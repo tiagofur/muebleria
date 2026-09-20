@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { AdapterSerializationBlocked } from '@granete/domain';
 import { buildFixtureCuttingJob } from './machineOutputFixtures';
 import {
+  PTX_ADAPTER_1_3_0_HISTORICAL_IDENTITY,
   PTX_ADAPTER_INDUSTRIAL_CONTRACT,
   PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR,
   PTX_POSTPROCESSOR_ADAPTER,
+  PTX_R5_FIELD_TEST_TITLE,
   resolvePtxCompilerRoute,
 } from './ptxAdapter';
 import {
@@ -13,6 +15,7 @@ import {
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_R3_PROFILE,
   PTX_CADMATIC_4_R4_PROFILE,
+  PTX_CADMATIC_4_R5_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
@@ -141,8 +144,26 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
       partCodeMaxLength: 50,
     });
     expect(r4.allowedFunctions).toEqual([0, 1, 2, 3, 92]);
+    const r5 = resolvePtxCompilerRoute(PTX_CADMATIC_4_R5_PROFILE).config!;
+    expect(r5.compileOptions).toMatchObject({
+      title: PTX_R5_FIELD_TEST_TITLE,
+      trimType: 1,
+      includeVectors: undefined,
+      supportsPositiveTrim: true,
+      offcutsWithQuantity: true,
+      offcutsBeforePatterns: true,
+      offcutCutMarkers: 'function92-only',
+      partCodeAuthority: 'workshop-labelref',
+      partCodeMaxLength: 50,
+      strictSpecPreflight: 'pattern-exchange-v1',
+      partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
+      partsUdi: 'structural',
+    });
+    expect(r5.compileOptions.receiverPolicy?.id).toBe('HPP250-CAD4-R5-CANDIDATE');
+    expect(r5.allowedFunctions).toEqual([0, 1, 2, 3, 92]);
+    expect(PTX_R5_FIELD_TEST_TITLE.length).toBeLessThanOrEqual(25);
     expect(contract.behaviorMarkers).toEqual({
-      compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4'],
+      compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4', 'ptx-cadmatic-4@r5'],
       r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
       r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
       r4OffcutQuantity: 'ofc-qty-1-92-paired-offcuts-only',
@@ -150,9 +171,27 @@ describe('PTX_POSTPROCESSOR_ADAPTER', () => {
       r4OffcutMarkers: 'xn-references-only-on-function-92',
       r4OffcutCode: 'empty-field-internal-region-id-not-serialized',
       r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',
+      r5Title: 'granete-r5-field-test-21-chars-spec-limit-25',
+      r5SpecPreflight: 'pattern-exchange-v1-document-and-serialized-bytes',
+      r5PartsReqDimensions: 'part-local-pre-rotation-cut',
+      r5PartsUdi: 'structural-info-cells-empty-without-authority',
+      r5ReceiverPolicy: 'hpp250-cad4-r5-candidate',
+      r5LabelAuthority: 'neutral-frozen-release-projection-1-1-coverage-fail-closed',
+      r5CncAuthority: 'drawing-barcode1-only-with-explicit-machining-frozen-scope',
+      r5LegacyFallback: 'none-block-instead',
       readback: 'parser-plus-independent-cut-program-verifier',
       legacyRoute: 'ptx-generic@r1-only',
     });
+    expect(contract.profiles.r5.digest).toBe(PTX_CADMATIC_4_R5_PROFILE.digest);
+    // #793 §18: the 1.3.0 identity stays recorded as immutable evidence and
+    // a persisted r4/1.3.0 selection surfaces stale blockers, never a
+    // silent retarget.
+    expect(PTX_ADAPTER_1_3_0_HISTORICAL_IDENTITY).toEqual({
+      postprocessorAdapterId: 'granete-ptx',
+      adapterVersion: '1.3.0',
+      implementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
+    });
+    expect(PTX_POSTPROCESSOR_ADAPTER.adapterVersion).toBe('1.4.0');
   });
 
   it('requires exactly the dimensions the serializer consumes', () => {

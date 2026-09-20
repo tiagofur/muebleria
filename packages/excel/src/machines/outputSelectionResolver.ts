@@ -10,17 +10,19 @@ import {
   machineOutputBlockerMessageEs,
   type AdapterBlockReason,
   type CutPlan,
-  MachineOutputSelection,
+  type MachineOutputSelection,
+  type ManufacturingLabelProjection,
   ManufacturingOperation,
   OutputCompatibilityProfile,
   ResolvedManufacturingOutputTarget,
+  ValidationError,
 } from '@granete/domain';
 import {
   CLIENT_A_BHX050_PROFILE,
   CLIENT_A_HPP250_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  PTX_CADMATIC_4_R4_PROFILE,
+  PTX_CADMATIC_4_R5_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
@@ -29,6 +31,8 @@ import {
 import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
 import { SAW_POSTPROCESSOR_ADAPTER } from './sawAdapter';
 import { WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
+import { ptxPartLabelsFromManufacturingProjection } from '../ptx/partLabels';
+import type { PtxPartLabelData } from '../ptx/partLabels';
 
 export const KNOWN_MACHINE_PROFILES: readonly ClientMachineProfileData[] = [
   CLIENT_A_HPP250_PROFILE,
@@ -38,12 +42,13 @@ export const KNOWN_MACHINE_PROFILES: readonly ClientMachineProfileData[] = [
 export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
   PTX_GENERIC_PROFILE,
   PTX_CADMATIC_3_PROFILE,
-  // r4 (#781, field dialect after the first CADLink rejection) is the
-  // CURRENT selectable revision of the CADmatic 4 profile. r1/r2/r3 keep
-  // existing as immutable historical constants, and selections pinned to
-  // them surface an actionable stale-revision blocker — never an automatic
-  // retarget to r4.
-  PTX_CADMATIC_4_R4_PROFILE,
+  // r5 (#793, productive final-gate candidate: strict spec preflight +
+  // frozen label authority + receiver policy) is the CURRENT selectable
+  // revision of the CADmatic 4 profile. r1..r4 keep existing as immutable
+  // historical constants (PTX_CADMATIC_4_R4_PROFILE stays exported for
+  // history/tests), and selections pinned to them surface an actionable
+  // stale-revision blocker — never an automatic retarget to r5.
+  PTX_CADMATIC_4_R5_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
@@ -232,7 +237,6 @@ import {
   groupCutPlanSheetsByMaterial,
   uniqueCutFileName,
 } from '../ptxCutPlanExport';
-import { ValidationError } from '@granete/domain';
 import { sha256Hex } from './digest';
 
 /**
@@ -263,6 +267,17 @@ async function industrialArtifactFileName(
 
 export type CuttingOutputMode = 'unified' | 'by-material';
 
+/** #793 — productive frozen label authority carried into the resolved job. */
+export interface SelectedCuttingOutputLabelOptions {
+  /**
+   * Neutral frozen per-piece manufacturing projection of the release the
+   * plan was generated from (`manufacturingLabelProjectionFromDemand`).
+   * Required for r5 (missing ⇒ BLOCK); ignored by revisions without label
+   * semantics (their byte identities are frozen).
+   */
+  readonly manufacturingLabels?: ManufacturingLabelProjection;
+}
+
 /**
  * Normal-production cutting generation through the EXACT selected target
  * (#591). 'unified' produces exactly ONE artifact; 'by-material' produces one
@@ -271,11 +286,16 @@ export type CuttingOutputMode = 'unified' | 'by-material';
  * it never falls back to another profile and never bulk-generates candidates.
  * NO_OUTPUT_CONFIGURED also throws: the legacy unconfigured flow is decided by
  * the caller, not silently here.
+ *
+ * #793: when the caller supplies the frozen manufacturing label projection
+ * (release flow with a verified demand), the resolved job carries it plus its
+ * mapped partLabels — the r5 route consumes them and fails closed otherwise.
  */
 export async function generateSelectedCuttingOutput(
   cutPlan: CutPlan,
   selection: MachineOutputSelection,
   mode: CuttingOutputMode = 'unified',
+  options?: SelectedCuttingOutputLabelOptions,
 ): Promise<readonly MachineArtifactBundle[]> {
   const resolved = evaluateSelectedCuttingOutputReadiness(cutPlan, selection);
   if (resolved.status !== 'CONFIGURED') {
@@ -283,7 +303,26 @@ export async function generateSelectedCuttingOutput(
       status: 'NO_OUTPUT_CONFIGURED',
     });
   }
-  if (!resolved.readiness.ready) {
+  // Catalog-level gate (identity/dimension blockers) always applies — a
+  // stale or unknown tuple throws its typed reasons here, never falls back
+  // and never dereferences a profile the exact selection cannot resolve.
+  const catalogResolved = resolveManufacturingOutputTarget(selection, 'cutting');
+  if (catalogResolved.status !== 'CONFIGURED' || !catalogResolved.readiness.ready) {
+    const reasons =
+      catalogResolved.status === 'CONFIGURED' ? catalogResolved.readiness.reasons : [];
+    throw new ValidationError(
+      machineOutputBlockerMessageEs(
+        reasons.length > 0
+          ? reasons
+          : [{ code: 'FORMAT_FAMILY_MISMATCH', detail: 'salida de máquina no configurada' }],
+      ),
+      { status: 'BLOCKED', reasons },
+    );
+  }
+  // Without the label option the bare job-level readiness is the final gate
+  // (r5 blocks here on its label authority). With the option, the labeled
+  // job below re-runs the EXACT gate that will govern serialization.
+  if (options?.manufacturingLabels === undefined && !resolved.readiness.ready) {
     throw new ValidationError(machineOutputBlockerMessageEs(resolved.readiness.reasons), {
       status: 'BLOCKED',
       reasons: resolved.readiness.reasons,
@@ -293,19 +332,54 @@ export async function generateSelectedCuttingOutput(
   const adapter = adapterForFamily(profile.formatFamily)!;
   const kind = profile.formatFamily === 'ptx' ? ('ptx' as const) : ('saw' as const);
   const extension = String(profile.dimensions.fileExtension ?? 'pending');
-  // #781 r4: the CADmatic 4 field-dialect lane uses the conservative short
-  // ASCII industrial file name; every other revision keeps the human name.
+  // #781 r4 / #793 r5: the CADmatic 4 industrial lanes use the conservative
+  // short ASCII industrial file name; every other revision keeps the human
+  // name.
   const useIndustrialNaming =
     profile.ref.outputCompatibilityProfileId === 'ptx-cadmatic-4' &&
-    profile.ref.revisionId === 'r4';
+    (profile.ref.revisionId === 'r4' || profile.ref.revisionId === 'r5');
+
+  // #793 — map the frozen neutral projection to the PTX label data ONCE (the
+  // mapper is the only sanctioned producer; its fail-closed gates surface
+  // here as actionable errors before any artifact exists).
+  const partLabels: readonly PtxPartLabelData[] | undefined = options?.manufacturingLabels
+    ? await ptxPartLabelsFromManufacturingProjection(options.manufacturingLabels)
+    : undefined;
+  const manufacturingLabels = options?.manufacturingLabels;
+
+  /** Projects the label authority onto one plan's placed pieces (by-material groups carry their subset). */
+  const labelsForPlan = (
+    plan: CutPlan,
+  ): { manufacturingLabels?: ManufacturingLabelProjection; partLabels?: readonly PtxPartLabelData[] } => {
+    if (manufacturingLabels === undefined || partLabels === undefined) return {};
+    const placedCodes = new Set(plan.sheets.flatMap((sheet) => sheet.pieces.map((piece) => piece.labelRef)));
+    if (placedCodes.size === 0) return {};
+    const pieces = manufacturingLabels.pieces.filter((piece) =>
+      placedCodes.has(piece.manufacturingPartCode),
+    );
+    const labels = partLabels.filter((label) => placedCodes.has(label.manufacturingPartCode));
+    if (pieces.length === 0 || labels.length === 0) {
+      // A group the projection does not cover at all is a hard mismatch —
+      // never an unlabeled r5 artifact.
+      throw new ValidationError(
+        'la proyección de etiquetas congelada no cubre las piezas de este plan; regenerá el plan desde la liberación de la proyección',
+        { status: 'BLOCKED' },
+      );
+    }
+    return {
+      manufacturingLabels: { ...manufacturingLabels, pieces },
+      partLabels: labels,
+    };
+  };
 
   const buildBundle = (
     plan: CutPlan,
     jobId: string,
     fileName: string,
     delivery: MachineArtifactBundle['manifest']['delivery'],
-  ): Promise<MachineArtifactBundle> =>
-    generateMachineArtifact({
+  ): Promise<MachineArtifactBundle> => {
+    const labels = labelsForPlan(plan);
+    return generateMachineArtifact({
       job: {
         jobId,
         provenance: {
@@ -329,6 +403,10 @@ export async function generateSelectedCuttingOutput(
           projectName: cutPlan.projectName ?? cutPlan.projectId,
           projectCode: cutPlan.projectId,
         },
+        ...(labels.manufacturingLabels !== undefined
+          ? { manufacturingLabels: labels.manufacturingLabels }
+          : {}),
+        ...(labels.partLabels !== undefined ? { partLabels: labels.partLabels } : {}),
       },
       adapter: adapter as typeof PTX_POSTPROCESSOR_ADAPTER,
       profile,
@@ -345,6 +423,34 @@ export async function generateSelectedCuttingOutput(
         supported: [],
       },
     });
+  };
+
+  // #793 — the bare-plan readiness above cannot see the label authority, so
+  // the r5 job-level gate re-runs here on the EXACT labeled job that will be
+  // serialized (deterministic: generateMachineArtifact reaches the same
+  // verdict).
+  if (manufacturingLabels !== undefined && profile.formatFamily === 'ptx') {
+    const readiness = adapter.canSerialize(
+      {
+        jobId: cutPlan.id,
+        provenance: {
+          projectId: cutPlan.projectId,
+          generatedAt: cutPlan.generatedAt,
+          cutPlanId: cutPlan.id,
+          cutPlanVersion: cutPlan.version,
+        },
+        cutPlan,
+        ...labelsForPlan(cutPlan),
+      } as never,
+      profile,
+    );
+    if (!readiness.ready) {
+      throw new ValidationError(machineOutputBlockerMessageEs(readiness.reasons), {
+        status: 'BLOCKED',
+        reasons: readiness.reasons,
+      });
+    }
+  }
 
   if (mode === 'by-material') {
     const groups = groupCutPlanSheetsByMaterial(cutPlan);

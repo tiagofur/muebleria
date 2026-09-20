@@ -84,9 +84,9 @@ const R3_SELECTION: MachineOutputSelection = {
   outputCompatibilityProfileId: PTX_CADMATIC_4_R4_PROFILE.ref.outputCompatibilityProfileId,
   outputCompatibilityProfileRevisionId: PTX_CADMATIC_4_R4_PROFILE.ref.revisionId,
   outputCompatibilityProfileDigest: PTX_CADMATIC_4_R4_PROFILE.digest,
-  postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
-  postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
-  postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
+  postprocessorAdapterId: 'granete-ptx',
+  postprocessorAdapterVersion: '1.3.0',
+  postprocessorImplementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
 };
 
 function configWithTrim(trim: { topMm: number; bottomMm: number; leftMm: number; rightMm: number }): CutPlanConfig {
@@ -870,12 +870,17 @@ describe('r3 fail closed — estructura del prefijo de trims', () => {
       () => compileCutPlanToPtxDocument(plan, R3_OPTIONS),
       'ptx_compile.trim_frame_unsupported',
     );
+    // #793: the catalog's CURRENT CADmatic 4 revision is r5, so this r4/1.3.0
+    // pin (a persisted historical selection) surfaces the stale blockers —
+    // never an automatic retarget, and never a compile on a stale tuple. The
+    // trim_frame_unsupported cause itself stays asserted above at the
+    // compiler level (the revision that implements it).
     const readiness = evaluateSelectedCuttingOutputReadiness(plan, R3_SELECTION);
     expect(readiness.status).toBe('CONFIGURED');
     if (readiness.status === 'CONFIGURED') {
       expect(readiness.readiness.ready).toBe(false);
       expect(readiness.readiness.reasons.map((reason) => reason.code)).toContain(
-        'ptx_compile.trim_frame_unsupported',
+        'PROFILE_DIGEST_MISMATCH',
       );
     }
   });

@@ -47,6 +47,7 @@
 
 import { sha256Hex } from '../machines/digest';
 import type { ProductionCutRow } from '@granete/domain';
+import type { ManufacturingLabelProjection, ManufacturingPieceLabel } from '@granete/domain';
 import { PtxCompilationError } from './compileCutPlan';
 
 // ---------------------------------------------------------------------------
@@ -407,6 +408,100 @@ export async function buildPtxPartLabels(
       labels.push(await buildPtxPartLabelData(input, copy));
     }
   }
+  return dedupeLabels(labels);
+}
+
+// ---------------------------------------------------------------------------
+// Productive label mapping (#793 — frozen neutral projection → PtxPartLabelData)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps the NEUTRAL frozen per-piece manufacturing projection (domain,
+ * `manufacturingLabelProjectionFromDemand`) to the export layer's frozen
+ * label data. This is the ONLY productive source of `partLabels`: the r5
+ * route requires labels derived this way (release truth), never a live
+ * catalog/SketchUp rebuild or a test fixture. Same fail-closed gates as the
+ * lab builder: ASCII identity, edge-band authority, core material, explicit
+ * CNC authority (DRAWING/BARCODE1 only when hasCncMachining === true with a
+ * non-empty frozen CNC scope), BARCODE2 = manufacturing code.
+ */
+export async function ptxPartLabelsFromManufacturingProjection(
+  projection: ManufacturingLabelProjection,
+): Promise<readonly PtxPartLabelData[]> {
+  const labels: PtxPartLabelData[] = [];
+  for (const piece of projection.pieces) {
+    labels.push(await ptxPartLabelFromNeutralPiece(piece, projection));
+  }
+  return dedupeLabels(labels);
+}
+
+async function ptxPartLabelFromNeutralPiece(
+  piece: ManufacturingPieceLabel,
+  projection: ManufacturingLabelProjection,
+): Promise<PtxPartLabelData> {
+  const code = piece.manufacturingPartCode;
+  requireAscii(code, 'manufacturingPartCode', code);
+
+  const band = piece.edgeBandCode?.trim() || undefined;
+  if (band !== undefined) {
+    requireAscii(band, 'edgeBandCode', code);
+  }
+  const edgeFlags = (['L1', 'L2', 'W1', 'W2'] as const).filter((side) => piece[side] === 1);
+  if (edgeFlags.length > 0 && band === undefined) {
+    throw new PtxCompilationError(
+      'ptx_compile.label_invalid',
+      'Una bandera de canto exige edgeBandCode autoritativo no vacío',
+      { manufacturingPartCode: code, edgeFlags },
+    );
+  }
+  const edgeOf = (side: 'L1' | 'L2' | 'W1' | 'W2'): string | undefined =>
+    piece[side] === 1 ? band : undefined;
+
+  if (piece.materialCode === undefined || piece.materialCode === '') {
+    throw new PtxCompilationError(
+      'ptx_compile.label_invalid',
+      'CORE_MAT exige materialCode autoritativo no vacío',
+      { manufacturingPartCode: code },
+    );
+  }
+
+  const hasCnc = piece.hasCncMachining === true;
+  const cncDrawingRef = hasCnc
+    ? await ptxCncDrawingRef(code, projection.cncScope)
+    : undefined;
+
+  return {
+    manufacturingPartCode: code,
+    description: auxiliaryText(piece.partName, 'description', code),
+    // Finished measures are copied from the frozen projection — the single
+    // deduction site stays unrollRows (optimizer); nothing is added back here.
+    finishedLengthMm: requireFiniteMagnitude(piece.finishedLengthMm, 'finishedLengthMm', code),
+    finishedWidthMm: requireFiniteMagnitude(piece.finishedWidthMm, 'finishedWidthMm', code),
+    orderRef: auxiliaryText(projection.orderRef, 'orderRef', code),
+    labelQuantity: 1,
+    edge1: edgeOf('L2'),
+    edge2: edgeOf('L1'),
+    edge3: edgeOf('W1'),
+    edge4: edgeOf('W2'),
+    coreMaterial: requireAscii(piece.materialCode, 'materialCode', code),
+    cncDrawingRef,
+    productCode: auxiliaryText(piece.moduleCode, 'productCode', code),
+    productInfo: auxiliaryText(piece.moduleName, 'productInfo', code),
+    productWidthMm: requireFiniteMagnitudeOptional(piece.moduleWidthMm, 'productWidthMm', code),
+    productHeightMm: requireFiniteMagnitudeOptional(piece.moduleHeightMm, 'productHeightMm', code),
+    productDepthMm: requireFiniteMagnitudeOptional(piece.moduleDepthMm, 'productDepthMm', code),
+    productNumber: requirePositiveIntegerOptional(
+      piece.workshopOccurrenceOrdinal,
+      'workshopOccurrenceOrdinal',
+      code,
+    ),
+    room: auxiliaryText(piece.room, 'room', code),
+    barcode1: cncDrawingRef !== undefined ? ptxBarcodeToken(cncDrawingRef) : undefined,
+    barcode2: code,
+  };
+}
+
+function dedupeLabels(labels: readonly PtxPartLabelData[]): readonly PtxPartLabelData[] {
   const seen = new Map<string, PtxPartLabelData>();
   for (const label of labels) {
     const previous = seen.get(label.manufacturingPartCode);

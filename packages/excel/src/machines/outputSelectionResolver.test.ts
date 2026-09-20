@@ -17,11 +17,13 @@ import {
   CLIENT_A_HPP250_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_4_PROFILE,
+  PTX_CADMATIC_4_R5_PROFILE,
   PTX_GENERIC_PROFILE,
 } from './profiles';
 import { PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR, PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
 import { buildFixtureCuttingJob } from './machineOutputFixtures';
 import { generateMachineArtifact } from './machineArtifacts';
+import { buildR5GateFixture, r5GateSelection } from '../ptx/r5FieldCandidateFixture';
 
 function cuttingSelection(profileId: string): MachineOutputSelection {
   const profile = KNOWN_OUTPUT_PROFILES.find(
@@ -101,16 +103,18 @@ describe('resolveManufacturingOutputTarget', () => {
     expect(result.readiness.reasons).toEqual([]);
   });
 
-  it('CADmatic 4: la revisión candidata r4 resuelve lista; los pins históricos r1/r2/r3 quedan stale sin fallback', () => {
+  it('CADmatic 4: la revisión candidata r5 resuelve lista; los pins históricos r1..r4 quedan stale sin fallback', () => {
     const current = resolveManufacturingOutputTarget(cuttingSelection('ptx-cadmatic-4'), 'cutting');
     expect(current.status).toBe('CONFIGURED');
     if (current.status !== 'CONFIGURED') return;
-    expect(current.profileLabel).toBe('ptx-cadmatic-4@r4');
+    expect(current.profileLabel).toBe('ptx-cadmatic-4@r5');
     expect(current.supportStatus).toBe('NOT_TESTED');
+    // Catalog-level readiness: dimensions are evidenced. The job-level label
+    // authority gate is evaluated against the real job (tests below).
     expect(current.readiness.ready).toBe(true);
     expect(current.readiness.reasons).toEqual([]);
 
-    for (const staleRevision of ['r1', 'r2', 'r3']) {
+    for (const staleRevision of ['r1', 'r2', 'r3', 'r4']) {
       const stale = {
         ...cuttingSelection('ptx-cadmatic-4'),
         outputCompatibilityProfileRevisionId: staleRevision,
@@ -122,7 +126,8 @@ describe('resolveManufacturingOutputTarget', () => {
       expect(staleResult.readiness.ready).toBe(false);
       expect(staleResult.readiness.reasons.map((r) => r.code)).toContain('PROFILE_DIGEST_MISMATCH');
       // Still the selected profile — no generic substitution and no automatic
-      // retarget to the current revision.
+      // retarget to the current revision (#793 §18: r4/1.3.0 pins never
+      // silently retarget to r5).
       expect(staleResult.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
       expect(staleResult.selection.outputCompatibilityProfileRevisionId).toBe(staleRevision);
     }
@@ -186,7 +191,7 @@ describe('resolveManufacturingOutputTarget', () => {
     const result = resolveManufacturingOutputTarget(historical, 'cutting');
     expect(result.status).toBe('CONFIGURED');
     if (result.status !== 'CONFIGURED') return;
-    expect(result.profileLabel).toBe('ptx-cadmatic-4@r4');
+    expect(result.profileLabel).toBe('ptx-cadmatic-4@r5');
     expect(result.readiness.ready).toBe(false);
     expect(result.readiness.reasons[0]?.detail).toContain('sin digest histórico');
   });
@@ -199,35 +204,45 @@ describe('resolveManufacturingOutputTarget', () => {
     expect(Array.isArray((result as { selection?: unknown }).selection)).toBe(false);
   });
 
-  it('evalúa readiness contra el CutPlan activo y ready=true genera sin otro fallo de representabilidad', async () => {
-    const plan = validCad4Plan();
-    const selection = cuttingSelection('ptx-cadmatic-4');
-    const evaluated = evaluateSelectedCuttingOutputReadiness(plan, selection);
-    expect(evaluated.status).toBe('CONFIGURED');
-    if (evaluated.status !== 'CONFIGURED') return;
-    expect(evaluated.readiness).toEqual({ ready: true, reasons: [] });
-    await expect(generateSelectedCuttingOutput(plan, selection)).resolves.toHaveLength(1);
+  it('r5: readiness contra el CutPlan activo exige la autoridad de etiquetas; con ella ready=true genera sin otro fallo', async () => {
+    const { plan, projection } = buildR5GateFixture();
+    const selection = r5GateSelection(PTX_POSTPROCESSOR_ADAPTER, PTX_CADMATIC_4_R5_PROFILE);
+    // Bare readiness (no label authority on the synthetic job) BLOCKS with
+    // the specific r5 gate — never a silent generic fallback.
+    const bare = evaluateSelectedCuttingOutputReadiness(plan, selection);
+    expect(bare.status).toBe('CONFIGURED');
+    if (bare.status !== 'CONFIGURED') return;
+    expect(bare.readiness.ready).toBe(false);
+    expect(bare.readiness.reasons.map((r) => r.code)).toContain('ptx_compile.label_authority_missing');
+    // The productive route WITH the frozen projection generates exactly one
+    // r5 artifact (job-level gate re-evaluated on the labeled job).
+    const bundles = await generateSelectedCuttingOutput(plan, selection, 'unified', {
+      manufacturingLabels: projection,
+    });
+    expect(bundles).toHaveLength(1);
   });
 
-  it('invalida inmediatamente un plan activo sin cutProgram y preserva ptx_compile.*', async () => {
-    const valid = validCad4Plan();
+  it('r5: invalida inmediatamente un plan activo sin cutProgram (con etiquetas) y preserva ptx_compile.*', async () => {
+    const { plan, projection } = buildR5GateFixture();
     const invalid = {
-      ...valid,
-      id: `${valid.id}-missing-program`,
-      version: valid.version + 1,
-      sheets: valid.sheets.map((sheet, index) =>
+      ...plan,
+      id: `${plan.id}-missing-program`,
+      version: plan.version + 1,
+      sheets: plan.sheets.map((sheet, index) =>
         index === 0 ? { ...sheet, cutProgram: undefined } : sheet,
       ),
     };
-    const selection = cuttingSelection('ptx-cadmatic-4');
-    const evaluated = evaluateSelectedCuttingOutputReadiness(invalid, selection);
-    expect(evaluated.status).toBe('CONFIGURED');
-    if (evaluated.status !== 'CONFIGURED') return;
-    expect(evaluated.readiness.ready).toBe(false);
-    expect(evaluated.readiness.reasons[0]?.code).toBe('ptx_compile.missing_cut_program');
-    expect(evaluated.readiness.reasons[0]?.context).toMatchObject({ sheetIndex: 0 });
+    const selection = r5GateSelection(PTX_POSTPROCESSOR_ADAPTER, PTX_CADMATIC_4_R5_PROFILE);
+    // Bare readiness surfaces the label-authority gate first (fail-closed
+    // ordering); with labels the compile preflight surfaces the exact cause.
+    const bare = evaluateSelectedCuttingOutputReadiness(invalid, selection);
+    expect(bare.status).toBe('CONFIGURED');
+    if (bare.status !== 'CONFIGURED') return;
+    expect(bare.readiness.ready).toBe(false);
 
-    const thrown = await generateSelectedCuttingOutput(invalid, selection).then(
+    const thrown = await generateSelectedCuttingOutput(invalid, selection, 'unified', {
+      manufacturingLabels: projection,
+    }).then(
       () => undefined,
       (error: unknown) => error,
     );
