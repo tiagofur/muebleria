@@ -18,6 +18,7 @@ import type {
   CutPlan,
   CutPlanConfig,
   CutStrategy,
+  ManufacturingLabelProjection,
   ReleaseCuttingDemandBase,
 } from '@granete/domain';
 import { planMatchesReleaseBase } from '@granete/domain';
@@ -68,10 +69,19 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly onExportCutPlanPtx?: (
     cutPlan: CutPlan,
     mode?: 'unified' | 'by-material',
+    manufacturingLabels?: ManufacturingLabelProjection,
   ) => void;
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly resolveCuttingOutputTarget?: (cutPlan: CutPlan) => CuttingOutputTargetView | null;
   readonly exportBusy?: boolean;
+  /**
+   * #793 — neutral frozen per-piece manufacturing label projection of the
+   * release (when this panel prepares an exact liberation). Forwarded to the
+   * PTX export so the r5 route consumes its PARTS_INF/PARTS_UDI authority
+   * from frozen release truth; absent for legacy plans (r5 export then blocks
+   * with the actionable reason instead of rebuilding labels from live data).
+   */
+  readonly manufacturingLabels?: ManufacturingLabelProjection;
   /**
    * #739 — plan persisted for the EXACT release this panel is preparing
    * (undefined = legacy project-scoped view; null = no stored plan).
@@ -117,6 +127,7 @@ export function ProductionOrderOptimizationPanel({
   exportBusy = false,
   initialCutPlan,
   demandGate = { mode: 'legacy' },
+  manufacturingLabels,
   optimizerUnavailableReason = null,
   dxfUnavailableReason = null,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
@@ -311,7 +322,7 @@ export function ProductionOrderOptimizationPanel({
 
   const handleExportPtx = () => {
     if (!currentCutPlan) return;
-    onExportCutPlanPtx?.(currentCutPlan, ptxMode);
+    onExportCutPlanPtx?.(currentCutPlan, ptxMode, manufacturingLabels);
   };
 
   const activeSheet = currentCutPlan?.sheets[activeSheetIndex] ?? null;

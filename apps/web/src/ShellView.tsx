@@ -110,6 +110,8 @@ import {
   projectAllowsProductionAccess,
   releaseAuthorityOf,
   releaseBaseFromDemand,
+  manufacturingLabelProjectionFromDemand,
+  type ManufacturingLabelProjection,
   releaseCutRowsFromDemand,
   suggestDuplicateCode,
   transitionProjectStatus,
@@ -470,7 +472,11 @@ export interface ShellViewCtx {
   readonly handleExportCutListCsv: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
   readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
-  readonly handleExportCutPlanPtx: (cutPlan: CutPlan, mode?: 'unified' | 'by-material') => Promise<void>;
+  readonly handleExportCutPlanPtx: (
+    cutPlan: CutPlan,
+    mode?: 'unified' | 'by-material',
+    manufacturingLabels?: ManufacturingLabelProjection,
+  ) => Promise<void>;
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly resolveCuttingOutputTarget?: (
@@ -1644,6 +1650,23 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             }
           }
         }
+        // #793 — neutral frozen label projection for the r5 export route:
+        // built from the SAME verified demand (occurrence ordinals, module
+        // context via the same catalog engineering inputs the rows use). No
+        // CNC machining authority is available web-side yet — fields without
+        // authority stay empty instead of being invented; real machining
+        // truth wiring belongs to the field-result follow-up (#348).
+        let engManufacturingLabels: ManufacturingLabelProjection | undefined;
+        if (engineeringDemandContext.kind === 'ready') {
+          try {
+            engManufacturingLabels = manufacturingLabelProjectionFromDemand(
+              engineeringDemandContext.demand,
+              catalog ?? null,
+            );
+          } catch {
+            engManufacturingLabels = undefined;
+          }
+        }
         // The readiness gate for the release context reports the FROZEN rows
         // (what must be manufactured); the live derivation keeps feeding the
         // legacy working view only.
@@ -1773,11 +1796,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onSaveCutPlan={(plan) => { projectActions.saveCutPlan(engProject.id, plan); }}
             onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
-            onExportCutPlanPtx={(plan, mode) => { void handleExportCutPlanPtx(plan, mode); }}
+            onExportCutPlanPtx={(plan, mode, manufacturingLabels) => {
+              void handleExportCutPlanPtx(plan, mode, manufacturingLabels);
+            }}
             /* #739 — frozen release demand + release-scoped plan persistence:
                the optimización/despiece surfaces consume the exact release
                content; every other tab keeps its live working view. */
             releaseCuttingDemand={engFrozenDemand}
+            manufacturingLabels={engManufacturingLabels}
             releaseCutPlan={
               engFrozenDemand?.status === 'ready'
                 ? loadReleaseCutPlan(

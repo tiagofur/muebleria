@@ -494,6 +494,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     async (
       cutPlan: import('@granete/domain').CutPlan,
       mode?: 'unified' | 'by-material',
+      manufacturingLabels?: import('@granete/domain').ManufacturingLabelProjection,
     ) => {
       setExportBusy(true);
       try {
@@ -506,6 +507,9 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         // reason surfaced) and never fall back to the legacy generic PTX. The
         // bundling mode still applies: by-material yields one file per
         // material, bundled in a .zip.
+        // #793: the release flow forwards the frozen manufacturing label
+        // projection so the r5 route consumes its PARTS_INF/PARTS_UDI
+        // authority from release truth; without it r5 blocks (fail-closed).
         const result: CuttingDownloadResult = await runWithCuttingOutputAuthority(
           cuttingOutputSelectionState,
           {
@@ -514,6 +518,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
                 cutPlan,
                 selection,
                 selectedMode,
+                manufacturingLabels ? { manufacturingLabels } : undefined,
               );
               return downloadCuttingArtifactBundles(
                 bundles,

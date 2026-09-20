@@ -199,6 +199,7 @@ export function EngineeringWorkspace({
   onExportCutPlanPdf,
   onExportCutPlanDxf,
   onExportCutPlanPtx,
+  manufacturingLabels,
   cuttingOutputTarget,
   resolveCuttingOutputTarget,
   onImportNesting: _onImportNesting,
@@ -277,7 +278,14 @@ export function EngineeringWorkspace({
   readonly onExportCutPlanPtx?: (
     cutPlan: import('@granete/domain').CutPlan,
     mode?: 'unified' | 'by-material',
+    manufacturingLabels?: import('@granete/domain').ManufacturingLabelProjection,
   ) => void | Promise<void>;
+  /**
+   * #793 — frozen manufacturing label projection of the exact release this
+   * workspace shows; forwarded to the optimización panel so the r5 PTX
+   * export consumes its PARTS_INF/PARTS_UDI authority from release truth.
+   */
+  readonly manufacturingLabels?: import('@granete/domain').ManufacturingLabelProjection;
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly resolveCuttingOutputTarget?: (
@@ -728,6 +736,7 @@ export function EngineeringWorkspace({
                 : null
             }
             onExportCutPlanPtx={onExportCutPlanPtx}
+            manufacturingLabels={manufacturingLabels}
             cuttingOutputTarget={cuttingOutputTarget}
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             exportBusy={exportBusy}

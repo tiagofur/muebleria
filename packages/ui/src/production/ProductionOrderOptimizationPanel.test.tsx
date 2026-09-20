@@ -329,12 +329,12 @@ describe('ProductionOrderOptimizationPanel — estrategia de corte (F126)', () =
 
     // Default unificado: una sola descarga con el modo seleccionado.
     fireEvent.click(screen.getByTestId('prod-opt-export-ptx'));
-    expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'unified');
+    expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'unified', undefined);
 
     // Cambio explícito a por material: la elección operacional viaja en el click.
     fireEvent.click(screen.getByTestId('prod-opt-ptx-mode-by-material'));
     fireEvent.click(screen.getByTestId('prod-opt-export-ptx'));
-    expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'by-material');
+    expect(onExportCutPlanPtx).toHaveBeenCalledWith(expect.anything(), 'by-material', undefined);
   });
 
   it('plan nesting: exporta DXF (tableros y piezas) y oculta PDF/Optimizer', () => {
