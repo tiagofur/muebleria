@@ -130,7 +130,7 @@ No iniciar #668 porque el esquema esté dibujado; el milestone requerido debe es
 
 ## 9. Evidencia de esta entrega documental
 
-Esta entrega inspecciona fuentes y crea documentación/issues; no ejecuta migraciones, tests de producto, conversores, SketchUp ni máquinas. La comprobación documental y readback remoto se registran en el PR. `progress/current.md`, `feature_list.json`, código funcional y ramas activas de producto permanecen fuera del diff.
+Esta entrega inspecciona fuentes y crea documentación/issues; no ejecuta migraciones, tests de producto, conversores, SketchUp ni máquinas. La comprobación documental y readback remoto se registran en el PR. El catálogo de capacidades, el código funcional y las ramas activas de producto permanecen fuera del diff; no se crea un ledger global de progreso.
 
 El repositorio tenía PR #664 de Cotizaciones abierto en la colección consultada. La consulta general por `is:pr` devolvió también issues, por lo que no se usó como evidencia del inventario de PRs; se consultó la colección `/pulls?state=open` directamente. Revalidar el estado al comenzar el trabajo futuro.
 

@@ -18,8 +18,9 @@ You own the candidate, not scope selection, approval, independent review, or mer
 3. Run `python3 scripts/factory_preflight.py` and require task tools as needed. Its
    `PREFLIGHT_OK_NOT_VERIFIED` result authorizes nothing and proves no behavior.
 4. Read only the affected code, tests, contracts, ADRs, and domain documentation.
-   Do not use `feature_list.json` to choose work or `progress/current.md` as startup
-   context, scratch space, execution state, or a routine completion edit.
+   Do not use the capability catalog or a global progress ledger to choose work,
+   store execution state, or perform routine completion cleanup. For ODD, read only
+   the exact issue artifact after the issue is known.
 5. Record the outcome, scope, tasks, checks, forecast, and delivery strategy in the
    existing execution artifact when the lane has one. Never create a review-round or
    tool-specific duplicate.

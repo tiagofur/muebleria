@@ -16,6 +16,8 @@ a second workflow, or treat an artifact as authorization.
 2. For Direct, create no execution artifact. For substantial ODD, require the one
    `odd/tasks/<issue>-<slug>.md`. For explicit SDD, use its canonical tasks artifact
    and do not create an ODD duplicate.
+   Identify that file from the approved issue; never scan the directory as a global
+   work ledger. Completed artifacts remain immutable history and need no cleanup.
 3. Run `python3 scripts/factory_preflight.py`. It must report
    `PREFLIGHT_OK_NOT_VERIFIED`; it is not a test, reservation, or write authority.
 4. Assign exactly one writer. Give it the outcome, exclusions, paths, invariants,

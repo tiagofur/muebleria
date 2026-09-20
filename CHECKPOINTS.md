@@ -58,6 +58,6 @@
 - [ ] The final state is ready for a human to recheck and merge, or is honestly
       blocked with the smallest next action.
 
-`feature_list.json`, `progress/current.md`, and Engram can provide historical context,
-but none is a checkpoint authority for current scope, ownership, code, review, CI,
-or delivery.
+The product capability catalog, retained issue artifacts, and optional Engram
+mirrors can provide context, but none is checkpoint authority for current scope,
+ownership, code, review, CI, or delivery.

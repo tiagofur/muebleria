@@ -253,6 +253,6 @@ Consultadas 2026-09-11. Son referencias de capacidades, no evidencia de Granete 
 
 ## 20. Condiciones antes de ejecutar
 
-Revalidar el writer/PR activo y #573; este documento no activa otra feature ni otorga `status:approved`. No tocar `progress/current.md` ni el ledger para simular inicio. Cada issue debe proponer alcance acotado, exclusiones, pruebas y presupuesto antes de implementar. PRs parciales usan `Refs`, no cierre del parent. Sin merge, cierre o ejecución física automáticos.
+Revalidar el writer/PR activo y #573; este documento no activa otra feature ni otorga `status:approved`. No crear un ledger global ni modificar el catálogo de capacidades para simular inicio. Cada issue debe proponer alcance acotado, exclusiones, pruebas y presupuesto antes de implementar. PRs parciales usan `Refs`, no cierre del parent. Sin merge, cierre o ejecución física automáticos.
 
 El plan de ejecución es el mapa de issues e hitos. Esta especificación contiene invariantes y aceptación; no mantener dos descripciones contradictorias del mismo programa.

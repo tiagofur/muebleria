@@ -22,6 +22,10 @@ another Gentle-absent tool follows this repository contract manually.
   candidate it reviews.
 - Use a stable filename and stable task IDs. Resume the same file; never create a
   new file for a review round, correction, tool change, or session restart.
+- Do not add front matter. The filename records the issue and this directory records
+  the lane without duplicated metadata.
+- Select the exact file from the approved issue; never scan this directory as a
+  global work-status input.
 - Engram may mirror this file for retrieval. The repository copy is authoritative.
 - Keep evidence concise: observed command result, commit identity, limitation, and
   next action. Logs and review transcripts belong outside this artifact.
@@ -38,8 +42,9 @@ another Gentle-absent tool follows this repository contract manually.
 6. Hand the exact HEAD/base to a fresh reviewer. Consolidate blockers into one
    correction round when feasible. If a blocker remains, ask the human whether to
    stop, narrow, extend, or open follow-up scope; never declare success by policy.
-7. Preserve the final artifact as evidence. GitHub and the PR remain authoritative
-   for delivery status.
+7. Completed artifacts remain in `odd/tasks/` as immutable history. No post-merge cleanup,
+   move, archive directory, or follow-up commit is required. GitHub and the PR remain
+   authoritative for delivery status.
 
 ## Template
 

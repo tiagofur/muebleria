@@ -53,6 +53,10 @@ python3 scripts/verify_affected.py --base origin/main --plan
 uncertain paths/pins expand verification rather than reducing it. Neither tool
 replaces issue-specific V1/V2 acceptance.
 
+Routine preflight does not read the product capability catalog, retained ODD
+artifacts, or historical progress records. Open only the execution artifact named
+by the approved issue when that lane uses one.
+
 ---
 
 ## 2A. Historical full local harness

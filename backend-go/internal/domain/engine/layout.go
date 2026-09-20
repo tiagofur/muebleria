@@ -20,7 +20,7 @@ import (
 //
 // All geometry math happens here, server-side: the SketchUp adapter only
 // transforms pre-baked boxes (SketchUp owns authoring/interaction; Granete
-// owns resolution truth — see progress/current.md invariant).
+// owns resolution truth).
 //
 // Frame convention (workshop == SketchUp): X = width (PW), Y = depth (PD),
 // Z = height (PH). Board-local box is [width, thickness, length] on local

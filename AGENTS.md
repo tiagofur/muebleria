@@ -12,8 +12,9 @@ Este archivo es el mapa de entrada, no el PRD ni una instrucción de releer el r
    handoff. It is read-only, runs no tests, and never authorizes a write.
 4. Verify current ownership/reservation without taking or deleting another
    writer's work. GitHub Issues is the only operational queue.
-5. Read only the affected sources and prerequisites. Do not choose work from
-   `feature_list.json` or use `progress/current.md` as startup context.
+5. Read only the affected sources and prerequisites. Do not choose work from the
+   capability catalog or a global progress ledger. For ODD, open only the exact
+   issue artifact after the issue is known; never scan `odd/tasks/` at startup.
 
 `./init.sh` conserva su comprobación completa histórica para uso explícito. No es
 el arranque rutinario del agente. Comandos locales y CI proporcional:
