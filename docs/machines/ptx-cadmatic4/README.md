@@ -94,9 +94,10 @@ se conserva explícitamente; no se elimina por heurística ni por edad.
 9. [PARTS_INF/UDI y etiquetas](09_parts_inf_labels_cnc.md): modelo tipado de las familias de etiqueta, proyección industrial congelada por pieza física, mapping Granete → PARTS_INF con autoridad por campo y puente de identidad CNC DRAWING/BARCODE (#789, fase R5-B).
 10. [Receiver HPP250/CAD4](10_receiver_profile_hpp250_cad4.md): política lab-only para #790; autoridad de MATERIALS, orden de records, BOARDS/JOBS/PATTERNS/CUTS shape y límites CADLink sin publicar un perfil/adaptador r5 productivo.
 11. [CUTS semantics/differential/golden r5](11_cuts_semantics_differential_golden_r5.md): addendum #791 que separa `FUNCTION` de `PART_INDEX`, acota `92 + Xn`, resume R2201/R7301 por propiedades y documenta el golden LAB/TEST con SHA/conteos.
-12. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
-13. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
-   directa TS↔contrato↔Go.
+12. [CADLink .RLT y field pack](12_cadlink_rlt_field_pack.md): parser fail-closed del `.RLT` de tres enteros, catálogo versionado de errores CADLink, diagnóstico Granete (field/line verbatim) y field pack determinista con identity pins obligatorios y README `/CAD4 /RESULT /UDI /INF` (#792, fase R5-J). Offline/LAB: no ejecuta CADLink ni publica identidades r5.
+13. `packages/excel/src/ptx/`: compiler, validator, serializer, parser y verifier.
+14. `contracts/machineOutputCatalog.contract.json`: catálogo compartido con paridad
+    directa TS↔contrato↔Go.
 
 Los documentos `01`–`05` preservan investigación/decisiones históricas y no se reescriben para simular que conocían los resultados posteriores. `06` y `07` gobiernan el discovery y el plan de r5.
 
@@ -110,7 +111,7 @@ de campo pendiente. #693 no cierra #650 automáticamente.
 
 ## Próximo gate externo
 
-**No enviar otro PTX al cliente todavía.** Primero completar el plan r5: strict spec preflight (#788 ✓), PARTS_INF/UDI/etiquetas/identidad CNC (#789 ✓), receiver profile HPP250/CAD4 (#790), CUTS diferencial (#791), field pack con `/RESULT` (#792) e integración final (#793). La siguiente prueba debe pedir idealmente sólo el `.rlt` o confirmación de éxito, no otra ronda manual de interpretación de popups.
+**No enviar otro PTX al cliente todavía.** Primero completar el plan r5: strict spec preflight (#788 ✓), PARTS_INF/UDI/etiquetas/identidad CNC (#789 ✓), receiver profile HPP250/CAD4 (#790 ✓), CUTS diferencial (#791 ✓), field pack con `/RESULT` (#792 ✓, offline: parser `.RLT` + pack reproducible, sin intento de campo) e integración final (#793). La siguiente prueba debe pedir el `.RLT` — el pack #792 ya lo exige en su README — y no otra ronda manual de interpretación de popups.
 
 Sólo una conversión CADLink exitosa, seguida de revisión semántica del operador, puede cambiar `NOT_TESTED/notClaimed`.
 

@@ -688,6 +688,62 @@ Cobertura contractual exigida por #789/#797:
 
 ---
 
+## PTX CADmatic 4 — CADLink .RLT parser y field pack r5 (#792)
+
+Instrumentación offline de la próxima prueba CADLink (R5-J de #787). Parser
+fail-closed del `.RLT` de tres enteros, catálogo versionado de errores
+documentados (-1..21; 18..21 CAD3_SPECIFIC), diagnóstico Granete con
+field/line verbatim (sin mapping inventado a nombres de campo, familia PTX
+derivada sólo de los bytes) y field pack determinista
+(`manifest.json`/`expected_identity.json`/`README_FIELD_TEST.txt`/
+`CHECKSUMS.sha256` + imágenes opcionales reales) con identity pins
+obligatorios del caller. Autoridad documental: ayuda Magi-Cut CADLink V12
+(`Cadlink.htm`) en `docs/machines/ptx-cadmatic4/12_cadlink_rlt_field_pack.md`.
+
+```sh
+pnpm --filter @granete/excel test    # cadlinkRlt + cadlinkFieldPack + suite
+pnpm typecheck
+```
+
+Cobertura contractual exigida por #792:
+
+- parser `.RLT`: success `0/0/0` CRLF/LF (con/sin newline final); faltante,
+  no-entero, línea extra no vacía, línea en blanco extra, CR suelto, no-ASCII
+  y vacío fallan cerrado (`cadlink_rlt.*`); enteros desconocidos se parsean y
+  clasifican `UNKNOWN_ERROR` (`cadlink.unknown_error`); `error=0` con
+  field/line ≠ 0 es `INCONSISTENT_RESULT`, nunca éxito silencioso;
+- diagnóstico: `2/0/12`, `9/8/42`, `17/4/23` con significado documentado
+  verbatim, field verbatim (`fieldName` no existe) y contexto de línea como
+  candidatos hipotéticos `ONE_BASED`/`ZERO_BASED` explícitos (la base del
+  `lineNumber` es NO documentada: nunca familia autoritativa), recomputados
+  independientemente desde los bytes del golden; `lineNumber=0` sin familia y
+  fuera de toda lectura sin contexto, número siempre intacto;
+- field pack: golden r5 #791 SHA `239e9f7c…`/3303 bytes SIN modificar entra
+  al builder con pins `LAB_TEST_ONLY` y produce pack byte-determinista (dos
+  builds = archivos byte-exact); CHECKSUMS re-hasheados independientemente y
+  ordenados; mapper desde el `MachineOutputSelection` REAL tipado de
+  `@granete/domain` (campos `outputCompatibilityProfile*`/`postprocessor*`,
+  digest `null` ⇒ bloqueo); README con `/CAD4`, `/RESULT`, `/UDI /INF`, warning
+  `cadlink.ini` (con `cadlinkIniPresent`/`effectiveOptionsVerified`), NO CUT /
+  NO START SAW / NO ejecutar `.SAW`, `/DELETE` prohibido, sin paths
+  absolutos/usuario/hostname/timestamp;
+- preflight negativo: PTX corrupto (`parse_failed`), título > 25
+  (`spec_preflight_failed`), `MATERIALS.RULE1 6→7` y `FUNCTION 92→93`
+  (`readback_failed`), política faltante (`receiver_policy_missing`), pin
+  faltante/digest vacío/digest null de selección (`identity_pin_missing`),
+  `udiPictureRef` sin imagen real (`picture_missing`; al proveerla se usa un
+  PNG 1×1 estructuralmente válido generado localmente — el builder trata los
+  bytes como attachments opacos del caller) — en todos los casos NO
+  existe pack;
+- `analyzeCadlinkFieldResult`: SUCCESS/FAILURE estructurados, mismatch de
+  identidad del candidato detectable, `.RLT` malformado lanza, y la función
+  nunca cambia `supportStatus` (`field-evidence-only`);
+- límites: #792 no publica `ptx-cadmatic-4@r5`/`granete-ptx@1.4.0` (#793), no
+  cambia profiles/adapter/routing productivos, no ejecuta CADLink ni envía PTX
+  al cliente; r2/r3/r4/r5-LAB siguen byte-exact.
+
+---
+
 ## 15. Definition of Verified
 
 Antes de declarar una feature verificada:

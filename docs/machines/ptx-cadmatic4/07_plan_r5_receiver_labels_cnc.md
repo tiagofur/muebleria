@@ -260,6 +260,12 @@ Agregar un golden r5 generado desde pipeline real que cubra:
 
 ## 13. R5-J — CADLink preflight y field pack
 
+> Estado: implementado por #792 — ver
+> `12_cadlink_rlt_field_pack.md` (parser `.RLT`, catálogo versionado,
+> diagnóstico, field pack determinista con identity pins obligatorios y
+> README `/CAD4 /RESULT /UDI /INF`). Offline/LAB: sin intento de campo y sin
+> identidades r5 productivas (esas pertenecen a #793).
+
 Antes de download:
 
     serialize
