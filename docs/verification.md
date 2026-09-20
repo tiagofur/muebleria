@@ -713,12 +713,17 @@ Cobertura contractual exigida por #792:
   clasifican `UNKNOWN_ERROR` (`cadlink.unknown_error`); `error=0` con
   field/line ≠ 0 es `INCONSISTENT_RESULT`, nunca éxito silencioso;
 - diagnóstico: `2/0/12`, `9/8/42`, `17/4/23` con significado documentado
-  verbatim, field verbatim (`fieldName` no existe) y familia/hash de línea
-  derivados independientemente de los bytes del golden;
+  verbatim, field verbatim (`fieldName` no existe) y contexto de línea como
+  candidatos hipotéticos `ONE_BASED`/`ZERO_BASED` explícitos (la base del
+  `lineNumber` es NO documentada: nunca familia autoritativa), recomputados
+  independientemente desde los bytes del golden; `lineNumber=0` sin familia y
+  fuera de toda lectura sin contexto, número siempre intacto;
 - field pack: golden r5 #791 SHA `239e9f7c…`/3303 bytes SIN modificar entra
   al builder con pins `LAB_TEST_ONLY` y produce pack byte-determinista (dos
   builds = archivos byte-exact); CHECKSUMS re-hasheados independientemente y
-  ordenados; README con `/CAD4`, `/RESULT`, `/UDI /INF`, warning
+  ordenados; mapper desde el `MachineOutputSelection` REAL tipado de
+  `@granete/domain` (campos `outputCompatibilityProfile*`/`postprocessor*`,
+  digest `null` ⇒ bloqueo); README con `/CAD4`, `/RESULT`, `/UDI /INF`, warning
   `cadlink.ini` (con `cadlinkIniPresent`/`effectiveOptionsVerified`), NO CUT /
   NO START SAW / NO ejecutar `.SAW`, `/DELETE` prohibido, sin paths
   absolutos/usuario/hostname/timestamp;
@@ -726,7 +731,9 @@ Cobertura contractual exigida por #792:
   (`spec_preflight_failed`), `MATERIALS.RULE1 6→7` y `FUNCTION 92→93`
   (`readback_failed`), política faltante (`receiver_policy_missing`), pin
   faltante/digest vacío/digest null de selección (`identity_pin_missing`),
-  `udiPictureRef` sin imagen real (`picture_missing`) — en todos los casos NO
+  `udiPictureRef` sin imagen real (`picture_missing`; al proveerla se usa un
+  PNG 1×1 estructuralmente válido generado localmente — el builder trata los
+  bytes como attachments opacos del caller) — en todos los casos NO
   existe pack;
 - `analyzeCadlinkFieldResult`: SUCCESS/FAILURE estructurados, mismatch de
   identidad del candidato detectable, `.RLT` malformado lanza, y la función

@@ -27,7 +27,7 @@
  * supportStatus or any compatibility claim, and no PTX is sent to a client.
  */
 
-import type { CutPlan } from '@granete/domain';
+import type { CutPlan, MachineOutputSelection } from '@granete/domain';
 import { canonicalJson, sha256Hex } from '../machines/digest';
 import {
   diagnoseCadlinkRlt,
@@ -47,13 +47,12 @@ import { verifyCutPlanPtxReadback } from './verifyCutPlanPtxReadback';
 // ---------------------------------------------------------------------------
 
 /**
- * Exact profile/adapter identities a field pack must register.
- *
- * The productive source is `MachineOutputSelection` (generated contracts);
- * `cadlinkFieldPackIdentityPinsFromSelection` maps it structurally so #793
- * can pass a real selection without this package depending on storage. Every
- * pin is required non-empty — a null digest is a missing digest, not a
- * wildcard — and pins are recorded byte-for-byte.
+ * Exact profile/adapter identities a field pack must register. Field names
+ * follow the authoritative `MachineOutputSelection` domain contract
+ * (`outputCompatibilityProfile*` / `postprocessor*`) so #793 can plug a real
+ * selection in with no translation layer. Every pin is required non-empty —
+ * a null digest is a missing digest, not a wildcard — and pins are recorded
+ * byte-for-byte.
  */
 export interface CadlinkFieldPackIdentityPins {
   readonly machineProfileId: string;
@@ -66,35 +65,24 @@ export interface CadlinkFieldPackIdentityPins {
   readonly postprocessorImplementationDigest: string;
 }
 
-/** Structural subset of the generated `MachineOutputSelection` contract. */
-export interface MachineOutputSelectionLike {
-  readonly machineProfileId: string;
-  readonly machineProfileRevisionId: string;
-  readonly outputProfileId: string;
-  readonly outputProfileRevisionId: string;
-  readonly outputProfileDigest: string | null;
-  readonly adapterId: string;
-  readonly adapterVersion: string;
-  readonly adapterImplementationDigest: string;
-}
-
 /**
- * Map a machine output selection to field-pack pins. A null digest maps to ''
- * ON PURPOSE: the builder then fails closed on the missing digest instead of
- * silently producing an unpinnable pack.
+ * Map the authoritative `MachineOutputSelection` (from `@granete/domain`) to
+ * field-pack pins. A null digest maps to '' ON PURPOSE: the builder then
+ * fails closed on the missing digest instead of silently producing an
+ * unpinnable pack.
  */
 export function cadlinkFieldPackIdentityPinsFromSelection(
-  selection: MachineOutputSelectionLike,
+  selection: MachineOutputSelection,
 ): CadlinkFieldPackIdentityPins {
   return {
     machineProfileId: selection.machineProfileId,
     machineProfileRevisionId: selection.machineProfileRevisionId,
-    outputCompatibilityProfileId: selection.outputProfileId,
-    outputCompatibilityProfileRevisionId: selection.outputProfileRevisionId,
-    outputCompatibilityProfileDigest: selection.outputProfileDigest ?? '',
-    postprocessorAdapterId: selection.adapterId,
-    postprocessorAdapterVersion: selection.adapterVersion,
-    postprocessorImplementationDigest: selection.adapterImplementationDigest,
+    outputCompatibilityProfileId: selection.outputCompatibilityProfileId,
+    outputCompatibilityProfileRevisionId: selection.outputCompatibilityProfileRevisionId,
+    outputCompatibilityProfileDigest: selection.outputCompatibilityProfileDigest ?? '',
+    postprocessorAdapterId: selection.postprocessorAdapterId,
+    postprocessorAdapterVersion: selection.postprocessorAdapterVersion,
+    postprocessorImplementationDigest: selection.postprocessorImplementationDigest,
   };
 }
 

@@ -329,14 +329,15 @@ export {
   classifyCadlinkRlt,
   diagnoseCadlinkRlt,
   parseCadlinkRlt,
-  ptxLineContextAt,
+  ptxLineCandidatesAt,
   type CadlinkErrorCatalog,
   type CadlinkErrorCatalogEntry,
   type CadlinkErrorCatalogScope,
   type CadlinkRltDiagnosis,
+  type CadlinkRltLineCandidateContext,
+  type CadlinkRltLineIndexingAssumption,
   type CadlinkRltOutcome,
   type CadlinkRltParseErrorCode,
-  type CadlinkRltPtxLineContext,
   type CadlinkRltResult,
 } from './ptx/cadlinkRlt';
 // --- #792 reproducible CADLink field pack: identity pins are REQUIRED from
@@ -356,7 +357,6 @@ export {
   type CadlinkFieldPackIdentityPins,
   type CadlinkFieldPackPicture,
   type CadlinkFieldResultAnalysis,
-  type MachineOutputSelectionLike,
 } from './ptx/cadlinkFieldPack';
 
 

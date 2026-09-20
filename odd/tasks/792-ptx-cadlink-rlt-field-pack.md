@@ -3,7 +3,7 @@
 Issue: #792 — [P0][PTX-CAD4][R5-E] CADLink preflight, parser .RLT y field pack reproducible
 Base: origin/main @ 9475da3a21b4ab13ca33f4a917babab86f0012ea (merge #802)
 Branch: feat/792-cadlink-rlt-field-pack
-Status: implemented pending PR/CI
+Status: implemented pending PR/CI (review micro-round r2 applied: line-number base ambiguity modeled as explicit ONE_BASED/ZERO_BASED candidates, real typed MachineOutputSelection mapper, valid minimal PNG fixture)
 
 ## Scope
 
@@ -33,8 +33,8 @@ No productive r5 profile/adapter publication (ptx-cadmatic-4@r5 / granete-ptx@1.
 ## Evidence
 
 - Preflight: `python3 scripts/factory_preflight.py` -> PREFLIGHT_OK_NOT_VERIFIED at 9475da3a (tools node/pnpm/go/ruby/docker OK).
-- Focused: `pnpm --filter @granete/excel exec vitest run src/ptx/cadlinkRlt.test.ts src/ptx/cadlinkFieldPack.test.ts` -> 2 files, 50 tests passed.
-- Package: `pnpm --filter @granete/excel test` -> 49 files passed, 627 tests passed, 3 skipped.
+- Focused: `pnpm --filter @granete/excel exec vitest run src/ptx/cadlinkRlt.test.ts src/ptx/cadlinkFieldPack.test.ts` -> 2 files, 52 tests passed (23 RLT + 29 field pack).
+- Package: `pnpm --filter @granete/excel test` -> 49 files passed, 629 tests passed, 3 skipped (micro-round r2).
 - Typecheck: `pnpm typecheck` -> passed across workspace packages (incl. apps/web, apps/mobile, packages/ui).
 - Diff hygiene: `git diff --check` -> passed.
 - Selector: `python3 scripts/verify_affected.py --base origin/main --plan` -> selected broad gates ("global, tooling or unknown input changed" — foreign untracked inputs in the worktree).

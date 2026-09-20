@@ -14,10 +14,11 @@
  * - `fieldNumber` is preserved VERBATIM. The source does not document whether
  *   the field index is zero/one-based or includes the family cell, so it is
  *   never converted into a field name;
- * - `lineNumber` is preserved verbatim too; the PTX family context is derived
- *   ONLY from the candidate bytes by reading the reported line (interpreted
- *   as a 1-based index into the candidate's text lines) and accepting the
- *   first cell only when it is a documented PTX family token;
+ * - `lineNumber` is preserved verbatim too. Its base is equally UNDOCUMENTED:
+ *   the derived PTX line context is exposed as explicitly-labeled HYPOTHETICAL
+ *   candidates (ONE_BASED and ZERO_BASED), each included only when that
+ *   reading resolves to an existing candidate line, and neither is presented
+ *   as authoritative until field evidence resolves the base;
  * - error numbers absent from the catalog still parse and classify as
  *   UNKNOWN_ERROR (`cadlink.unknown_error`) so future CADLink versions keep
  *   leaving evidence instead of being rejected at parse time.
@@ -231,10 +232,20 @@ export function classifyCadlinkRlt(result: CadlinkRltResult): CadlinkRltOutcome 
   return CATALOG_BY_NUMBER.has(result.errorNumber) ? 'FAILURE' : 'UNKNOWN_ERROR';
 }
 
-/** PTX line context derived from the candidate bytes, never from assumptions. */
-export interface CadlinkRltPtxLineContext {
+/** PTX line candidate derived from the candidate bytes, never from assumptions. */
+export type CadlinkRltLineIndexingAssumption = 'ZERO_BASED' | 'ONE_BASED';
+
+export interface CadlinkRltLineCandidateContext {
   /**
-   * First cell of the reported line, only when it is a documented PTX family
+   * Which UNVERIFIED reading of the reported lineNumber produced this
+   * candidate. CADLink does not document the base; it stays a hypothesis
+   * until real field evidence resolves it.
+   */
+  readonly indexingAssumption: CadlinkRltLineIndexingAssumption;
+  /** ZERO-BASED array entry of the candidate PTX text line that was read. */
+  readonly candidateLineIndex: number;
+  /**
+   * First cell of the candidate line, only when it is a documented PTX family
    * token; otherwise absent. No field-name mapping is attempted.
    */
   readonly family?: string;
@@ -248,12 +259,18 @@ export interface CadlinkRltDiagnosis {
   readonly errorNumber: number;
   /** Verbatim; NEVER converted to a field name (base/offset undocumented). */
   readonly fieldNumber: number;
-  /** Verbatim; the PTX family context below is the only derivation. */
+  /** Verbatim; the candidate line contexts below are the only derivation. */
   readonly lineNumber: number;
   readonly documentedMeaning?: string;
   readonly documentedScope?: CadlinkErrorCatalogScope;
   readonly catalogVersion?: string;
-  readonly ptxLine?: CadlinkRltPtxLineContext;
+  /**
+   * Hypothetical PTX line contexts for the reported lineNumber, one per
+   * indexing assumption that resolves to an existing line. Absent when the
+   * number is 0 or no reading resolves. NEVER authoritative: the base of
+   * CADLink's line numbering is undocumented.
+   */
+  readonly ptxLineCandidates?: readonly CadlinkRltLineCandidateContext[];
   readonly candidateSha256: string;
 }
 
@@ -264,39 +281,66 @@ function candidateLines(ptxBytes: Uint8Array): readonly string[] {
   return split[split.length - 1] === '' ? split.slice(0, -1) : split;
 }
 
-/**
- * Derive the reported line's context from the candidate bytes. The reported
- * number is read as a 1-based index into the candidate's text lines; when the
- * line exists and its first cell is a documented PTX family token the family
- * is reported, otherwise nothing is invented.
- */
-export async function ptxLineContextAt(
-  ptxBytes: Uint8Array,
-  lineNumber: number,
-): Promise<CadlinkRltPtxLineContext | undefined> {
-  if (!Number.isInteger(lineNumber) || lineNumber < 1) return undefined;
-  const lines = candidateLines(ptxBytes);
-  const raw = lines[lineNumber - 1];
-  if (raw === undefined) return undefined;
-  const cells = raw.split(',');
+function familyOfCell(cells: readonly string[]): string | undefined {
   const firstCell = cells[0] ?? '';
-  const family = Object.prototype.hasOwnProperty.call(PTX_PARSER_FAMILY_SPECS, firstCell)
+  return Object.prototype.hasOwnProperty.call(PTX_PARSER_FAMILY_SPECS, firstCell)
     ? firstCell
     : undefined;
-  return {
-    family,
-    cellCount: cells.length,
-    rawLineSha256: await sha256Hex(raw),
+}
+
+/**
+ * Derive the HYPOTHETICAL line contexts for a reported lineNumber from the
+ * candidate bytes. CADLink documents "line number" but not its base, so both
+ * readings are offered, explicitly labeled:
+ *
+ * - ONE_BASED: PTX text line `lineNumber` (array entry lineNumber - 1);
+ * - ZERO_BASED: array entry `lineNumber`.
+ *
+ * Only readings that resolve to an existing line are included. lineNumber 0
+ * yields NO candidates: 0 is the documented success/no-line marker and no
+ * family may be invented for it. A single surviving candidate does NOT mean
+ * CADLink used that base.
+ */
+export async function ptxLineCandidatesAt(
+  ptxBytes: Uint8Array,
+  lineNumber: number,
+): Promise<readonly CadlinkRltLineCandidateContext[]> {
+  if (!Number.isInteger(lineNumber) || lineNumber < 1) return [];
+  const lines = candidateLines(ptxBytes);
+
+  const candidateAt = async (
+    indexingAssumption: CadlinkRltLineIndexingAssumption,
+    arrayIndex: number,
+  ): Promise<CadlinkRltLineCandidateContext | undefined> => {
+    const raw = lines[arrayIndex];
+    if (raw === undefined) return undefined;
+    const cells = raw.split(',');
+    return {
+      indexingAssumption,
+      candidateLineIndex: arrayIndex,
+      family: familyOfCell(cells),
+      cellCount: cells.length,
+      rawLineSha256: await sha256Hex(raw),
+    };
   };
+
+  const candidates: (CadlinkRltLineCandidateContext | undefined)[] = [
+    await candidateAt('ONE_BASED', lineNumber - 1),
+    await candidateAt('ZERO_BASED', lineNumber),
+  ];
+  return candidates.filter(
+    (candidate): candidate is CadlinkRltLineCandidateContext => candidate !== undefined,
+  );
 }
 
 /**
  * Build the Granete diagnosis for a parsed .RLT triple against the exact
  * candidate PTX bytes. Documents the documented meaning verbatim (when the
- * catalog knows the code), preserves field/line verbatim and adds the PTX
- * family context when the reported line can be identified in the bytes.
- * Never invents a root cause: `error 2 = Bad format` does NOT mean "HEADER
- * incorrect" unless the reported line/field shows it.
+ * catalog knows the code), preserves field/line verbatim and adds the
+ * HYPOTHETICAL PTX line candidates (ZERO_BASED/ONE_BASED, base undocumented)
+ * when readings resolve against the bytes. Never invents a root cause:
+ * `error 2 = Bad format` does NOT mean "HEADER incorrect" unless the
+ * reported line/field shows it.
  */
 export async function diagnoseCadlinkRlt(
   result: CadlinkRltResult,
@@ -311,6 +355,7 @@ export async function diagnoseCadlinkRlt(
         ? 'cadlink.unknown_error'
         : (entry?.diagnosticCode ?? 'cadlink.unknown_error');
   const showMeaning = outcome === 'SUCCESS' || outcome === 'FAILURE';
+  const ptxLineCandidates = await ptxLineCandidatesAt(ptxBytes, result.lineNumber);
 
   return {
     outcome,
@@ -321,7 +366,7 @@ export async function diagnoseCadlinkRlt(
     documentedMeaning: showMeaning ? entry?.documentedMeaning : undefined,
     documentedScope: showMeaning ? entry?.documentedScope : undefined,
     catalogVersion: CADLINK_ERROR_CATALOG_V1.version,
-    ptxLine: await ptxLineContextAt(ptxBytes, result.lineNumber),
+    ptxLineCandidates: ptxLineCandidates.length > 0 ? ptxLineCandidates : undefined,
     candidateSha256: await sha256Hex(ptxBytes),
   };
 }

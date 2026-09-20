@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
+import type { MachineOutputSelection } from '@granete/domain';
 import type { PtxDocument } from './records';
 import { serializePtxDocumentUnchecked } from './serialize';
 import { serializePtxDocumentBytesSpecChecked } from './specPreflight';
@@ -22,6 +23,21 @@ import { CadlinkRltParseError } from './cadlinkRlt';
 const GOLDEN_R5_SHA256 = '239e9f7c8989c5f3756545da94a184b7b79aa1bdda797755c065301917201932';
 const GOLDEN_R5_BYTES = 3303;
 const CANDIDATE_FILENAME = 'LAB-792-R5-GOLDEN.ptx';
+
+/**
+ * Minimal structurally-valid 1x1 8-bit grayscale PNG (67 bytes): signature,
+ * IHDR 1x1, one filtered pixel in IDAT, IEND. Generated locally for this
+ * test — no private or downloaded art. The builder treats picture bytes as
+ * opaque caller-supplied attachments; this fixture is a real PNG so the test
+ * never depends on that opacity.
+ */
+const MINIMAL_VALID_1X1_PNG = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
+  0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x3a,
+  0x7e, 0x9b, 0x55, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xe8,
+  0x04, 0x00, 0x00, 0x8b, 0x00, 0x8a, 0xfc, 0x49, 0x38, 0x55, 0x00, 0x00, 0x00, 0x00, 0x49,
+  0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+]);
 
 /**
  * LAB/TEST identity pins — deliberately impossible to confuse with a
@@ -229,19 +245,20 @@ describe('#792 field pack — valid golden r5 builds a deterministic pack', () =
     expect(identity.identity).toEqual(expectedIdentity);
   });
 
-  it('9. pins map structurally from a MachineOutputSelection-shaped selection', () => {
-    const pins = cadlinkFieldPackIdentityPinsFromSelection({
+  it('9. maps the REAL typed MachineOutputSelection to exact pins (postprocessor* names)', () => {
+    const selection: MachineOutputSelection = {
+      operation: 'cutting',
       machineProfileId: 'machine-a',
       machineProfileRevisionId: 'machine-a-r1',
-      outputProfileId: 'ptx-cadmatic-4',
-      outputProfileRevisionId: 'r5',
-      outputProfileDigest: 'deadbeef',
-      adapterId: 'granete-ptx',
-      adapterVersion: '1.4.0',
-      adapterImplementationDigest: 'cafebabe',
-    });
+      outputCompatibilityProfileId: 'ptx-cadmatic-4',
+      outputCompatibilityProfileRevisionId: 'r5',
+      outputCompatibilityProfileDigest: 'deadbeef',
+      postprocessorAdapterId: 'granete-ptx',
+      postprocessorAdapterVersion: '1.4.0',
+      postprocessorImplementationDigest: 'cafebabe',
+    };
 
-    expect(pins).toEqual({
+    expect(cadlinkFieldPackIdentityPinsFromSelection(selection)).toEqual({
       machineProfileId: 'machine-a',
       machineProfileRevisionId: 'machine-a-r1',
       outputCompatibilityProfileId: 'ptx-cadmatic-4',
@@ -407,14 +424,15 @@ describe('#792 field pack — preflight blocks invalid candidates', () => {
     await expect(buildCadlinkFieldPack(input)).rejects.toMatchObject({ code: 'field_pack.identity_pin_missing' });
 
     const pins = cadlinkFieldPackIdentityPinsFromSelection({
+      operation: 'cutting',
       machineProfileId: 'm',
       machineProfileRevisionId: 'm-r1',
-      outputProfileId: 'o',
-      outputProfileRevisionId: 'o-r1',
-      outputProfileDigest: null,
-      adapterId: 'a',
-      adapterVersion: '1',
-      adapterImplementationDigest: 'd',
+      outputCompatibilityProfileId: 'ptx-cadmatic-4',
+      outputCompatibilityProfileRevisionId: 'r5',
+      outputCompatibilityProfileDigest: null,
+      postprocessorAdapterId: 'granete-ptx',
+      postprocessorAdapterVersion: '1.4.0',
+      postprocessorImplementationDigest: 'd',
     });
     await expect(buildCadlinkFieldPack({ ...packInput(), identityPins: pins })).rejects.toMatchObject({ code: 'field_pack.identity_pin_missing' });
   });
@@ -441,19 +459,22 @@ describe('#792 field pack — preflight blocks invalid candidates', () => {
 
     const pack = await buildCadlinkFieldPack({
       ...input,
-      optionalPictures: [
-        { name: 'LABEL-PIC-792.PNG', bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) },
-      ],
+      optionalPictures: [{ name: 'LABEL-PIC-792.PNG', bytes: MINIMAL_VALID_1X1_PNG }],
     });
     const manifest = JSON.parse(ascii(packFile(pack, 'manifest.json').bytes));
     expect(manifest.attachments).toEqual([
       {
         name: 'LABEL-PIC-792.PNG',
-        sha256: sha256(new Uint8Array([0x89, 0x50, 0x4e, 0x47])),
-        byteLength: 4,
+        sha256: sha256(MINIMAL_VALID_1X1_PNG),
+        byteLength: MINIMAL_VALID_1X1_PNG.byteLength,
       },
     ]);
     expect(pack.files.map((file) => file.name)).toContain('LABEL-PIC-792.PNG');
+    // Structural sanity of the fixture itself: PNG signature + IEND trailer.
+    expect(Array.from(MINIMAL_VALID_1X1_PNG.slice(0, 8))).toEqual([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
+    expect(ascii(MINIMAL_VALID_1X1_PNG.slice(-8))).toContain('IEND');
   });
 
   it('rejects unsafe filenames and picture names before any gate', async () => {

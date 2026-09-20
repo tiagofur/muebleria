@@ -113,29 +113,45 @@ La fuente primaria sólo dice "field number" y "line number". No documenta si el
 base del número de línea. Por tanto:
 
 - `fieldNumber` se conserva VERBATIM en el diagnóstico (`CadlinkRltDiagnosis`).
-  Nunca se convierte automáticamente en `fieldName = MAT_INDEX` o similar.
-- `lineNumber` también se conserva verbatim. Lo único que derivamos —sólo desde
-  los bytes reales del candidato— es el contexto de la línea reportada:
-  `ptxLineContextAt(bytes, line)` interpreta el número como índice 1-based de
-  las líneas de texto del PTX y reporta la familia (`CUTS`, `MATERIALS`, …)
-  únicamente cuando la primera celda de esa línea es una familia PTX documentada
-  (tabla del parser), junto con el hash SHA-256 de la línea cruda y su conteo de
-  celdas. Si la línea está fuera de rango o no es identificable, no se inventa
-  nada.
+  Nunca se convierte automáticamente en `fieldName = MAT_INDEX` o similar:
+  no tenemos demostración de base, de si cuenta la familia, ni del
+  comportamiento histórico de numeración de campos de CADLink.
+- `lineNumber` también se conserva verbatim. **La base es DESCONOCIDA**: CADLink
+  documenta "line number" pero no si es 0-based o 1-based. Granete NO publica
+  una familia autoritativa calculada con una base sin demostrar. El contexto
+  PTX derivado es hipotético y va etiquetado explícitamente:
+  `ptxLineCandidatesAt(bytes, line)` (`CadlinkRltLineCandidateContext[]` en el
+  diagnóstico) ofrece UNA entrada por suposición de indexación que resuelva a
+  una línea existente del candidato:
+  - `indexingAssumption: 'ONE_BASED'` → línea de texto `line` (entrada de
+    array `line - 1`);
+  - `indexingAssumption: 'ZERO_BASED'` → entrada de array `line`.
+
+  Cada candidato reporta la familia (`CUTS`, `MATERIALS`, …) sólo cuando la
+  primera celda de ESA línea es una familia PTX documentada (tabla del
+  parser), junto con el índice usado, el hash SHA-256 de la línea cruda y su
+  conteo de celdas. `lineNumber = 0` no produce ningún candidato (0 es el
+  marcador documentado de éxito/sin línea: no se inventa familia). Si NINGUNA
+  lectura resuelve, el contexto simplemente está ausente — el número queda
+  intacto. Que sobreviva un solo candidato NO afirma que esa sea la base que
+  CADLink usó; sólo evidencia real de campo podrá resolver la ambigüedad.
 - El diagnóstico nunca inventa causa raíz: `error 2 = Bad format` NO significa
   automáticamente "HEADER incorrecto" si line/field no lo demuestran.
 
-Diagnóstico ejemplo (estructura real de `diagnoseCadlinkRlt`):
+Diagnóstico ejemplo (estructura real de `diagnoseCadlinkRlt`, `lineNumber = 42`):
 
 ```text
-outcome           = FAILURE
-diagnosticCode    = cadlink.illegal_part_index
-errorNumber       = 9
-documentedMeaning = Illegal part index
-fieldNumber       = 8        (verbatim, sin mapping a nombre)
-lineNumber        = 42       (verbatim)
-ptxLine.family    = CUTS     (derivado de los bytes, línea 42)
-candidateSha256   = 239e9f…
+outcome            = FAILURE
+diagnosticCode     = cadlink.illegal_part_index
+errorNumber        = 9
+documentedMeaning  = Illegal part index
+fieldNumber        = 8        (verbatim, sin mapping a nombre)
+lineNumber         = 42       (verbatim; base NO documentada)
+ptxLineCandidates  = [
+  { indexingAssumption: ONE_BASED,  candidateLineIndex: 41, family: …, … },
+  { indexingAssumption: ZERO_BASED, candidateLineIndex: 42, family: …, … },
+]                    (hipotéticos; sólo lecturas que resuelven en los bytes)
+candidateSha256     = 239e9f…
 ```
 
 Nunca incluye datos privados adicionales del cliente.
@@ -211,11 +227,15 @@ segundo verifier: se reusan parse/validate/spec-preflight/readback existentes.
 
 El pack exige pins explícitos del caller (`CadlinkFieldPackIdentityPins`):
 machine profile id/revision, output compatibility profile id/revision/digest,
-postprocessor adapter id/version/implementation digest. `#792` NO publica
-identidades productivas: los tests usan pins `LAB_TEST_ONLY` inequívocos. #793
-suministrará `ptx-cadmatic-4@r5` / `granete-ptx@1.4.0` reales; el mapper
-`cadlinkFieldPackIdentityPinsFromSelection` acepta un `MachineOutputSelection`
-estructural (digest `null` ⇒ falla cerrado como pin faltante, nunca comodín).
+postprocessor adapter id/version/implementation digest — los mismos nombres de
+campo del contrato autoritativo `MachineOutputSelection` de `@granete/domain`.
+`cadlinkFieldPackIdentityPinsFromSelection(selection: MachineOutputSelection)`
+acepta la selección real directamente (sin capa de traducción propia): #793
+enchufará la selección productiva tal cual. El digest
+`outputCompatibilityProfileDigest === null` mapea a pin faltante y falla
+cerrado — nunca comodín. `#792` NO publica identidades productivas: los tests
+usan pins `LAB_TEST_ONLY` inequívocos; #793 suministrará
+`ptx-cadmatic-4@r5` / `granete-ptx@1.4.0` reales.
 
 ### 8.2 Hashing sin circularidad
 
@@ -239,6 +259,13 @@ copias privadas del cliente. Cada imagen debe tener nombre determinista (basenam
 ASCII seguro, sin `..`, sin paths absolutos) y hash incluido; cualquier
 `udiPictureRef` debe resolver a un archivo real del pack o el builder bloquea
 (`field_pack.picture_missing`). La generación visual queda fuera de #792.
+
+Contrato exacto del builder: los bytes de una imagen son un **attachment
+opaco suministrado por el caller** — el builder exige nombre seguro, bytes no
+vacíos y resolución de `udiPictureRef`, pero NO decodifica ni valida el formato
+de imagen (no existe un parser de imágenes productivo por diseño). El test usa
+un PNG 1×1 grayscale estructuralmente válido generado localmente, de modo que
+la prueba no dependa de esa opacidad.
 
 ### 8.4 README_FIELD_TEST.txt
 
@@ -286,23 +313,29 @@ evidencia real de un field attempt podrá hacerlo bajo su issue.
 
 ## 11. Cobertura de tests
 
-`cadlinkRlt.test.ts` (21): success CRLF/LF, bad format 2/0/12 con familia
-derivada de la línea 12 real, illegal part 9/8/42, illegal material 17/4/23,
-CRLF/LF, tercera línea faltante, no-entero, línea extra no vacía, línea en
-blanco extra, CR suelto, no-ASCII, vacío, código entero desconocido, éxito con
-field/line ≠ 0 ⇒ inconsistente, 18..21 CAD3_SPECIFIC, unicidad/completitud del
-catálogo, SHA del candidato, línea fuera de rango.
+`cadlinkRlt.test.ts` (23): success CRLF/LF, bad format 2/0/12 con AMBAS
+lecturas hipotéticas (ONE_BASED/ZERO_BASED) recomputadas independientemente,
+illegal part 9/8/42, illegal material 17/4/23, CRLF/LF, tercera línea
+faltante, no-entero, línea extra no vacía, línea en blanco extra, CR suelto,
+no-ASCII, vacío, código entero desconocido, éxito con field/line ≠ 0 ⇒
+inconsistente, 18..21 CAD3_SPECIFIC, unicidad/completitud del catálogo, SHA
+del candidato, `lineNumber = 0` sin familia inventada, ambigüedad
+zero/one-based explícita cuando ambas lecturas caen en familias distintas (sin
+familia autoritativa en el diagnóstico), línea fuera de toda lectura posible.
 
 `cadlinkFieldPack.test.ts` (29): los 25 puntos de aceptación del issue (pack
 válido del golden r5, byte-exactitud entre builds, SHA del PTX exacto
 `239e9f7c…`, bytes/SHA del manifest exactos, checksums exactos re-hasheados,
-expected identity, pins byte-for-byte, receiverPolicyId, README determinista
+expected identity, pins byte-for-byte, mapper desde el `MachineOutputSelection`
+REAL tipado de `@granete/domain` (campos `postprocessor*`/`outputCompatibilityProfile*`),
+digest `null` de selección ⇒ bloqueo, README determinista
 con `/CAD4` `/RESULT` `/UDI /INF`, warning `cadlink.ini`, NO CUT/NO SAW, sin
 `/DELETE` instructivo, sin paths absolutos/usuarios/timestamps, pictures
 vacías válidas, PTX corrupto, mutación spec título>25, mutación receiver
 RULE1 6→7, mutación semántica 92→93, política faltante, pin faltante, digest
-vacío) + bloqueo de `udiPictureRef` sin imagen real, filenames inseguros y la
-API `analyzeCadlinkFieldResult` (éxito, fallo estructurado, mismatch de
+vacío) + bloqueo de `udiPictureRef` sin imagen real (con fixture PNG 1×1
+válido al proveerla), filenames inseguros y la API
+`analyzeCadlinkFieldResult` (éxito, fallo estructurado, mismatch de
 identidad, `.RLT` malformado).
 
 ## 12. Verificación
