@@ -1,16 +1,26 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 
-import type { GlbAssetSource } from './glbSceneCache';
+import { type GlbAssetSource, GlbSceneCache } from './glbSceneCache';
 
 /**
- * Session-scoped GLB byte source for every web consumer (#669). The app
- * provides the API-backed source once (GlbAssetSourceProvider); surfaces that
- * already accept an explicit glbSource prop keep precedence. In guest/test
- * contexts a data-only window seam can supply static bytes: it never carries
- * functions, only {revisionId -> {sha256, bytesBase64}} recorded BEFORE the
- * scene mounts (the #444 WebGL harness pattern, like __graneteScene).
+ * Session-scoped GLB authority for every web consumer (#669): the byte source
+ * AND the scene cache that owns its parsed templates. The app provides the
+ * API-backed source once (GlbAssetSourceProvider); one cache lives per
+ * source/owner so twenty members of the same digest authorize/fetch/parse
+ * ONCE, templates never leak across sessions, and disposal happens exactly
+ * when the owning authority changes or unmounts. In guest/test contexts a
+ * data-only window seam can supply static bytes: it never carries functions,
+ * only {revisionId -> {sha256, bytesBase64}} recorded BEFORE the scene mounts
+ * (the #444 WebGL harness pattern, like __graneteScene).
  */
-const GlbAssetSourceContext = createContext<GlbAssetSource | undefined>(undefined);
+export interface GlbAssetAuthority {
+  readonly source: GlbAssetSource | undefined;
+  readonly cache: GlbSceneCache | undefined;
+}
+
+const GlbAssetSourceContext = createContext<GlbAssetAuthority | undefined>(undefined);
+
+const EMPTY_AUTHORITY: GlbAssetAuthority = { source: undefined, cache: undefined };
 
 export type GlbAssetSourceProviderProps = {
   readonly source: GlbAssetSource | undefined;
@@ -18,18 +28,45 @@ export type GlbAssetSourceProviderProps = {
 };
 
 export function GlbAssetSourceProvider({ source, children }: GlbAssetSourceProviderProps): ReactNode {
-  return <GlbAssetSourceContext.Provider value={source}>{children}</GlbAssetSourceContext.Provider>;
+  // One cache per source identity: a session switch produces a new source →
+  // new cache → the previous cache is disposed (its templates/geometries/
+  // materials/textures are owned by it and by nothing else).
+  const cache = useMemo(() => (source ? new GlbSceneCache(source) : undefined), [source]);
+  useEffect(() => {
+    if (!cache) return;
+    return () => cache.dispose();
+  }, [cache]);
+  const authority = useMemo<GlbAssetAuthority>(
+    () => (source ? { source, cache } : EMPTY_AUTHORITY),
+    [source, cache],
+  );
+  return <GlbAssetSourceContext.Provider value={authority}>{children}</GlbAssetSourceContext.Provider>;
 }
 
-export function useGlbAssetSource(): GlbAssetSource | undefined {
+export function useGlbAssetAuthority(): GlbAssetAuthority {
   const provided = useContext(GlbAssetSourceContext);
-  if (provided) return provided;
-  const testSource = useMemo(() => createWindowSeamGlbAssetSource(), []);
-  return testSource;
+  const seamAuthority = useMemo(() => buildWindowSeamAuthority(), []);
+  // Hooks are unconditional; precedence is decided at return time only. A
+  // provider without a source (e.g. guest sessions) must NOT mask the test
+  // seam: an empty authority is equivalent to no authority.
+  return provided?.source ? provided : seamAuthority;
+}
+
+/**
+ * Back-compat helper: the byte source of the active authority.
+ */
+export function useGlbAssetSource(): GlbAssetSource | undefined {
+  return useGlbAssetAuthority().source;
 }
 
 interface WindowSeamAssets {
-  readonly [revisionId: string]: { readonly sha256: string; readonly bytesBase64: string };
+  readonly [revisionId: string]: { readonly sha256: string; bytesBase64: string };
+}
+
+function buildWindowSeamAuthority(): GlbAssetAuthority {
+  const source = createWindowSeamGlbAssetSource();
+  if (!source) return EMPTY_AUTHORITY;
+  return { source, cache: new GlbSceneCache(source) };
 }
 
 /**

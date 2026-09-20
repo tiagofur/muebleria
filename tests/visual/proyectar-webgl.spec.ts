@@ -1528,6 +1528,9 @@ const glbParityCanonical = JSON.parse(
   };
   readonly expected: {
     readonly pairwiseDistancesMm: Readonly<Record<string, number>>;
+    readonly referencePoints: readonly {
+      readonly expectedWorldMm: readonly [number, number, number];
+    }[];
   };
 };
 const glbParityBytes = readFileSync(
@@ -1701,9 +1704,9 @@ test('Point 12: WebGL real — #669 exact GLB member renders with canonical unit
         for (let i = 0; i < position.count; i++) {
           const candidate = [position.getX(i), position.getY(i), position.getZ(i)];
           const distance = Math.hypot(
-            candidate[0] - target[0],
-            candidate[1] - target[1],
-            candidate[2] - target[2],
+            candidate[0]! - target[0]!,
+            candidate[1]! - target[1]!,
+            candidate[2]! - target[2]!,
           );
           if (distance < bestDistance) {
             bestDistance = distance;
@@ -1719,19 +1722,55 @@ test('Point 12: WebGL real — #669 exact GLB member renders with canonical unit
       for (let i = 0; i < position.count; i++) {
         const candidate = [position.getX(i), position.getY(i), position.getZ(i)];
         for (let axis = 0; axis < 3; axis++) {
-          min[axis] = Math.min(min[axis], candidate[axis]);
-          max[axis] = Math.max(max[axis], candidate[axis]);
+          min[axis] = Math.min(min[axis]!, candidate[axis]!);
+          max[axis] = Math.max(max[axis]!, candidate[axis]!);
         }
       }
 
       // World-space reference points through the REAL scene graph matrices.
       const matrix = mesh.matrixWorld.elements;
-      const transform = (p: readonly number[]) => [
-        matrix[0]! * p[0]! + matrix[4]! * p[1]! + matrix[8]! * p[2]! + matrix[12]!,
-        matrix[1]! * p[0]! + matrix[5]! * p[1]! + matrix[9]! * p[2]! + matrix[13]!,
-        matrix[2]! * p[0]! + matrix[6]! * p[1]! + matrix[10]! * p[2]! + matrix[14]!,
+      const transformWith = (m: readonly number[], p: readonly number[]) => [
+        m[0]! * p[0]! + m[4]! * p[1]! + m[8]! * p[2]! + m[12]!,
+        m[1]! * p[0]! + m[5]! * p[1]! + m[9]! * p[2]! + m[13]!,
+        m[2]! * p[0]! + m[6]! * p[1]! + m[10]! * p[2]! + m[14]!,
       ];
-      const world = referencePoints.map((assetPoint) => transform(nearestVertex(assetPoint).vertex));
+      const world = referencePoints.map((assetPoint) =>
+        transformWith(matrix, nearestVertex(assetPoint).vertex),
+      );
+      // Independent expectation for the MESH DATA PATH (#669 territory):
+      // memberGroup.matrixWorld carries the conjugated placement chain
+      // (furniture x assembly x T_member x T_norm — #670 territory, proven by
+      // Points 10/11); the axis swap S and the unit/axis normalization U are
+      // CONSTANTS of the render contract, and P_glb comes from the canonical
+      // fixture — none of it is read from the mesh under test. A mirror or a
+      // double conversion in the GLB path preserves pairwise distances but
+      // can NEVER land on these per-point expectations.
+      const swapMatrix = [1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,0,1];
+      const unitScale = 1000; // canonical fixture: metres, +Y up
+      const glbToAsset = (p: readonly number[]) =>
+        [p[0]! * unitScale, -p[2]! * unitScale, p[1]! * unitScale] as const;
+      const canonicalGlb = [
+        [0.017, 0.011, -0.023],
+        [0.087, 0.011, -0.023],
+        [0.031, 0.011, -0.077],
+      ];
+      const groupMatrix = group.matrixWorld.elements;
+      const worldErrors = world.map((point, index) => {
+        const glbPoint = canonicalGlb[index]!;
+        // asset mm (Z up) -> swap S -> member group world (the render contract)
+        const assetPoint = glbToAsset(glbPoint);
+        const swapped = transformWith(swapMatrix, assetPoint);
+        const expected = transformWith(groupMatrix, swapped);
+        return {
+          point,
+          expected,
+          error: Math.hypot(
+            point[0]! - expected[0]!,
+            point[1]! - expected[1]!,
+            point[2]! - expected[2]!,
+          ),
+        };
+      });
       const distance = (a: readonly number[], b: readonly number[]) =>
         Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
 
@@ -1760,16 +1799,25 @@ test('Point 12: WebGL real — #669 exact GLB member renders with canonical unit
         expectedPairwise: [pairwise.p0p1, pairwise.p1p2, pairwise.p0p2],
         worldScaleNorms: norms,
         worldDeterminant: det,
+        worldPoints: worldErrors.map((entry) => ({
+          expected: entry.expected,
+          actual: entry.point,
+          error: entry.error,
+        })),
       };
     },
     {
       referencePoints: glbParityCanonical.asset.referencePointsAssetMm,
       pairwise: glbParityCanonical.expected.pairwiseDistancesMm,
+      // Independent contract constants (hand-derived world points of the
+      // canonical fixture), mapped to the three frame the ONLY way the
+      // renderer convention defines: workshop (X,Y,Z) -> three (X,Z,Y).
+      // Never derived from the matrixWorld under test.
     },
   );
 
   expect((glbReport as { error?: string }).error, JSON.stringify(glbReport)).toBeUndefined();
-  const report = glbReport as {
+  const report = glbReport as unknown as {
     glbRevisionId: unknown;
     glbSourceRevisionId: unknown;
     bakedExtents: number[];
@@ -1777,16 +1825,31 @@ test('Point 12: WebGL real — #669 exact GLB member renders with canonical unit
     expectedPairwise: number[];
     worldScaleNorms: number[];
     worldDeterminant: number;
+    worldPoints: {
+      expected: readonly [number, number, number];
+      actual: readonly number[];
+      error: number;
+    }[];
   };
   expect(report.glbRevisionId).toBe(GLB_SEAM_REVISION_ID);
   expect(report.glbSourceRevisionId).toBe('rev-runner-500');
   // Canonical bracket extents in asset mm (baked once, single conversion).
   report.bakedExtents.forEach((extent, axis) => {
-    expect(Math.abs(extent - [70, 54, 18][axis])).toBeLessThan(0.02);
+    expect(Math.abs(extent - [70, 54, 18][axis]!)).toBeLessThan(0.02);
   });
   // Pairwise distances survive the whole render chain unchanged (mm, rigid).
   report.worldPairwise.forEach((measured, index) => {
-    expect(Math.abs(measured - report.expectedPairwise[index])).toBeLessThan(0.05);
+    expect(Math.abs(measured - report.expectedPairwise[index]!)).toBeLessThan(0.05);
+  });
+  // World-point parity against the independent contract constants: a mirror
+  // preserves every pairwise distance, so ONLY exact per-point comparison
+  // (P0, P1, P2 individually) can rule it out.
+  expect(report.worldPoints.length).toBe(3);
+  report.worldPoints.forEach((point, index) => {
+    expect(
+      point.error,
+      `P${index} world parity: expected ${JSON.stringify(point.expected)}, actual ${JSON.stringify(point.actual)}`,
+    ).toBeLessThan(0.05);
   });
   // Uniform unit scale and a single mirror (the workshop→three axis swap).
   report.worldScaleNorms.forEach((norm) => {

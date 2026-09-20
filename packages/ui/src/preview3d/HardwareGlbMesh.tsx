@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import * as THREE from 'three';
 import type { ProjectedRigidMember } from '@granete/domain';
 import {
-  type GlbAssetSource,
   GlbAssetLoadError,
-  GlbSceneCache,
+  type GlbSceneCache,
   cloneGlbScene,
   createAssetSpaceSwapGroup,
 } from './glbSceneCache';
@@ -28,7 +27,12 @@ export type HardwareGlbLoadStatus = 'loading' | 'ready' | 'corrupt' | 'inaccessi
 
 export type HardwareGlbMeshProps = {
   readonly member: ProjectedRigidMember;
-  readonly glbSource?: GlbAssetSource;
+  /**
+   * Shared, owner-scoped cache (#669 review R2): one per session/source
+   * authority (GlbAssetSourceProvider or an explicit prop on the scene).
+   * Members NEVER create their own cache — the same digest is fetched and
+   * parsed once per owner, not once per member.
+   */
   readonly glbCache?: GlbSceneCache;
   readonly selected?: boolean;
   readonly onSelect?: () => void;
@@ -39,7 +43,6 @@ export type HardwareGlbMeshProps = {
 
 export function HardwareGlbMesh({
   member,
-  glbSource,
   glbCache,
   onSelect,
   fallback,
@@ -54,7 +57,7 @@ export function HardwareGlbMesh({
   const [mounted, setMounted] = useState<THREE.Group | null>(null);
   const [diagnostic, setDiagnostic] = useState<string | undefined>(undefined);
   const generationRef = useRef(0);
-  const cache = glbCache ?? (glbSource ? useMemo(() => new GlbSceneCache(glbSource), [glbSource]) : undefined);
+  const cache = glbCache;
 
   const revisionId = glb?.revisionId;
   const sha256 = glb?.sha256;

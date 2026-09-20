@@ -248,3 +248,125 @@ function hashOfFixture(): string {
   // the authoritative digest for the committed fixture.
   return createHash('sha256').update(fixtureBytes).digest('hex');
 }
+
+describe('GlbSceneCache shared ownership (#669 review R2)', () => {
+  const fixtureBytes = readFileSync(join(root, 'contracts/fixtures/glb-parity-bracket.glb'));
+  const fixtureArrayBuffer = (): ArrayBuffer =>
+    fixtureBytes.buffer.slice(
+      fixtureBytes.byteOffset,
+      fixtureBytes.byteOffset + fixtureBytes.byteLength,
+    ) as ArrayBuffer;
+  const representation = {
+    assetId: 'ast-glb-parity',
+    revisionId: 'rev-glb-parity-bracket-1',
+    sha256: 'sha256-' + createHash('sha256').update(fixtureBytes).digest('hex'),
+    sourceUnits: canonical.glbRepresentation.sourceUnits,
+    upAxis: canonical.glbRepresentation.upAxis,
+  };
+
+  it('deduplicates one digest across three members: one fetch/parse per cache owner', async () => {
+    const source = {
+      ownerKey: 'owner-x',
+      loadBytes: vi.fn(async () => fixtureArrayBuffer()),
+    };
+    const cache = new GlbSceneCache(source);
+
+    const [a, b, c] = await Promise.all([
+      cache.load(representation),
+      cache.load(representation),
+      cache.load(representation),
+    ]);
+    expect(source.loadBytes).toHaveBeenCalledTimes(1);
+    expect(b).toBe(a);
+    expect(c).toBe(a);
+    expect(a.children.length).toBeGreaterThan(0);
+  });
+
+  it('never reuses bytes or templates across owners even with identical revision/digest', async () => {
+    const sourceA = {
+      ownerKey: 'owner-a',
+      loadBytes: vi.fn(async () => fixtureArrayBuffer()),
+    };
+    const sourceB = {
+      ownerKey: 'owner-b',
+      loadBytes: vi.fn(async () => fixtureArrayBuffer()),
+    };
+    const cacheA = new GlbSceneCache(sourceA);
+    const cacheB = new GlbSceneCache(sourceB);
+
+    const [templateA, templateB] = await Promise.all([
+      cacheA.load(representation),
+      cacheB.load(representation),
+    ]);
+    expect(sourceA.loadBytes).toHaveBeenCalledTimes(1);
+    expect(sourceB.loadBytes).toHaveBeenCalledTimes(1);
+    expect(templateA).not.toBe(templateB); // distinct ownership, distinct template
+    // Disposing one owner never invalidates the other's live template.
+    cacheA.dispose();
+    expect(templateB.children.length).toBeGreaterThan(0);
+  });
+
+  it('dispose releases owned templates (geometry dispose events) and refuses further loads', async () => {
+    const source = {
+      ownerKey: 'owner-dispose',
+      loadBytes: vi.fn(async () => fixtureArrayBuffer()),
+    };
+    const cache = new GlbSceneCache(source);
+    const template = await cache.load(representation);
+
+    const disposedGeometries: string[] = [];
+    template.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      const geometry = mesh.geometry as THREE.BufferGeometry;
+      geometry.addEventListener('dispose', () => disposedGeometries.push(geometry.uuid));
+    });
+
+    cache.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(disposedGeometries.length).toBeGreaterThan(0);
+
+    await expect(cache.load(representation)).rejects.toThrow(/disposed/);
+  });
+});
+
+describe('axis-swap and normalization determinants (#669 review)', () => {
+  it('the swap group is EXACTLY the canonical workshop->three map S with det -1', () => {
+    const swap = createAssetSpaceSwapGroup();
+    const elements = swap.matrix.elements;
+    // S maps workshop (X, Y, Z) -> three (X, Z, Y): column-major elements
+    // [1,0,0,0, 0,0,1,0, 0,1,0,0, 0,0,0,1]
+    expect(elements.slice(0, 16)).toEqual([
+      1, 0, 0, 0,
+      0, 0, 1, 0,
+      0, 1, 0, 0,
+      0, 0, 0, 1,
+    ]);
+    const det = new THREE.Matrix3().setFromMatrix4(swap.matrix).determinant();
+    expect(det).toBeCloseTo(-1, 9);
+  });
+
+  it('the composed world determinant decomposes as det(member) * det(swap) only', () => {
+    const effective = composeMemberTransform(
+      canonical.placementChain.member,
+      canonical.asset.mountFrame,
+    );
+    const memberMatrixThree = assemblyTransformToThreeMatrix4(effective);
+    const detMember = new THREE.Matrix3().setFromMatrix4(memberMatrixThree).determinant();
+    const detSwap = new THREE.Matrix3().setFromMatrix4(swap.matrix).determinant();
+    const normalization = glbToAssetMmMatrix4({
+      sourceUnits: canonical.glbRepresentation.sourceUnits,
+      upAxis: canonical.glbRepresentation.upAxis,
+    });
+    const detNormalization = new THREE.Matrix3().setFromMatrix4(normalization).determinant();
+
+    // Handedness chain: member placement rigid right-handed (+1), GLB unit
+    // conversion positive (no winding flip), swap mirror (-1) — the product
+    // is the -1 the renderer shows, i.e. a coordinate-frame conversion, not
+    // an accidental geometry mirror.
+    expect(detMember).toBeCloseTo(1, 6);
+    expect(detNormalization).toBeGreaterThan(0);
+    expect(detSwap).toBeCloseTo(-1, 9);
+    expect(detMember * detNormalization * detSwap).toBeLessThan(0);
+  });
+});

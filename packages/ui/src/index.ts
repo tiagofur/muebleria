@@ -428,7 +428,9 @@ export {
   type MaterialTextureLookup,
   type Project3DPreviewResult,
   type GlbAssetSource,
+  type GlbAssetAuthority,
   GlbAssetSourceProvider,
+  useGlbAssetAuthority,
   useGlbAssetSource,
 } from './preview3d';
 

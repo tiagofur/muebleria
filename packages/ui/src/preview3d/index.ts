@@ -127,6 +127,8 @@ export {
 } from './HardwareGlbMesh';
 export {
   GlbAssetSourceProvider,
+  type GlbAssetAuthority,
+  useGlbAssetAuthority,
   useGlbAssetSource,
   createWindowSeamGlbAssetSource,
 } from './glbAssetSourceContext';

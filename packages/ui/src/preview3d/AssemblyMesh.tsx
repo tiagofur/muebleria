@@ -14,7 +14,7 @@ import {
 } from '@granete/domain';
 import { HardwareMesh } from './HardwareMesh';
 import { HardwareGlbMesh } from './HardwareGlbMesh';
-import type { GlbAssetSource } from './glbSceneCache';
+import type { GlbSceneCache } from './glbSceneCache';
 import { BoardMesh } from './BoardMesh';
 import type { BoardColorMode, BoardPartVisual, MaterialColorLookup, MaterialSurfaceMode, MaterialTextureLookup } from './boardPartVisual';
 import { DEFAULT_SCENE_LIGHTING_MODE, type SceneLightingMode } from './sceneLighting';
@@ -142,8 +142,8 @@ export type AssemblyMeshProps = {
   readonly surfaceMode?: MaterialSurfaceMode;
   readonly onSelectMember?: (memberId: string) => void;
   readonly onSelectFabricated?: (componentId: string) => void;
-  /** Exact GLB byte source for web consumers (#669); absent = procedural only. */
-  readonly glbSource?: GlbAssetSource;
+  /** Shared owner-scoped GLB cache for web consumers (#669); absent = procedural only. */
+  readonly glbCache?: GlbSceneCache;
 };
 
 function resolveHardwareCatalogMap(
@@ -170,7 +170,7 @@ export function AssemblyMesh({
   selected = false,
   onSelectMember,
   onSelectFabricated,
-  glbSource,
+  glbCache,
 }: AssemblyMeshProps): ReactNode {
   const hwMap = resolveHardwareCatalogMap(hardwareCatalog);
 
@@ -271,7 +271,7 @@ export function AssemblyMesh({
             {member.glb ? (
               <HardwareGlbMesh
                 member={member}
-                glbSource={glbSource}
+                glbCache={glbCache}
                 selected={selected}
                 onSelect={onSelectMember ? () => onSelectMember(member.memberId) : undefined}
                 fallback={proceduralHardware}

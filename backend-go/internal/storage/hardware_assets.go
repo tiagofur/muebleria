@@ -1721,14 +1721,6 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 	// #669: resolve the GLB co-representation of every SKP-bound revision in
 	// one batched read of the deterministic latest-derived rule. Unreadable
 	// provenance omits the block (fail-honest, never invented).
-	skpSourceIDs := make([]string, 0, len(details))
-	for _, facts := range details {
-		if facts.Representation == domain.HardwareAssetRepresentationSKP && facts.SourceRevisionID == "" {
-			// Only revisions that are themselves the derivation source can
-			// have derived GLBs; the source row carries no source_revision_id.
-			skpSourceIDs = append(skpSourceIDs, "")
-		}
-	}
 	derivedBySource := map[string]*domain.HardwareVisualGlbRepresentation{}
 	skpBoundIDs := make([]string, 0, len(revisionIDs))
 	for _, id := range revisionIDs {
@@ -1736,7 +1728,6 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 			skpBoundIDs = append(skpBoundIDs, id)
 		}
 	}
-	_ = skpSourceIDs
 	if len(skpBoundIDs) > 0 {
 		derivedRows, err := s.db(ctx).Query(ctx, `
 			SELECT DISTINCT ON (d.source_revision_id) d.source_revision_id, d.id, d.sha256, d.size_bytes, d.origin

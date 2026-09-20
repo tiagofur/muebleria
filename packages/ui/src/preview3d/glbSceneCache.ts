@@ -148,6 +148,16 @@ export class GlbSceneCache {
   }
 
   load(representation: GlbRepresentationRef): Promise<THREE.Group> {
+    if (this.disposed) {
+      return Promise.reject(
+        new GlbAssetLoadError(
+          'inaccessible',
+          representation.revisionId,
+          representation.sha256,
+          `cache for owner '${this.source.ownerKey}' was disposed (owner switched or unmounted)`,
+        ),
+      );
+    }
     const key = `${this.source.ownerKey}:${representation.sha256}:${representation.revisionId}`;
     const existing = this.entries.get(key);
     if (existing) return existing;
