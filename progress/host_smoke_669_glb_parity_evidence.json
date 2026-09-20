@@ -1,6 +1,6 @@
 {
-  "head": "b7446866ed247677d8b8f83238cddbd96579db97",
-  "rbzSha256": "b27f0df1efc4993e433d9b46f3b7aa651406c60b33888bcaff09c788b933a019",
+  "head": "cae255a98585efb315d92765ef4f229b6f828431",
+  "rbzSha256": "7a7bbebc3f824052df1750659ad78374ad23add62f297e6e3ba6a847f9eb9bed",
   "sketchupVersion": "26.2.242",
   "canonicalFixture": "contracts/fixtures/glb-parity-canonical.json",
   "glbFixture": "contracts/fixtures/glb-parity-bracket.glb",

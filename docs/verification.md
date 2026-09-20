@@ -724,3 +724,12 @@ cd apps/sketchup-extension && bundle exec rake verify
   documentado para la paridad SKP/GLB de #669).
 - F3 (`DEFAULT_THICKNESS_MM` del renderer genérico offline) queda
   expresamente fuera de este hardening.
+
+## #669 — GLB y representación 3D coherente (paridad SKP↔GLB↔WebGL)
+
+- **Gate P0 (paridad numérica)**: fixture canónico `contracts/fixtures/glb-parity-canonical.json` (bracket sólido cerrado 70×54×18 mm, MountFrame no-identidad, constantes world derivadas a mano) + GLB producido por el host real (`glb-parity-bracket.glb`, escritor `granete-sketchup-glb-exporter 1.0.0` determinista). Host smoke `TC_GlbParitySmoke` (36 aserciones PASS, SketchUp 2026.2.242): delta SKP↔GLB ≤ 2.5e-6 mm, dimensiones/pairwise preservadas, scale [1,1,1], det +1, mutantes de unidades/normalización ≥ 21 mm detectables. Evidencia `progress/host_smoke_669_glb_parity_evidence.json` (head = commit final).
+- **Lectores paralelos**: TS `glbParityCanonical` (17 tests) y Go `TestGlbParity*` (3 tests) consumen los MISMOS bytes GLB del host y las mismas constantes; contrato de validación compartido `glb-validation-cases.json` (17 casos) ejecutado por Go (upload) y TS (consumo).
+- **Frontera fail-closed**: finalize GLB valida estructura/self-containment (`ValidateGlbContainerStructure`) y registra evidencia `granete-glb-structure-validator`; una revisión GLB sin validación no puede existir (storage test). Upload con derivación exige source SKP del MISMO asset; pins de publicación congelan el GLB exacto (R1 queda en G1 aunque exista G2 — test).
+- **Render Web**: `GlbSceneCache` (clave digest, normalización ÚNICA horneada a mm asset Z-up, det>0), `HardwareGlbMesh` (estados loading/ready/corrupt/inaccessible/unsupported con fallback procedural explícito; primitive de identidad estable — el reconciler de R3F desprende hijos imperativos si el objeto churn), grupo de swap S constante (det −1 manejado por flipSided del renderer).
+- **WebGL real (Point 12, suite 9/9)**: extents [70,54,18] mm, distancias world IGUALES a la evidencia host (70 / 77.79460135510689 / 55.78530272392541), escala uniforme 1, det −1 (único mirror = swap), 0 errores de consola.
+- **Verificación**: domain 1582 (5 nuevos #669 + paridad), ui 1955, Go domain/storage/api focalizados PASS (PG 16 desechable), rake verify PASS (RuboCop 0, unit, boundary, RBZ), typecheck 7/7, openapi 0 drift. Pendiente: suites completas serializadas + CI del HEAD exacto (post-push), casos browser tenant/stale, comando host asistido interactivo, previews Agregado/herraje.
