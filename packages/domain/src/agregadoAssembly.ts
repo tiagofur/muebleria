@@ -30,6 +30,12 @@ import { calculateAgregadoSubspaceUnits } from './agregados';
 import { evaluatePartFormula } from './engine/shared';
 import { materialBindingRole } from './materialRole';
 import { resolveBoardOptionChoiceId } from './plinth';
+import {
+  type GlbSourceUnits,
+  type GlbUpAxis,
+  isGlbSourceUnits,
+  isGlbUpAxis,
+} from './glbRepresentation';
 
 export interface HardwareRotationDeg {
   readonly x?: number;
@@ -148,6 +154,8 @@ export interface ResolvedRigidMember {
   readonly assetRevisionId?: string;
   readonly sha256?: string;
   readonly mountFrame?: HardwareMountFrame;
+  /** Exact GLB co-representation for web consumers; absent = partial capability (#669) */
+  readonly glb?: MemberGlbRepresentation;
 }
 
 export interface AssemblyBOMItem {
@@ -933,6 +941,21 @@ export function resolveAgregadoAssembly(
 
 // Visual Pinning Authority (#668 - R10, R13)
 
+/**
+ * MemberGlbRepresentation is the web co-representation reference for a rigid
+ * member (#669): the exact GLB revision to load plus the declared coordinate
+ * space of the file. The renderer maps GLB vertices to asset mm ONCE through
+ * sourceUnits/upAxis (glbRepresentation.ts) and then reuses the identical
+ * MountFrame chain — there is no second interpretation of MountFrame for web.
+ */
+export interface MemberGlbRepresentation {
+  readonly revisionId: string;
+  readonly sha256: string;
+  readonly sourceUnits: GlbSourceUnits;
+  readonly upAxis: GlbUpAxis;
+  readonly sourceRevisionId?: string;
+}
+
 export type VisualAssetLookup = (hardwareId: string) => {
   mountFrame?: {
     originMm: readonly [number, number, number];
@@ -941,6 +964,7 @@ export type VisualAssetLookup = (hardwareId: string) => {
   assetId: string;
   assetRevisionId: string;
   sha256: string;
+  glb?: MemberGlbRepresentation;
 } | null;
 
 /**
@@ -962,6 +986,15 @@ export function createCatalogVisualAssetLookup(
     if (!hw || !hw.visualAsset) return null;
     const va = hw.visualAsset;
     if (!va.assetId || !va.assetRevisionId) return null;
+    const glbBinding = (va as unknown as { glb?: MemberGlbRepresentation }).glb;
+    const glb =
+      glbBinding &&
+      glbBinding.revisionId &&
+      glbBinding.sha256 &&
+      isGlbSourceUnits(glbBinding.sourceUnits) &&
+      isGlbUpAxis(glbBinding.upAxis)
+        ? glbBinding
+        : undefined;
     return {
       assetId: va.assetId,
       assetRevisionId: va.assetRevisionId,
@@ -969,6 +1002,7 @@ export function createCatalogVisualAssetLookup(
       mountFrame:
         (va as unknown as { mountFrame?: HardwareMountFrame }).mountFrame ??
         (hw as unknown as { mountFrame?: HardwareMountFrame }).mountFrame,
+      ...(glb ? { glb } : {}),
     };
   };
 }
@@ -1010,6 +1044,7 @@ export function attachVisualPins(
       assetRevisionId: asset.assetRevisionId,
       sha256: asset.sha256,
       mountFrame: asset.mountFrame,
+      ...(asset.glb ? { glb: asset.glb } : {}),
     };
   });
 
@@ -1102,6 +1137,12 @@ export interface ProjectedRigidMember {
   readonly effectiveTransform: AssemblyMemberTransform;
   readonly renderStatus: AssemblyRenderStatus;
   readonly statusDiagnostic?: string;
+  /**
+   * Exact GLB representation to render for web consumers (#669). Absent means
+   * the renderer must show the explicit procedural representation (partial
+   * capability), never silently hide the member.
+   */
+  readonly glb?: MemberGlbRepresentation;
 }
 
 /**
@@ -1177,6 +1218,7 @@ export function projectResolvedAssemblyFor3D(
       localTransform: m.localTransform,
       effectiveTransform,
       renderStatus,
+      ...(m.glb ? { glb: m.glb } : {}),
     };
   });
 
@@ -1232,6 +1274,16 @@ export function projectPublishedAssemblySnapshotFor3D(
       statusDiagnostic = `exact historical asset unavailable (rev: ${m.assetRevisionId})`;
     }
 
+    // The frozen GLB pin stays exact: it renders only when the exact revision
+    // is available to this consumer. A re-exported newer GLB never replaces it
+    // and an unavailable one degrades to the explicit procedural
+    // representation with a diagnostic, never to latest or to invisibility.
+    let glb = m.glb;
+    if (glb && availableAssets && !availableAssets.has(glb.revisionId)) {
+      statusDiagnostic = `${statusDiagnostic ? `${statusDiagnostic}; ` : ''}exact historical glb unavailable (rev: ${glb.revisionId})`;
+      glb = undefined;
+    }
+
     return {
       memberId: m.memberId,
       role: m.role,
@@ -1245,6 +1297,7 @@ export function projectPublishedAssemblySnapshotFor3D(
       effectiveTransform,
       renderStatus,
       ...(statusDiagnostic ? { statusDiagnostic } : {}),
+      ...(glb ? { glb } : {}),
     };
   });
 

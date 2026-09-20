@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { required } from './support/api';
@@ -198,8 +200,11 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     await page.getByTestId('hardware-add-revision-btn').click();
     await expect(page.getByTestId('hardware-asset-upload-modal')).toBeVisible();
 
-    // Upload .glb bytes for Rev. 2 (must start with glTF magic for backend content inspection)
-    const glbContent = Buffer.from('glTF-dummy-binary-content-rev2-distinct-hash');
+    // Upload the canonical #669 parity GLB (real closed-mesh glTF container;
+    // finalize validation rejects structurally invalid bytes fail-closed).
+    const glbContent = readFileSync(
+      join(__dirname, '../../contracts/fixtures/glb-parity-bracket.glb'),
+    );
     await page.getByTestId('hardware-asset-file-input').setInputFiles({
       name: 'tirador-tubular-v2.glb',
       mimeType: 'model/gltf-binary',
@@ -226,6 +231,32 @@ test.describe.serial('Hardware 3D Asset Administration (#667 M2) browser E2E', (
     const rev2Id = updated01?.visualAsset?.assetRevisionId;
     expect(rev2Id).toBeTruthy();
     expect(rev2Id).not.toBe(rev1Id);
+
+    // -------------------------------------------------------------------------
+    // Step 3b: structurally broken GLB (valid magic) is rejected fail-closed
+    // -------------------------------------------------------------------------
+    await page.getByRole('button', { name: 'Editar HW-3D-01' }).click();
+    await expect(page.getByRole('heading', { name: 'Editar herraje' })).toBeVisible();
+    await page.getByTestId('hardware-add-revision-btn').click();
+    await expect(page.getByTestId('hardware-asset-upload-modal')).toBeVisible();
+    const corruptGlb = Buffer.from(glbContent);
+    corruptGlb[21] = 0x7b; // break the JSON chunk (byte 20 is the opening '{')
+    await page.getByTestId('hardware-asset-file-input').setInputFiles({
+      name: 'broken.glb',
+      mimeType: 'model/gltf-binary',
+      buffer: corruptGlb,
+    });
+    await page.getByTestId('hardware-asset-upload-submit-btn').click();
+    await expect(page.getByTestId('hardware-upload-error')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('hardware-upload-success')).not.toBeVisible();
+    await page.getByTestId('hardware-asset-upload-cancel-btn').click();
+    await expect(page.getByTestId('hardware-asset-upload-modal')).not.toBeVisible();
+    await page.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(page.getByRole('heading', { name: 'Editar herraje' })).not.toBeVisible();
+    // No third revision was created.
+    const catalogAfterCorrupt = await repository.getCatalog();
+    const afterCorrupt = catalogAfterCorrupt.hardware.find((h) => h.code === 'HW-3D-01');
+    expect(afterCorrupt?.visualAsset?.assetRevisionId).toBe(rev2Id);
 
     // -------------------------------------------------------------------------
     // Step 4: Cancel form with unbind draft does not alter persisted binding

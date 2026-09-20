@@ -47,7 +47,7 @@
 | Hardware 3D | #666 | META open, approved | Coordinate remaining AS3D work without mixing scopes. |
 | Hardware resources | #667 | Open umbrella; M1/M2 history archived | Triage remaining umbrella scope before adding more work under it. |
 | SketchUp hardware SKP | #668 | Open/reopened | Preserve exact-asset/mounting guarantees; keep GLB work separate. |
-| GLB / coherent 3D | #669 | **Next/current hardware implementation**; open | GLB representation across catalog/agregados/muebles/Proyectar. |
+| GLB / coherent 3D | #669 | PR #803 open (`Refs #669`, Delivery: partial) — P0 parity closed, GLB contract+renderer+Proyectar wired; hardening round in progress | Merge blockers (hooks/cache compartido/paridad world WebGL) + CI exact-head antes de re-revisión. |
 | Rigid assemblies pilot | #670 | Open | Continue MERIVOBOX/pilot work under its own acceptance gates. |
 | Ops revision continuity | #741 | Open, not current priority | Resume only when explicitly reprioritized; preserve P1/P2 authority rules. |
 | SketchUp commercial | #677 | Open, not current priority | Resume live commercial total/delta work when reprioritized. |

@@ -33,6 +33,7 @@ module Granete
         connection/design_publish
         connection/position_sync_coordinator
         assets/mount_frame
+        assets/glb_writer
         library/catalog_parameter_contract
         library/catalog_provider
         library/layout_contract

@@ -30,7 +30,11 @@ type CreateHardwareAssetUploadSessionCommand struct {
 	// revision to this EXISTING active asset (replace-with-new-revision)
 	// instead of creating a new asset. Validated at session start.
 	TargetAssetID string
-	ActorUserID   string
+	// Derivation (#669), when set, stages a GLB derivation block: finalize
+	// writes it onto the new revision. Requires representation 'glb' and a
+	// target asset whose exact SKP revision is the source.
+	Derivation *domain.HardwareAssetDerivation
+	ActorUserID string
 }
 
 type HardwareAssetUploadSessionResult struct {
@@ -72,6 +76,12 @@ type FinalizeHardwareAssetUploadCommand struct {
 	ActorUserID string
 	IP          string
 	RequestID   string
+	// GlbSummary (#669) is the structural validation observation the API layer
+	// produced over the staged bytes before calling finalize. Required for a
+	// 'glb' representation: finalize records it as append-only evidence
+	// (tool granete-glb-structure-validator) so the validation state derives
+	// from evidence, and refuses to create an unvalidated GLB revision.
+	GlbSummary *domain.GlbDocumentSummary
 }
 
 type CancelHardwareAssetUploadSessionCommand struct {
@@ -98,19 +108,31 @@ type RecordHardwareAssetValidationCommand struct {
 
 const hardwareAssetUploadSessionTTL = 24 * time.Hour
 
+// HardwareAssetGlbStructureValidatorTool is the #669 evidence tool recorded at
+// GLB finalize: the server-side structural container validation the staged
+// bytes passed before the immutable revision existed.
+const HardwareAssetGlbStructureValidatorTool = "granete-glb-structure-validator"
+
 // hardwareAssetRevisionColumns is the canonical projection of a revision row.
 // There is deliberately no validation_state column: host compatibility is
 // derived from the append-only evidence rows so the revision stays truly
-// immutable (spec §10 / §15).
+// immutable (spec §10 / §15). The #669 derivation provenance columns are part
+// of the projection (NULL for every non-derived revision).
 const hardwareAssetRevisionColumns = `id, organization_id, asset_id, revision_number, representation,
-	storage_key, content_type, size_bytes, sha256, origin, integrity_verified_at, created_by, created_at`
+	storage_key, content_type, size_bytes, sha256, origin,
+	source_revision_id, exporter_name, exporter_version, export_options,
+	integrity_verified_at, created_by, created_at`
 
 func scanHardwareAssetRevision(row pgx.Row) (*domain.HardwareAssetRevision, error) {
 	var r domain.HardwareAssetRevision
 	var originRaw []byte
 	var createdBy *string
+	var sourceRevisionID, exporterName, exporterVersion *string
+	var exportOptions []byte
 	if err := row.Scan(&r.ID, &r.OrganizationID, &r.AssetID, &r.RevisionNumber, &r.Representation,
-		&r.StorageKey, &r.ContentType, &r.SizeBytes, &r.SHA256, &originRaw, &r.IntegrityVerifiedAt, &createdBy, &r.CreatedAt); err != nil {
+		&r.StorageKey, &r.ContentType, &r.SizeBytes, &r.SHA256, &originRaw,
+		&sourceRevisionID, &exporterName, &exporterVersion, &exportOptions,
+		&r.IntegrityVerifiedAt, &createdBy, &r.CreatedAt); err != nil {
 		return nil, err
 	}
 	origin, err := domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
@@ -118,6 +140,22 @@ func scanHardwareAssetRevision(row pgx.Row) (*domain.HardwareAssetRevision, erro
 		return nil, err
 	}
 	r.Origin = origin
+	if sourceRevisionID != nil {
+		r.SourceRevisionID = *sourceRevisionID
+	}
+	if exporterName != nil {
+		r.ExporterName = *exporterName
+	}
+	if exporterVersion != nil {
+		r.ExporterVersion = *exporterVersion
+	}
+	if len(exportOptions) > 0 && string(exportOptions) != "null" {
+		var options map[string]any
+		if err := json.Unmarshal(exportOptions, &options); err != nil {
+			return nil, fmt.Errorf("hardware asset revision %s export_options: %w", r.ID, err)
+		}
+		r.ExportOptions = options
+	}
 	if createdBy != nil {
 		r.CreatedBy = *createdBy
 	}
@@ -180,9 +218,38 @@ func (s *PostgresStore) CreateHardwareAssetUploadSession(ctx context.Context, cm
 		}
 		targetAssetID = &cmd.TargetAssetID
 	}
+	var derivation *domain.HardwareAssetDerivation
+	if cmd.Derivation != nil {
+		// #669: a derivation block is only meaningful on a GLB upload that
+		// appends to the SAME asset as its SKP source revision. Everything is
+		// validated HERE, inside the tenant transaction, against the org-scoped
+		// revision row — never against client echo.
+		if cmd.Representation != domain.HardwareAssetRepresentationGLB {
+			return nil, fmt.Errorf("%w: a derivation block is only accepted on glb uploads", domain.ErrHardwareAssetInvalid)
+		}
+		if targetAssetID == nil {
+			return nil, fmt.Errorf("%w: a derived glb requires asset_id pointing at the source revision's asset", domain.ErrHardwareAssetInvalid)
+		}
+		d := *cmd.Derivation
+		lookup := func(assetID, revisionID string) (domain.HardwareAssetRevision, error) {
+			rev, err := s.getHardwareAssetRevisionRow(ctx, assetID, revisionID)
+			if err != nil {
+				return domain.HardwareAssetRevision{}, err
+			}
+			return *rev, nil
+		}
+		if err := domain.ValidateHardwareAssetDerivation(d, *targetAssetID, lookup); err != nil {
+			return nil, err
+		}
+		derivation = &d
+	}
 	var originArg interface{}
 	if len(cmd.Origin) > 0 && string(cmd.Origin) != "null" {
 		originArg = []byte(cmd.Origin)
+	}
+	var derivationArgs hardwareAssetDerivationParams
+	if derivation != nil {
+		derivationArgs = hardwareAssetDerivationParamsFrom(derivation)
 	}
 	session := &domain.HardwareAssetUploadSession{
 		Representation: cmd.Representation,
@@ -190,14 +257,19 @@ func (s *PostgresStore) CreateHardwareAssetUploadSession(ctx context.Context, cm
 		Provenance:     cmd.Provenance,
 		License:        cmd.License,
 		Origin:         origin,
+		Derivation:     derivation,
 		Status:         "prepared",
 	}
 	err = s.db(ctx).QueryRow(ctx, `
 		INSERT INTO hardware_asset_upload_sessions
-			(organization_id, representation, display_name, provenance, license, origin, target_asset_id, status, created_by, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, 'prepared', $8, NOW() + $9::interval)
+			(organization_id, representation, display_name, provenance, license, origin, target_asset_id,
+			 source_revision_id, exporter_name, exporter_version, export_options,
+			 status, created_by, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'prepared', $12, NOW() + $13::interval)
 		RETURNING id, organization_id, created_at, expires_at
-	`, OrgFromCtx(ctx), string(cmd.Representation), displayName, cmd.Provenance, cmd.License, originArg, targetAssetID, createdBy,
+	`, OrgFromCtx(ctx), string(cmd.Representation), displayName, cmd.Provenance, cmd.License, originArg, targetAssetID,
+		derivationArgs.SourceRevisionID, derivationArgs.ExporterName, derivationArgs.ExporterVersion, derivationArgs.ExportOptions,
+		createdBy,
 		fmt.Sprintf("%d seconds", int(hardwareAssetUploadSessionTTL.Seconds())),
 	).Scan(&session.ID, &session.OrganizationID, &session.CreatedAt, &session.ExpiresAt)
 	session.TargetAssetID = targetAssetID
@@ -205,6 +277,34 @@ func (s *PostgresStore) CreateHardwareAssetUploadSession(ctx context.Context, cm
 		return nil, fmt.Errorf("create hardware asset upload session: %w", err)
 	}
 	return &HardwareAssetUploadSessionResult{Session: session, AbandonedStagedKeys: abandoned}, nil
+}
+
+// hardwareAssetDerivationParams carries the nullable SQL parameters of one
+// derivation block (NULL everywhere when absent).
+type hardwareAssetDerivationParams struct {
+	SourceRevisionID *string
+	ExporterName     *string
+	ExporterVersion  *string
+	ExportOptions    []byte
+}
+
+func hardwareAssetDerivationParamsFrom(d *domain.HardwareAssetDerivation) hardwareAssetDerivationParams {
+	if d == nil {
+		return hardwareAssetDerivationParams{}
+	}
+	params := hardwareAssetDerivationParams{
+		SourceRevisionID: &d.SourceRevisionID,
+		ExporterName:     &d.ExporterName,
+		ExporterVersion:  &d.ExporterVersion,
+	}
+	if d.ExportOptions != nil {
+		// Bounded by ValidateHardwareAssetDerivation (≤4 KiB); marshal errors
+		// are impossible for map[string]any from JSON — propagate anyway.
+		if raw, err := json.Marshal(d.ExportOptions); err == nil {
+			params.ExportOptions = raw
+		}
+	}
+	return params
 }
 
 // abandonExpiredHardwareAssetUploadSessions transitions expired prepared
@@ -242,7 +342,8 @@ func (s *PostgresStore) GetHardwareAssetUploadSession(ctx context.Context, sessi
 	row := s.db(ctx).QueryRow(ctx, `
 		SELECT id, organization_id, representation, display_name, provenance, license, origin,
 		       staged_storage_key, staged_content_type, staged_size_bytes, staged_sha256,
-		       target_asset_id, status, created_by, created_at, expires_at, finalized_asset_id, finalized_revision_id
+		       target_asset_id, status, created_by, created_at, expires_at, finalized_asset_id, finalized_revision_id,
+		       source_revision_id, exporter_name, exporter_version, export_options
 		FROM hardware_asset_upload_sessions
 		WHERE id = $1
 	`, sessionID)
@@ -256,11 +357,14 @@ func scanHardwareAssetUploadSession(row pgx.Row) (*domain.HardwareAssetUploadSes
 	var stagedKey, stagedCT, stagedSHA *string
 	var stagedSize *int64
 	var createdBy *string
+	var sourceRevisionID, exporterName, exporterVersion *string
+	var exportOptions []byte
 	err := row.Scan(&sess.ID, &sess.OrganizationID, &sess.Representation, &sess.DisplayName,
 		&sess.Provenance, &sess.License, &originRaw,
 		&stagedKey, &stagedCT, &stagedSize, &stagedSHA,
 		&sess.TargetAssetID, &sess.Status, &createdBy, &sess.CreatedAt, &sess.ExpiresAt,
-		&sess.FinalizedAssetID, &sess.FinalizedRevisionID)
+		&sess.FinalizedAssetID, &sess.FinalizedRevisionID,
+		&sourceRevisionID, &exporterName, &exporterVersion, &exportOptions)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil, domain.ErrHardwareAssetSessionNotFound
@@ -281,6 +385,23 @@ func scanHardwareAssetUploadSession(row pgx.Row) (*domain.HardwareAssetUploadSes
 			SizeBytes:   *stagedSize,
 			SHA256:      *stagedSHA,
 		}
+	}
+	if sourceRevisionID != nil {
+		derivation := &domain.HardwareAssetDerivation{SourceRevisionID: *sourceRevisionID}
+		if exporterName != nil {
+			derivation.ExporterName = *exporterName
+		}
+		if exporterVersion != nil {
+			derivation.ExporterVersion = *exporterVersion
+		}
+		if len(exportOptions) > 0 && string(exportOptions) != "null" {
+			var options map[string]any
+			if err := json.Unmarshal(exportOptions, &options); err != nil {
+				return nil, nil, fmt.Errorf("upload session %s export_options: %w", sess.ID, err)
+			}
+			derivation.ExportOptions = options
+		}
+		sess.Derivation = derivation
 	}
 	if createdBy != nil {
 		sess.CreatedBy = *createdBy
@@ -394,7 +515,8 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 	row := s.db(ctx).QueryRow(ctx, `
 		SELECT id, organization_id, representation, display_name, provenance, license, origin,
 		       staged_storage_key, staged_content_type, staged_size_bytes, staged_sha256,
-		       target_asset_id, status, created_by, created_at, expires_at, finalized_asset_id, finalized_revision_id
+		       target_asset_id, status, created_by, created_at, expires_at, finalized_asset_id, finalized_revision_id,
+		       source_revision_id, exporter_name, exporter_version, export_options
 		FROM hardware_asset_upload_sessions
 		WHERE id = $1
 		FOR UPDATE
@@ -428,6 +550,23 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 	if !hardwareAssetContentTypeMatchesRepresentation(sess.Representation, sess.Staged.ContentType) {
 		return nil, fmt.Errorf("%w: el contenido almacenado (%s) no corresponde a la representación %s",
 			domain.ErrHardwareAssetInvalid, sess.Staged.ContentType, sess.Representation)
+	}
+
+	// #669 fail-closed GLB frontier: a GLB revision may only exist with a
+	// structural validation observation attached as evidence. The API layer
+	// validates the staged bytes BEFORE the transaction; a missing summary
+	// means the caller skipped the frontier — refuse, never invent evidence.
+	var glbSummary *domain.GlbDocumentSummary
+	if sess.Representation == domain.HardwareAssetRepresentationGLB {
+		if cmd.GlbSummary == nil {
+			return nil, fmt.Errorf("%w: glb finalize requires the structural validation summary", domain.ErrHardwareAssetInvalid)
+		}
+		glbSummary = cmd.GlbSummary
+	} else if sess.Derivation != nil {
+		// Belt and braces: session creation already refuses this, but the row
+		// is re-read here under lock — a derivation on a non-glb finalize can
+		// never reach the immutable revision.
+		return nil, fmt.Errorf("%w: a derivation block is only accepted on glb uploads", domain.ErrHardwareAssetInvalid)
 	}
 
 	var createdBy *string
@@ -495,21 +634,28 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 		SHA256:         sess.Staged.SHA256,
 		Origin:         sess.Origin,
 	}
-	var revisionCreatedBy *string
-	var insertedOriginRaw []byte
-	err = s.db(ctx).QueryRow(ctx, `
+	// #669: the staged derivation block rides the INSERT — immutability is
+	// respected by construction (the values are part of the one-time write).
+	derivationParams := hardwareAssetDerivationParamsFrom(sess.Derivation)
+	if sess.Derivation != nil {
+		revision.SourceRevisionID = sess.Derivation.SourceRevisionID
+		revision.ExporterName = sess.Derivation.ExporterName
+		revision.ExporterVersion = sess.Derivation.ExporterVersion
+		revision.ExportOptions = sess.Derivation.ExportOptions
+	}
+	inserted, err := scanHardwareAssetRevision(s.db(ctx).QueryRow(ctx, `
 		INSERT INTO hardware_asset_revisions
 			(organization_id, asset_id, revision_number, representation, storage_key,
-			 content_type, size_bytes, sha256, origin, integrity_verified_at, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10)
+			 content_type, size_bytes, sha256, origin,
+			 source_revision_id, exporter_name, exporter_version, export_options,
+			 integrity_verified_at, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), $14)
 		RETURNING `+hardwareAssetRevisionColumns,
 		sess.OrganizationID, asset.ID, revision.RevisionNumber, string(revision.Representation), revision.StorageKey,
-		revision.ContentType, revision.SizeBytes, revision.SHA256, originArg, createdBy,
-	).Scan(
-		&revision.ID, &revision.OrganizationID, &revision.AssetID, &revision.RevisionNumber,
-		&revision.Representation, &revision.StorageKey, &revision.ContentType, &revision.SizeBytes,
-		&revision.SHA256, &insertedOriginRaw, &revision.IntegrityVerifiedAt, &revisionCreatedBy, &revision.CreatedAt,
-	)
+		revision.ContentType, revision.SizeBytes, revision.SHA256, originArg,
+		derivationParams.SourceRevisionID, derivationParams.ExporterName, derivationParams.ExporterVersion, derivationParams.ExportOptions,
+		createdBy,
+	))
 	if err != nil {
 		if isUniqueViolationOn(err, "uq_hardware_asset_revisions_number") {
 			// Belt and braces for the FOR UPDATE serialization: a same-asset
@@ -519,12 +665,32 @@ func (s *PostgresStore) FinalizeHardwareAssetUpload(ctx context.Context, cmd Fin
 		}
 		return nil, fmt.Errorf("insert hardware asset revision: %w", err)
 	}
-	if revisionCreatedBy != nil {
-		revision.CreatedBy = *revisionCreatedBy
-	}
+	revision = inserted
 	// A brand-new revision has no evidence yet: pending until an authorized
 	// validator records it (never a client-declared state).
 	revision.ValidationState = domain.HardwareAssetValidationPending
+	// #669: the structural validation observation the API layer made over the
+	// staged bytes becomes append-only evidence IN THE SAME transaction, so
+	// the revision's validation state derives from evidence (#668 semantics)
+	// and an unvalidated GLB revision can never exist.
+	if glbSummary != nil {
+		details, err := json.Marshal(glbSummary)
+		if err != nil {
+			return nil, fmt.Errorf("marshal glb summary: %w", err)
+		}
+		if err := s.RecordHardwareAssetValidation(ctx, RecordHardwareAssetValidationCommand{
+			AssetID:     asset.ID,
+			RevisionID:  revision.ID,
+			SHA256:      revision.SHA256,
+			Tool:        HardwareAssetGlbStructureValidatorTool,
+			Result:      "passed",
+			Details:     details,
+			ActorUserID: cmd.ActorUserID,
+		}); err != nil {
+			return nil, fmt.Errorf("record glb structure validation evidence: %w", err)
+		}
+		revision.ValidationState = domain.HardwareAssetValidationValidated
+	}
 	asset.Revisions = []domain.HardwareAssetRevision{*revision}
 
 	if _, err := s.db(ctx).Exec(ctx, `
@@ -674,9 +840,7 @@ func (s *PostgresStore) DeriveHardwareAssetRevision(ctx context.Context, cmd Der
 		Origin:         validatedOrigin,
 	}
 
-	var revisionCreatedBy *string
-	var insertedOriginRaw []byte
-	err = s.db(ctx).QueryRow(ctx, `
+	inserted, err := scanHardwareAssetRevision(s.db(ctx).QueryRow(ctx, `
 		INSERT INTO hardware_asset_revisions
 			(organization_id, asset_id, revision_number, representation, storage_key,
 			 content_type, size_bytes, sha256, origin, integrity_verified_at, created_by)
@@ -684,20 +848,14 @@ func (s *PostgresStore) DeriveHardwareAssetRevision(ctx context.Context, cmd Der
 		RETURNING `+hardwareAssetRevisionColumns,
 		OrgFromCtx(ctx), asset.ID, revision.RevisionNumber, string(revision.Representation), revision.StorageKey,
 		revision.ContentType, revision.SizeBytes, revision.SHA256, marshaledOrigin, createdBy,
-	).Scan(
-		&revision.ID, &revision.OrganizationID, &revision.AssetID, &revision.RevisionNumber,
-		&revision.Representation, &revision.StorageKey, &revision.ContentType, &revision.SizeBytes,
-		&revision.SHA256, &insertedOriginRaw, &revision.IntegrityVerifiedAt, &revisionCreatedBy, &revision.CreatedAt,
-	)
+	))
 	if err != nil {
 		if isUniqueViolationOn(err, "uq_hardware_asset_revisions_number") {
 			return nil, domain.ErrHardwareAssetRevisionConflict
 		}
 		return nil, fmt.Errorf("insert derived hardware asset revision: %w", err)
 	}
-	if revisionCreatedBy != nil {
-		revision.CreatedBy = *revisionCreatedBy
-	}
+	revision = inserted
 	revision.ValidationState = domain.HardwareAssetValidationPending
 
 	if err := s.InsertSecurityAuditEvent(ctx, SecurityAuditEvent{
@@ -910,6 +1068,24 @@ func (s *PostgresStore) GetHardwareAssetRevision(ctx context.Context, assetID, r
 	if !isValidUUID(assetID) || !isValidUUID(revisionID) {
 		return nil, domain.ErrHardwareAssetRevisionNotFound
 	}
+	rev, err := s.getHardwareAssetRevisionRow(ctx, assetID, revisionID)
+	if err != nil {
+		return nil, err
+	}
+	states, err := s.hardwareAssetValidationStates(ctx, []string{rev.ID})
+	if err != nil {
+		return nil, err
+	}
+	rev.ValidationState = states[rev.ID]
+	return rev, nil
+}
+
+// getHardwareAssetRevisionRow reads one revision row inside the tenant scope
+// (no derived validation state — the raw immutable facts).
+func (s *PostgresStore) getHardwareAssetRevisionRow(ctx context.Context, assetID, revisionID string) (*domain.HardwareAssetRevision, error) {
+	if !isValidUUID(assetID) || !isValidUUID(revisionID) {
+		return nil, domain.ErrHardwareAssetRevisionNotFound
+	}
 	rev, err := scanHardwareAssetRevision(s.db(ctx).QueryRow(ctx, `
 		SELECT `+hardwareAssetRevisionColumns+`
 		FROM hardware_asset_revisions
@@ -921,12 +1097,58 @@ func (s *PostgresStore) GetHardwareAssetRevision(ctx context.Context, assetID, r
 		}
 		return nil, err
 	}
-	states, err := s.hardwareAssetValidationStates(ctx, []string{rev.ID})
+	return rev, nil
+}
+
+// hardwareAssetGlbRepresentation builds the server-resolved GLB
+// co-representation of one revision (#669). For a GLB revision it mirrors the
+// revision itself; for an SKP revision it is the LATEST revision derived from
+// that exact source (deterministic rule: representation 'glb' +
+// source_revision_id = the SKP revision, highest revision_number). Provenance
+// comes from the revision's validated origin; a missing or unreadable origin
+// omits the block (fail-honest: never invent units or axis).
+func hardwareAssetGlbRepresentation(
+	representation domain.HardwareAssetRepresentation,
+	revisionID, sha256 string, sizeBytes int64,
+	sourceRevisionID string,
+	origin *domain.HardwareAssetOrigin,
+) *domain.HardwareVisualGlbRepresentation {
+	if origin == nil {
+		return nil
+	}
+	glb := &domain.HardwareVisualGlbRepresentation{
+		RevisionID:       revisionID,
+		SHA256:           sha256,
+		SizeBytes:        sizeBytes,
+		SourceUnits:      origin.SourceUnits,
+		UpAxis:           origin.UpAxis,
+	}
+	if sourceRevisionID != "" {
+		glb.SourceRevisionID = sourceRevisionID
+	}
+	return glb
+}
+
+// latestDerivedGlbRevision resolves the deterministic "latest derived GLB of
+// revision R" inside the tenant scope (nil when none exists).
+func (s *PostgresStore) latestDerivedGlbRevision(ctx context.Context, assetID, sourceRevisionID string) (*domain.HardwareAssetRevision, error) {
+	if !isValidUUID(assetID) || !isValidUUID(sourceRevisionID) {
+		return nil, nil
+	}
+	var derivedID string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT id FROM hardware_asset_revisions
+		WHERE organization_id = $1 AND asset_id = $2 AND source_revision_id = $3 AND representation = 'glb'
+		ORDER BY revision_number DESC
+		LIMIT 1
+	`, OrgFromCtx(ctx), assetID, sourceRevisionID).Scan(&derivedID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	rev.ValidationState = states[rev.ID]
-	return rev, nil
+	return s.getHardwareAssetRevisionRow(ctx, assetID, derivedID)
 }
 
 // RetireHardwareAsset withdraws the asset from NEW selections. Existing
@@ -1002,21 +1224,23 @@ func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, a
 		return nil, fmt.Errorf("%w: asset/revision identifiers required", domain.ErrHardwareAssetBindingInvalid)
 	}
 	var (
+		revisionIDRow  string
 		assetStatus    string
 		representation string
 		sha256         string
 		sizeBytes      int64
+		sourceRevID    *string
 		originRaw      []byte
 		evidence       *string
 	)
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT a.status, r.representation, r.sha256, r.size_bytes, r.origin,
+		SELECT r.id, a.status, r.representation, r.sha256, r.size_bytes, r.source_revision_id, r.origin,
 		       (SELECT v.result FROM hardware_asset_validations v
 		        WHERE v.revision_id = r.id ORDER BY v.created_at DESC, v.id DESC LIMIT 1)
 		FROM hardware_assets a
 		JOIN hardware_asset_revisions r ON r.asset_id = a.id AND r.id = $2
 		WHERE a.id = $1 AND a.organization_id = $3
-	`, assetID, revisionID, OrgFromCtx(ctx)).Scan(&assetStatus, &representation, &sha256, &sizeBytes, &originRaw, &evidence)
+	`, assetID, revisionID, OrgFromCtx(ctx)).Scan(&revisionIDRow, &assetStatus, &representation, &sha256, &sizeBytes, &sourceRevID, &originRaw, &evidence)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Neutral: an unknown revision and a foreign one are
@@ -1037,11 +1261,12 @@ func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, a
 		AssetRevisionID:  revisionID,
 		Representation:   rep,
 		SHA256:           sha256,
-		SizeBytes:       sizeBytes,
+		SizeBytes:        sizeBytes,
 		PreparationState: domain.HardwareAssetPreparationUnprepared,
 	}
+	var origin *domain.HardwareAssetOrigin
 	if len(originRaw) > 0 && string(originRaw) != "null" {
-		origin, err := domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
+		origin, err = domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
 		if err != nil {
 			return nil, fmt.Errorf("%w: origen del recurso inválido: %v", domain.ErrHardwareAssetBindingInvalid, err)
 		}
@@ -1060,6 +1285,22 @@ func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, a
 		binding.ValidationState = domain.HardwareAssetValidationValidated
 	default:
 		binding.ValidationState = domain.HardwareAssetValidationFailed
+	}
+
+	// #669 server-resolved GLB co-representation for web consumers: a GLB
+	// binding mirrors itself; an SKP binding resolves the latest derived GLB
+	// of exactly this revision (deterministic rule). Nil when none exists or
+	// its provenance is unreadable — never an invented block.
+	if rep == domain.HardwareAssetRepresentationGLB {
+		binding.Glb = hardwareAssetGlbRepresentation(rep, revisionID, sha256, sizeBytes, "", origin)
+	} else {
+		derived, err := s.latestDerivedGlbRevision(ctx, assetID, revisionID)
+		if err != nil {
+			derived = nil // fail-honest: unreadable provenance omits the block
+		}
+		if derived != nil {
+			binding.Glb = hardwareAssetGlbRepresentation(derived.Representation, derived.ID, derived.SHA256, derived.SizeBytes, derived.SourceRevisionID, derived.Origin)
+		}
 	}
 	return binding, nil
 }
@@ -1221,15 +1462,29 @@ func (s *PostgresStore) freezeDesignRevisionHardwareAssets(ctx context.Context, 
 		ids = append(ids, id)
 	}
 	// One atomic statement: the revision id, representation and digest of
-	// each pin come from the SAME read of hardwares × hardware_asset_revisions.
+	// each pin come from the SAME read of hardwares × hardware_asset_revisions,
+	// and the derived GLB is resolved at freeze time with the same
+	// deterministic rule as the live binding (highest derived revision of the
+	// exact pinned SKP revision). Later re-exports create new rows and can
+	// never rewrite a frozen pin (#669 historical exactness).
 	pinned, err := s.db(ctx).Query(ctx, `
 		WITH inserted AS (
 			INSERT INTO design_revision_hardware_assets
-				(organization_id, project_id, design_revision_id, hardware_id, asset_id, asset_revision_id, representation, sha256)
-			SELECT $1, $2, $3, h.id, r.asset_id, r.id, r.representation, r.sha256
+				(organization_id, project_id, design_revision_id, hardware_id, asset_id, asset_revision_id, representation, sha256, glb_revision_id, glb_sha256)
+			SELECT $1, $2, $3, h.id, r.asset_id, r.id, r.representation, r.sha256, g.id, g.sha256
 			FROM hardwares h
 			JOIN hardware_asset_revisions r
 			  ON r.id = h.visual_asset_revision_id AND r.asset_id = h.visual_asset_id
+			LEFT JOIN LATERAL (
+				SELECT gr.id, gr.sha256
+				FROM hardware_asset_revisions gr
+				WHERE gr.organization_id = r.organization_id
+				  AND gr.asset_id = r.asset_id
+				  AND gr.source_revision_id = r.id
+				  AND gr.representation = 'glb'
+				ORDER BY gr.revision_number DESC
+				LIMIT 1
+			) g ON r.representation = 'skp'
 			WHERE h.organization_id = $1 AND h.visual_asset_id IS NOT NULL AND h.id = ANY($4::uuid[])
 			RETURNING 1
 		)
@@ -1365,7 +1620,7 @@ func (s *PostgresStore) ListDesignRevisionHardwareAssets(ctx context.Context, de
 		return nil, domain.ErrDesignRevisionNotFound
 	}
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT id, hardware_id, asset_id, asset_revision_id, representation, sha256, created_at
+		SELECT id, hardware_id, asset_id, asset_revision_id, representation, sha256, glb_revision_id, glb_sha256, created_at
 		FROM design_revision_hardware_assets
 		WHERE organization_id = $1 AND design_revision_id = $2
 		ORDER BY hardware_id ASC
@@ -1377,7 +1632,7 @@ func (s *PostgresStore) ListDesignRevisionHardwareAssets(ctx context.Context, de
 	var pins []domain.DesignRevisionHardwareAssetPin
 	for rows.Next() {
 		var p domain.DesignRevisionHardwareAssetPin
-		if err := rows.Scan(&p.ID, &p.HardwareID, &p.AssetID, &p.AssetRevisionID, &p.Representation, &p.SHA256, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.HardwareID, &p.AssetID, &p.AssetRevisionID, &p.Representation, &p.SHA256, &p.GlbRevisionID, &p.GlbSHA256, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		pins = append(pins, p)
@@ -1400,7 +1655,7 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		return nil
 	}
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT r.id, r.representation, r.sha256, r.size_bytes, r.origin
+		SELECT r.id, r.representation, r.sha256, r.size_bytes, r.source_revision_id, r.origin
 		FROM hardware_asset_revisions r
 		WHERE r.organization_id = $1 AND r.id = ANY($2::uuid[])
 	`, OrgFromCtx(ctx), revisionIDs)
@@ -1408,24 +1663,29 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		return err
 	}
 	defer rows.Close()
-	details := map[string]struct {
+	type revisionFacts struct {
 		Representation   domain.HardwareAssetRepresentation
 		SHA256           string
 		SizeBytes        int64
+		SourceRevisionID string
+		Origin           *domain.HardwareAssetOrigin
 		PreparationState domain.HardwareAssetPreparationState
 		MountFrame       *domain.HardwareMountFrame
-	}{}
+	}
+	details := map[string]revisionFacts{}
 	for rows.Next() {
 		var revisionID, representation, sha256 string
 		var sizeBytes int64
+		var sourceRevisionID *string
 		var originRaw []byte
-		if err := rows.Scan(&revisionID, &representation, &sha256, &sizeBytes, &originRaw); err != nil {
+		if err := rows.Scan(&revisionID, &representation, &sha256, &sizeBytes, &sourceRevisionID, &originRaw); err != nil {
 			return err
 		}
 		prepState := domain.HardwareAssetPreparationUnprepared
 		var mountFrame *domain.HardwareMountFrame
+		var origin *domain.HardwareAssetOrigin
 		if len(originRaw) > 0 && string(originRaw) != "null" {
-			origin, err := domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
+			origin, err = domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
 			if err != nil {
 				return fmt.Errorf("%w: revision %s origen del recurso inválido: %v", domain.ErrHardwareAssetBindingInvalid, revisionID, err)
 			}
@@ -1437,13 +1697,18 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 				}
 			}
 		}
-		details[revisionID] = struct {
-			Representation   domain.HardwareAssetRepresentation
-			SHA256           string
-			SizeBytes        int64
-			PreparationState domain.HardwareAssetPreparationState
-			MountFrame       *domain.HardwareMountFrame
-		}{domain.HardwareAssetRepresentation(representation), sha256, sizeBytes, prepState, mountFrame}
+		facts := revisionFacts{
+			Representation:   domain.HardwareAssetRepresentation(representation),
+			SHA256:           sha256,
+			SizeBytes:        sizeBytes,
+			Origin:           origin,
+			PreparationState: prepState,
+			MountFrame:       mountFrame,
+		}
+		if sourceRevisionID != nil {
+			facts.SourceRevisionID = *sourceRevisionID
+		}
+		details[revisionID] = facts
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -1452,6 +1717,51 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 	if err != nil {
 		return err
 	}
+
+	// #669: resolve the GLB co-representation of every SKP-bound revision in
+	// one batched read of the deterministic latest-derived rule. Unreadable
+	// provenance omits the block (fail-honest, never invented).
+	derivedBySource := map[string]*domain.HardwareVisualGlbRepresentation{}
+	skpBoundIDs := make([]string, 0, len(revisionIDs))
+	for _, id := range revisionIDs {
+		if d, ok := details[id]; ok && d.Representation == domain.HardwareAssetRepresentationSKP {
+			skpBoundIDs = append(skpBoundIDs, id)
+		}
+	}
+	if len(skpBoundIDs) > 0 {
+		derivedRows, err := s.db(ctx).Query(ctx, `
+			SELECT DISTINCT ON (d.source_revision_id) d.source_revision_id, d.id, d.sha256, d.size_bytes, d.origin
+			FROM hardware_asset_revisions d
+			WHERE d.organization_id = $1 AND d.representation = 'glb'
+			  AND d.source_revision_id IS NOT NULL AND d.source_revision_id = ANY($2::uuid[])
+			ORDER BY d.source_revision_id, d.revision_number DESC
+		`, OrgFromCtx(ctx), skpBoundIDs)
+		if err != nil {
+			return err
+		}
+		for derivedRows.Next() {
+			var sourceRevisionID, revisionID, sha256 string
+			var sizeBytes int64
+			var originRaw []byte
+			if err := derivedRows.Scan(&sourceRevisionID, &revisionID, &sha256, &sizeBytes, &originRaw); err != nil {
+				derivedRows.Close()
+				return err
+			}
+			var origin *domain.HardwareAssetOrigin
+			if len(originRaw) > 0 && string(originRaw) != "null" {
+				if origin, err = domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw)); err != nil {
+					origin = nil // unreadable provenance omits the block
+				}
+			}
+			derivedBySource[sourceRevisionID] = hardwareAssetGlbRepresentation(
+				domain.HardwareAssetRepresentationGLB, revisionID, sha256, sizeBytes, sourceRevisionID, origin)
+		}
+		derivedRows.Close()
+		if err := derivedRows.Err(); err != nil {
+			return err
+		}
+	}
+
 	for i := range items {
 		binding := items[i].VisualAsset
 		if binding == nil {
@@ -1467,6 +1777,7 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 			binding.ValidationState = ""
 			binding.PreparationState = ""
 			binding.MountFrame = nil
+			binding.Glb = nil
 			continue
 		}
 		binding.Representation = d.Representation
@@ -1475,6 +1786,13 @@ func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items 
 		binding.ValidationState = states[binding.AssetRevisionID]
 		binding.PreparationState = d.PreparationState
 		binding.MountFrame = d.MountFrame
+		binding.Glb = nil
+		switch d.Representation {
+		case domain.HardwareAssetRepresentationGLB:
+			binding.Glb = hardwareAssetGlbRepresentation(d.Representation, binding.AssetRevisionID, d.SHA256, d.SizeBytes, d.SourceRevisionID, d.Origin)
+		case domain.HardwareAssetRepresentationSKP:
+			binding.Glb = derivedBySource[binding.AssetRevisionID]
+		}
 	}
 	return nil
 }

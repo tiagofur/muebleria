@@ -427,6 +427,11 @@ export {
   type MaterialTextureEntry,
   type MaterialTextureLookup,
   type Project3DPreviewResult,
+  type GlbAssetSource,
+  type GlbAssetAuthority,
+  GlbAssetSourceProvider,
+  useGlbAssetAuthority,
+  useGlbAssetSource,
 } from './preview3d';
 
 // --- Board-first editor (Fase 1) ---

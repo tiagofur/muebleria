@@ -35,6 +35,7 @@ import type {
   ResolvedBoardPart,
   ResolvedHardwarePlacement,
 } from '@granete/domain';
+import type { ProjectedAssembly } from '@granete/domain';
 import '../preview3d/partInspector.css';
 import './furniture3dViewer.css';
 
@@ -105,6 +106,8 @@ export type Furniture3DViewerProps = {
    * no handles (byte-identical to pre-Fase-2 scene).
    */
   readonly resolvedHardwarePlacements?: readonly ResolvedHardwarePlacement[];
+  /** Resolved rigid assemblies (#670) projected for this module (#669). */
+  readonly assemblies?: readonly ProjectedAssembly[];
   /**
    * Hardware catalog used to look up preview geometry/PBR for the resolved
    * placements. Optional: when omitted (or no placements), no handles render.
@@ -138,6 +141,7 @@ export function Furniture3DViewer({
   lightingMode = DEFAULT_SCENE_LIGHTING_MODE,
   catalogPhotoViewToken = 0,
   resolvedHardwarePlacements,
+  assemblies,
   hardwareCatalog,
   optionGroups,
 }: Furniture3DViewerProps): ReactNode {
@@ -423,6 +427,7 @@ Common causes:
             showAxes={!productShotClean}
             showOuterGhost={!productShotClean}
             resolvedHardwarePlacements={resolvedHardwarePlacements}
+            assemblies={assemblies}
             hardwareCatalog={hardwareCatalog}
           />
         </div>

@@ -4,6 +4,8 @@
  */
 
 import type {
+  HardwareVisualGlbBinding,
+  HardwareVisualMountFrameBinding,
   AmbientCategory,
   AmbientMaterial,
   AmbientSurfaceType,
@@ -479,6 +481,12 @@ function normalizeVisualAsset(
   const stateRaw = str(value.validationState ?? value.validation_state);
   const validStates = ['pending', 'validated', 'failed'];
   const shaRaw = str(value.sha256);
+  const glbRaw = value.glb;
+  const glb =
+    glbRaw && typeof glbRaw === 'object'
+      ? normalizeVisualGlb(glbRaw as Record<string, unknown>)
+      : undefined;
+  const mountFrame = normalizeVisualMountFrame(value.mountFrame);
   return {
     visualAsset: {
       assetId,
@@ -490,7 +498,58 @@ function normalizeVisualAsset(
       ...(validStates.includes(stateRaw)
         ? { validationState: stateRaw as 'pending' | 'validated' | 'failed' }
         : {}),
+      ...(glb ? { glb } : {}),
+      ...(mountFrame ? { mountFrame } : {}),
     },
+  };
+}
+
+/**
+ * MountFrame of the bound revision (#668 server-resolved fact): origin mm +
+ * orthonormal basis triples. Loose shape check only — the domain revalidates
+ * strictly (validateHardwareBasis) before any geometry depends on it.
+ */
+function normalizeVisualMountFrame(raw: unknown): HardwareVisualMountFrameBinding | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const value = raw as Record<string, unknown>;
+  const originRaw = value.originMm ?? value.origin_mm;
+  const basis = value.basis;
+  const triple = (v: unknown): readonly [number, number, number] | undefined =>
+    Array.isArray(v) && v.length === 3 && v.every((c) => typeof c === 'number' && Number.isFinite(c))
+      ? ([v[0], v[1], v[2]] as readonly [number, number, number])
+      : undefined;
+  const origin = triple(originRaw);
+  if (!origin) return undefined;
+  if (!basis || typeof basis !== 'object') return undefined;
+  const b = basis as Record<string, unknown>;
+  const x = triple(b.x);
+  const y = triple(b.y);
+  const z = triple(b.z);
+  if (!x || !y || !z) return undefined;
+  return { originMm: origin, basis: { x, y, z } };
+}
+
+/**
+ * Server-resolved GLB co-representation (#669). Malformed shapes are dropped
+ * (fail-honest) — the consumer renders the procedural representation.
+ */
+function normalizeVisualGlb(raw: Record<string, unknown>): HardwareVisualGlbBinding | undefined {
+  const revisionId = str(raw.revisionId ?? raw.revision_id);
+  const sha256 = str(raw.sha256);
+  if (!revisionId || !sha256.startsWith('sha256-')) return undefined;
+  const sourceUnitsRaw = str(raw.sourceUnits ?? raw.source_units);
+  const upAxisRaw = str(raw.upAxis ?? raw.up_axis);
+  const sourceRevisionId = str(raw.sourceRevisionId ?? raw.source_revision_id);
+  const sizeBytesRaw = raw.sizeBytes ?? raw.size_bytes;
+  return {
+    revisionId,
+    sha256,
+    ...(sourceRevisionId ? { sourceRevisionId } : {}),
+    ...(typeof sizeBytesRaw === 'number' && Number.isFinite(sizeBytesRaw) ? { sizeBytes: sizeBytesRaw } : {}),
+    ...(sourceUnitsRaw === 'mm' || sourceUnitsRaw === 'cm' || sourceUnitsRaw === 'm' || sourceUnitsRaw === 'inch'
+      ? { sourceUnits: sourceUnitsRaw }
+      : {}),
+    ...(upAxisRaw === 'y' || upAxisRaw === 'z' ? { upAxis: upAxisRaw } : {}),
   };
 }
 

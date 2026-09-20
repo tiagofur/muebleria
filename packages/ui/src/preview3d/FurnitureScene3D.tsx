@@ -45,6 +45,8 @@ import { HardwareMesh } from './HardwareMesh';
 import { HardwarePlacementGizmo, pickGizmoPlacement } from './HardwarePlacementGizmo';
 import { BoardMesh } from './BoardMesh';
 import { AssemblyMesh } from './AssemblyMesh';
+import type { GlbSceneCache } from './glbSceneCache';
+import { useGlbAssetAuthority } from './glbAssetSourceContext';
 import type { ProjectedAssembly } from '@granete/domain';
 import {
   beginDragFeedbackSample,
@@ -288,6 +290,13 @@ export type FurnitureScene3DProps = {
   readonly onModuleWallDragEnd?: (moduleKey: string) => void;
   /** When true, pointer-drag on a module updates offset along its wall. */
   readonly wallDragEnabled?: boolean;
+  /**
+   * Shared owner-scoped GLB cache for hardware members with a web
+   * representation (#669). Defaults to the session authority from
+   * GlbAssetSourceProvider; absent renders the explicit procedural
+   * representation.
+   */
+  readonly glbCache?: GlbSceneCache;
   /**
    * Free-floor drag (islands). Keys = module.instanceKey that use free place.
    * planShift converts displayed (shifted) floor hits back to layout plan mm.
@@ -1082,6 +1091,7 @@ function ModuleGroup({
   setOrbitSuppressed,
   rawPlacementsByInstanceId,
   onUpdatePlacement,
+  glbCache,
 }: {
   readonly mod: FurnitureSceneModule;
   readonly colorMode: BoardColorMode;
@@ -1128,6 +1138,8 @@ function ModuleGroup({
   readonly draggingInvalid?: boolean;
   /** Hardware catalog (id → entry) for rendering resolved placements. */
   readonly hardwareCatalog?: Readonly<Map<string, Hardware>>;
+  /** Shared owner-scoped GLB cache (#669). */
+  readonly glbCache?: GlbSceneCache;
   readonly controlsRef: React.RefObject<any>;
   readonly setOrbitSuppressed: (v: boolean) => void;
   /** F131: raw placements by componentInstanceId for the 3D gizmo editor. */
@@ -1439,6 +1451,7 @@ function ModuleGroup({
           materialColors={materialColors}
           materialTextures={materialTextures}
           surfaceMode={surfaceMode}
+          glbCache={glbCache}
         />
       ))}
     </group>
@@ -1694,8 +1707,11 @@ function SceneContent({
   ghostPosition = null,
   draggingInvalid = false,
   hardwareCatalog,
+  glbCache,
 }: {
   readonly modules: readonly FurnitureSceneModule[];
+  /** Shared owner-scoped GLB cache (#669). */
+  readonly glbCache?: GlbSceneCache;
   readonly walls: readonly FurnitureSceneWall[];
   readonly totalWidth: number;
   readonly totalHeight: number;
@@ -2295,6 +2311,7 @@ function SceneContent({
               ambientCountertop={ambientCountertop}
               paintHoverCountertop={paintHoverSurface?.kind === 'countertop'}
               hardwareCatalog={hardwareById}
+              glbCache={glbCache}
               controlsRef={controlsRef}
               setOrbitSuppressed={setOrbitSuppressed}
             />
@@ -2449,6 +2466,7 @@ export function FurnitureScene3D({
   onModuleWallDragStart,
   onModuleWallDragEnd,
   wallDragEnabled = false,
+  glbCache,
   freeDragByKey,
   planShiftMm,
   onModuleFreeMove,
@@ -2482,6 +2500,8 @@ export function FurnitureScene3D({
   onBoardPaintHover,
   boardPaintHoverModuleKey = null,
 }: FurnitureScene3DProps): ReactNode {
+  const glbAuthority = useGlbAssetAuthority();
+  const effectiveGlbCache = glbCache ?? glbAuthority.cache;
   const controlsRef = useRef<any>(null);
   /**
    * Ref registrado por SceneContent (que has useThree access). Holds a
@@ -2781,6 +2801,7 @@ export function FurnitureScene3D({
               <ScenePerfProbe />
               <Suspense fallback={null}>
                 <SceneContent
+                  glbCache={effectiveGlbCache}
                   rawHardwarePlacements={rawHardwarePlacements}
                   onUpdateHardwarePlacement={onUpdateHardwarePlacement}
                   modules={sceneModules}

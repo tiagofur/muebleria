@@ -20,6 +20,8 @@ export type {
   EdgeBand,
   Hardware,
   HardwareVisualAssetBinding,
+  HardwareVisualGlbBinding,
+  HardwareVisualMountFrameBinding,
   User,
   UserRole,
   Customer,
@@ -1474,3 +1476,6 @@ export {
 
 // Agregado Hardware Assembly (#670)
 export * from "./agregadoAssembly";
+
+// GLB representation contract (#669)
+export * from "./glbRepresentation";

@@ -170,6 +170,36 @@ module Sketchup
   class Edge
   end
 
+  class ComponentDefinition
+  end
+
+  # Fan triangulation only. The real host triangulator (Sketchup::Face#mesh)
+  # handles arbitrary concave polygons and holes; this stub models the API
+  # surface for unit tests whose fixtures are fan-safe (convex or fan-valid
+  # concave outlines). Real triangulation parity is proven by the TestUp host
+  # smokes, never by this stub.
+  class PolygonMesh
+    def initialize(points)
+      @points = points
+      # Host-faithful shape: polygon rows of 1-based point indices (fan
+      # triangulation here; the real host triangulator is exercised by the
+      # TestUp host smokes).
+      @polygons = points.length > 2 ? (1...(points.length - 1)).map { |i| [1, i + 1, i + 2] } : []
+    end
+
+    def points
+      @points.dup
+    end
+
+    def count_polygons
+      @polygons.length
+    end
+
+    def polygons
+      @polygons.dup
+    end
+  end
+
   def self.version
     '24.0.145-stub'
   end
@@ -195,11 +225,12 @@ module SketchupStub
   end
 
   class FaceStub < Sketchup::Face
-    attr_accessor :normal
+    attr_accessor :normal, :material
     attr_reader :points
 
     def initialize(points = [])
       @normal = Geom::Vector3d.new(0, 0, 1)
+      @material = nil
       @points = points
     end
 
@@ -210,6 +241,10 @@ module SketchupStub
 
     def pushpull(_distance)
       true
+    end
+
+    def mesh
+      Sketchup::PolygonMesh.new(@points)
     end
   end
 
@@ -304,7 +339,7 @@ module SketchupStub
     end
   end
 
-  class ComponentDefinitionStub
+  class ComponentDefinitionStub < Sketchup::ComponentDefinition
     include AttributeContainer
 
     attr_accessor :name

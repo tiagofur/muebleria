@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { Hardware } from './types';
 import {
   type AgregadoAssemblyInput,
   type AgregadoRigidMember,
   type AgregadoVariantSet,
+  type AssemblyBasis,
   type AssemblyDimensionRule,
   type HardwareMountFrame,
   type PublishedAssemblySnapshot,
@@ -13,6 +15,7 @@ import {
   applyAssemblyBasis,
   attachVisualPins,
   composeMemberTransform,
+  createCatalogVisualAssetLookup,
   deriveAssetNormalization,
   deriveHardwareBasisFromEuler,
   evaluateDimensionRule,
@@ -1354,5 +1357,156 @@ describe('Agregado Hardware Assembly Contracts & Validators', () => {
       expect(typeof projectResolvedAssemblyFor3D).toBe('function');
     });
   });
-});
 
+  describe('#669 GLB representation projection (web co-representation)', () => {
+    const glbRep = {
+      revisionId: 'rev-glb-1',
+      sha256: 'sha-glb-1',
+      sourceUnits: 'm' as const,
+      upAxis: 'y' as const,
+      sourceRevisionId: 'rev-ar-2',
+    };
+    const identityBasis: AssemblyBasis = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+    const baseAssembly: ResolvedAssembly = {
+      agregadoId: 'agr-glb',
+      resolvedDimensionsMm: [570, 200, 500],
+      selectedVariants: [],
+      rigidMembers: [
+        {
+          memberId: 'side_left',
+          role: 'side',
+          hardwareId: 'hw-glb',
+          bomRole: 'included_in_kit',
+          localTransform: { translationMm: [0, 0, 0], basis: identityBasis },
+        },
+      ],
+      fabricatedComponents: [],
+      bomItems: [],
+    };
+    const placement = { originMm: [0, 0, 0] as const };
+
+    it('live projection carries the exact GLB reference alongside the SKP pin', () => {
+      const pinned = attachVisualPins(baseAssembly, (hardwareId) => {
+        expect(hardwareId).toBe('hw-glb');
+        return {
+          assetId: 'ast-glb',
+          assetRevisionId: 'rev-ar-2',
+          sha256: 'sha-ar-2',
+          glb: glbRep,
+        };
+      });
+      const projected = projectResolvedAssemblyFor3D({
+        assembly: pinned,
+        placement,
+        assemblyInstanceId: 'inst-glb-1',
+      });
+
+      const member = projected.rigidMembers[0]!;
+      expect(member.renderStatus).toBe('exact');
+      expect(member.assetRevisionId).toBe('rev-ar-2');
+      expect(member.glb).toEqual(glbRep);
+    });
+
+    it('live projection without a derived GLB stays exact but omits glb (partial capability, never hidden)', () => {
+      const pinned = attachVisualPins(baseAssembly, () => ({
+        assetId: 'ast-glb',
+        assetRevisionId: 'rev-ar-2',
+        sha256: 'sha-ar-2',
+      }));
+      const projected = projectResolvedAssemblyFor3D({
+        assembly: pinned,
+        placement,
+        assemblyInstanceId: 'inst-glb-2',
+      });
+
+      const member = projected.rigidMembers[0]!;
+      expect(member.renderStatus).toBe('exact');
+      expect(member.glb).toBeUndefined();
+      expect(member.statusDiagnostic).toBeUndefined();
+    });
+
+    it('freeze pins the GLB revision and a later re-export never rewrites the frozen snapshot', () => {
+      let currentGlb = glbRep;
+      const lookup = () => ({
+        assetId: 'ast-glb',
+        assetRevisionId: 'rev-ar-2',
+        sha256: 'sha-ar-2',
+        glb: currentGlb,
+      });
+
+      const r1 = freezePublishedAssemblySnapshot(baseAssembly, 1, lookup);
+      expect(r1.rigidMembers[0]!.glb?.revisionId).toBe('rev-glb-1');
+
+      // Catalog changes after publication: a newer derived GLB exists.
+      currentGlb = { ...glbRep, revisionId: 'rev-glb-2', sha256: 'sha-glb-2' };
+      const r2 = freezePublishedAssemblySnapshot(baseAssembly, 2, lookup);
+      expect(r2.rigidMembers[0]!.glb?.revisionId).toBe('rev-glb-2');
+
+      // R1 stays frozen on G1; R2 uses G2 — history never resolves latest.
+      expect(r1.rigidMembers[0]!.glb?.revisionId).toBe('rev-glb-1');
+      const projectedR1 = projectPublishedAssemblySnapshotFor3D({
+        snapshot: r1,
+        placement,
+        assemblyInstanceId: 'hist-r1',
+        availableAssets: new Set(['rev-ar-2', 'rev-glb-1', 'rev-glb-2']),
+      });
+      const projectedR2 = projectPublishedAssemblySnapshotFor3D({
+        snapshot: r2,
+        placement,
+        assemblyInstanceId: 'hist-r2',
+        availableAssets: new Set(['rev-ar-2', 'rev-glb-1', 'rev-glb-2']),
+      });
+      expect(projectedR1.rigidMembers[0]!.glb?.revisionId).toBe('rev-glb-1');
+      expect(projectedR2.rigidMembers[0]!.glb?.revisionId).toBe('rev-glb-2');
+    });
+
+    it('historical projection drops the glb with an honest diagnostic when the exact revision is unavailable', () => {
+      const frozen = freezePublishedAssemblySnapshot(baseAssembly, 1, () => ({
+        assetId: 'ast-glb',
+        assetRevisionId: 'rev-ar-2',
+        sha256: 'sha-ar-2',
+        glb: glbRep,
+      }));
+      const projected = projectPublishedAssemblySnapshotFor3D({
+        snapshot: frozen,
+        placement,
+        assemblyInstanceId: 'hist-glb',
+        availableAssets: new Set(['rev-ar-2']), // SKP pin available, GLB not
+      });
+
+      const member = projected.rigidMembers[0]!;
+      expect(member.renderStatus).toBe('exact');
+      expect(member.glb).toBeUndefined();
+      expect(member.statusDiagnostic).toContain('exact historical glb unavailable');
+      expect(member.statusDiagnostic).toContain('rev-glb-1');
+    });
+
+    it('createCatalogVisualAssetLookup surfaces the server-resolved glb binding and rejects malformed ones', () => {
+      const hardware = [
+        {
+          id: 'hw-ok',
+          visualAsset: {
+            assetId: 'ast-1',
+            assetRevisionId: 'rev-1',
+            sha256: 'sha-1',
+            glb: { revisionId: 'rev-glb-1', sha256: 'sha-glb-1', sourceUnits: 'm', upAxis: 'y' },
+          },
+        },
+        {
+          id: 'hw-bad-glb',
+          visualAsset: {
+            assetId: 'ast-2',
+            assetRevisionId: 'rev-2',
+            sha256: 'sha-2',
+            glb: { revisionId: '', sha256: 'sha-glb-2', sourceUnits: 'm', upAxis: 'y' },
+          },
+        },
+      ] as unknown as Hardware[];
+
+      const lookup = createCatalogVisualAssetLookup(hardware);
+      expect(lookup('hw-ok')?.glb?.revisionId).toBe('rev-glb-1');
+      expect(lookup('hw-bad-glb')?.glb).toBeUndefined();
+      expect(lookup('hw-unknown')).toBeNull();
+    });
+  });
+});

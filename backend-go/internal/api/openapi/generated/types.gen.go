@@ -2022,6 +2022,10 @@ type HardwareAssetRevision struct {
 	SizeBytes           int64                        `json:"size_bytes"`
 	Sha256              string                       `json:"sha256"`
 	Origin              *HardwareAssetOrigin         `json:"origin,omitempty"`
+	SourceRevisionID    *string                      `json:"source_revision_id,omitempty"`
+	ExporterName        *string                      `json:"exporter_name,omitempty"`
+	ExporterVersion     *string                      `json:"exporter_version,omitempty"`
+	ExportOptions       map[string]any               `json:"export_options,omitempty"`
 	IntegrityVerifiedAt string                       `json:"integrity_verified_at"`
 	ValidationState     HardwareAssetValidationState `json:"validation_state"`
 	CreatedAt           string                       `json:"created_at"`
@@ -2045,6 +2049,14 @@ type StartHardwareAssetUploadRequest struct {
 	License        *string                     `json:"license,omitempty"`
 	Origin         *HardwareAssetOrigin        `json:"origin,omitempty"`
 	AssetID        *string                     `json:"asset_id,omitempty"`
+	Derivation     *HardwareAssetDerivation    `json:"derivation,omitempty"`
+}
+
+type HardwareAssetDerivation struct {
+	SourceRevisionID string         `json:"source_revision_id"`
+	ExporterName     string         `json:"exporter_name"`
+	ExporterVersion  string         `json:"exporter_version"`
+	ExportOptions    map[string]any `json:"export_options,omitempty"`
 }
 
 type DeriveHardwareAssetRevisionRequest struct {

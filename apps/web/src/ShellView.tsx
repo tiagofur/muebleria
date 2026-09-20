@@ -222,6 +222,8 @@ import {
   GraneteApiClient,
   createApiHardwareAssetService,
 } from '@granete/storage';
+import { GlbAssetSourceProvider } from '@granete/ui';
+import { useApiGlbAssetSource } from './glbAssetSource';
 import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import {
   engineeringReleaseQueryKey,
@@ -1189,6 +1191,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       authToken,
     );
   }, [session, authToken]);
+  // #669: session-scoped GLB byte source for every 3D consumer (Proyectar,
+  // mueble, Agregado, herraje). Guest sessions fall back to the test seam /
+  // procedural representations.
+  const glbAssetSource = useApiGlbAssetSource(
+    hardwareAssetService,
+    DEFAULT_API_BASE,
+    sessionScope ? `${sessionScope.userId}:${sessionScope.organizationId ?? 'none'}` : session,
+  );
   const quoteAuthorityView = quoteAuthority.kind === 'idle'
     ? undefined
     : quoteAuthority.kind === 'ready'
@@ -1246,6 +1256,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
 
   return (
 
+    <GlbAssetSourceProvider source={glbAssetSource}>
     <AppShell
       activeId={navId}
       onNavigate={onNavigate}
@@ -2936,5 +2947,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           (sólo se monta con el flag localStorage del benchmark). */}
       <UsabilityBenchmarkPanel />
     </AppShell>
+    </GlbAssetSourceProvider>
   );
 }

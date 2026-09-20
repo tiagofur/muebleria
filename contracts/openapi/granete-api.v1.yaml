@@ -11907,6 +11907,25 @@
           "origin": {
             "$ref": "#/components/schemas/HardwareAssetOrigin"
           },
+          "source_revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "#669: for a derived GLB revision, the exact SKP revision it was prepared from."
+          },
+          "exporter_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "exporter_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "export_options": {
+            "type": "object",
+            "description": "Exporter options actually used, as recorded by the preparing host."
+          },
           "integrity_verified_at": {
             "type": "string",
             "format": "date-time",
@@ -12000,8 +12019,42 @@
             "type": "string",
             "format": "uuid",
             "description": "When set, finalize appends the next immutable revision to THIS existing active asset instead of creating a new one (replace-with-new-revision flow). Omitted: a new asset is created."
+          },
+          "derivation": {
+            "$ref": "#/components/schemas/HardwareAssetDerivation"
           }
         }
+      },
+      "HardwareAssetDerivation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_revision_id",
+          "exporter_name",
+          "exporter_version"
+        ],
+        "properties": {
+          "source_revision_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Exact SKP revision of the SAME asset the GLB is prepared from (the upload must carry asset_id)."
+          },
+          "exporter_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "exporter_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "export_options": {
+            "type": "object",
+            "description": "Exporter options used by the preparing host (free-form, size-bounded)."
+          }
+        },
+        "description": "#669: derivation provenance for a GLB revision prepared from an SKP revision."
       },
       "DeriveHardwareAssetRevisionRequest": {
         "type": "object",

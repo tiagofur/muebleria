@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/binary"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -615,4 +616,140 @@ func TestHardwareAssetRevisionValidate(t *testing.T) {
 	if badResRR.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 Bad Request for bad result, got %d", badResRR.Code)
 	}
+}
+
+// #669: finalize is the fail-closed GLB publication frontier — the staged
+// bytes must pass the structural self-containment validation before the
+// immutable revision exists. The canonical parity fixture is a valid GLB; a
+// magic-carrying but structurally broken container must be rejected with a
+// typed error and no finalize call.
+func TestHardwareAssets_FinalizeValidatesGlbStructure(t *testing.T) {
+	fixture, err := os.ReadFile("../../../contracts/fixtures/glb-parity-bracket.glb")
+	if err != nil {
+		t.Fatalf("read parity fixture: %v", err)
+	}
+	dir := t.TempDir()
+
+	stage := func(content []byte) (string, string) {
+		sum := sha256.Sum256(content)
+		sha := "sha256-" + hex.EncodeToString(sum[:])
+		key := "hardware-assets/54000000-0000-0000-0000-000000000001/glb-" + hex.EncodeToString(sum[:6]) + ".glb"
+		path := filepath.Join(dir, storage.InitialOrganizationID, filepath.FromSlash(key))
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, content, 0o640); err != nil {
+			t.Fatal(err)
+		}
+		return key, sha
+	}
+
+	finalizeWith := func(content []byte) (*httptest.ResponseRecorder, *stubStore) {
+		key, sha := stage(content)
+		store := &stubStore{
+			assetSession: &domain.HardwareAssetUploadSession{
+				ID: "54000000-0000-0000-0000-000000000001", Status: "prepared",
+				Representation: domain.HardwareAssetRepresentationGLB,
+				OrganizationID: storage.InitialOrganizationID,
+				ExpiresAt:      time.Now().Add(time.Hour),
+				Staged: &domain.HardwareAssetStagedBytes{
+					StorageKey:  key,
+					ContentType: "model/gltf-binary",
+					SizeBytes:   int64(len(content)),
+					SHA256:      sha,
+				},
+			},
+			assetFinalized: &domain.HardwareAsset{ID: "74000000-0000-0000-0000-000000000099"},
+		}
+		srv := &Server{Store: store, MediaDir: dir}
+		req := hwAssetRequest(http.MethodPost, "/api/hardware-assets/uploads/54000000-0000-0000-0000-000000000001:finalize", "", string(domain.RoleAdmin))
+		req.SetPathValue("sessionId", "54000000-0000-0000-0000-000000000001")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareAssetUploadFinalize(rr, req)
+		return rr, store
+	}
+
+	// The committed parity fixture finalizes and carries the summary forward.
+	rr, store := finalizeWith(fixture)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("valid glb finalize = %d %s", rr.Code, rr.Body.String())
+	}
+	if store.assetFinalizeCmd == nil || store.assetFinalizeCmd.GlbSummary == nil {
+		t.Fatalf("finalize command must carry the structural summary: %+v", store.assetFinalizeCmd)
+	}
+	if store.assetFinalizeCmd.GlbSummary.Triangles != 20 || store.assetFinalizeCmd.GlbSummary.Vertices != 12 {
+		t.Fatalf("summary = %+v", store.assetFinalizeCmd.GlbSummary)
+	}
+
+	// Valid magic, broken structure: rejected, no revision created.
+	corrupt := append([]byte(nil), fixture...)
+	corrupt[21] = '{' // break the JSON chunk (byte 20 is the opening '{')
+	rr, store = finalizeWith(corrupt)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("corrupt glb finalize = %d %s", rr.Code, rr.Body.String())
+	}
+	if store.assetFinalizeCmd != nil {
+		t.Fatal("corrupt glb must never reach the transactional finalize")
+	}
+
+	// Self-containment policy: an external buffer URI is refused.
+	external := buildGlbWithExternalBufferURI(t, fixture)
+	rr, store = finalizeWith(external)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("external-uri glb finalize = %d %s", rr.Code, rr.Body.String())
+	}
+	if store.assetFinalizeCmd != nil {
+		t.Fatal("non-self-contained glb must never reach the transactional finalize")
+	}
+}
+
+// buildGlbWithExternalBufferURI rewrites the fixture JSON chunk to point its
+// buffer at an external URI (re-serializing the container with the same BIN).
+func buildGlbWithExternalBufferURI(t *testing.T, fixture []byte) []byte {
+	t.Helper()
+	jsonLength := binary.LittleEndian.Uint32(fixture[12:16])
+	jsonChunk := fixture[20 : 20+jsonLength]
+	var doc map[string]any
+	if err := json.Unmarshal(trimJSONPadding(jsonChunk), &doc); err != nil {
+		t.Fatal(err)
+	}
+	buffers, ok := doc["buffers"].([]any)
+	if !ok || len(buffers) == 0 {
+		t.Fatal("fixture buffers")
+	}
+	first, _ := buffers[0].(map[string]any)
+	first["uri"] = "https://external.example/bracket.bin"
+	rewritten, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pad := (4 - len(rewritten)%4) % 4
+	jsonPadded := append(rewritten, bytes.Repeat([]byte{0x20}, pad)...)
+	binHeader := 20 + int(jsonLength)
+	binLength := int(binary.LittleEndian.Uint32(fixture[binHeader : binHeader+4]))
+	binChunk := fixture[binHeader+8 : binHeader+8+binLength]
+	binPad := (4 - len(binChunk)%4) % 4
+	binPadded := append(binChunk, bytes.Repeat([]byte{0}, binPad)...)
+
+	total := 12 + 8 + len(jsonPadded) + 8 + len(binPadded)
+	out := make([]byte, 0, total)
+	header := make([]byte, 12)
+	binary.LittleEndian.PutUint32(header[0:4], 0x46546c67)
+	binary.LittleEndian.PutUint32(header[4:8], 2)
+	binary.LittleEndian.PutUint32(header[8:12], uint32(total))
+	out = append(out, header...)
+	chunk := make([]byte, 8)
+	binary.LittleEndian.PutUint32(chunk[0:4], uint32(len(jsonPadded)))
+	binary.LittleEndian.PutUint32(chunk[4:8], 0x4e4f534a)
+	out = append(out, chunk...)
+	out = append(out, jsonPadded...)
+	binary.LittleEndian.PutUint32(chunk[0:4], uint32(len(binPadded)))
+	binary.LittleEndian.PutUint32(chunk[4:8], 0x004e4942)
+	out = append(out, chunk...)
+	out = append(out, binPadded...)
+	return out
+}
+
+func trimJSONPadding(chunk []byte) []byte {
+	return bytes.TrimRight(chunk, " ")
 }
