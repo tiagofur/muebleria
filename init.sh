@@ -56,9 +56,9 @@ done
 echo ""
 echo "── 2. Validando catálogo de capacidades ────────────────"
 
-python3 scripts/validate_feature_catalog.py
-
-if [ $? -ne 0 ]; then EXIT_CODE=1; fi
+if ! python3 scripts/validate_feature_catalog.py; then
+  EXIT_CODE=1
+fi
 
 # ── 3. Entorno Node / pnpm ───────────────────────────────────────────────────
 echo ""
@@ -78,7 +78,8 @@ if ! command -v node >/dev/null 2>&1; then
   fi
 else
   NODE_VER=$(node --version)
-  NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v\([0-9]*\).*/\1/')
+  NODE_MAJOR=${NODE_VER#v}
+  NODE_MAJOR=${NODE_MAJOR%%.*}
   if [ "$NODE_MAJOR" -lt 20 ]; then
     fail "Se requiere Node.js >= 20 (actual: $NODE_VER)"
     EXIT_CODE=1
