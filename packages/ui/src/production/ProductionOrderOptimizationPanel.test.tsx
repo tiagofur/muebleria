@@ -494,7 +494,7 @@ describe('ProductionOrderOptimizationPanel — export PTX: salida configurada, m
       />,
     );
 
-    expect(resolveCuttingOutputTarget).toHaveBeenCalledWith(activePlan);
+    expect(resolveCuttingOutputTarget).toHaveBeenCalledWith(activePlan, undefined);
     expect(screen.getByTestId('prod-opt-cutting-output-blocked').textContent)
       .toContain('no tiene programa de corte');
     expect((screen.getByTestId('prod-opt-export-ptx') as HTMLButtonElement).disabled)

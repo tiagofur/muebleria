@@ -200,6 +200,7 @@ export function EngineeringWorkspace({
   onExportCutPlanDxf,
   onExportCutPlanPtx,
   manufacturingLabels,
+  partLabels,
   cuttingOutputTarget,
   resolveCuttingOutputTarget,
   onImportNesting: _onImportNesting,
@@ -286,6 +287,8 @@ export function EngineeringWorkspace({
    * export consumes its PARTS_INF/PARTS_UDI authority from release truth.
    */
   readonly manufacturingLabels?: import('@granete/domain').ManufacturingLabelProjection;
+  /** #793 — precomputed export-layer mapping of the projection (readiness parity). */
+  readonly partLabels?: readonly unknown[];
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly resolveCuttingOutputTarget?: (
@@ -737,6 +740,7 @@ export function EngineeringWorkspace({
             }
             onExportCutPlanPtx={onExportCutPlanPtx}
             manufacturingLabels={manufacturingLabels}
+            partLabels={partLabels}
             cuttingOutputTarget={cuttingOutputTarget}
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             exportBusy={exportBusy}

@@ -365,6 +365,8 @@ import type { AmbientMaterialDraft, CuttingOutputTargetView, MachineOutputConfig
 import type { OwnerPortfolioRow } from '@granete/ui';
 import type { WorkspaceRepository } from '@granete/storage';
 import { loadReleaseCutPlan, saveReleaseCutPlan } from '@granete/storage';
+import { ptxPartLabelsFromManufacturingProjection } from '@granete/excel';
+import type { PtxPartLabelData } from '@granete/excel';
 import type { AuthUser, MembershipChoice, OrgSummary } from './session';
 import type { AssignableOwner } from './stores/workspaceStore';
 import type { StockCatalogView } from './derivations/stockCatalog';
@@ -1053,6 +1055,46 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
+  // #793 — neutral frozen label projection of the SAME verified demand
+  // (occurrence ordinals, module context via the same catalog engineering
+  // inputs the rows use) plus its export-layer mapping, precomputed once so
+  // the optimización panel's readiness reflects the SAME labeled-job gate the
+  // serialization route enforces. No CNC machining authority is available
+  // web-side yet — fields without authority stay empty instead of being
+  // invented; real machining truth wiring belongs to the field-result
+  // follow-up (#348).
+  const engManufacturingLabels = useMemo<ManufacturingLabelProjection | undefined>(() => {
+    if (engineeringDemandContext.kind !== 'ready') return undefined;
+    try {
+      return manufacturingLabelProjectionFromDemand(
+        engineeringDemandContext.demand,
+        catalog ?? null,
+      );
+    } catch {
+      return undefined;
+    }
+  }, [engineeringDemandContext, catalog]);
+  const [engPartLabels, setEngPartLabels] = useState<readonly PtxPartLabelData[] | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (!engManufacturingLabels) {
+      setEngPartLabels(undefined);
+      return;
+    }
+    let cancelled = false;
+    ptxPartLabelsFromManufacturingProjection(engManufacturingLabels).then(
+      (labels) => {
+        if (!cancelled) setEngPartLabels(labels);
+      },
+      () => {
+        if (!cancelled) setEngPartLabels(undefined);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [engManufacturingLabels]);
   // #740 — durable per-release Engineering state of the SAME pinned release:
   // the exact-release evidence the workspace status chip and the EXPLICIT
   // start/complete commands consume. Reading it never writes.
@@ -1650,23 +1692,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             }
           }
         }
-        // #793 — neutral frozen label projection for the r5 export route:
-        // built from the SAME verified demand (occurrence ordinals, module
-        // context via the same catalog engineering inputs the rows use). No
-        // CNC machining authority is available web-side yet — fields without
-        // authority stay empty instead of being invented; real machining
-        // truth wiring belongs to the field-result follow-up (#348).
-        let engManufacturingLabels: ManufacturingLabelProjection | undefined;
-        if (engineeringDemandContext.kind === 'ready') {
-          try {
-            engManufacturingLabels = manufacturingLabelProjectionFromDemand(
-              engineeringDemandContext.demand,
-              catalog ?? null,
-            );
-          } catch {
-            engManufacturingLabels = undefined;
-          }
-        }
         // The readiness gate for the release context reports the FROZEN rows
         // (what must be manufactured); the live derivation keeps feeding the
         // legacy working view only.
@@ -1804,6 +1829,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                content; every other tab keeps its live working view. */
             releaseCuttingDemand={engFrozenDemand}
             manufacturingLabels={engManufacturingLabels}
+            partLabels={engPartLabels}
             releaseCutPlan={
               engFrozenDemand?.status === 'ready'
                 ? loadReleaseCutPlan(

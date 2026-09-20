@@ -149,7 +149,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     await page.getByText('Detalle técnico').click();
     const tech = page.getByTestId('machine-output-cutting');
     await expect(tech.getByText('profile: ptx-generic@r1')).toBeVisible();
-    await expect(tech.getByText('adapter: granete-ptx@1.3.0')).toBeVisible();
+    await expect(tech.getByText('adapter: granete-ptx@1.4.0')).toBeVisible();
 
     // Server read model: exactly ONE configured target, no blockers.
     const readModel = await repository.getMachineOutputSelections();

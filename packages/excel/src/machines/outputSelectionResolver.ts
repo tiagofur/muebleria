@@ -209,6 +209,10 @@ export function resolveManufacturingOutputTarget(
 export function evaluateSelectedCuttingOutputReadiness(
   cutPlan: CutPlan,
   selection: MachineOutputSelection | undefined,
+  labels?: {
+    readonly manufacturingLabels?: ManufacturingLabelProjection;
+    readonly partLabels?: readonly PtxPartLabelData[];
+  },
 ): ResolvedManufacturingOutputTarget {
   const resolved = resolveManufacturingOutputTarget(selection, 'cutting');
   if (resolved.status !== 'CONFIGURED' || !resolved.readiness.ready || !selection) {
@@ -226,6 +230,10 @@ export function evaluateSelectedCuttingOutputReadiness(
       cutPlanVersion: cutPlan.version,
     },
     cutPlan,
+    ...(labels?.manufacturingLabels !== undefined
+      ? { manufacturingLabels: labels.manufacturingLabels }
+      : {}),
+    ...(labels?.partLabels !== undefined ? { partLabels: labels.partLabels } : {}),
   } as never, profile);
   return { ...resolved, readiness };
 }

@@ -72,7 +72,13 @@ export type ProductionOrderOptimizationPanelProps = {
     manufacturingLabels?: ManufacturingLabelProjection,
   ) => void;
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
-  readonly resolveCuttingOutputTarget?: (cutPlan: CutPlan) => CuttingOutputTargetView | null;
+  readonly resolveCuttingOutputTarget?: (
+    cutPlan: CutPlan,
+    labels?: {
+      readonly manufacturingLabels?: ManufacturingLabelProjection;
+      readonly partLabels?: readonly unknown[];
+    },
+  ) => CuttingOutputTargetView | null;
   readonly exportBusy?: boolean;
   /**
    * #793 — neutral frozen per-piece manufacturing label projection of the
@@ -82,6 +88,13 @@ export type ProductionOrderOptimizationPanelProps = {
    * with the actionable reason instead of rebuilding labels from live data).
    */
   readonly manufacturingLabels?: ManufacturingLabelProjection;
+  /**
+   * #793 — the projection's export-layer label mapping (async digests for CNC
+   * drawing refs), precomputed by the release screen. Feeds the readiness
+   * resolver so the export button reflects the SAME labeled-job gate the
+   * serialization route enforces (never a parallel truth).
+   */
+  readonly partLabels?: readonly unknown[];
   /**
    * #739 — plan persisted for the EXACT release this panel is preparing
    * (undefined = legacy project-scoped view; null = no stored plan).
@@ -128,6 +141,7 @@ export function ProductionOrderOptimizationPanel({
   initialCutPlan,
   demandGate = { mode: 'legacy' },
   manufacturingLabels,
+  partLabels,
   optimizerUnavailableReason = null,
   dxfUnavailableReason = null,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
@@ -195,9 +209,12 @@ export function ProductionOrderOptimizationPanel({
   const activeCuttingOutputTarget = useMemo(
     () =>
       currentCutPlan && resolveCuttingOutputTarget
-        ? resolveCuttingOutputTarget(currentCutPlan)
+        ? resolveCuttingOutputTarget(currentCutPlan, manufacturingLabels ? {
+            manufacturingLabels,
+            ...(partLabels !== undefined ? { partLabels } : {}),
+          } : undefined)
         : cuttingOutputTarget,
-    [currentCutPlan, cuttingOutputTarget, resolveCuttingOutputTarget],
+    [currentCutPlan, cuttingOutputTarget, resolveCuttingOutputTarget, manufacturingLabels, partLabels],
   );
 
   // #739 — with a frozen release demand the pre-plan estimate must NOT be

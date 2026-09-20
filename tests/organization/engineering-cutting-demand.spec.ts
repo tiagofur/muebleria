@@ -588,5 +588,27 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
       expect(row.barcode1).toBeUndefined();
     }
     await browserErrors.assertEmpty('CADmatic candidate + readback journey');
+
+    // Serial-suite citizenship: this test leaves org A configured on the r5
+    // candidate, which legitimately BLOCKS later specs that download PTX from
+    // non-release plans (r5 hard gate). Restore the generic tuple so the
+    // suite's remaining journeys exercise their own configured output.
+    const restoreClient = new GraneteApiClient(seeded.apiBase);
+    const latest = await restoreClient.listMachineOutputSelections(seeded.token);
+    const cutting = latest.selections.find((s) => s.selection.operation === 'cutting');
+    await restoreClient.upsertMachineOutputSelection(seeded.token, 'cutting', {
+      selection: {
+        operation: 'cutting',
+        machineProfileId: 'client-a-machine-b-hpp250',
+        machineProfileRevisionId: 'r1',
+        outputCompatibilityProfileId: 'ptx-generic',
+        outputCompatibilityProfileRevisionId: 'r1',
+        outputCompatibilityProfileDigest: 'd05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595',
+        postprocessorAdapterId: 'granete-ptx',
+        postprocessorAdapterVersion: '1.4.0',
+        postprocessorImplementationDigest: '8c13f67bfc8f1354984b90bbea1a3719b91905b62d63af570eec3d83a52a7916',
+      },
+      expectedVersion: cutting?.selection.version ?? 0,
+    });
   });
 });
