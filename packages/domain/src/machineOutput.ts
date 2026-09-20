@@ -23,6 +23,7 @@
 import type { CutPlan } from './optimizer/types';
 import type { MachineCapability, MachineProfileRef } from './sketchupAuthoringSchema';
 import type { ProjectDrillingData } from './partDrilling';
+import type { ManufacturingLabelProjection } from './manufacturingLabelProjection';
 import { DomainError } from './errors';
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,14 @@ export interface ResolvedCuttingJob {
   readonly cutPlan: CutPlan;
   /** Optional labeling for the artifact header. Never identity. */
   readonly presentation?: ExportPresentation;
+  /**
+   * #793 — neutral frozen per-piece manufacturing label projection of the
+   * release the plan was generated from. Present only when the calling flow
+   * holds the frozen release truth; export layers that need per-piece label
+   * authority (e.g. the r5 PTX PARTS_INF/UDI route) fail closed when it is
+   * absent instead of rebuilding labels from live sources.
+   */
+  readonly manufacturingLabels?: ManufacturingLabelProjection;
 }
 
 export interface ResolvedMachiningJob {
