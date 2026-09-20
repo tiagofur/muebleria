@@ -32,10 +32,13 @@ import type {
   PtxJobRecord,
   PtxMaterialRecord,
   PtxOffcutRecord,
+  PtxPartsInfRecord,
   PtxPartsReqRecord,
+  PtxPartsUdiRecord,
   PtxPatternRecord,
   PtxVectorRecord,
 } from './records';
+import { PTX_PARTS_UDI_INFO_COLUMN_COUNT } from './records';
 import { PtxDocumentInvalidError, validatePtxDocument } from './validate';
 
 export type PtxFormatErrorCode =
@@ -218,8 +221,77 @@ function partsReqLine(r: PtxPartsReqRecord, f: Fmt): string {
   ].join(',');
 }
 
-function boardLine(r: PtxBoardRecord, f: Fmt): string {
+function partsInfLine(r: PtxPartsInfRecord, f: Fmt): string {
+  // #789: full documented §20 width (32 cells) — absent optionals are EMPTY
+  // cells, the same writer philosophy as JOBS (middle empties never shift
+  // columns; trailing empties are the documented optional-trailing shape).
   return [
+    'PARTS_INF',
+    f.int(r.jobIndex, 'PARTS_INF.JOB_INDEX'),
+    f.int(r.partIndex, 'PARTS_INF.PART_INDEX'),
+    f.optText(r.description, 'PARTS_INF.DESC'),
+    f.optText(r.labelQuantity, 'PARTS_INF.LABEL_QTY'),
+    f.optText(r.finishedLength, 'PARTS_INF.FIN_LENGTH'),
+    f.optText(r.finishedWidth, 'PARTS_INF.FIN_WIDTH'),
+    f.optText(r.order, 'PARTS_INF.ORDER'),
+    f.optText(r.edge1, 'PARTS_INF.EDGE1'),
+    f.optText(r.edge2, 'PARTS_INF.EDGE2'),
+    f.optText(r.edge3, 'PARTS_INF.EDGE3'),
+    f.optText(r.edge4, 'PARTS_INF.EDGE4'),
+    f.optText(r.edgeProgram1, 'PARTS_INF.EDG_PG1'),
+    f.optText(r.edgeProgram2, 'PARTS_INF.EDG_PG2'),
+    f.optText(r.edgeProgram3, 'PARTS_INF.EDG_PG3'),
+    f.optText(r.edgeProgram4, 'PARTS_INF.EDG_PG4'),
+    f.optText(r.faceLaminate, 'PARTS_INF.FACE_LAM'),
+    f.optText(r.backLaminate, 'PARTS_INF.BACK_LAM'),
+    f.optText(r.coreMaterial, 'PARTS_INF.CORE_MAT'),
+    f.optText(r.pallet, 'PARTS_INF.PALLET'),
+    f.optText(r.drawing, 'PARTS_INF.DRAWING'),
+    f.optText(r.product, 'PARTS_INF.PRODUCT'),
+    f.optText(r.productInfo, 'PARTS_INF.PROD_INFO'),
+    f.optText(r.productWidth, 'PARTS_INF.PROD_WIDTH'),
+    f.optText(r.productHeight, 'PARTS_INF.PROD_HGT'),
+    f.optText(r.productDepth, 'PARTS_INF.PROD_DEPTH'),
+    f.optText(r.productNumber, 'PARTS_INF.PROD_NUM'),
+    f.optText(r.room, 'PARTS_INF.ROOM'),
+    f.optText(r.barcode1, 'PARTS_INF.BARCODE1'),
+    f.optText(r.barcode2, 'PARTS_INF.BARCODE2'),
+    f.optText(r.colour, 'PARTS_INF.COLOUR'),
+    f.optText(r.secondCutLength, 'PARTS_INF.SECOND_CUT_LENGTH'),
+    f.optText(r.secondCutWidth, 'PARTS_INF.SECOND_CUT_WIDTH'),
+  ].join(',');
+}
+
+function partsUdiLine(r: PtxPartsUdiRecord, f: Fmt): string {
+  // #789: JOB/PART prefix + the DEFINED prefix of the homogeneous INFO
+  // columns. Trailing undefined INFO entries are OMITTED cells (the row ends
+  // after the last defined value — the field samples' short-row shape), the
+  // same trailing-optional discipline as OFFCUTS.OFC_QTY. Mid-row undefined
+  // entries are empty cells and never shift positions.
+  if (r.info.length > PTX_PARTS_UDI_INFO_COLUMN_COUNT) {
+    throw new PtxFormatError(
+      'NUMBER_OUT_OF_RANGE',
+      `PARTS_UDI.INFO carries ${r.info.length} columns; the documented maximum is ${PTX_PARTS_UDI_INFO_COLUMN_COUNT}`,
+      'PARTS_UDI.INFO',
+    );
+  }
+  const cells = [
+    'PARTS_UDI',
+    f.int(r.jobIndex, 'PARTS_UDI.JOB_INDEX'),
+    f.int(r.partIndex, 'PARTS_UDI.PART_INDEX'),
+  ];
+  let lastDefined = -1;
+  r.info.forEach((value, i) => {
+    if (value !== undefined) lastDefined = i;
+  });
+  for (let i = 0; i <= lastDefined; i++) {
+    cells.push(f.optText(r.info[i], `PARTS_UDI.INFO${i + 1}`));
+  }
+  return cells.join(',');
+}
+
+function boardLine(r: PtxBoardRecord, f: Fmt): string {
+  const cells = [
     'BOARDS',
     f.int(r.jobIndex, 'BOARDS.JOB_INDEX'),
     f.int(r.boardIndex, 'BOARDS.BRD_INDEX'),
@@ -229,7 +301,17 @@ function boardLine(r: PtxBoardRecord, f: Fmt): string {
     f.real(r.width, 'BOARDS.WIDTH'),
     f.optInt(r.stockQuantity, 'BOARDS.QTY_STOCK'),
     f.optInt(r.usedQuantity, 'BOARDS.QTY_USED'),
-  ].join(',');
+  ];
+  // BOARDS.COST / STK_FLAG are optional trailing cells. Do not append either
+  // by default, preserving historical r2/r3/r4 bytes; when STK_FLAG is present
+  // without COST, emit the empty COST cell to preserve column position.
+  if (r.cost !== undefined || r.stockFlag !== undefined) {
+    cells.push(f.optNum(r.cost, 'BOARDS.COST', f.real));
+  }
+  if (r.stockFlag !== undefined) {
+    cells.push(f.int(r.stockFlag, 'BOARDS.STK_FLAG'));
+  }
+  return cells.join(',');
 }
 
 function materialLine(r: PtxMaterialRecord, f: Fmt): string {
@@ -385,6 +467,12 @@ export function serializePtxDocumentUnchecked(
         break;
       case 'PARTS_REQ':
         lines.push(partsReqLine(record, f));
+        break;
+      case 'PARTS_INF':
+        lines.push(partsInfLine(record, f));
+        break;
+      case 'PARTS_UDI':
+        lines.push(partsUdiLine(record, f));
         break;
       case 'BOARDS':
         lines.push(boardLine(record, f));

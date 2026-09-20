@@ -236,6 +236,8 @@ Casos obligatorios: 10/4, `trim==kerf`, `trim<kerf`, asimétricos y trim cero.
 
 ## 6. G5 — contrato soportado para `FUNCTION 92 + Xn`
 
+> ERRATA / addendum #791: este contrato r3/r4 usó una interpretación de producto más estrecha para poder emitir un subconjunto seguro. #791 corrige la semántica conceptual de r5: `FUNCTION` describe fase/evento físico y no es sinónimo de `PART_INDEX`; `92` es trim/waste phase 2 y `Xn` es una referencia a OFFCUTS. La combinación `92 + Xn` sigue permitida sólo cuando el evento físico observado coincide. Esta aclaración no reescribe la historia: los bytes, perfiles, adapters y digests r3/r4 permanecen inmutables.
+
 ### 6.1 Patrón repetido en las muestras
 
 Muestra A:

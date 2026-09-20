@@ -8,15 +8,54 @@
 ## 1. Principios
 
 1. Un test verde local es evidencia, no permiso para ignorar CI.
-2. `./init.sh` debe fallar de verdad si el entorno o los tests obligatorios fallan.
+2. `factory_preflight.py` is the routine read-only start; `./init.sh` must fail
+   truthfully when the historical full harness is explicitly required.
 3. Si una métrica, workflow o permiso cambió, probar el comportamiento, no sólo tipos.
 4. Exports físicos requieren fixture/golden/round-trip apropiado.
 5. TS↔Go duplicado requiere fixtures de contrato, no fe manual.
-6. Ninguna feature se marca `done` si falta evidencia exigida por su aceptación.
+6. No issue delivery is complete while its acceptance requires missing evidence.
 
 ---
 
-## 2. Gate local base
+## 2. Portable G-ODD verification
+
+Verification is selected by the claim, not by which agent or adapter is running:
+
+| Level | Question | Examples |
+| --- | --- | --- |
+| **V0 — Structural** | Is the candidate well-formed? | diff/readback, syntax, format, schema, generated drift |
+| **V1 — Functional** | Does affected behavior satisfy its contract? | unit, contract, integration, migration, positive/negative paths |
+| **V2 — Operational** | Does the real boundary work? | browser, PostgreSQL/RLS, SketchUp/TestUp, receiver or machine readback |
+
+Run every level applicable to the issue and delivery claim. A level blocked by
+missing infrastructure is `NOT_RUN` or `BLOCKED`, not PASS. Focused/jsdom evidence
+does not prove a real browser; compiler/serializer evidence does not prove a host,
+receiver, or physical machine.
+
+The candidate rhythm is: focused checks while implementing, final source-mutating
+normalization, freeze exact HEAD/base, one conservative affected verification run,
+fresh independent review, then current remote CI. A new HEAD invalidates review,
+CI, and handoff evidence for the previous candidate.
+
+CI validates a prepared frozen candidate; it is not the debugger. Diagnose failures
+locally, do not publish speculative commits merely to query CI, and never interpret
+an empty, stale, missing, cancelled, or required skipped result set as success.
+
+Routine structural start:
+
+```bash
+python3 scripts/factory_preflight.py
+python3 scripts/verify_affected.py --base origin/main --plan
+```
+
+`factory_preflight.py` remains read-only and returns
+`PREFLIGHT_OK_NOT_VERIFIED`. `verify_affected.py` is conservative: invalid or
+uncertain paths/pins expand verification rather than reducing it. Neither tool
+replaces issue-specific V1/V2 acceptance.
+
+---
+
+## 2A. Historical full local harness
 
 ```bash
 ./init.sh
@@ -121,10 +160,11 @@ PKs globales de `material_stock`/`project_picking` (migración 000091), cuyos
 
 ## 4. CI remoto
 
-Operational Core OC-002 implementa los required checks en `.github/workflows/ci.yml`:
+Operational Core OC-002 implements the remote checks in `.github/workflows/ci.yml`.
+Their result is evidence only for the exact tested commit and base:
 
 ```text
-1. feature-list/schema validation
+1. feature-list catalog/schema validation (not queue or ownership validation)
 2. pnpm install + typecheck + test (pnpm según packageManager)
 3. go test -v ./... con service container de Postgres (DATABASE_URL), para que
    los tests de integración de storage corran en vez de saltarse con t.Skip
@@ -525,6 +565,126 @@ Cobertura contractual exigida por #788:
   `NOT_TESTED/notClaimed` permanece; etiquetas/CNC/receiver/CUTS/RLT/profile
   r5 siguen en #789–#793 (la semántica FUNCTION 92 no se toca: #791 es su
   dueño).
+
+---
+
+## PTX CADmatic 4 — PARTS_INF/PARTS_UDI, etiquetas e identidad CNC r5 (#789)
+
+Modelo tipado de las familias de etiqueta (32 columnas PARTS_INF y
+JOB/PART+INFO1..60 PARTS_UDI según el diccionario §20 pp.168–171), proyección
+industrial congelada por pieza física (`PtxPartLabelData`/`buildPtxPartLabels`)
+y puente CNC `D<hex12>`/BARCODE. Autoridad y clasificación por campo en
+`docs/machines/ptx-cadmatic4/09_parts_inf_labels_cnc.md` (política de dimensiones PARTS_REQ §3,
+mapping §4, orientación de cantos §5, puente CNC §6, inventario UDI §7).
+
+Evidencia enfocada observada en el hardening #797 antes de T4/T5:
+
+```sh
+# HEAD 32518fc47273f74af71520985953f68d9ca32bf3
+pnpm --filter @granete/excel test    # 45 archivos / 534 PASS / 3 skips
+pnpm typecheck                      # PASS
+# prior diff check                  # limpio
+```
+
+T4 agregó la política explícita `partsReqDimensionPolicy:
+'part-local-pre-rotation-cut'`. Work-unit de política:
+`f4dac0af791fd58052b49b7acf91a31c70ebd118`. La verificación local final del
+candidato rotado se hizo en `ed1d5066b61db18da64e774879f8f14f59b16011`; ese
+commit es una corrección test-only que importa `PtxRecord` después de la falla
+inicial de `pnpm typecheck` del candidato. Evidencia en `ed1d5066`: Excel 45
+archivos / 534 PASS / 3 skips, `pnpm typecheck` PASS y `git diff --check` PASS.
+
+Intento de selector autorizado sobre el candidato
+`ed1d5066b61db18da64e774879f8f14f59b16011`, base
+`b7446866ed247677d8b8f83238cddbd96579db97`:
+
+```sh
+python3 scripts/verify_affected.py --base origin/main --budget-seconds 3600
+```
+
+Resultado: bloqueado antes de gates porque falta un `DATABASE_URL` aislado. El
+selector corrió una sola vez con 3600 s y seleccionó `typescript`, `backend-go`,
+`sketchup-extension`, `proyectar-visual`, `foundation-postgres` y
+`organization-browser`, pero ninguno de esos gates corrió ni cuenta como PASS
+local.
+
+T6 queda registrado en el HEAD
+`d68aa969cbc47d243f1d51828ffbfa87866e3718`. `partLabels` requiere
+`partsReqDimensionPolicy: 'part-local-pre-rotation-cut'`; `partLabels` con la
+política ausente o `placement` falla cerrado como `ptx_compile.options_invalid`.
+Las etiquetas no auto-seleccionan ni infieren esa política. Sin etiquetas, la
+opción ausente/`placement` conserva el comportamiento histórico, y sin etiquetas
+`part-local-pre-rotation-cut` es reutilizable/válida. La cobertura E2E
+CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1 ausentes y BARCODE2
+ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC.
+
+T7 sigue en curso para push/CI del mismo PR #797. Verificación local final del
+candidato `18d09e350c741b2c1a5f38ee95df22a1b161b700`: Excel 45 archivos / 539
+PASS / 3 skips, `pnpm typecheck` PASS y `git diff --check` PASS. El selector
+autorizado corrió una sola vez con 3600 s en ese candidato contra base
+`b7446866ed247677d8b8f83238cddbd96579db97` y bloqueó antes de selected gates
+porque falta un `DATABASE_URL` aislado. Los gates seleccionados de
+TypeScript/Go/Ruby/WebGL/Foundation no corrieron localmente y no son evidencia
+PASS. CI final del nuevo HEAD sigue pendiente; no hay claim de entrega completa
+ni de aceptación de receptor/máquina.
+
+Cobertura contractual exigida por #789/#797:
+
+- proyección pura: el serializer/compiler no reconstruye etiqueta — todo
+  PARTS_INF es proyección de `PtxPartLabelData`; el verifier exige celda a
+  celda la igualdad con la etiqueta de SU pieza y que los campos sin
+  autoridad (EDG_PG*/FACE/BACK/PALLET/COLOUR/SECOND_CUT) estén AUSENTES
+  (`parts_inf.authority_violation` ante un byte mutado);
+- CORE_MAT: `ProductionCutRow.materialCode` es la autoridad del tablero; esto
+  no introduce tuning de MATERIALS/receptor, que sigue perteneciendo a #790;
+- dimensión PARTS_REQ r5: `partsReqDimensionPolicy:
+  'part-local-pre-rotation-cut'` es política explícita del candidato r5;
+  `PARTS_REQ.LENGTH/WIDTH` expresan el corte local de pieza antes de rotación,
+  `GRAIN=0` permite rotación; `partLabels` requiere esta política y falla
+  cerrado como `ptx_compile.options_invalid` si la política está ausente o es
+  `placement`; las etiquetas no auto-seleccionan ni infieren la política; sin
+  etiquetas, la política ausente/`placement` preserva r2/r3/r4 byte-exact y
+  `part-local-pre-rotation-cut` sigue siendo reutilizable/válida;
+- fixture rotado vigente: pieza real `rotated === true`, colocada `39×549`,
+  `PARTS_REQ 549×39`, `GRAIN=0`, `FIN 550×40`, `EDGE2`/`EDGE4`; la mutación
+  vieja a dimensiones colocadas falla con `parts.dims` y el no rotado conserva
+  igualdad;
+- identidad de medidas: FIN_* (terminada, copiada de la fila de ingeniería)
+  contra PARTS_REQ (corte) + descuento del optimizador, re-derivada de forma
+  independiente por el verifier (`parts_inf.finished_identity`) y afirmada
+  desde los bytes en el golden;
+- orientación de cantos: L2→EDGE1, L1→EDGE2, W1→EDGE3, W2→EDGE4 con trampas
+  asimétricas y con un escenario real del optimizador `grain=0` +
+  `allowRotationNoGrain` que produce `piece.rotated === true`; las etiquetas
+  preservan lados físicos de pieza, no ejes del tablero;
+- edge fail-closed: cualquier bandera de canto sin `edgeBandCode` bloquea;
+  Granete sigue limitado a un código de banda por pieza;
+- ocurrencia física: PROD_NUM = `workshopOccurrenceOrdinal` congelado (#781);
+  golden con orden léxico de módulos OPUESTO al de ordinales y ocurrencia
+  repetida (`-L2`, ROOM distinto) — las etiquetas no cruzan ocurrencias;
+- puente CNC: DRAWING/BARCODE1 sólo existen con autoridad CNC explícita y
+  `cncScope` congelado no vacío; `D<hex12>` deriva de scope+CNC/release y
+  código de fabricación, no de un basename futuro para mecanizado desconocido;
+  autoridad false/ausente deja DRAWING/BARCODE1 vacíos; el E2E
+  CNC=false compiler→bytes→parse confirma DRAWING/BARCODE1 ausentes y
+  BARCODE2 ligado a `PARTS_REQ.CODE`, sin cambio de implementación CNC;
+  duplicados bloquean;
+- LABEL_QTY/quantities: una etiqueta por pieza física (`LABEL_QTY="1"`) y
+  cantidades inválidas de filas de ingeniería (0, negativas o decimales)
+  fallan cerrado;
+- PARTS_UDI: modelado estructural INFO1..60, INFO2 (encoding compacto
+  `2WE2LE`-style) clasificado UNKNOWN y JAMÁS generado; R2201/R7301 se leen
+  tipadas con referencias PART_INDEX → PARTS_REQ verificadas;
+- spec preflight extendido: TXT 200 en las columnas de texto de PARTS_INF y en
+  INFO1..60 (document y bytes), IDX 1-250/1-9999; unicidad por pieza es
+  PRODUCT (validate.ts DUPLICATE_INDEX), no SPEC;
+- inmutabilidad r2/r3/r4: sin la opción `partLabels` no se emiten PARTS_INF/
+  PARTS_UDI y los goldens históricos recompilan byte-exact dentro de la suite;
+  r2/r3/r4, FUNCTION 92, adapter/profile y outputs cliente no se tocaron.
+- CNC productivo posterior: #793 debe derivar el scope desde
+  `CutPlan.releaseBase.manufacturingFingerprint` o equivalente congelado
+  autoritativo y bloquear sin `releaseBase`; `release:789:r5:*` queda como
+  fixture de laboratorio, no como wiring productivo.
 
 ---
 

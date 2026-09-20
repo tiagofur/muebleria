@@ -83,11 +83,10 @@
  *   (missing thickness fails closed; no hardcoded 4/18 mm); both kerf fields
  *   stay separate fields fed from Granete's single saw configuration, and
  *   every division kerf must equal config.sawKerfMm or compilation fails.
- *   The dossier only establishes that BOOK counts boards, not millimetres
- *   [S03 pp.134–135] — "total boards of the material in the job" is NOT
- *   documented, so the candidate emits the conservative one-board-per-cycle
- *   value BOOK = 1 (consistent with MAX_BOOK=1/QTY_CYCLES=1 and one BOARDS
- *   row per sheet). RULE1..4 stay EMPTY: their per-class receiver semantics
+ *   Pattern Exchange documents BOOK/MAX_BOOK as max sheets per book /
+ *   cutting-height capacity. Historical candidates keep BOOK=1/MAX_BOOK=1;
+ *   a receiver policy may pin BOOK and require PATTERNS.MAX_BOOK coherence.
+ *   RULE1..4 stay EMPTY by default: their per-class receiver semantics
  *   are a documented §9 ambiguity. TRIM_* are empty under r2 and carry the
  *   r3 projected margins (or stay absent per side without a trim pass).
  *
@@ -129,14 +128,26 @@ import {
   type PtxGrain,
   type PtxOffcutRecord,
   type PtxPartReference,
+  type PtxPartsInfRecord,
+  type PtxPartsUdiRecord,
   type PtxPatternType,
   type PtxRecord,
   type PtxTrimType,
   type PtxVectorRecord,
 } from './records';
+import type { PtxPartLabelData } from './partLabels';
 import type { ScopedRegionRef } from './scopedRegionRef';
 import { PtxDocumentInvalidError, validatePtxDocument } from './validate';
 import { PTX_SPEC_PREFLIGHT_REVISION, ptxSpecPreflightDocument } from './specPreflight';
+import {
+  PTX_RECEIVER_FIELD_SOURCE,
+  PTX_RECEIVER_GEOMETRY_TRIM_FIELDS,
+  PTX_RECEIVER_REQUIRED_MATERIAL_FIELDS,
+  optionalReceiverExpectedNumber,
+  requiredReceiverNumber,
+  type PtxReceiverMaterialFieldName,
+  type PtxReceiverPolicy,
+} from './receiverPolicy';
 
 // ---------------------------------------------------------------------------
 // Public contract
@@ -212,6 +223,44 @@ export interface CompileCutPlanToPtxOptions {
    * side of the same boundary is serializePtxDocumentBytesSpecChecked.
    */
   readonly strictSpecPreflight?: typeof PTX_SPEC_PREFLIGHT_REVISION;
+  /**
+   * r5 label projection (#789): one frozen PtxPartLabelData per PHYSICAL
+   * piece, keyed by manufacturingPartCode. When present, the compiler emits
+   * one PARTS_INF row per PARTS_REQ row immediately after the PARTS_REQ
+   * block (the PARTS_REQ→PARTS_INF adjacency is RECEIVER_EVIDENCED on
+   * R2201/R7301; the rest of the family order stays this revision's dialect
+   * — a full reorder belongs to the #790 receiver profile). The serializer
+   * NEVER consults any other source: cells are a pure projection of the
+   * label entry. Requires partCodeAuthority 'workshop-labelref' (the key IS
+   * the PARTS_REQ.CODE authority); a label without a matching placed piece,
+   * a placed piece without a label, or an ambiguous DRAWING/BARCODE1 token
+   * fails closed (label_* codes) — nothing is dropped, merged or renamed.
+   */
+  readonly partLabels?: readonly PtxPartLabelData[];
+  /**
+   * r5 structural PARTS_UDI rows (#789): emit one PARTS_UDI row per placed
+   * piece carrying the projection's INFO1 picture reference (when present)
+   * and otherwise EMPTY INFO cells. This models the family's PRESENCE
+   * (documented INFO1..60 shape) without inventing semantics: the compact
+   * edge encoding observed in the field samples (e.g. `2WE2LE`) is UNKNOWN
+   * and is never generated. The final receiver policy is #790.
+   */
+  readonly partsUdi?: 'structural';
+  /**
+   * r5 PARTS_REQ dimensions policy (#789): absent preserves historical
+   * placement dimensions byte-for-byte. The r5 label route may explicitly
+   * request part-local pre-rotation cut dimensions; rotated optimizer pieces
+   * then swap placed length/width back to the part-local cut frame without
+   * recalculating edge-band deduction.
+   */
+  readonly partsReqDimensionPolicy?: 'placement' | 'part-local-pre-rotation-cut';
+  /**
+   * r5 receiver profile (#790): gated receiver-specific PTX shaping. The
+   * compiler consumes only the executable policy contract (sources, record
+   * shape and constraints); receiver ids and receiver-specific values live in
+   * receiverPolicy.ts.
+   */
+  readonly receiverPolicy?: PtxReceiverPolicy;
 }
 
 /** Per-sheet slice of the inverse table linking durable identities to local PTX indexes. */
@@ -239,6 +288,13 @@ export interface PtxCompilationMapping {
   readonly partIndexByPieceRef: ReadonlyMap<string, number>;
   /** PART_INDEX → placed piece id (position i holds partIndex i+1). */
   readonly pieceRefByPartIndex: readonly string[];
+  /**
+   * #789 label projection inverse: PART_INDEX → the frozen label data that
+   * produced its PARTS_INF row (position i holds partIndex i+1). Entries are
+   * undefined when the compilation carried no partLabels option — the array
+   * itself is undefined then (nothing to audit).
+   */
+  readonly partLabelByPartIndex?: readonly (PtxPartLabelData | undefined)[];
   /** OFFCUT_INDEX → sheet-scoped remnant identity (position i holds offcutIndex i+1). */
   readonly offcutRegionRefByOffcutIndex: readonly ScopedRegionRef[];
   /** PTN_INDEX → sheetIndex (position i holds patternIndex i+1). */
@@ -271,6 +327,12 @@ export type PtxCompilationErrorCode =
   | 'ptx_compile.part_code_missing'
   | 'ptx_compile.part_code_too_long'
   | 'ptx_compile.part_code_duplicate'
+  | 'ptx_compile.label_invalid'
+  | 'ptx_compile.label_code_duplicate'
+  | 'ptx_compile.label_code_unknown'
+  | 'ptx_compile.label_missing'
+  | 'ptx_compile.label_drawing_duplicate'
+  | 'ptx_compile.label_barcode_duplicate'
   | 'ptx_compile.spec_preflight_failed'
   | 'ptx_compile.material_thickness_missing'
   | 'ptx_compile.material_conflict'
@@ -1127,6 +1189,154 @@ function isPrintableAscii(value: string): boolean {
   return true;
 }
 
+function receiverPolicyOptionError(message: string, context: Record<string, unknown>): never {
+  throw new PtxCompilationError('ptx_compile.options_invalid', message, context);
+}
+
+function validateReceiverPolicyOption(policy: PtxReceiverPolicy | undefined): void {
+  if (policy === undefined) return;
+  const familyOrder = policy.recordShape?.familyOrder;
+  if (policy.id === '' || typeof policy.id !== 'string') {
+    receiverPolicyOptionError('receiverPolicy incompleto: id no vacío requerido', {
+      receiverPolicyId: policy.id,
+    });
+  }
+  if (!Array.isArray(familyOrder) || familyOrder.length === 0) {
+    receiverPolicyOptionError('receiverPolicy incompleto: familyOrder requerido', {
+      receiverPolicyId: policy.id,
+      familyOrder,
+    });
+  }
+  const validFamilies = new Set<PtxRecord['type']>([
+    'JOBS',
+    'PARTS_REQ',
+    'PARTS_INF',
+    'PARTS_UDI',
+    'BOARDS',
+    'MATERIALS',
+    'OFFCUTS',
+    'PATTERNS',
+    'CUTS',
+    'VECTORS',
+  ]);
+  const seenFamilies = new Set<string>();
+  for (const family of familyOrder) {
+    if (!validFamilies.has(family as PtxRecord['type']) || seenFamilies.has(family)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: familyOrder contiene una familia inválida o duplicada', {
+        receiverPolicyId: policy.id,
+        familyOrder,
+        family,
+      });
+    }
+    seenFamilies.add(family);
+  }
+  for (const required of ['JOBS', 'BOARDS', 'MATERIALS', 'PATTERNS', 'CUTS'] as const) {
+    if (!seenFamilies.has(required)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: familyOrder omite una familia emitida requerida', {
+        receiverPolicyId: policy.id,
+        familyOrder,
+        required,
+      });
+    }
+  }
+  if (policy.recordShape?.emitCutComments !== true && policy.recordShape?.emitCutComments !== false) {
+    receiverPolicyOptionError('receiverPolicy incompleto: emitCutComments debe ser booleano', {
+      receiverPolicyId: policy.id,
+      emitCutComments: policy.recordShape?.emitCutComments,
+    });
+  }
+  if (policy.recordShape?.requireBookMaxBookCoherence !== true && policy.recordShape?.requireBookMaxBookCoherence !== false) {
+    receiverPolicyOptionError('receiverPolicy incompleto: requireBookMaxBookCoherence debe ser booleano', {
+      receiverPolicyId: policy.id,
+      requireBookMaxBookCoherence: policy.recordShape?.requireBookMaxBookCoherence,
+    });
+  }
+  for (const fieldName of PTX_RECEIVER_REQUIRED_MATERIAL_FIELDS) {
+    const field = policy.materialFields?.[fieldName];
+    if (field === undefined) {
+      receiverPolicyOptionError('receiverPolicy incompleto: falta política de MATERIALS', {
+        receiverPolicyId: policy.id,
+        fieldName,
+      });
+    }
+    const source = field.source;
+    if (!Object.values(PTX_RECEIVER_FIELD_SOURCE).includes(source)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: source inválido de MATERIALS', {
+        receiverPolicyId: policy.id,
+        fieldName,
+        source,
+      });
+    }
+    if (source === PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE) {
+      if (field.value !== undefined) {
+        receiverPolicyOptionError('receiverPolicy inválido: OMIT_NO_OVERRIDE no puede traer valor', {
+          receiverPolicyId: policy.id,
+          fieldName,
+          value: field.value,
+        });
+      }
+      continue;
+    }
+    if (source === PTX_RECEIVER_FIELD_SOURCE.FROM_MATERIAL) {
+      receiverPolicyOptionError('receiverPolicy inválido: FROM_MATERIAL está reservado y no está soportado hasta que exista resolución real de material', {
+        receiverPolicyId: policy.id,
+        fieldName,
+        value: field.value,
+      });
+    }
+    if (source === PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY) {
+      if (!(PTX_RECEIVER_GEOMETRY_TRIM_FIELDS as readonly string[]).includes(fieldName)) {
+        receiverPolicyOptionError('receiverPolicy inválido: FROM_CUTPLAN_GEOMETRY sólo está soportado para TRIM_* ejecutados', {
+          receiverPolicyId: policy.id,
+          fieldName,
+        });
+      }
+      if (field.value !== undefined && !Number.isFinite(field.value)) {
+        receiverPolicyOptionError('receiverPolicy inválido: expected receiver value no es numérico finito', {
+          receiverPolicyId: policy.id,
+          fieldName,
+          value: field.value,
+        });
+      }
+      continue;
+    }
+    if (field.value === undefined || !Number.isFinite(field.value)) {
+      receiverPolicyOptionError('receiverPolicy incompleto: falta un valor numérico requerido de MATERIALS', {
+        receiverPolicyId: policy.id,
+        fieldName,
+        source,
+      });
+    }
+  }
+}
+
+function receiverNumber(policy: PtxReceiverPolicy, fieldName: PtxReceiverMaterialFieldName): number {
+  try {
+    return requiredReceiverNumber(policy, fieldName);
+  } catch (error) {
+    receiverPolicyOptionError((error as Error).message, {
+      receiverPolicyId: policy.id,
+      fieldName,
+    });
+  }
+}
+
+function reorderRecordsForReceiver(records: readonly PtxRecord[], familyOrder: readonly PtxRecord['type'][]): readonly PtxRecord[] {
+  const prefixFamilies = familyOrder.filter(
+    (family) => family !== 'PATTERNS' && family !== 'CUTS',
+  );
+  const prefixRecords = prefixFamilies.flatMap((family) =>
+    records.filter((record) => record.type === family),
+  );
+  const patternCutRecords = records.filter(
+    (record) => record.type === 'PATTERNS' || record.type === 'CUTS',
+  );
+  const knownFamilies = new Set(familyOrder);
+  const unknownRecords = records.filter((record) => !knownFamilies.has(record.type));
+
+  return [...prefixRecords, ...patternCutRecords, ...unknownRecords];
+}
+
 // ---------------------------------------------------------------------------
 // Compiler
 // ---------------------------------------------------------------------------
@@ -1196,6 +1406,49 @@ export function compileCutPlanToPtxDocument(
       { strictSpecPreflight: options.strictSpecPreflight },
     );
   }
+  if (options.partsUdi !== undefined && options.partsUdi !== 'structural') {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partsUdi sólo implementa 'structural' (#789: la familia modelada sin semántica inventada)",
+      { partsUdi: options.partsUdi },
+    );
+  }
+  if (
+    options.partsReqDimensionPolicy !== undefined &&
+    options.partsReqDimensionPolicy !== 'placement' &&
+    options.partsReqDimensionPolicy !== 'part-local-pre-rotation-cut'
+  ) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partsReqDimensionPolicy sólo implementa 'placement' o 'part-local-pre-rotation-cut' (#789 r5)",
+      { partsReqDimensionPolicy: options.partsReqDimensionPolicy },
+    );
+  }
+  if (
+    options.partLabels !== undefined &&
+    options.partsReqDimensionPolicy !== 'part-local-pre-rotation-cut'
+  ) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      'r5 PARTS_INF projection requires PARTS_REQ part-local cut frame so optimizer rotation cannot mutate dimensional identity; set partsReqDimensionPolicy to part-local-pre-rotation-cut when partLabels is provided',
+      { partsReqDimensionPolicy: options.partsReqDimensionPolicy },
+    );
+  }
+  if (options.partsUdi === 'structural' && options.partLabels === undefined) {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partsUdi 'structural' requiere partLabels: las filas PARTS_UDI se derivan de la proyección de etiqueta congelada",
+      { partsUdi: options.partsUdi },
+    );
+  }
+  validateReceiverPolicyOption(options.receiverPolicy);
+  if (options.partLabels !== undefined && options.partCodeAuthority !== 'workshop-labelref') {
+    throw new PtxCompilationError(
+      'ptx_compile.options_invalid',
+      "partLabels requiere partCodeAuthority 'workshop-labelref': la clave de la proyección ES el PARTS_REQ.CODE del candidato",
+      { partCodeAuthority: options.partCodeAuthority },
+    );
+  }
   if (cutPlan.sheets.length === 0) {
     throw new PtxCompilationError(
       'ptx_compile.no_sheets',
@@ -1207,6 +1460,27 @@ export function compileCutPlanToPtxDocument(
   const decimalPlaces = options.decimalPlaces;
   const q = (value: number, field: string) => ptxResolveMagnitude(value, decimalPlaces, field);
   const kerfMm = cutPlan.config.sawKerfMm;
+  if (options.receiverPolicy !== undefined) {
+    const receiverKerfRip = receiverNumber(options.receiverPolicy, 'KERF_RIP');
+    const receiverKerfCrosscut = receiverNumber(options.receiverPolicy, 'KERF_XCT');
+    const kerfTolerance = 1e-9 * Math.max(1, kerfMm, receiverKerfRip, receiverKerfCrosscut);
+    if (
+      Math.abs(kerfMm - receiverKerfRip) > kerfTolerance ||
+      Math.abs(kerfMm - receiverKerfCrosscut) > kerfTolerance ||
+      Math.abs(receiverKerfRip - receiverKerfCrosscut) > kerfTolerance
+    ) {
+      throw new PtxCompilationError(
+        'ptx_compile.kerf_not_uniform',
+        'receiverPolicy exige kerf uniforme: cutPlan.config.sawKerfMm debe coincidir con KERF_RIP y KERF_XCT del perfil receptor',
+        {
+          sawKerfMm: kerfMm,
+          receiverKerfRip,
+          receiverKerfCrosscut,
+          receiverPolicyId: options.receiverPolicy.id,
+        },
+      );
+    }
+  }
 
   const compiledSheets = cutPlan.sheets.map((sheet) => compileSheet(sheet, kerfMm, options));
 
@@ -1274,6 +1548,54 @@ export function compileCutPlanToPtxDocument(
       }
     }
     trimByMaterial.set(material.code, sheetPlans[0]!);
+  }
+
+  if (options.receiverPolicy !== undefined) {
+    const receiverTrimSlots = [
+      ['TRIM_FRIP', 'trimFrip'],
+      ['TRIM_VRIP', 'trimVrip'],
+      ['TRIM_FXCT', 'trimFxct'],
+      ['TRIM_VXCT', 'trimVXct'],
+    ] as const satisfies readonly (readonly [PtxReceiverMaterialFieldName, keyof PtxMaterialTrims])[];
+
+    for (const material of materials.values()) {
+      const trims = trimByMaterial.get(material.code);
+      for (const [receiverSlot, trimKey] of receiverTrimSlots) {
+        const executedValue = trims?.[trimKey];
+        const expectedValue = optionalReceiverExpectedNumber(options.receiverPolicy, receiverSlot);
+        if (expectedValue !== undefined) {
+          if (executedValue === undefined && expectedValue !== 0) {
+            throw new PtxCompilationError(
+              'ptx_compile.trim_geometry_mismatch',
+              'receiverPolicy exige TRIM_* ejecutado desde geometría; no se fabrica cero ni override cuando la geometría está ausente',
+              {
+                materialCode: material.code,
+                slot: receiverSlot,
+                executedValue,
+                expectedValue,
+                receiverPolicyId: options.receiverPolicy.id,
+              },
+            );
+          }
+          if (executedValue !== undefined) {
+            const tolerance = 1e-9 * Math.max(1, Math.abs(executedValue), Math.abs(expectedValue));
+            if (Math.abs(executedValue - expectedValue) > tolerance) {
+              throw new PtxCompilationError(
+                'ptx_compile.trim_geometry_mismatch',
+                'receiverPolicy exige coherencia fail-closed entre los TRIM_* ejecutados por geometría y los valores esperados del receptor',
+                {
+                  materialCode: material.code,
+                  slot: receiverSlot,
+                  executedValue,
+                  expectedValue,
+                  receiverPolicyId: options.receiverPolicy.id,
+                },
+              );
+            }
+          }
+        }
+      }
+    }
   }
 
   // --- Parts table: one row per placed piece, no aggregation --------------
@@ -1344,14 +1666,18 @@ export function compileCutPlanToPtxDocument(
         }
         seenPartCodes.set(partCode, partIndex);
       }
+      const partLocalCutDimensions =
+        options.partsReqDimensionPolicy === 'part-local-pre-rotation-cut' && piece.rotated
+          ? { lengthMm: piece.widthMm, widthMm: piece.lengthMm }
+          : { lengthMm: piece.lengthMm, widthMm: piece.widthMm };
       partsReq.push({
         type: 'PARTS_REQ',
         jobIndex: 1,
         partIndex,
         code: partCode,
         materialIndex: materials.get(materialCode)!.index,
-        length: q(piece.lengthMm, `PARTS_REQ ${partIndex} LENGTH`),
-        width: q(piece.widthMm, `PARTS_REQ ${partIndex} WIDTH`),
+        length: q(partLocalCutDimensions.lengthMm, `PARTS_REQ ${partIndex} LENGTH`),
+        width: q(partLocalCutDimensions.widthMm, `PARTS_REQ ${partIndex} WIDTH`),
         requiredQuantity: 1,
         overQuantity: 0,
         underQuantity: 0,
@@ -1387,26 +1713,209 @@ export function compileCutPlanToPtxDocument(
       code: material.code,
       description: ptxAscii(sampleSheet.materialName) || undefined,
       thickness: q(material.thicknessMm, `MATERIALS '${material.code}' THICK`),
-      // BOOK: the dossier only establishes that it counts boards, not
-      // millimetres [S03 pp.134–135]; "total boards of the material in the
-      // job" is NOT documented. The candidate's one-board-per-cycle policy
-      // (MAX_BOOK=1, QTY_CYCLES=1, one BOARDS row per sheet) emits BOOK = 1.
-      bookQuantity: 1,
-      kerfRip: q(kerfMm, `MATERIALS '${material.code}' KERF_RIP`),
-      kerfCrosscut: q(kerfMm, `MATERIALS '${material.code}' KERF_XCT`),
+      // BOOK/MAX_BOOK: Pattern Exchange documents max sheets per book /
+      // cutting-height capacity. Historical r2/r3/r4 keep BOOK=1; a receiver
+      // policy may pin BOOK and may require PATTERNS.MAX_BOOK to match it.
+      bookQuantity:
+        options.receiverPolicy !== undefined
+          ? receiverNumber(options.receiverPolicy, 'BOOK')
+          : 1,
+      kerfRip:
+        options.receiverPolicy !== undefined
+          ? q(receiverNumber(options.receiverPolicy, 'KERF_RIP'), `MATERIALS '${material.code}' KERF_RIP`)
+          : q(kerfMm, `MATERIALS '${material.code}' KERF_RIP`),
+      kerfCrosscut:
+        options.receiverPolicy !== undefined
+          ? q(receiverNumber(options.receiverPolicy, 'KERF_XCT'), `MATERIALS '${material.code}' KERF_XCT`)
+          : q(kerfMm, `MATERIALS '${material.code}' KERF_XCT`),
       // r3 (#661): the four evidenced trims, each the TOTAL margin including
       // kerf (G4), mapped by executed axis + leadingBand (G2). A side without
       // a trim pass stays ABSENT (undefined → empty cell, never 0). G3:
       // TRIM_HEAD/TRIM_FRCT/TRIM_VRCT are never derived — no override.
-      trimFRip: trims?.trimFrip !== undefined ? q(trims.trimFrip, `MATERIALS '${material.code}' TRIM_FRIP`) : undefined,
-      trimVRip: trims?.trimVrip !== undefined ? q(trims.trimVrip, `MATERIALS '${material.code}' TRIM_VRIP`) : undefined,
-      trimFXct: trims?.trimFxct !== undefined ? q(trims.trimFxct, `MATERIALS '${material.code}' TRIM_FXCT`) : undefined,
-      trimVXct: trims?.trimVXct !== undefined ? q(trims.trimVXct, `MATERIALS '${material.code}' TRIM_VXCT`) : undefined,
-      // RULE1..4 deliberately empty: receiver semantics stay unresolved (§9).
+      trimFRip:
+        trims?.trimFrip !== undefined ? q(trims.trimFrip, `MATERIALS '${material.code}' TRIM_FRIP`) : undefined,
+      trimVRip:
+        trims?.trimVrip !== undefined ? q(trims.trimVrip, `MATERIALS '${material.code}' TRIM_VRIP`) : undefined,
+      trimFXct:
+        trims?.trimFxct !== undefined ? q(trims.trimFxct, `MATERIALS '${material.code}' TRIM_FXCT`) : undefined,
+      trimVXct:
+        trims?.trimVXct !== undefined ? q(trims.trimVXct, `MATERIALS '${material.code}' TRIM_VXCT`) : undefined,
+      trimHead: undefined,
+      trimFRct: undefined,
+      trimVRct: undefined,
+      // RULE1..4 deliberately empty in the historical default; an opted-in
+      // receiver policy may pin machine/profile overrides.
+      rule1: options.receiverPolicy !== undefined ? receiverNumber(options.receiverPolicy, 'RULE1') : undefined,
+      rule2: options.receiverPolicy !== undefined ? receiverNumber(options.receiverPolicy, 'RULE2') : undefined,
+      rule3: options.receiverPolicy !== undefined ? receiverNumber(options.receiverPolicy, 'RULE3') : undefined,
+      rule4: options.receiverPolicy !== undefined ? receiverNumber(options.receiverPolicy, 'RULE4') : undefined,
     });
   }
 
   records.push(...partsReq);
+
+  // --- #789 label projection → PARTS_INF (+ structural PARTS_UDI) ----------
+  // Identity gates first (fail closed BEFORE any row is emitted):
+  //   physical piece ↔ manufacturingPartCode ↔ PARTS_REQ.CODE ↔ PART_INDEX
+  //   ↔ PARTS_INF ↔ DRAWING/BARCODE ↔ future CNC artifact.
+  // The rows below are a PURE projection of PtxPartLabelData: nothing here
+  // consults the BOM, the catalog, names or geometry to "complete" data.
+  // Position: immediately after the PARTS_REQ block — the PARTS_REQ →
+  // PARTS_INF → PARTS_UDI adjacency is RECEIVER_EVIDENCED on R2201/R7301;
+  // reordering the other families belongs to the #790 receiver profile.
+  let partLabelByPartIndex: readonly (PtxPartLabelData | undefined)[] | undefined;
+  if (options.partLabels !== undefined) {
+    const labelByCode = new Map<string, PtxPartLabelData>();
+    const drawingRefs = new Map<string, string>();
+    const barcode1Tokens = new Map<string, string>();
+    for (const label of options.partLabels) {
+      const code = requireAsciiIdentity(label.manufacturingPartCode, 'label manufacturingPartCode', {
+        manufacturingPartCode: label.manufacturingPartCode,
+      });
+      if (labelByCode.has(code)) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_code_duplicate',
+          'Dos entradas de la proyección de etiqueta comparten el código de fabricación',
+          { manufacturingPartCode: code },
+        );
+      }
+      if (!seenPartCodes.has(code)) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_code_unknown',
+          'La proyección de etiqueta referencia un código de fabricación sin pieza colocada en el plan (PARTS_REQ)',
+          { manufacturingPartCode: code, knownCodes: [...seenPartCodes.keys()] },
+        );
+      }
+      if (label.cncDrawingRef !== undefined) {
+        const previous = drawingRefs.get(label.cncDrawingRef);
+        if (previous !== undefined) {
+          throw new PtxCompilationError(
+            'ptx_compile.label_drawing_duplicate',
+            'Dos piezas físicas distintas comparten la referencia CNC de DRAWING: el puente hacia el futuro MPR/MPRX sería ambiguo',
+            { cncDrawingRef: label.cncDrawingRef, manufacturingPartCode: code, previousPartCode: previous },
+          );
+        }
+        drawingRefs.set(label.cncDrawingRef, code);
+      }
+      if (label.barcode1 !== undefined) {
+        const previous = barcode1Tokens.get(label.barcode1);
+        if (previous !== undefined) {
+          throw new PtxCompilationError(
+            'ptx_compile.label_barcode_duplicate',
+            'Dos piezas físicas distintas comparten el token de BARCODE1: el scan CNC sería ambiguo',
+            { barcode1: label.barcode1, manufacturingPartCode: code, previousPartCode: previous },
+          );
+        }
+        barcode1Tokens.set(label.barcode1, code);
+      }
+      if (label.barcode2 !== undefined && label.barcode2 !== code) {
+        // Product policy: BARCODE2 IS the manufacturing part code; a
+        // different value is a wiring mistake, not an alternative token.
+        throw new PtxCompilationError(
+          'ptx_compile.label_invalid',
+          'BARCODE2 debe ser el manufacturingPartCode de la pieza (token de tracking con autoridad real) o quedar vacío',
+          { manufacturingPartCode: code, barcode2: label.barcode2 },
+        );
+      }
+      if (!Number.isInteger(label.labelQuantity) || label.labelQuantity < 1) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_invalid',
+          'LABEL_QTY debe ser un entero >= 1 (política: una etiqueta por pieza física)',
+          { manufacturingPartCode: code, labelQuantity: label.labelQuantity },
+        );
+      }
+      labelByCode.set(code, label);
+    }
+    for (const [code, partIndexOfCode] of seenPartCodes) {
+      if (!labelByCode.has(code)) {
+        throw new PtxCompilationError(
+          'ptx_compile.label_missing',
+          'Una pieza colocada no tiene proyección de etiqueta: PARTS_INF exige una fila por pieza física',
+          { manufacturingPartCode: code, partIndex: partIndexOfCode },
+        );
+      }
+    }
+
+    // Deterministic text rendering for the TXT-typed §20 columns: resolve the
+    // frozen magnitude at the compilation resolution (fail closed on a value
+    // that does not fit) and render it exactly like the serializer renders a
+    // real cell — one shared numeric-form rule across PARTS_REQ and PARTS_INF.
+    const txt = (value: number, field: string, code: string): string => {
+      const resolved = ptxResolveMagnitude(value, decimalPlaces, `PARTS_INF ${field} (${code})`);
+      const fixed = resolved.toFixed(decimalPlaces);
+      return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+    };
+    const cell = (value: string | undefined, field: string, code: string): string | undefined => {
+      if (value === undefined) return undefined;
+      const ascii = ptxAscii(value);
+      if (ascii === '') {
+        throw new PtxCompilationError(
+          'ptx_compile.label_invalid',
+          `El texto de etiqueta ${field} no tiene representación ASCII de impresión`,
+          { field, value, manufacturingPartCode: code },
+        );
+      }
+      return ascii;
+    };
+
+    const partsInf: PtxPartsInfRecord[] = [];
+    const partsUdi: PtxPartsUdiRecord[] = [];
+    const labelByPartIndex: (PtxPartLabelData | undefined)[] = pieceRefByPartIndex.map(
+      () => undefined,
+    );
+    for (const [code, partIndexOfCode] of [...seenPartCodes.entries()].sort(
+      (a, b) => a[1] - b[1],
+    )) {
+      const label = labelByCode.get(code)!;
+      labelByPartIndex[partIndexOfCode - 1] = label;
+      partsInf.push({
+        type: 'PARTS_INF',
+        jobIndex: 1,
+        partIndex: partIndexOfCode,
+        description: cell(label.description, 'DESC', code),
+        labelQuantity: String(label.labelQuantity),
+        finishedLength: txt(label.finishedLengthMm, 'FIN_LENGTH', code),
+        finishedWidth: txt(label.finishedWidthMm, 'FIN_WIDTH', code),
+        order: cell(label.orderRef, 'ORDER', code),
+        edge1: cell(label.edge1, 'EDGE1', code),
+        edge2: cell(label.edge2, 'EDGE2', code),
+        edge3: cell(label.edge3, 'EDGE3', code),
+        edge4: cell(label.edge4, 'EDGE4', code),
+        // EDG_PG1..4 stay ABSENT: Granete has no edge operation/program code
+        // authority (#789 decision — a value like "EDGE" or "1" would be
+        // invented semantics).
+        // FACE_LAM/BACK_LAM stay ABSENT (no separate lamination authority).
+        coreMaterial: cell(label.coreMaterial, 'CORE_MAT', code),
+        drawing: cell(label.cncDrawingRef, 'DRAWING', code),
+        product: cell(label.productCode, 'PRODUCT', code),
+        productInfo: cell(label.productInfo, 'PROD_INFO', code),
+        productWidth:
+          label.productWidthMm !== undefined ? txt(label.productWidthMm, 'PROD_WIDTH', code) : undefined,
+        productHeight:
+          label.productHeightMm !== undefined ? txt(label.productHeightMm, 'PROD_HGT', code) : undefined,
+        productDepth:
+          label.productDepthMm !== undefined ? txt(label.productDepthMm, 'PROD_DEPTH', code) : undefined,
+        productNumber: label.productNumber !== undefined ? String(label.productNumber) : undefined,
+        room: cell(label.room, 'ROOM', code),
+        barcode1: cell(label.barcode1, 'BARCODE1', code),
+        barcode2: cell(label.barcode2, 'BARCODE2', code),
+      });
+      if (options.partsUdi === 'structural') {
+        // INFO1 = the projection's picture reference when present; the rest
+        // stays EMPTY. The field samples' compact edge encoding (INFO2) is
+        // UNKNOWN and is NEVER generated (#789; #790 owns the receiver
+        // policy).
+        partsUdi.push({
+          type: 'PARTS_UDI',
+          jobIndex: 1,
+          partIndex: partIndexOfCode,
+          info: [cell(label.udiPictureRef, 'INFO1', code)],
+        });
+      }
+    }
+    records.push(...partsInf, ...partsUdi);
+    partLabelByPartIndex = labelByPartIndex;
+  }
 
   const offcutRecords: PtxOffcutRecord[] = [];
   const vectorRecords: PtxVectorRecord[] = [];
@@ -1445,7 +1954,10 @@ export function compileCutPlanToPtxDocument(
       patternType,
       runQuantity: 1,
       cyclesQuantity: 1,
-      maxBook: 1,
+      maxBook:
+        options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.requireBookMaxBookCoherence
+          ? receiverNumber(options.receiverPolicy, 'BOOK')
+          : 1,
     });
 
     const cutIndexByCutId = new Map<string, number>();
@@ -1473,7 +1985,10 @@ export function compileCutPlanToPtxDocument(
         repeatQuantity: 1,
         partReference,
         producedQuantity: plan.keptPieceRef !== undefined ? 1 : 0,
-        comment: ptxAscii(division.cutId) || undefined,
+        comment:
+          options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.emitCutComments === false
+            ? undefined
+            : ptxAscii(division.cutId) || undefined,
       });
       if (options.includeVectors === true) {
         vectorRecords.push({
@@ -1541,7 +2056,10 @@ export function compileCutPlanToPtxDocument(
         repeatQuantity: isPhysical92 ? 1 : 0,
         partReference: reference,
         producedQuantity: isPhysical92 ? undefined : 1,
-        comment: ptxAscii(release.regionId) || undefined,
+        comment:
+          options.receiverPolicy !== undefined && options.receiverPolicy.recordShape.emitCutComments === false
+            ? undefined
+            : ptxAscii(release.regionId) || undefined,
       });
       if (release.kind === 'offcut') {
         const terminal = terminalByRegion.get(release.regionId)!;
@@ -1603,7 +2121,10 @@ export function compileCutPlanToPtxDocument(
       origin: options.headerOrigin,
       trimType: options.trimType,
     },
-    records,
+    records:
+      options.receiverPolicy !== undefined
+        ? reorderRecordsForReceiver(records, options.receiverPolicy.recordShape.familyOrder as readonly PtxRecord['type'][])
+        : records,
   };
 
   const issues = validatePtxDocument(document);
@@ -1638,6 +2159,7 @@ export function compileCutPlanToPtxDocument(
       ),
       partIndexByPieceRef,
       pieceRefByPartIndex,
+      ...(partLabelByPartIndex !== undefined ? { partLabelByPartIndex } : {}),
       offcutRegionRefByOffcutIndex,
       sheetIndexByPatternIndex,
       sheets: sheetMappings,

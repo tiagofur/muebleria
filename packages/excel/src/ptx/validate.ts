@@ -26,7 +26,9 @@ import {
   type PtxJobRecord,
   type PtxMaterialRecord,
   type PtxOffcutRecord,
+  type PtxPartsInfRecord,
   type PtxPartsReqRecord,
+  type PtxPartsUdiRecord,
   type PtxPatternRecord,
   type PtxRecord,
   type PtxVectorRecord,
@@ -123,12 +125,28 @@ function quantityIssue(value: number, label: string, min: number, issues: Issue[
   }
 }
 
+function finiteNumberShapeIssue(value: number, label: string, issues: Issue[]): void {
+  if (!Number.isFinite(value)) {
+    issues.push({ code: 'INVALID_MAGNITUDE', message: `${label}=${value} must be a finite number` });
+  }
+}
+
+function finiteIntegerShapeIssue(value: number, label: string, issues: Issue[]): void {
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    issues.push({ code: 'INVALID_QUANTITY', message: `${label}=${value} must be a finite integer` });
+  }
+}
+
 function recordLabel(record: PtxRecord): string {
   switch (record.type) {
     case 'JOBS':
       return `JOBS job=${record.jobIndex}`;
     case 'PARTS_REQ':
       return `PARTS_REQ job=${record.jobIndex} part=${record.partIndex}`;
+    case 'PARTS_INF':
+      return `PARTS_INF job=${record.jobIndex} part=${record.partIndex}`;
+    case 'PARTS_UDI':
+      return `PARTS_UDI job=${record.jobIndex} part=${record.partIndex}`;
     case 'BOARDS':
       return `BOARDS job=${record.jobIndex} board=${record.boardIndex}`;
     case 'MATERIALS':
@@ -318,6 +336,12 @@ function checkBoard(record: PtxBoardRecord, issues: Issue[]): void {
   if (record.usedQuantity !== undefined) {
     quantityIssue(record.usedQuantity, `${recordLabel(record)} QTY_USED`, 0, issues);
   }
+  if (record.cost !== undefined) {
+    finiteNumberShapeIssue(record.cost, `${recordLabel(record)} COST`, issues);
+  }
+  if (record.stockFlag !== undefined) {
+    finiteIntegerShapeIssue(record.stockFlag, `${recordLabel(record)} STK_FLAG`, issues);
+  }
 }
 
 function checkMaterial(record: PtxMaterialRecord, issues: Issue[]): void {
@@ -380,36 +404,6 @@ function checkCut(record: PtxCutRecord, issues: Issue[]): void {
       )}]`,
     });
   }
-  // FUNCTION 92 row semantics (#661, 04_contrato_r3_refilados.md §6.2/§19):
-  // a physical phase-2 offcut release pass — QTY_RPT=1, positive SEQUENCE,
-  // PART_INDEX referencing an OFFCUTS row via Xn, positive DIMENSION. Never
-  // the relational QTY_RPT=0/SEQUENCE=0 representation.
-  if (record.functionCode === 92) {
-    if (record.repeatQuantity !== 1) {
-      issues.push({
-        code: 'INVALID_FUNCTION_SEMANTICS',
-        message: `${recordLabel(record)} FUNCTION=92 QTY_RPT=${record.repeatQuantity} must be 1 (a physical release pass, not a relational attribution row)`,
-      });
-    }
-    if (record.sequence < 1) {
-      issues.push({
-        code: 'INVALID_FUNCTION_SEMANTICS',
-        message: `${recordLabel(record)} FUNCTION=92 SEQUENCE=${record.sequence} must be > 0 (scheduled after its producer pass)`,
-      });
-    }
-    if (record.partReference.kind !== 'offcut') {
-      issues.push({
-        code: 'INVALID_FUNCTION_SEMANTICS',
-        message: `${recordLabel(record)} FUNCTION=92 PART_INDEX must reference an OFFCUTS row as Xn`,
-      });
-    }
-    if (record.producedQuantity !== undefined) {
-      issues.push({
-        code: 'INVALID_FUNCTION_SEMANTICS',
-        message: `${recordLabel(record)} FUNCTION=92 QTY_PARTS must be ABSENT (the pass releases an Xn offcut, not a PARTS_REQ part)`,
-      });
-    }
-  }
   // DIMENSION is the relative measure of the sub-panel, never a coordinate —
   // it must be positive even for trim rows (investigation §5).
   magnitudeIssue(record.dimension, `${recordLabel(record)} DIMENSION`, true, issues);
@@ -426,6 +420,70 @@ function checkOffcut(record: PtxOffcutRecord, issues: Issue[]): void {
   // #781 r4 micro-fix: OFFCUTS.CODE is optional (empty cell = absent).
   // Other families' CODE checks stay required (untouched).
   textIssues(record.code, `${recordLabel(record)} CODE`, false, issues);
+}
+
+/**
+ * #789: PARTS_INF/PARTS_UDI are TXT-carried label rows keyed by
+ * (JOB_INDEX, PART_INDEX). Every text column is printable-ASCII-or-absent;
+ * numeric columns do not exist (§20 documents all of them as TXT 200). The
+ * label↔part relation and the one-row-per-part product contract are checked
+ * by the caller against the PARTS_REQ table.
+ */
+const PARTS_INF_TEXT_FIELDS = [
+  'DESC', 'LABEL_QTY', 'FIN_LENGTH', 'FIN_WIDTH', 'ORDER',
+  'EDGE1', 'EDGE2', 'EDGE3', 'EDGE4',
+  'EDG_PG1', 'EDG_PG2', 'EDG_PG3', 'EDG_PG4',
+  'FACE_LAM', 'BACK_LAM', 'CORE_MAT', 'PALLET',
+  'DRAWING', 'PRODUCT', 'PROD_INFO',
+  'PROD_WIDTH', 'PROD_HGT', 'PROD_DEPTH', 'PROD_NUM',
+  'ROOM', 'BARCODE1', 'BARCODE2', 'COLOUR',
+  'SECOND_CUT_LENGTH', 'SECOND_CUT_WIDTH',
+] as const;
+
+function checkPartsInf(record: PtxPartsInfRecord, issues: Issue[]): void {
+  const label = recordLabel(record);
+  const values: Record<string, string | undefined> = {
+    DESC: record.description,
+    LABEL_QTY: record.labelQuantity,
+    FIN_LENGTH: record.finishedLength,
+    FIN_WIDTH: record.finishedWidth,
+    ORDER: record.order,
+    EDGE1: record.edge1,
+    EDGE2: record.edge2,
+    EDGE3: record.edge3,
+    EDGE4: record.edge4,
+    EDG_PG1: record.edgeProgram1,
+    EDG_PG2: record.edgeProgram2,
+    EDG_PG3: record.edgeProgram3,
+    EDG_PG4: record.edgeProgram4,
+    FACE_LAM: record.faceLaminate,
+    BACK_LAM: record.backLaminate,
+    CORE_MAT: record.coreMaterial,
+    PALLET: record.pallet,
+    DRAWING: record.drawing,
+    PRODUCT: record.product,
+    PROD_INFO: record.productInfo,
+    PROD_WIDTH: record.productWidth,
+    PROD_HGT: record.productHeight,
+    PROD_DEPTH: record.productDepth,
+    PROD_NUM: record.productNumber,
+    ROOM: record.room,
+    BARCODE1: record.barcode1,
+    BARCODE2: record.barcode2,
+    COLOUR: record.colour,
+    SECOND_CUT_LENGTH: record.secondCutLength,
+    SECOND_CUT_WIDTH: record.secondCutWidth,
+  };
+  for (const field of PARTS_INF_TEXT_FIELDS) {
+    textIssues(values[field], `${label} ${field}`, false, issues);
+  }
+}
+
+function checkPartsUdi(record: PtxPartsUdiRecord, issues: Issue[]): void {
+  const label = recordLabel(record);
+  record.info.forEach((value, i) => {
+    textIssues(value, `${label} INFO${i + 1}`, false, issues);
+  });
 }
 
 function checkVector(record: PtxVectorRecord, issues: Issue[]): void {
@@ -446,6 +504,12 @@ function checkIndexFields(record: PtxRecord, issues: Issue[]): void {
     case 'PARTS_REQ':
       quantityIssue(record.partIndex, `${label} PART_INDEX`, 1, issues);
       quantityIssue(record.materialIndex, `${label} MAT_INDEX`, 1, issues);
+      break;
+    case 'PARTS_INF':
+      quantityIssue(record.partIndex, `${label} PART_INDEX`, 1, issues);
+      break;
+    case 'PARTS_UDI':
+      quantityIssue(record.partIndex, `${label} PART_INDEX`, 1, issues);
       break;
     case 'BOARDS':
       quantityIssue(record.boardIndex, `${label} BRD_INDEX`, 1, issues);
@@ -491,6 +555,8 @@ export function validatePtxDocument(doc: PtxDocument): readonly Issue[] {
   checkHeader(doc, issues);
 
   const tables = buildTables(doc);
+  const seenPartsInfKeys = new Set<string>();
+  const seenPartsUdiKeys = new Set<string>();
 
   for (const record of doc.records) {
     checkIndexFields(record, issues);
@@ -502,6 +568,30 @@ export function validatePtxDocument(doc: PtxDocument): readonly Issue[] {
         checkPartsReq(record, issues);
         if (!tables.materials.has(`${record.jobIndex}:${record.materialIndex}`)) {
           issues.push({ code: 'UNKNOWN_MATERIAL_REFERENCE', message: `${recordLabel(record)} MAT_INDEX=${record.materialIndex} has no MATERIALS row in job ${record.jobIndex}` });
+        }
+        break;
+      case 'PARTS_INF':
+        checkPartsInf(record, issues);
+        // #789 product contract: at most ONE PARTS_INF row per part (one
+        // label projection per physical piece). The §20 dictionary does not
+        // document uniqueness — this is Granete candidate policy, and a
+        // duplicate blocks instead of merging.
+        if (seenPartsInfKeys.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'DUPLICATE_INDEX', message: `${recordLabel(record)}: duplicate PARTS_INF row for part ${record.partIndex} of job ${record.jobIndex} (one label projection per physical piece)` });
+        }
+        seenPartsInfKeys.add(`${record.jobIndex}:${record.partIndex}`);
+        if (!tables.parts.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'UNKNOWN_PART_REFERENCE', message: `${recordLabel(record)} PART_INDEX=${record.partIndex} has no PARTS_REQ row in job ${record.jobIndex}` });
+        }
+        break;
+      case 'PARTS_UDI':
+        checkPartsUdi(record, issues);
+        if (seenPartsUdiKeys.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'DUPLICATE_INDEX', message: `${recordLabel(record)}: duplicate PARTS_UDI row for part ${record.partIndex} of job ${record.jobIndex}` });
+        }
+        seenPartsUdiKeys.add(`${record.jobIndex}:${record.partIndex}`);
+        if (!tables.parts.has(`${record.jobIndex}:${record.partIndex}`)) {
+          issues.push({ code: 'UNKNOWN_PART_REFERENCE', message: `${recordLabel(record)} PART_INDEX=${record.partIndex} has no PARTS_REQ row in job ${record.jobIndex}` });
         }
         break;
       case 'BOARDS':

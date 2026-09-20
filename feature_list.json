@@ -1,9 +1,17 @@
 {
   "project": "muebles",
-  "description": "Sistema de cotizaci\u00f3n y producci\u00f3n de muebles. Web (React) + Desktop (Electron) compartiendo dominio TypeScript en monorepo pnpm.",
+  "description": "Legacy implementation catalog and historical metadata for Granete. Not an operational queue, scheduler, ownership registry, reservation, or execution authority.",
   "rules": {
-    "one_feature_at_a_time": true,
-    "require_tests_to_close": true,
+    "catalog_only": true,
+    "not_operational_authority": [
+      "queue",
+      "scheduler",
+      "priority",
+      "ownership",
+      "reservation",
+      "execution_state"
+    ],
+    "require_evidence_for_done_metadata": true,
     "valid_status": [
       "pending",
       "in_progress",

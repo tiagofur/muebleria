@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  PtxCutRecord,
-  PtxDocument,
-  PtxPartsReqRecord,
-  PtxPatternRecord,
-  PtxRecord,
+import {
+  describePtxCutFunction,
+  interpretPtxCutFunction,
+  isDocumentedPtxCutFunctionCode,
+  isSupportedPtxCutFunctionCode,
+  type PtxCutRecord,
+  type PtxDocument,
+  type PtxPartsReqRecord,
+  type PtxPatternRecord,
+  type PtxRecord,
 } from './records';
 import { buildLabGuillotineDocument } from './fixtures';
 import { assertValidPtxDocument, validatePtxDocument } from './validate';
@@ -32,6 +36,33 @@ function mapRecords(
 ): PtxDocument {
   return { ...doc, records: doc.records.map(mutate) };
 }
+
+describe('CUTS.FUNCTION semantic interpreter', () => {
+  it('interprets documented phase semantics independently from PART_INDEX references', () => {
+    expect(interpretPtxCutFunction(0)).toEqual({ kind: 'head', phase: 0 });
+    expect(interpretPtxCutFunction(1)).toEqual({ kind: 'rip', phase: 1 });
+    expect(interpretPtxCutFunction(2)).toEqual({ kind: 'cross', phase: 2 });
+    expect(interpretPtxCutFunction(3)).toEqual({ kind: 'recut', phase: 3 });
+    expect(interpretPtxCutFunction(4)).toEqual({ kind: 'recut', phase: 4 });
+    expect(interpretPtxCutFunction(90)).toEqual({ kind: 'trim-waste', phase: 0 });
+    expect(interpretPtxCutFunction(91)).toEqual({ kind: 'trim-waste', phase: 1 });
+    expect(interpretPtxCutFunction(92)).toEqual({ kind: 'trim-waste', phase: 2 });
+    expect(interpretPtxCutFunction(93)).toEqual({ kind: 'trim-waste', phase: 3 });
+    expect(interpretPtxCutFunction(99)).toEqual({ kind: 'trim-waste', phase: 9 });
+  });
+
+  it('keeps description and documented-code checks on the semantic interpreter', () => {
+    expect(describePtxCutFunction(92)).toBe('trim_waste_phase_2');
+    for (const code of [0, 1, 2, 3, 4, 90, 91, 92, 93, 99]) {
+      expect(isDocumentedPtxCutFunctionCode(code), `code ${code}`).toBe(true);
+    }
+    for (const code of [81, 89, 100]) {
+      expect(interpretPtxCutFunction(code), `code ${code}`).toBeUndefined();
+      expect(describePtxCutFunction(code), `code ${code}`).toBeUndefined();
+      expect(isDocumentedPtxCutFunctionCode(code), `code ${code}`).toBe(false);
+    }
+  });
+});
 
 describe('validatePtxDocument', () => {
   it('accepts the canonical lab document', () => {
@@ -189,16 +220,19 @@ describe('validatePtxDocument', () => {
 });
 
 describe('review R1 — documented FUNCTION codes vs supported by the Granete candidate', () => {
-  it('accepts exactly 0/1/2/3 as supported', () => {
+  it('accepts exactly 0/1/2/3/92 as supported by product policy', () => {
     const doc = buildLabGuillotineDocument();
-    for (const code of [0, 1, 2, 3]) {
+    for (const code of [0, 1, 2, 3, 92]) {
+      expect(isSupportedPtxCutFunctionCode(code), `support ${code}`).toBe(true);
       expect(codes(mapCuts(doc, 1, (c) => ({ ...c, functionCode: code }))), `code ${code}`).toEqual([]);
     }
   });
 
   it('rejects documented-but-unsupported codes with UNSUPPORTED_FUNCTION_CODE, not as unknown', () => {
     const doc = buildLabGuillotineDocument();
-    for (const code of [4, 5, 9, 90, 95, 99]) {
+    for (const code of [4, 5, 9, 90, 91, 93, 99]) {
+      expect(isDocumentedPtxCutFunctionCode(code), `documented ${code}`).toBe(true);
+      expect(isSupportedPtxCutFunctionCode(code), `support ${code}`).toBe(false);
       const issues = validatePtxDocument(mapCuts(doc, 1, (c) => ({ ...c, functionCode: code })));
       const issueCodes = issues.map((i) => i.code);
       expect(issueCodes, `code ${code}`).toContain('UNSUPPORTED_FUNCTION_CODE');
@@ -209,13 +243,71 @@ describe('review R1 — documented FUNCTION codes vs supported by the Granete ca
 
   it('rejects codes outside the documented dictionary (81 tension included) with INVALID_FUNCTION_CODE', () => {
     const doc = buildLabGuillotineDocument();
-    for (const code of [10, 50, 81, 100]) {
+    for (const code of [81, 89, 100]) {
       const issueCodes = validatePtxDocument(mapCuts(doc, 1, (c) => ({ ...c, functionCode: code }))).map(
         (i) => i.code,
       );
       expect(issueCodes, `code ${code}`).toContain('INVALID_FUNCTION_CODE');
       expect(issueCodes, `code ${code}`).not.toContain('UNSUPPORTED_FUNCTION_CODE');
     }
+  });
+
+  it('does not impose Xn-only reference semantics on FUNCTION 92', () => {
+    const doc = buildLabGuillotineDocument();
+    expect(
+      codes(
+        mapCuts(doc, 1, (c) => ({
+          ...c,
+          functionCode: 92,
+          partReference: { kind: 'none' },
+          producedQuantity: 0,
+        })),
+      ),
+    ).toEqual([]);
+    expect(
+      codes(
+        mapCuts(doc, 2, (c) => ({
+          ...c,
+          functionCode: 92,
+          partReference: { kind: 'part', partIndex: 1 },
+          producedQuantity: 1,
+        })),
+      ),
+    ).toEqual([]);
+    expect(
+      codes(
+        mapCuts(doc, 5, (c) => ({
+          ...c,
+          functionCode: 92,
+          sequence: 0,
+          repeatQuantity: 0,
+          partReference: { kind: 'offcut', offcutIndex: 1 },
+          producedQuantity: 1,
+        })),
+      ),
+    ).toEqual([]);
+  });
+
+  it('still reports unknown PART/OFFCUT references independently from FUNCTION 92', () => {
+    const doc = buildLabGuillotineDocument();
+    expect(
+      codes(
+        mapCuts(doc, 1, (c) => ({
+          ...c,
+          functionCode: 92,
+          partReference: { kind: 'part', partIndex: 99 },
+        })),
+      ),
+    ).toContain('UNKNOWN_PART_REFERENCE');
+    expect(
+      codes(
+        mapCuts(doc, 1, (c) => ({
+          ...c,
+          functionCode: 92,
+          partReference: { kind: 'offcut', offcutIndex: 99 },
+        })),
+      ),
+    ).toContain('UNKNOWN_OFFCUT_REFERENCE');
   });
 });
 

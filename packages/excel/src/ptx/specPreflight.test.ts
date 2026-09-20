@@ -105,6 +105,7 @@ describe('#788 catálogo documentado de límites', () => {
       expect(limit.authority.locator).toMatch(/^S03 V11 Interface Guide §/);
       if (limit.kind === 'text-length') expect(limit.maxLength).toBeGreaterThan(0);
       if (limit.kind === 'int-range') expect(limit.min).toBeLessThan(limit.max);
+      if (limit.kind === 'float-range') expect(limit.min).toBeLessThan(limit.max);
       if (limit.kind === 'int-enum') expect(limit.values.length).toBeGreaterThan(0);
     }
   });
@@ -480,6 +481,86 @@ describe('#788 rangos DIM del diccionario (units-aware)', () => {
     const issues = ptxSpecPreflightBytes(new TextEncoder().encode(mutated));
     expect(codes(issues)).toContain('ptx_spec.dimension_out_of_range');
     expect(issues.find((i) => i.code === 'ptx_spec.dimension_out_of_range')!.observed).toBe(10000);
+  });
+});
+
+
+describe('#790 BOARDS COST/STK_FLAG strict spec preflight', () => {
+  it('BOARDS.COST aplica el rango FLT 0..9.99 documentado en documento tipado', () => {
+    for (const cost of [0, 9.99] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { cost?: number }).cost = cost;
+      });
+      expect(ptxSpecPreflightDocument(doc), `COST=${cost}`).toEqual([]);
+    }
+
+    for (const cost of [10, -0.01] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { cost?: number }).cost = cost;
+      });
+      const issues = ptxSpecPreflightDocument(doc);
+      expect(codes(issues), `COST=${cost}`).toEqual(['ptx_spec.float_out_of_range']);
+      expect(issues[0]).toMatchObject({
+        field: 'BOARDS.COST',
+        classification: 'SPEC_REQUIRED',
+        observed: cost,
+        minimum: 0,
+        maximum: 9.99,
+      });
+      expect(issues[0]!.locator).toContain('FLT 0-9.99');
+    }
+  });
+
+  it('BOARDS.COST aplica el rango también en bytes/readback', () => {
+    const base = serializePtxDocument(labDoc(), LAB_TEXT_OPTIONS);
+    const withCost = (cost: string) => base.replace(
+      'BOARDS,1,1,BOARD_LAB,1,1200,700,1,1',
+      `BOARDS,1,1,BOARD_LAB,1,1200,700,1,1,${cost}`,
+    );
+
+    expect(ptxSpecPreflightBytes(new TextEncoder().encode(withCost('9.99')))).toEqual([]);
+    const issues = ptxSpecPreflightBytes(new TextEncoder().encode(withCost('10')));
+    expect(codes(issues)).toEqual(['ptx_spec.float_out_of_range']);
+    expect(issues[0]).toMatchObject({ field: 'BOARDS.COST', classification: 'SPEC_REQUIRED', observed: 10 });
+    expect(issues[0]!.locator).toContain('FLT 0-9.99');
+  });
+
+  it('BOARDS.STK_FLAG aplica INT 0..9 documentado', () => {
+    for (const stockFlag of [0, 9] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { stockFlag?: number }).stockFlag = stockFlag;
+      });
+      expect(ptxSpecPreflightDocument(doc), `STK_FLAG=${stockFlag}`).toEqual([]);
+    }
+
+    for (const stockFlag of [10, -1] as const) {
+      const doc = labDocWith((d) => {
+        const board = d.records.find((r) => r.type === 'BOARDS');
+        (board as { stockFlag?: number }).stockFlag = stockFlag;
+      });
+      const issues = ptxSpecPreflightDocument(doc);
+      expect(codes(issues), `STK_FLAG=${stockFlag}`).toEqual(['ptx_spec.index_out_of_range']);
+      expect(issues[0]).toMatchObject({
+        field: 'BOARDS.STK_FLAG',
+        classification: 'SPEC_REQUIRED',
+        observed: stockFlag,
+        minimum: 0,
+        maximum: 9,
+      });
+      expect(issues[0]!.locator).toContain('INT 0-9');
+    }
+
+    const decimal = labDocWith((d) => {
+      const board = d.records.find((r) => r.type === 'BOARDS');
+      (board as { stockFlag?: number }).stockFlag = 1.5;
+    });
+    const decimalIssues = ptxSpecPreflightDocument(decimal);
+    expect(codes(decimalIssues)).toEqual(['ptx_spec.index_out_of_range']);
+    expect(decimalIssues[0]).toMatchObject({ field: 'BOARDS.STK_FLAG', classification: 'SPEC_REQUIRED', observed: 1.5 });
+    expect(decimalIssues[0]!.locator).toContain('INT 0-9');
   });
 });
 
@@ -1130,5 +1211,104 @@ describe('#788 writer gating — compileCutPlanToPtxDocument strictSpecPreflight
     const parsed = parsePtxDocumentBytes(bytes);
     expect(parsed.header.title).toBe(R5_LIKE_TITLE);
     expect(verifyCutPlanPtxReadback(parsed, r4Plan(), compiled.mapping, options)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #789 — PARTS_INF / PARTS_UDI: límites documentados TXT 200 / IDX / referencias
+// ---------------------------------------------------------------------------
+
+describe('#789 PARTS_INF/PARTS_UDI — límites §20 del diccionario', () => {
+  function docWithPartsInf(mutate?: (row: { type: 'PARTS_INF'; partIndex: number; drawing?: string; room?: string; jobIndex: number }) => void): PtxDocument {
+    const doc = labDoc();
+    const row: PtxRecord = {
+      type: 'PARTS_INF',
+      jobIndex: 1,
+      partIndex: 1,
+      labelQuantity: '1',
+      finishedLength: '450',
+      finishedWidth: '320',
+      drawing: 'D0123456789AB',
+      room: 'COCINA',
+    };
+    mutate?.(row as never);
+    return { ...doc, records: [...doc.records, row] };
+  }
+
+  it('PARTS_INF bien formada pasa (TXT columns dentro de 200, índices 1..N, referencia existente)', () => {
+    expect(ptxSpecPreflightDocument(docWithPartsInf())).toEqual([]);
+  });
+
+  it('DRAWING de 201 caracteres BLOQUEA con text_too_long (TXT 200 documentado)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.drawing = 'D'.repeat(201);
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toContain('ptx_spec.text_too_long');
+    const issue = issues.find((i) => i.field === 'PARTS_INF.DRAWING')!;
+    expect(issue.maximum).toBe(200);
+    expect(issue.locator).toContain('PARTS_INF');
+  });
+
+  it('el límite aplica TAMBIÉN en bytes (mutación post-serialización detectada)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.room = 'X'.repeat(201);
+    });
+    const bytes = serializePtxDocumentBytes(doc, LAB_TEXT_OPTIONS);
+    const issues = ptxSpecPreflightBytes(bytes);
+    expect(codes(issues)).toContain('ptx_spec.text_too_long');
+  });
+
+  it('PART_INDEX inexistente en PARTS_REQ BLOQUEA (reference_unknown)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.partIndex = 99;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(codes(issues)).toContain('ptx_spec.reference_unknown');
+  });
+
+  it('JOB_INDEX de PARTS_INF fuera de 1..250 BLOQUEA (IDX documentado)', () => {
+    const doc = docWithPartsInf((row) => {
+      row.jobIndex = 251;
+    });
+    const issues = ptxSpecPreflightDocument(doc);
+    expect(issues.some((i) => i.field === 'PARTS_INF.JOB_INDEX')).toBe(true);
+  });
+
+  it('PARTS_UDI: INFO1 de 201 caracteres BLOQUEA; una fila bien formada pasa', () => {
+    const good = { ...labDoc(), records: [...labDoc().records, { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 1, info: ['pic.png', undefined, 'LINEA-A', 'LINEA-A'] }] };
+    expect(ptxSpecPreflightDocument(good)).toEqual([]);
+
+    const bad = { ...labDoc(), records: [...labDoc().records, { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 1, info: ['X'.repeat(201)] }] };
+    const issues = ptxSpecPreflightDocument(bad);
+    expect(issues.some((i) => i.field === 'PARTS_UDI.INFO1' && i.code === 'ptx_spec.text_too_long')).toBe(true);
+  });
+
+  it('PARTS_UDI con PART_INDEX sin PARTS_REQ BLOQUEA', () => {
+    const doc = { ...labDoc(), records: [...labDoc().records, { type: 'PARTS_UDI' as const, jobIndex: 1, partIndex: 42, info: [] }] };
+    expect(codes(ptxSpecPreflightDocument(doc))).toContain('ptx_spec.reference_unknown');
+  });
+
+  it('el catálogo documenta los 30 campos TXT de PARTS_INF y los 60 INFO de PARTS_UDI con localizador', () => {
+    const infTxt = PTX_SPEC_LIMITS.filter((l) => l.kind === 'text-length' && l.field.startsWith('PARTS_INF.'));
+    expect(infTxt).toHaveLength(30);
+    const udiInfo = PTX_SPEC_LIMITS.filter((l) => l.kind === 'text-length' && l.field.startsWith('PARTS_UDI.INFO'));
+    expect(udiInfo).toHaveLength(60);
+    expect(udiInfo.every((l) => l.kind === 'text-length' && l.maxLength === 200)).toBe(true);
+  });
+
+  it('PARTS_INF duplicada para la misma pieza BLOQUEA en validate.ts (contrato de producto, no spec)', () => {
+    const doc = {
+      ...docWithPartsInf(),
+      records: [
+        ...docWithPartsInf().records,
+        { type: 'PARTS_INF' as const, jobIndex: 1, partIndex: 1, labelQuantity: '1' },
+      ],
+    };
+    const issues = validatePtxDocument(doc);
+    expect(issues.some((i) => i.code === 'DUPLICATE_INDEX')).toBe(true);
+    // La especificación no documenta unicidad por pieza: el preflight NO lo
+    // reporta como ptx_spec.* (la separación SPEC vs PRODUCT se conserva).
+    expect(ptxSpecPreflightDocument(doc)).toEqual([]);
   });
 });

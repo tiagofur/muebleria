@@ -69,8 +69,10 @@ export class PtxParseError extends Error {
 // ---------------------------------------------------------------------------
 
 interface FamilySpec {
-  /** Column names after the family token (documented order). */
+  /** Column names after the family token that Granete historically modeled. */
   readonly columns: readonly string[];
+  /** Optional trailing columns accepted by the strict parser for this family. */
+  readonly optionalTrailingColumns?: readonly string[];
   /** How many of those columns are required (prefix). */
   readonly required: number;
 }
@@ -94,8 +96,34 @@ const FAMILY_SPECS: Readonly<Record<string, FamilySpec>> = {
     // prefix must physically reach it (`...,QTY_REQ,,,GRAIN` is fine).
     required: 10,
   },
+  // #789: the full documented §20 width (pp.168–169) — 32 columns, every one
+  // after PART_INDEX is TXT 200. Required prefix: the two IDX columns only.
+  PARTS_INF: {
+    columns: [
+      'JOB_INDEX', 'PART_INDEX', 'DESC', 'LABEL_QTY', 'FIN_LENGTH', 'FIN_WIDTH', 'ORDER',
+      'EDGE1', 'EDGE2', 'EDGE3', 'EDGE4',
+      'EDG_PG1', 'EDG_PG2', 'EDG_PG3', 'EDG_PG4',
+      'FACE_LAM', 'BACK_LAM', 'CORE_MAT', 'PALLET',
+      'DRAWING', 'PRODUCT', 'PROD_INFO',
+      'PROD_WIDTH', 'PROD_HGT', 'PROD_DEPTH', 'PROD_NUM',
+      'ROOM', 'BARCODE1', 'BARCODE2', 'COLOUR',
+      'SECOND_CUT_LENGTH', 'SECOND_CUT_WIDTH',
+    ],
+    required: 2,
+  },
+  // #789: JOB_INDEX + PART_INDEX + the 60 documented homogeneous INFO
+  // columns (§20 pp.169–171). Rows may end after any INFO column (trailing
+  // omitted) — the field samples carry INFO1..INFO4 only.
+  PARTS_UDI: {
+    columns: [
+      'JOB_INDEX', 'PART_INDEX',
+      ...Array.from({ length: 60 }, (_, i) => `INFO${i + 1}`),
+    ],
+    required: 2,
+  },
   BOARDS: {
     columns: ['JOB_INDEX', 'BRD_INDEX', 'CODE', 'MAT_INDEX', 'LENGTH', 'WIDTH', 'QTY_STOCK', 'QTY_USED'],
+    optionalTrailingColumns: ['COST', 'STK_FLAG'],
     required: 6,
   },
   MATERIALS: {
@@ -238,7 +266,9 @@ function readCells(line: string, lineNo: number): string[] {
 // ---------------------------------------------------------------------------
 
 const INTEGER_PATTERN = /^\d+$/;
+const SIGNED_INTEGER_PATTERN = /^-?\d+$/;
 const NUMBER_PATTERN = /^\d+(\.\d+)?$/;
+const SIGNED_NUMBER_PATTERN = /^-?\d+(\.\d+)?$/;
 
 class CellCursor {
   constructor(
@@ -271,6 +301,15 @@ class CellCursor {
     return Number(raw);
   }
 
+  optionalFiniteInt(column: number, field: string): number | undefined {
+    const raw = this.cell(column);
+    if (raw === undefined || raw === '') return undefined;
+    if (!SIGNED_INTEGER_PATTERN.test(raw)) {
+      throw new PtxParseError('INVALID_INTEGER', `${this.family}.${field}: '${raw}' is not an integer`, this.lineNo);
+    }
+    return Number(raw);
+  }
+
   real(column: number, field: string): number {
     const raw = this.cell(column);
     if (raw === undefined || raw === '') {
@@ -287,6 +326,15 @@ class CellCursor {
     if (raw === undefined || raw === '') return undefined;
     if (!NUMBER_PATTERN.test(raw)) {
       throw new PtxParseError('INVALID_NUMBER', `${this.family}.${field}: '${raw}' is not a non-negative decimal number`, this.lineNo);
+    }
+    return Number(raw);
+  }
+
+  optionalFiniteNumber(column: number, field: string): number | undefined {
+    const raw = this.cell(column);
+    if (raw === undefined || raw === '') return undefined;
+    if (!SIGNED_NUMBER_PATTERN.test(raw)) {
+      throw new PtxParseError('INVALID_NUMBER', `${this.family}.${field}: '${raw}' is not a finite decimal number`, this.lineNo);
     }
     return Number(raw);
   }
@@ -391,6 +439,63 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
         grain: c.enum<PtxGrain>(9, 'GRAIN', [0, 1, 2]),
         producedQuantity: c.optionalInt(10, 'QTY_PROD'),
       };
+    case 'PARTS_INF':
+      // #789: every column after the two IDX fields is TXT 200 (§20
+      // pp.168–169) — read verbatim as text; no numeric coercion. The
+      // empty-vs-omitted distinction: an existing empty cell reads back as
+      // undefined exactly like an omitted trailing cell (both mean "no
+      // value imposed"); the external-dialect reader is the one that
+      // distinguishes them for evidence purposes.
+      return {
+        type: 'PARTS_INF',
+        jobIndex: c.int(0, 'JOB_INDEX'),
+        partIndex: c.int(1, 'PART_INDEX'),
+        description: c.optionalText(2),
+        labelQuantity: c.optionalText(3),
+        finishedLength: c.optionalText(4),
+        finishedWidth: c.optionalText(5),
+        order: c.optionalText(6),
+        edge1: c.optionalText(7),
+        edge2: c.optionalText(8),
+        edge3: c.optionalText(9),
+        edge4: c.optionalText(10),
+        edgeProgram1: c.optionalText(11),
+        edgeProgram2: c.optionalText(12),
+        edgeProgram3: c.optionalText(13),
+        edgeProgram4: c.optionalText(14),
+        faceLaminate: c.optionalText(15),
+        backLaminate: c.optionalText(16),
+        coreMaterial: c.optionalText(17),
+        pallet: c.optionalText(18),
+        drawing: c.optionalText(19),
+        product: c.optionalText(20),
+        productInfo: c.optionalText(21),
+        productWidth: c.optionalText(22),
+        productHeight: c.optionalText(23),
+        productDepth: c.optionalText(24),
+        productNumber: c.optionalText(25),
+        room: c.optionalText(26),
+        barcode1: c.optionalText(27),
+        barcode2: c.optionalText(28),
+        colour: c.optionalText(29),
+        secondCutLength: c.optionalText(30),
+        secondCutWidth: c.optionalText(31),
+      };
+    case 'PARTS_UDI': {
+      // #789: JOB/PART + up to 60 INFO columns, homogeneous TXT. The model
+      // keeps the defined prefix of the info array; a row that ends early
+      // (trailing omitted) yields a shorter array, never padded with values.
+      const info: (string | undefined)[] = [];
+      for (let column = 2; column < cells.length; column++) {
+        info.push(c.optionalText(column));
+      }
+      return {
+        type: 'PARTS_UDI',
+        jobIndex: c.int(0, 'JOB_INDEX'),
+        partIndex: c.int(1, 'PART_INDEX'),
+        info,
+      };
+    }
     case 'BOARDS':
       return {
         type: 'BOARDS',
@@ -402,6 +507,8 @@ export function parseRecordRow(family: string, cells: readonly string[], lineNo:
         width: c.real(5, 'WIDTH'),
         stockQuantity: c.optionalInt(6, 'QTY_STOCK'),
         usedQuantity: c.optionalInt(7, 'QTY_USED'),
+        cost: c.optionalFiniteNumber(8, 'COST'),
+        stockFlag: c.optionalFiniteInt(9, 'STK_FLAG'),
       };
     case 'MATERIALS':
       return {
@@ -537,10 +644,11 @@ export function parsePtxText(text: string): PtxRecordsReadback {
         lineNo,
       );
     }
-    if (content.length > spec.columns.length) {
+    const allowedColumns = [...spec.columns, ...(spec.optionalTrailingColumns ?? [])];
+    if (content.length > allowedColumns.length) {
       throw new PtxParseError(
         'TOO_MANY_COLUMNS',
-        `${family} implements ${spec.columns.length} column(s) [${spec.columns.join(',')}]; the extra ${content.length - spec.columns.length} column(s) are outside the documented subset (fail closed)`,
+        `${family} implements ${allowedColumns.length} column(s) [${allowedColumns.join(',')}]; the extra ${content.length - allowedColumns.length} column(s) are outside the documented subset (fail closed)`,
         lineNo,
       );
     }

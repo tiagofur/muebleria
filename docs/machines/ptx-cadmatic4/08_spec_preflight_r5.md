@@ -184,12 +184,16 @@ emisión nueva (test lo congela).
   and board codes are converted to upper case on import." Es normalización del
   receptor (riesgo de fusión de identidades `A B`/`A_B` en importación);
   pertenece al tuning MATERIALS del receiver (#790), no a este preflight.
-- PARTS_INF/PARTS_UDI (límites TXT 200): las familias no tienen modelo tipado
-  hasta #789.
+- PARTS_INF/PARTS_UDI (límites TXT 200): SIN modelo tipado hasta #789.
+  **Actualización #789 (ya integrado):** ambas familias tienen modelo tipado y
+  sus límites ESTÁN enforceados — TXT 200 por cada una de las 30 columnas de
+  texto de PARTS_INF y cada PARTS_UDI.INFO1..60, IDX 1-250/1-9999 y las
+  referencias PART_INDEX → PARTS_REQ (§20 pp.168–171; ver
+  `09_parts_inf_labels_cnc.md` §1).
 - Columnas documentadas no modeladas (BOARDS COST/STK_FLAG/INFORMATION/…,
   MATERIALS MAT_PARAM/GRAIN/PICTURE/DENSITY, PATTERNS PICTURE/CYCLE_TIME,
   OFFCUTS COST/TYPE): sin modelo tipado no hay preflight; entran con su
-  modelado (#789/#790).
+  modelado (#790).
 
 ## 3. Independencia writer / validator
 

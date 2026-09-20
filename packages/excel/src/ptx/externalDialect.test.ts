@@ -19,9 +19,20 @@ import {
   ptxExternalColumnPresence,
   PTX_DOCUMENTED_UNMODELED_FAMILIES,
   type PtxExternalModeledRow,
+  type PtxExternalRow,
 } from './externalDialect';
 import { ptxSpecPreflightDocument } from './specPreflight';
-import type { PtxBoardRecord, PtxCutRecord, PtxJobRecord, PtxMaterialRecord } from './records';
+import type {
+  PtxBoardRecord,
+  PtxCutRecord,
+  PtxJobRecord,
+  PtxMaterialRecord,
+  PtxPartsInfRecord,
+  PtxPartsUdiRecord,
+  PtxPartsReqRecord,
+  PtxPatternRecord,
+} from './records';
+import { HPP250_CAD4_R5_LAB_RECEIVER_POLICY } from './receiverPolicy';
 
 const FIELD_DIR = new URL('../../../../docs/machines/ptx-cadmatic4/field/', import.meta.url);
 
@@ -63,13 +74,61 @@ describe('#788 parsing estructural de R2201 saneado (subset soportado)', () => {
     expect(new Set(cuts.map((c) => c.patternIndex))).toEqual(new Set([1, 2]));
   });
 
-  it('las familias documentadas no modeladas quedan registradas opacas (no parseadas, no ignoradas)', () => {
-    expect(readback.unmodeledFamilyCounts.get('PARTS_INF')).toBe(5);
-    expect(readback.unmodeledFamilyCounts.get('PARTS_UDI')).toBe(5);
+  it('PARTS_INF/PARTS_UDI (#789) se leen TIPADAS: presentes, no opacas, con sus relaciones', () => {
+    // Las familias de etiqueta dejaron de ser blobs opacos: cada fila llega
+    // como registro modelado y su PART_INDEX resuelve contra PARTS_REQ (lo
+    // comprueba el spec preflight del subset, abajo).
+    const partsInf = readback.records.filter((r) => r.type === 'PARTS_INF') as PtxPartsInfRecord[];
+    const partsUdi = readback.records.filter((r) => r.type === 'PARTS_UDI') as PtxPartsUdiRecord[];
+    expect(partsInf).toHaveLength(5);
+    expect(partsUdi).toHaveLength(5);
     expect(readback.unmodeledFamilyCounts.get('NOTES')).toBe(1);
+    expect(readback.unmodeledFamilyCounts.has('PARTS_INF')).toBe(false);
+    expect(readback.unmodeledFamilyCounts.has('PARTS_UDI')).toBe(false);
+    // Evidencia de campo preservada sin interpretarla: piezas 1-2 con los 4
+    // cantos, piezas 3-5 (ST_AJUSTE) sólo con los 2 lados longitud; DESC
+    // vacío presente; ROOM con valor; trailing SECOND_CUT_* omitido (29
+    // celdas de las 32 documentadas).
+    expect(partsInf[0]).toMatchObject({
+      jobIndex: 1,
+      partIndex: 1,
+      labelQuantity: '1',
+      finishedLength: '1897.0',
+      finishedWidth: '333.0',
+      order: 'MUESTRA-A:1',
+      edge1: 'C PVC MUESTRA-A 1X19_/LINEA-1',
+      edge2: 'C PVC MUESTRA-A 1X19_/LINEA-1',
+      drawing: 'ETQ-A1',
+      product: 'MOD-A1',
+      productInfo: 'CLOSET MODULAR ABIERTO',
+      productWidth: '356.00',
+      productHeight: '1900.00',
+      productDepth: '600.00',
+      productNumber: '20',
+      room: 'AMBIENTE 1',
+      barcode2: '*ETQ-A1*',
+    });
+    expect(partsInf[0]!.description).toBeUndefined();
+    expect(partsInf[2]).toMatchObject({ edge1: 'C PVC MUESTRA-B 1X22/LINEA-1', edge2: 'C PVC MUESTRA-B 1X22/LINEA-1' });
+    // Pieza 3 (ST_AJUSTE): sólo los DOS lados longitud llevan canto — los
+    // lados ancho (EDGE3/EDGE4) quedan ausentes. Observación de dialecto: la
+    // fila 3 del cliente lleva UNA celda vacía más que las filas 1-2 antes
+    // del texto 'ST_AJUSTE', que bajo las posiciones documentadas cae en
+    // PRODUCT; se lee literal por posición y NO se interpreta.
+    expect(partsInf[2]!.edge3).toBeUndefined();
+    expect(partsInf[2]!.edge4).toBeUndefined();
+    const infShape = readback.rows
+      .filter(hasPtxExternalShape)
+      .find((row) => row.family === 'PARTS_INF');
+    expect(infShape?.cellsProvided).toBe(29);
+    expect(infShape?.extraTrailingCells).toBe(0);
+    // PARTS_UDI: INFO1..INFO4 evidenciados (imagen, encoding compacto
+    // UNKNOWN, dos acabados) — se leen crudos, nunca se generan.
+    expect(partsUdi[0]).toMatchObject({ jobIndex: 1, partIndex: 1 });
+    expect(partsUdi[0]!.info).toEqual(['ETQ-A1.png', '2WD2LD', 'LINEA-A', 'LINEA-A']);
     const unmodeledTotal = [...readback.unmodeledFamilyCounts.values()].reduce((sum, count) => sum + count, 0);
-    // Cada fila del row view es exactamente: un registro modelado, una fila
-    // opaca no modelada o el HEADER — nada se cae fuera del inventario.
+    // Cada fila del row view es exactamente: un registro modelado (incluidas
+    // PARTS_INF/UDI), una fila opaca no modelada o el HEADER.
     expect(readback.rows).toHaveLength(readback.records.length + unmodeledTotal + 1);
   });
 
@@ -104,10 +163,10 @@ describe('#788 parsing estructural de R2201 saneado (subset soportado)', () => {
     expect(fn92!.partReference).toEqual({ kind: 'offcut', offcutIndex: 1 });
   });
 
-  it('el subset modelado pasa el strict spec preflight (índices y referencias del dialecto real)', () => {
-    // Observación sobre el SUBSET leído: las familias no modeladas están
-    // fuera del veredicto por construcción — esto no es un claim sobre el
-    // archivo completo ni sobre el receptor.
+  it('el subset modelado pasa el strict spec preflight sin convertir trailing receiver en autoridad Granete', () => {
+    // El row view conserva que BOARDS trae trailing receiver extra. El subset
+    // tipado usado por Granete no convierte esos valores en COST/STK_FLAG con
+    // autoridad de producto; los límites estrictos se prueban en specPreflight.
     expect(ptxSpecPreflightDocument({ header: readback.header!, records: readback.records })).toEqual([]);
   });
 });
@@ -125,8 +184,16 @@ describe('#788 parsing estructural de R7301 saneado (subset soportado)', () => {
     expect(patterns.map((p) => (p as { patternType: number }).patternType)).toEqual([0, 1]);
     const cuts = readback.records.filter((r) => r.type === 'CUTS') as PtxCutRecord[];
     expect(cuts).toHaveLength(26); // 14 + 12
-    expect(readback.unmodeledFamilyCounts.get('PARTS_INF')).toBe(12);
-    expect(readback.unmodeledFamilyCounts.get('PARTS_UDI')).toBe(12);
+    // #789: PARTS_INF/PARTS_UDI tipadas; el uso de BARCODE1/BARCODE2 de esta
+    // muestra es OPUESTO al de R2201 (aquí BARCODE1 lleva el token) —
+    // evidencia de que la asignación de barcode es política de producto,
+    // nunca una regla universal copiable.
+    const partsInf = readback.records.filter((r) => r.type === 'PARTS_INF') as PtxPartsInfRecord[];
+    const partsUdi = readback.records.filter((r) => r.type === 'PARTS_UDI') as PtxPartsUdiRecord[];
+    expect(partsInf).toHaveLength(12);
+    expect(partsUdi).toHaveLength(12);
+    expect(partsInf[0]).toMatchObject({ barcode1: '*ETQ-B1*', order: 'Proyecto:1', room: 'TV', productNumber: '3' });
+    expect(partsUdi[0]!.info).toEqual(['r73p0024.png', undefined, 'LINEA-C', 'LINEA-C']);
     expect(readback.unmodeledFamilyCounts.get('NOTES')).toBe(1);
   });
 
@@ -148,9 +215,142 @@ describe('#788 parsing estructural de R7301 saneado (subset soportado)', () => {
     expect((boardRow as { extraTrailingCells: number }).extraTrailingCells).toBe(2);
   });
 
-  it('el subset modelado pasa el strict spec preflight', () => {
+  it('el subset modelado pasa el strict spec preflight sin convertir trailing receiver en autoridad Granete', () => {
     expect(ptxSpecPreflightDocument({ header: readback.header!, records: readback.records })).toEqual([]);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Shape: prefijo requerido / trailing opcional / vacío vs omitido
+// ---------------------------------------------------------------------------
+
+describe('#790 observed R2201/R7301 receiver evidence vs emitted policy', () => {
+  for (const [sample, name] of [
+    ['01_muestra_a_saneada.ptx.txt', 'R2201'],
+    ['02_muestra_b_saneada.ptx.txt', 'R7301'],
+  ] as const) {
+    it(`${name}: compares modeled observed evidence with HPP250 policy where the policy has authority`, () => {
+      const readback = parsePtxExternalText(readSample(sample));
+      const materialRows = readback.records.filter((r): r is PtxMaterialRecord => r.type === 'MATERIALS');
+      const patternRows = readback.records.filter((r): r is PtxPatternRecord => r.type === 'PATTERNS');
+      const boardRows = readback.records.filter((r): r is PtxBoardRecord => r.type === 'BOARDS');
+      const boardShapes = readback.rows.filter(hasPtxExternalShape).filter((row) => row.family === 'BOARDS');
+      const notesObserved = readback.unmodeledFamilyCounts.get('NOTES') ?? 0;
+
+      expect(materialRows.length).toBeGreaterThan(0);
+      expect(patternRows.length).toBeGreaterThan(0);
+      expect(boardRows.length).toBeGreaterThan(0);
+      expect(boardShapes.some((row) => row.extraTrailingCells >= 2)).toBe(true);
+      expect(notesObserved).toBeGreaterThan(0);
+
+      for (const material of materialRows) {
+        expect(material.bookQuantity).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.BOOK.value);
+        expect(material.kerfRip).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.KERF_RIP.value);
+        expect(material.kerfCrosscut).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.KERF_XCT.value);
+        expect(material.rule1).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE1.value);
+        expect(material.rule2).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE2.value);
+        expect(material.rule3).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE3.value);
+        expect(material.rule4).toBe(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.RULE4.value);
+        // Observed receiver samples carry HEAD/FRCT/VRCT, but emitted Granete
+        // policy intentionally omits them until product/geometry authority exists.
+        expect(material.trimHead).toBe(20);
+        expect(material.trimFRct).toBe(20);
+        expect(material.trimVRct).toBe(0);
+        expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_HEAD.source).toBe('OMIT_NO_OVERRIDE');
+        expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_FRCT.source).toBe('OMIT_NO_OVERRIDE');
+        expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_VRCT.source).toBe('OMIT_NO_OVERRIDE');
+      }
+      expect(patternRows.every((row) => row.maxBook === HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.BOOK.value)).toBe(true);
+      expect(patternRows.every((row) => row.runQuantity === 1 && row.cyclesQuantity === 1)).toBe(true);
+
+      const observedFamilies: readonly string[] = readback.rows.filter(hasPtxExternalShape).map((row) => row.family);
+      const firstIndex = (family: string) => observedFamilies.indexOf(family);
+      for (const [before, after] of [
+        ['JOBS', 'PARTS_REQ'],
+        ['PARTS_REQ', 'PARTS_INF'],
+        ['PARTS_INF', 'PARTS_UDI'],
+        ['PARTS_UDI', 'BOARDS'],
+        ['BOARDS', 'MATERIALS'],
+        ['MATERIALS', 'PATTERNS'],
+      ] as const) {
+        expect(firstIndex(before), `${before} present`).toBeGreaterThanOrEqual(0);
+        expect(firstIndex(after), `${after} present`).toBeGreaterThanOrEqual(0);
+        expect(firstIndex(before), `${before} before ${after}`).toBeLessThan(firstIndex(after));
+      }
+      for (const family of HPP250_CAD4_R5_LAB_RECEIVER_POLICY.recordShape.familyOrder) {
+        if (family === 'CUTS') continue;
+        expect(firstIndex(family), `${family} observed`).toBeGreaterThanOrEqual(0);
+      }
+    });
+  }
+});
+
+describe('#791 differential assertions over sanitized receiver samples', () => {
+  for (const [sample, name, expected] of [
+    ['01_muestra_a_saneada.ptx.txt', 'R2201', { parts: 5, boards: 2, materials: 6, patterns: 2, cuts: 12, offcutDimension: 1718.6 }],
+    ['02_muestra_b_saneada.ptx.txt', 'R7301', { parts: 12, boards: 1, materials: 4, patterns: 2, cuts: 26, offcutDimension: 845.6 }],
+  ] as const) {
+    it(`${name}: preserves observed properties separately from Granete emitted policy`, () => {
+      const readback = parsePtxExternalText(readSample(sample));
+      const modeledRows = readback.rows.filter(hasPtxExternalShape);
+      const parts = readback.records.filter((r): r is PtxPartsReqRecord => r.type === 'PARTS_REQ');
+      const partsInf = readback.records.filter((r): r is PtxPartsInfRecord => r.type === 'PARTS_INF');
+      const partsUdi = readback.records.filter((r): r is PtxPartsUdiRecord => r.type === 'PARTS_UDI');
+      const boards = readback.records.filter((r): r is PtxBoardRecord => r.type === 'BOARDS');
+      const materials = readback.records.filter((r): r is PtxMaterialRecord => r.type === 'MATERIALS');
+      const patterns = readback.records.filter((r): r is PtxPatternRecord => r.type === 'PATTERNS');
+      const cuts = readback.records.filter((r): r is PtxCutRecord => r.type === 'CUTS');
+      const offcuts = readback.records.filter((r) => r.type === 'OFFCUTS');
+
+      expect(parts).toHaveLength(expected.parts);
+      expect(partsInf).toHaveLength(expected.parts);
+      expect(partsUdi).toHaveLength(expected.parts);
+      expect(boards).toHaveLength(expected.boards);
+      expect(materials).toHaveLength(expected.materials);
+      expect(patterns).toHaveLength(expected.patterns);
+      expect(cuts).toHaveLength(expected.cuts);
+      expect(offcuts).toHaveLength(1);
+
+      const partIndexes = new Set(parts.map((part) => part.partIndex));
+      expect(partIndexes.size).toBe(parts.length);
+      for (const row of [...partsInf, ...partsUdi]) {
+        expect(row.jobIndex).toBe(1);
+        expect(partIndexes.has(row.partIndex)).toBe(true);
+      }
+      for (const cut of cuts) {
+        expect(patterns.some((pattern) => pattern.patternIndex === cut.patternIndex)).toBe(true);
+        if (cut.partReference.kind === 'part') {
+          expect(partIndexes.has(cut.partReference.partIndex)).toBe(true);
+        }
+      }
+
+      const materialShapes = modeledRows.filter((row) => row.family === 'MATERIALS');
+      const cutShapes = modeledRows.filter((row) => row.family === 'CUTS');
+      expect(materialShapes).toHaveLength(expected.materials);
+      expect(materialShapes.every((row) => row.cellsProvided === 19 && row.extraTrailingCells === 0)).toBe(true);
+      expect(cutShapes).toHaveLength(expected.cuts);
+      expect(cutShapes.some((row) => row.cellsProvided === 8)).toBe(true);
+      expect(cutShapes.some((row) => row.cellsProvided === 9)).toBe(true);
+
+      for (const material of materials) {
+        expect(material.bookQuantity).toBe(3);
+        expect(material.kerfRip).toBe(4.4);
+        expect(material.kerfCrosscut).toBe(4.4);
+        expect([material.rule1, material.rule2, material.rule3, material.rule4]).toEqual([6, 1, 1, 1]);
+        // Field observations include receiver trim columns that Granete's LAB
+        // policy deliberately does not emit without product/geometry authority.
+        expect([material.trimHead, material.trimFRct, material.trimVRct]).toEqual([20, 20, 0]);
+      }
+      expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_HEAD.source).toBe('OMIT_NO_OVERRIDE');
+      expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_FRCT.source).toBe('OMIT_NO_OVERRIDE');
+      expect(HPP250_CAD4_R5_LAB_RECEIVER_POLICY.materialFields.TRIM_VRCT.source).toBe('OMIT_NO_OVERRIDE');
+
+      const x1Cuts = cuts.filter((cut) => cut.partReference.kind === 'offcut' && cut.partReference.offcutIndex === 1);
+      expect(x1Cuts).toHaveLength(1);
+      expect(x1Cuts[0]).toMatchObject({ functionCode: 92, producedQuantity: undefined, dimension: expected.offcutDimension });
+      expect(offcuts[0]).toMatchObject({ offcutIndex: 1, producedQuantity: 1 });
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -235,6 +435,6 @@ describe('#788 fail-closed del lector externo', () => {
   });
 
   it('el catálogo de familias no modeladas es exactamente el documentado', () => {
-    expect([...PTX_DOCUMENTED_UNMODELED_FAMILIES]).toEqual(['PARTS_INF', 'PARTS_UDI', 'PARTS_DST', 'PTN_UDI', 'NOTES']);
+    expect([...PTX_DOCUMENTED_UNMODELED_FAMILIES]).toEqual(['PARTS_DST', 'PTN_UDI', 'NOTES']);
   });
 });

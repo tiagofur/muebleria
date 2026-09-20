@@ -198,7 +198,7 @@ Refactor conceptual:
 
 No modelar FUNCTION 92 como sinonimo universal de offcut release.
 
-Mantener 92 + Xn en el receiver donde la evidencia lo soporta.
+Mantener 92 + Xn en el receiver donde la evidencia lo soporta. El addendum #791 en `11_cuts_semantics_differential_golden_r5.md` documenta la regla r5: `92` es trim/waste phase 2, `Xn` es referencia a OFFCUTS, y la combinación sólo se emite cuando el evento físico rest-side phase 2 coincide con la evidencia R2201/R7301.
 
 Tests obligatorios:
 
@@ -230,7 +230,7 @@ Elegir conscientemente los trailing optionals de JOBS/BOARDS/PATTERNS/CUTS. No d
 
 ## 12. R5-I — differential fixtures y golden
 
-No copiar byte por byte los archivos del cliente.
+No copiar byte por byte los archivos del cliente. La documentación de #791 en `11_cuts_semantics_differential_golden_r5.md` resume el diferencial R2201/R7301 por propiedades y fija el manifest LAB/TEST actual del golden r5 (SHA, tamaño y conteos) sin hacer claims de compatibilidad.
 
 Comparar propiedades:
 

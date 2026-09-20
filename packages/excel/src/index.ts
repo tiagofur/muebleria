@@ -164,6 +164,7 @@ export {
 export {
   PTX_GRAIN,
   PTX_PATTERN_TYPE,
+  PTX_PARTS_UDI_INFO_COLUMN_COUNT,
   PTX_RECORD_CONTENT_WIDTH,
   PTX_SUPPORTED_CUT_FUNCTION_CODES,
   PTX_TRIM_TYPE,
@@ -180,7 +181,9 @@ export {
   type PtxMaterialRecord,
   type PtxOffcutRecord,
   type PtxPartReference,
+  type PtxPartsInfRecord,
   type PtxPartsReqRecord,
+  type PtxPartsUdiRecord,
   type PtxPatternRecord,
   type PtxDocumentedPatternType,
   type PtxPatternType,
@@ -282,6 +285,35 @@ export {
   type PtxDivisionPlan,
   type PtxReleasePlan,
 } from './ptx/compileCutPlan';
+// --- #790 PTX receiver policy: public lab receiver constraints used by the
+// compiler/preflight path and downstream machine profile wiring. ---
+export {
+  HPP250_CAD4_R5_LAB_RECEIVER_POLICY,
+  PTX_RECEIVER_FIELD_SOURCE,
+  requiredReceiverNumber,
+  type PtxReceiverFieldSource,
+  type PtxReceiverMaterialFieldName,
+  type PtxReceiverMaterialFieldPolicies,
+  type PtxReceiverNumberFieldPolicy,
+  type PtxReceiverPolicy,
+  type PtxReceiverRecordFamily,
+  type PtxReceiverRecordShapePolicy,
+} from './ptx/receiverPolicy';
+// --- #789 frozen label projection per physical piece (PARTS_INF/UDI source):
+// the ONLY L1/L2/W1/W2 → EDGE1..4 translation site, the D<hex12> CNC drawing
+// reference and the barcode policy. Pure projection inputs — the compiler
+// never consults the catalog/BOM to complete label data. ---
+export {
+  PTX_CNC_DRAWING_REF_NAMESPACE,
+  PTX_EDGE_COLUMN_BY_WORKSHOP_SIDE,
+  buildPtxPartLabelData,
+  buildPtxPartLabels,
+  ptxBarcodeToken,
+  ptxCncDrawingRef,
+  type PtxPartLabelData,
+  type PtxPartLabelInput,
+  type PtxPartLabelUnitContext,
+} from './ptx/partLabels';
 export {
   verifyCutPlanPtxReadback,
   type CutPlanPtxReadbackIssue,
