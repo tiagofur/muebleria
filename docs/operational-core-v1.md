@@ -90,22 +90,22 @@ forma consistente:
 
 **Checks mínimos:**
 
-- JSON/schema de `feature_list.json`;
+- schema determinista del catálogo de capacidades `feature_list.json`;
 - `pnpm test`;
 - `pnpm typecheck`;
 - Go tests;
 - checks de boundaries/arquitectura si existen;
 - verificaciones específicas de exports cuando cambien.
 
-### OC-003 — Reconciliar backlog y ledger
+### OC-003 — Reconciliar backlog y catálogo
 
-**Problema:** roadmap, issues, PRD y `feature_list.json` pueden divergir.
+**Problema:** roadmap, issues, PRD y el catálogo de capacidades pueden divergir.
 
 **Contrato nuevo:**
 
 - `docs/roadmap-comercial-v2.md` = narrativa/prioridad;
 - GitHub issues = trabajo futuro humano;
-- `feature_list.json` = ledger ejecutable/histórico de implementación;
+- `feature_list.json` = catálogo estable de capacidades de producto, sin estado de ejecución;
 - código + tests = verdad de lo implementado.
 
 **Trabajo:**

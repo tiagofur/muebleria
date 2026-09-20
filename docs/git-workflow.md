@@ -36,7 +36,7 @@ o borran después. Y son imposibles de perder mientras existan en
    only when the issue explicitly requires the historical full harness.
 2. Keep each coherent work unit in a Conventional Commit with its tests and docs.
 3. Update the issue's single ODD/SDD execution artifact when that lane has one;
-   never use `progress/current.md` as routine task evidence.
+   never create or use a global progress ledger as routine task evidence.
 4. Push only with explicit remote authorization and verify local HEAD == remote HEAD.
 5. Hand the exact HEAD/base to a fresh independent reviewer before human merge.
 

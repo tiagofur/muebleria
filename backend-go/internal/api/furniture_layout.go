@@ -21,7 +21,7 @@ import (
 // visible hardware placements (handles with preview geometry, hinges, …).
 // All geometry is resolved server-side (formulas, poses, AABBs); clients like
 // the SketchUp extension only transform pre-baked boxes — they never compute
-// composition (progress/current.md invariant).
+// composition (server-authoritative composition invariant).
 //
 // Query parameters widthMm/heightMm/depthMm override the module's own
 // dimensions (the SketchUp dialog edits them freely); each is optional and

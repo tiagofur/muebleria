@@ -52,30 +52,13 @@ for f in "${HARNESS_FILES[@]}"; do
   fi
 done
 
-# ── 2. Validar feature_list.json ─────────────────────────────────────────────
+# ── 2. Validar catálogo de capacidades ───────────────────────────────────────
 echo ""
-echo "── 2. Validando feature_list.json ──────────────────────"
+echo "── 2. Validando catálogo de capacidades ────────────────"
 
-python3 - <<'PY'
-import json, sys
-try:
-    data = json.load(open("feature_list.json"))
-    valid = {"pending", "in_progress", "done", "blocked"}
-    for f in data["features"]:
-        if f["status"] not in valid:
-            print(f"[FAIL]  Estado inválido en feature {f['id']}: {f['status']}")
-            sys.exit(1)
-    if data.get("rules", {}).get("catalog_only") is not True:
-        print("[FAIL]  feature_list.json must declare catalog_only")
-        sys.exit(1)
-    print(f"[OK]    feature_list.json valid ({len(data['features'])} historical entries; "
-          "not queue or ownership)")
-except Exception as e:
-    print(f"[FAIL]  feature_list.json inválido: {e}")
-    sys.exit(1)
-PY
-
-if [ $? -ne 0 ]; then EXIT_CODE=1; fi
+if ! python3 scripts/validate_feature_catalog.py; then
+  EXIT_CODE=1
+fi
 
 # ── 3. Entorno Node / pnpm ───────────────────────────────────────────────────
 echo ""
@@ -95,7 +78,8 @@ if ! command -v node >/dev/null 2>&1; then
   fi
 else
   NODE_VER=$(node --version)
-  NODE_MAJOR=$(echo "$NODE_VER" | sed 's/v\([0-9]*\).*/\1/')
+  NODE_MAJOR=${NODE_VER#v}
+  NODE_MAJOR=${NODE_MAJOR%%.*}
   if [ "$NODE_MAJOR" -lt 20 ]; then
     fail "Se requiere Node.js >= 20 (actual: $NODE_VER)"
     EXIT_CODE=1

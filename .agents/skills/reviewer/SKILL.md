@@ -14,7 +14,8 @@ merge, issue closure, scope expansion, or receipt-driven review.
 1. Pin the open approved issue, acceptance/exclusions, PR, exact HEAD/base, changed
    paths, and the single execution artifact when the selected lane has one.
 2. Read the actual diff and only the applicable code/tests/contracts/ADRs. Do not use
-   `feature_list.json` or `progress/current.md` as current authority.
+   the capability catalog, retained task history, or a global progress ledger as
+   current authority.
 3. Check the real Definition of Done and delivery claim:
    - complete: `Closes/Fixes/Resolves #N`, `Delivery: complete`, base `main`, no
      acceptance or evidence pending;

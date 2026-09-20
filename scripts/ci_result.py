@@ -8,9 +8,9 @@ from ci_impact import JOBS, validate_plan
 
 
 def validate_results(needs, tested_sha):
-    if not isinstance(needs, dict) or set(needs) != set(JOBS) | {"impact", "validate-ledger"}:
+    if not isinstance(needs, dict) or set(needs) != set(JOBS) | {"impact", "validate-catalog"}:
         raise ValueError("missing or unexpected job results")
-    for key in ("impact", "validate-ledger"):
+    for key in ("impact", "validate-catalog"):
         if needs[key].get("result") != "success":
             raise ValueError(key + " did not succeed")
     plan = json.loads(needs["impact"].get("outputs", {}).get("plan", ""))

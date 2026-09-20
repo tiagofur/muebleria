@@ -82,9 +82,9 @@ This read-only routine preflight checks repository state and task tools. Its
 
 Run `./init.sh` only when the approved issue explicitly requires the historical
 full harness. It may install dependencies and execute broad suites; it is not the
-routine startup command. In bootstrap mode it validates the harness without using
-`feature_list.json` to select work. That file is a historical catalog, not an
-instruction to select the first pending feature.
+routine startup command. In bootstrap mode it validates the harness and the
+high-level product capability catalog without using that catalog to select work.
+GitHub Issues is the operational queue.
 
 Cuando el monorepo esté scaffolded:
 
@@ -121,7 +121,7 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 .
 ├── AGENTS.md                   # Punto de entrada para agentes (mapa corto)
 ├── CHECKPOINTS.md              # Criterios de "estado final correcto"
-├── feature_list.json           # Historical catalog; not queue or ownership
+├── feature_list.json           # High-level product capability catalog
 ├── init.sh                     # Verificación e inicialización del entorno
 │
 ├── docs/
@@ -137,8 +137,7 @@ Detalle y smoke: `docs/verification.md` § Nivel 6.
 │       └── reviewer/SKILL.md   # Revisor: aprueba o rechaza
 │
 ├── progress/
-│   ├── current.md              # Optional human overview outside normal execution
-│   └── history.md              # Bitácora append-only de sesiones
+│   └── history.md              # Bitácora histórica; no estado de ejecución
 │
 ├── Plantilla_Muebles.xlsx      # Fuente de dominio (fórmulas, datos de referencia)
 ├── Plantilla_Optimizer.xlsx    # Contrato de salida (formato de export de corte)
@@ -174,7 +173,7 @@ Principios clave:
 - **Divulgación progresiva:** `AGENTS.md` es un mapa, no un manual. Los detalles viven en `docs/`.
 - **One issue / one writer:** current ownership and an isolated branch; GitHub Issues is the queue.
 - **Recoverable execution:** ODD uses one `odd/tasks/<issue>-<slug>.md`; Direct creates no artifact and explicit SDD uses its canonical tasks.
-- **Auxiliary state:** `feature_list.json`, `progress/current.md`, and Engram are not operational authority.
+- **Separated authority:** GitHub owns queue/global state; exact issue artifacts own recoverable ODD execution; the capability catalog and optional Engram mirror are context only.
 - **Executable verification:** `factory_preflight.py` starts read-only; affected
   V0/V1/V2 checks prove the candidate; `init.sh` is explicit-only full validation.
 - **Anti teléfono-descompuesto:** subagentes escriben resultados en archivos, solo devuelven una referencia.

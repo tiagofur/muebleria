@@ -48,10 +48,11 @@ Size and risk can change verification and delivery slicing, but do not select SD
 Do not create a plan file, session file, review-round file, and task file for the
 same issue. Resume and update the one artifact. Direct work stays artifact-free.
 
-`feature_list.json` is catalog/legacy implementation metadata. It is not a queue,
-scheduler, issue authority, reservation, ownership record, or instruction to pick
-the first pending row. `progress/current.md` is an optional human overview outside
-the normal agent loop; do not read or edit it at startup or on every task.
+`feature_list.json` is a compact catalog of high-level product capabilities. It is
+not a queue, scheduler, issue authority, reservation, ownership record, or source
+of execution state. Do not load the catalog or scan `odd/tasks/` during routine
+startup; open only the artifact named by the approved issue when the ODD lane uses
+one.
 
 ## Sources of truth by concern
 
@@ -66,7 +67,7 @@ There is no universal ledger. Use the authority for the concern being decided:
 | Execution progress | The issue's single ODD/SDD tasks artifact and work-unit commits |
 | Candidate identity and review | Exact PR HEAD/base, diff, reviewer report, and evidence for those pins |
 | CI and publication | Current remote checks and PR/issue metadata read back from GitHub |
-| Historical catalog/context | `feature_list.json`, archives, and `progress/current.md`; never live authority |
+| Capability context and history | `feature_list.json`, retained issue artifacts, archives, and Git history; never live execution authority |
 
 If sources disagree, stop only the affected unsafe decision, verify the higher
 authority, and correct the stale lower source. Do not concatenate histories.
@@ -138,6 +139,10 @@ python3 scripts/verify_affected.py --full --budget-seconds <remaining>
 the product. `verify_affected.py` remains a conservative selector. Unknown paths,
 invalid pins/diffs, shared contracts, lockfiles, tooling, or sensitive boundaries
 expand to all relevant gates. It cannot certify a real host or machine by filename.
+
+When ODD work completes, its issue artifact remains in `odd/tasks/` as immutable
+history. It is not startup input, and completion requires no archive move,
+post-merge cleanup commit, or follow-up call to the writer.
 
 CI validates the frozen candidate; it is not the debugger. Diagnose locally with
 focused checks before publication. Do not push speculative commits to learn from

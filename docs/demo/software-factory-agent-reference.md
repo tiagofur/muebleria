@@ -149,8 +149,8 @@ Then:
 2. choose Direct, ODD, or explicit SDD using the portable contract;
 3. read the canonical sources for the affected area;
 4. verify prerequisites, base, branch, and existing PR;
-5. do not read `progress/current.md` as startup context or select a pending
-   `feature_list.json` row; both are historical/optional context only.
+5. do not read a global progress ledger, scan `odd/tasks/`, or select work from
+   `feature_list.json`; open only the exact issue artifact when the ODD lane uses one.
 
 ### Si la issue toca Users, Memberships, Organizations, Auth o Sales Network
 
@@ -208,8 +208,8 @@ packages/
 backend-go/            API + application services + Postgres + auth + enforcement
 contracts/             OpenAPI, JSON Schemas y fixtures compartidos
 docs/                  contratos de producto/arquitectura/UX
-progress/              archivos históricos y overview humano opcional
-feature_list.json      catálogo/metadata histórica, no autoridad operativa
+progress/              archivos históricos, nunca estado global de ejecución
+feature_list.json      catálogo de capacidades de producto, no autoridad operativa
 ```
 
 ### Bounded contexts conceptuales
@@ -400,8 +400,8 @@ Meta: #308.
 - Proyectar: `docs/proyectar-3d-roadmap-vnext.md`;
 - Digital Thread: #384 y Web tracker #396;
 - trabajo futuro: GitHub issues;
-- historical catalog/legacy metadata: `feature_list.json` (never queue, scheduler,
-  priority, ownership, reservation, or execution state).
+- high-level product capability catalog: `feature_list.json` (never queue,
+  scheduler, priority, ownership, reservation, or execution state).
 
 ### Prioridad reconciliada — corte 2026-09-05
 
@@ -421,7 +421,7 @@ Gate A. El plan fechado contiene URLs, corte y limitaciones; verificar estado re
 antes de iniciar implementación. #398 cerrado no certifica navegador→máquina completo.
 
 Discovery/documentation does not authorize another issue or writer. Do not skip hard
-prerequisites or derive priority from any pending `feature_list.json` entry.
+prerequisites or derive priority from the capability catalog.
 
 ---
 

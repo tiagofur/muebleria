@@ -15,16 +15,9 @@ def inspect(root, required=(), require_clean=False):
     tools = {name: shutil.which(name) is not None for name in TOOLS}
     errors = ["missing required tool: " + name for name in {"git", *required} if not tools.get(name)]
     state = {"tests": "NOT_RUN", "tools": tools, "errors": errors}
-    for name in ("AGENTS.md", "feature_list.json", "docs/verification.md"):
+    for name in ("AGENTS.md", "docs/verification.md"):
         if not (root / name).is_file():
             errors.append("missing harness file: " + name)
-    try:
-        data = json.loads((root / "feature_list.json").read_text(encoding="utf-8"))
-        statuses = [feature["status"] for feature in data["features"]]
-        if any(status not in {"pending", "in_progress", "done", "blocked"} for status in statuses) or statuses.count("in_progress") > 1:
-            errors.append("invalid feature ledger")
-    except (KeyError, TypeError, ValueError, OSError):
-        errors.append("unreadable feature ledger")
     try:
         def git(*args):
             return subprocess.check_output(["git", "--no-optional-locks", "-C", str(root), *args], stderr=subprocess.DEVNULL)
