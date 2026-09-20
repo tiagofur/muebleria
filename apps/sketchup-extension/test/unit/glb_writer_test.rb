@@ -38,9 +38,7 @@ class GlbWriterTest < Minitest::Test
     # Self-sufficient model: sibling suites (e.g. digital_thread_contract)
     # leave the shared stub's active_model nil in their teardowns, and
     # minitest's random order decides whether we run after them.
-    if defined?(SketchupStub)
-      SketchupStub.active_model = SketchupStub::ModelStub.new
-    end
+    SketchupStub.active_model = SketchupStub::ModelStub.new if defined?(SketchupStub)
     @model = Sketchup.active_model
     refute_nil @model
   end
