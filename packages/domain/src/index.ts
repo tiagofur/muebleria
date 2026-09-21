@@ -686,6 +686,14 @@ export {
 } from './engineeringCuttingDemand';
 
 export {
+  manufacturingCncScope,
+  manufacturingLabelProjectionFromDemand,
+  type ManufacturingLabelProjection,
+  type ManufacturingMachiningAuthority,
+  type ManufacturingPieceLabel,
+} from './manufacturingLabelProjection';
+
+export {
   projectProcessStage,
   filterProjectsByProcessStage,
   canReleaseMaterials,

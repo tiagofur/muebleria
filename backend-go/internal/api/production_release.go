@@ -478,10 +478,31 @@ func toReleaseCuttingDemandDTO(view *storage.ReleaseCuttingDemandView) openapi.R
 	}
 	for _, unit := range view.Units {
 		unitDTO := openapi.ReleaseCuttingDemandUnit{
-			FurnitureInstanceID:   unit.FurnitureInstanceID,
-			FurnitureDefinitionID: unit.FurnitureDefinitionID,
+			FurnitureInstanceID:       unit.FurnitureInstanceID,
+			FurnitureDefinitionID:     unit.FurnitureDefinitionID,
 			WorkshopOccurrenceOrdinal: int64(unit.WorkshopOccurrenceOrdinal),
-			Pieces:                make([]openapi.ReleaseCuttingDemandPiece, 0, len(unit.Pieces)),
+			Pieces:                    make([]openapi.ReleaseCuttingDemandPiece, 0, len(unit.Pieces)),
+		}
+		// #793 — frozen module identity; absent stays null (never live-derived).
+		if unit.ModuleCode != "" {
+			code := unit.ModuleCode
+			unitDTO.ModuleCode = &code
+		}
+		if unit.ModuleName != "" {
+			name := unit.ModuleName
+			unitDTO.ModuleName = &name
+		}
+		if unit.ModuleWidthMm > 0 {
+			width := int64(unit.ModuleWidthMm)
+			unitDTO.ModuleWidthMm = &width
+		}
+		if unit.ModuleHeightMm > 0 {
+			height := int64(unit.ModuleHeightMm)
+			unitDTO.ModuleHeightMm = &height
+		}
+		if unit.ModuleDepthMm > 0 {
+			depth := int64(unit.ModuleDepthMm)
+			unitDTO.ModuleDepthMm = &depth
 		}
 		for _, piece := range unit.Pieces {
 			pieceDTO := openapi.ReleaseCuttingDemandPiece{
@@ -509,6 +530,15 @@ func toReleaseCuttingDemandDTO(view *storage.ReleaseCuttingDemandView) openapi.R
 			if piece.OptionRole != "" {
 				role := piece.OptionRole
 				pieceDTO.OptionRole = &role
+			}
+			// #793 — frozen industrial codes; absent stays null.
+			if piece.MaterialCode != "" {
+				code := piece.MaterialCode
+				pieceDTO.MaterialCode = &code
+			}
+			if piece.EdgeBandCode != "" {
+				code := piece.EdgeBandCode
+				pieceDTO.EdgeBandCode = &code
 			}
 			unitDTO.Pieces = append(unitDTO.Pieces, pieceDTO)
 		}

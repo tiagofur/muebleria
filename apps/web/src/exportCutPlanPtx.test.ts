@@ -6,12 +6,24 @@ import {
   ptxFileName,
   ptxZipFileName,
 } from './exportCutPlanPtx';
-import { DEFAULT_CUT_PLAN_CONFIG, optimizeCutPlan } from '@granete/domain';
-import type { CutPlan, MachineOutputSelection, ProductionCutRow } from '@granete/domain';
+import {
+  DEFAULT_CUT_PLAN_CONFIG,
+  manufacturingLabelProjectionFromDemand,
+  optimizeCutPlan,
+  releaseBaseFromDemand,
+  releaseCutRowsFromDemand,
+} from '@granete/domain';
+import type {
+  Catalog,
+  CutPlan,
+  MachineOutputSelection,
+  MaterialBoard,
+  ReleaseCuttingDemandView,
+} from '@granete/domain';
 import {
   generateSelectedCuttingOutput,
   PTX_CADMATIC_4_R3_PROFILE,
-  PTX_CADMATIC_4_R4_PROFILE,
+  PTX_CADMATIC_4_R5_PROFILE,
   PTX_POSTPROCESSOR_ADAPTER,
 } from '@granete/excel';
 import type { MachineArtifactBundle } from '@granete/excel';
@@ -227,7 +239,7 @@ describe('exportCutPlanPtx', () => {
   });
 });
 
-describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r4, #781)', () => {
+describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r5, #793)', () => {
   it('by-material: el PTX documentado del compilador llega dentro del ZIP, un archivo por material', async () => {
     const { fakeAnchor, deps, blobs } = captureDeps();
 
@@ -259,46 +271,24 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r4, #781)', () => {
         active: true,
       },
     ];
-    const row = (
-      partCode: string,
-      lengthMm: number,
-      widthMm: number,
-      materialName: string,
-      materialCode: string,
-    ): ProductionCutRow => ({
-      quantity: 1,
-      lengthMm,
-      widthMm,
-      description: `${partCode} lab`,
-      materialName,
-      materialCode,
-      grain: 1 as const,
-      L1: 0,
-      L2: 0,
-      W1: 0,
-      W2: 0,
-      partCode,
-      partName: partCode,
-      // #781 r4: workshop codes are fail-closed — lab rows carry one.
-      labelRef: `MOD-LAB-${partCode}`,
-      moduleCode: 'M01',
-      thicknessMm: 18,
-    });
-    const plan = optimizeCutPlan(
-      'lab-650-cad4-zip',
-      [
-        row('A', 450, 320, 'Lab Board 18', 'LAB18'),
-        row('C', 500, 400, 'Lab Alt 18', 'ALT18'),
-      ],
-      materials,
+    // #793: the productive r5 route needs a frozen release plan + its label
+    // projection (two materials keep the by-material split meaningful).
+    const { demand, catalog } = labRelease(['mat-a', 'mat-b']);
+    const basePlan = optimizeCutPlan(
+      'lab-793-cad5-zip',
+      releaseCutRowsFromDemand(demand, catalog),
+      materials as MaterialBoard[],
       {
         ...DEFAULT_CUT_PLAN_CONFIG,
-        sawKerfMm: 4,
-        trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
+        sawKerfMm: 4.4,
+        trim: { topMm: 0, bottomMm: 10, leftMm: 10, rightMm: 0 },
       },
     );
+    const plan: CutPlan = { ...basePlan, releaseBase: releaseBaseFromDemand(demand) };
 
-    const bundles = await generateSelectedCuttingOutput(plan, cad4Selection(), 'by-material');
+    const bundles = await generateSelectedCuttingOutput(plan, cad5Selection(), 'by-material', {
+      manufacturingLabels: manufacturingLabelProjectionFromDemand(demand),
+    });
     expect(bundles.length).toBe(2);
 
     await downloadCuttingArtifactBundles(bundles, 'Cocina Candidata', deps, 'by-material');
@@ -314,7 +304,7 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r4, #781)', () => {
       const content = await zip.file(name)!.async('string');
       expect(content.startsWith('HEADER,')).toBe(true);
       expect(content).not.toContain('[HEADER]');
-      expect(content).toContain('GRANETE-PTX-CANDIDATE NOT_MACHINE_VALIDATED');
+      expect(content).toContain('GRANETE-R5-FIELD-TEST');
       const manifest = JSON.parse(
         await zip.file(`${name}.manifest.json`)!.async('string'),
       ) as MachineArtifactBundle['manifest'];
@@ -325,74 +315,146 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r4, #781)', () => {
       expect(manifest.artifacts[0]?.fileName).toBe(name);
       expect(manifest.artifacts[0]?.sha256).toBe(actualHash);
       expect(manifest.outputCompatibilityProfileDigest).toBe(
-        PTX_CADMATIC_4_R4_PROFILE.digest,
+        PTX_CADMATIC_4_R5_PROFILE.digest,
       );
       expect(manifest.delivery.mode).toBe('by-material');
       expect(manifest.delivery.material?.code).toBeTruthy();
     }
     // Manifest exacto por material dentro del propio bundle.
     for (const bundle of bundles) {
-      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r4');
+      expect(bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r5');
       expect(bundle.manifest.validationStatus).toBe('NOT_TESTED');
       expect(bundle.manifest.compatibilityEvidence.claim).toBe('notClaimed');
     }
   });
 });
 
-function cad4Selection(): MachineOutputSelection {
+/** #793 — current CADmatic 4 selection: r5 + adapter 1.4.0 exact pins. */
+function cad5Selection(): MachineOutputSelection {
   return {
     operation: 'cutting',
     machineProfileId: 'client-a-machine-b-hpp250',
     machineProfileRevisionId: 'r1',
     outputCompatibilityProfileId: 'ptx-cadmatic-4',
-    outputCompatibilityProfileRevisionId: 'r4',
-    outputCompatibilityProfileDigest: PTX_CADMATIC_4_R4_PROFILE.digest,
+    outputCompatibilityProfileRevisionId: 'r5',
+    outputCompatibilityProfileDigest: PTX_CADMATIC_4_R5_PROFILE.digest,
     postprocessorAdapterId: PTX_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
     postprocessorAdapterVersion: PTX_POSTPROCESSOR_ADAPTER.adapterVersion,
     postprocessorImplementationDigest: PTX_POSTPROCESSOR_ADAPTER.implementationDigest,
   };
 }
 
-function buildCad4ReadyPlan(): CutPlan {
-  return optimizeCutPlan(
-    'cad4-direct-manifest',
-    [{
-      quantity: 1,
-      lengthMm: 450,
-      widthMm: 320,
-      description: 'Panel lab',
-      materialName: 'Lab Board 18',
-      materialCode: 'LAB18',
-      grain: 1,
-      L1: 0,
-      L2: 0,
-      W1: 0,
-      W2: 0,
-      partCode: 'P1',
-      partName: 'Panel lab',
-      labelRef: 'MOD-LAB-P1',
-      moduleCode: 'M01',
-      thicknessMm: 18,
-    }],
-    [{
-      id: 'lab18',
-      code: 'LAB18',
-      name: 'Lab Board 18',
-      costPerM2: 10,
-      wastePercent: 10,
-      lengthMm: 1200,
-      widthMm: 700,
-      thicknessMm: 18,
-      grainDefault: true,
-      boardPrice: 8,
-      active: true,
-    }],
+/** Minimal frozen release demand + catalog engineering inputs (#793 lab). */
+function labRelease(materialIds: ['mat-a' | 'mat-b', 'mat-a' | 'mat-b']): {
+  demand: ReleaseCuttingDemandView;
+  catalog: Catalog;
+} {
+  const frozenCodeOf = (id: 'mat-a' | 'mat-b'): string => (id === 'mat-a' ? 'LAB18' : 'ALT18');
+  const demand: ReleaseCuttingDemandView = {
+    releaseId: '1b1b7930-0000-4000-8000-0000000000z1',
+    releaseNumber: 2,
+    designRevisionId: '1b1b7930-0000-4000-8000-0000000000z2',
+    designRevisionNumber: 1,
+    manufacturingFingerprint: `sha256-${'a1b2c3'.repeat(10)}a1b2`,
+    schemaVersion: 2,
+    units: [
+      {
+        furnitureInstanceId: '1b1b7930-0000-4000-8000-0000000000u1',
+        furnitureDefinitionId: 'MOD-LAB',
+        workshopOccurrenceOrdinal: 1,
+        // #793 — snapshot-frozen industrial identity (as the server authors it).
+        frozenModuleCode: 'MOD-LAB',
+        frozenModuleName: 'Modulo Lab',
+        frozenModuleWidthMm: 600,
+        frozenModuleHeightMm: 720,
+        frozenModuleDepthMm: 450,
+        pieces: [
+          {
+            partId: 'part-a',
+            partCode: 'A',
+            description: 'Panel A',
+            quantity: 1,
+            lengthMm: 450,
+            widthMm: 320,
+            thicknessMm: 18,
+            materialId: materialIds[0],
+            frozenMaterialCode: frozenCodeOf(materialIds[0]),
+            grain: 1,
+            l1: 0,
+            l2: 0,
+            w1: 0,
+            w2: 0,
+          },
+          {
+            partId: 'part-c',
+            partCode: 'C',
+            description: 'Panel C',
+            quantity: 1,
+            lengthMm: 500,
+            widthMm: 400,
+            thicknessMm: 18,
+            materialId: materialIds[1],
+            frozenMaterialCode: frozenCodeOf(materialIds[1]),
+            grain: 1,
+            l1: 0,
+            l2: 0,
+            w1: 0,
+            w2: 0,
+          },
+        ],
+      },
+    ],
+  };
+  const catalog: Catalog = {
+    materials: [
+      {
+        id: 'mat-a',
+        code: 'LAB18',
+        name: 'Lab Board 18',
+        costPerM2: 10,
+        wastePercent: 10,
+        lengthMm: 1200,
+        widthMm: 700,
+        thicknessMm: 18,
+        grainDefault: true,
+        boardPrice: 8,
+        active: true,
+      },
+      {
+        id: 'mat-b',
+        code: 'ALT18',
+        name: 'Lab Alt 18',
+        costPerM2: 12,
+        wastePercent: 10,
+        lengthMm: 800,
+        widthMm: 600,
+        thicknessMm: 18,
+        grainDefault: true,
+        boardPrice: 6,
+        active: true,
+      },
+    ],
+    edges: [],
+    hardware: [],
+    optionGroups: [],
+    modules: [],
+  };
+  return { demand, catalog };
+}
+
+function buildCad5ReadyRelease(): { plan: CutPlan; demand: ReleaseCuttingDemandView; catalog: Catalog } {
+  const { demand, catalog } = labRelease(['mat-a', 'mat-a']);
+  const basePlan = optimizeCutPlan(
+    'cad5-direct-manifest',
+    releaseCutRowsFromDemand(demand, catalog),
+    catalog.materials.slice(0, 1),
     {
       ...DEFAULT_CUT_PLAN_CONFIG,
-      sawKerfMm: 4,
-      trim: { topMm: 0, bottomMm: 0, leftMm: 0, rightMm: 0 },
+      sawKerfMm: 4.4,
+      trim: { topMm: 0, bottomMm: 10, leftMm: 10, rightMm: 0 },
     },
   );
+  return { plan: { ...basePlan, releaseBase: releaseBaseFromDemand(demand) }, demand, catalog };
 }
 
 function bundleFixture(fileName: string, marker: string): MachineArtifactBundle {
@@ -454,11 +516,10 @@ describe('downloadCuttingArtifactBundles (#591 machine output)', () => {
 
   it('descarga directa entrega manifest companion con hash de los bytes exactos', async () => {
     const { deps, blobs, downloads } = captureDeps();
-    const bundles = await generateSelectedCuttingOutput(
-      buildCad4ReadyPlan(),
-      cad4Selection(),
-      'unified',
-    );
+    const release = buildCad5ReadyRelease();
+    const bundles = await generateSelectedCuttingOutput(release.plan, cad5Selection(), 'unified', {
+      manufacturingLabels: manufacturingLabelProjectionFromDemand(release.demand),
+    });
 
     const result = await downloadCuttingArtifactBundles(
       bundles,
@@ -477,7 +538,7 @@ describe('downloadCuttingArtifactBundles (#591 machine output)', () => {
     expect(manifest.artifacts[0]?.fileName).toBe(downloads[0]);
     expect(manifest.artifacts[0]?.sha256).toBe(actualHash);
     expect(manifest.outputCompatibilityProfileDigest).toBe(
-      PTX_CADMATIC_4_R4_PROFILE.digest,
+      PTX_CADMATIC_4_R5_PROFILE.digest,
     );
   });
 

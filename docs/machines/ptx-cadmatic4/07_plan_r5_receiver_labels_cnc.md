@@ -421,3 +421,13 @@ r5 queda listo para campo cuando existe:
     + reproducible field pack
 
 La confianza no viene de “mas tests” en abstracto. Debemos poder explicar cada byte relevante, su autoridad, su limite y como se verifica antes de tocar CADLink.
+
+## Estado R5-F (#793) — implementado
+
+La fase final quedó implementada y documentada en
+[`13_final_r5_candidate_gate.md`](13_final_r5_candidate_gate.md):
+`ptx-cadmatic-4@r5` + `granete-ptx@1.4.0` + receiver `HPP250-CAD4-R5-CANDIDATE`
+publicados en catálogo (TS/JSON/Go en paridad), autoridad de labels frozen
+conectada a la ruta productiva (proyección neutral en domain, hard gates sin
+fallback), bytes spec-checked y UN field pack final de revisión generado
+localmente (pendiente de revisión independiente; NOT_TESTED/notClaimed).

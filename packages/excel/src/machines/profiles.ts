@@ -164,6 +164,22 @@ export const PTX_COMPILER_R4_REQUIRED_DIMENSIONS = [
 ] as const;
 
 /**
+ * Dimensions ONLY the r5 revision (#793) requires on top of the r4 set: the
+ * strict Pattern Exchange spec preflight (#788), the part-local pre-rotation
+ * cut PARTS_REQ frame + structural PARTS_UDI (#789), and the productive
+ * receiver policy identity (#790 values, #793 candidate id). Every value is
+ * consumed by the r5 compiler route — an option that does not reach the
+ * bytes or a gate is forbidden.
+ */
+export const PTX_COMPILER_R5_REQUIRED_DIMENSIONS = [
+  ...PTX_COMPILER_R4_REQUIRED_DIMENSIONS,
+  'strictSpecPreflight',
+  'partsReqDimensionPolicy',
+  'partsUdi',
+  'receiverPolicy',
+] as const;
+
+/**
  * `ptx-cadmatic-4` r2 — the CANDIDATE revision routed to the documented PTX
  * compiler (#650 PR 6: CutProgram → PtxDocument → CADLink/CAD4 route).
  *
@@ -342,6 +358,79 @@ export const PTX_CADMATIC_4_R4_PROFILE: OutputCompatibilityProfile = {
   supportStatus: 'NOT_TESTED',
   digest: '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc',
   evidenceUri: 'docs/machines/ptx-cadmatic4/05_contrato_r4_field_dialect.md',
+};
+
+/**
+ * `ptx-cadmatic-4` r5 — the PRODUCTIVE final-gate candidate revision
+ * (#793): r4's proven dimension base plus the r5 decisions already
+ * implemented and lab-proven by #788–#792, now wired into the normal
+ * serialization route with NEW industrial identities:
+ *
+ * - strictSpecPreflight 'pattern-exchange-v1' (#788): the compiled document
+ *   AND the serialized bytes must pass the strict Pattern Exchange limit
+ *   validator (serializePtxDocumentBytesSpecChecked boundary) — the r4
+ *   43-char TITLE defect class can never reach bytes again;
+ * - partsReqDimensionPolicy 'part-local-pre-rotation-cut' (#789): PARTS_REQ
+ *   carries the part-local cut frame so optimizer rotation cannot mutate
+ *   dimensional identity (required whenever the label projection is on);
+ * - partsUdi 'structural' (#789): one structural PARTS_UDI row per piece,
+ *   INFO cells empty except evidenced picture refs — the field samples'
+ *   compact edge encodings are UNKNOWN and never generated;
+ * - receiverPolicy 'HPP250-CAD4-R5-CANDIDATE' (#790 values / #793 identity):
+ *   the productive receiver policy pin (BOOK=3, KERF 4.4/4.4, geometry TRIM
+ *   authority, recut trio OMIT, RULE 6/1/1/1) — separate from the frozen
+ *   HPP250_CAD4_R5_LAB policy of the #791 golden;
+ * - productive label authority (#793 hard gate): the route requires the
+ *   neutral frozen per-piece manufacturing projection on the resolved job
+ *   (release truth → ManufacturingLabelProjection → partLabels) and BLOCKS
+ *   without it — the lab fixture discipline of #789/#791 is not a
+ *   productive label source.
+ *
+ * EVIDENCE STATUS: repo implementation of the #788–#793 contracts; none of
+ * it is receiver evidence — supportStatus stays NOT_TESTED and
+ * compatibilityClaim stays notClaimed until a real field result lands in
+ * #348. r2/r3/r4 stay immutable historical constants: selections pinned to
+ * them surface a stale-revision blocker (never an automatic retarget to r5).
+ */
+export const PTX_CADMATIC_4_R5_PROFILE: OutputCompatibilityProfile = {
+  ref: { outputCompatibilityProfileId: 'ptx-cadmatic-4', revisionId: 'r5' },
+  formatFamily: 'ptx',
+  targetSoftware: {
+    name: 'CADmatic',
+    version: '4',
+    provenance: 'FIELD_VERIFICATION_REQUIRED',
+  },
+  dimensions: {
+    fileExtension: 'ptx',
+    encoding: 'ascii',
+    lineEnding: 'crlf',
+    decimalPlaces: 2,
+    headerVersion: '1',
+    unit: 'mm',
+    headerOrigin: 0,
+    trimType: 1,
+    includeVectors: false,
+    supportsPositiveTrim: true,
+    supportedFunctions: '0,1,2,3,92',
+    offcutsWithQuantity: true,
+    offcutsBeforePatterns: true,
+    offcutCutMarkers: 'function92-only',
+    partCodeAuthority: 'workshop-labelref',
+    partCodeMaxLength: 50,
+    strictSpecPreflight: 'pattern-exchange-v1',
+    partsReqDimensionPolicy: 'part-local-pre-rotation-cut',
+    partsUdi: 'structural',
+    receiverPolicy: 'HPP250-CAD4-R5-CANDIDATE',
+  },
+  pendingEvidence: [
+    'fieldAvailability',
+    'recordOrdering',
+    'characterRestrictions',
+    'filenameConstraints',
+  ],
+  supportStatus: 'NOT_TESTED',
+  digest: '3d3d215bf45859b6bf74ea931fc34e9d2b99e16ed346f67a33f68da482534c6b',
+  evidenceUri: 'docs/machines/ptx-cadmatic4/13_final_r5_candidate_gate.md',
 };
 
 // ---------------------------------------------------------------------------

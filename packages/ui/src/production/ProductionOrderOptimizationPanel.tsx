@@ -18,6 +18,7 @@ import type {
   CutPlan,
   CutPlanConfig,
   CutStrategy,
+  ManufacturingLabelProjection,
   ReleaseCuttingDemandBase,
 } from '@granete/domain';
 import { planMatchesReleaseBase } from '@granete/domain';
@@ -68,10 +69,32 @@ export type ProductionOrderOptimizationPanelProps = {
   readonly onExportCutPlanPtx?: (
     cutPlan: CutPlan,
     mode?: 'unified' | 'by-material',
+    manufacturingLabels?: ManufacturingLabelProjection,
   ) => void;
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
-  readonly resolveCuttingOutputTarget?: (cutPlan: CutPlan) => CuttingOutputTargetView | null;
+  readonly resolveCuttingOutputTarget?: (
+    cutPlan: CutPlan,
+    labels?: {
+      readonly manufacturingLabels?: ManufacturingLabelProjection;
+      readonly partLabels?: readonly unknown[];
+    },
+  ) => CuttingOutputTargetView | null;
   readonly exportBusy?: boolean;
+  /**
+   * #793 — neutral frozen per-piece manufacturing label projection of the
+   * release (when this panel prepares an exact liberation). Forwarded to the
+   * PTX export so the r5 route consumes its PARTS_INF/PARTS_UDI authority
+   * from frozen release truth; absent for legacy plans (r5 export then blocks
+   * with the actionable reason instead of rebuilding labels from live data).
+   */
+  readonly manufacturingLabels?: ManufacturingLabelProjection;
+  /**
+   * #793 — the projection's export-layer label mapping (async digests for CNC
+   * drawing refs), precomputed by the release screen. Feeds the readiness
+   * resolver so the export button reflects the SAME labeled-job gate the
+   * serialization route enforces (never a parallel truth).
+   */
+  readonly partLabels?: readonly unknown[];
   /**
    * #739 — plan persisted for the EXACT release this panel is preparing
    * (undefined = legacy project-scoped view; null = no stored plan).
@@ -117,6 +140,8 @@ export function ProductionOrderOptimizationPanel({
   exportBusy = false,
   initialCutPlan,
   demandGate = { mode: 'legacy' },
+  manufacturingLabels,
+  partLabels,
   optimizerUnavailableReason = null,
   dxfUnavailableReason = null,
 }: ProductionOrderOptimizationPanelProps): ReactNode {
@@ -184,9 +209,12 @@ export function ProductionOrderOptimizationPanel({
   const activeCuttingOutputTarget = useMemo(
     () =>
       currentCutPlan && resolveCuttingOutputTarget
-        ? resolveCuttingOutputTarget(currentCutPlan)
+        ? resolveCuttingOutputTarget(currentCutPlan, manufacturingLabels ? {
+            manufacturingLabels,
+            ...(partLabels !== undefined ? { partLabels } : {}),
+          } : undefined)
         : cuttingOutputTarget,
-    [currentCutPlan, cuttingOutputTarget, resolveCuttingOutputTarget],
+    [currentCutPlan, cuttingOutputTarget, resolveCuttingOutputTarget, manufacturingLabels, partLabels],
   );
 
   // #739 — with a frozen release demand the pre-plan estimate must NOT be
@@ -311,7 +339,7 @@ export function ProductionOrderOptimizationPanel({
 
   const handleExportPtx = () => {
     if (!currentCutPlan) return;
-    onExportCutPlanPtx?.(currentCutPlan, ptxMode);
+    onExportCutPlanPtx?.(currentCutPlan, ptxMode, manufacturingLabels);
   };
 
   const activeSheet = currentCutPlan?.sheets[activeSheetIndex] ?? null;

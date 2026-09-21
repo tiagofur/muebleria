@@ -110,6 +110,8 @@ import {
   projectAllowsProductionAccess,
   releaseAuthorityOf,
   releaseBaseFromDemand,
+  manufacturingLabelProjectionFromDemand,
+  type ManufacturingLabelProjection,
   releaseCutRowsFromDemand,
   suggestDuplicateCode,
   transitionProjectStatus,
@@ -363,6 +365,8 @@ import type { AmbientMaterialDraft, CuttingOutputTargetView, MachineOutputConfig
 import type { OwnerPortfolioRow } from '@granete/ui';
 import type { WorkspaceRepository } from '@granete/storage';
 import { loadReleaseCutPlan, saveReleaseCutPlan } from '@granete/storage';
+import { ptxPartLabelsFromManufacturingProjection } from '@granete/excel';
+import type { PtxPartLabelData } from '@granete/excel';
 import type { AuthUser, MembershipChoice, OrgSummary } from './session';
 import type { AssignableOwner } from './stores/workspaceStore';
 import type { StockCatalogView } from './derivations/stockCatalog';
@@ -470,7 +474,11 @@ export interface ShellViewCtx {
   readonly handleExportCutListCsv: (projectId?: string | undefined) => Promise<void>;
   readonly handleExportCutPlanPdf: (cutPlan: CutPlan) => Promise<void>;
   readonly handleExportCutPlanDxf: (cutPlan: CutPlan, variant: 'sheets' | 'pieces') => Promise<void>;
-  readonly handleExportCutPlanPtx: (cutPlan: CutPlan, mode?: 'unified' | 'by-material') => Promise<void>;
+  readonly handleExportCutPlanPtx: (
+    cutPlan: CutPlan,
+    mode?: 'unified' | 'by-material',
+    manufacturingLabels?: ManufacturingLabelProjection,
+  ) => Promise<void>;
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
   readonly resolveCuttingOutputTarget?: (
@@ -1047,6 +1055,51 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       routeEngineeringReleaseId ?? 'no-release',
     ),
   });
+  // #793 — neutral frozen label projection of the SAME verified demand
+  // (occurrence ordinals, module context via the same catalog engineering
+  // inputs the rows use) plus its export-layer mapping, precomputed once so
+  // the optimización panel's readiness reflects the SAME labeled-job gate the
+  // serialization route enforces. No CNC machining authority is available
+  // web-side yet — fields without authority stay empty instead of being
+  // invented; real machining truth wiring belongs to the field-result
+  // follow-up (#348).
+  //
+  // Dependency discipline: the demand CONTEXT object is rebuilt every render,
+  // so the memo keys on the underlying react-query `demand` reference
+  // (referentially stable while unchanged) — keying on the context itself
+  // would recompute every render and re-trigger the partLabels effect in a
+  // loop.
+  const engDemandReady =
+    engineeringDemandContext.kind === 'ready' ? engineeringDemandContext.demand : undefined;
+  const engManufacturingLabels = useMemo<ManufacturingLabelProjection | undefined>(() => {
+    if (!engDemandReady) return undefined;
+    try {
+      return manufacturingLabelProjectionFromDemand(engDemandReady);
+    } catch {
+      return undefined;
+    }
+  }, [engDemandReady]);
+  const [engPartLabels, setEngPartLabels] = useState<readonly PtxPartLabelData[] | undefined>(
+    undefined,
+  );
+  useEffect(() => {
+    if (!engManufacturingLabels) {
+      setEngPartLabels(undefined);
+      return;
+    }
+    let cancelled = false;
+    ptxPartLabelsFromManufacturingProjection(engManufacturingLabels).then(
+      (labels) => {
+        if (!cancelled) setEngPartLabels(labels);
+      },
+      () => {
+        if (!cancelled) setEngPartLabels(undefined);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [engManufacturingLabels]);
   // #740 — durable per-release Engineering state of the SAME pinned release:
   // the exact-release evidence the workspace status chip and the EXPLICIT
   // start/complete commands consume. Reading it never writes.
@@ -1773,11 +1826,15 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onSaveCutPlan={(plan) => { projectActions.saveCutPlan(engProject.id, plan); }}
             onExportCutPlanPdf={(plan) => { void handleExportCutPlanPdf(plan); }}
             onExportCutPlanDxf={(plan, variant) => { void handleExportCutPlanDxf(plan, variant); }}
-            onExportCutPlanPtx={(plan, mode) => { void handleExportCutPlanPtx(plan, mode); }}
+            onExportCutPlanPtx={(plan, mode, manufacturingLabels) => {
+              void handleExportCutPlanPtx(plan, mode, manufacturingLabels);
+            }}
             /* #739 — frozen release demand + release-scoped plan persistence:
                the optimización/despiece surfaces consume the exact release
                content; every other tab keeps its live working view. */
             releaseCuttingDemand={engFrozenDemand}
+            manufacturingLabels={engManufacturingLabels}
+            partLabels={engPartLabels}
             releaseCutPlan={
               engFrozenDemand?.status === 'ready'
                 ? loadReleaseCutPlan(

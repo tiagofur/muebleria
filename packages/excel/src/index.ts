@@ -288,6 +288,8 @@ export {
 // --- #790 PTX receiver policy: public lab receiver constraints used by the
 // compiler/preflight path and downstream machine profile wiring. ---
 export {
+  HPP250_CAD4_R5_CANDIDATE_POLICY_ID,
+  HPP250_CAD4_R5_CANDIDATE_RECEIVER_POLICY,
   HPP250_CAD4_R5_LAB_RECEIVER_POLICY,
   PTX_RECEIVER_FIELD_SOURCE,
   requiredReceiverNumber,
@@ -302,7 +304,8 @@ export {
 // --- #789 frozen label projection per physical piece (PARTS_INF/UDI source):
 // the ONLY L1/L2/W1/W2 → EDGE1..4 translation site, the D<hex12> CNC drawing
 // reference and the barcode policy. Pure projection inputs — the compiler
-// never consults the catalog/BOM to complete label data. ---
+// never consults the catalog/BOM to complete label data. #793 adds the
+// productive mapping from the neutral frozen ManufacturingLabelProjection. ---
 export {
   PTX_CNC_DRAWING_REF_NAMESPACE,
   PTX_EDGE_COLUMN_BY_WORKSHOP_SIDE,
@@ -310,6 +313,7 @@ export {
   buildPtxPartLabels,
   ptxBarcodeToken,
   ptxCncDrawingRef,
+  ptxPartLabelsFromManufacturingProjection,
   type PtxPartLabelData,
   type PtxPartLabelInput,
   type PtxPartLabelUnitContext,
@@ -371,9 +375,12 @@ export {
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_R3_PROFILE,
   PTX_CADMATIC_4_R4_PROFILE,
+  PTX_CADMATIC_4_R5_PROFILE,
   PTX_CADMATIC_4_PROFILE,
   PTX_CADMATIC_5_PROFILE,
   PTX_COMPILER_REQUIRED_DIMENSIONS,
+  PTX_COMPILER_R4_REQUIRED_DIMENSIONS,
+  PTX_COMPILER_R5_REQUIRED_DIMENSIONS,
   PTX_GENERIC_PROFILE,
   SAW_HOMAG_PROFILE,
   type ClientMachineProfileData,
@@ -381,11 +388,16 @@ export {
 
 export {
   PTX_POSTPROCESSOR_ADAPTER,
+  PTX_ADAPTER_1_3_0_HISTORICAL_IDENTITY,
   PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR,
+  PTX_ADAPTER_INDUSTRIAL_CONTRACT,
   PTX_CANDIDATE_TITLE,
+  PTX_R5_FIELD_TEST_TITLE,
+  isCadmatic4R5,
   profileUsesDocumentedPtxCompiler,
   resolvePtxCompilerRoute,
   type PtxCompilerRouteConfig,
+  type PtxResolvedCuttingJob,
 } from './machines/ptxAdapter';
 export { SAW_POSTPROCESSOR_ADAPTER, SAW_ADAPTER_IMPLEMENTATION_DESCRIPTOR } from './machines/sawAdapter';
 export {

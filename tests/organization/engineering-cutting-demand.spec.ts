@@ -2,6 +2,7 @@ import { expect, test, type Download, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import {
+  manufacturingLabelProjectionFromDemand,
   type ArtifactManifest,
   type CutPlan,
   type ReleaseCuttingDemandView,
@@ -10,8 +11,9 @@ import {
   compileCutPlanToPtxDocument,
   cutPlanPdfExport,
   parsePtxDocumentBytes,
+  ptxPartLabelsFromManufacturingProjection,
   PTX_CADMATIC_4_R3_PROFILE,
-  PTX_CADMATIC_4_R4_PROFILE,
+  PTX_CADMATIC_4_R5_PROFILE,
   resolvePtxCompilerRoute,
   validatePtxDocument,
   verifyCutPlanPtxReadback,
@@ -47,7 +49,7 @@ const MAT_NAME = 'MDF Prueba 739';
 const DEPTH_MM = 590;
 
 const CUTTING_CADMATIC4_DIGEST =
-  '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc';
+  '3d3d215bf45859b6bf74ea931fc34e9d2b99e16ed346f67a33f68da482534c6b';
 
 interface Seeded {
   readonly projectId: string;
@@ -89,6 +91,12 @@ async function fetchDemand(seeded: Seeded): Promise<ReleaseCuttingDemandView> {
     units: raw.units.map((unit: Record<string, unknown>) => ({
       furnitureInstanceId: String(unit.furniture_instance_id),
       furnitureDefinitionId: String(unit.furniture_definition_id),
+      workshopOccurrenceOrdinal: Number(unit.workshop_occurrence_ordinal),
+      frozenModuleCode: (unit.module_code as string | null) ?? null,
+      frozenModuleName: (unit.module_name as string | null) ?? null,
+      frozenModuleWidthMm: (unit.module_width_mm as number | null) ?? null,
+      frozenModuleHeightMm: (unit.module_height_mm as number | null) ?? null,
+      frozenModuleDepthMm: (unit.module_depth_mm as number | null) ?? null,
       pieces: (unit.pieces as ReadonlyArray<Record<string, unknown>>).map((piece) => ({
         partId: String(piece.part_id),
         partCode: (piece.part_code as string | null) ?? null,
@@ -98,6 +106,8 @@ async function fetchDemand(seeded: Seeded): Promise<ReleaseCuttingDemandView> {
         widthMm: Number(piece.width_mm),
         thicknessMm: Number(piece.thickness_mm),
         materialId: String(piece.material_id),
+        frozenMaterialCode: (piece.material_code as string | null) ?? null,
+        frozenEdgeBandCode: (piece.edge_band_code as string | null) ?? null,
         edgeBandId: (piece.edge_band_id as string | null) ?? null,
         grain: Number(piece.grain) as 0 | 1,
         l1: Number(piece.l1) as 0 | 1,
@@ -487,7 +497,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     await browserErrors.assertEmpty('PDF + PTX download journey');
   });
 
-  test('candidato CADmatic 4 r4: manifiesto con procedencia del release + lectura independiente de bytes', async ({ page }) => {
+  test('candidato CADmatic 4 r5 (#793): manifiesto con procedencia del release + bytes productivos con PARTS_INF', async ({ page }) => {
     test.setTimeout(150_000);
     const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
 
@@ -497,7 +507,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     await page.getByTestId('settings-tab-tab-ingenieria').click();
     await expect(page.getByTestId('machine-output-cutting')).toBeVisible();
     await page.getByTestId('machine-output-cutting-machine').selectOption({ label: 'HOLZMA (HOMAG) HPP 250' });
-    await page.getByTestId('machine-output-cutting-profile').selectOption({ label: 'PTX · CADmatic 4 · r4' });
+    await page.getByTestId('machine-output-cutting-profile').selectOption({ label: 'PTX · CADmatic 4 · r5' });
     await page.getByTestId('machine-output-cutting-save').click();
     await expect(page.getByTestId('machine-output-cutting-status')).toHaveText('Candidato — no validado en máquina');
 
@@ -516,11 +526,25 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
 
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
     await page.getByTestId('eng-tab-optimizacion').click();
-    await expect(page.getByTestId('prod-opt-cutting-output')).toContainText('ptx-cadmatic-4@r4');
+    await expect(page.getByTestId('prod-opt-cutting-output')).toContainText('ptx-cadmatic-4@r5');
+    // The r5 receiver policy (HPP250-CAD4-R5-CANDIDATE) pins the machine's
+    // kerf (4.4) and the geometry trims it expects (fixed 10 mm bottom/left):
+    // the workshop sets them on the plan before generating, and a plan built
+    // with other values blocks honestly (kerf_not_uniform).
+    await page.getByLabel('Disco / Kerf (mm)').fill('4.4');
+    await page.getByLabel('Sup:', { exact: true }).fill('0');
+    await page.getByLabel('Inf:', { exact: true }).fill('10');
+    await page.getByLabel('Izq:', { exact: true }).fill('10');
+    await page.getByLabel('Der:', { exact: true }).fill('0');
     await page.getByRole('button', { name: /Generar Plan de Corte 2D/i }).click();
     await expect(page.getByTestId('prod-opt-summary')).toContainText('tablero');
     await page.getByRole('button', { name: /Guardar Plan/i }).click();
     await expect(page.getByTestId('prod-opt-save-ok')).toBeVisible();
+
+    // #793 review B2: the button must be ENABLED — readiness evaluated the
+    // complete labeled r5 job (frozen release identity + label authority),
+    // never a bare plan that would legitimately block.
+    await expect(page.getByTestId('prod-opt-export-ptx')).toBeEnabled();
 
     const files = await captureDownloads(page, () =>
       page.getByTestId('prod-opt-export-ptx').click(), 2,
@@ -543,13 +567,22 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     // correspond to the EXACT plan the browser generated from the frozen
     // demand (read back from its release-scoped persistence).
     const plan = await savedReleasePlan(page, seeded.releaseId);
-    const route = resolvePtxCompilerRoute(PTX_CADMATIC_4_R4_PROFILE);
+    const route = resolvePtxCompilerRoute(PTX_CADMATIC_4_R5_PROFILE);
     expect(route.reasons).toEqual([]);
     expect(route.config).toBeDefined();
-    const { mapping } = compileCutPlanToPtxDocument(plan, route.config!.compileOptions);
+    // #793: the productive bytes carry PARTS_INF/PARTS_UDI labels projected
+    // from the frozen release demand. Independently recompute the label
+    // authority the browser flow used (the projection reads ONLY the
+    // snapshot-frozen identity — the live catalog is not an input) and
+    // compile the same options for the readback.
+    const demand = await fetchDemand(seeded);
+    const manufacturingLabels = manufacturingLabelProjectionFromDemand(demand);
+    const partLabels = await ptxPartLabelsFromManufacturingProjection(manufacturingLabels);
+    const compileOptions = { ...route.config!.compileOptions, partLabels };
+    const { mapping } = compileCutPlanToPtxDocument(plan, compileOptions);
     const parsed = parsePtxDocumentBytes(ptxFile.bytes);
     expect(validatePtxDocument(parsed)).toEqual([]);
-    expect(verifyCutPlanPtxReadback(parsed, plan, mapping, route.config!.compileOptions)).toEqual([]);
+    expect(verifyCutPlanPtxReadback(parsed, plan, mapping, compileOptions)).toEqual([]);
 
     // Dimensions/quantities of the frozen demand are IN the machine program:
     // PARTS_REQ carries the required pieces with their exact sizes.
@@ -560,6 +593,43 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
       .map((record) => (record as { width: number }).width)
       .sort((a, b) => a - b);
     expect(demandedWidths).toEqual([600, 600, 650]);
+
+    // One PARTS_INF + PARTS_UDI row per placed piece; BARCODE2 = manufacturing
+    // code; NO DRAWING/BARCODE1 anywhere — the web flow holds no explicit CNC
+    // machining authority, so those cells stay empty (never inferred from
+    // names or descriptions).
+    const partsInf = parsed.records.filter((record) => record.type === 'PARTS_INF');
+    const partsUdi = parsed.records.filter((record) => record.type === 'PARTS_UDI');
+    expect(partsInf.length).toBe(partsReq.length);
+    expect(partsUdi.length).toBe(partsReq.length);
+    for (const row of partsInf) {
+      const code = partsReq.find((req) => req.partIndex === row.partIndex)?.code;
+      expect(row.barcode2).toBe(code);
+      expect(row.drawing).toBeUndefined();
+      expect(row.barcode1).toBeUndefined();
+    }
     await browserErrors.assertEmpty('CADmatic candidate + readback journey');
+
+    // Serial-suite citizenship: this test leaves org A configured on the r5
+    // candidate, which legitimately BLOCKS later specs that download PTX from
+    // non-release plans (r5 hard gate). Restore the generic tuple so the
+    // suite's remaining journeys exercise their own configured output.
+    const restoreClient = new GraneteApiClient(seeded.apiBase);
+    const latest = await restoreClient.listMachineOutputSelections(seeded.token);
+    const cutting = latest.selections.find((s) => s.selection.operation === 'cutting');
+    await restoreClient.upsertMachineOutputSelection(seeded.token, 'cutting', {
+      selection: {
+        operation: 'cutting',
+        machineProfileId: 'client-a-machine-b-hpp250',
+        machineProfileRevisionId: 'r1',
+        outputProfileId: 'ptx-generic',
+        outputProfileRevisionId: 'r1',
+        outputProfileDigest: 'd05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595',
+        adapterId: 'granete-ptx',
+        adapterVersion: '1.4.0',
+        adapterImplementationDigest: '8c13f67bfc8f1354984b90bbea1a3719b91905b62d63af570eec3d83a52a7916',
+      },
+      expectedVersion: cutting?.selection.version ?? 0,
+    });
   });
 });

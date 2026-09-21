@@ -1,22 +1,33 @@
 /**
- * PTX postprocessor adapter (#351 foundation, #650 CADmatic 4 candidate route).
+ * PTX postprocessor adapter (#351 foundation, #650 CADmatic 4 candidate route,
+ * #793 r5 productive final-gate route).
  *
- * Two serialization routes, selected by EXACT profile revision — never by
+ * Serialization routes, selected by EXACT profile revision — never by
  * name/metadata guessing:
  *
- * - `ptx-cadmatic-4@r2` (PTX_CADMATIC_4_CANDIDATE_PROFILE): the documented
- *   PTX compiler of #650/#657 — CutPlan/CutProgram → compileCutPlanToPtxDocument
+ * - `ptx-cadmatic-4@r2/r3/r4` (frozen history): the documented PTX compiler
+ *   of #650/#657/#661/#781 — CutPlan/CutProgram → compileCutPlanToPtxDocument
  *   → validate → serializePtxDocumentBytes. Every effective option declared by
- *   the profile (headerVersion, headerOrigin, trimType, decimalPlaces,
- *   encoding, lineEnding, includeVectors, supportedFunctions,
- *   supportsPositiveTrim) is consumed by this route; an option value the
- *   implementation does not support blocks with a specific reason instead of
- *   being ignored. canSerialize runs the REAL compilation preflight (the
- *   compiler is pure and deterministic), so every ptx_compile.* failure
- *   (missing/stale program, cnc-nesting, positive trims, phase > 3, missing
- *   thickness, non-ASCII identity, non-representable decimals, unresolved
- *   material…) surfaces as an actionable blocker BEFORE any bytes exist, and
- *   `ready === true` guarantees serialize() executes for the same input.
+ *   the profile is consumed by this route; an option value the implementation
+ *   does not support blocks with a specific reason instead of being ignored.
+ *   canSerialize runs the REAL compilation preflight (the compiler is pure and
+ *   deterministic), so every ptx_compile.* failure surfaces as an actionable
+ *   blocker BEFORE any bytes exist, and `ready === true` guarantees serialize()
+ *   executes for the same input. Byte identities of r2/r3/r4 are frozen.
+ *
+ * - `ptx-cadmatic-4@r5` (#793, the PRODUCTIVE final-gate candidate): the same
+ *   documented compiler with the r5 contract — TITLE GRANETE-R5-FIELD-TEST
+ *   (21 chars, inside the documented 25-char limit), strict Pattern Exchange
+ *   spec preflight on BOTH the compiled document and the serialized bytes
+ *   (serializePtxDocumentBytesSpecChecked — unchecked r5 bytes cannot exist),
+ *   part-local pre-rotation PARTS_REQ dimensions, structural PARTS_UDI, the
+ *   productive receiver policy HPP250-CAD4-R5-CANDIDATE, and PARTS_INF/
+ *   PARTS_UDI labels projected from the NEUTRAL frozen manufacturing label
+ *   authority carried by the resolved job. HARD GATES (fail-closed, never a
+ *   fallback to r4/ptx-generic/legacy): the plan must pin a frozen release
+ *   base that matches the label projection's release base; the job must carry
+ *   the neutral projection AND its mapped partLabels with exact 1:1 code
+ *   coverage; any missing r5 data BLOCKS.
  *
  * - Every other PTX profile revision (ptx-generic@r1 today): the legacy
  *   ptxCutPlanExport serializer, unchanged and still byte-identical to the
@@ -30,8 +41,10 @@
 
 import {
   AdapterSerializationBlocked,
+  manufacturingCncScope,
   type AdapterBlockReason,
   type AdapterReadiness,
+  type ManufacturingLabelProjection,
   type OutputCompatibilityProfile,
   type PostprocessorAdapter,
   type ResolvedCuttingJob,
@@ -42,9 +55,32 @@ import {
   PtxCompilationError,
   type CompileCutPlanToPtxOptions,
 } from '../ptx/compileCutPlan';
+import type { PtxPartLabelData } from '../ptx/partLabels';
 import { PtxDocumentInvalidError } from '../ptx/validate';
 import { serializePtxDocumentBytes } from '../ptx/serialize';
-import { PTX_COMPILER_R4_REQUIRED_DIMENSIONS, PTX_COMPILER_REQUIRED_DIMENSIONS, PTX_REQUIRED_DIMENSIONS } from './profiles';
+import { serializePtxDocumentBytesSpecChecked } from '../ptx/specPreflight';
+import {
+  HPP250_CAD4_R5_CANDIDATE_POLICY_ID,
+  HPP250_CAD4_R5_CANDIDATE_RECEIVER_POLICY,
+} from '../ptx/receiverPolicy';
+import {
+  PTX_COMPILER_R4_REQUIRED_DIMENSIONS,
+  PTX_COMPILER_R5_REQUIRED_DIMENSIONS,
+  PTX_COMPILER_REQUIRED_DIMENSIONS,
+  PTX_REQUIRED_DIMENSIONS,
+} from './profiles';
+
+/**
+ * Resolved cutting job as the PTX adapter consumes it: the neutral domain
+ * contract plus the export-layer label projection mapped from it
+ * (`ptxPartLabelsFromManufacturingProjection` is the only sanctioned
+ * producer). Structural typing keeps plain ResolvedCuttingJob inputs valid
+ * for every non-r5 revision; the r5 route fails closed when either half of
+ * the label authority is absent.
+ */
+export type PtxResolvedCuttingJob = ResolvedCuttingJob & {
+  readonly partLabels?: readonly PtxPartLabelData[];
+};
 
 function checkRequiredDimensions(
   profile: OutputCompatibilityProfile,
@@ -85,15 +121,32 @@ export function checkFormatFamily(
 export const PTX_CANDIDATE_TITLE = 'GRANETE-PTX-CANDIDATE NOT_MACHINE_VALIDATED';
 
 /**
+ * #793 r5 TITLE — fixed, ASCII, deterministic, 21 characters (inside the
+ * documented 25-char Pattern Exchange limit; the r4 43-char title stays as
+ * frozen historical evidence and is never reused). No customer/project
+ * names, no UUID, no timestamp, no hostname, no user, no release name.
+ */
+export const PTX_R5_FIELD_TEST_TITLE = 'GRANETE-R5-FIELD-TEST';
+
+/**
  * Exact profile revisions routed to the documented PTX compiler: r2 (#650,
- * trim = 0 only), r3 (#661, evidenced positive-trim subset) and r4 (#781,
- * field dialect after the first CADLink rejection). Selection is by EXACT
- * revision — never by name or family.
+ * trim = 0 only), r3 (#661, evidenced positive-trim subset), r4 (#781, field
+ * dialect after the first CADLink rejection) and r5 (#793, productive
+ * final-gate candidate with strict spec preflight + frozen label authority).
+ * Selection is by EXACT revision — never by name or family.
  */
 export function profileUsesDocumentedPtxCompiler(profile: OutputCompatibilityProfile): boolean {
   return (
     profile.ref.outputCompatibilityProfileId === 'ptx-cadmatic-4' &&
-    (profile.ref.revisionId === 'r2' || profile.ref.revisionId === 'r3' || profile.ref.revisionId === 'r4')
+    (profile.ref.revisionId === 'r2' || profile.ref.revisionId === 'r3' || profile.ref.revisionId === 'r4' || profile.ref.revisionId === 'r5')
+  );
+}
+
+/** True only for the #793 productive final-gate revision. */
+export function isCadmatic4R5(profile: OutputCompatibilityProfile): boolean {
+  return (
+    profile.ref.outputCompatibilityProfileId === 'ptx-cadmatic-4' &&
+    profile.ref.revisionId === 'r5'
   );
 }
 
@@ -114,11 +167,15 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
   const label = `${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`;
   const isCadmatic4R3 = label === 'ptx-cadmatic-4@r3';
   const isCadmatic4R4 = label === 'ptx-cadmatic-4@r4';
-  // r4 (#781) additionally requires its field-dialect dimensions; r2/r3 keep
-  // their historical sets and must not fail on dimensions they never had.
-  const required = isCadmatic4R4
-    ? [...PTX_COMPILER_REQUIRED_DIMENSIONS, ...PTX_COMPILER_R4_REQUIRED_DIMENSIONS]
-    : PTX_COMPILER_REQUIRED_DIMENSIONS;
+  const r5 = isCadmatic4R5(profile);
+  // r4 (#781) additionally requires its field-dialect dimensions; r5 (#793)
+  // requires the r4 set plus its own four decisions. r2/r3 keep their
+  // historical sets and must not fail on dimensions they never had.
+  const required = r5
+    ? [...PTX_COMPILER_REQUIRED_DIMENSIONS, ...PTX_COMPILER_R5_REQUIRED_DIMENSIONS]
+    : isCadmatic4R4
+      ? [...PTX_COMPILER_REQUIRED_DIMENSIONS, ...PTX_COMPILER_R4_REQUIRED_DIMENSIONS]
+      : PTX_COMPILER_REQUIRED_DIMENSIONS;
   const missing = checkRequiredDimensions(profile, required);
   if (missing.length > 0) return { reasons: missing };
 
@@ -201,30 +258,31 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
   }
 
   // r4 (#781) field-dialect options — each one reaches the bytes through the
-  // compiler; an unsupported value blocks instead of being decorative.
+  // compiler; an unsupported value blocks instead of being decorative. r5
+  // (#793) inherits the exact same dialect set on top of its own decisions.
   let offcutsWithQuantity: boolean | undefined;
   let offcutsBeforePatterns: boolean | undefined;
   let offcutCutMarkers: 'function92-only' | undefined;
   let partCodeAuthority: 'workshop-labelref' | undefined;
   let partCodeMaxLength: number | undefined;
-  if (isCadmatic4R4) {
+  if (isCadmatic4R4 || r5) {
     if (dims.offcutsWithQuantity !== true) {
-      unsupported(`offcutsWithQuantity '${String(dims.offcutsWithQuantity)}' no implementado (r4 exige true: columna OFC_QTY evidenciada)`);
+      unsupported(`offcutsWithQuantity '${String(dims.offcutsWithQuantity)}' no implementado (r4+ exige true: columna OFC_QTY evidenciada)`);
     } else {
       offcutsWithQuantity = true;
     }
     if (dims.offcutsBeforePatterns !== true) {
-      unsupported(`offcutsBeforePatterns '${String(dims.offcutsBeforePatterns)}' no implementado (r4 exige true: OFFCUTS declarado antes de PATTERNS/CUTS)`);
+      unsupported(`offcutsBeforePatterns '${String(dims.offcutsBeforePatterns)}' no implementado (r4+ exige true: OFFCUTS declarado antes de PATTERNS/CUTS)`);
     } else {
       offcutsBeforePatterns = true;
     }
     if (dims.offcutCutMarkers !== 'function92-only') {
-      unsupported(`offcutCutMarkers '${String(dims.offcutCutMarkers)}' no implementado (r4 sólo 'function92-only': Xn exclusivamente en FUNCTION 92)`);
+      unsupported(`offcutCutMarkers '${String(dims.offcutCutMarkers)}' no implementado (r4+ sólo 'function92-only': Xn exclusivamente en FUNCTION 92)`);
     } else {
       offcutCutMarkers = 'function92-only';
     }
     if (dims.partCodeAuthority !== 'workshop-labelref') {
-      unsupported(`partCodeAuthority '${String(dims.partCodeAuthority)}' no implementado (r4 sólo 'workshop-labelref': código de fabricación por pieza física)`);
+      unsupported(`partCodeAuthority '${String(dims.partCodeAuthority)}' no implementado (r4+ sólo 'workshop-labelref': código de fabricación por pieza física)`);
     } else {
       partCodeAuthority = 'workshop-labelref';
     }
@@ -241,7 +299,7 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
       reasons.push({
         code: 'ptx_compile.profile_option_unsupported',
         dimension: 'includeVectors',
-        detail: `${label} no implementa includeVectors=true: el contrato r4 mantiene VECTORS=off`,
+        detail: `${label} no implementa includeVectors=true: el contrato mantiene VECTORS=off`,
       });
     }
     if (trimType !== 1) {
@@ -250,6 +308,34 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
         dimension: 'trimType',
         detail: `${label} con refilados positivos exige trimType=1 (hereda el frame fijo del contrato r3)`,
       });
+    }
+  }
+
+  // r5 (#793) decisions — every value is consumed by the compiler route (the
+  // spec preflight runs inside compileCutPlanToPtxDocument AND the serializer
+  // boundary; the dimension/frame/UDI/receiver policies become compile
+  // options). An unsupported value blocks instead of being decorative.
+  let strictSpecPreflight: CompileCutPlanToPtxOptions['strictSpecPreflight'];
+  let partsReqDimensionPolicy: CompileCutPlanToPtxOptions['partsReqDimensionPolicy'];
+  let partsUdi: CompileCutPlanToPtxOptions['partsUdi'];
+  if (r5) {
+    if (dims.strictSpecPreflight !== 'pattern-exchange-v1') {
+      unsupported(`strictSpecPreflight '${String(dims.strictSpecPreflight)}' no implementado (r5 exige 'pattern-exchange-v1' #788)`);
+    } else {
+      strictSpecPreflight = 'pattern-exchange-v1';
+    }
+    if (dims.partsReqDimensionPolicy !== 'part-local-pre-rotation-cut') {
+      unsupported(`partsReqDimensionPolicy '${String(dims.partsReqDimensionPolicy)}' no implementado (r5 exige 'part-local-pre-rotation-cut' #789)`);
+    } else {
+      partsReqDimensionPolicy = 'part-local-pre-rotation-cut';
+    }
+    if (dims.partsUdi !== 'structural') {
+      unsupported(`partsUdi '${String(dims.partsUdi)}' no implementado (r5 exige 'structural' #789)`);
+    } else {
+      partsUdi = 'structural';
+    }
+    if (dims.receiverPolicy !== HPP250_CAD4_R5_CANDIDATE_POLICY_ID) {
+      unsupported(`receiverPolicy '${String(dims.receiverPolicy)}' no implementado (r5 sólo '${HPP250_CAD4_R5_CANDIDATE_POLICY_ID}': política productiva #790/#793)`);
     }
   }
 
@@ -263,7 +349,7 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
         headerVersion,
         headerOrigin: headerOrigin as number,
         trimType: trimType as 0 | 1,
-        title: PTX_CANDIDATE_TITLE,
+        title: r5 ? PTX_R5_FIELD_TEST_TITLE : PTX_CANDIDATE_TITLE,
         decimalPlaces: decimalPlaces as number,
         includeVectors: (includeVectors as boolean) === true ? true : undefined,
         supportsPositiveTrim: (supportsPositiveTrim as boolean) === true ? true : undefined,
@@ -272,6 +358,10 @@ export function resolvePtxCompilerRoute(profile: OutputCompatibilityProfile):
         offcutCutMarkers,
         partCodeAuthority,
         ...(partCodeMaxLength !== undefined ? { partCodeMaxLength } : {}),
+        ...(strictSpecPreflight !== undefined ? { strictSpecPreflight } : {}),
+        ...(partsReqDimensionPolicy !== undefined ? { partsReqDimensionPolicy } : {}),
+        ...(partsUdi !== undefined ? { partsUdi } : {}),
+        ...(r5 ? { receiverPolicy: HPP250_CAD4_R5_CANDIDATE_RECEIVER_POLICY } : {}),
       },
       lineEnding,
       allowedFunctions,
@@ -301,21 +391,121 @@ function compilationBlockReason(error: unknown): AdapterBlockReason {
   };
 }
 
+// ---------------------------------------------------------------------------
+// r5 hard gates (#793): frozen release identity + productive label authority
+// ---------------------------------------------------------------------------
+
+/**
+ * Every #793 hard gate that must hold BEFORE the r5 route compiles anything.
+ * Each missing piece BLOCKS with a specific reason — r5 never falls back to
+ * r4, ptx-generic or the legacy serializer, and never serializes partial
+ * label authority.
+ */
+function r5LabelAuthorityReasons(job: PtxResolvedCuttingJob): readonly AdapterBlockReason[] {
+  const reasons: AdapterBlockReason[] = [];
+  const projection: ManufacturingLabelProjection | undefined = job.manufacturingLabels;
+  const labels = job.partLabels;
+
+  if (projection === undefined) {
+    reasons.push({
+      code: 'ptx_compile.label_authority_missing',
+      detail:
+        'r5 exige la proyección neutral de etiquetas desde la verdad congelada del release (ManufacturingLabelProjection en el job): sin autoridad no se generan PARTS_INF/PARTS_UDI',
+    });
+    return reasons;
+  }
+  if (labels === undefined || labels.length === 0) {
+    reasons.push({
+      code: 'ptx_compile.label_authority_missing',
+      detail:
+        'r5 exige las partLabels proyectadas desde la proyección congelada (ptxPartLabelsFromManufacturingProjection): el compilador no reconstruye etiquetas',
+    });
+    return reasons;
+  }
+
+  // 1:1 code coverage between the frozen projection and its mapped labels —
+  // a filtered, partial or hand-crafted projection can never reach bytes.
+  const projectionCodes = new Set(projection.pieces.map((piece) => piece.manufacturingPartCode));
+  const labelCodes = new Set(labels.map((label) => label.manufacturingPartCode));
+  for (const code of projectionCodes) {
+    if (!labelCodes.has(code)) {
+      reasons.push({
+        code: 'ptx_compile.label_missing',
+        detail: `la proyección congelada lleva la pieza '${code}' pero las partLabels del job no`,
+        context: { manufacturingPartCode: code },
+      });
+    }
+  }
+  for (const code of labelCodes) {
+    if (!projectionCodes.has(code)) {
+      reasons.push({
+        code: 'ptx_compile.label_code_unknown',
+        detail: `las partLabels del job llevan la pieza '${code}' fuera de la proyección congelada`,
+        context: { manufacturingPartCode: code },
+      });
+    }
+  }
+
+  // Frozen release identity: the plan must pin a release base and it must be
+  // the EXACT release the label projection was derived from.
+  const planBase = job.cutPlan.releaseBase;
+  if (planBase === undefined) {
+    reasons.push({
+      code: 'ptx_compile.release_identity_missing',
+      detail:
+        'r5 exige un plan generado desde una liberación congelada (CutPlan.releaseBase ausente): no se serializa un plan sin identidad frozen',
+    });
+  } else if (
+    planBase.releaseId !== projection.releaseBase.releaseId ||
+    planBase.designRevisionId !== projection.releaseBase.designRevisionId ||
+    planBase.manufacturingFingerprint !== projection.releaseBase.manufacturingFingerprint
+  ) {
+    reasons.push({
+      code: 'ptx_compile.release_identity_mismatch',
+      detail:
+        'la proyección de etiquetas corresponde a otra liberación/revisión: regenerá el plan desde la liberación de la proyección (nunca se re-etiqueta un plan con una autoridad ajena)',
+      context: {
+        planReleaseId: planBase.releaseId,
+        projectionReleaseId: projection.releaseBase.releaseId,
+      },
+    });
+  }
+
+  // CNC scope identity must be the frozen release-derived scope (same
+  // algorithm as the domain builder — imported, never duplicated).
+  if (projection.cncScope !== manufacturingCncScope(projection.releaseBase)) {
+    reasons.push({
+      code: 'ptx_compile.release_identity_mismatch',
+      detail: 'el scope CNC de la proyección no se deriva de su propia identidad frozen de release',
+      context: { cncScope: projection.cncScope },
+    });
+  }
+
+  return reasons;
+}
+
 /** Compiles + validates + serializes through the documented route; throws AdapterSerializationBlocked on any blocker. */
 function serializeWithDocumentedCompiler(
-  job: ResolvedCuttingJob,
+  job: PtxResolvedCuttingJob,
   profile: OutputCompatibilityProfile,
 ): Uint8Array {
   const route = resolvePtxCompilerRoute(profile);
+  const r5 = isCadmatic4R5(profile);
   const reasons: AdapterBlockReason[] = [...route.reasons];
+  if (r5) {
+    reasons.push(...r5LabelAuthorityReasons(job));
+  }
   let bytes: Uint8Array | undefined;
 
-  if (!route.config) {
+  if (!route.config || reasons.length > 0) {
     throw new AdapterSerializationBlocked(reasons);
   }
 
   try {
-    const compiled = compileCutPlanToPtxDocument(job.cutPlan, route.config.compileOptions);
+    const compiled = compileCutPlanToPtxDocument(job.cutPlan, {
+      ...route.config.compileOptions,
+      ...(r5 ? { partLabels: job.partLabels } : {}),
+    });
     const emittedFunctions = new Set(
       compiled.document.records
         .filter((record) => record.type === 'CUTS')
@@ -330,10 +520,19 @@ function serializeWithDocumentedCompiler(
       }
     }
     if (reasons.length === 0) {
-      bytes = serializePtxDocumentBytes(compiled.document, {
-        decimalPlaces: route.config.compileOptions.decimalPlaces,
-        lineEnding: route.config.lineEnding,
-      });
+      // r5 (#788/#793): bytes exist ONLY behind the strict Pattern Exchange
+      // spec preflight boundary. r2/r3/r4 keep the historical unchecked
+      // serializer — their bytes are frozen history expected to fail the
+      // title rule (the regression fixture, not something to repair).
+      bytes = r5
+        ? serializePtxDocumentBytesSpecChecked(compiled.document, {
+            decimalPlaces: route.config.compileOptions.decimalPlaces,
+            lineEnding: route.config.lineEnding,
+          })
+        : serializePtxDocumentBytes(compiled.document, {
+            decimalPlaces: route.config.compileOptions.decimalPlaces,
+            lineEnding: route.config.lineEnding,
+          });
     }
   } catch (error) {
     reasons.push(compilationBlockReason(error));
@@ -366,18 +565,29 @@ function serializeWithDocumentedCompiler(
  * restricted to FUNCTION 92, and PARTS_REQ.CODE as the workshop
  * manufacturing code (workshop-labelref authority, ≤50, fail-closed on
  * collisions). r2/r3 routing and the legacy route are unchanged and keep
+ * their byte identities. (unpublished, same version): r4 OFFCUTS.CODE
+ * serializes EMPTY per the functional field samples (R2201/R7301).
+ * v1.4.0 (#793): routes ptx-cadmatic-4@r5 through the SAME documented
+ * compiler with the r5 final-gate contract — TITLE GRANETE-R5-FIELD-TEST
+ * (≤25), strict Pattern Exchange spec preflight on document AND bytes
+ * (serializePtxDocumentBytesSpecChecked boundary), part-local pre-rotation
+ * PARTS_REQ dimensions, structural PARTS_UDI, productive receiver policy
+ * HPP250-CAD4-R5-CANDIDATE, and PARTS_INF/PARTS_UDI labels exclusively from
+ * the neutral frozen manufacturing label projection of the release
+ * (fail-closed: no projection/labels/frozen release identity ⇒ BLOCK, never
+ * a fallback). r2/r3/r4 routing and the legacy route are unchanged and keep
  * their byte identities.
- * v1.3.0 (unpublished, same version): r4 OFFCUTS.CODE serializes EMPTY per
- * the functional field samples (R2201/R7301) — Granete's internal remnant
- * identity (regionId) stays in the mapping/CutProgram/verifier and never
- * leaks into the industrial bytes. Fingerprinted as r4OffcutCode below.
  */
 export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
   postprocessorAdapterId: 'granete-ptx',
-  adapterVersion: '1.3.0',
+  adapterVersion: '1.4.0',
   producedFormatFamily: 'ptx',
-  generator: 'packages/excel/src/machines/ptxAdapter.ts@4',
+  generator: 'packages/excel/src/machines/ptxAdapter.ts@5',
   r4OffcutCode: 'empty-field-internal-region-id-not-serialized',
+  r5Title: 'GRANETE-R5-FIELD-TEST',
+  r5SerializationBoundary: 'strict-spec-preflight-checked-bytes-only',
+  r5LabelAuthority: 'neutral-frozen-manufacturing-projection-fail-closed',
+  r5ReceiverPolicy: 'HPP250-CAD4-R5-CANDIDATE',
 } as const;
 
 /**
@@ -386,11 +596,20 @@ export const PTX_ADAPTER_IMPLEMENTATION_DESCRIPTOR = {
  * options and stable golden bytes — never whole source files or formatting
  * noise. Any governed change must update this record together with a new
  * adapter identity; CI compares every value against its independent source.
+ * The 1.3.0 identity (granete-ptx@1.3.0 / e856f8e8…) stays recorded below as
+ * immutable historical evidence — persisted selections pinned to it surface a
+ * stale-adapter blocker and are never silently retargeted.
  */
-export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
+export const PTX_ADAPTER_1_3_0_HISTORICAL_IDENTITY = {
+  postprocessorAdapterId: 'granete-ptx',
+  adapterVersion: '1.3.0',
   implementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
+} as const;
+
+export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
+  implementationDigest: '8c13f67bfc8f1354984b90bbea1a3719b91905b62d63af570eec3d83a52a7916',
   behaviorMarkers: {
-    compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4'],
+    compilerRoutes: ['ptx-cadmatic-4@r2', 'ptx-cadmatic-4@r3', 'ptx-cadmatic-4@r4', 'ptx-cadmatic-4@r5'],
     r3TrimProjection: 'fixed-frame-trim-type-1-vectors-off',
     r3ReleaseScheduling: 'phase-2-rest-remnant-function-92-before-dependent-recut',
     r4OffcutQuantity: 'ofc-qty-1-92-paired-offcuts-only',
@@ -398,6 +617,14 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
     r4OffcutMarkers: 'xn-references-only-on-function-92',
     r4OffcutCode: 'empty-field-internal-region-id-not-serialized',
     r4PartCodes: 'workshop-labelref-unique-per-piece-max-50-fail-closed',
+    r5Title: 'granete-r5-field-test-21-chars-spec-limit-25',
+    r5SpecPreflight: 'pattern-exchange-v1-document-and-serialized-bytes',
+    r5PartsReqDimensions: 'part-local-pre-rotation-cut',
+    r5PartsUdi: 'structural-info-cells-empty-without-authority',
+    r5ReceiverPolicy: 'hpp250-cad4-r5-candidate',
+    r5LabelAuthority: 'neutral-frozen-release-projection-1-1-coverage-fail-closed',
+    r5CncAuthority: 'drawing-barcode1-only-with-explicit-machining-frozen-scope',
+    r5LegacyFallback: 'none-block-instead',
     readback: 'parser-plus-independent-cut-program-verifier',
     legacyRoute: 'ptx-generic@r1-only',
   },
@@ -414,24 +641,30 @@ export const PTX_ADAPTER_INDUSTRIAL_CONTRACT = {
       digest: '94401b8c17cd54b80e548bcc85cd184f80ba25ba97056ef6d46d81d1cb5114fc',
       goldenBytesSha256: '92209bfb8c35354a55f2289b6ab83ae22857c6ea496283ac5d7a3d6cee6df313',
     },
+    r5: {
+      digest: '3d3d215bf45859b6bf74ea931fc34e9d2b99e16ed346f67a33f68da482534c6b',
+    },
   },
   legacyGoldenBytesSha256: '544dcae574bc19e19f934f96b2ad1dc104a2d7b1f668262a83ae09df72510f09',
 } as const;
 
-export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob> = {
+export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<PtxResolvedCuttingJob> = {
   postprocessorAdapterId: 'granete-ptx',
-  adapterVersion: '1.3.0',
-  implementationDigest: 'e856f8e88ba4deb7077ba24f4182378a8d706591bd8831affa0b45370d56584c',
+  adapterVersion: '1.4.0',
+  implementationDigest: '8c13f67bfc8f1354984b90bbea1a3719b91905b62d63af570eec3d83a52a7916',
   producedFormatFamily: 'ptx',
   requiredDimensions: PTX_REQUIRED_DIMENSIONS,
 
-  canSerialize(job: ResolvedCuttingJob, profile: OutputCompatibilityProfile): AdapterReadiness {
+  canSerialize(job: PtxResolvedCuttingJob, profile: OutputCompatibilityProfile): AdapterReadiness {
+    const r5 = isCadmatic4R5(profile);
     const reasons: AdapterBlockReason[] = [
       ...checkFormatFamily(profile, 'ptx'),
       ...checkRequiredDimensions(
         profile,
         profileUsesDocumentedPtxCompiler(profile)
-          ? PTX_COMPILER_REQUIRED_DIMENSIONS
+          ? r5
+            ? [...PTX_COMPILER_REQUIRED_DIMENSIONS, ...PTX_COMPILER_R5_REQUIRED_DIMENSIONS]
+            : PTX_COMPILER_REQUIRED_DIMENSIONS
           : PTX_REQUIRED_DIMENSIONS,
       ),
     ];
@@ -439,13 +672,21 @@ export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob>
     if (profileUsesDocumentedPtxCompiler(profile) && reasons.length === 0) {
       const route = resolvePtxCompilerRoute(profile);
       reasons.push(...route.reasons);
-      if (route.config) {
+      if (r5) {
+        reasons.push(...r5LabelAuthorityReasons(job));
+      }
+      if (route.config && reasons.length === 0) {
         // Real preflight: the compiler is pure/deterministic, so running it
         // here guarantees ready=true ⇒ serialize() executes unchanged. Every
         // ptx_compile.* cause (missing program, trims, phase, thickness,
-        // identity, decimals, material…) surfaces as a specific blocker.
+        // identity, decimals, material, labels…) surfaces as a specific
+        // blocker. r5 compiles WITH its mapped partLabels — the exact
+        // document serialize() will emit.
         try {
-          const compiled = compileCutPlanToPtxDocument(job.cutPlan, route.config.compileOptions);
+          const compiled = compileCutPlanToPtxDocument(job.cutPlan, {
+            ...route.config.compileOptions,
+            ...(r5 ? { partLabels: job.partLabels } : {}),
+          });
           const emittedFunctions = new Set(
             compiled.document.records
               .filter((record) => record.type === 'CUTS')
@@ -468,7 +709,7 @@ export const PTX_POSTPROCESSOR_ADAPTER: PostprocessorAdapter<ResolvedCuttingJob>
     return { ready: reasons.length === 0, reasons };
   },
 
-  serialize(job: ResolvedCuttingJob, profile: OutputCompatibilityProfile): Uint8Array {
+  serialize(job: PtxResolvedCuttingJob, profile: OutputCompatibilityProfile): Uint8Array {
     const readiness = this.canSerialize(job, profile);
     if (!readiness.ready) {
       throw new AdapterSerializationBlocked(readiness.reasons);

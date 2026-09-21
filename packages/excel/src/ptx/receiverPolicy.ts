@@ -125,6 +125,70 @@ export const HPP250_CAD4_R5_LAB_RECEIVER_POLICY = {
   },
 } as const satisfies PtxReceiverPolicy;
 
+/**
+ * #793 — PRODUCTIVE r5 receiver policy candidate. Same approved values as the
+ * frozen LAB policy (#790/#791 golden), but a SEPARATE identity so the lab
+ * golden's policy stays byte-frozen while the productive route pins its own
+ * receiverPolicyId in the profile dimension and the field pack manifests.
+ *
+ * Deliberately NOT copied from the field samples (THICK+0.3, BOARDS.COST,
+ * STK_FLAG, NOTES, TRIM_HEAD=20/TRIM_FRCT=20/TRIM_VRCT=0): those carry no new
+ * authority — the recut trio stays OMIT_NO_OVERRIDE per the #790 contract.
+ */
+export const HPP250_CAD4_R5_CANDIDATE_RECEIVER_POLICY = {
+  id: 'HPP250-CAD4-R5-CANDIDATE',
+  materialFields: {
+    BOOK: { source: PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE, value: 3 },
+    KERF_RIP: {
+      source: PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE,
+      value: 4.4,
+    },
+    KERF_XCT: {
+      source: PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE,
+      value: 4.4,
+    },
+    TRIM_FRIP: {
+      source: PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY,
+      value: 10,
+    },
+    TRIM_VRIP: { source: PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY, value: 0 },
+    TRIM_FXCT: {
+      source: PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY,
+      value: 10,
+    },
+    TRIM_VXCT: { source: PTX_RECEIVER_FIELD_SOURCE.FROM_CUTPLAN_GEOMETRY, value: 0 },
+    TRIM_HEAD: {
+      source: PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE,
+    },
+    TRIM_FRCT: {
+      source: PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE,
+    },
+    TRIM_VRCT: { source: PTX_RECEIVER_FIELD_SOURCE.OMIT_NO_OVERRIDE },
+    RULE1: { source: PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE, value: 6 },
+    RULE2: { source: PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE, value: 1 },
+    RULE3: { source: PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE, value: 1 },
+    RULE4: { source: PTX_RECEIVER_FIELD_SOURCE.FROM_MACHINE_PROFILE, value: 1 },
+  },
+  recordShape: {
+    familyOrder: [
+      'JOBS',
+      'PARTS_REQ',
+      'PARTS_INF',
+      'PARTS_UDI',
+      'BOARDS',
+      'MATERIALS',
+      'OFFCUTS',
+      'PATTERNS',
+      'CUTS',
+    ],
+    requireBookMaxBookCoherence: true,
+    emitCutComments: false,
+  },
+} as const satisfies PtxReceiverPolicy;
+
+/** Receiver policy identity the productive r5 profile dimension pins. */
+export const HPP250_CAD4_R5_CANDIDATE_POLICY_ID = 'HPP250-CAD4-R5-CANDIDATE' as const;
+
 export const PTX_RECEIVER_REQUIRED_MATERIAL_FIELDS: readonly PtxReceiverMaterialFieldName[] = [
   'BOOK',
   'KERF_RIP',

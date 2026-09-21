@@ -851,7 +851,13 @@ type ResolvedBoardPart struct {
 	Edges       []EdgeAssignment `json:"edges"`
 	OptionRole  string           `json:"option_role"`
 	MaterialID  string           `json:"material_id"`
-	EdgeBandID  string           `json:"edge_band_id,omitempty"`
+	// #793 — industrial identity frozen at resolve time from the same catalog
+	// read that produced the release snapshot. Older snapshot payloads decode
+	// with these empty: consumers that need frozen identity (the r5 PTX
+	// label route) fail closed instead of re-reading the live catalog.
+	MaterialCode string `json:"material_code,omitempty"`
+	EdgeBandID   string `json:"edge_band_id,omitempty"`
+	EdgeBandCode string `json:"edge_band_code,omitempty"`
 }
 
 // ResolvedHardwareLine is a hardware line with concrete hardware id.

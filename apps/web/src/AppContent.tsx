@@ -894,13 +894,17 @@ export function AppContent({
   }, [cuttingOutputSelectionState, machineOutputResolved, machineOutputReadModel]);
 
   const resolveCuttingOutputTargetForPlan = useCallback(
-    (cutPlan: CutPlan): CuttingOutputTargetView | null => {
+    (
+      cutPlan: CutPlan,
+      labels?: Parameters<typeof evaluateSelectedCuttingOutputReadiness>[2],
+    ): CuttingOutputTargetView | null => {
       if (!cuttingOutputTarget || cuttingOutputSelectionState.status !== 'configured') {
         return cuttingOutputTarget;
       }
       const evaluated = evaluateSelectedCuttingOutputReadiness(
         cutPlan,
         cuttingOutputSelectionState.selection,
+        labels,
       );
       if (evaluated.status !== 'CONFIGURED') return cuttingOutputTarget;
       const exactProfile = machineOutputReadModel?.catalog?.outputProfiles.find(

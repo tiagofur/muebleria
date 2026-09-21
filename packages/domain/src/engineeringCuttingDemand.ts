@@ -22,6 +22,7 @@ import {
 } from './engine/cut';
 import type {
   Catalog,
+  ExternalDims,
   ProductionCutRow,
 } from './types';
 
@@ -54,6 +55,17 @@ export interface ReleaseCuttingDemandUnitView {
    * codes, so this flow never orders occurrences by lexical instance id.
    */
   readonly workshopOccurrenceOrdinal: number;
+  /**
+   * #793 — module industrial identity frozen in the release snapshot at
+   * liberation time. Absent on older snapshots and NEVER re-derived from the
+   * live catalog: consumers that need frozen identity (the r5 PTX label
+   * route) fail closed instead.
+   */
+  readonly frozenModuleCode?: string | null;
+  readonly frozenModuleName?: string | null;
+  readonly frozenModuleWidthMm?: number | null;
+  readonly frozenModuleHeightMm?: number | null;
+  readonly frozenModuleDepthMm?: number | null;
   readonly pieces: readonly ReleaseCuttingDemandPieceView[];
 }
 
@@ -73,6 +85,67 @@ export interface ReleaseCuttingDemandPieceView {
   readonly w1: 0 | 1;
   readonly w2: 0 | 1;
   readonly optionRole?: string | null;
+  /** #793 — industrial material code frozen in the snapshot (absent on older rows). */
+  readonly frozenMaterialCode?: string | null;
+  /** #793 — industrial edge-band code frozen in the snapshot (absent on older/unbanded rows). */
+  readonly frozenEdgeBandCode?: string | null;
+}
+
+/** One frozen demand piece already resolved against the catalog engineering inputs. */
+export interface ReleaseDemandRowContext {
+  readonly unit: ReleaseCuttingDemandUnitView;
+  readonly piece: ReleaseCuttingDemandPieceView;
+  /**
+   * Module code for the workshop-code walk. #793: the SNAPSHOT-frozen module
+   * code when the release carries it (industrial identity never re-read from
+   * the live catalog); the legacy catalog/definition fallback keeps the
+   * historical #739 rows flow working for older snapshots — the r5 label
+   * projection refuses those instead of using it.
+   */
+  readonly moduleCode: string;
+  /** Catalog module definition (engineering input): name + external dims when declared. */
+  readonly module: { readonly name: string; readonly externalDims?: ExternalDims } | undefined;
+  /** #781 canonical workshop code of copy 1 (`MOD-XXX[-Ln]-Pnn`). */
+  readonly cleanPartCode: string;
+  /** Stable label key (workshop code authority shared with the optimizer rows). */
+  readonly labelRef: string;
+}
+
+/**
+ * Shared frozen iteration behind the optimizer rows AND the #793 neutral
+ * manufacturing label projection: units in FROZEN workshop occurrence order,
+ * pieces in canonical partId order, module/line suffixes and clean labelRefs
+ * assigned by the same #781 rule. Both consumers must derive their identities
+ * from this single walk or their codes could diverge.
+ */
+export function* iterateReleaseDemandPieces(
+  demand: ReleaseCuttingDemandView,
+  modulesById: ReadonlyMap<string, Catalog['modules'][number]>,
+): Generator<ReleaseDemandRowContext> {
+  const units = canonicalWorkshopOccurrences(
+    demand.units.map((unit) => ({ ...unit, id: unit.furnitureInstanceId })),
+  );
+  const moduleCounts = new Map<string, number>();
+  for (const unit of units) {
+    const module = modulesById.get(unit.furnitureDefinitionId);
+    // #793: frozen module code wins; the catalog/definition fallback serves
+    // only the legacy #739 rows flow for snapshots that predate the freeze.
+    const moduleCode = unit.frozenModuleCode?.trim() || module?.code || unit.furnitureDefinitionId;
+    const seenMod = (moduleCounts.get(moduleCode) ?? 0) + 1;
+    moduleCounts.set(moduleCode, seenMod);
+    const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
+    let partIdx = 0;
+    for (const piece of [...unit.pieces].sort((a, b) => a.partId.localeCompare(b.partId))) {
+      partIdx++;
+      const { partCode: cleanPartCode, labelRef } = resolveCleanPieceCode(
+        moduleCode,
+        piece.partCode ?? undefined,
+        partIdx,
+        lineSuffix,
+      );
+      yield { unit, piece, moduleCode, module, cleanPartCode, labelRef };
+    }
+  }
 }
 
 /**
@@ -115,61 +188,41 @@ export function releaseCutRowsFromDemand(
   }
 
   const rows: ProductionCutRow[] = [];
-  // Deterministic order: the FROZEN manufacturing occurrence ordinal (the
-  // liberation order — never lexical instance ids), then the canonical part
-  // order inside each unit.
-  const units = canonicalWorkshopOccurrences(
-    demand.units.map((unit) => ({ ...unit, id: unit.furnitureInstanceId })),
-  );
-  // #781 — canonical workshop-code assignment (review §1): occurrences
-  // follow the FROZEN workshop occurrence ordinal (liberation order) and
-  // parts their canonical partId order, mirroring the BOM flow's shared
-  // rule — reordering the demand arrays never changes the codes.
-  const moduleCounts = new Map<string, number>();
-  for (const unit of units) {
-    const moduleCode = modulesById.get(unit.furnitureDefinitionId)?.code ?? unit.furnitureDefinitionId;
-    const seenMod = (moduleCounts.get(moduleCode) ?? 0) + 1;
-    moduleCounts.set(moduleCode, seenMod);
-    const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
-    let partIdx = 0;
-    for (const piece of [...unit.pieces].sort((a, b) => a.partId.localeCompare(b.partId))) {
-      partIdx++;
-      const material = materialsById.get(piece.materialId)!;
-      const edge = piece.edgeBandId ? edgesById.get(piece.edgeBandId) : undefined;
-      const { partCode: cleanPartCode, labelRef } = resolveCleanPieceCode(
-        moduleCode,
-        piece.partCode ?? undefined,
-        partIdx,
-        lineSuffix,
-      );
-      rows.push({
-        quantity: piece.quantity,
-        lengthMm: piece.lengthMm,
-        widthMm: piece.widthMm,
-        // Finished dimensions are frozen; edge-band deduction stays an
-        // optimization input (deductEdgeBand), never pre-applied here.
-        description: formatOptimizerPartDescription(
-          moduleCode,
-          piece.description,
-          piece.partCode ?? undefined,
-        ),
-        materialName: material.name,
-        materialCode: material.code,
-        grain: piece.grain,
-        L1: piece.l1,
-        L2: piece.l2,
-        W1: piece.w1,
-        W2: piece.w2,
-        partName: piece.description,
-        partCode: cleanPartCode,
-        moduleCode,
-        labelRef,
-        thicknessMm: piece.thicknessMm,
-        edgeBandCode: edge?.code,
-        edgeBandName: edge?.name,
-        edgeBandThicknessMm: edge?.thicknessMm,
-      });
-    }
+  for (const entry of iterateReleaseDemandPieces(demand, modulesById)) {
+    const material = materialsById.get(entry.piece.materialId)!;
+    const edge = entry.piece.edgeBandId ? edgesById.get(entry.piece.edgeBandId) : undefined;
+    // #793 — industrial identity prefers the SNAPSHOT-frozen codes; the
+    // catalog values remain the legacy fallback for older snapshots and stay
+    // the authority for display names / engineering geometry below.
+    const materialCode = entry.piece.frozenMaterialCode?.trim() || material.code;
+    const edgeBandCode = entry.piece.frozenEdgeBandCode?.trim() || edge?.code;
+    rows.push({
+      quantity: entry.piece.quantity,
+      lengthMm: entry.piece.lengthMm,
+      widthMm: entry.piece.widthMm,
+      // Finished dimensions are frozen; edge-band deduction stays an
+      // optimization input (deductEdgeBand), never pre-applied here.
+      description: formatOptimizerPartDescription(
+        entry.moduleCode,
+        entry.piece.description,
+        entry.piece.partCode ?? undefined,
+      ),
+      materialName: material.name,
+      materialCode,
+      grain: entry.piece.grain,
+      L1: entry.piece.l1,
+      L2: entry.piece.l2,
+      W1: entry.piece.w1,
+      W2: entry.piece.w2,
+      partName: entry.piece.description,
+      partCode: entry.cleanPartCode,
+      moduleCode: entry.moduleCode,
+      labelRef: entry.labelRef,
+      thicknessMm: entry.piece.thicknessMm,
+      edgeBandCode,
+      edgeBandName: edge?.name,
+      edgeBandThicknessMm: edge?.thicknessMm,
+    });
   }
   return rows;
 }

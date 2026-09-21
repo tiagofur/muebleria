@@ -132,7 +132,15 @@ type ReleaseCuttingDemandUnitView struct {
 	// working copy → revision → snapshot); never recomputed, never derived
 	// from lexical id order. Both TS flows order workshop occurrences by it.
 	WorkshopOccurrenceOrdinal int
-	Pieces                    []ReleaseCuttingDemandPieceView
+	// #793 — module industrial identity frozen in the snapshot at liberation
+	// time. Empty values (older snapshots) are NOT re-derived from the live
+	// catalog: the r5 label route fails closed on them.
+	ModuleCode     string
+	ModuleName     string
+	ModuleWidthMm  int
+	ModuleHeightMm int
+	ModuleDepthMm  int
+	Pieces         []ReleaseCuttingDemandPieceView
 }
 
 type ReleaseCuttingDemandPieceView struct {
@@ -149,6 +157,8 @@ type ReleaseCuttingDemandPieceView struct {
 	L1, L2       int
 	W1, W2       int
 	OptionRole   string
+	MaterialCode string
+	EdgeBandCode string
 }
 
 // WorkshopOccurrenceAssignmentView is one frozen manufacturing occurrence:
@@ -274,6 +284,12 @@ func (s *PostgresStore) GetProjectProductionReleaseCuttingDemand(ctx context.Con
 			// #781: the frozen liberation order IS the manufacturing
 			// occurrence order — the array position of the frozen snapshot.
 			WorkshopOccurrenceOrdinal: unitIndex + 1,
+			// #793: frozen module identity (older snapshots decode empty).
+			ModuleCode:     unit.Resolved.ModuleCode,
+			ModuleName:     unit.Resolved.ModuleName,
+			ModuleWidthMm:  unit.Resolved.ModuleWidthMm,
+			ModuleHeightMm: unit.Resolved.ModuleHeightMm,
+			ModuleDepthMm:  unit.Resolved.ModuleDepthMm,
 		}
 		for _, part := range unit.Resolved.BOM.BoardParts {
 			if part.Quantity <= 0 {
@@ -291,6 +307,8 @@ func (s *PostgresStore) GetProjectProductionReleaseCuttingDemand(ctx context.Con
 				EdgeBandID:   part.EdgeBandID,
 				Grain:        int(part.Grain),
 				OptionRole:   part.OptionRole,
+				MaterialCode: part.MaterialCode,
+				EdgeBandCode: part.EdgeBandCode,
 			}
 			for _, edge := range part.Edges {
 				if !edge.Enabled {

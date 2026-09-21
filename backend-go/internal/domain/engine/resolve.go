@@ -215,8 +215,10 @@ func resolveBomFromParts(
 		}
 
 		edgeBandID := ""
+		edgeBandCode := ""
 		if edgeBand != nil {
 			edgeBandID = edgeBand.ID
+			edgeBandCode = edgeBand.Code
 		}
 
 		grain := domain.GrainNone
@@ -225,18 +227,20 @@ func resolveBomFromParts(
 		}
 
 		boardParts = append(boardParts, domain.ResolvedBoardPart{
-			ID:          part.ID,
-			Code:        part.Code,
-			Description: part.Description,
-			Quantity:    part.Quantity,
-			LengthMm:    part.LengthMm,
-			WidthMm:     part.WidthMm,
-			ThicknessMm: material.ThicknessMm,
-			Grain:       grain,
-			Edges:       part.Edges,
-			OptionRole:  part.OptionRole,
-			MaterialID:  material.ID,
-			EdgeBandID:  edgeBandID,
+			ID:           part.ID,
+			Code:         part.Code,
+			Description:  part.Description,
+			Quantity:     part.Quantity,
+			LengthMm:     part.LengthMm,
+			WidthMm:      part.WidthMm,
+			ThicknessMm:  material.ThicknessMm,
+			Grain:        grain,
+			Edges:        part.Edges,
+			OptionRole:   part.OptionRole,
+			MaterialID:   material.ID,
+			MaterialCode: material.Code,
+			EdgeBandID:   edgeBandID,
+			EdgeBandCode: edgeBandCode,
 		})
 	}
 

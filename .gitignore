@@ -58,3 +58,6 @@ tmp/
 .atl/
 backend-go/server
 backend-go/admin
+
+# #793 — local final-review field packs (never committed, never sent)
+/artifacts-local/
