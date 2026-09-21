@@ -235,11 +235,6 @@
               "type": "number"
             }
           },
-          "required": [
-            "x",
-            "y",
-            "z"
-          ],
           "additionalProperties": false
         }
       },
