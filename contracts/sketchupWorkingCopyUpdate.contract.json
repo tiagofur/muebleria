@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 1,
-  "comment": "Shared #624 Ruby-to-Go working-copy boundary. Ruby builds each request from the persisted placement intent; the Go handler decodes the same request through the generated UpdateDesignWorkingCopyRequest. Catalog semver is not an integer Design definition revision and must be omitted, while an authoritative integer is preserved.",
+  "schemaVersion": 2,
+  "comment": "Shared #624/#810 Ruby-to-Go working-copy boundary. Ruby builds each request from the persisted placement intent; the Go handler decodes the same request through the generated UpdateDesignWorkingCopyRequest. Catalog semver is not an integer Design definition revision and must be omitted, while an authoritative integer is preserved. #810: every PUT carries expected_working_version — the canonical workingVersion token (working-copy updated_at of the caller's last authoritative read) validated under the write lock.",
   "endpoint": "PUT /api/designs/{designId}/working-copy",
   "scenarios": [
     {
@@ -20,6 +20,7 @@
       },
       "request": {
         "base_revision_id": "53000000-0000-0000-0000-000000000001",
+        "expected_working_version": "2026-09-21T00:00:00.000000Z",
         "items": [
           {
             "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
@@ -55,6 +56,7 @@
       },
       "request": {
         "base_revision_id": "53000000-0000-0000-0000-000000000001",
+        "expected_working_version": "2026-09-21T00:00:00.000000Z",
         "items": [
           {
             "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
@@ -77,11 +79,22 @@
   ],
   "invalidRequest": {
     "base_revision_id": "53000000-0000-0000-0000-000000000001",
+    "expected_working_version": "2026-09-21T00:00:00.000000Z",
     "items": [
       {
         "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
         "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
         "definition_version": "1.0.0",
+        "parameters": {},
+        "material_choices": {}
+      }
+    ]
+  },
+  "missingPreconditionRequest": {
+    "base_revision_id": "53000000-0000-0000-0000-000000000001",
+    "items": [
+      {
+        "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
         "parameters": {},
         "material_choices": {}
       }

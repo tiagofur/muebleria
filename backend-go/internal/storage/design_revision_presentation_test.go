@@ -37,7 +37,7 @@ func TestDesignRevisionPresentationFrozenAtPublicationAndApproval(t *testing.T) 
 		if err != nil {
 			return err
 		}
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{DesignID: design.ID, ActorUserID: rlsUserA, Items: []storage.UpdateDesignWorkingCopyItemCommand{{FurnitureInstanceID: instance.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0}, MaterialChoices: map[string]string{"INTERIOR": releaseMaterial}, RoomID: "kitchen"}}})
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{DesignID: design.ID, ActorUserID: rlsUserA, Items: []storage.UpdateDesignWorkingCopyItemCommand{{FurnitureInstanceID: instance.ID, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 600.0}, MaterialChoices: map[string]string{"INTERIOR": releaseMaterial}, RoomID: "kitchen"}}})
 		if err != nil {
 			return err
 		}

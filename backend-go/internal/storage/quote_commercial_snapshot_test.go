@@ -311,7 +311,7 @@ func TestQuoteCommercialSnapshot_Q2Requote_IndependentTruth(t *testing.T) {
 		if len(units) != 2 {
 			return errors.New("expected 2 materialized units")
 		}
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

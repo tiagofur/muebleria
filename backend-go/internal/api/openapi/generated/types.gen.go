@@ -1170,13 +1170,15 @@ type DesignWorkingCopy struct {
 }
 
 type UpdateDesignWorkingCopyRequest struct {
-	BaseRevisionID *string                     `json:"base_revision_id,omitempty"`
-	SourceType     *DesignRevisionSourceType   `json:"source_type,omitempty"`
-	Items          []PublishDesignRevisionItem `json:"items"`
+	BaseRevisionID         *string                     `json:"base_revision_id,omitempty"`
+	ExpectedWorkingVersion string                      `json:"expected_working_version"`
+	SourceType             *DesignRevisionSourceType   `json:"source_type,omitempty"`
+	Items                  []PublishDesignRevisionItem `json:"items"`
 }
 
 type ResetDesignWorkingCopyRequest struct {
-	RevisionID string `json:"revision_id"`
+	RevisionID             string `json:"revision_id"`
+	ExpectedWorkingVersion string `json:"expected_working_version"`
 }
 
 type ReconcileDesignWorkingMaterialsRequest struct {

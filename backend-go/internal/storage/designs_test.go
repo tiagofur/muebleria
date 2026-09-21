@@ -268,7 +268,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 	var rev1 *domain.DesignRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design1.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -330,7 +330,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 	var rev2 *domain.DesignRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:       design1.ID,
 			BaseRevisionID: &rev1.ID,
 			SourceType:     domain.DesignRevisionSourceSketchup,
@@ -388,7 +388,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 
 	// 5. Cross-design base rejection on working copy.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:       design2.ID,
 			BaseRevisionID: &rev1.ID, // Belongs to design1, not design2!
 			ActorUserID:    rlsUserA,
@@ -401,7 +401,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 
 	// 6. Duplicate FurnitureInstance in working copy (Invariant §11).
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: design1.ID,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{FurnitureInstanceID: fi1.ID, Parameters: map[string]any{"widthMm": 600.0}},
@@ -431,7 +431,7 @@ func TestDesigns_ProjectAggregateAndRevisions(t *testing.T) {
 	}
 
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: design1.ID,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{FurnitureInstanceID: fiInProjectB.ID}, // FI belongs to project B!
@@ -497,7 +497,7 @@ func TestDesigns_Immutability(t *testing.T) {
 			return err
 		}
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -734,7 +734,7 @@ func TestDesigns_DurableHistoryBlocksQuoteDecrease(t *testing.T) {
 			return err
 		}
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -874,7 +874,7 @@ func TestDesigns_WorkingCopy_LifecycleAndDraftPersistence(t *testing.T) {
 	// Verify NO design_revisions rows are created while editing draft!
 	for editNum := 1; editNum <= 3; editNum++ {
 		err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-			_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 				DesignID:   design.ID,
 				SourceType: domain.DesignRevisionSourceManual,
 				Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -953,7 +953,7 @@ func TestDesigns_WorkingCopy_LifecycleAndDraftPersistence(t *testing.T) {
 
 	// 5. Continue editing working copy based on R1 (add second furniture instance).
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:       design.ID,
 			BaseRevisionID: &rev1.ID,
 			SourceType:     domain.DesignRevisionSourceManual,
@@ -1022,7 +1022,7 @@ func TestDesigns_WorkingCopy_LifecycleAndDraftPersistence(t *testing.T) {
 
 	// 7. Reset working copy back to R1 baseline.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		wc, err := fx.store.ResetDesignWorkingCopy(ctx, storage.ResetDesignWorkingCopyCommand{
+		wc, err := ResetWorkingCopyCurrent(ctx, fx.store, storage.ResetDesignWorkingCopyCommand{
 			DesignID:    design.ID,
 			RevisionID:  rev1.ID,
 			ActorUserID: rlsUserA,
@@ -1258,7 +1258,7 @@ func TestDesigns_SnapshotSerializationFailClosed(t *testing.T) {
 		}
 
 		// Insert valid item into working copy.
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design.ID,
 			SourceType: domain.DesignRevisionSourceSystem,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1352,7 +1352,7 @@ func TestDesigns_AuthoritativeWorkingCopyPublishProofs(t *testing.T) {
 	var rev1 *domain.DesignRevision
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		// Put item A in working copy (authoring state).
-		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   design.ID,
 			SourceType: domain.DesignRevisionSourceManual,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1410,7 +1410,7 @@ func TestDesigns_AuthoritativeWorkingCopyPublishProofs(t *testing.T) {
 	// Working copy has item A. Publish does NOT take an items payload; the published snapshot is strictly item A.
 	// Now update working copy to have item B.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:       design.ID,
 			BaseRevisionID: &rev1.ID,
 			SourceType:     domain.DesignRevisionSourceManual,

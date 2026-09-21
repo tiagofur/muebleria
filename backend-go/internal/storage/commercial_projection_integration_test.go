@@ -40,7 +40,7 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 			return err
 		}
 		designID = design.ID
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: design.ID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{{
 				FurnitureInstanceID: unit.FurnitureInstanceID, FurnitureDefinitionID: csModule,
@@ -100,7 +100,7 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 	// The existing confirmed working-copy command is the only write. A material
 	// change must produce a new exact projection without creating QuoteRevision Q2.
 	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-		_, updateErr := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, updateErr := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{{
 				FurnitureInstanceID: unit.FurnitureInstanceID, FurnitureDefinitionID: csModule,
@@ -141,7 +141,7 @@ func TestDesignCommercialProjection_RealPostgresUsesWorkingCopyAndAcceptedRefere
 		if createErr != nil {
 			return createErr
 		}
-		_, updateErr := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, updateErr := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{FurnitureInstanceID: unit.FurnitureInstanceID, FurnitureDefinitionID: csModule, Parameters: map[string]any{}, MaterialChoices: map[string]string{"INTERIOR": csMaterial2, "FRENTE": csMaterial2}},

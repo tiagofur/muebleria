@@ -176,7 +176,7 @@ func TestDesignMaterialProvenance_DetectReconcileAndPreserveHistory(t *testing.T
 
 		// The pre-#621 working copy: explicit choices lost ({}), authored
 		// FRENTE on fiAlias, authored FRENTES on fiMixed.
-		_, txErr = fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		_, txErr = UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -221,7 +221,7 @@ func TestDesignMaterialProvenance_DetectReconcileAndPreserveHistory(t *testing.T
 					Transform:             *item.Transform,
 				})
 			}
-			if _, txErr = fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+			if _, txErr = UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 				DesignID: designID, SourceType: domain.DesignRevisionSourceSketchup,
 				Items: items, ActorUserID: rlsUserA,
 			}); txErr != nil {

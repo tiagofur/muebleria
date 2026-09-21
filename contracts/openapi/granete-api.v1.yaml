@@ -3590,6 +3590,7 @@
       },
       "put": {
         "operationId": "updateDesignWorkingCopy",
+        "description": "Replace the working-copy items. Optimistic-concurrency frontier (#810/#679): expected_working_version carries the canonical workingVersion token (the working-copy updated_at exactly as returned by the caller's last authoritative read; the zero timestamp of an absent working copy is valid) and is validated under the authoritative write lock — a mismatch rejects with 409 VERSION_CONFLICT and the newer server state stays intact. The caller must merge: server WorkingCopy + dirty local intent, preserving unmodified fields verbatim.",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -3622,6 +3623,16 @@
           "409": {
             "$ref": "#/components/responses/ApiError"
           },
+          "428": {
+            "description": "expected_working_version missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
           "default": {
             "$ref": "#/components/responses/ApiError"
           }
@@ -3631,6 +3642,7 @@
     "/designs/{designId}/working-copy:reset": {
       "post": {
         "operationId": "resetDesignWorkingCopy",
+        "description": "Reset the working copy to an exact published revision. Same optimistic-concurrency frontier as the PUT (#810): expected_working_version is required and validated under the write lock.",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -3653,6 +3665,22 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DesignWorkingCopy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "description": "expected_working_version missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -8885,7 +8913,8 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "items"
+          "items",
+          "expected_working_version"
         ],
         "properties": {
           "base_revision_id": {
@@ -8894,6 +8923,11 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "expected_working_version": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optimistic-concurrency precondition (#810): the canonical workingVersion token — the working-copy updated_at exactly as returned by the caller's last authoritative read. The zero timestamp of an absent working copy is a valid value. A mismatch rejects with 409 VERSION_CONFLICT without overwriting; omitting it rejects with 428."
           },
           "source_type": {
             "$ref": "#/components/schemas/DesignRevisionSourceType"
@@ -8910,12 +8944,18 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "revision_id"
+          "revision_id",
+          "expected_working_version"
         ],
         "properties": {
           "revision_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "expected_working_version": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optimistic-concurrency precondition (#810): the canonical workingVersion token — the working-copy updated_at exactly as returned by the caller's last authoritative read. A mismatch rejects with 409 VERSION_CONFLICT without overwriting."
           }
         }
       },

@@ -225,7 +225,7 @@ func TestOpsDt1_MaterialDeriveBindsExactCanonicalRelease(t *testing.T) {
 	// 3. The canonical negative proof: publish R4 with a manufacturing change
 	// — deriving from P1 again keeps the R3 pins; nothing retargets.
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

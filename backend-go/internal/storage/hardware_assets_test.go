@@ -84,7 +84,7 @@ func newHwAssetWorld(t *testing.T) *hwAssetWorld {
 			return err
 		}
 		w.fi = fi.ID
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   w.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{{
@@ -1146,7 +1146,7 @@ func TestHardwareAssets_PublishLegitimateAbsenceWithoutDefinition(t *testing.T) 
 		if err != nil {
 			return err
 		}
-		_, err = w.fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, w.fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   w.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

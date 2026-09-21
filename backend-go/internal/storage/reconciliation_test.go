@@ -186,7 +186,7 @@ func TestReconciliation_SyncedAndModified(t *testing.T) {
 		// 4. Update working copy and publish DesignRevision R1:
 		// fi1 has identical dimensions and material (synced)
 		// fi2 has modified width (from 600 to 650) (modified)
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -302,7 +302,7 @@ func TestReconciliation_NegativeProofE_SameLookingDifferentIdentity(t *testing.T
 		quoteRevID = qRev.ID
 
 		// DesignRevision contains modeledFI with the EXACT SAME dimensions and module
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -424,7 +424,7 @@ func TestReconciliation_QuantityGreaterThanOne_PartialPlacement(t *testing.T) {
 		quoteRevID = qRev.ID
 
 		// Design only places fi1 and fi2 (fi3 is unplaced)
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -579,7 +579,7 @@ func TestReconciliation_ImmutabilityNegativeProof(t *testing.T) {
 		}
 		quoteRevID = qRev.ID
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -782,7 +782,7 @@ func TestReconciliation_HistoricalQuote_OldQuoteRevisionStaysOld(t *testing.T) {
 			return err
 		}
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -949,7 +949,7 @@ func TestReconciliation_HistoricalRemoval_LaterCancellationDoesNotRewriteOld(t *
 			return err
 		}
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1067,7 +1067,7 @@ func TestReconciliation_DefinitionVersion(t *testing.T) {
 			return err
 		}
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1163,7 +1163,7 @@ func TestReconciliation_CorruptSnapshot_FailsClosed(t *testing.T) {
 			return err
 		}
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

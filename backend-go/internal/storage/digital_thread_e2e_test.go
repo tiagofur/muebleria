@@ -132,7 +132,7 @@ func TestDigitalThreadE2E_ScenarioA_QuoteFirst(t *testing.T) {
 	// Step 2: Place units, author change on FI-002, publish R1.
 	err = fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
 		// Place units in working copy without creating new identities.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   designD1,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -157,7 +157,7 @@ func TestDigitalThreadE2E_ScenarioA_QuoteFirst(t *testing.T) {
 		}
 
 		// Modify FI-002 width 600 -> 650. FI-001 unchanged.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   designD1,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -320,7 +320,7 @@ func TestDigitalThreadE2E_ScenarioA_QuoteFirst(t *testing.T) {
 
 	// Step 5: Post-Release Authoring: modify height 720 -> 800 and publish R2.
 	err = fiTx(t, fx.store, actorA, func(txCtx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   designD1,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -453,7 +453,7 @@ func TestDigitalThreadE2E_ScenarioB_QuantityGreaterThanOne(t *testing.T) {
 			return err
 		}
 
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -570,7 +570,7 @@ func TestDigitalThreadE2E_ScenarioC_DesignFirst(t *testing.T) {
 			return err
 		}
 
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -686,7 +686,7 @@ func TestDigitalThreadE2E_ScenarioD_DuplicateIdentity(t *testing.T) {
 		}
 
 		// Duplicate in working copy must be rejected.
-		_, errDuplicate := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		_, errDuplicate := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -716,7 +716,7 @@ func TestDigitalThreadE2E_ScenarioD_DuplicateIdentity(t *testing.T) {
 		}
 
 		// Resolved working copy publishes cleanly.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -786,7 +786,7 @@ func TestDigitalThreadE2E_ScenarioE_SemanticScope_UnmanagedExclusion(t *testing.
 		}
 
 		// Working copy contains only managed furniture instances.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -870,7 +870,7 @@ func TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected(t *testing.T) 
 			return err
 		}
 
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -893,7 +893,7 @@ func TestDigitalThreadE2E_ScenarioF_Concurrency_StaleBaseRejected(t *testing.T) 
 
 		// Client A observed base = R1.
 		// In the meantime, another publish happens -> R2 with BaseRevisionID = R1.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1007,7 +1007,7 @@ func TestDigitalThreadE2E_ScenarioG_ReleaseDurability(t *testing.T) {
 		f3 = p1.Release.ManufacturingFingerprint
 
 		// Authoring continues: publish R4 with base = R3.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1029,7 +1029,7 @@ func TestDigitalThreadE2E_ScenarioG_ReleaseDurability(t *testing.T) {
 		}
 
 		// Continue authoring: publish R5 with base = R4.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1237,7 +1237,7 @@ func TestDigitalThreadE2E_DeterministicFingerprintParity(t *testing.T) {
 			return err
 		}
 
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1273,7 +1273,7 @@ func TestDigitalThreadE2E_DeterministicFingerprintParity(t *testing.T) {
 		}
 
 		// Spatial-only change: moving the unit from 100 -> 500 translation preserves manufacturing fingerprint.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1315,7 +1315,7 @@ func TestDigitalThreadE2E_DeterministicFingerprintParity(t *testing.T) {
 		}
 
 		// Manufacturing-affecting change: changing widthMm 600 -> 650 MUST alter manufacturing fingerprint.
-		if _, err := fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

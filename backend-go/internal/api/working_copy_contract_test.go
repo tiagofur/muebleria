@@ -17,7 +17,8 @@ type workingCopyContractFixture struct {
 		ID      string          `json:"id"`
 		Request json.RawMessage `json:"request"`
 	} `json:"scenarios"`
-	InvalidRequest json.RawMessage `json:"invalidRequest"`
+	InvalidRequest             json.RawMessage `json:"invalidRequest"`
+	MissingPreconditionRequest json.RawMessage `json:"missingPreconditionRequest"`
 }
 
 func loadWorkingCopyContractFixture(t *testing.T) workingCopyContractFixture {
@@ -77,5 +78,29 @@ func TestWorkingCopyContractFixture_SemverIsRejectedByGeneratedGoHandler(t *test
 	}
 	if store.updateDesignWorkingCopyCmd != nil {
 		t.Fatal("invalid semver must never reach the working-copy command")
+	}
+}
+
+// #810 fixture parity: a PUT without the canonical workingVersion token never
+// reaches the store — 428 PRECONDITION_REQUIRED is part of the shared
+// Ruby-to-Go boundary.
+func TestWorkingCopyContractFixture_MissingPreconditionRejected(t *testing.T) {
+	fixture := loadWorkingCopyContractFixture(t)
+	if len(fixture.MissingPreconditionRequest) == 0 {
+		t.Fatal("fixture must carry missingPreconditionRequest")
+	}
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
+		string(fixture.MissingPreconditionRequest), string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+
+	srv.HandleDesignWorkingCopy(rr, req)
+
+	if rr.Code != http.StatusPreconditionRequired {
+		t.Fatalf("status = %d, want 428 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.updateDesignWorkingCopyCmd != nil {
+		t.Fatal("missing precondition must never reach the working-copy command")
 	}
 }

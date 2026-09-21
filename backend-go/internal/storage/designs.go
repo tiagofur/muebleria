@@ -59,18 +59,30 @@ type UpdateDesignWorkingCopyItemCommand struct {
 	TechnicalClientLocator *domain.TechnicalClientLocator
 }
 
+// #810 — WorkingCopy optimistic-concurrency frontier. The canonical
+// workingVersion token is the working-copy updated_at exactly as returned by
+// the caller's last authoritative read; it is validated under the write lock
+// so a stale writer can never overwrite a newer accepted state (#679). The
+// SQL lock serializes writers; this precondition proves the input is current.
+var (
+	ErrWorkingCopyPreconditionRequired = errors.New("working copy write requires expected_working_version")
+	ErrWorkingCopyVersionConflict      = errors.New("working copy version conflict")
+)
+
 type UpdateDesignWorkingCopyCommand struct {
-	DesignID       string
-	BaseRevisionID *string
-	SourceType     domain.DesignRevisionSourceType
-	Items          []UpdateDesignWorkingCopyItemCommand
-	ActorUserID    string
+	DesignID               string
+	BaseRevisionID         *string
+	ExpectedWorkingVersion *time.Time
+	SourceType             domain.DesignRevisionSourceType
+	Items                  []UpdateDesignWorkingCopyItemCommand
+	ActorUserID            string
 }
 
 type ResetDesignWorkingCopyCommand struct {
-	DesignID    string
-	RevisionID  string
-	ActorUserID string
+	DesignID               string
+	RevisionID             string
+	ExpectedWorkingVersion *time.Time
+	ActorUserID            string
 }
 
 const designColumns = `
@@ -1061,6 +1073,33 @@ func (s *PostgresStore) GetDesignWorkingCopy(ctx context.Context, designID strin
 	return &wc, nil
 }
 
+// assertWorkingCopyVersion enforces the #810 write precondition under the
+// caller's design-row lock. A nil token is only valid while no working-copy
+// row exists (nothing to lose); a zero token records that the caller last read
+// an ABSENT working copy and diverges once a row exists; any other token must
+// equal the stored updated_at exactly.
+func (s *PostgresStore) assertWorkingCopyVersion(ctx context.Context, designID string, expected *time.Time) error {
+	var storedUpdatedAt *time.Time
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT updated_at FROM design_working_copies WHERE design_id = $1
+	`, designID).Scan(&storedUpdatedAt)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	switch {
+	case storedUpdatedAt != nil:
+		if expected == nil {
+			return ErrWorkingCopyPreconditionRequired
+		}
+		if expected.IsZero() || !expected.UTC().Equal(storedUpdatedAt.UTC()) {
+			return ErrWorkingCopyVersionConflict
+		}
+	case expected != nil && !expected.IsZero():
+		return ErrWorkingCopyVersionConflict
+	}
+	return nil
+}
+
 func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error) {
 	if !isValidUUID(cmd.DesignID) {
 		return nil, domain.ErrDesignNotFound
@@ -1110,6 +1149,11 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 	actorOrg := OrgFromCtx(ctx)
 	if actorOrg != "" && actorOrg != designOrgID {
 		return nil, domain.ErrFurnitureInstanceProjectNotWritable
+	}
+
+	// 1.5 #810 write precondition, under the design-row lock.
+	if err := s.assertWorkingCopyVersion(ctx, cmd.DesignID, cmd.ExpectedWorkingVersion); err != nil {
+		return nil, err
 	}
 
 	// 2. Validate base_revision_id if provided
@@ -1360,6 +1404,11 @@ func (s *PostgresStore) ResetDesignWorkingCopy(ctx context.Context, cmd ResetDes
 	actorOrg := OrgFromCtx(ctx)
 	if actorOrg != "" && actorOrg != designOrgID {
 		return nil, domain.ErrFurnitureInstanceProjectNotWritable
+	}
+
+	// 1.5 #810 write precondition, under the design-row lock.
+	if err := s.assertWorkingCopyVersion(ctx, cmd.DesignID, cmd.ExpectedWorkingVersion); err != nil {
+		return nil, err
 	}
 
 	// 2. Verify revision exists for this design

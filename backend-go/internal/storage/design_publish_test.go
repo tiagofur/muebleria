@@ -152,7 +152,7 @@ func newDesignPublishWorld(t *testing.T) *designPublishWorld {
 		}
 		w.fi1, w.fi2 = created[0], created[1]
 
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   w.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -589,7 +589,7 @@ func TestDesignPublish_ManifestMustMatchWorkingCopy(t *testing.T) {
 	}
 	stageAllArtifacts(t, w, session.Session.ID)
 	err = fiTx(t, w.fx.store, actor, func(ctx context.Context) error {
-		_, err := w.fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, w.fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   w.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

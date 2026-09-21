@@ -139,7 +139,7 @@ func TestProductionReleaseCaptureHTTPFrozen(t *testing.T) {
 	}
 	// Later published manufacturing revision and mutable project/catalog never retarget P1.
 	if err := fiTx(t, fx.store, fiActorA(), func(inner context.Context) error {
-		_, err := fx.store.UpdateDesignWorkingCopy(inner, storage.UpdateDesignWorkingCopyCommand{DesignID: fx.designID, BaseRevisionID: &fx.revR3, SourceType: domain.DesignRevisionSourceManual, ActorUserID: rlsUserA,
+		_, err := UpdateWorkingCopyCurrent(inner, fx.store, storage.UpdateDesignWorkingCopyCommand{DesignID: fx.designID, BaseRevisionID: &fx.revR3, SourceType: domain.DesignRevisionSourceManual, ActorUserID: rlsUserA,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{{FurnitureInstanceID: fx.fiA, FurnitureDefinitionID: fiModuleA, Parameters: map[string]any{"widthMm": 800.0, "heightMm": 900.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"BODY": releaseMaterial}}}})
 		if err != nil {
 			return err

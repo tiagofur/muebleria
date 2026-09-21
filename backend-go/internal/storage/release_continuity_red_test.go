@@ -54,7 +54,7 @@ func continuityCreateP2(t *testing.T, gs *gateSetup, keyPrefix string) (p2ID, p2
 				Transform:             domain.Transform3D{TranslationMm: [3]float64{100, 0, 0}},
 			}
 		}
-		if _, err := gs.fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, gs.fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:    gs.fx.designID,
 			SourceType:  domain.DesignRevisionSourceManual,
 			Items:       []storage.UpdateDesignWorkingCopyItemCommand{workingItem(gs.fx.fiA), workingItem(gs.fx.fiB)},
