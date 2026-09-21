@@ -80,6 +80,7 @@ func seedBodyChoice(t *testing.T, fx *rlsFixture, lineID string) {
 func fixtureCommercialSnapshot(projectID string, items []storage.CreateQuoteRevisionItemCommand) *domain.QuoteCommercialSnapshot {
 	lines := make([]domain.QuoteCommercialLine, 0, len(items))
 	units := make([]domain.QuoteCommercialUnit, 0, len(items))
+	zeroClearance := 0
 	for _, item := range items {
 		lineID := item.FurnitureInstanceID
 		lifecycle := item.LifecycleStatus
@@ -91,7 +92,7 @@ func fixtureCommercialSnapshot(projectID string, items []storage.CreateQuoteRevi
 			quantity = 1
 		}
 		lines = append(lines, domain.QuoteCommercialLine{QuoteLineID: lineID, Quantity: quantity, FurnitureInstanceIDs: []string{item.FurnitureInstanceID}})
-		units = append(units, domain.QuoteCommercialUnit{FurnitureInstanceID: item.FurnitureInstanceID, QuoteLineID: lineID, ModuleCode: "FIXTURE", ModuleName: "Fixture module", LifecycleStatus: lifecycle, Options: []domain.QuoteCommercialOption{}})
+		units = append(units, domain.QuoteCommercialUnit{FurnitureInstanceID: item.FurnitureInstanceID, QuoteLineID: lineID, ModuleCode: "FIXTURE", ModuleName: "Fixture module", LifecycleStatus: lifecycle, Options: []domain.QuoteCommercialOption{}, PricingContext: &domain.QuoteCommercialPricingContext{BaseMode: "none", BaseClearanceMm: &zeroClearance, StructureIndependent: true}})
 	}
 	snapshot, err := domain.BuildQuoteCommercialSnapshot(time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC), "MXN",
 		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture customer"},

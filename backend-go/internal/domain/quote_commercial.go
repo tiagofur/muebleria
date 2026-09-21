@@ -67,6 +67,7 @@ type QuoteCommercialPricingContext struct {
 	MeasurePresetID      string                      `json:"measurePresetId,omitempty"`
 	BaseMode             string                      `json:"baseMode"`
 	StructureRevisionPin *int                        `json:"structureRevisionPin,omitempty"`
+	StructureIndependent bool                        `json:"structureIndependent,omitempty"`
 	BaseClearanceMm      *int                        `json:"baseClearanceMm,omitempty"`
 	PlinthSides          *QuoteCommercialPlinthSides `json:"plinthSides,omitempty"`
 }
@@ -256,6 +257,9 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 			}
 			if context.StructureRevisionPin != nil && *context.StructureRevisionPin <= 0 {
 				return fmt.Errorf("%w: commercial snapshot unit %s has invalid structure revision pin", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
+			}
+			if context.StructureRevisionPin != nil && context.StructureIndependent {
+				return fmt.Errorf("%w: commercial snapshot unit %s has conflicting structure authority", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
 			}
 			if context.BaseClearanceMm == nil || *context.BaseClearanceMm < 0 {
 				return fmt.Errorf("%w: commercial snapshot unit %s has invalid base clearance", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)

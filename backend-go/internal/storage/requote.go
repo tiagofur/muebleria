@@ -125,6 +125,9 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 		}
 		materialChoices := make(map[string]string, len(item.MaterialChoices)+len(sourceUnit.Options))
 		if existedInQuote {
+			if sourceUnit.PricingContext == nil || (sourceUnit.PricingContext.StructureRevisionPin == nil && !sourceUnit.PricingContext.StructureIndependent) {
+				return nil, fmt.Errorf("%w: la revisión base no congeló el contexto de precio por unidad; creá una revisión comercial nueva con el contrato actual", domain.ErrQuoteCommercialSnapshotMissing)
+			}
 			for _, option := range sourceUnit.Options {
 				materialChoices[option.GroupCode] = option.ChoiceID
 			}
@@ -141,7 +144,6 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			MaterialChoices:       materialChoices,
 			LifecycleStatus:       item.LifecycleStatus,
 			PricingContext:        domain.CloneQuoteCommercialPricingContext(sourceUnit.PricingContext),
-			LegacyPricingContext:  existedInQuote && sourceUnit.PricingContext == nil,
 		}
 	}
 

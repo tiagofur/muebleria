@@ -119,6 +119,10 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	for _, module := range catalog.Modules {
 		moduleByID[module.ID] = module
 	}
+	structureByID := make(map[string]domain.Structure, len(catalog.Structures))
+	for _, structure := range catalog.Structures {
+		structureByID[structure.ID] = structure
+	}
 	knownOptionChoices := make(map[string]map[string]bool, len(catalog.OptionGroups))
 	for _, group := range catalog.OptionGroups {
 		knownOptionChoices[group.Code] = make(map[string]bool, len(group.OptionIDs))
@@ -139,9 +143,22 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 		}
 		items[i].MaterialChoices = engine.EffectiveOptionChoices(items[i].MaterialChoices, levelChoices)
 		if items[i].PricingContext == nil {
+			var structurePin *int
+			structureIndependent := module.StructureID == ""
+			if !structureIndependent {
+				structurePin = projectItem.StructureRevisionPin
+			}
+			if !structureIndependent && structurePin == nil {
+				structure, ok := structureByID[module.StructureID]
+				if !ok {
+					return nil, fmt.Errorf("%w: no se pudo congelar la revisión estructural de la unidad %s", domain.ErrInvalidRevisionSnapshot, items[i].FurnitureInstanceID)
+				}
+				revision := engine.StructureRevisionNumber(structure)
+				structurePin = &revision
+			}
 			items[i].PricingContext = &domain.QuoteCommercialPricingContext{
 				MeasurePresetID: projectItem.MeasurePresetID, BaseMode: projectItem.BaseMode,
-				StructureRevisionPin: projectItem.StructureRevisionPin,
+				StructureRevisionPin: structurePin, StructureIndependent: structureIndependent,
 			}
 		}
 		baseContext, err := engine.ResolveBaseContextForItem(pricingProject, projectItem, &catalog)
@@ -200,6 +217,10 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 	for _, module := range catalog.Modules {
 		moduleByID[module.ID] = module
 	}
+	structureByID := make(map[string]domain.Structure, len(catalog.Structures))
+	for _, structure := range catalog.Structures {
+		structureByID[structure.ID] = structure
+	}
 
 	pricingItems := make([]domain.ProjectItem, 0, len(items))
 	for i := range items {
@@ -213,14 +234,20 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 				return nil, fmt.Errorf("%w: module not found for project item: %s", domain.ErrInvalidRevisionSnapshot, item.FurnitureDefinitionID)
 			}
 			if len(module.Presets) > 0 {
-				if item.LegacyPricingContext {
-					return nil, fmt.Errorf("%w: la revisión base no congeló el preset comercial exacto; creá una revisión comercial nueva con el contrato actual", domain.ErrQuoteCommercialSnapshotMissing)
-				}
 				return nil, fmt.Errorf("%w: la unidad nueva %s no tiene un preset comercial exacto; no se infiere desde sus dimensiones", domain.ErrInvalidRevisionSnapshot, item.FurnitureInstanceID)
 			}
 			clearance := engine.ResolveBaseClearanceWithContext(module, nil)
 			item.PricingContext = &domain.QuoteCommercialPricingContext{
 				BaseMode: engine.ResolveBaseModeWithContext(module, nil), BaseClearanceMm: &clearance,
+				StructureIndependent: module.StructureID == "",
+			}
+			if module.StructureID != "" {
+				structure, ok := structureByID[module.StructureID]
+				if !ok {
+					return nil, fmt.Errorf("%w: no se pudo congelar la revisión estructural de la unidad nueva %s", domain.ErrInvalidRevisionSnapshot, item.FurnitureInstanceID)
+				}
+				revision := engine.StructureRevisionNumber(structure)
+				item.PricingContext.StructureRevisionPin = &revision
 			}
 		}
 		choices := item.MaterialChoices

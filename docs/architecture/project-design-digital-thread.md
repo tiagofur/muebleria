@@ -857,6 +857,8 @@ zócalo derivados del layout. Las opciones heredadas a nivel de obra se aplanan
 como opciones efectivas por unidad. R1 sólo puede superponer dimensiones y
 materiales autorizados sobre ese contexto; nunca se infiere un preset desde la
 geometría ni se releen `project_items`/`kitchen_layout` mutables como historia.
+Un pin estructural `nil`/live se materializa como la revisión efectiva al crear
+Q1; los módulos fijos congelan evidencia explícita de independencia estructural.
 Snapshots anteriores sin este contexto siguen siendo legibles, pero fallan
 cerrado al re-cotizar con una recuperación accionable.
 
