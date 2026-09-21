@@ -49,13 +49,18 @@ export function BoardMesh({
       : '#000000';
   const handleMeshes =
     hardwarePlacements && hardwarePlacements.length > 0 && hardwareCatalog
-      ? hardwarePlacements.map((placement) => {
+      ? hardwarePlacements.map((placement, index) => {
           const hardware = hardwareCatalog.get(placement.hardwareId);
           if (!hardware) return null;
-          const hardwareId = `${placement.componentInstanceId}:${placement.hardwareId}`;
+          // componentInstanceId === visual.id by construction (the resolver
+          // groups placements by board part id), and HardwarePlacement has no
+          // per-entry id — the array index is the only discriminator between
+          // repeated placements of the same hardware (e.g. two hinges of one
+          // model on a door). #813.
+          const hardwareId = `${placement.componentInstanceId}:${placement.hardwareId}:${index}`;
           return (
             <HardwareMesh
-              key={`${visual.id}:${placement.hardwareId}:${placement.componentInstanceId}`}
+              key={`${visual.id}:${placement.hardwareId}:${index}`}
               placement={placement}
               hardware={hardware}
               lightingMode={lightingMode}
