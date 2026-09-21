@@ -132,6 +132,13 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
         furnitureInstanceId: R5_GATE_UNIT_1_INSTANCE_ID,
         furnitureDefinitionId: R5_GATE_MODULE_ID,
         workshopOccurrenceOrdinal: 1,
+        // #793 — snapshot-frozen industrial identity (server-authored at
+        // liberation time; the projection never consults the live catalog).
+        frozenModuleCode: R5_GATE_MODULE_CODE,
+        frozenModuleName: 'Rack 793 Gate',
+        frozenModuleWidthMm: 600,
+        frozenModuleHeightMm: 1600,
+        frozenModuleDepthMm: 450,
         pieces: [
           {
             // 3+1 asymmetric trap: L1, L2 and W1 banded, W2 NOT.
@@ -143,7 +150,9 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
             widthMm: 440,
             thicknessMm: 18,
             materialId: 'mat-793-mdf',
+            frozenMaterialCode: R5_GATE_MAIN_MATERIAL_CODE,
             edgeBandId: 'edge-793-abs',
+            frozenEdgeBandCode: R5_GATE_EDGE_CODE,
             grain: 1,
             l1: 1,
             l2: 1,
@@ -160,7 +169,9 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
             widthMm: 396,
             thicknessMm: 18,
             materialId: 'mat-793-mdf',
+            frozenMaterialCode: R5_GATE_MAIN_MATERIAL_CODE,
             edgeBandId: 'edge-793-abs',
+            frozenEdgeBandCode: R5_GATE_EDGE_CODE,
             grain: 1,
             l1: 1,
             l2: 1,
@@ -179,6 +190,7 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
             widthMm: 1100,
             thicknessMm: 18,
             materialId: 'mat-793-fondo',
+            frozenMaterialCode: R5_GATE_FONDO_MATERIAL_CODE,
             grain: 0,
             l1: 0,
             l2: 0,
@@ -195,6 +207,7 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
             widthMm: 356,
             thicknessMm: 18,
             materialId: 'mat-793-mdf',
+            frozenMaterialCode: R5_GATE_MAIN_MATERIAL_CODE,
             grain: 1,
             l1: 0,
             l2: 0,
@@ -208,6 +221,11 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
         furnitureInstanceId: R5_GATE_UNIT_2_INSTANCE_ID,
         furnitureDefinitionId: R5_GATE_MODULE_ID,
         workshopOccurrenceOrdinal: 2,
+        frozenModuleCode: R5_GATE_MODULE_CODE,
+        frozenModuleName: 'Rack 793 Gate',
+        frozenModuleWidthMm: 600,
+        frozenModuleHeightMm: 1600,
+        frozenModuleDepthMm: 450,
         pieces: [
           {
             partId: 'part-cost',
@@ -218,7 +236,9 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
             widthMm: 440,
             thicknessMm: 18,
             materialId: 'mat-793-mdf',
+            frozenMaterialCode: R5_GATE_MAIN_MATERIAL_CODE,
             edgeBandId: 'edge-793-abs',
+            frozenEdgeBandCode: R5_GATE_EDGE_CODE,
             grain: 1,
             l1: 1,
             l2: 1,
@@ -234,7 +254,9 @@ export function r5GateDemand(): ReleaseCuttingDemandView {
             widthMm: 396,
             thicknessMm: 18,
             materialId: 'mat-793-mdf',
+            frozenMaterialCode: R5_GATE_MAIN_MATERIAL_CODE,
             edgeBandId: 'edge-793-abs',
+            frozenEdgeBandCode: R5_GATE_EDGE_CODE,
             grain: 1,
             l1: 1,
             l2: 1,
@@ -293,7 +315,7 @@ export function buildR5GateFixture(
     ...plan,
     releaseBase: releaseBaseFromDemand(demand),
   };
-  const projection = manufacturingLabelProjectionFromDemand(demand, catalog, {
+  const projection = manufacturingLabelProjectionFromDemand(demand, {
     machining: R5_GATE_MACHINING_AUTHORITY,
   });
   return { catalog, demand, rows, plan: planWithBase, projection };

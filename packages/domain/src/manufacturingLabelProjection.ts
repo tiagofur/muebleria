@@ -38,6 +38,7 @@ import type { Catalog } from './types';
 import { iterateReleaseDemandPieces } from './engineeringCuttingDemand';
 import type {
   ReleaseCuttingDemandBase,
+  ReleaseCuttingDemandUnitView,
   ReleaseCuttingDemandView,
 } from './engineeringCuttingDemand';
 
@@ -141,70 +142,78 @@ function finiteMagnitude(value: number | undefined, field: string, context: Reco
  * Builds the neutral frozen per-piece manufacturing projection of a release
  * cutting demand. One entry per PHYSICAL piece (quantity rows expand with the
  * optimizer's `-C<n>` copy discipline); codes come from the same canonical
- * walk as `releaseCutRowsFromDemand`. Fails closed on missing catalog
- * engineering inputs (materials/edges — same rule as the rows flow) and on
- * duplicate physical codes.
+ * walk as `releaseCutRowsFromDemand`.
+ *
+ * #793 freeze rule: the projection takes its INDUSTRIAL IDENTITY (module
+ * code, material code, edge-band code, piece manufacturing codes) EXCLUSIVELY
+ * from the SNAPSHOT-frozen fields the server authored at liberation time —
+ * this builder never consults the live catalog, so the same frozen release
+ * produces the same identity even after the catalog mutates. A release whose
+ * snapshot predates the freeze (missing frozen codes) BLOCKS with the exact
+ * missing authority — it is never silently completed from live data. Display
+ * extras (module name, module dims) stay optional: absent frozen values are
+ * simply empty cells, never live substitutions.
  */
 export function manufacturingLabelProjectionFromDemand(
   demand: ReleaseCuttingDemandView,
-  catalog: Catalog | null,
   options?: {
     /** Explicit frozen machining authority; absent = no authority (fields stay empty). */
     readonly machining?: ManufacturingMachiningAuthority;
   },
 ): ManufacturingLabelProjection {
-  const materialsById = new Map((catalog?.materials ?? []).map((m) => [m.id, m]));
-  const edgesById = new Map((catalog?.edges ?? []).map((e) => [e.id, e]));
-  const modulesById = new Map((catalog?.modules ?? []).map((m) => [m.id, m]));
-
-  const missingMaterials = new Set<string>();
-  const missingEdges = new Set<string>();
-  for (const unit of demand.units) {
-    for (const piece of unit.pieces) {
-      if (!materialsById.has(piece.materialId)) missingMaterials.add(piece.materialId);
-      if (piece.edgeBandId && !edgesById.has(piece.edgeBandId)) missingEdges.add(piece.edgeBandId);
-    }
-  }
-  if (missingMaterials.size > 0 || missingEdges.size > 0) {
-    throw new ResolutionError(
-      'La proyección de etiquetas requiere los mismos insumos de ingeniería que el despiece: materiales/cantos de la liberación ausentes del catálogo vigente',
-      {
-        releaseId: demand.releaseId,
-        missingMaterialIds: [...missingMaterials],
-        missingEdgeIds: [...missingEdges],
-      },
-    );
-  }
-
   const machiningPartIds = new Set(options?.machining?.machiningPartIds ?? []);
   const pieces: ManufacturingPieceLabel[] = [];
-  for (const entry of iterateReleaseDemandPieces(demand, modulesById)) {
-    const material = materialsById.get(entry.piece.materialId)!;
-    const edge = entry.piece.edgeBandId ? edgesById.get(entry.piece.edgeBandId) : undefined;
+  for (const entry of iterateReleaseDemandPieces(demand, EMPTY_MODULES)) {
     const context = {
       releaseId: demand.releaseId,
       furnitureInstanceId: entry.unit.furnitureInstanceId,
       partId: entry.piece.partId,
       labelRef: entry.labelRef,
     };
+
+    // --- Frozen industrial identity gates (#793): same release ⇒ same
+    // identity regardless of later catalog mutations; missing freeze ⇒ BLOCK.
+    const frozenModuleCode = entry.unit.frozenModuleCode?.trim();
+    if (frozenModuleCode === undefined || frozenModuleCode === '') {
+      throw new ResolutionError(
+        'La proyección de etiquetas r5 exige el código de módulo congelado en el snapshot de la liberación; los snapshots anteriores no definen identidad industrial congelada (re-liberar la obra)',
+        { ...context, field: 'frozenModuleCode', furnitureDefinitionId: entry.unit.furnitureDefinitionId },
+      );
+    }
+    const frozenMaterialCode = entry.piece.frozenMaterialCode?.trim();
+    if (frozenMaterialCode === undefined || frozenMaterialCode === '') {
+      throw new ResolutionError(
+        'La proyección de etiquetas r5 exige el código de material congelado en el snapshot de la liberación; los snapshots anteriores no definen identidad industrial congelada (re-liberar la obra)',
+        { ...context, field: 'frozenMaterialCode', materialId: entry.piece.materialId },
+      );
+    }
+    const banded = entry.piece.l1 === 1 || entry.piece.l2 === 1 || entry.piece.w1 === 1 || entry.piece.w2 === 1;
+    const frozenEdgeBandCode = entry.piece.frozenEdgeBandCode?.trim();
+    if (banded && (frozenEdgeBandCode === undefined || frozenEdgeBandCode === '')) {
+      throw new ResolutionError(
+        'La pieza lleva cantos y el snapshot de la liberación no congeló su código industrial; los snapshots anteriores no definen identidad industrial congelada (re-liberar la obra)',
+        { ...context, field: 'frozenEdgeBandCode', edgeBandId: entry.piece.edgeBandId ?? null },
+      );
+    }
+
     const quantity = positiveInteger(entry.piece.quantity, 'quantity', context);
     const hasCnc = machiningPartIds.has(entry.piece.partId) ? (true as const) : undefined;
     for (let copy = 1; copy <= quantity; copy++) {
       const manufacturingPartCode = copy > 1 ? `${entry.labelRef}-C${copy}` : entry.labelRef;
-      const externalDims = entry.module?.externalDims;
+      const externalDims = frozenUnitDims(entry.unit);
       pieces.push({
         manufacturingPartCode,
         partName: entry.piece.description,
         finishedLengthMm: finiteMagnitude(entry.piece.lengthMm, 'lengthMm', context),
         finishedWidthMm: finiteMagnitude(entry.piece.widthMm, 'widthMm', context),
-        materialCode: material.code,
+        materialCode: frozenMaterialCode,
         L1: entry.piece.l1,
         L2: entry.piece.l2,
         W1: entry.piece.w1,
         W2: entry.piece.w2,
-        edgeBandCode: edge?.code,
-        moduleCode: entry.moduleCode,
-        moduleName: entry.module?.name,
+        edgeBandCode: banded ? frozenEdgeBandCode : undefined,
+        moduleCode: frozenModuleCode,
+        moduleName: entry.unit.frozenModuleName?.trim() || undefined,
         ...(externalDims !== undefined
           ? {
               moduleWidthMm: finiteMagnitude(externalDims.width, 'moduleWidthMm', context),
@@ -253,4 +262,14 @@ export function manufacturingLabelProjectionFromDemand(
     orderRef: `R${demand.releaseNumber}`,
     pieces,
   };
+}
+
+const EMPTY_MODULES: ReadonlyMap<string, Catalog['modules'][number]> = new Map();
+
+function frozenUnitDims(
+  unit: ReleaseCuttingDemandUnitView,
+): { width: number; height: number; depth: number } | undefined {
+  const { frozenModuleWidthMm: width, frozenModuleHeightMm: height, frozenModuleDepthMm: depth } = unit;
+  if (width == null || height == null || depth == null) return undefined;
+  return { width, height, depth };
 }

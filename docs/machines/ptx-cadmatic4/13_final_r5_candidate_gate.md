@@ -40,6 +40,34 @@ decorativa. La política LAB `HPP250_CAD4_R5_LAB` queda congelada por el golden
 
 ## 3. Autoridad de labels productiva (el hueco que #793 cierra)
 
+### 3.1 Identidad industrial congelada vs insumos de ingeniería (#793 review B1)
+
+La identidad industrial serializada al PTX r5 (`PARTS_REQ.CODE`, módulo de
+los códigos, `CORE_MAT`, códigos de canto → `EDGE1..4`, `PRODUCT`,
+`BARCODE2`) proviene EXCLUSIVAMENTE de campos congelados por el SERVER en el
+snapshot de la liberación (`module_code`, `material_code`, `edge_band_code`,
+`module_name`, dims efectivas), capturados con la MISMA lectura de catálogo
+que resolvió el BOM al liberar. El builder de la proyección NO recibe
+catálogo: `same frozen release → same industrial identity`, aunque el
+catálogo live mute después (regresión explícita: mutar `module.code`,
+`material.code`, `edge.code` produce bytes IDÉNTICOS; mutar nombres/dims
+declaradas cambia a lo sumo celdas de display, nunca identidad). Un snapshot
+anterior sin códigos congelados BLOQUEA con motivo accionable (re-liberar);
+nunca se completa desde el catálogo live.
+
+El catálogo vigente sigue siendo autoridad SOLO de insumos de ingeniería
+para calcular el plan (formatos de tablero, espesores, espesor de canto para
+el descuento) — separación explícita entre recursos para calcular y
+identidad congelada serializada. El optimizador prefiere el código frozen de
+la fila para identidad; legacy sin freeze mantiene el comportamiento #739.
+
+Snapshot/contrato: `ResolvedBoardPart.material_code/edge_band_code` y
+`ResolvedReleaseUnit.Module*` (Go) → `ReleaseCuttingDemand` (openapi
+`module_code`, `material_code`, `edge_band_code`, opcionales nullable) →
+clientes generados TS/Go → `frozenModuleCode`/`frozenMaterialCode`/
+`frozenEdgeBandCode` en la vista domain.
+
+
 Ruta (la MISMA que una liberación real):
 
 ```text
@@ -57,6 +85,14 @@ ProductionRelease (verdad congelada del servidor)
   productiva de `partLabels`); reusa las validaciones #789 (ASCII, autoridad
   de canto, CORE_MAT, BARCODE2 = código de fabricación).
 - Room queda vacío (la demanda frozen no lo lleva). ORDER = `R<releaseNumber>`.
+- ROOM y la autoridad de mecanizado explícita NO viajan hoy en la demanda
+  del release web: el flujo web real emite ROOM/DRAWING/BARCODE1 vacíos
+  (nunca inventados); el fixture del pack sí ejerce la autoridad CNC
+  explícita. El wiring de CNC frozen real queda como follow-up post-#348.
+- Readiness = el MISMO job que serializa: `evaluateSelectedCuttingOutputReadiness`
+  acepta la proyección + su mapeo `partLabels`; el botón de export se habilita
+  sólo con el job r5 completo ready (browser: release real → botón habilitado
+  → bytes; caso negativo: plan sintético → blocker visible + botón deshabilitado).
 - **CNC**: `hasCncMachining` sólo con autoridad explícita
   (`ManufacturingMachiningAuthority` por partId). Sin autoridad → DRAWING y
   BARCODE1 vacíos (nunca inferidos por nombre/descripción/tipo). Hoy el flujo

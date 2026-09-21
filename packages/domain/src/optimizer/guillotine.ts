@@ -986,7 +986,11 @@ export function optimizeCutPlan(
     const sheetLengthMm = catMat && catMat.lengthMm > 0 ? catMat.lengthMm : 2440;
     const sheetWidthMm = catMat && catMat.widthMm > 0 ? catMat.widthMm : 1830;
     const thicknessMm = catMat?.thicknessMm ?? rows[0]?.thicknessMm;
-    const matCode = catMat?.code || rows[0]?.materialCode || matKey;
+    // #793 — industrial identity prefers the ROW's code (snapshot-frozen on
+    // release plans); the catalog board remains the authority for geometry
+    // (sheet sizes, thickness) only. Legacy rows carry the catalog code
+    // anyway, so this preference changes nothing outside frozen releases.
+    const matCode = rows[0]?.materialCode || catMat?.code || matKey;
     const matName = catMat?.name || rows[0]?.materialName || matKey;
 
     const placements = optimizeSingleMaterial(

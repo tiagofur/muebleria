@@ -18,7 +18,10 @@ import {
   AdapterSerializationBlocked,
   DEFAULT_CUT_PLAN_CONFIG,
   divideRegion,
+  manufacturingLabelProjectionFromDemand,
   optimizeCutPlan,
+  releaseCutRowsFromDemand,
+  type Catalog,
   type CutPlan,
   type CutPlanConfig,
   type CutPlanPlacedPiece,
@@ -50,6 +53,9 @@ import {
   R5_GATE_FONDO_MATERIAL_CODE,
   R5_GATE_MAIN_MATERIAL_CODE,
   R5_GATE_EDGE_CODE,
+  R5_GATE_MACHINING_AUTHORITY,
+  R5_GATE_PLAN_CONFIG,
+  R5_GATE_PROJECT_ID,
   R5_GATE_RELEASE_NUMBER,
 } from '../ptx/r5FieldCandidateFixture';
 import { sha256Hex } from './digest';
@@ -1104,6 +1110,86 @@ describe('CADmatic 4 r5 productivo (#793) — labels, CNC identity y hard gates'
     expect(a?.drawing).toBe(b?.drawing);
     expect(c?.drawing).toBeDefined();
     expect(c?.drawing).not.toBe(a?.drawing);
+  });
+
+  it('inmutabilidad de identidad industrial (#793 review B1): mutar el catálogo live NO cambia los bytes del mismo release frozen', async () => {
+    const base = buildR5GateFixture();
+    const selection = candidateR5Selection();
+    const exportBytes = async (catalog: Catalog): Promise<Uint8Array> => {
+      const rows = releaseCutRowsFromDemand(base.demand, catalog);
+      const generated = optimizeCutPlan(
+        R5_GATE_PROJECT_ID,
+        rows,
+        catalog.materials,
+        R5_GATE_PLAN_CONFIG,
+        'R793 Immutability',
+      );
+      const plan: CutPlan = { ...generated, releaseBase: base.plan.releaseBase };
+      const projection = manufacturingLabelProjectionFromDemand(base.demand, {
+        machining: R5_GATE_MACHINING_AUTHORITY,
+      });
+      const [bundle] = await generateSelectedCuttingOutput(plan, selection, 'unified', {
+        manufacturingLabels: projection,
+      });
+      return bundle!.artifact.bytes;
+    };
+
+    // Round A — identity CODES mutated in the live catalog (module, material,
+    // edge): the SAME frozen release must produce the EXACT same PTX bytes.
+    const original = await exportBytes(base.catalog);
+    const codesMutated: Catalog = {
+      ...base.catalog,
+      materials: base.catalog.materials.map((m) => ({ ...m, code: `MUT-${m.code}` })),
+      edges: base.catalog.edges.map((e) => ({ ...e, code: `MUT-${e.code}` })),
+      modules: base.catalog.modules.map((m) => ({ ...m, code: `MUT-${m.code}` })),
+    };
+    const afterCodes = await exportBytes(codesMutated);
+    expect(Buffer.from(afterCodes).equals(Buffer.from(original))).toBe(true);
+
+    // Round B — display names + declared module dims mutated: identity fields
+    // stay identical (bytes may differ only in display description cells).
+    const namesMutated: Catalog = {
+      ...base.catalog,
+      materials: base.catalog.materials.map((m) => ({ ...m, name: `Mutado ${m.name}` })),
+      modules: base.catalog.modules.map((m) => ({
+        ...m,
+        name: `Mutado ${m.name}`,
+        externalDims: { width: 999, height: 999, depth: 999 },
+      })),
+    };
+    const afterNames = await exportBytes(namesMutated);
+    const identityOf = (bytes: Uint8Array) => {
+      const parsed = parsePtxDocumentBytes(bytes);
+      const partsReq = parsed.records.filter(
+        (record): record is PtxPartsReqRecord => record.type === 'PARTS_REQ',
+      );
+      const partsInf = parsed.records.filter(
+        (record): record is PtxPartsInfRecord => record.type === 'PARTS_INF',
+      );
+      const materials = parsed.records.filter(
+        (record): record is PtxMaterialRecord => record.type === 'MATERIALS',
+      );
+      return {
+        codes: partsReq.map((row) => row.code).sort(),
+        materials: materials.map((row) => row.code).sort(),
+        inf: partsInf.map((row) => JSON.stringify([
+          row.partIndex, row.coreMaterial, row.product, row.productInfo,
+          row.productWidth, row.productHeight, row.productDepth, row.productNumber,
+          row.edge1, row.edge2, row.edge3, row.edge4, row.barcode2, row.drawing,
+        ])).sort(),
+      };
+    };
+    expect(identityOf(afterNames)).toEqual(identityOf(original));
+    // The frozen module identity survived: PRODUCT/PROD dims come from the
+    // snapshot, not the mutated catalog.
+    const parsedNames = parsePtxDocumentBytes(afterNames);
+    const infNames = parsedNames.records.filter(
+      (record): record is PtxPartsInfRecord => record.type === 'PARTS_INF',
+    );
+    expect(infNames.length).toBeGreaterThan(0);
+    expect(infNames.every((row) => row.product === 'MOD-793')).toBe(true);
+    expect(infNames.every((row) => row.productWidth === '600')).toBe(true);
+    expect(infNames.every((row) => row.productHeight === '1600')).toBe(true);
   });
 
   it('scope CNC vacío con autoridad BLOQUEA en el mapeo (nunca un D<>) degenerado', async () => {

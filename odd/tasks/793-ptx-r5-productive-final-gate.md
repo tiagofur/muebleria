@@ -3,7 +3,7 @@
 Issue: #793 — [P0][PTX-CAD4][R5-F] Integrar profile r5, nueva identidad industrial y gate final antes de campo
 Base: origin/main @ fbe8227d6f5ed166b9ddc0625ada15e9a8469232 (merge PR #804 / #792)
 Branch: feat/793-ptx-r5-productive-gate
-Status: implemented pending PR/CI
+Status: implemented pending PR/CI (review round B applied: CHANGES REQUESTED hardening — frozen industrial identity server-authored, readiness over the labeled job, adapter stale assertions; local organization gate 17/17 PASS)
 
 ## Scope
 
@@ -17,6 +17,14 @@ Status: implemented pending PR/CI
 - Browser: machine-output-selection (r5 pin + candidate copy + fail-closed export without authority) and engineering-cutting-demand (release flow exports r5 bytes with PARTS_INF/UDI, manifest provenance, independent readback) — require the org gate (isolated DATABASE_URL).
 - ONE final-review field pack via env-gated generator (r5ReviewFieldPack.generate.test.ts, skips in CI) into ignored artifacts-local/ptx-r5-final-review/ (GC238DCD30E18.ptx, sha 6e40939c…, 2284 bytes; JOBS 1/PARTS 7/PARTS_INF 7/PARTS_UDI 7/BOARDS 3/MATERIALS 2/OFFCUTS 1/PATTERNS 3/CUTS 15; NOT_TESTED/notClaimed). No send, no private data.
 - Docs 13_final_r5_candidate_gate.md + pointers README/07/12 + .gitignore artifacts-local.
+
+## Review round B (CHANGES REQUESTED) — applied
+
+- B1 frozen identity: snapshot freezes module/material/edge industrial codes (+ module name/effective dims) at liberation (Go engine/domain/storage/api + openapi + generated clients + web mapDemand). Projection takes identity EXCLUSIVELY from the frozen fields (no catalog parameter; older snapshots BLOCK with actionable cause); rows/optimizer prefer frozen codes (legacy #739 fallback preserved); regression: live-catalog code mutations produce byte-identical PTX (names/dims affect display cells only).
+- B2 readiness: evaluateSelectedCuttingOutputReadiness accepts {manufacturingLabels, partLabels}; ShellView precomputes the mapping (async digests, demand-reference-stable memo); panel/AppContent resolver runs the SAME labeled-job gate that serializes — browser proves enabled button + r5 bytes on the real release flow AND the negative synthetic case.
+- B3 stale adapter: 1.4.0 current assertions; historical 1.3.0 persisted tuple keeps its fail-closed stale proof (excel suite).
+- Field pack regenerated: PTX sha256 UNCHANGED (6e40939c…, 2284 bytes) — frozen codes equal the fixture catalog values, so no governed behavior changed; profile/adapter digests preserved.
+- Local org gate (3 specs): 17/17 PASS.
 
 ## Exclusions
 

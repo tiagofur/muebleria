@@ -55,6 +55,17 @@ export interface ReleaseCuttingDemandUnitView {
    * codes, so this flow never orders occurrences by lexical instance id.
    */
   readonly workshopOccurrenceOrdinal: number;
+  /**
+   * #793 — module industrial identity frozen in the release snapshot at
+   * liberation time. Absent on older snapshots and NEVER re-derived from the
+   * live catalog: consumers that need frozen identity (the r5 PTX label
+   * route) fail closed instead.
+   */
+  readonly frozenModuleCode?: string | null;
+  readonly frozenModuleName?: string | null;
+  readonly frozenModuleWidthMm?: number | null;
+  readonly frozenModuleHeightMm?: number | null;
+  readonly frozenModuleDepthMm?: number | null;
   readonly pieces: readonly ReleaseCuttingDemandPieceView[];
 }
 
@@ -74,12 +85,23 @@ export interface ReleaseCuttingDemandPieceView {
   readonly w1: 0 | 1;
   readonly w2: 0 | 1;
   readonly optionRole?: string | null;
+  /** #793 — industrial material code frozen in the snapshot (absent on older rows). */
+  readonly frozenMaterialCode?: string | null;
+  /** #793 — industrial edge-band code frozen in the snapshot (absent on older/unbanded rows). */
+  readonly frozenEdgeBandCode?: string | null;
 }
 
 /** One frozen demand piece already resolved against the catalog engineering inputs. */
 export interface ReleaseDemandRowContext {
   readonly unit: ReleaseCuttingDemandUnitView;
   readonly piece: ReleaseCuttingDemandPieceView;
+  /**
+   * Module code for the workshop-code walk. #793: the SNAPSHOT-frozen module
+   * code when the release carries it (industrial identity never re-read from
+   * the live catalog); the legacy catalog/definition fallback keeps the
+   * historical #739 rows flow working for older snapshots — the r5 label
+   * projection refuses those instead of using it.
+   */
   readonly moduleCode: string;
   /** Catalog module definition (engineering input): name + external dims when declared. */
   readonly module: { readonly name: string; readonly externalDims?: ExternalDims } | undefined;
@@ -106,7 +128,9 @@ export function* iterateReleaseDemandPieces(
   const moduleCounts = new Map<string, number>();
   for (const unit of units) {
     const module = modulesById.get(unit.furnitureDefinitionId);
-    const moduleCode = module?.code ?? unit.furnitureDefinitionId;
+    // #793: frozen module code wins; the catalog/definition fallback serves
+    // only the legacy #739 rows flow for snapshots that predate the freeze.
+    const moduleCode = unit.frozenModuleCode?.trim() || module?.code || unit.furnitureDefinitionId;
     const seenMod = (moduleCounts.get(moduleCode) ?? 0) + 1;
     moduleCounts.set(moduleCode, seenMod);
     const lineSuffix = seenMod === 1 ? undefined : `L${seenMod}`;
@@ -167,6 +191,11 @@ export function releaseCutRowsFromDemand(
   for (const entry of iterateReleaseDemandPieces(demand, modulesById)) {
     const material = materialsById.get(entry.piece.materialId)!;
     const edge = entry.piece.edgeBandId ? edgesById.get(entry.piece.edgeBandId) : undefined;
+    // #793 — industrial identity prefers the SNAPSHOT-frozen codes; the
+    // catalog values remain the legacy fallback for older snapshots and stay
+    // the authority for display names / engineering geometry below.
+    const materialCode = entry.piece.frozenMaterialCode?.trim() || material.code;
+    const edgeBandCode = entry.piece.frozenEdgeBandCode?.trim() || edge?.code;
     rows.push({
       quantity: entry.piece.quantity,
       lengthMm: entry.piece.lengthMm,
@@ -179,7 +208,7 @@ export function releaseCutRowsFromDemand(
         entry.piece.partCode ?? undefined,
       ),
       materialName: material.name,
-      materialCode: material.code,
+      materialCode,
       grain: entry.piece.grain,
       L1: entry.piece.l1,
       L2: entry.piece.l2,
@@ -190,7 +219,7 @@ export function releaseCutRowsFromDemand(
       moduleCode: entry.moduleCode,
       labelRef: entry.labelRef,
       thicknessMm: entry.piece.thicknessMm,
-      edgeBandCode: edge?.code,
+      edgeBandCode,
       edgeBandName: edge?.name,
       edgeBandThicknessMm: edge?.thicknessMm,
     });
