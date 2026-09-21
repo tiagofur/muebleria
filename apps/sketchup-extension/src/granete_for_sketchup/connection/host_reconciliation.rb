@@ -146,6 +146,11 @@ module Granete
               'workingCopyMatchCount' => working_items.length,
               'localPresence' => local_entries.length == 1,
               'localMatchCount' => local_entries.length,
+              # #810: a locally edited entity still owes the working copy its
+              # authoring fields; the explicit design sync clears the flag
+              # after confirmed readback.
+              'authoringDirty' => local_entries.length == 1 &&
+                local_entries.first[:metadata]['authoringDirty'] == true,
               'reconciliationState' => state,
               'blocking' => !CLEAN_STATES.include?(state),
               'reason' => reason

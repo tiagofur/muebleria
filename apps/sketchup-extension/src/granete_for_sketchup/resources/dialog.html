@@ -1867,6 +1867,19 @@
             <strong>Guardá este archivo SketchUp</strong>
             <p class="subhead" style="margin: var(--space-1) 0 0; font-size: var(--text-xs);">Hay cambios sincronizados con Granete que todavía no se guardaron en este archivo.</p>
           </div>
+          <!-- #810: explicit design synchronization — dirty count, one action,
+               honest states. Success is only claimed after the backend
+               readback, so this card never invents a synchronized state. -->
+          <div id="design-sync-card" class="card" style="display: none; margin-bottom: var(--space-3);" role="status" aria-live="polite" data-testid="design-sync-card">
+            <div class="library-header-row">
+              <div>
+                <div class="card-title">Sincronización del diseño</div>
+                <p id="design-sync-status" class="subhead" style="margin: var(--space-1) 0 0; font-size: var(--text-xs);">Sin cambios pendientes.</p>
+              </div>
+              <span id="design-sync-badge" class="status-badge valid">Sincronizado</span>
+            </div>
+            <button id="btn-design-sync" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Sincronizar diseño</button>
+          </div>
           <div id="commercial-projection-card" class="card" style="display: none; margin-bottom: var(--space-3);" aria-live="polite">
             <div class="library-header-row">
               <div>
@@ -4260,6 +4273,7 @@
           onConfirmPlacementResult: function (result) { handleConfirmPlacementResult(result); },
           onCancelPlacementResult: function (result) { handleCancelPlacementResult(result); },
           onRestoreFurnitureResult: function (result) { handleRestoreFurnitureResult(result); },
+          onSynchronizeDesignResult: function (result) { handleSynchronizeDesignResult(result); },
           onHostSaveAwareness: function (payload) { renderHostSaveAwareness(payload); },
 
           setCatalog: function (payload) {
@@ -6232,6 +6246,11 @@
         var btnPfGoStatus = document.getElementById("btn-pf-go-status");
         var btnPfRetry = document.getElementById("btn-pf-retry");
         var pfSaveAwareness = document.getElementById("pf-save-awareness");
+        var designSyncCard = document.getElementById("design-sync-card");
+        var designSyncStatus = document.getElementById("design-sync-status");
+        var designSyncBadge = document.getElementById("design-sync-badge");
+        var btnDesignSync = document.getElementById("btn-design-sync");
+        var designSyncBusy = false;
 
         var PF_ERROR_COPY = {
           unauthenticated: "Iniciá sesión con tu cuenta del taller en la pestaña Estado.",
@@ -6255,6 +6274,86 @@
         function hidePfStates() {
           [pfUnbound, pfLoading, pfError, pfEmpty].forEach(function (el) { el.style.display = "none"; });
           pfListView.style.display = "none";
+          designSyncCard.style.display = "none";
+        }
+
+        // #810 sync surface. The badge/state map is exhaustive and honest:
+        // pending changes, syncing, synchronized, conflict and error. A
+        // network failure can never render as "Sincronizado".
+        function renderDesignSyncCard(payload) {
+          if (designSyncBusy) return;
+          var dirty = payload.dirty || 0;
+          var lastOutcome = lastDesignSyncOutcome;
+          designSyncCard.style.display = "block";
+          if (lastOutcome && lastOutcome.kind === "conflict") {
+            designSyncBadge.className = "status-badge conflict";
+            designSyncBadge.textContent = "Conflicto";
+            designSyncStatus.textContent = "El diseño cambió en el servidor. " +
+              (dirty > 0 ? dirty + " cambio(s) local(es) esperan una nueva sincronización." : "Sincronizá de nuevo para ver el estado actual.");
+          } else if (lastOutcome && lastOutcome.kind === "error") {
+            designSyncBadge.className = "status-badge invalid";
+            designSyncBadge.textContent = "Error de sincronización";
+            designSyncStatus.textContent = lastOutcome.reason || "No se pudo sincronizar el diseño.";
+          } else if (dirty > 0) {
+            designSyncBadge.className = "status-badge pending";
+            designSyncBadge.textContent = "Pendiente";
+            designSyncStatus.textContent = dirty + " cambio" + (dirty === 1 ? "" : "s") +
+              " local" + (dirty === 1 ? "" : "es") + " pendiente" + (dirty === 1 ? "" : "s") +
+              " de sincronizar. El total del diseño todavía no los incluye.";
+            btnDesignSync.disabled = false;
+            btnDesignSync.textContent = "Sincronizar diseño";
+            return;
+          } else {
+            designSyncBadge.className = "status-badge valid";
+            designSyncBadge.textContent = "Sincronizado";
+            designSyncStatus.textContent = "El diseño coincide con Granete.";
+          }
+          btnDesignSync.disabled = dirty === 0;
+          btnDesignSync.textContent = "Sincronizar diseño";
+        }
+
+        var lastDesignSyncOutcome = null;
+
+        function synchronizeDesign() {
+          if (designSyncBusy) return;
+          designSyncBusy = true;
+          designSyncBadge.className = "status-badge pending";
+          designSyncBadge.textContent = "Sincronizando";
+          designSyncStatus.textContent = "Sincronizando…";
+          btnDesignSync.disabled = true;
+          btnDesignSync.textContent = "Sincronizando…";
+          if (window.sketchup && window.sketchup.synchronize_design) {
+            window.sketchup.synchronize_design();
+          } else {
+            designSyncBusy = false;
+            lastDesignSyncOutcome = { kind: "error", reason: "La sincronización está disponible sólo dentro de SketchUp." };
+            btnDesignSync.disabled = false;
+            btnDesignSync.textContent = "Sincronizar diseño";
+            showToast("error", "Sincronización disponible sólo dentro de SketchUp.");
+          }
+        }
+
+        function handleSynchronizeDesignResult(result) {
+          designSyncBusy = false;
+          btnDesignSync.disabled = false;
+          btnDesignSync.textContent = "Sincronizar diseño";
+          result = result || {};
+          if (result.ok) {
+            lastDesignSyncOutcome = null;
+            var changes = result.changes || {};
+            var total = (changes.added || []).length + (changes.updated || []).length + (changes.removed || []).length;
+            showToast("success", total > 0 ? "Diseño sincronizado (" + total + " cambio" + (total === 1 ? "" : "s") + ")." : "El diseño ya estaba sincronizado.");
+            // The confirmed total comes from the backend projection, never
+            // from local math (#810 rule F).
+            if (window.GraneteCommercialProjection) { window.GraneteCommercialProjection.refresh(); }
+            requestProjectFurniture();
+          } else {
+            lastDesignSyncOutcome = { kind: result.code === "conflict" ? "conflict" : "error", reason: result.reason };
+            showToast("error", result.code === "conflict"
+              ? "Conflicto: el diseño cambió en el servidor."
+              : "No se pudo sincronizar el diseño.");
+            requestProjectFurniture();
+          }
         }
 
         var lastPfState = null;
@@ -6279,6 +6378,7 @@
           hidePfStates();
 
           if (payload.state === "connected") {
+            renderDesignSyncCard(payload);
             var items = payload.items || [];
             if (!items.length) {
               pfEmpty.style.display = "block";
@@ -6630,6 +6730,7 @@
         });
         btnPfRetry.addEventListener("click", requestProjectFurniture);
         btnPfGoStatus.addEventListener("click", function () { switchTab("status"); });
+        btnDesignSync.addEventListener("click", synchronizeDesign);
         // No pre-render: the panel loads when the tab first becomes visible
         // (all state cards start hidden in the markup).
 

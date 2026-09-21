@@ -1529,7 +1529,8 @@ class ProjectFurnitureTest < Minitest::Test
     @transport.respond(:get, "/designs/#{DESIGN_ID}/working-copy", 200, body)
     @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200,
                        { 'design_id' => DESIGN_ID, 'project_id' => PROJECT_ID,
-                         'base_revision_id' => REVISION_R1, 'items' => [] })
+                         'base_revision_id' => REVISION_R1,
+                         'updated_at' => '2026-09-03T00:01:00Z', 'items' => [] })
   end
 
   def working_copy_body(items)

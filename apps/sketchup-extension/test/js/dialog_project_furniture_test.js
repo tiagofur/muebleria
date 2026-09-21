@@ -91,6 +91,7 @@ function buildSandbox() {
         cancel_placement_instance: (p) => bridgeCalls.push({ action: 'cancel_placement_instance', payload: JSON.parse(p) }),
         restore_furniture_instance: (p) => bridgeCalls.push({ action: 'restore_furniture_instance', payload: JSON.parse(p) }),
         select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
+        synchronize_design: () => bridgeCalls.push({ action: 'synchronize_design' }),
         enroll: () => {}, logout: () => {}, close_dialog: () => {}
       }
     }
@@ -458,6 +459,102 @@ function runTests() {
 
     assert.equal(sandbox.window.GraneteDialog.getCatalogCreateIntentKey(), null,
                  'created_pending is terminal for catalog intent and must clear the key');
+  });
+
+
+  // ------------------------------------------------------------------
+  // #810 explicit design synchronization surface
+  // ------------------------------------------------------------------
+
+  test('dirty panel shows pending changes and keeps the sync action enabled', (sandbox) => {
+    const payload = connectedPanel();
+    payload.dirty = 2;
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+
+    const card = el(sandbox, 'design-sync-card');
+    assert.ok(visible(card), 'the sync card is part of the connected panel');
+    assert.equal(el(sandbox, 'design-sync-badge').className, 'status-badge pending');
+    assert.ok(el(sandbox, 'design-sync-status').textContent.includes('2 cambios locales pendientes'),
+              'the status copy names the pending change count');
+    assert.ok(el(sandbox, 'design-sync-status').textContent.includes('todavía no los incluye'),
+              'the copy states the total does not include local changes yet');
+    assert.equal(el(sandbox, 'btn-design-sync').disabled, false);
+  });
+
+  test('clean panel reports Sincronizado and disables the action', (sandbox) => {
+    const payload = connectedPanel();
+    payload.dirty = 0;
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+
+    assert.equal(el(sandbox, 'design-sync-badge').className, 'status-badge valid');
+    assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Sincronizado');
+    assert.equal(el(sandbox, 'btn-design-sync').disabled, true);
+  });
+
+  test('clicking Sincronizar diseño invokes the Ruby bridge once and shows Sincronizando', (sandbox) => {
+    const payload = connectedPanel();
+    payload.dirty = 1;
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+
+    el(sandbox, 'btn-design-sync').click();
+    const syncCalls = sandbox.__bridge.filter((c) => c.action === 'synchronize_design');
+    assert.equal(syncCalls.length, 1);
+
+    assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Sincronizando');
+    assert.equal(el(sandbox, 'btn-design-sync').disabled, true);
+
+    // A double click while busy never re-enters the operation.
+    el(sandbox, 'btn-design-sync').click();
+    assert.equal(sandbox.__bridge.filter((c) => c.action === 'synchronize_design').length, 1);
+  });
+
+  test('successful sync result refreshes the panel and the commercial projection', (sandbox) => {
+    const payload = connectedPanel();
+    payload.dirty = 1;
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+    el(sandbox, 'btn-design-sync').click();
+
+    const before = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length;
+    sandbox.window.GraneteDialog.onSynchronizeDesignResult({
+      ok: true, code: 'synchronized', changes: { added: [FI_1], updated: [], removed: [FI_2] }
+    });
+
+    const after = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length;
+    assert.ok(after > before, 'success must refresh the panel from the backend state');
+    assert.equal(el(sandbox, 'btn-design-sync').disabled, false);
+  });
+
+  test('conflict result renders Conflicto and never a synchronized claim', (sandbox) => {
+    const payload = connectedPanel();
+    payload.dirty = 1;
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+    el(sandbox, 'btn-design-sync').click();
+
+    sandbox.window.GraneteDialog.onSynchronizeDesignResult({
+      ok: false, code: 'conflict', reason: 'el diseño cambió en el servidor'
+    });
+
+    // The refreshed panel keeps the conflict visible for as long as the
+    // local changes remain unsynchronized.
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+    assert.equal(el(sandbox, 'design-sync-badge').className, 'status-badge conflict');
+    assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Conflicto');
+  });
+
+  test('network error result renders Error de sincronización without success copy', (sandbox) => {
+    const payload = connectedPanel();
+    payload.dirty = 1;
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+    el(sandbox, 'btn-design-sync').click();
+
+    sandbox.window.GraneteDialog.onSynchronizeDesignResult({
+      ok: false, code: 'unreachable', reason: 'no se pudo contactar al servidor'
+    });
+
+    sandbox.window.GraneteDialog.onProjectFurniture(payload);
+    assert.equal(el(sandbox, 'design-sync-badge').className, 'status-badge invalid');
+    assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Error de sincronización');
+    assert.equal(el(sandbox, 'btn-design-sync').disabled, false);
   });
 
   return tests;

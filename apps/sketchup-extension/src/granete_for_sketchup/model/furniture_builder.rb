@@ -769,7 +769,7 @@ module Granete
             MetadataWriter.write_furniture(
               @metadata_store, furniture, instance_id, definition, parameters,
               material_choices: merged_material_choices, existing_metadata: existing_meta,
-              relationships: relationships
+              relationships: relationships, authoring_dirty: true
             )
             model.commit_operation if transaction
           rescue StandardError => e
@@ -982,9 +982,13 @@ module Granete
         # marks a placement whose instance_id IS the backend
         # furnitureInstanceId; a copied existing_metadata keeps a previously
         # stored server identity through rebuilds with no flag.
+        # authoring_dirty (#810 rule C): true marks a local authoring edit
+        # (parameters/materials) whose fields the working copy has not
+        # confirmed yet; the explicit design sync clears it after readback.
+        # rubocop:disable-next Metrics/ParameterLists
         def write_furniture(store, furniture, instance_id, definition, parameters,
                             material_choices: nil, existing_metadata: nil, migrated_from: nil,
-                            identity: nil, relationships: nil)
+                            identity: nil, relationships: nil, authoring_dirty: false)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -994,6 +998,11 @@ module Granete
           metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref,
                                                             rev_ref, identity: identity)
           metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
+          if authoring_dirty
+            metadata_payload['authoringDirty'] = true
+          else
+            metadata_payload.delete('authoringDirty')
+          end
           metadata_payload['provenance'] = representation_migration(migrated_from) if migrated_from
           apply_relationship_state(metadata_payload, relationships)
           store.write(furniture, metadata_payload)

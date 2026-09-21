@@ -84,7 +84,8 @@ module Granete
           created
         end
 
-        def update_working_copy(design_id, items:, base_revision_id:)
+        def update_working_copy(design_id, items:, expected_working_version:, base_revision_id:)
+          @last_expected_version = expected_working_version
           @working_copy = Connection::ProjectFurniture::Contract::WorkingCopy.new(
             design_id: design_id,
             base_revision_id: base_revision_id,

@@ -11,6 +11,7 @@ require_relative '../../src/granete_for_sketchup/connection/project_furniture_co
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
+require_relative '../../src/granete_for_sketchup/connection/design_sync'
 require_relative '../../src/granete_for_sketchup/host/command_contract'
 require_relative '../../src/granete_for_sketchup/host/position_sync_observer'
 require_relative '../../src/granete_for_sketchup/connection/position_sync_coordinator'
@@ -95,6 +96,8 @@ class PositionSyncCoordinatorTest < Minitest::Test
         body['design_id'] ||= DESIGN_ID
         body['base_revision_id'] ||= REVISION_R1
         body['items'] ||= []
+        # The accepted write mints a NEW canonical workingVersion token.
+        body['updated_at'] ||= '2026-09-03T00:02:00Z'
         @routes[['GET', path]] = { 'status' => 200, 'body' => body }
         return { 'status' => 200, 'body' => body }
       end
@@ -453,6 +456,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
       'design_id' => DESIGN_ID,
       'project_id' => PROJECT_ID,
       'base_revision_id' => REVISION_R1,
+      'updated_at' => '2026-09-03T00:01:00Z',
       'items' => [
         {
           'furniture_instance_id' => FI_1,
@@ -613,6 +617,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
       'design_id' => DESIGN_ID,
       'project_id' => PROJECT_ID,
       'base_revision_id' => REVISION_R1,
+      'updated_at' => '2026-09-03T00:01:00Z',
       'items' => [
         {
           'furniture_instance_id' => FI_1,
@@ -857,6 +862,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
     @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 200,
                        { 'project_id' => PROJECT_ID, 'design_id' => DESIGN_ID,
                          'base_revision_id' => REVISION_R1,
+                         'updated_at' => '2026-09-03T00:01:00Z',
                          'items' => [
                            { 'furniture_instance_id' => FI_1,
                              'parameters' => {}, 'material_choices' => {},
@@ -922,6 +928,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
       'design_id' => DESIGN_ID,
       'project_id' => PROJECT_ID,
       'base_revision_id' => REVISION_R1,
+      'updated_at' => '2026-09-03T00:01:00Z',
       'items' => items
     }
     @transport.respond(:get, "/designs/#{DESIGN_ID}/working-copy", 200, body)

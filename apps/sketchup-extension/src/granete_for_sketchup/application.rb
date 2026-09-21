@@ -124,7 +124,15 @@ module Granete
           # canonical publication scope the gate and publisher manifest.
           publication_scope_provider: method(:publication_scope_items),
           commercial_projection_service: commercial_projection_service,
-          project_bootstrap: commercial_entry[:project_bootstrap], initial_quote: commercial_entry[:initial_quote]
+          project_bootstrap: commercial_entry[:project_bootstrap], initial_quote: commercial_entry[:initial_quote],
+          design_sync_synchronizer: Connection::DesignSync::Synchronizer.new(
+            model_provider: method(:active_model),
+            binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) },
+            model_binding_service: @model_binding_connector.service,
+            service: @project_furniture_placer.service,
+            metadata_store_factory: method(:metadata_store),
+            logger: logger
+          )
         )
         @save_awareness_lifecycle = Host::SaveAwarenessLifecycle.new(
           model_provider: method(:active_model), state: @save_awareness, logger: logger,
