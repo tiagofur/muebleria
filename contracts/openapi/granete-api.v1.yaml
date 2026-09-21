@@ -8558,6 +8558,44 @@
             "minimum": 1,
             "description": "#781 — frozen manufacturing occurrence ordinal: the 1-based position of this unit in the release's frozen unit order (decided when the work was liberated, never recomputed). The shared authority behind workshop codes (`MOD-X[-Ln]-Pnn`): both the project/BOM flow and this release flow order occurrences by it, so the same physical unit keeps the same code from preview to PTX/CNC regardless of array or lexical id order."
           },
+          "module_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#793 — module industrial code frozen in the release snapshot at liberation time. Null on older snapshots (never re-derived from the live catalog): consumers that need frozen identity fail closed."
+          },
+          "module_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#793 — frozen module display name; null when not frozen."
+          },
+          "module_width_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "#793 — frozen effective module width (mm); null when not frozen."
+          },
+          "module_height_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "#793 — frozen effective module height (mm); null when not frozen."
+          },
+          "module_depth_mm": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "#793 — frozen effective module depth (mm); null when not frozen."
+          },
           "pieces": {
             "type": "array",
             "items": {
@@ -8618,6 +8656,20 @@
           "material_id": {
             "type": "string",
             "description": "Frozen material identity; the current catalog only supplies display labels and stock formats."
+          },
+          "material_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#793 — industrial material code frozen in the release snapshot. Null on older snapshots: never re-derived from the live catalog (r5 fails closed)."
+          },
+          "edge_band_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "#793 — industrial edge-band code frozen in the release snapshot. Null on older snapshots or unbanded pieces."
           },
           "edge_band_id": {
             "type": [

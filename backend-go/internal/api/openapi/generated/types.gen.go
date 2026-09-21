@@ -1105,25 +1105,32 @@ type ReleaseCuttingDemandUnit struct {
 	FurnitureInstanceID       string                      `json:"furniture_instance_id"`
 	FurnitureDefinitionID     string                      `json:"furniture_definition_id"`
 	WorkshopOccurrenceOrdinal int64                       `json:"workshop_occurrence_ordinal"`
+	ModuleCode                *string                     `json:"module_code,omitempty"`
+	ModuleName                *string                     `json:"module_name,omitempty"`
+	ModuleWidthMm             *int64                      `json:"module_width_mm,omitempty"`
+	ModuleHeightMm            *int64                      `json:"module_height_mm,omitempty"`
+	ModuleDepthMm             *int64                      `json:"module_depth_mm,omitempty"`
 	Pieces                    []ReleaseCuttingDemandPiece `json:"pieces"`
 }
 
 type ReleaseCuttingDemandPiece struct {
-	PartID      string  `json:"part_id"`
-	PartCode    *string `json:"part_code,omitempty"`
-	Description string  `json:"description"`
-	Quantity    int64   `json:"quantity"`
-	LengthMm    int64   `json:"length_mm"`
-	WidthMm     int64   `json:"width_mm"`
-	ThicknessMm int64   `json:"thickness_mm"`
-	MaterialID  string  `json:"material_id"`
-	EdgeBandID  *string `json:"edge_band_id,omitempty"`
-	Grain       int64   `json:"grain"`
-	L1          int64   `json:"l1"`
-	L2          int64   `json:"l2"`
-	W1          int64   `json:"w1"`
-	W2          int64   `json:"w2"`
-	OptionRole  *string `json:"option_role,omitempty"`
+	PartID       string  `json:"part_id"`
+	PartCode     *string `json:"part_code,omitempty"`
+	Description  string  `json:"description"`
+	Quantity     int64   `json:"quantity"`
+	LengthMm     int64   `json:"length_mm"`
+	WidthMm      int64   `json:"width_mm"`
+	ThicknessMm  int64   `json:"thickness_mm"`
+	MaterialID   string  `json:"material_id"`
+	MaterialCode *string `json:"material_code,omitempty"`
+	EdgeBandCode *string `json:"edge_band_code,omitempty"`
+	EdgeBandID   *string `json:"edge_band_id,omitempty"`
+	Grain        int64   `json:"grain"`
+	L1           int64   `json:"l1"`
+	L2           int64   `json:"l2"`
+	W1           int64   `json:"w1"`
+	W2           int64   `json:"w2"`
+	OptionRole   *string `json:"option_role,omitempty"`
 }
 
 type PublishDesignRevisionItem struct {

@@ -39,6 +39,12 @@ export function engineeringCuttingDemandQueryKey(
 
 const flag = (n: number): 0 | 1 => (n ? 1 : 0);
 
+const nullableText = (value: string | null | undefined): string | null | undefined =>
+  value === undefined ? undefined : value ?? null;
+
+const nullableInt = (value: number | null | undefined): number | null | undefined =>
+  value === undefined ? undefined : value ?? null;
+
 function mapPiece(raw: GeneratedReleaseCuttingDemand['units'][number]['pieces'][number]): ReleaseCuttingDemandPieceView {
   return {
     partId: raw.part_id,
@@ -49,6 +55,9 @@ function mapPiece(raw: GeneratedReleaseCuttingDemand['units'][number]['pieces'][
     widthMm: raw.width_mm,
     thicknessMm: raw.thickness_mm,
     materialId: raw.material_id,
+    // #793 — snapshot-frozen industrial codes; null on older snapshots.
+    frozenMaterialCode: nullableText(raw.material_code),
+    frozenEdgeBandCode: nullableText(raw.edge_band_code),
     edgeBandId: raw.edge_band_id ?? null,
     grain: flag(raw.grain),
     l1: flag(raw.l1),
@@ -64,6 +73,11 @@ function mapDemand(raw: GeneratedReleaseCuttingDemand): ReleaseCuttingDemandView
     furnitureInstanceId: unit.furniture_instance_id,
     furnitureDefinitionId: unit.furniture_definition_id,
     workshopOccurrenceOrdinal: unit.workshop_occurrence_ordinal,
+    frozenModuleCode: nullableText(unit.module_code),
+    frozenModuleName: nullableText(unit.module_name),
+    frozenModuleWidthMm: nullableInt(unit.module_width_mm),
+    frozenModuleHeightMm: nullableInt(unit.module_height_mm),
+    frozenModuleDepthMm: nullableInt(unit.module_depth_mm),
     pieces: unit.pieces.map(mapPiece),
   }));
   return {

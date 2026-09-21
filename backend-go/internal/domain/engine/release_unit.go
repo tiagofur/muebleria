@@ -15,6 +15,15 @@ type ResolvedReleaseUnit struct {
 	FurnitureDefinitionID string
 	EvaluatedParameters   map[string]any
 	BOM                   domain.ResolvedBom
+	// #793 — module industrial identity frozen at resolve time (same catalog
+	// read as the BOM): the r5 PTX label route serializes THESE, never a
+	// live re-read. Zero/empty values (older snapshots) mean the identity was
+	// not frozen — consumers fail closed instead of substituting the catalog.
+	ModuleCode     string
+	ModuleName     string
+	ModuleWidthMm  int
+	ModuleHeightMm int
+	ModuleDepthMm  int
 }
 
 // ResolveReleaseUnit resolves one unversioned revision item from an already
@@ -112,8 +121,18 @@ func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, 
 	if err := validateReleaseUnitChoices(prepared, item.MaterialChoices, catalog, bom); err != nil {
 		return nil, err
 	}
+	// #793 — freeze the module's industrial identity with the same catalog
+	// read that resolved the BOM. Effective dims: the item's explicit
+	// dimensions when the unit is parametric, else the definition's declared
+	// dims (0 = not declared → empty optional cells downstream).
+	widthMm, heightMm, depthMm := module.WidthMm, module.HeightMm, module.DepthMm
+	if dims != nil {
+		widthMm, heightMm, depthMm = dims.WidthMm, dims.HeightMm, dims.DepthMm
+	}
 	return &ResolvedReleaseUnit{FurnitureInstanceID: item.FurnitureInstanceID,
-		FurnitureDefinitionID: module.ID, EvaluatedParameters: values, BOM: bom}, nil
+		FurnitureDefinitionID: module.ID, EvaluatedParameters: values, BOM: bom,
+		ModuleCode: module.Code, ModuleName: module.Name,
+		ModuleWidthMm: widthMm, ModuleHeightMm: heightMm, ModuleDepthMm: depthMm}, nil
 }
 
 func releaseUnitSafeInteger(value float64) bool {
