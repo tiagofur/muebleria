@@ -182,6 +182,7 @@ describe('#477 shared authoring resolve contract fixture', () => {
       '10-unicode-quarter-step',
       '11-material-pbr-roundtrip',
       '12-cost-only-manual-hardware',
+      '19-manual-handle-rotation-deg',
       'neg-query-parameter',
       'neg-adhoc-body-parameter',
       'neg-duplicate-occurrence-id',
@@ -241,6 +242,30 @@ describe('#477 shared authoring resolve contract fixture', () => {
       expect.objectContaining({ placementId: 'hp-cost-only-01' }),
     );
     expect(costOnlyResponse.resolved.machining.manufacturingFingerprint).toMatch(/^sha256-[0-9a-f]{64}$/u);
+  });
+
+  test('shared fixture proves manual rotationDeg survives request, snapshot, and layout basis', () => {
+    const scenario = fixture.scenarios.find((entry) => entry.id === '19-manual-handle-rotation-deg')!;
+    const parsed = parseAuthoringResolveResponse(scenario.response, scenario.request);
+    expect(parsed.status).toBe('accepted');
+    if (parsed.status !== 'accepted') throw new Error('rotationDeg scenario must be accepted');
+
+    const requestPlacement = scenario.request.furniture.hardwarePlacements?.[0];
+    expect(requestPlacement).toMatchObject({
+      hardwarePlacementId: 'hp-handle-rotated-01',
+      rotationDeg: { x: 5, y: 10, z: 90 },
+    });
+
+    const snapshotPlacement = parsed.normalizedSnapshot.hardwarePlacements.find(
+      (placement) => placement.hardwarePlacementId === 'hp-handle-rotated-01',
+    );
+    expect(snapshotPlacement?.rotationDeg).toEqual({ x: 5, y: 10, z: 90 });
+
+    const hardware = parsed.resolved.layout.hardware.find(
+      (placement) => placement.placementId === 'hp-handle-rotated-01',
+    ) as { readonly localTransform?: { readonly basis?: Record<string, readonly number[]> } } | undefined;
+    expect(hardware?.localTransform?.basis).toBeDefined();
+    expect(hardware!.localTransform!.basis).not.toEqual({ x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] });
   });
 
   test('every response echoes the capability marker before any host mutation', () => {

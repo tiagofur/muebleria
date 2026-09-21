@@ -221,6 +221,21 @@
           ],
           "minItems": 2,
           "maxItems": 2
+        },
+        "rotationDeg": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "z": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [

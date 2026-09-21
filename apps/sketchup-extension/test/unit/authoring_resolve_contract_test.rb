@@ -124,6 +124,21 @@ class AuthoringResolveContractTest < Minitest::Test
     assert_match(/\Asha256-[0-9a-f]{64}\z/, cost_only.manufacturing_fingerprint)
   end
 
+  def test_golden_fixture_carries_manual_rotation_deg_to_snapshot_and_layout
+    result = accepted_scenario('19-manual-handle-rotation-deg')
+
+    placement = result.normalized_snapshot['hardwarePlacements'].find do |entry|
+      entry['hardwarePlacementId'] == 'hp-handle-rotated-01'
+    end
+    refute_nil placement
+    assert_equal({ 'x' => 5, 'y' => 10, 'z' => 90 }, placement['rotationDeg'])
+
+    hardware = result.layout.hardware.find { |entry| entry.placement_id == 'hp-handle-rotated-01' }
+    refute_nil hardware
+    refute_nil hardware.basis
+    refute_equal({ 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }, hardware.basis)
+  end
+
   def test_rejected_resolve_carries_structured_codes_not_messages
     result = parse_response(
       scenario('07-orphan-anchor-rejection')['response']
@@ -290,10 +305,42 @@ class AuthoringResolveContractTest < Minitest::Test
     end
   end
 
-  def test_snapshot_echo_with_removed_v1_fields_fails_closed
+  def test_snapshot_echo_with_drifted_v1_field_fails_closed
     snapshot = scenario('01-params-materials-parity')['response']['normalizedSnapshot']
                .merge('hardwarePlacements' => [
-                        snapshot_placement.merge('rotationDeg' => 0)
+                        snapshot_placement.merge('handedness' => 'left')
+                      ])
+    body = scenario('01-params-materials-parity')['response'].merge('normalizedSnapshot' => snapshot)
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body)
+    end
+  end
+
+  def test_snapshot_echo_with_scalar_rotation_deg_fails_closed
+    snapshot = scenario('01-params-materials-parity')['response']['normalizedSnapshot']
+               .merge('hardwarePlacements' => [
+                        snapshot_placement.merge('rotationDeg' => 90)
+                      ])
+    body = scenario('01-params-materials-parity')['response'].merge('normalizedSnapshot' => snapshot)
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body)
+    end
+  end
+
+  def test_snapshot_echo_accepts_per_axis_rotation_deg
+    body = deep_copy(scenario('01-params-materials-parity')['response'])
+    body['normalizedSnapshot']['hardwarePlacements'][0]['rotationDeg'] = { 'y' => 90 }
+
+    result = parse_response(body)
+
+    assert result.accepted?
+    assert_equal({ 'y' => 90 }, result.normalized_snapshot['hardwarePlacements'][0]['rotationDeg'])
+  end
+
+  def test_snapshot_echo_with_non_finite_rotation_deg_fails_closed
+    snapshot = scenario('01-params-materials-parity')['response']['normalizedSnapshot']
+               .merge('hardwarePlacements' => [
+                        snapshot_placement.merge('rotationDeg' => { 'y' => Float::NAN })
                       ])
     body = scenario('01-params-materials-parity')['response'].merge('normalizedSnapshot' => snapshot)
     assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do

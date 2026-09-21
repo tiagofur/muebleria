@@ -152,28 +152,28 @@ type LayoutComponent struct {
 // joints once that machinery is projected into layouts. Clients must fail
 // closed on unknown values instead of treating them as derived.
 type LayoutHardware struct {
-	PlacementID             string               `json:"placementId"`
-	HardwareID              string               `json:"hardwareId"`
-	Name                    string               `json:"name"`
-	Shape                   string               `json:"shape"`
-	SizeMm                  float64              `json:"sizeMm,omitempty"`
-	DiameterMm              float64              `json:"diameterMm,omitempty"`
-	ProjectionMm            float64              `json:"projectionMm"`
-	ColorHex                string               `json:"colorHex,omitempty"`
-	HostComponentInstanceID string               `json:"hostComponentInstanceId"`
-	AnchorFace              string               `json:"anchorFace"`
-	PlacementKind           string               `json:"placementKind"`
-	Transform               LayoutTransform      `json:"transform"`
-	DimensionsMm            [3]float64           `json:"dimensionsMm"`
-	LocalTransform          LayoutLocalTransform `json:"localTransform"`
-	AssetID                 string               `json:"assetId,omitempty"`
-	AssetRevisionID         string               `json:"assetRevisionId,omitempty"`
-	SHA256                  string               `json:"sha256,omitempty"`
-	ExpectedBytes           int64                `json:"expectedBytes,omitempty"`
-	Representation          string                      `json:"representation,omitempty"`
-	ValidationState         string                      `json:"validationState,omitempty"`
-	PreparationState        string                      `json:"preparationState,omitempty"`
-	MountFrame              *domain.HardwareMountFrame  `json:"mountFrame,omitempty"`
+	PlacementID             string                     `json:"placementId"`
+	HardwareID              string                     `json:"hardwareId"`
+	Name                    string                     `json:"name"`
+	Shape                   string                     `json:"shape"`
+	SizeMm                  float64                    `json:"sizeMm,omitempty"`
+	DiameterMm              float64                    `json:"diameterMm,omitempty"`
+	ProjectionMm            float64                    `json:"projectionMm"`
+	ColorHex                string                     `json:"colorHex,omitempty"`
+	HostComponentInstanceID string                     `json:"hostComponentInstanceId"`
+	AnchorFace              string                     `json:"anchorFace"`
+	PlacementKind           string                     `json:"placementKind"`
+	Transform               LayoutTransform            `json:"transform"`
+	DimensionsMm            [3]float64                 `json:"dimensionsMm"`
+	LocalTransform          LayoutLocalTransform       `json:"localTransform"`
+	AssetID                 string                     `json:"assetId,omitempty"`
+	AssetRevisionID         string                     `json:"assetRevisionId,omitempty"`
+	SHA256                  string                     `json:"sha256,omitempty"`
+	ExpectedBytes           int64                      `json:"expectedBytes,omitempty"`
+	Representation          string                     `json:"representation,omitempty"`
+	ValidationState         string                     `json:"validationState,omitempty"`
+	PreparationState        string                     `json:"preparationState,omitempty"`
+	MountFrame              *domain.HardwareMountFrame `json:"mountFrame,omitempty"`
 }
 
 const (
@@ -376,6 +376,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				HardwareID:       intent.CatalogHardwareID,
 				AnchorFace:       intent.AnchorFace,
 				RelativePosition: domain.HardwareRelPosition{XMm: intent.OffsetMm[0], YMm: intent.OffsetMm[1]},
+				RotationDeg:      intent.RotationDeg,
 			}
 			resolved, ok := resolveHardwareToWorld(host, hp, catalog, intent.HardwarePlacementID)
 			if !ok {
@@ -1241,7 +1242,6 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		group[1] + renderOffset[1],
 		group[2] + renderOffset[2],
 	}
-	normalRender := mulMatVec3(m, normal)
 
 	// Box in-plane extents by shape (knob: square; pulls: bar along size).
 	extentU := size
@@ -1251,14 +1251,33 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		extentV = diameter
 	}
 
-	// In-plane basis in the render frame: two vectors orthogonal to the normal.
-	u := orthogonalVector(normalRender)
-	v := cross3(normalRender, u)
+	// Mounted interface frame with Web parity (F6, #668): the web renderer
+	// (HardwareMesh.tsx) mounts each placement as R_euler(rotationDeg) ·
+	// Q_normal where Q_normal is the shortest arc +Y→face normal, both in the
+	// board-local frame; the canonical hardware space (mount_frame.rb) is
+	// +X longitudinal, +Z outward normal. So the longitudinal axis is R·Q·+X
+	// (the bar-pull grip) and the outward mount normal is R·Q·+Y.
+	var rotXDeg, rotYDeg, rotZDeg float64
+	if hp.RotationDeg != nil {
+		rotXDeg, rotYDeg, rotZDeg = hp.RotationDeg.X, hp.RotationDeg.Y, hp.RotationDeg.Z
+	}
+	mountLocal := mulMat3(eulerXyzMatrix(rotXDeg, rotYDeg, rotZDeg), rotateYToNormalMatrix(normal))
+	longRender := mulMatVec3(m, columnVec3(mountLocal, 0))
+	outRender := mulMatVec3(m, columnVec3(mountLocal, 1))
+
+	// Complete mounted rigid frame in render space. HardwareMesh applies the
+	// authored Euler before the +Y→normal quaternion, so the preview/proxy box
+	// must use the same rotated longitudinal, in-plane and outward axes. The
+	// face point itself remains the mount point; only the standoff/projection
+	// volume follows the rotated outward axis, matching the Web child group.
+	u := longRender
+	outAxisRender := outRender
+	v := cross3(outAxisRender, u)
 
 	centerRender := [3]float64{
-		faceRender[0] + normalRender[0]*projection/2,
-		faceRender[1] + normalRender[1]*projection/2,
-		faceRender[2] + normalRender[2]*projection/2,
+		faceRender[0] + outAxisRender[0]*projection/2,
+		faceRender[1] + outAxisRender[1]*projection/2,
+		faceRender[2] + outAxisRender[2]*projection/2,
 	}
 
 	// AABB of the oriented box (8 corners in render space) → workshop.
@@ -1269,9 +1288,9 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		for _, sv := range [2]float64{-hv, hv} {
 			for _, sn := range [2]float64{-hn, hn} {
 				p := [3]float64{
-					centerRender[0] + u[0]*su + v[0]*sv + normalRender[0]*sn,
-					centerRender[1] + u[1]*su + v[1]*sv + normalRender[1]*sn,
-					centerRender[2] + u[2]*su + v[2]*sv + normalRender[2]*sn,
+					centerRender[0] + u[0]*su + v[0]*sv + outAxisRender[0]*sn,
+					centerRender[1] + u[1]*su + v[1]*sv + outAxisRender[1]*sn,
+					centerRender[2] + u[2]*su + v[2]*sv + outAxisRender[2]*sn,
 				}
 				for k := 0; k < 3; k++ {
 					if p[k] < minR[k] {
@@ -1301,13 +1320,16 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 
 	// Authoritative hardware mounting frame in furniture space:
 	faceFurniture := [3]float64{snapMm(faceRender[0]), snapMm(faceRender[2]), snapMm(faceRender[1])}
-	normFurn := snapUnitVec3([3]float64{normalRender[0], normalRender[2], normalRender[1]})
-	uFurn := snapUnitVec3([3]float64{u[0], u[2], u[1]})
-	vFurn := snapUnitVec3(cross3(normFurn, uFurn))
+	// Workshop axes of the mounted interface: X longitudinal (grip), Z the
+	// outward mount normal (rotated with the placement), Y = Z×X keeps the
+	// basis right-handed (det +1) in the furniture frame.
+	longFurn := snapUnitVec3([3]float64{longRender[0], longRender[2], longRender[1]})
+	outFurn := snapUnitVec3([3]float64{outRender[0], outRender[2], outRender[1]})
+	inPlaneFurn := snapUnitVec3(cross3(outFurn, longFurn))
 	hwBasis := LayoutBasis{
-		X: uFurn,
-		Y: vFurn,
-		Z: normFurn,
+		X: longFurn,
+		Y: inPlaneFurn,
+		Z: outFurn,
 	}
 	hwLocalTransform := LayoutLocalTransform{
 		TranslationMm: faceFurniture,
@@ -1381,12 +1403,40 @@ func boardAABBRender(board *layoutBoard) (min [3]float64, size [3]float64) {
 	return min, [3]float64{max[0] - min[0], max[1] - min[1], max[2] - min[2]}
 }
 
-func orthogonalVector(n [3]float64) [3]float64 {
-	ref := [3]float64{0, 0, 1}
-	if math.Abs(n[2]) > 0.9 {
-		ref = [3]float64{1, 0, 0}
+// columnVec3 returns the i-th column of a 3x3 row-major matrix.
+func columnVec3(m [9]float64, i int) [3]float64 {
+	return [3]float64{m[i], m[3+i], m[6+i]}
+}
+
+// rotateYToNormalMatrix mirrors TS normalOrientationQuaternion
+// (HardwareMesh.tsx): the shortest-arc rotation taking +Y onto the unit face
+// normal n, as a 3x3 matrix. Identity for +Y; 180° about X for −Y; otherwise
+// the rotation axis is +Y × n = (n.z, 0, −n.x).
+func rotateYToNormalMatrix(n [3]float64) [9]float64 {
+	dot := n[1]
+	if dot >= 1-1e-9 {
+		return [9]float64{1, 0, 0, 0, 1, 0, 0, 0, 1}
 	}
-	return normalize3(cross3(n, ref))
+	if dot <= -1+1e-9 {
+		// 180° about X maps +Y onto −Y.
+		return [9]float64{1, 0, 0, 0, -1, 0, 0, 0, -1}
+	}
+	ax, ay, az := n[2], 0.0, -n[0]
+	axisLen := math.Sqrt(ax*ax + ay*ay + az*az)
+	if axisLen < 1e-9 {
+		return [9]float64{1, 0, 0, 0, 1, 0, 0, 0, 1}
+	}
+	sinHalf := math.Sqrt((1 - dot) / 2)
+	cosHalf := math.Sqrt((1 + dot) / 2)
+	x := (ax / axisLen) * sinHalf
+	y := (ay / axisLen) * sinHalf
+	z := (az / axisLen) * sinHalf
+	w := cosHalf
+	return [9]float64{
+		1 - 2*(y*y+z*z), 2 * (x*y - w*z), 2 * (x*z + w*y),
+		2 * (x*y + w*z), 1 - 2*(x*x+z*z), 2 * (y*z - w*x),
+		2 * (x*z - w*y), 2 * (y*z + w*x), 1 - 2*(x*x+y*y),
+	}
 }
 
 func cross3(a, b [3]float64) [3]float64 {

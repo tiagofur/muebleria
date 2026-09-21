@@ -326,12 +326,13 @@ type authoringTransformWire struct {
 }
 
 type authoringPlacementWire struct {
-	HardwarePlacementID     string    `json:"hardwarePlacementId"`
-	PlacementKind           string    `json:"placementKind,omitempty"`
-	CatalogHardwareID       string    `json:"catalogHardwareId"`
-	HostComponentInstanceID string    `json:"hostComponentInstanceId"`
-	AnchorFace              string    `json:"anchorFace"`
-	OffsetMm                []float64 `json:"offsetMm"`
+	HardwarePlacementID     string     `json:"hardwarePlacementId"`
+	PlacementKind           string     `json:"placementKind,omitempty"`
+	CatalogHardwareID       string     `json:"catalogHardwareId"`
+	HostComponentInstanceID string     `json:"hostComponentInstanceId"`
+	AnchorFace              string     `json:"anchorFace"`
+	OffsetMm                []float64  `json:"offsetMm"`
+	RotationDeg             *domain.HardwareRotationDeg `json:"rotationDeg,omitempty"`
 }
 
 type authoringResolveResponse struct {
@@ -733,6 +734,18 @@ func authoringPlacementsFromWire(wire []authoringPlacementWire) ([]engine.Author
 			})
 			continue
 		}
+		if placement.RotationDeg != nil {
+			r := *placement.RotationDeg
+			if math.IsNaN(r.X) || math.IsInf(r.X, 0) || math.IsNaN(r.Y) || math.IsInf(r.Y, 0) ||
+				math.IsNaN(r.Z) || math.IsInf(r.Z, 0) {
+				issues = append(issues, domain.ContractIssue{
+					Code:     "HARDWARE_PLACEMENT_INVALID",
+					Message:  "rotationDeg must be finite degrees",
+					Severity: domain.IssueSeverityError, Path: path + ".rotationDeg",
+				})
+				continue
+			}
+		}
 		out = append(out, engine.AuthoringManualPlacement{
 			HardwarePlacementID:     placement.HardwarePlacementID,
 			PlacementKind:           placement.PlacementKind,
@@ -740,6 +753,7 @@ func authoringPlacementsFromWire(wire []authoringPlacementWire) ([]engine.Author
 			HostComponentInstanceID: placement.HostComponentInstanceID,
 			AnchorFace:              placement.AnchorFace,
 			OffsetMm:                [2]float64{placement.OffsetMm[0], placement.OffsetMm[1]},
+			RotationDeg:             placement.RotationDeg,
 		})
 	}
 	return out, issues

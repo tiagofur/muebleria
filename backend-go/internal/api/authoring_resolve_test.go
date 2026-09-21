@@ -143,7 +143,7 @@ func authoringAPICabinetFixture() (*domain.Module, domain.Catalog) {
 			{ID: "hw-minifix", Code: "HER-MIN-15", Name: "Minifix 15", Category: "connector", Unit: domain.UnitPiece, Active: true},
 			{ID: "hw-dowel", Code: "HER-TAQ-8X30", Name: "Tarugo 8x30", Category: "connector", Unit: domain.UnitPiece, Active: true},
 			{ID: "hw-incompatible", Code: "CORR-450", Name: "Corredera Telescópica 450", Category: "slide", Unit: domain.UnitPiece, Active: true,
-				PreviewShape: authoringStrPtr("slide"),
+				PreviewShape:    authoringStrPtr("slide"),
 				CompatibleRoles: []string{"lateral_izquierdo", "lateral_derecho", "cajon"}},
 		},
 	}
@@ -454,7 +454,6 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			return run("neg-wrong-length-translation", "", request, http.StatusBadRequest)
 		}(),
 
-
 		// Complete empty manual set: definition placements fully replaced.
 		run("09-empty-manual-placement-set", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Components = defaultOccurrencesJSON()
@@ -556,6 +555,16 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			f.HardwarePlacements = []authoringPlacementWire{
 				{HardwarePlacementID: "hp-hinge-01", CatalogHardwareID: "hw-hinge", HostComponentInstanceID: "side-left-01",
 					AnchorFace: "front", OffsetMm: []float64{50, 500}},
+			}
+		})), http.StatusOK),
+
+		// 19. Manual handle rotationDeg survives the shared contract and is
+		// resolved into the layout localTransform basis consumed by SketchUp.
+		run("19-manual-handle-rotation-deg", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = defaultOccurrencesJSON()
+			f.HardwarePlacements = []authoringPlacementWire{
+				{HardwarePlacementID: "hp-handle-rotated-01", PlacementKind: "manual", CatalogHardwareID: "hw-handle", HostComponentInstanceID: "door-01",
+					AnchorFace: "front", OffsetMm: []float64{120, 360}, RotationDeg: &domain.HardwareRotationDeg{X: 5, Y: 10, Z: 90}},
 			}
 		})), http.StatusOK),
 

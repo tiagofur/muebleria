@@ -208,8 +208,16 @@ func TestResolveFurnitureLayoutHardwarePlacement(t *testing.T) {
 	if min[1]+size[1] > 578+37+0.1 {
 		t.Fatalf("handle projection must not exceed previewProjectionMm, spans %v + %v", min, size)
 	}
-	if min[0] < 2 || min[0]+size[0] > 598+0.1 {
-		t.Fatalf("handle must stay within the door width [2,598], got %v + %v", min, size)
+	// F6 (#668): the preview box follows the Web-parity orientation — the
+	// bar-pull grip runs along the door WIDTH (workshop X), as the Web preview
+	// renders it. The authored anchor (xMm=40) sits inside the door; the 160mm
+	// grip centered on it extends past the door edge exactly as in Web.
+	if size[0] != 160 {
+		t.Fatalf("bar-pull grip must span previewSizeMm along the door width (workshop X), got %v", size)
+	}
+	centerX := min[0] + size[0]/2
+	if centerX < 2 || centerX > 598 {
+		t.Fatalf("handle anchor must sit within the door width [2,598], got center %v (%v + %v)", centerX, min, size)
 	}
 	if min[2] < 2 || min[2]+size[2] > 718+0.1 {
 		t.Fatalf("handle must stay within the door height [2,718], got %v + %v", min, size)

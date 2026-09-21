@@ -67,6 +67,33 @@ describe('sketchupAuthoringResolve.schema.json', () => {
     }
   });
 
+  test('accepts sparse per-axis hardware rotationDeg and rejects unknown axes', () => {
+    const scenarios = record(fixture).scenarios as unknown[];
+    const rotationScenario = record(scenarios.find((value) => {
+      const hardwarePlacements = record(record(record(value).request).furniture).hardwarePlacements;
+      return Array.isArray(hardwarePlacements) && hardwarePlacements.some((placement) =>
+        typeof placement === 'object' && placement !== null && 'rotationDeg' in placement,
+      );
+    }));
+    expect(requestValidator!(rotationScenario.request), ajv.errorsText(requestValidator!.errors)).toBe(true);
+
+    const sparse = structuredClone(rotationScenario.request);
+    const sparseHardwarePlacements = record(record(sparse).furniture).hardwarePlacements;
+    if (!Array.isArray(sparseHardwarePlacements) || sparseHardwarePlacements.length === 0) {
+      throw new Error('fixture must contain hardware placements');
+    }
+    record(sparseHardwarePlacements.find((placement) => 'rotationDeg' in record(placement))).rotationDeg = { z: 90 };
+    expect(requestValidator!(sparse), ajv.errorsText(requestValidator!.errors)).toBe(true);
+
+    const malformed = structuredClone(rotationScenario.request);
+    const hardwarePlacements = record(record(malformed).furniture).hardwarePlacements;
+    if (!Array.isArray(hardwarePlacements) || hardwarePlacements.length === 0) {
+      throw new Error('fixture must contain hardware placements');
+    }
+    record(hardwarePlacements.find((placement) => 'rotationDeg' in record(placement))).rotationDeg = { x: 5, y: 10, w: 90 };
+    expect(requestValidator!(malformed)).toBe(false);
+  });
+
   test('rejects optional occurrence definition IDs, nested parameters, and response union leakage', () => {
     const scenarios = record(fixture).scenarios as unknown[];
     const acceptedScenario = record(scenarios.find((value) => {

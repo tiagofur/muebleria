@@ -79,9 +79,9 @@ type AuthoringRelationship struct {
 }
 
 // AuthoringManualPlacement is the resolve-scoped manual placement intent.
-// v1 carries no rotationDeg/handedness: fields that do not drive resolution
-// are not accepted (an apparent capability is worse than an absent one);
-// #468 adds them together with their resolution semantics.
+// v1 carries the authored rotationDeg (per-axis board-frame Euler, same
+// name/type as domain.HardwarePlacement.RotationDeg) but no handedness:
+// fields without resolution semantics are still not accepted (#668 F6).
 type AuthoringManualPlacement struct {
 	HardwarePlacementID     string     `json:"hardwarePlacementId"`
 	PlacementKind           string     `json:"placementKind,omitempty"`
@@ -89,6 +89,7 @@ type AuthoringManualPlacement struct {
 	HostComponentInstanceID string     `json:"hostComponentInstanceId"`
 	AnchorFace              string     `json:"anchorFace"`
 	OffsetMm                [2]float64 `json:"offsetMm"`
+	RotationDeg             *domain.HardwareRotationDeg `json:"rotationDeg,omitempty"`
 }
 
 // NormalizedAuthoringComponent is the server-normalized occurrence echo.
