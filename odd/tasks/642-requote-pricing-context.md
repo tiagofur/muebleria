@@ -19,7 +19,7 @@ The normal Chrome + SketchUp flow reached accepted Q1 and published R1, then `PO
 
 - No preset inference from dimensions and no mutable `project_items` fallback as historical authority.
 - No PTX, production, stock, tax/discount, UI, or SketchUp feature work.
-- No merge, issue closure, push, PR, or GitHub mutation.
+- No merge or issue closure. Push and one issue-scoped PR are authorized.
 
 ## Authorized scope
 
@@ -42,7 +42,7 @@ Authorized by the P0 recovery request and the user's report that this failure bl
 - Size exception: explicitly authorized by the user for one atomic PR; correction work may take the accumulated branch above 400 authored lines.
 - Final accumulated authored count before the correction commit: 534 lines (+513/-21) from `origin/main`; the authorized exception keeps this one atomic PR.
 - Branch/base: `fix/642-requote-pricing-context` from `origin/main@57ebd1b7ca7407128471d4e4f7b104de50f29c8f`.
-- Commit identity: this work-unit's `fix(quotes): preserve requote pricing context` commit (exact SHA reported at handoff).
+- Commit identities: `a41c78a081789a0fdfb4a64c7bd50ed2b2cb2ce6` and correction `77df345b8905139de5f62e3499347d86c177d6bb`.
 - RDD: clone-local disabled/unmanaged.
 
 ## Tasks
@@ -60,8 +60,8 @@ Authorized by the P0 recovery request and the user's report that this failure bl
 
 ## Progress
 
-T1 and its single bounded correction round are complete locally. Engram mirror is pending because multiple active runtime sessions make project binding ambiguous.
+T1 and its single bounded correction round are complete locally. Fresh independent review approved exact source HEAD `77df345b8905139de5f62e3499347d86c177d6bb`; the subsequent task-artifact-only publication update is structurally read back. Engram mirror is pending because multiple active runtime sessions make project binding ambiguous.
 
 ## Next step
 
-Parent orchestration may inspect the exact correction commit, then decide push/PR under ordinary repository policy.
+Push the authorized branch, open one `Refs #642` / `Delivery: partial` PR with the explicit size exception, then observe exact-head CI. Do not merge or close #642/#398.
