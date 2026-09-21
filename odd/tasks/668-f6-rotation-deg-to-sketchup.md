@@ -55,9 +55,9 @@ merge, no labels de aprobación.
 ## Tasks
 
 - [x] T1 — Confirm root-cause chain (Go/TS/Ruby/wire) and audit the inherited candidate. Route: delegated read-only mapping (4-file rule). The candidate implements the required Go/manual/TS transport; the shared contract fixture still lacks an observed `rotationDeg` case.
-- [ ] T2 — Correct the JSON Schema shape to match the existing Go/TS/Ruby sparse per-axis `rotationDeg` contract. Route: delegated writer correction round 1/1. Independent verification found schema required all axes while runtime validators default absent axes. Preserve unknown-axis rejection and add sparse-axis conformance proof.
-- [ ] T3 — Freeze and verify the scoped candidate. Route: delegated independent verifier (native assessment unavailable; treated high risk). Previous candidate evidence: focused Go/TS/typecheck/diff check pass; Ruby blocked by missing bundled gems; final preflight blocked by unrelated untracked paths; real host NOT_RUN. Re-run only invalidated focused checks after correction.
-- [ ] T4 — Create one Conventional Commit, report F6 in #668, and open one partial PR (`Refs #668` / `Delivery: partial`) without merge. Route: parent publication readback.
+- [x] T2 — Correct the JSON Schema shape to match the existing Go/TS/Ruby sparse per-axis `rotationDeg` contract. Route: delegated writer correction round 1/1. Schema now accepts zero to three known numeric axes and rejects unknown axes; focused schema test passed.
+- [ ] T3 — Verification remains blocked. Independent verifier on `2dd7d8005f20598ce0c85ac249603d20f5aec743`: focused Go API/engine, TS contract/schema/validator (32 tests), `pnpm typecheck`, and diff check PASS. Ruby `bundle exec rake verify` BLOCKED by absent bundled gems; `factory_preflight --require-clean` BLOCKED by unrelated untracked paths; real SketchUp/TestUp NOT_RUN. The impact plan selected broader gates; none are claimed.
+- [x] T4 — Published draft PR #809 (`Refs #668` / `Delivery: partial`, `type:bug`) after pushing the two focused Conventional Commits; posted F6 finding at issue comment `#issuecomment-5755564860`. No merge, no issue closure.
 
 Delivery strategy: single-pr. Forecast: under 400 authored diff lines excluding generated fixture reformatting. TDD mode: unknown (no configured mode found during current resume); use the existing RED regression evidence in the inherited candidate and ordinary focused checks for any remaining regression.
 
@@ -66,5 +66,5 @@ Delivery strategy: single-pr. Forecast: under 400 authored diff lines excluding 
 - Preflight: `factory_preflight.py` → PREFLIGHT_OK_NOT_VERIFIED (main, dirty sólo
   por untracked de tareas previas: PROMPT-codex-781.md, docs/ptx-example/,
   progress/host_smoke_*).
-- Issue #668: open, status:approved, sin assignees, sin PRs abiertos que la
-  referencien; comentario de reconciliación 2026-09-16 documenta F1–F5 y estado.
+- Issue #668: open, status:approved, remains open after draft PR #809; the F6 finding is recorded at `#issuecomment-5755564860`.
+- Candidate commits: `c36384b5a10b4bbb9954d0dd676f81b9acb70c56` and `2dd7d8005f20598ce0c85ac249603d20f5aec743`.
