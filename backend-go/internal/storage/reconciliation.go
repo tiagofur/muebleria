@@ -48,6 +48,10 @@ type CreateQuoteRevisionItemCommand struct {
 	Parameters            map[string]any
 	MaterialChoices       map[string]string
 	LifecycleStatus       string
+	// PricingContext is transient capture provenance stored in the canonical
+	// commercial snapshot, not in quote_revision_items.
+	PricingContext       *domain.QuoteCommercialPricingContext
+	LegacyPricingContext bool
 }
 
 // CreateQuoteRevision persists an immutable historical commercial revision snapshot and its items.

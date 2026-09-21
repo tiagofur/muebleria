@@ -110,17 +110,27 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 	if inputs.Quote.CommercialSnapshot == nil {
 		return nil, domain.ErrQuoteCommercialSnapshotMissing
 	}
-	quoteLineByInstance := make(map[string]string, len(inputs.Quote.CommercialSnapshot.Units))
+	sourceUnitByInstance := make(map[string]domain.QuoteCommercialUnit, len(inputs.Quote.CommercialSnapshot.Units))
 	for _, unit := range inputs.Quote.CommercialSnapshot.Units {
-		quoteLineByInstance[unit.FurnitureInstanceID] = unit.QuoteLineID
+		sourceUnitByInstance[unit.FurnitureInstanceID] = unit
 	}
 	for i, item := range draft.Items {
-		quoteLineID := quoteLineByInstance[item.FurnitureInstanceID]
+		sourceUnit, existedInQuote := sourceUnitByInstance[item.FurnitureInstanceID]
+		quoteLineID := sourceUnit.QuoteLineID
 		if quoteLineID == "" {
 			// A design-only unit has no prior commercial line. Derive a stable,
 			// non-FurnitureInstance UUID once from its immutable identity; later
 			// revisions carry this exact QuoteLineID from the source snapshot.
 			quoteLineID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("granete.quote-line:"+item.FurnitureInstanceID)).String()
+		}
+		materialChoices := make(map[string]string, len(item.MaterialChoices)+len(sourceUnit.Options))
+		if existedInQuote {
+			for _, option := range sourceUnit.Options {
+				materialChoices[option.GroupCode] = option.ChoiceID
+			}
+		}
+		for groupCode, choiceID := range item.MaterialChoices {
+			materialChoices[groupCode] = choiceID
 		}
 		items[i] = CreateQuoteRevisionItemCommand{
 			FurnitureInstanceID:   item.FurnitureInstanceID,
@@ -128,8 +138,10 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			FurnitureDefinitionID: item.FurnitureDefinitionID,
 			DefinitionVersion:     item.DefinitionVersion,
 			Parameters:            item.Parameters,
-			MaterialChoices:       item.MaterialChoices,
+			MaterialChoices:       materialChoices,
 			LifecycleStatus:       item.LifecycleStatus,
+			PricingContext:        domain.CloneQuoteCommercialPricingContext(sourceUnit.PricingContext),
+			LegacyPricingContext:  existedInQuote && sourceUnit.PricingContext == nil,
 		}
 	}
 

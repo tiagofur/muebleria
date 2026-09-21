@@ -111,6 +111,52 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	projectItemByID := make(map[string]domain.ProjectItem, len(projectItems))
+	for _, projectItem := range projectItems {
+		projectItemByID[projectItem.ID] = projectItem
+	}
+	moduleByID := make(map[string]domain.Module, len(catalog.Modules))
+	for _, module := range catalog.Modules {
+		moduleByID[module.ID] = module
+	}
+	knownOptionChoices := make(map[string]map[string]bool, len(catalog.OptionGroups))
+	for _, group := range catalog.OptionGroups {
+		knownOptionChoices[group.Code] = make(map[string]bool, len(group.OptionIDs))
+		for _, choiceID := range group.OptionIDs {
+			knownOptionChoices[group.Code][choiceID] = true
+		}
+	}
+	for groupCode, choiceID := range levelChoices {
+		if !knownOptionChoices[groupCode][choiceID] {
+			delete(levelChoices, groupCode)
+		}
+	}
+	for i := range items {
+		projectItem, ok := projectItemByID[items[i].QuoteLineID]
+		module, moduleOK := moduleByID[items[i].FurnitureDefinitionID]
+		if !ok || !moduleOK {
+			return nil, fmt.Errorf("%w: no se pudo congelar el contexto comercial de la unidad %s", domain.ErrInvalidRevisionSnapshot, items[i].FurnitureInstanceID)
+		}
+		items[i].MaterialChoices = engine.EffectiveOptionChoices(items[i].MaterialChoices, levelChoices)
+		if items[i].PricingContext == nil {
+			items[i].PricingContext = &domain.QuoteCommercialPricingContext{
+				MeasurePresetID: projectItem.MeasurePresetID, BaseMode: projectItem.BaseMode,
+				StructureRevisionPin: projectItem.StructureRevisionPin,
+			}
+		}
+		baseContext, err := engine.ResolveBaseContextForItem(pricingProject, projectItem, &catalog)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
+		}
+		items[i].PricingContext.BaseMode = engine.ResolveBaseModeWithContext(module, baseContext)
+		clearance := engine.ResolveBaseClearanceWithContext(module, baseContext)
+		items[i].PricingContext.BaseClearanceMm = &clearance
+		if baseContext != nil && baseContext.PlinthSides != nil {
+			items[i].PricingContext.PlinthSides = &domain.QuoteCommercialPlinthSides{
+				Left: baseContext.PlinthSides.Left, Right: baseContext.PlinthSides.Right, Back: baseContext.PlinthSides.Back,
+			}
+		}
+	}
 	breakdown, err := engine.CalcProjectBreakdown(pricingProject, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
@@ -146,22 +192,52 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 	if err != nil {
 		return nil, err
 	}
+	catalog, err := s.GetFullCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	moduleByID := make(map[string]domain.Module, len(catalog.Modules))
+	for _, module := range catalog.Modules {
+		moduleByID[module.ID] = module
+	}
 
 	pricingItems := make([]domain.ProjectItem, 0, len(items))
-	for _, item := range items {
+	for i := range items {
+		item := &items[i]
 		if item.LifecycleStatus != "active" || item.FurnitureDefinitionID == "" {
 			continue
+		}
+		if item.PricingContext == nil {
+			module, ok := moduleByID[item.FurnitureDefinitionID]
+			if !ok {
+				return nil, fmt.Errorf("%w: module not found for project item: %s", domain.ErrInvalidRevisionSnapshot, item.FurnitureDefinitionID)
+			}
+			if len(module.Presets) > 0 {
+				if item.LegacyPricingContext {
+					return nil, fmt.Errorf("%w: la revisión base no congeló el preset comercial exacto; creá una revisión comercial nueva con el contrato actual", domain.ErrQuoteCommercialSnapshotMissing)
+				}
+				return nil, fmt.Errorf("%w: la unidad nueva %s no tiene un preset comercial exacto; no se infiere desde sus dimensiones", domain.ErrInvalidRevisionSnapshot, item.FurnitureInstanceID)
+			}
+			clearance := engine.ResolveBaseClearanceWithContext(module, nil)
+			item.PricingContext = &domain.QuoteCommercialPricingContext{
+				BaseMode: engine.ResolveBaseModeWithContext(module, nil), BaseClearanceMm: &clearance,
+			}
 		}
 		choices := item.MaterialChoices
 		if choices == nil {
 			choices = map[string]string{}
 		}
+		pricingContext := domain.CloneQuoteCommercialPricingContext(item.PricingContext)
 		pricingItems = append(pricingItems, domain.ProjectItem{
-			ID:            item.FurnitureInstanceID,
-			ModuleID:      item.FurnitureDefinitionID,
-			Quantity:      1,
-			OptionChoices: choices,
-			CustomDims:    domain.CommercialDimsFromParameters(item.Parameters),
+			ID:                   item.FurnitureInstanceID,
+			ModuleID:             item.FurnitureDefinitionID,
+			Quantity:             1,
+			OptionChoices:        choices,
+			MeasurePresetID:      pricingContext.MeasurePresetID,
+			CustomDims:           domain.CommercialDimsFromParameters(item.Parameters),
+			BaseMode:             pricingContext.BaseMode,
+			StructureRevisionPin: pricingContext.StructureRevisionPin,
+			FrozenPricingContext: pricingContext,
 		})
 	}
 	if len(pricingItems) == 0 {
@@ -179,10 +255,6 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 		Items:          pricingItems,
 	}
 
-	catalog, err := s.GetFullCatalog(ctx)
-	if err != nil {
-		return nil, err
-	}
 	breakdown, err := engine.CalcProjectBreakdown(pricingProject, catalog)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
@@ -335,6 +407,7 @@ func (s *PostgresStore) buildQuoteCommercialUnits(ctx context.Context, items []C
 			QuoteLineID:         item.QuoteLineID,
 			LifecycleStatus:     lifecycle,
 			Options:             []domain.QuoteCommercialOption{},
+			PricingContext:      domain.CloneQuoteCommercialPricingContext(item.PricingContext),
 		}
 		label, ok := moduleLabels[item.FurnitureDefinitionID]
 		if !ok || strings.TrimSpace(label.Code) == "" || strings.TrimSpace(label.Name) == "" {

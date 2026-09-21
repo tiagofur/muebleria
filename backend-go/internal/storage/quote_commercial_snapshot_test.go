@@ -383,6 +383,122 @@ func TestQuoteCommercialSnapshot_Q2Requote_IndependentTruth(t *testing.T) {
 	requireSnapshotFrozen(t, fx, q2.ID, q2Bytes, q2Want)
 }
 
+func TestQuoteCommercialSnapshot_Q2Requote_PreservesFrozenPricingContext(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	const (
+		structureID = "72000000-0000-0000-0000-0000000000c1"
+		componentID = "72000000-0000-0000-0000-0000000000c2"
+		presetID    = "72000000-0000-0000-0000-0000000000c3"
+		edgeID      = "72000000-0000-0000-0000-0000000000c4"
+	)
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO edge_bands (id, code, name, thickness_mm, cost_per_ml, organization_id)
+		VALUES ('`+edgeID+`', 'CS-EDGE', 'Canto CS', 1, 0, '`+rlsOrgA+`');
+		UPDATE material_boards SET default_edge_band_id='`+edgeID+`' WHERE id='`+csMaterial+`';
+		INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+structureID+`', 'CS-STRUCT', 'Estructura CS', 600, 720, 560, '`+rlsOrgA+`');
+		INSERT INTO components (id, code, name, placement, length_mm, width_mm, length_formula, width_formula, thickness_mm, option_roles, organization_id)
+		VALUES ('`+componentID+`', 'CS-PANEL', 'Panel CS', 'base', 560, 600, 'D', 'W', 18, '{INTERIOR}', '`+rlsOrgA+`');
+		INSERT INTO structure_components (structure_id, component_id, quantity, organization_id)
+		VALUES ('`+structureID+`', '`+componentID+`', 1, '`+rlsOrgA+`');
+		INSERT INTO module_presets (id, module_id, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+presetID+`', '`+csModule+`', '600x720x560', 600, 720, 560, '`+rlsOrgA+`');
+		UPDATE modules SET structure_id='`+structureID+`', width_mm=600, height_mm=720, depth_mm=560
+		WHERE id='`+csModule+`';
+		UPDATE project_items SET measure_preset_id='`+presetID+`', base_mode='plinth_board'
+		WHERE id='`+csLine+`';
+		INSERT INTO option_groups (id, code, name, kind, required, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000c2', 'ZOCLO', 'Material de zoclo', 'board', FALSE, '`+rlsOrgA+`');
+		INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000c2', '`+csMaterial+`', '`+rlsOrgA+`');
+		INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+csProject+`', 'ZOCLO', '`+csMaterial+`', '`+rlsOrgA+`');
+		UPDATE projects SET kitchen_layout='{
+			"baseClearanceMm": 120,
+			"walls": [{"id": "wall-a", "lengthMm": 600}],
+			"placements": [{"itemId": "`+csLine+`", "wallId": "wall-a", "offsetMm": 0, "elevation": "floor"}]
+		}'::jsonb WHERE id='`+csProject+`';`)
+
+	q1 := createInitialRevision(t, fx).Revision
+	publishRevision(t, fx, q1.ID)
+	acceptRevision(t, fx, q1.ID)
+	q1Bytes := readStoredSnapshotBytes(t, fx, q1.ID)
+
+	var q2 *domain.QuoteRevision
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		design, err := fx.store.CreateDesign(ctx, storage.CreateDesignCommand{
+			ProjectID: csProject, Name: "Diseño preset CS", ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		unitRows, err := fx.store.ListQuoteLineFurnitureInstances(ctx, csProject, csLine)
+		if err != nil {
+			return err
+		}
+		if len(unitRows) != 2 {
+			return errors.New("expected 2 materialized units")
+		}
+		items := make([]storage.UpdateDesignWorkingCopyItemCommand, 0, 2)
+		for i, unit := range unitRows {
+			materialID := csMaterial
+			if i == 1 {
+				materialID = csMaterial2
+			}
+			items = append(items, storage.UpdateDesignWorkingCopyItemCommand{
+				FurnitureInstanceID:   unit.FurnitureInstanceID,
+				FurnitureDefinitionID: csModule,
+				Parameters:            map[string]any{"widthMm": 600, "heightMm": 720, "depthMm": 560},
+				MaterialChoices:       map[string]string{"INTERIOR": materialID, "ZOCLO": csMaterial},
+			})
+		}
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: design.ID, SourceType: domain.DesignRevisionSourceSketchup,
+			Items: items, ActorUserID: rlsUserA,
+		}); err != nil {
+			return err
+		}
+		published, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID: design.ID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		result, err := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID: csProject, BaseQuoteRevisionID: q1.ID,
+			DesignRevisionID: published.ID, ActorUserID: rlsUserA,
+		})
+		if err != nil {
+			return err
+		}
+		q2 = result.Revision
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("requote preset-bearing Q2: %v", err)
+	}
+	if q2.RevisionNumber != 2 || q2.Status != "draft" || q2.BaseQuoteRevisionID != q1.ID {
+		t.Fatalf("Q2 provenance = %+v", q2)
+	}
+	if got := readStoredSnapshotBytes(t, fx, q1.ID); got != q1Bytes {
+		t.Fatal("requote mutated accepted Q1")
+	}
+	details := listRevisions(t, fx)
+	if len(details) != 2 || details[1].CommercialSnapshot == nil {
+		t.Fatalf("expected Q1 plus frozen Q2, got %+v", details)
+	}
+	q2Snapshot := details[1].CommercialSnapshot
+	if q2Snapshot.Breakdown.MaterialsCost != 230.4 || q2Snapshot.Breakdown.SalePrice != 545.6 {
+		t.Fatalf("Q2 must preserve preset/base/layout context while changing one material: %+v", q2Snapshot.Breakdown)
+	}
+	q2Bytes := readStoredSnapshotBytes(t, fx, q2.ID)
+	for _, frozen := range []string{`"measurePresetId": "` + presetID + `"`, `"baseMode": "plinth_board"`, `"baseClearanceMm": 120`} {
+		if !strings.Contains(q2Bytes, frozen) {
+			t.Fatalf("Q2 snapshot did not freeze pricing context %s: %s", frozen, q2Bytes)
+		}
+	}
+}
+
 // Proof 10: commercial truth stays tenant-isolated (API read + direct SQL).
 func TestQuoteCommercialSnapshot_CrossTenantDenied(t *testing.T) {
 	fx := setupCommercialSnapshotFixture(t)

@@ -55,16 +55,33 @@ type QuoteCommercialOption struct {
 	ChoiceLabel string `json:"choiceLabel"`
 }
 
+// QuoteCommercialPlinthSides freezes layout-derived exposed base returns.
+type QuoteCommercialPlinthSides struct {
+	Left  bool `json:"left"`
+	Right bool `json:"right"`
+	Back  bool `json:"back"`
+}
+
+// QuoteCommercialPricingContext freezes inputs not authored by a DesignRevision.
+type QuoteCommercialPricingContext struct {
+	MeasurePresetID      string                      `json:"measurePresetId,omitempty"`
+	BaseMode             string                      `json:"baseMode"`
+	StructureRevisionPin *int                        `json:"structureRevisionPin,omitempty"`
+	BaseClearanceMm      *int                        `json:"baseClearanceMm,omitempty"`
+	PlinthSides          *QuoteCommercialPlinthSides `json:"plinthSides,omitempty"`
+}
+
 // QuoteCommercialUnit is the frozen customer-facing descriptor of ONE physical
 // furniture unit inside the revision, keyed by the exact FurnitureInstance
 // identity (never by name or geometry).
 type QuoteCommercialUnit struct {
-	FurnitureInstanceID string                  `json:"furnitureInstanceId"`
-	QuoteLineID         string                  `json:"quoteLineId"`
-	ModuleCode          string                  `json:"moduleCode"`
-	ModuleName          string                  `json:"moduleName"`
-	LifecycleStatus     string                  `json:"lifecycleStatus"`
-	Options             []QuoteCommercialOption `json:"options"`
+	FurnitureInstanceID string                         `json:"furnitureInstanceId"`
+	QuoteLineID         string                         `json:"quoteLineId"`
+	ModuleCode          string                         `json:"moduleCode"`
+	ModuleName          string                         `json:"moduleName"`
+	LifecycleStatus     string                         `json:"lifecycleStatus"`
+	Options             []QuoteCommercialOption        `json:"options"`
+	PricingContext      *QuoteCommercialPricingContext `json:"pricingContext,omitempty"`
 }
 
 // QuoteCommercialLineAmounts freezes the amount contribution of one exact
@@ -226,6 +243,24 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 		if unit.Options == nil {
 			return fmt.Errorf("%w: commercial snapshot unit %s options must be an array", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
 		}
+		if context := unit.PricingContext; context != nil {
+			if context.MeasurePresetID != "" {
+				if _, err := uuid.Parse(context.MeasurePresetID); err != nil {
+					return fmt.Errorf("%w: commercial snapshot unit %s has invalid measure preset", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
+				}
+			}
+			switch context.BaseMode {
+			case "none", "plinth_board", "plinth_strip", "legs":
+			default:
+				return fmt.Errorf("%w: commercial snapshot unit %s has invalid base mode %q", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, context.BaseMode)
+			}
+			if context.StructureRevisionPin != nil && *context.StructureRevisionPin <= 0 {
+				return fmt.Errorf("%w: commercial snapshot unit %s has invalid structure revision pin", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
+			}
+			if context.BaseClearanceMm == nil || *context.BaseClearanceMm < 0 {
+				return fmt.Errorf("%w: commercial snapshot unit %s has invalid base clearance", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID)
+			}
+		}
 		if instanceLine[unit.FurnitureInstanceID] != unit.QuoteLineID {
 			return fmt.Errorf("%w: commercial snapshot unit %s is not bound to quote line %s", ErrInvalidRevisionSnapshot, unit.FurnitureInstanceID, unit.QuoteLineID)
 		}
@@ -323,6 +358,7 @@ func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, custome
 		options := make([]QuoteCommercialOption, len(units[i].Options))
 		copy(options, units[i].Options)
 		units[i].Options = options
+		units[i].PricingContext = CloneQuoteCommercialPricingContext(units[i].PricingContext)
 		sort.Slice(units[i].Options, func(a, b int) bool {
 			if units[i].Options[a].GroupCode == units[i].Options[b].GroupCode {
 				return units[i].Options[a].ChoiceID < units[i].Options[b].ChoiceID
@@ -351,6 +387,28 @@ func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, custome
 		return nil, err
 	}
 	return snapshot, nil
+}
+
+// CloneQuoteCommercialPricingContext returns an independent copy suitable for
+// carrying immutable quote context into a new revision.
+func CloneQuoteCommercialPricingContext(source *QuoteCommercialPricingContext) *QuoteCommercialPricingContext {
+	if source == nil {
+		return nil
+	}
+	cloned := *source
+	if source.StructureRevisionPin != nil {
+		pin := *source.StructureRevisionPin
+		cloned.StructureRevisionPin = &pin
+	}
+	if source.BaseClearanceMm != nil {
+		clearance := *source.BaseClearanceMm
+		cloned.BaseClearanceMm = &clearance
+	}
+	if source.PlinthSides != nil {
+		sides := *source.PlinthSides
+		cloned.PlinthSides = &sides
+	}
+	return &cloned
 }
 
 // CommercialDimsFromParameters extracts a full width/height/depth override
