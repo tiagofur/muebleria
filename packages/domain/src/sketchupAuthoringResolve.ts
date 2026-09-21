@@ -590,9 +590,12 @@ export function validateAuthoringResolveRequest(
     const rotation = placementRecord.rotationDeg;
     if (rotation !== undefined) {
       const rotationRecord = rotation as unknown as Record<string, unknown>;
-      const axes = ['x', 'y', 'z'].filter((axis) => rotationRecord[axis] !== undefined);
+      const axisKeys = typeof rotation === 'object' && rotation !== null && !Array.isArray(rotation)
+        ? Object.keys(rotationRecord)
+        : [];
       if (typeof rotation !== 'object' || rotation === null || Array.isArray(rotation) ||
-        axes.some((axis) => {
+        !axisKeys.every((axis) => axis === 'x' || axis === 'y' || axis === 'z') ||
+        axisKeys.some((axis) => {
           const value = rotationRecord[axis];
           return typeof value !== 'number' || !Number.isFinite(value);
         })) {

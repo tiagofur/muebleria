@@ -257,6 +257,58 @@ class AssetLoaderRigidPlacementTest < Minitest::Test
     assert_in_delta 1.0, vector_mag(t.zaxis), 1e-4
   end
 
+  def test_resolved_rotated_placement_composes_after_prepared_mount_frame
+    # Basis is the resolver-published 90° front-face placement basis. This
+    # regression must not recalculate rotationDeg in Ruby; the host consumes the
+    # resolved axes and composes them with the prepared MountFrame.
+    resolved_basis = { 'x' => [0.0, -1.0, 0.0], 'y' => [1.0, 0.0, 0.0], 'z' => [0.0, 0.0, 1.0] }
+    pos_mm = [320.0, 18.0, 640.0]
+    mf = MountFrameData.new(
+      origin_mm: [25.0, -10.0, 8.0],
+      basis: BasisData.new(
+        x: [0.0, 1.0, 0.0],
+        y: [-1.0, 0.0, 0.0],
+        z: [0.0, 0.0, 1.0]
+      )
+    )
+
+    instance = @loader.load_asset_instance(
+      @model, 'ast-handle', @target_group, pos_mm,
+      basis: resolved_basis, revision_id: 'rev-2',
+      mount_frame: mf, preparation_state: 'prepared', placement_id: 'hw-resolved-rot90'
+    )
+    refute_nil instance
+
+    t_instance = instance.transformation
+    t_placement = Geom::Transformation.axes(
+      Geom::Point3d.new(pos_mm[0] / 25.4, pos_mm[1] / 25.4, pos_mm[2] / 25.4),
+      Geom::Vector3d.new(*resolved_basis['x']),
+      Geom::Vector3d.new(*resolved_basis['y']),
+      Geom::Vector3d.new(*resolved_basis['z'])
+    )
+    t_mount_inverse = MountFrame.derive_normalization(mf).to_sketchup_transformation
+    assert_equal t_placement * t_mount_inverse, t_instance,
+                 'prepared instance must be T_placement * inverse(T_mountFrame)'
+
+    assert_equal [-1.0, 0.0, 0.0], t_instance.xaxis.to_a
+    assert_equal [0.0, -1.0, 0.0], t_instance.yaxis.to_a
+    assert_equal [0.0, 0.0, 1.0], t_instance.zaxis.to_a
+
+    mount_origin = Geom::Point3d.new(25.0 / 25.4, -10.0 / 25.4, 8.0 / 25.4)
+    placed_origin = mount_origin.transform(t_instance)
+    assert_in_delta pos_mm[0] / 25.4, placed_origin.x, 1e-4
+    assert_in_delta pos_mm[1] / 25.4, placed_origin.y, 1e-4
+    assert_in_delta pos_mm[2] / 25.4, placed_origin.z, 1e-4
+
+    assert_in_delta 1.0, compute_det(t_instance), 1e-4
+    assert_in_delta 1.0, vector_mag(t_instance.xaxis), 1e-4
+    assert_in_delta 1.0, vector_mag(t_instance.yaxis), 1e-4
+    assert_in_delta 1.0, vector_mag(t_instance.zaxis), 1e-4
+    assert_in_delta 0.0, MountFrame.dot_product(t_instance.xaxis.to_a, t_instance.yaxis.to_a), 1e-4
+    assert_in_delta 0.0, MountFrame.dot_product(t_instance.xaxis.to_a, t_instance.zaxis.to_a), 1e-4
+    assert_in_delta 0.0, MountFrame.dot_product(t_instance.yaxis.to_a, t_instance.zaxis.to_a), 1e-4
+  end
+
   def test_cabinet_world_transform_preserves_local_placement_and_rigidity
     mf = MountFrameData.new(
       origin_mm: [25.0, -10.0, 8.0],

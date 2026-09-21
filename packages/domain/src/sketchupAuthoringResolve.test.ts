@@ -223,6 +223,21 @@ describe('validateAuthoringResolveRequest', () => {
     });
     expect(codes(validateAuthoringResolveRequest(nonFiniteAxis))).toContain('HARDWARE_PLACEMENT_INVALID');
 
+    const unknownAxis = request({
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      hardwarePlacements: [
+        {
+          hardwarePlacementId: 'hp-1',
+          catalogHardwareId: 'hw-hinge',
+          hostComponentInstanceId: 'door-01',
+          anchorFace: 'front',
+          offsetMm: [298, 100],
+          rotationDeg: { w: 90 } as never,
+        },
+      ],
+    });
+    expect(codes(validateAuthoringResolveRequest(unknownAxis))).toContain('HARDWARE_PLACEMENT_INVALID');
+
     const valid = request({
       components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
       hardwarePlacements: [

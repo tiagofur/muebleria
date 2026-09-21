@@ -28,6 +28,9 @@ Status: in progress
 - Tests Ruby focalizados: layout_contract bases distintas → transforms
   distintas; AssetLoader `T_placement × inverse(T_mountFrame)` con base rotada
   (scale 1, det +1, sin shear). Ruby NO recalcula el ángulo.
+- Bump explícitamente autorizado para pruebas: plugin `v0.1.2`, sus literales
+  existentes de UI/tests/documentación, RBZ nuevo e instalación local en
+  SketchUp. No publicación de release, merge ni cambio de PR.
 
 ## Exclusions
 
@@ -56,8 +59,13 @@ merge, no labels de aprobación.
 
 - [x] T1 — Confirm root-cause chain (Go/TS/Ruby/wire) and audit the inherited candidate. Route: delegated read-only mapping (4-file rule). The candidate implements the required Go/manual/TS transport; the shared contract fixture still lacks an observed `rotationDeg` case.
 - [x] T2 — Correct the JSON Schema shape to match the existing Go/TS/Ruby sparse per-axis `rotationDeg` contract. Route: delegated writer correction round 1/1. Schema now accepts zero to three known numeric axes and rejects unknown axes; focused schema test passed.
-- [ ] T3 — Verification remains blocked. Independent verifier on `2dd7d8005f20598ce0c85ac249603d20f5aec743`: focused Go API/engine, TS contract/schema/validator (32 tests), `pnpm typecheck`, and diff check PASS. Ruby `bundle exec rake verify` BLOCKED by absent bundled gems; `factory_preflight --require-clean` BLOCKED by unrelated untracked paths; real SketchUp/TestUp NOT_RUN. The impact plan selected broader gates; none are claimed.
-- [x] T4 — Published draft PR #809 (`Refs #668` / `Delivery: partial`, `type:bug`) after pushing the two focused Conventional Commits; posted F6 finding at issue comment `#issuecomment-5755564860`. No merge, no issue closure.
+- [x] T3 — Repair Ruby parser regression found by CI. Route: delegated writer correction. Commit `1a5d7a4e` qualifies `AuthoringSnapshotValues.valid_offsets?`; Ruby CI matrix passed on that head. Foundation Gate A was derivative.
+- [x] T4 — R1: proxy/AABB now uses the complete rotated Web-parity frame (`longRender`, `outRender`, `cross(outRender,longRender)`) with independent `{x:5,y:10,z:90}` parity/corner/dimensions regression. Focused Go PASS.
+- [x] T5 — R2: TS request validation now fails closed for unknown `rotationDeg` axes; `{w:90}` returns `HARDWARE_PLACEMENT_INVALID`. Focused TS PASS.
+- [ ] T6 — R3: added Ruby regression proving prepared nonidentity MountFrame composes with a rotated placement basis as `T_placement × inverse(T_mountFrame)`, rigidly. Local focused Ruby execution is BLOCKED by missing Bundler gems; CI will verify.
+- [ ] T7 — Bump plugin to `v0.1.2` across its authoritative constant and existing UI/test/docs literals. Build, package-verify, and install the fresh RBZ into local SketchUp for testing; record exact host/RBZ evidence or NOT_RUN. Route: delegated writer for version surfaces, parent for host installation.
+- [ ] T8 — Re-freeze and verify the corrected candidate, update PR #809 body with observed results, and wait current-head CI. `factory_preflight --require-clean` remains blocked by unrelated untracked paths; distinguish Ruby CI from SketchUp desktop evidence.
+- [x] T9 — Continued the same PR #809 only; no new PR, merge, or issue closure.
 
 Delivery strategy: single-pr. Forecast: under 400 authored diff lines excluding generated fixture reformatting. TDD mode: unknown (no configured mode found during current resume); use the existing RED regression evidence in the inherited candidate and ordinary focused checks for any remaining regression.
 

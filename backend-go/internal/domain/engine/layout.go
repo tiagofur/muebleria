@@ -152,28 +152,28 @@ type LayoutComponent struct {
 // joints once that machinery is projected into layouts. Clients must fail
 // closed on unknown values instead of treating them as derived.
 type LayoutHardware struct {
-	PlacementID             string               `json:"placementId"`
-	HardwareID              string               `json:"hardwareId"`
-	Name                    string               `json:"name"`
-	Shape                   string               `json:"shape"`
-	SizeMm                  float64              `json:"sizeMm,omitempty"`
-	DiameterMm              float64              `json:"diameterMm,omitempty"`
-	ProjectionMm            float64              `json:"projectionMm"`
-	ColorHex                string               `json:"colorHex,omitempty"`
-	HostComponentInstanceID string               `json:"hostComponentInstanceId"`
-	AnchorFace              string               `json:"anchorFace"`
-	PlacementKind           string               `json:"placementKind"`
-	Transform               LayoutTransform      `json:"transform"`
-	DimensionsMm            [3]float64           `json:"dimensionsMm"`
-	LocalTransform          LayoutLocalTransform `json:"localTransform"`
-	AssetID                 string               `json:"assetId,omitempty"`
-	AssetRevisionID         string               `json:"assetRevisionId,omitempty"`
-	SHA256                  string               `json:"sha256,omitempty"`
-	ExpectedBytes           int64                `json:"expectedBytes,omitempty"`
-	Representation          string                      `json:"representation,omitempty"`
-	ValidationState         string                      `json:"validationState,omitempty"`
-	PreparationState        string                      `json:"preparationState,omitempty"`
-	MountFrame              *domain.HardwareMountFrame  `json:"mountFrame,omitempty"`
+	PlacementID             string                     `json:"placementId"`
+	HardwareID              string                     `json:"hardwareId"`
+	Name                    string                     `json:"name"`
+	Shape                   string                     `json:"shape"`
+	SizeMm                  float64                    `json:"sizeMm,omitempty"`
+	DiameterMm              float64                    `json:"diameterMm,omitempty"`
+	ProjectionMm            float64                    `json:"projectionMm"`
+	ColorHex                string                     `json:"colorHex,omitempty"`
+	HostComponentInstanceID string                     `json:"hostComponentInstanceId"`
+	AnchorFace              string                     `json:"anchorFace"`
+	PlacementKind           string                     `json:"placementKind"`
+	Transform               LayoutTransform            `json:"transform"`
+	DimensionsMm            [3]float64                 `json:"dimensionsMm"`
+	LocalTransform          LayoutLocalTransform       `json:"localTransform"`
+	AssetID                 string                     `json:"assetId,omitempty"`
+	AssetRevisionID         string                     `json:"assetRevisionId,omitempty"`
+	SHA256                  string                     `json:"sha256,omitempty"`
+	ExpectedBytes           int64                      `json:"expectedBytes,omitempty"`
+	Representation          string                     `json:"representation,omitempty"`
+	ValidationState         string                     `json:"validationState,omitempty"`
+	PreparationState        string                     `json:"preparationState,omitempty"`
+	MountFrame              *domain.HardwareMountFrame `json:"mountFrame,omitempty"`
 }
 
 const (
@@ -1242,7 +1242,6 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		group[1] + renderOffset[1],
 		group[2] + renderOffset[2],
 	}
-	normalRender := mulMatVec3(m, normal)
 
 	// Box in-plane extents by shape (knob: square; pulls: bar along size).
 	extentU := size
@@ -1266,15 +1265,19 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 	longRender := mulMatVec3(m, columnVec3(mountLocal, 0))
 	outRender := mulMatVec3(m, columnVec3(mountLocal, 1))
 
-	// In-plane basis in the render frame for the preview box: the longitudinal
-	// axis plus its face-plane perpendicular.
+	// Complete mounted rigid frame in render space. HardwareMesh applies the
+	// authored Euler before the +Y→normal quaternion, so the preview/proxy box
+	// must use the same rotated longitudinal, in-plane and outward axes. The
+	// face point itself remains the mount point; only the standoff/projection
+	// volume follows the rotated outward axis, matching the Web child group.
 	u := longRender
-	v := cross3(normalRender, u)
+	outAxisRender := outRender
+	v := cross3(outAxisRender, u)
 
 	centerRender := [3]float64{
-		faceRender[0] + normalRender[0]*projection/2,
-		faceRender[1] + normalRender[1]*projection/2,
-		faceRender[2] + normalRender[2]*projection/2,
+		faceRender[0] + outAxisRender[0]*projection/2,
+		faceRender[1] + outAxisRender[1]*projection/2,
+		faceRender[2] + outAxisRender[2]*projection/2,
 	}
 
 	// AABB of the oriented box (8 corners in render space) → workshop.
@@ -1285,9 +1288,9 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		for _, sv := range [2]float64{-hv, hv} {
 			for _, sn := range [2]float64{-hn, hn} {
 				p := [3]float64{
-					centerRender[0] + u[0]*su + v[0]*sv + normalRender[0]*sn,
-					centerRender[1] + u[1]*su + v[1]*sv + normalRender[1]*sn,
-					centerRender[2] + u[2]*su + v[2]*sv + normalRender[2]*sn,
+					centerRender[0] + u[0]*su + v[0]*sv + outAxisRender[0]*sn,
+					centerRender[1] + u[1]*su + v[1]*sv + outAxisRender[1]*sn,
+					centerRender[2] + u[2]*su + v[2]*sv + outAxisRender[2]*sn,
 				}
 				for k := 0; k < 3; k++ {
 					if p[k] < minR[k] {
@@ -1430,9 +1433,9 @@ func rotateYToNormalMatrix(n [3]float64) [9]float64 {
 	z := (az / axisLen) * sinHalf
 	w := cosHalf
 	return [9]float64{
-		1 - 2*(y*y+z*z), 2*(x*y - w*z), 2*(x*z + w*y),
-		2*(x*y + w*z), 1 - 2*(x*x+z*z), 2*(y*z - w*x),
-		2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y),
+		1 - 2*(y*y+z*z), 2 * (x*y - w*z), 2 * (x*z + w*y),
+		2 * (x*y + w*z), 1 - 2*(x*x+z*z), 2 * (y*z - w*x),
+		2 * (x*z - w*y), 2 * (y*z + w*x), 1 - 2*(x*x+y*y),
 	}
 }
 

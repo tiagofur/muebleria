@@ -31,17 +31,17 @@ func rotationTestCatalog(withMountFrame bool) domain.Catalog {
 		Active: true,
 		Name:   "Tirador 160",
 		// bar-pull: extentU (size) runs along the longitudinal axis u.
-		PreviewShape:    strPtr("bar-pull"),
-		PreviewSizeMm:   floatPtr(160),
+		PreviewShape:      strPtr("bar-pull"),
+		PreviewSizeMm:     floatPtr(160),
 		PreviewDiameterMm: floatPtr(12),
 	}
 	if withMountFrame {
 		hw.VisualAsset = &domain.HardwareVisualAssetBinding{
-			AssetID:         "asset-handle-1",
-			AssetRevisionID: "rev-handle-1",
-			SHA256:          "sha256-rotation-test-0000000000000000000000000000000000000000000000000000",
-			Representation:  domain.HardwareAssetRepresentationSKP,
-			ValidationState: domain.HardwareAssetValidationPending,
+			AssetID:          "asset-handle-1",
+			AssetRevisionID:  "rev-handle-1",
+			SHA256:           "sha256-rotation-test-0000000000000000000000000000000000000000000000000000",
+			Representation:   domain.HardwareAssetRepresentationSKP,
+			ValidationState:  domain.HardwareAssetValidationPending,
 			PreparationState: domain.HardwareAssetPreparationPrepared,
 			// Non-identity, right-handed mount frame: the asset is authored
 			// rotated 90° about its own mount normal (+Z canonical) with an
@@ -74,6 +74,28 @@ func requireValidRotationBasis(t *testing.T, hw LayoutHardware, label string) {
 	if err := validateLayoutBasis(hw.LocalTransform.Basis); err != nil {
 		t.Fatalf("%s: %v", label, err)
 	}
+}
+
+func assertVecClose(t *testing.T, got, want [3]float64, tol float64, label string) {
+	t.Helper()
+	for i := 0; i < 3; i++ {
+		if math.Abs(got[i]-want[i]) > tol {
+			t.Fatalf("%s[%d]: want %.9f, got %.9f (full got %v, want %v)", label, i, want[i], got[i], got, want)
+		}
+	}
+}
+
+func aabbCorners(minCorner, dims [3]float64) [][3]float64 {
+	maxCorner := [3]float64{minCorner[0] + dims[0], minCorner[1] + dims[1], minCorner[2] + dims[2]}
+	corners := make([][3]float64, 0, 8)
+	for _, x := range [2]float64{minCorner[0], maxCorner[0]} {
+		for _, y := range [2]float64{minCorner[1], maxCorner[1]} {
+			for _, z := range [2]float64{minCorner[2], maxCorner[2]} {
+				corners = append(corners, [3]float64{x, y, z})
+			}
+		}
+	}
+	return corners
 }
 
 // A. Same board, same hardware, same position: rotationDeg 0 vs 90 must keep
@@ -227,8 +249,8 @@ func TestAuthoringResolveManualPlacementKeepsRotationDeg(t *testing.T) {
 	module, catalog := authoringCabinetCatalog()
 	base := AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences:            defaultAuthoringOccurrences(),
-		Relationships:          []AuthoringRelationship{},
+		Occurrences:             defaultAuthoringOccurrences(),
+		Relationships:           []AuthoringRelationship{},
 		ManualPlacementsPresent: true,
 	}
 
@@ -308,4 +330,47 @@ func TestResolveHardwareRotationWithNonIdentityMountFrame(t *testing.T) {
 	if d := dot3(hw0.LocalTransform.Basis.X, hw90.LocalTransform.Basis.X); math.Abs(d) > 1e-9 {
 		t.Fatalf("rotation must survive alongside the mount frame, dot = %v", d)
 	}
+}
+
+// G. Multi-axis rotation parity with HardwareMesh/Web: the resolved frame uses
+// the rotated longitudinal axis, the rotated outward axis, and Y=Z×X. The
+// proxy/AABB is built from that same rigid frame, while the mount point and
+// pass-through MountFrame stay unchanged.
+func TestResolveHardwareMultiAxisRotationProxyAABBParity(t *testing.T) {
+	board := rotationTestBoard()
+	catalog := rotationTestCatalog(true)
+	placement := rotationTestPlacement(&domain.HardwareRotationDeg{X: 5, Y: 10, Z: 90})
+
+	hw, ok := resolveHardwareToWorld(board, placement, catalog, "hp-multi-axis")
+	if !ok {
+		t.Fatal("multi-axis placement must resolve")
+	}
+	requireValidRotationBasis(t, hw, "multi-axis")
+
+	// Hard-coded from the Web child-frame contract for front face:
+	// Rxyz(5,10,90)·(+X), Rxyz(5,10,90)·(+Y), then render→workshop Y/Z swap.
+	assertVecClose(t, hw.LocalTransform.Basis.X, [3]float64{0, 0.087156, 0.996195}, 1e-6, "basis.X")
+	assertVecClose(t, hw.LocalTransform.Basis.Z, [3]float64{-0.984808, 0.172987, -0.015134}, 1e-6, "basis.Z")
+	assertVecClose(t, hw.LocalTransform.Basis.Y, [3]float64{0.173648, 0.98106, -0.085832}, 1e-6, "basis.Y")
+
+	flat, ok := resolveHardwareToWorld(board, rotationTestPlacement(nil), catalog, "hp-flat")
+	if !ok {
+		t.Fatal("flat placement must resolve")
+	}
+	if flat.LocalTransform.TranslationMm != hw.LocalTransform.TranslationMm {
+		t.Fatalf("rotation must not move mount point: %v vs %v", flat.LocalTransform.TranslationMm, hw.LocalTransform.TranslationMm)
+	}
+	wantFrame := rotationTestCatalog(true).Hardware[0].VisualAsset.MountFrame
+	if hw.MountFrame == nil || *hw.MountFrame != *wantFrame {
+		t.Fatalf("mount frame must pass through unchanged: %v", hw.MountFrame)
+	}
+
+	wantMin := [3]float64{254.337917, 47.141179, -62.588927}
+	wantDims := [3]float64{26.703972, 30.042327, 160.799493}
+	assertVecClose(t, hw.Transform.TranslationMm, wantMin, 1e-6, "proxy AABB min")
+	assertVecClose(t, hw.DimensionsMm, wantDims, 1e-6, "proxy AABB dimensions")
+
+	corners := aabbCorners(hw.Transform.TranslationMm, hw.DimensionsMm)
+	assertVecClose(t, corners[0], wantMin, 1e-6, "proxy AABB min corner")
+	assertVecClose(t, corners[len(corners)-1], [3]float64{281.041889, 77.183506, 98.210566}, 1e-6, "proxy AABB max corner")
 }
