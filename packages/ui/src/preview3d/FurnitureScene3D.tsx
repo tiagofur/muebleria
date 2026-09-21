@@ -261,7 +261,9 @@ export type FurnitureScene3DProps = {
   ) => void;
   /**
    * F143 — herraje seleccionado en modo detalle. Identidad estable:
-   * `${componentInstanceId}:${hardwareId}` (la misma del mesh key).
+   * `${componentInstanceId}:${hardwareId}:${placementIndex}` (la misma
+   * discriminación del mesh key; el índice distingue placements repetidos del
+   * mismo herraje sobre un tablero, #813).
    */
   readonly selectedHardwareId?: string | null;
   readonly onSelectHardware?: (hardwareId: string | null) => void;
