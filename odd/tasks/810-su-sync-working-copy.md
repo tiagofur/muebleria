@@ -105,6 +105,36 @@ No merge, no self-approval, no auto-close.
 - New proofs: `test_unreadable_local_metadata_blocks_the_sync_without_writes`
   (unit 894/0) and the strengthened JS error-branch assertion (26/26).
 
+## Review round 2 (R2) — explicit empty authoring values
+
+- Bug: `WorkingCopyMerger.apply_authoring_intent!` guarded on `!empty?`,
+  collapsing "key absent" (no authoring statement) with "key present, {}"
+  (explicit clear) — an empty materialChoices/parameters could never clear
+  the server values, and the metadata writer (`furniture_intent`) had the
+  same collapse (empty choices were not persisted at all, making the clear
+  unreachable end-to-end).
+- New rule (merger + intent writer): key absent → preserve verbatim; key
+  present with {} → explicit clear; key present with values → replace.
+- Tests RED→GREEN (`design_sync_test.rb`, now 13): clears material choices
+  (material-a gone), absent key preserves server choices during a
+  parameter-driven update, present-empty parameters replace at the merger
+  level (documented: the canonical persisted intent always carries the
+  complete normalized set, so {} parameters is reachable only via a future
+  canonical reset-overrides form), absent parameters key preserves server
+  values verbatim.
+- Punto-audit of other nil/absent/{}/[]/"" collapses in #810 code:
+  new_working_item (creation-only seed, no server value to preserve);
+  definition_id "" guard ("" is not a representable uuid intent);
+  authoritative_definition_version nil (the #624 catalog-semver rule);
+  IntentBuilder absent-intent → {} (keys absent → preserve, consistent);
+  WorkingItem parse/to_contract_h ({} is the wire-canonical decode — the
+  absent/present distinction lives in the intent metadata, where it was
+  fixed); authoringDirty strict `== true`; equivalence operates on decoded
+  items. No other collapse of distinct intentions found.
+- Verification: `rake verify` green (unit 897, boundary 6/3251, RBZ
+  18161f1a…) and real-host TestUp re-run at this code state: 4/4, 31
+  assertions (the writer change touches persisted metadata semantics).
+
 ## REAL HOST result
 
 PASS — SketchUp 2026 (arm64), TestUp CI via

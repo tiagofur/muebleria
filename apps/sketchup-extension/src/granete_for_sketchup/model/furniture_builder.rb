@@ -1074,7 +1074,12 @@ module Granete
           version = definition['definition_version'] || definition['definitionVersion'] || definition['version']
           intent['definitionVersion'] = version unless version.nil?
           intent['parameters'] = parameters
-          intent['materialChoices'] = material_choices if material_choices.is_a?(Hash) && !material_choices.empty?
+          # R2: a Hash material_choices — INCLUDING the empty one — is an
+          # explicit authoring statement ({} is the canonical "no material
+          # choices" state and must reach the working copy as a clear). nil
+          # means no statement: the key is omitted and the server value
+          # survives.
+          intent['materialChoices'] = material_choices if material_choices.is_a?(Hash)
           intent
         end
       end

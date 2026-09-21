@@ -191,12 +191,93 @@ class DesignSyncTest < Minitest::Test
   end
 
   # ------------------------------------------------------------------
+  # R2 — explicit empty authoring values (#810 review round 2)
+  # ------------------------------------------------------------------
+
+  def test_dirty_sync_clears_material_choices_explicitly
+    entity = place_local_root(FI_1, parameters: { 'widthMm' => 600 }) # persisted intent carries materialChoices: {}
+    stub_working_copy([working_item(FI_1, {}, entity).merge(
+      'material_choices' => { 'FRONT' => 'material-a' }
+    )])
+    edit_authoring!(FI_1, 'widthMm' => 600) # marks dirty; intent keeps the EMPTY choices
+
+    result = @synchronizer.synchronize_design
+    assert result['ok'], result.inspect
+    assert_equal [FI_1], result['changes']['updated']
+
+    item = @transport.working_copy_puts.first['body']['items'].first
+    assert_equal({}, item['material_choices'],
+                 'a present-but-empty materialChoices is an explicit clear, not a preserve')
+    assert_nil item['material_choices']['FRONT'], 'material-a must be gone'
+  end
+
+  def test_absent_material_choices_key_preserves_server_choices
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 }, material_choices: nil) # intent omits the key
+    entity = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    stub_working_copy([working_item(FI_1, {}, entity).merge(
+      'material_choices' => { 'FRONT' => 'material-a' }
+    )])
+    edit_authoring!(FI_1, 'widthMm' => 750) # dirty on parameters; STILL no choices key
+
+    result = @synchronizer.synchronize_design
+    assert result['ok'], result.inspect
+
+    item = @transport.working_copy_puts.first['body']['items'].first
+    assert_equal({ 'FRONT' => 'material-a' }, item['material_choices'],
+                 'an absent key is no authoring statement: the server value survives verbatim')
+  end
+
+  # The canonical persisted authoring intent always carries the COMPLETE
+  # normalized parameter set (definition defaults + edits), so an explicit
+  # {} parameters intent is only reachable through a future canonical
+  # "reset overrides" form. The merger rule is proven regardless: present
+  # {} replaces; absent preserves.
+  def test_present_empty_parameters_replace_at_the_merger_level
+    entity = place_local_root(FI_1, parameters: { 'widthMm' => 600 })
+    store = MS.new(@model)
+    metadata = store.read(entity)
+    metadata['intent']['parameters'] = {}
+    metadata['authoringDirty'] = true
+    store.write(entity, metadata)
+    stub_working_copy([working_item(FI_1, 'widthMm' => 750)])
+
+    result = @synchronizer.synchronize_design
+    assert result['ok'], result.inspect
+
+    item = @transport.working_copy_puts.first['body']['items'].first
+    assert_equal({}, item['parameters'],
+                 'present-but-empty parameters replace the server values at the merger level')
+  end
+
+  # Regression guard for the absent half of the parameters rule. The
+  # update is driven by the transform (locator mismatch) so the assertion
+  # isolates the parameters field: the intent carries NO authoring keys, so
+  # the server values must travel verbatim.
+  def test_absent_parameters_key_preserves_server_values
+    entity = place_local_root(FI_1, material_choices: nil)
+    store = MS.new(@model)
+    metadata = store.read(entity)
+    metadata['intent'].delete('parameters')
+    metadata['authoringDirty'] = true
+    store.write(entity, metadata)
+    stub_working_copy([working_item(FI_1, { 'widthMm' => 750 })])
+
+    result = @synchronizer.synchronize_design
+    assert result['ok'], result.inspect
+    assert_equal [FI_1], result['changes']['updated']
+
+    item = @transport.working_copy_puts.first['body']['items'].first
+    assert_equal 750, item.dig('parameters', 'widthMm'),
+                 'an absent parameters key must preserve the server values'
+  end
+
+  # ------------------------------------------------------------------
   # Golden sequence (#810 Definition of Done)
   # ------------------------------------------------------------------
 
   def test_golden_sequence_place_sync_edit_move_delete_sync_redelete_reuse_identity
-    place_local_root(FI_1, 'widthMm' => 600)
-    place_local_root(FI_2, 'widthMm' => 600)
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 })
+    place_local_root(FI_2, parameters: { 'widthMm' => 600 })
 
     # 1) place both → sync: the working copy receives both ids with the
     #    persisted placement intent, through the canonical token.
@@ -268,13 +349,13 @@ class DesignSyncTest < Minitest::Test
   # authoring fields change, and working items with no local root are the
   # conscious remove intent.
   def test_sync_builds_from_server_state_plus_dirty_intent_only
-    untouched = place_local_root(FI_1, 'widthMm' => 600)
+    untouched = place_local_root(FI_1, parameters: { 'widthMm' => 600 })
     stub_working_copy([
                         working_item(FI_1, {}, untouched),
                         working_item(FI_2, 'widthMm' => 600),
                         working_item(FI_3, 'widthMm' => 600)
                       ])
-    place_local_root(FI_2, 'widthMm' => 600)
+    place_local_root(FI_2, parameters: { 'widthMm' => 600 })
     edit_authoring!(FI_2, 'widthMm' => 750) # dirty edit
     # FI_3 has no local root: remove intent.
 
@@ -297,7 +378,7 @@ class DesignSyncTest < Minitest::Test
   # the response was lost — the retry converges instead of overwriting.
   def test_retry_after_lost_response_converges
     stub_working_copy([working_item(FI_1, 'widthMm' => 600)])
-    place_local_root(FI_1, 'widthMm' => 600)
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 })
     edit_authoring!(FI_1, 'widthMm' => 750)
 
     # The server committed EXACTLY the intention this client would send (the
@@ -329,7 +410,7 @@ class DesignSyncTest < Minitest::Test
   # stale intention is surfaced as conflict and never overwrites W-newer.
   def test_diverged_conflict_surfaces_without_overwriting
     stub_working_copy([working_item(FI_1, 'widthMm' => 600)])
-    place_local_root(FI_1, 'widthMm' => 600)
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 })
     edit_authoring!(FI_1, 'widthMm' => 750)
 
     # Another writer advanced the server to a DIFFERENT state between this
@@ -353,7 +434,7 @@ class DesignSyncTest < Minitest::Test
 
   def test_missing_precondition_is_surfaced_not_swallowed
     stub_working_copy([working_item(FI_1, 'widthMm' => 600)])
-    place_local_root(FI_1, 'widthMm' => 600)
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 })
     edit_authoring!(FI_1, 'widthMm' => 750)
 
     @transport.fail_next_put_with(428, 'PRECONDITION_REQUIRED',
@@ -367,8 +448,8 @@ class DesignSyncTest < Minitest::Test
 
   def test_duplicate_roots_block_the_sync_without_writes
     stub_working_copy([working_item(FI_1, 'widthMm' => 600)])
-    place_local_root(FI_1, 'widthMm' => 600)
-    place_local_root(FI_1, 'widthMm' => 600)
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 })
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 })
 
     result = @synchronizer.synchronize_design
     refute result['ok']
@@ -378,7 +459,7 @@ class DesignSyncTest < Minitest::Test
 
   def test_already_synchronized_state_writes_nothing_and_reports_clean
     stub_working_copy([])
-    place_local_root(FI_1, 'widthMm' => 600)
+    place_local_root(FI_1, parameters: { 'widthMm' => 600 })
     @synchronizer.synchronize_design # first sync lands the add
 
     result = @synchronizer.synchronize_design
@@ -484,18 +565,21 @@ class DesignSyncTest < Minitest::Test
     item
   end
 
-  def place_local_root(fi_id, parameters = {})
+  # material_choices: nil models the persisted intent WITHOUT the
+  # materialChoices key (no authoring statement at all).
+  def place_local_root(fi_id, parameters: {}, material_choices: {})
     definition = @model.definitions.add("Managed #{fi_id}")
     entity = @model.entities.add_instance(definition, Geom::Transformation.new)
+    intent = { 'furnitureDefinitionId' => DEFINITION_ID,
+               'parameters' => { 'widthMm' => 600, 'heightMm' => 720,
+                                 'depthMm' => 560, 'shelfCount' => 1 }.merge(parameters) }
+    intent['materialChoices'] = material_choices if material_choices.is_a?(Hash)
     MS.new(@model).write(entity, {
                            'namespace' => 'com.granete.sketchup_extension', 'metadataVersion' => 1,
                            'kind' => 'furnitureInstance',
                            'identity' => { 'instanceRef' => fi_id, 'furnitureInstanceId' => fi_id,
                                            'projectId' => PROJECT_ID, 'designId' => DESIGN_ID },
-                           'intent' => { 'furnitureDefinitionId' => DEFINITION_ID,
-                                         'parameters' => { 'widthMm' => 600, 'heightMm' => 720,
-                                                           'depthMm' => 560, 'shelfCount' => 1 }.merge(parameters),
-                                         'materialChoices' => {} }
+                           'intent' => intent
                          })
     entity
   end

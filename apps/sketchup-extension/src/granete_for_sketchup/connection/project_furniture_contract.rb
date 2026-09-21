@@ -222,12 +222,19 @@ module Granete
           # ONLY from the entity's persisted intent, and only while the
           # authoring-dirty flag is set (a local edit awaiting confirmed
           # sync). Absent intent keys keep the server value verbatim.
+          # #810 rule A + R2: authoring fields of an existing item are
+          # replaced ONLY from the entity's persisted intent, and only while
+          # the authoring-dirty flag is set. PRESENCE of the key defines the
+          # authoring statement — never emptiness:
+          #   key absent          → preserve the server value verbatim;
+          #   key present with {} → explicit clear (replace with {});
+          #   key present, values → replace with those values.
           def apply_authoring_intent!(item, intent)
             return item unless intent.is_a?(Hash)
 
-            item.parameters = intent['parameters'] if intent['parameters'].is_a?(Hash) && !intent['parameters'].empty?
+            item.parameters = intent['parameters'] if intent.key?('parameters') && intent['parameters'].is_a?(Hash)
             choices = intent['materialChoices']
-            item.material_choices = choices if choices.is_a?(Hash) && !choices.empty?
+            item.material_choices = choices if intent.key?('materialChoices') && choices.is_a?(Hash)
             definition_id = intent['furnitureDefinitionId']
             item.furniture_definition_id = definition_id if definition_id.is_a?(String) && !definition_id.strip.empty?
             version = Contract.authoritative_definition_version(
