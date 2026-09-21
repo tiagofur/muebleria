@@ -135,6 +135,37 @@ No merge, no self-approval, no auto-close.
   18161f1a…) and real-host TestUp re-run at this code state: 4/4, 31
   assertions (the writer change touches persisted metadata semantics).
 
+## Review round 3 (R3) — reachable explicit material clear
+
+- Canonical semantics found (step 1): `material_choices` in
+  `FurnitureBuilder#update_furniture` is PATCH for Hash maps — the #405
+  shared parity contract (`MaterialRebuildTest`) proves partial maps must
+  keep every omitted persisted role — and the dialog selector layer is
+  patch-by-design ("a selector changes one role"). No canonical clear
+  representation existed anywhere (the selector cannot unset a role; no
+  reset/clear/remove command; grep found none).
+- Loss point: `FurnitureIntent#merge_material_choices` patched the incoming
+  map onto the persisted intent, so `{}` (patch identity) could never clear
+  — consuming the R2 statement before MetadataWriter.
+- Minimal fix: `FurnitureBuilder::CLEAR_MATERIAL_CHOICES` sentinel — the
+  explicit total-clear statement at the builder boundary. Semantics now:
+  Hash (partial or complete) = patch (#405 intact); sentinel = explicit
+  total clear (persists `materialChoices: {}` + authoringDirty, reaches the
+  working copy via the R2 rule); nil = no statement (key omitted, server
+  value preserved).
+- Documented limits: the current UX has NO clear action (every role always
+  materializes a material); single-role removal is not representable under
+  patch semantics and has no UI — a future replacement-mode UX would need
+  its own explicit form (out of scope).
+- E2E proof (RED→GREEN, no manual metadata):
+  `test_real_authoring_path_clears_material_choices_end_to_end` — real
+  `update_furniture(material_choices: CLEAR_MATERIAL_CHOICES)` → persisted
+  `materialChoices == {}` + `authoringDirty` → Synchronize Design →
+  WorkingCopy `material_choices == {}` (material-a gone) → dirty cleared.
+- Verification: unit 899/0 (patch contract tests green), `rake verify`
+  green (RBZ 3eccc221…), real-host TestUp re-run at this state: 4/4, 31
+  assertions.
+
 ## REAL HOST result
 
 PASS — SketchUp 2026 (arm64), TestUp CI via

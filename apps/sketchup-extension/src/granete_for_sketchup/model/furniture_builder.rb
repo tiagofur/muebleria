@@ -206,12 +206,23 @@ module Granete
           end
         end
 
+        # R3: material_choices semantics at this boundary:
+        #   * Hash (partial or complete) → PATCH (#405 contract: a role edit
+        #     sends just that role and every omitted persisted role survives);
+        #   * CLEAR_MATERIAL_CHOICES     → the explicit total-clear statement
+        #     (the minimal canonical representation of "remove every choice";
+        #     none existed before — a Hash can't express it because {} is the
+        #     identity of the patch);
+        #   * nil                        → NO statement: the persisted intent
+        #     survives untouched (MetadataWriter then omits the key and the
+        #     working-copy merger preserves the server value, per #810/R2).
         def merge_material_choices(existing_meta, incoming_choices)
           existing = existing_meta&.dig('intent', 'materialChoices')
           existing = {} unless existing.is_a?(Hash)
-          return existing.dup unless incoming_choices.is_a?(Hash)
+          return {} if incoming_choices == FurnitureBuilder::CLEAR_MATERIAL_CHOICES
+          return existing.merge(incoming_choices) if incoming_choices.is_a?(Hash)
 
-          existing.merge(incoming_choices)
+          existing.dup
         end
 
         def material_choices_changed?(existing_meta, merged_choices)
@@ -689,6 +700,9 @@ module Granete
         MATERIAL_RESOLUTION_REQUIRED_ERROR =
           'El cambio de material requiere una composición nativa resuelta por Granete; ' \
           'el mueble anterior no fue modificado.'
+        # R3/#810: explicit total-clear statement for update_furniture's
+        # material_choices (never a data map; see merge_material_choices).
+        CLEAR_MATERIAL_CHOICES = :clear_material_choices
 
         def initialize(metadata_store: nil, asset_loader: nil, texture_cache: nil)
           @metadata_store = metadata_store

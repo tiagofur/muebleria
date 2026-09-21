@@ -272,6 +272,53 @@ class DesignSyncTest < Minitest::Test
   end
 
   # ------------------------------------------------------------------
+  # R3 — the explicit clear must be reachable through the REAL authoring
+  # path: FurnitureBuilder#update_furniture → MetadataWriter → DesignSync →
+  # WorkingCopy. No manual metadata preparation.
+  # ------------------------------------------------------------------
+
+  def test_real_authoring_path_clears_material_choices_end_to_end
+    entity = place_local_root(FI_1, parameters: { 'widthMm' => 600 },
+                                    material_choices: { 'FRONT' => 'material-a' })
+    stub_working_copy([working_item(FI_1, {}, entity).merge(
+      'material_choices' => { 'FRONT' => 'material-a' }
+    )])
+
+    # The user's real clear action: the authoring command re-resolves and
+    # applies with material_choices = {} (an explicit empty statement).
+    builder = FBUILDER.new(metadata_store: MS.new(@model))
+    resolved = Granete::SketchUpExtension::Library::NativeLayout.new(
+      'granete.local-basis.v1', [], []
+    )
+    outcome = builder.update_furniture(@model, entity, MiniCatalog.new.definition,
+                                       { 'widthMm' => 600 },
+                                       resolved_layout: resolved,
+                                       material_choices: FBUILDER::CLEAR_MATERIAL_CHOICES)
+    assert outcome['success'], "real authoring clear failed: #{outcome['error']}"
+
+    # Persisted metadata carries the explicit empty statement and stays
+    # dirty until the backend confirms the working copy.
+    edited = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    metadata = MS.new(@model).read(edited)
+    assert_equal({}, metadata.dig('intent', 'materialChoices'),
+                 'the real path must persist the explicit empty choices')
+    assert metadata['authoringDirty'], 'a local clear must stay dirty until confirmed'
+
+    # Synchronize Design: the working copy clears and the flag drops.
+    result = @synchronizer.synchronize_design
+    assert result['ok'], result.inspect
+    assert_equal [FI_1], result['changes']['updated']
+
+    item = @transport.working_copy_puts.first['body']['items'].first
+    assert_equal({}, item['material_choices'])
+    assert_nil item['material_choices']['FRONT'], 'material-a must be gone'
+
+    refute MS.new(@model).read(
+      PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    )['authoringDirty'], 'confirmed sync clears the dirty flag'
+  end
+
+  # ------------------------------------------------------------------
   # Golden sequence (#810 Definition of Done)
   # ------------------------------------------------------------------
 
