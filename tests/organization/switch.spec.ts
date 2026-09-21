@@ -1,11 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import {
-  GATE_MEDIA_A_URL,
-  GATE_MEDIA_B_URL,
-  GATE_MODULE_A_ID,
-  GATE_MODULE_B_ID,
-  required,
-} from './support/api';
+import { GATE_MEDIA_A_URL, GATE_MEDIA_B_URL, GATE_MODULE_A_ID, GATE_MODULE_B_ID, putWorkingCopyCurrent, required } from './support/api';
 
 async function loginToA(page: Page): Promise<void> {
   await page.goto('/');

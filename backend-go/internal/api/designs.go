@@ -236,6 +236,10 @@ func respondWithDesignError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "El borrador de trabajo no existe", nil)
 	case errors.Is(err, domain.ErrWorkingItemNotFound):
 		respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "La unidad no forma parte del borrador de trabajo de este diseño", nil)
+	case errors.Is(err, storage.ErrWorkingCopyVersionConflict):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeVersionConflict, "El borrador de trabajo cambió; volvé a leer su estado antes de escribir", nil)
+	case errors.Is(err, storage.ErrWorkingCopyPreconditionRequired):
+		respondWithAPIError(w, http.StatusPreconditionRequired, openapi.ApiErrorCodePreconditionRequired, "expected_working_version es obligatorio: leé el WorkingCopy actual antes de escribir", nil)
 	case errors.Is(err, storage.ErrVersionConflict):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "El borrador de trabajo cambió; volvé a leer su estado antes de reconciliar", nil)
 	case errors.Is(err, domain.ErrSerializationFailed):
@@ -475,6 +479,11 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
+		expectedWorkingVersion, ok := parseExpectedWorkingVersion(w, body.ExpectedWorkingVersion)
+		if !ok {
+			return
+		}
+
 		var baseRevID *string
 		if body.BaseRevisionID != nil {
 			trimmed := strings.TrimSpace(*body.BaseRevisionID)
@@ -543,11 +552,12 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 		}
 
 		wc, err := s.Store.UpdateDesignWorkingCopy(r.Context(), storage.UpdateDesignWorkingCopyCommand{
-			DesignID:       designID,
-			BaseRevisionID: baseRevID,
-			SourceType:     sourceType,
-			Items:          items,
-			ActorUserID:    claims.UserID,
+			DesignID:               designID,
+			BaseRevisionID:         baseRevID,
+			ExpectedWorkingVersion: expectedWorkingVersion,
+			SourceType:             sourceType,
+			Items:                  items,
+			ActorUserID:            claims.UserID,
 		})
 		if err != nil {
 			respondWithDesignError(w, err)
@@ -558,6 +568,24 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+// parseExpectedWorkingVersion decodes the #810 canonical workingVersion
+// precondition: the exact working-copy updated_at of the caller's last
+// authoritative read (the zero timestamp of an absent working copy is a valid
+// value). The field is required — 428 when absent, 400 when unparsable.
+func parseExpectedWorkingVersion(w http.ResponseWriter, raw string) (*time.Time, bool) {
+	if strings.TrimSpace(raw) == "" {
+		respondWithAPIError(w, http.StatusPreconditionRequired, openapi.ApiErrorCodePreconditionRequired,
+			"expected_working_version es obligatorio: leé el WorkingCopy actual antes de escribir", nil)
+		return nil, false
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw))
+	if err != nil {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "expected_working_version inválido", nil)
+		return nil, false
+	}
+	return &parsed, true
 }
 
 // HandleDesignWorkingCopyReset serves POST for /api/designs/{designId}/working-copy:reset.
@@ -592,10 +620,16 @@ func (s *Server) HandleDesignWorkingCopyReset(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	expectedWorkingVersion, ok := parseExpectedWorkingVersion(w, body.ExpectedWorkingVersion)
+	if !ok {
+		return
+	}
+
 	wc, err := s.Store.ResetDesignWorkingCopy(r.Context(), storage.ResetDesignWorkingCopyCommand{
-		DesignID:    designID,
-		RevisionID:  revID,
-		ActorUserID: claims.UserID,
+		DesignID:               designID,
+		RevisionID:             revID,
+		ExpectedWorkingVersion: expectedWorkingVersion,
+		ActorUserID:            claims.UserID,
 	})
 	if err != nil {
 		respondWithDesignError(w, err)

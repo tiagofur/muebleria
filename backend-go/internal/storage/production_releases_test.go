@@ -120,7 +120,7 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 				Transform:             domain.Transform3D{TranslationMm: [3]float64{100, 0, 0}},
 			}
 		}
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:    d.ID,
 			SourceType:  domain.DesignRevisionSourceSketchup,
 			Items:       []storage.UpdateDesignWorkingCopyItemCommand{workingItem(out.fiA), workingItem(out.fiB)},
@@ -226,7 +226,7 @@ func TestProductionRelease_CanonicalPinningNegativeProof(t *testing.T) {
 
 	// The designer keeps working: manufacturing-affecting change on FI-A.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -481,7 +481,7 @@ func TestProductionRelease_SpatialOnlyRevisionIsNotManufacturingStale(t *testing
 
 	// R4: identical manufacturing inputs, furniture purely moved.
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -529,7 +529,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 	// try to release it.
 	var revR4ID string
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -601,7 +601,7 @@ func TestProductionRelease_Gates(t *testing.T) {
 	// 3. Preflight blocker: invalid parameter type against the module contract.
 	var invalidRevID string
 	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -1090,7 +1090,7 @@ func TestGetContextualProductionRelease_HistoricalVsLatest(t *testing.T) {
 	var p2 *storage.ProductionReleaseReadback
 	var revR4, quoteQ4 string
 	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #642 demo flow — browser E2E of the SIMPLIFIED happy path UX:
@@ -111,7 +111,7 @@ test.describe.serial('Demo happy path UX: Q1 → cambios → Q2/R2 → P1 → Pr
     //    single next action offered is the updated quote.
     // ------------------------------------------------------------------
     const client = new GraneteApiClient(apiBase);
-    await client.updateDesignWorkingCopy(token, designId, {
+    await putWorkingCopyCurrent(client, token, designId, {
       items: [
         { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720, depthMm: seeded.depthMm }, material_choices: HAPPY_CHOICES },
         { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720, depthMm: seeded.depthMm }, material_choices: HAPPY_CHOICES },
@@ -307,7 +307,7 @@ async function seedHappyPathFixtureReal(): Promise<SeededHappyPath> {
     { name: 'Cocina Happy Path' },
     'happy-path-create-design',
   );
-  await client.updateDesignWorkingCopy(owner.token, design.id, {
+  await putWorkingCopyCurrent(client, owner.token, design.id, {
     items: [
       { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720, depthMm }, material_choices: HAPPY_CHOICES },
       { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720, depthMm }, material_choices: HAPPY_CHOICES },

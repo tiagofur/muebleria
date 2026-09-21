@@ -117,7 +117,7 @@ func setupRequoteFixture(t *testing.T) *requoteFixture {
 		}
 		out.quoteRevID = qRev.ID
 
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -367,7 +367,7 @@ func TestRequote_NoCommercialChanges_Rejected(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceManual,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
@@ -455,7 +455,7 @@ func TestRequote_PureMove_NeverCreatesCommercialRevision(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   d.ID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

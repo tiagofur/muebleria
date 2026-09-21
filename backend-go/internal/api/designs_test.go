@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -305,6 +306,7 @@ func TestHandleDesignWorkingCopy_PutReturns200(t *testing.T) {
 	srv := &Server{Store: store}
 	reqBody := `{
 		"source_type": "manual",
+		"expected_working_version": "2026-09-21T00:00:00.000000Z",
 		"items": [
 			{
 				"furniture_instance_id": "` + designTestInstanceID + `",
@@ -327,12 +329,58 @@ func TestHandleDesignWorkingCopy_PutReturns200(t *testing.T) {
 	if len(store.updateDesignWorkingCopyCmd.Items) != 1 {
 		t.Fatalf("items count = %d, want 1", len(store.updateDesignWorkingCopyCmd.Items))
 	}
+	if store.updateDesignWorkingCopyCmd.ExpectedWorkingVersion == nil ||
+		!store.updateDesignWorkingCopyCmd.ExpectedWorkingVersion.UTC().Equal(time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("expected_working_version = %v, want the canonical token from the body", store.updateDesignWorkingCopyCmd.ExpectedWorkingVersion)
+	}
+}
+
+// #810 — the PUT is a conflict-safe frontier: a missing canonical token
+// rejects with 428 before touching the store, an unparsable token with 400,
+// and a stale token surfaces the typed 409 VERSION_CONFLICT.
+func TestHandleDesignWorkingCopy_PreconditionAndTypedConflict(t *testing.T) {
+	srv := &Server{Store: &stubStore{}}
+
+	missing := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
+		`{"items": []}`, string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+	srv.HandleDesignWorkingCopy(rr, missing)
+	if rr.Code != http.StatusPreconditionRequired {
+		t.Fatalf("missing token status = %d, want 428 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "PRECONDITION_REQUIRED") {
+		t.Fatalf("missing token body = %s, want PRECONDITION_REQUIRED code", rr.Body.String())
+	}
+
+	unparsable := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
+		`{"expected_working_version": "hace-un-rato", "items": []}`, string(domain.RoleAdmin))
+	rr = httptest.NewRecorder()
+	srv.HandleDesignWorkingCopy(rr, unparsable)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("unparsable token status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+
+	conflictStore := &stubStore{updateDesignWorkingCopyErr: storage.ErrWorkingCopyVersionConflict}
+	srv = &Server{Store: conflictStore}
+	stale := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
+		`{"expected_working_version": "2026-09-21T00:00:00.000000Z", "items": []}`, string(domain.RoleAdmin))
+	rr = httptest.NewRecorder()
+	srv.HandleDesignWorkingCopy(rr, stale)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("stale token status = %d, want 409 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "VERSION_CONFLICT") {
+		t.Fatalf("stale token body = %s, want VERSION_CONFLICT code", rr.Body.String())
+	}
+	if conflictStore.updateDesignWorkingCopyCmd == nil {
+		t.Fatal("typed conflict must still reach the store command with the token")
+	}
 }
 
 func TestHandleDesignWorkingCopyReset_PostReturns200(t *testing.T) {
 	store := &stubStore{}
 	srv := &Server{Store: store}
-	reqBody := `{"revision_id":"` + designTestRevisionID + `"}`
+	reqBody := `{"revision_id":"` + designTestRevisionID + `", "expected_working_version": "2026-09-21T00:00:00.000000Z"}`
 	req := designRequest(http.MethodPost, "/api/designs/"+designTestDesignID+"/working-copy:reset", reqBody, string(domain.RoleAdmin))
 	rr := httptest.NewRecorder()
 

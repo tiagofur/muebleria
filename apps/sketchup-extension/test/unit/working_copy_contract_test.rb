@@ -23,6 +23,7 @@ class WorkingCopyContractTest < Minitest::Test
       )
       actual = {
         'base_revision_id' => expected.fetch('base_revision_id'),
+        'expected_working_version' => expected.fetch('expected_working_version'),
         'items' => [item.to_contract_h]
       }
 

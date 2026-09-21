@@ -20,7 +20,13 @@ module Granete
               'items' => items,
               'placed' => items.count { |row| row['reconciliationState'] == 'present_synced' },
               'pending' => items.count { |row| !row['terminal'] && !row['placed'] },
-              'attention' => items.count { |row| row['blocking'] }
+              'attention' => items.count { |row| row['blocking'] },
+              # #810 sync surface: local edits the working copy has not
+              # confirmed yet — placements/moves to confirm, deletions to
+              # apply, authoring edits awaiting their fields.
+              'dirty' => items.count do |row|
+                row['pendingConfirm'] || row['reconciliationState'] == 'missing_local' || row['authoringDirty']
+              end
             )
           end
 
@@ -54,6 +60,7 @@ module Granete
               'terminal' => state == 'terminal',
               'placed' => state == 'present_synced',
               'pendingConfirm' => state == 'pending_confirmation',
+              'authoringDirty' => item['authoringDirty'] == true,
               'reconciliationState' => state,
               'blocking' => item['blocking'],
               'reason' => item['reason'],

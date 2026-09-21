@@ -23,7 +23,7 @@ func publishRevisionFromWorkingCopy(t *testing.T, fx *releaseFixture, baseRev st
 	actorA := fiActorA()
 	var revID string
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:    fx.designID,
 			SourceType:  domain.DesignRevisionSourceSketchup,
 			Items:       items,

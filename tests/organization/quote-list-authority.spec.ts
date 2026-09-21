@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #642 / 2A browser E2E against the real Go backend + PostgreSQL (no mocks
@@ -129,7 +129,7 @@ async function prepareListFixture(): Promise<SeedListFixture> {
   // R1 carries a REAL commercial change (unit width 600 → 650) so the Q2
   // requote has something to incorporate: the server refuses requotes with
   // zero commercial delta ("no se crea una nueva cotización").
-  await client.updateDesignWorkingCopy(token, design.id, {
+  await putWorkingCopyCurrent(client, token, design.id, {
     items: [
       { furniture_instance_id: instanceId, furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
     ],
@@ -289,7 +289,7 @@ test('2A: Q2 accepted wins, identity stays frozen, Q3 draft stays secondary, vie
   // Q3 draft: newer than the accepted Q2 → secondary "en borrador" line.
   // R2 carries another real commercial change (650 → 700) so the requote
   // from Q2 is accepted by the server.
-  await client.updateDesignWorkingCopy(seeded.token, seeded.designId, {
+  await putWorkingCopyCurrent(client, seeded.token, seeded.designId, {
     items: [
       { furniture_instance_id: seeded.instanceId, furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 700, heightMm: 720, depthMm: seeded.depthMm }, material_choices: REC_CHOICES },
     ],

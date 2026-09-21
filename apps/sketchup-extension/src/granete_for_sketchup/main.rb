@@ -25,6 +25,7 @@ module Granete
         connection/host_restore
         connection/panel_state
         connection/project_furniture
+        connection/design_sync
         connection/commercial_projection
         connection/project_bootstrap
         connection/initial_quote

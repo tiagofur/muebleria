@@ -13,6 +13,7 @@ require_relative '../../src/granete_for_sketchup/connection/transform_contract'
 require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
+require_relative '../../src/granete_for_sketchup/connection/design_sync'
 require_relative '../../src/granete_for_sketchup/connection/duplicate_resolver'
 require_relative '../../src/granete_for_sketchup/connection/design_publish'
 
@@ -78,10 +79,13 @@ class DigitalThreadContractTest < Minitest::Test
       new_inst
     end
 
-    def update_working_copy(design_id, items:, base_revision_id:)
+    def update_working_copy(design_id, items:, expected_working_version:, base_revision_id:, source_type: nil)
+      @last_source_type = source_type
+      @last_expected_version = expected_working_version
       @working_copy = PF::Contract::WorkingCopy.new(
         design_id: design_id,
         base_revision_id: base_revision_id,
+        updated_at: '2026-09-03T00:01:00Z',
         items: items
       )
     end

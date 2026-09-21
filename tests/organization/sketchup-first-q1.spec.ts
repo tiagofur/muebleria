@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 const STRUCTURE_ID = '71800000-0000-4000-8000-000000000001';
 const HARDWARE_ID = '71800000-0000-4000-8000-000000000002';
@@ -74,7 +74,7 @@ test('718: canonical SketchUp-first bootstrap and Q1 appear through the normal R
     { furniture_definition_id: GATE_MODULE_A_ID },
     'gate-718-furniture',
   );
-  await client.updateDesignWorkingCopy(token, designId, {
+  await putWorkingCopyCurrent(client, token, designId, {
     items: [{
       furniture_instance_id: furniture.id,
       furniture_definition_id: GATE_MODULE_A_ID,

@@ -48,11 +48,12 @@ module Granete
         # design working copy (GET + merge-PUT). Typed errors only.
         class Service
           class Error < StandardError
-            attr_reader :kind, :status
+            attr_reader :kind, :status, :api_code
 
-            def initialize(kind, message = nil, status: nil)
+            def initialize(kind, message = nil, status: nil, api_code: nil)
               @kind = kind
               @status = status
+              @api_code = api_code
               super(message || kind.to_s)
             end
           end
@@ -100,9 +101,17 @@ module Granete
 
           # Sends the COMPLETE desired working state (replace semantics of
           # PUT); the caller is responsible for merging, never for silent
-          # overwrite of items it did not place.
-          def update_working_copy(design_id, items:, base_revision_id: nil, source_type: nil)
-            payload = { 'items' => items.map(&:to_contract_h) }
+          # overwrite of items it did not place. expected_working_version is
+          # the canonical #810 workingVersion token — the verbatim updated_at
+          # of the caller's last authoritative read — validated server-side
+          # under the write lock (409 VERSION_CONFLICT on mismatch).
+          def update_working_copy(design_id, items:, expected_working_version:, base_revision_id: nil, source_type: nil)
+            unless expected_working_version.is_a?(String) && !expected_working_version.strip.empty?
+              raise ArgumentError, 'expected_working_version es obligatorio (token workingVersion #810)'
+            end
+
+            payload = { 'items' => items.map(&:to_contract_h),
+                        'expected_working_version' => expected_working_version }
             payload['base_revision_id'] = base_revision_id if base_revision_id
             payload['source_type'] = source_type if source_type
             body = request(:put, "/designs/#{design_id}/working-copy", payload)
@@ -122,18 +131,31 @@ module Granete
 
             response = @transport.request(payload)
             status = response['status'].to_i
-            case status
-            when 200, 201 then response['body']
-            when 400 then raise Error.new(:bad_request, error_message(response), status: status)
-            when 401 then raise Error.new(:unauthenticated, 'sesión expirada o inválida', status: status)
-            when 403 then raise Error.new(:unauthorized, 'no tenés permiso para este proyecto o diseño', status: status)
-            when 404 then raise Error.new(:not_found, 'proyecto, diseño o mueble inexistente', status: status)
-            when 409 then raise Error.new(:conflict, conflict_message(response), status: status)
-            else raise Error.new(:bad_response, "respuesta inesperada del servidor (#{status})", status: status)
-            end
+            return response['body'] if [200, 201].include?(status)
+
+            raise typed_error(status, response)
           rescue ::Granete::SketchUpExtension::Transport::RequestError => e
             @logger.error('project_furniture_request_failed', error: e)
             raise Error.new(:unreachable, 'no se pudo contactar al servidor')
+          end
+
+          def typed_error(status, response)
+            error_body = response['body']
+            api_code = error_body.is_a?(Hash) ? error_body['code'] : nil
+            case status
+            when 400 then raise Error.new(:bad_request, error_message(response), status: status, api_code: api_code)
+            when 401 then raise Error.new(:unauthenticated, 'sesión expirada o inválida', status: status,
+                                                                                          api_code: api_code)
+            when 403 then raise Error.new(:unauthorized, 'no tenés permiso para este proyecto o diseño',
+                                          status: status, api_code: api_code)
+            when 404 then raise Error.new(:not_found, 'proyecto, diseño o mueble inexistente', status: status,
+                                                                                               api_code: api_code)
+            when 409 then raise Error.new(:conflict, conflict_message(response), status: status, api_code: api_code)
+            when 428 then raise Error.new(:precondition_required, error_message(response), status: status,
+                                                                                           api_code: api_code)
+            else raise Error.new(:bad_response, "respuesta inesperada del servidor (#{status})", status: status,
+                                                                                                 api_code: api_code)
+            end
           end
 
           def conflict_message(response)
@@ -567,17 +589,19 @@ module Granete
           end
 
           # Phase 4 — sync with the FINAL transform: GET → merge by
-          # furnitureInstanceId → PUT complete state (#389 §14). Existing
-          # items keep every field SketchUp does not own; a PUT failure rolls
-          # the local placement back (#389 §18).
+          # furnitureInstanceId → PUT complete state (#389 §14, #810
+          # frontier). Existing items keep every field SketchUp does not
+          # own; a PUT failure rolls the local placement back (#389 §18).
           def sync_placement(model, binding, furniture_instance_id, entity)
             working = @service.get_working_copy(binding.design_id)
             intent = placement_intent(entity, furniture_instance_id) || {}
             locator = ManagedFurniture.persistent_locator(entity)
             merged = WorkingCopyMerger.merge(working, furniture_instance_id, entity,
-                                             intent: intent, locator: locator)
+                                             intent: intent, locator: locator,
+                                             authoring_dirty: authoring_dirty?(entity, furniture_instance_id))
             @service.update_working_copy(binding.design_id, items: merged,
-                                                            base_revision_id: binding.base_revision_id)
+                                                            base_revision_id: binding.base_revision_id,
+                                                            expected_working_version: working.updated_at)
             @intent_store.clear(furniture_instance_id)
             @logger.info('project_furniture_placed',
                          furniture_instance_id: furniture_instance_id,
@@ -606,6 +630,19 @@ module Granete
             end
 
             metadata['intent'].is_a?(Hash) ? metadata['intent'] : {}
+          end
+
+          # #810 rule C: a locally edited entity carries the persisted
+          # authoring-dirty flag until a confirmed sync clears it; the merge
+          # then owns its parameters/material choices.
+          def authoring_dirty?(entity, furniture_instance_id)
+            metadata = @metadata_store_factory.call(@model_provider.call).read(entity)
+            return false unless metadata.is_a?(Hash)
+
+            identity = metadata['identity']
+            return false unless identity&.dig('furnitureInstanceId') == furniture_instance_id
+
+            metadata['authoringDirty'] == true
           end
 
           def locate_unit(model, furniture_instance_id)

@@ -45,7 +45,7 @@ func setupDesignQuoteFixture(t *testing.T) *designQuoteFixture {
 			return err
 		}
 		out.designID = design.ID
-		_, err = fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		_, err = UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID: design.ID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{FurnitureInstanceID: out.instances[0], FurnitureDefinitionID: csModule, DefinitionVersion: intPtr(3), Parameters: map[string]any{}, MaterialChoices: map[string]string{"INTERIOR": csMaterial}},
@@ -150,7 +150,7 @@ func TestCreateInitialDesignQuoteRevision_PreservesExactWorkingIdentityAndConfig
 	}
 	multiOrgExec(t, fx.admin, `UPDATE material_boards SET board_price=999 WHERE id='`+csMaterial+`';`)
 	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
-		_, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{DesignID: fx.designID, ActorUserID: rlsUserA, Items: []storage.UpdateDesignWorkingCopyItemCommand{
+		_, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{DesignID: fx.designID, ActorUserID: rlsUserA, Items: []storage.UpdateDesignWorkingCopyItemCommand{
 			{FurnitureInstanceID: fx.instances[0], FurnitureDefinitionID: csModule, MaterialChoices: map[string]string{"INTERIOR": csMaterial2}},
 			{FurnitureInstanceID: fx.instances[1], FurnitureDefinitionID: csModule, MaterialChoices: map[string]string{"INTERIOR": csMaterial}},
 		}})

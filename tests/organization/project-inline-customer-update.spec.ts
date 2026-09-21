@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { required } from './support/api';
+import { putWorkingCopyCurrent, required } from './support/api';
 
 const PROJECT_ID = '71400000-0000-4000-8000-000000000001';
 const BASE_CUSTOMER_ID = '71400000-0000-4000-8000-000000000002';

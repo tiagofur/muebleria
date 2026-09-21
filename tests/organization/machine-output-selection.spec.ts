@@ -7,7 +7,7 @@ import {
   resolvePtxCompilerRoute,
 } from '@granete/excel';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { required } from './support/api';
+import { putWorkingCopyCurrent, required } from './support/api';
 import { TotpProvider, secretFromProvisioningUri } from './support/totp';
 
 /**

@@ -1,9 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import {
-  GATE_MODULE_A_ID,
-  required,
-} from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 const PROJECT_A_ID = '77777777-1111-4777-8777-111111111111';
 const QUOTE_LINE_ID = '88888888-1111-4888-8888-111111111111';
@@ -84,7 +81,7 @@ async function prepareProjectFurniture(): Promise<SeededProjectFurniture> {
     'gate-pf-create-design',
   );
 
-  await client.updateDesignWorkingCopy(aOwner.token, design.id, {
+  await putWorkingCopyCurrent(client, aOwner.token, design.id, {
     items: [
       { furniture_instance_id: instanceIds[0]!, parameters: {}, material_choices: {} },
       { furniture_instance_id: instanceIds[1]!, parameters: {}, material_choices: {} },

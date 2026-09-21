@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #741 PR 1 — browser E2E of the conservative continuity policy:
@@ -217,7 +217,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
       { name: 'Cocina Continuidad' },
       'cont-741-create-design',
     );
-    await client.updateDesignWorkingCopy(owner.token, design.id, {
+    await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
         furniture_definition_id: template.id,
@@ -302,7 +302,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
 
     // P2 with a REAL manufacturing difference: both units 600 mm → 650 mm,
     // explicit requote Q2 (commercial change, #678), approved R2, exact pair.
-    await client.updateDesignWorkingCopy(owner.token, design.id, {
+    await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
         furniture_definition_id: template.id,

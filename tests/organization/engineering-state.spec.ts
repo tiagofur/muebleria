@@ -1,7 +1,7 @@
 import { expect, test, type Download, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #740 PR 1 — browser E2E of the DURABLE per-release Engineering state:
@@ -205,7 +205,7 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
       { name: 'Cocina Estado Ingeniería' },
       'eng-state-create-design',
     );
-    await client.updateDesignWorkingCopy(owner.token, design.id, {
+    await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
         furniture_definition_id: template.id,

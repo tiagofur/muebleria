@@ -164,7 +164,7 @@ func TestProductionRelease_PreflightParityBlocksUnresolvableRevision(t *testing.
 	// clean, so ONLY the resolution gate can reject).
 	var revR4 string
 	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		if _, err := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #658 browser proof — reconciliar materiales pendientes del Design Working
@@ -128,7 +128,7 @@ async function seedWorkingMaterials(): Promise<SeededWorkingMaterials> {
   // Unit 1: INTERIOR authored, FRENTES missing → candidate.
   // Unit 2: nothing authored → both roles candidates.
   // Unit 3: fully authored → never offered repair.
-  await client.updateDesignWorkingCopy(aOwner.token, design.id, {
+  await putWorkingCopyCurrent(client, aOwner.token, design.id, {
     items: [
       { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600 }, material_choices: { INTERIOR: AUTHORED_MATERIAL_ID } },
       { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 800 }, material_choices: {} },
@@ -266,7 +266,7 @@ test.describe.serial('Design Working Copy materials reconciliation UI (#658) Bro
       { name: 'Conflicto stale 658' },
       'gate-658-conflict-design',
     );
-    await client.updateDesignWorkingCopy(aOwner.token, design.id, {
+    await putWorkingCopyCurrent(client, aOwner.token, design.id, {
       items: [
         { furniture_instance_id: seeded.instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600 }, material_choices: {} },
       ],
@@ -281,7 +281,7 @@ test.describe.serial('Design Working Copy materials reconciliation UI (#658) Bro
 
     // Concurrent authoring save between the read and the confirm: the real
     // backend bumps the working-copy version the UI pinned.
-    await client.updateDesignWorkingCopy(aOwner.token, design.id, {
+    await putWorkingCopyCurrent(client, aOwner.token, design.id, {
       items: [
         { furniture_instance_id: seeded.instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 610 }, material_choices: {} },
       ],

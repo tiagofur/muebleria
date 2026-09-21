@@ -524,6 +524,9 @@ module Granete
           dialog.add_action_callback('validate_design_revision') do |_c, _p|
             handle_validate_design_revision(dialog)
           end
+          dialog.add_action_callback('synchronize_design') do
+            handle_synchronize_design(dialog)
+          end
         end
 
         # Panel payload: binding-aware reconciliation per furnitureInstanceId.
@@ -533,6 +536,26 @@ module Granete
         rescue StandardError => e
           @logger.error('project_furniture_panel_failed', error: e)
           execute_bridge(dialog, 'onProjectFurniture', { 'state' => 'error', 'reason' => e.message })
+        end
+
+        # #810 — the explicit "Sincronizar diseño" operation: one conscious
+        # add/update/delete sync through the conflict-safe frontier, verified
+        # by authoritative readback. Success refreshes the panel and marks the
+        # commercial projection synchronized; the HtmlDialog refetches the
+        # confirmed total from the backend (no local price math).
+        def handle_synchronize_design(dialog)
+          result = design_sync_synchronizer.synchronize_design
+          execute_bridge(dialog, 'onSynchronizeDesignResult', result)
+          if result['ok']
+            notify_commercial_projection_synchronization(:full)
+            handle_get_project_furniture(dialog)
+            push_preflight_state(dialog)
+            mark_host_save_pending
+          end
+        rescue StandardError => e
+          @logger.error('design_sync_handler_failed', error: e)
+          execute_bridge(dialog, 'onSynchronizeDesignResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         end
 
         # Place EXISTING FurnitureInstance: identity arrives from the server
@@ -2415,6 +2438,19 @@ module Granete
           @mutation_coordinator ||= build_default_mutation_coordinator
         end
 
+        # #810: the explicit "Sincronizar diseño" operation. Injectable for
+        # tests; lazily built over the placer's shared working-copy service.
+        def design_sync_synchronizer
+          @design_sync_synchronizer ||= Connection::DesignSync::Synchronizer.new(
+            model_provider: method(:active_model),
+            binding_store_factory: ->(model) { Connection::ModelBinding::Store.new(model) },
+            model_binding_service: @model_binding_connector.service,
+            service: @project_furniture_placer.service,
+            metadata_store_factory: @metadata_store_factory,
+            logger: @logger
+          )
+        end
+
         # rubocop:disable Metrics/ParameterLists
         def initialize(logger:, status_provider:, catalog_provider: nil, furniture_builder: nil,
                        metadata_store: nil, metadata_store_factory: nil, session: nil,
@@ -2426,7 +2462,8 @@ module Granete
                        position_sync_coordinator: nil,
                        publication_scope_provider: nil,
                        project_bootstrap: nil, initial_quote: nil,
-                       mount_frame_preparer_controller: nil)
+                       mount_frame_preparer_controller: nil,
+                       design_sync_synchronizer: nil)
           # rubocop:enable Metrics/ParameterLists
           @logger = logger
           @status_provider = status_provider
@@ -2447,6 +2484,7 @@ module Granete
           @commercial_projection_service = commercial_projection_service
           @project_bootstrap = project_bootstrap
           @initial_quote = initial_quote
+          @design_sync_synchronizer = design_sync_synchronizer
           @catalog_provider = catalog_provider || Library::CatalogProvider.new
           @furniture_builder = furniture_builder
           @metadata_store = metadata_store

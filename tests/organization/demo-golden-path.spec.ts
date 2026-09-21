@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { required } from './support/api';
+import { putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * [P0][DEMO] Canonical golden-path regression (#644, test-only) —
@@ -686,7 +686,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
   // ------------------------------------------------------------------
   test('stage 5 — working copy carries quoted identity for every unit', async () => {
     test.setTimeout(60_000);
-    await client.updateDesignWorkingCopy(owner.token, track.designId, {
+    await putWorkingCopyCurrent(client, owner.token, track.designId, {
       source_type: 'sketchup',
       items: track.furnitureInstanceIds.map((instanceId, index) => ({
         furniture_instance_id: instanceId,
@@ -780,7 +780,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     for (const item of r1AfterCatalogRename.items) expectPresentationSnapshot(item, GOLD_MODULE_NAME);
 
     const modifiedWidth = 650;
-    await client.updateDesignWorkingCopy(owner.token, track.designId, {
+    await putWorkingCopyCurrent(client, owner.token, track.designId, {
       source_type: 'sketchup',
       items: track.furnitureInstanceIds.map((instanceId, index) => ({
         furniture_instance_id: instanceId,
@@ -966,7 +966,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     // A REAL pending commercial change (width 650 → 700 on the golden unit)
     // grounds quote Q3 through the supported requote command; it is published
     // but deliberately NOT accepted.
-    await client.updateDesignWorkingCopy(owner.token, track.designId, {
+    await putWorkingCopyCurrent(client, owner.token, track.designId, {
       source_type: 'sketchup',
       items: track.furnitureInstanceIds.map((instanceId, index) => ({
         furniture_instance_id: instanceId,
@@ -1071,7 +1071,7 @@ test.describe.serial('DEMO golden path: Quote → SketchUp → DesignRevision �
     expect(transformBefore[fiC]).toEqual({ translation_mm: [1200, 0, 0], rotation_deg: [0, 0, 0] });
 
     // Q2's exact commercial content with ONLY the placement transformed.
-    await client.updateDesignWorkingCopy(owner.token, track.designId, {
+    await putWorkingCopyCurrent(client, owner.token, track.designId, {
       source_type: 'sketchup',
       items: track.furnitureInstanceIds.map((instanceId, index) => ({
         furniture_instance_id: instanceId,

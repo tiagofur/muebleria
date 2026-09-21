@@ -470,9 +470,12 @@ module Granete
           # Final sync of the working copy before publishing: the working
           # copy is the sole publication source, so every managed entity's
           # CURRENT transform/locator must be merged into it (existing
-          # authoritative fields survive verbatim — #389 merge rule).
+          # authoritative fields survive verbatim — #389 merge rule). The
+          # write goes through the canonical #810 frontier with the
+          # workingVersion token, converging a lost-response retry.
           def sync_working_copy(binding, model, manifest)
-            working = @working_copy_service.get_working_copy(binding.design_id)
+            base_working = @working_copy_service.get_working_copy(binding.design_id)
+            working = base_working
             metadata_store = @metadata_store_factory.call(model)
             items = working.items
             manifest['items'].each do |manifest_item|
@@ -487,15 +490,14 @@ module Granete
               )
               working = ProjectFurniture::Contract::WorkingCopy.new(
                 design_id: working.design_id, project_id: working.project_id,
-                base_revision_id: working.base_revision_id, items: items
+                base_revision_id: working.base_revision_id, updated_at: working.updated_at,
+                items: items
               )
             end
             assert_context_current!(model, binding)
-            @working_copy_service.update_working_copy(
-              binding.design_id,
-              items: items,
-              base_revision_id: binding.base_revision_id,
-              source_type: 'sketchup'
+            DesignSync::SafeWrite.write(
+              service: @working_copy_service, working: base_working,
+              items: items, base_revision_id: binding.base_revision_id
             )
           end
 

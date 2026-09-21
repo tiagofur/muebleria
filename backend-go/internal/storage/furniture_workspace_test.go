@@ -80,7 +80,7 @@ func TestGetProjectFurnitureWorkspace_ProvenanceAndProjection(t *testing.T) {
 		if txErr != nil {
 			return txErr
 		}
-		_, txErr = fx.store.UpdateDesignWorkingCopy(txCtx, storage.UpdateDesignWorkingCopyCommand{
+		_, txErr = UpdateWorkingCopyCurrent(txCtx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:    design.ID,
 			ActorUserID: rlsUserA,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{

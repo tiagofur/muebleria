@@ -132,12 +132,11 @@ module Granete
                            furniture_instance_id)
           end
 
-          updated_wc = @service.update_working_copy(
-            captured_binding.design_id,
-            items: merged_items,
-            base_revision_id: captured_binding.base_revision_id,
-            source_type: 'sketchup'
+          outcome = DesignSync::SafeWrite.write(
+            service: @service, working: working, items: merged_items,
+            base_revision_id: captured_binding.base_revision_id
           )
+          updated_wc = outcome['working']
 
           unless context_valid?(captured_model, captured_binding)
             return failure(:context_changed,
@@ -242,12 +241,11 @@ module Granete
 
           return unless context_valid?(captured_model, captured_binding)
 
-          updated_wc = @service.update_working_copy(
-            captured_binding.design_id,
-            items: current_working.items,
-            base_revision_id: captured_binding.base_revision_id,
-            source_type: 'sketchup'
+          outcome = DesignSync::SafeWrite.write(
+            service: @service, working: working, items: current_working.items,
+            base_revision_id: captured_binding.base_revision_id
           )
+          updated_wc = outcome['working']
 
           return unless context_valid?(captured_model, captured_binding)
 
@@ -403,12 +401,11 @@ module Granete
                                        missing)
           end
 
-          updated_wc = @service.update_working_copy(
-            binding.design_id,
-            items: merged_items,
-            base_revision_id: binding.base_revision_id,
-            source_type: 'sketchup'
+          outcome = DesignSync::SafeWrite.write(
+            service: @service, working: working, items: merged_items,
+            base_revision_id: binding.base_revision_id
           )
+          updated_wc = outcome['working']
 
           unless context_valid?(model, binding)
             return convergence_failure(:context_changed,

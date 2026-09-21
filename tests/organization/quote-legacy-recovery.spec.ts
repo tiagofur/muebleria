@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Pool } from 'pg';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #642 Legacy Quote Recovery — real browser E2E (Chromium + Go + PostgreSQL).

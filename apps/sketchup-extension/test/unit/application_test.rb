@@ -20,6 +20,7 @@ require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/host_restore'
 require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
+require_relative '../../src/granete_for_sketchup/connection/design_sync'
 require_relative '../../src/granete_for_sketchup/connection/commercial_projection'
 require_relative '../../src/granete_for_sketchup/connection/project_bootstrap'
 require_relative '../../src/granete_for_sketchup/connection/initial_quote'
@@ -186,7 +187,8 @@ class ApplicationTest < Minitest::Test
       manufacturing_inspection open_external_url open_material_selector
       place_furniture_instance poll_enrollment preflight_review prepare_hardware_mount publish_design_revision
       refresh_media_url refresh_model_binding
-      rescan_duplicates restore_furniture_instance select_furniture select_project_furniture update_furniture
+      rescan_duplicates restore_furniture_instance select_furniture select_project_furniture
+      synchronize_design update_furniture
       validate_design_revision validate_managed_furniture_identity
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort

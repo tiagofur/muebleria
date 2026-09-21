@@ -206,12 +206,23 @@ module Granete
           end
         end
 
+        # R3: material_choices semantics at this boundary:
+        #   * Hash (partial or complete) → PATCH (#405 contract: a role edit
+        #     sends just that role and every omitted persisted role survives);
+        #   * CLEAR_MATERIAL_CHOICES     → the explicit total-clear statement
+        #     (the minimal canonical representation of "remove every choice";
+        #     none existed before — a Hash can't express it because {} is the
+        #     identity of the patch);
+        #   * nil                        → NO statement: the persisted intent
+        #     survives untouched (MetadataWriter then omits the key and the
+        #     working-copy merger preserves the server value, per #810/R2).
         def merge_material_choices(existing_meta, incoming_choices)
           existing = existing_meta&.dig('intent', 'materialChoices')
           existing = {} unless existing.is_a?(Hash)
-          return existing.dup unless incoming_choices.is_a?(Hash)
+          return {} if incoming_choices == FurnitureBuilder::CLEAR_MATERIAL_CHOICES
+          return existing.merge(incoming_choices) if incoming_choices.is_a?(Hash)
 
-          existing.merge(incoming_choices)
+          existing.dup
         end
 
         def material_choices_changed?(existing_meta, merged_choices)
@@ -689,6 +700,9 @@ module Granete
         MATERIAL_RESOLUTION_REQUIRED_ERROR =
           'El cambio de material requiere una composición nativa resuelta por Granete; ' \
           'el mueble anterior no fue modificado.'
+        # R3/#810: explicit total-clear statement for update_furniture's
+        # material_choices (never a data map; see merge_material_choices).
+        CLEAR_MATERIAL_CHOICES = :clear_material_choices
 
         def initialize(metadata_store: nil, asset_loader: nil, texture_cache: nil)
           @metadata_store = metadata_store
@@ -769,7 +783,7 @@ module Granete
             MetadataWriter.write_furniture(
               @metadata_store, furniture, instance_id, definition, parameters,
               material_choices: merged_material_choices, existing_metadata: existing_meta,
-              relationships: relationships
+              relationships: relationships, authoring_dirty: true
             )
             model.commit_operation if transaction
           rescue StandardError => e
@@ -982,9 +996,13 @@ module Granete
         # marks a placement whose instance_id IS the backend
         # furnitureInstanceId; a copied existing_metadata keeps a previously
         # stored server identity through rebuilds with no flag.
+        # authoring_dirty (#810 rule C): true marks a local authoring edit
+        # (parameters/materials) whose fields the working copy has not
+        # confirmed yet; the explicit design sync clears it after readback.
+        # rubocop:disable-next Metrics/ParameterLists
         def write_furniture(store, furniture, instance_id, definition, parameters,
                             material_choices: nil, existing_metadata: nil, migrated_from: nil,
-                            identity: nil, relationships: nil)
+                            identity: nil, relationships: nil, authoring_dirty: false)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -994,6 +1012,11 @@ module Granete
           metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref,
                                                             rev_ref, identity: identity)
           metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
+          if authoring_dirty
+            metadata_payload['authoringDirty'] = true
+          else
+            metadata_payload.delete('authoringDirty')
+          end
           metadata_payload['provenance'] = representation_migration(migrated_from) if migrated_from
           apply_relationship_state(metadata_payload, relationships)
           store.write(furniture, metadata_payload)
@@ -1065,7 +1088,12 @@ module Granete
           version = definition['definition_version'] || definition['definitionVersion'] || definition['version']
           intent['definitionVersion'] = version unless version.nil?
           intent['parameters'] = parameters
-          intent['materialChoices'] = material_choices if material_choices.is_a?(Hash) && !material_choices.empty?
+          # R2: a Hash material_choices — INCLUDING the empty one — is an
+          # explicit authoring statement ({} is the canonical "no material
+          # choices" state and must reach the working copy as a clear). nil
+          # means no statement: the key is omitted and the server value
+          # survives.
+          intent['materialChoices'] = material_choices if material_choices.is_a?(Hash)
           intent
         end
       end

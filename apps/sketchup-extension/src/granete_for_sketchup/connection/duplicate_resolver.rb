@@ -544,7 +544,12 @@ module Granete
           merged = wc.items.reject { |item| item.furniture_instance_id == new_id }
           merged << new_item
 
-          @service.update_working_copy(binding.design_id, items: merged, base_revision_id: binding.base_revision_id)
+          # #810 frontier: the duplicate identity lands through the canonical
+          # conflict-safe write carrying the workingVersion token.
+          DesignSync::SafeWrite.write(
+            service: @service, working: wc, items: merged,
+            base_revision_id: binding.base_revision_id
+          )
         end
 
         def build_working_copy_item(copy_entity, new_id, source_item)

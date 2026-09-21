@@ -14,7 +14,11 @@ module Granete
                                    :parameters, :material_choices, :transform, :technical_client_locator,
                                    :room_id,
                                    keyword_init: true)
-          WorkingCopy = Struct.new(:design_id, :project_id, :base_revision_id, :items, keyword_init: true)
+          # updated_at is kept as the VERBATIM server string: it is the
+          # canonical workingVersion token every write must echo back as
+          # expected_working_version (#810).
+          WorkingCopy = Struct.new(:design_id, :project_id, :base_revision_id, :items, :updated_at,
+                                   keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
                                 :display_name, :display_dimensions, :display_material_choices,
                                 keyword_init: true)
@@ -120,9 +124,14 @@ module Granete
               base = nil if base.to_s.strip.empty?
               raise ContractError, 'base_revision_id inválido' unless base.nil? || ProjectFurniture.uuid?(base)
 
+              updated_at = body['updated_at']
+              unless updated_at.is_a?(String) && !updated_at.strip.empty?
+                raise ContractError, 'working copy sin updated_at (token workingVersion) válido'
+              end
+
               WorkingCopy.new(
                 design_id: body['design_id'], project_id: body['project_id'],
-                base_revision_id: base,
+                base_revision_id: base, updated_at: updated_at,
                 items: body['items'].map { |entry| parse_working_item!(entry) }
               )
             end
@@ -180,27 +189,59 @@ module Granete
           end
         end
 
-        # Merge rule (#389 §14 + review fix): the PUT carries the COMPLETE
-        # desired state. An EXISTING working item keeps every authoritative
-        # authoring field (definition, version, parameters, materials,
-        # room) verbatim — SketchUp updates ONLY the placement-owned
-        # transform and technical locator. A first-time item is built from
-        # the persisted placement intent metadata (what was rendered).
+        # Merge rule (#389 §14 + review fix, extended by #810): the PUT
+        # carries the COMPLETE desired state. An EXISTING working item keeps
+        # every authoritative authoring field (definition, version,
+        # parameters, materials, room) verbatim — SketchUp updates ONLY the
+        # placement-owned transform and technical locator — UNLESS the entity
+        # carries the persisted authoring-dirty flag (#810 rule C): a local,
+        # server-resolved edit the backend has not confirmed yet. Then the
+        # item's parameters/material choices/definition come from the
+        # persisted placement intent (what was rendered), still preserving
+        # every field SketchUp does not author (room). A first-time item is
+        # always built from the placement intent metadata.
         module WorkingCopyMerger
           module_function
 
-          def merge(working, furniture_instance_id, entity, intent: {}, locator: nil)
+          def merge(working, furniture_instance_id, entity, intent: {}, locator: nil, authoring_dirty: false)
             existing = working.items.find { |item| item.furniture_instance_id == furniture_instance_id }
             if existing
               updated = existing.dup
               updated.transform = TransformContract.from_host(entity.transformation)
               updated.technical_client_locator = locator
+              apply_authoring_intent!(updated, intent) if authoring_dirty
               return working.items.map do |item|
                 item.furniture_instance_id == furniture_instance_id ? updated : item
               end
             end
 
             working.items + [new_working_item(furniture_instance_id, entity, intent, locator)]
+          end
+
+          # #810 rule A: authoring fields of an existing item are replaced
+          # ONLY from the entity's persisted intent, and only while the
+          # authoring-dirty flag is set (a local edit awaiting confirmed
+          # sync). Absent intent keys keep the server value verbatim.
+          # #810 rule A + R2: authoring fields of an existing item are
+          # replaced ONLY from the entity's persisted intent, and only while
+          # the authoring-dirty flag is set. PRESENCE of the key defines the
+          # authoring statement — never emptiness:
+          #   key absent          → preserve the server value verbatim;
+          #   key present with {} → explicit clear (replace with {});
+          #   key present, values → replace with those values.
+          def apply_authoring_intent!(item, intent)
+            return item unless intent.is_a?(Hash)
+
+            item.parameters = intent['parameters'] if intent.key?('parameters') && intent['parameters'].is_a?(Hash)
+            choices = intent['materialChoices']
+            item.material_choices = choices if intent.key?('materialChoices') && choices.is_a?(Hash)
+            definition_id = intent['furnitureDefinitionId']
+            item.furniture_definition_id = definition_id if definition_id.is_a?(String) && !definition_id.strip.empty?
+            version = Contract.authoritative_definition_version(
+              intent['definitionVersion'], intent['definition_version']
+            )
+            item.definition_version = version unless version.nil?
+            item
           end
 
           def new_working_item(furniture_instance_id, entity, intent, locator)

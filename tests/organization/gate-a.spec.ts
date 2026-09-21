@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { GraneteApiClient } from '@granete/storage';
-import { required } from './support/api';
+import { putWorkingCopyCurrent, required } from './support/api';
 
 async function login(page: Page, email: string, organizationSlug: string): Promise<void> {
   await page.goto('/');

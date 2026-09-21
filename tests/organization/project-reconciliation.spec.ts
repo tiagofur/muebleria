@@ -2,7 +2,7 @@ import { mkdir } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #502 / WEB-DT-3 browser E2E against the real Go backend + PostgreSQL:
@@ -135,7 +135,7 @@ async function prepareReconciliationFixture(): Promise<SeededReconciliation> {
     { name: 'Cocina Reconciliación' },
     'gate-pr-create-design',
   );
-  await client.updateDesignWorkingCopy(aOwner.token, design.id, {
+  await putWorkingCopyCurrent(client, aOwner.token, design.id, {
     items: [
       { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
       { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
@@ -297,7 +297,7 @@ async function publishRevisionWithItemIds(options: {
           parameters: { widthMm: widthOf(selector), heightMm: 720, depthMm: seeded.depthMm },
           material_choices: REC_CHOICES,
         };
-  await client.updateDesignWorkingCopy(
+  await putWorkingCopyCurrent(client, 
     owner.token,
     seeded.designId,
     { items: options.items.map(itemOf) },
@@ -1070,7 +1070,7 @@ async function publishRevisionWithItemIds(options: {
         'gate-ops-create-design',
       ),
     );
-    await step('updateWorkingCopy', () => client.updateDesignWorkingCopy(owner.token, design.id, {
+    await step('updateWorkingCopy', () => putWorkingCopyCurrent(client, owner.token, design.id, {
       items: mat.instances.map((instance) => ({
         furniture_instance_id: instance.furniture_instance_id,
         furniture_definition_id: OPS_MODULE_ID,
