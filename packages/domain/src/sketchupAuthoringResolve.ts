@@ -128,10 +128,12 @@ export type AuthoringOccurrenceTransformV1 = {
 };
 
 /**
- * The resolve-scoped manual placement intent. v1 carries no
- * rotationDeg/handedness: fields that do not drive resolution are not part
- * of the wire (an apparent capability is worse than an absent one); #468
- * adds them together with their resolution semantics.
+ * The resolve-scoped manual placement intent. v1 carries the authored
+ * rotationDeg (per-axis board-frame Euler, same shape as
+ * HardwarePlacement['rotationDeg'] in this package) with its resolution
+ * semantics (the resolved layout's hardware localTransform basis applies it,
+ * #668 F6). Handedness is still not part of the wire: a field without
+ * resolution semantics is worse than an absent one.
  */
 export type AuthoringHardwarePlacementV1 = {
   readonly hardwarePlacementId: StableEntityId;
@@ -140,6 +142,7 @@ export type AuthoringHardwarePlacementV1 = {
   readonly hostComponentInstanceId: StableEntityId;
   readonly anchorFace: string;
   readonly offsetMm: readonly [number, number];
+  readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
 };
 
 /**
@@ -584,14 +587,23 @@ export function validateAuthoringResolveRequest(
         `${path}.offsetMm`);
     }
     const placementRecord = placement as unknown as Record<string, unknown>;
-    if (placementRecord.rotationDeg !== undefined) {
-      push('HARDWARE_PLACEMENT_INVALID',
-        `placement ${placement.hardwarePlacementId}: rotationDeg is not part of resolve v1 (added with #468 resolution semantics)`,
-        `${path}.rotationDeg`);
+    const rotation = placementRecord.rotationDeg;
+    if (rotation !== undefined) {
+      const rotationRecord = rotation as unknown as Record<string, unknown>;
+      const axes = ['x', 'y', 'z'].filter((axis) => rotationRecord[axis] !== undefined);
+      if (typeof rotation !== 'object' || rotation === null || Array.isArray(rotation) ||
+        axes.some((axis) => {
+          const value = rotationRecord[axis];
+          return typeof value !== 'number' || !Number.isFinite(value);
+        })) {
+        push('HARDWARE_PLACEMENT_INVALID',
+          `placement ${placement.hardwarePlacementId}: rotationDeg must be finite degrees per axis {x,y,z}`,
+          `${path}.rotationDeg`);
+      }
     }
     if (placementRecord.handedness !== undefined) {
       push('HARDWARE_PLACEMENT_INVALID',
-        `placement ${placement.hardwarePlacementId}: handedness is not part of resolve v1 (added with #468 resolution semantics)`,
+        `placement ${placement.hardwarePlacementId}: handedness is not part of resolve v1`,
         `${path}.handedness`);
     }
   }
@@ -790,7 +802,7 @@ function validatePlacements(value: unknown, componentIds: ReadonlyMap<string, st
     const placement = asRecord(item);
     const path = `normalizedSnapshot.hardwarePlacements[${index}]`;
     if (!placement) { problems.push(`${path} must be an object`); continue; }
-    rejectUnknownRecordKeys(placement, new Set(['hardwarePlacementId', 'placementKind', 'catalogHardwareId', 'hostComponentInstanceId', 'anchorFace', 'offsetMm']), path, problems);
+    rejectUnknownRecordKeys(placement, new Set(['hardwarePlacementId', 'placementKind', 'catalogHardwareId', 'hostComponentInstanceId', 'anchorFace', 'offsetMm', 'rotationDeg']), path, problems);
     if (placement.placementKind !== undefined && placement.placementKind !== 'manual' && placement.placementKind !== 'derived') {
       problems.push(`${path}.placementKind must be manual or derived`);
     }
@@ -798,6 +810,15 @@ function validatePlacements(value: unknown, componentIds: ReadonlyMap<string, st
       !isBoundedString(placement.hostComponentInstanceId) || !componentIds.has(placement.hostComponentInstanceId) ||
       !HARDWARE_ANCHOR_FACES.has(String(placement.anchorFace)) || !isFiniteTuple(placement.offsetMm, 2)) {
       problems.push(`${path} is invalid or references an unknown component`);
+    }
+    if (placement.rotationDeg !== undefined) {
+      const rotation = placement.rotationDeg as unknown as Record<string, unknown>;
+      const validShape = typeof rotation === 'object' && rotation !== null && !Array.isArray(rotation) &&
+        Object.keys(rotation).every((axis) => axis === 'x' || axis === 'y' || axis === 'z') &&
+        Object.values(rotation).every((value) => typeof value === 'number' && Number.isFinite(value));
+      if (!validShape) {
+        problems.push(`${path}.rotationDeg must be finite degrees per axis {x,y,z}`);
+      }
     }
     if (typeof placement.hardwarePlacementId === 'string') {
       if (ids.has(placement.hardwarePlacementId)) problems.push(`${path}.hardwarePlacementId is duplicated`);

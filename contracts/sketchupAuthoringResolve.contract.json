@@ -851,15 +851,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -869,14 +869,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -900,15 +900,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -918,14 +918,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -1840,15 +1840,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -1858,14 +1858,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -1889,15 +1889,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -1907,14 +1907,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -2931,15 +2931,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -2949,14 +2949,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -2980,15 +2980,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -2998,14 +2998,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -4092,15 +4092,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -4110,14 +4110,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -4141,15 +4141,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -4159,14 +4159,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -4799,15 +4799,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    434
+                    464.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -4817,14 +4817,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -4848,15 +4848,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -4866,14 +4866,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -5754,15 +5754,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    284,
+                    260,
                     578,
-                    62
+                    86
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  80,
                   22,
-                  80
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -5772,14 +5772,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -7210,15 +7210,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -7228,14 +7228,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -7259,15 +7259,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -7277,14 +7277,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -8179,15 +8179,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -8197,14 +8197,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -8228,15 +8228,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -8246,14 +8246,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -9148,15 +9148,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -9166,14 +9166,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -9197,15 +9197,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -9215,14 +9215,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -11071,15 +11071,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    332.5,
+                    302,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -11089,14 +11089,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -11120,15 +11120,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    592,
+                    528,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -11138,14 +11138,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -12571,15 +12571,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -12589,14 +12589,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -12620,15 +12620,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -12638,14 +12638,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -13442,15 +13442,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -13460,14 +13460,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -13491,15 +13491,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -13509,14 +13509,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -14368,15 +14368,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    282.5,
+                    252,
                     578,
-                    54
+                    84.5
                   ]
                 },
                 "dimensionsMm": [
-                  35,
+                  96,
                   25,
-                  96
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -14386,14 +14386,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -14417,15 +14417,15 @@
                 "placementKind": "manual",
                 "transform": {
                   "translationMm": [
-                    542,
+                    478,
                     578,
-                    282
+                    346
                   ]
                 },
                 "dimensionsMm": [
-                  32,
+                  160,
                   37,
-                  160
+                  32
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -14435,14 +14435,14 @@
                   ],
                   "basis": {
                     "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
                       0,
                       0,
                       1
-                    ],
-                    "y": [
-                      1,
-                      0,
-                      0
                     ],
                     "z": [
                       0,
@@ -15656,14 +15656,14 @@
                 "transform": {
                   "translationMm": [
                     18,
-                    32.5,
-                    102
+                    2,
+                    132.5
                   ]
                 },
                 "dimensionsMm": [
                   25,
-                  35,
-                  96
+                  96,
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -15674,13 +15674,13 @@
                   "basis": {
                     "x": [
                       0,
-                      0,
-                      -1
+                      1,
+                      0
                     ],
                     "y": [
                       0,
-                      1,
-                      0
+                      0,
+                      1
                     ],
                     "z": [
                       1,
@@ -16614,14 +16614,14 @@
                 "transform": {
                   "translationMm": [
                     18,
-                    32.5,
-                    452
+                    2,
+                    482.5
                   ]
                 },
                 "dimensionsMm": [
                   25,
-                  35,
-                  96
+                  96,
+                  35
                 ],
                 "localTransform": {
                   "translationMm": [
@@ -16632,13 +16632,13 @@
                   "basis": {
                     "x": [
                       0,
-                      0,
-                      -1
+                      1,
+                      0
                     ],
                     "y": [
                       0,
-                      1,
-                      0
+                      0,
+                      1
                     ],
                     "z": [
                       1,
@@ -16961,6 +16961,906 @@
               }
             ],
             "manufacturingFingerprint": "sha256-b45a4d2b763411f9b7c22db166f81f773dc5089a0d77ff632c42ea034fbc1a91"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
+            "issues": [],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": []
+      }
+    },
+    {
+      "id": "19-manual-handle-rotation-deg",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-8588028751d3",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "hardwarePlacements": [
+            {
+              "anchorFace": "front",
+              "catalogHardwareId": "hw-handle",
+              "hardwarePlacementId": "hp-handle-rotated-01",
+              "hostComponentInstanceId": "door-01",
+              "offsetMm": [
+                120,
+                360
+              ],
+              "placementKind": "manual",
+              "rotationDeg": {
+                "x": 5,
+                "y": 10,
+                "z": 90
+              }
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-8588028751d3",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "hasBackPanel": true,
+            "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "side-left-01",
+              "componentDefinitionId": "st-comp-side",
+              "catalogComponentId": "comp-side",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "componentDefinitionId": "st-comp-side-r",
+              "catalogComponentId": "comp-side-r",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "floor-01",
+              "componentDefinitionId": "st-comp-base",
+              "catalogComponentId": "comp-base",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "top-01",
+              "componentDefinitionId": "st-comp-top",
+              "catalogComponentId": "comp-top",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "back-01",
+              "componentDefinitionId": "mod-comp-back",
+              "catalogComponentId": "comp-back",
+              "role": "FONDO"
+            },
+            {
+              "componentInstanceId": "shelf-01",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "door-01",
+              "componentDefinitionId": "mod-comp-door",
+              "catalogComponentId": "comp-door",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            }
+          ],
+          "hardwarePlacements": [
+            {
+              "hardwarePlacementId": "hp-handle-rotated-01",
+              "placementKind": "manual",
+              "catalogHardwareId": "hw-handle",
+              "hostComponentInstanceId": "door-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                120,
+                360
+              ],
+              "rotationDeg": {
+                "x": 5,
+                "y": 10,
+                "z": 90
+              }
+            }
+          ]
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+            "definitionName": "Gabinete Authoring 600",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "side-left-01",
+                "componentDefinitionId": "st-comp-side",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "side-right-01",
+                "componentDefinitionId": "st-comp-side-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "floor-01",
+                "componentDefinitionId": "st-comp-base",
+                "slotId": "base",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "top-01",
+                "componentDefinitionId": "st-comp-top",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "back-01",
+                "componentDefinitionId": "mod-comp-back",
+                "slotId": "trasera",
+                "role": "FONDO",
+                "name": "Fondo",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ]
+                },
+                "dimensionsMm": [
+                  690,
+                  15,
+                  570
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 570,
+                "widthMm": 690,
+                "thicknessMm": 15,
+                "optionRole": "FONDO",
+                "materialColorHex": "#8b7355"
+              },
+              {
+                "componentInstanceId": "shelf-01",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    150
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  564,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    150
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "door-01",
+                "componentDefinitionId": "mod-comp-door",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  716
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 716,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "hp-handle-rotated-01",
+                "hardwareId": "hw-handle",
+                "name": "Manija 160",
+                "shape": "bar-pull",
+                "sizeMm": 160,
+                "diameterMm": 32,
+                "projectionMm": 37,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "door-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    476.605508,
+                    498.304424,
+                    355.027541
+                  ]
+                },
+                "dimensionsMm": [
+                  2.7889840000000277,
+                  196.39115199999998,
+                  13.94491800000003
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    478,
+                    578,
+                    362
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      0.9961946980917454,
+                      0.08715574274765821
+                    ],
+                    "y": [
+                      -0.1736481776669302,
+                      -0.08583165117743133,
+                      0.9810602621904069
+                    ],
+                    "z": [
+                      0.9848077530122081,
+                      -0.01513443590133857,
+                      0.17298739392508933
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "bottom",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "manufacturingFingerprint": "sha256-12b4ad34ab39e73da2948405b54c865354fad73a786a99c64d53e6a8eefc193c"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",

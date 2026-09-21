@@ -376,6 +376,7 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 				HardwareID:       intent.CatalogHardwareID,
 				AnchorFace:       intent.AnchorFace,
 				RelativePosition: domain.HardwareRelPosition{XMm: intent.OffsetMm[0], YMm: intent.OffsetMm[1]},
+				RotationDeg:      intent.RotationDeg,
 			}
 			resolved, ok := resolveHardwareToWorld(host, hp, catalog, intent.HardwarePlacementID)
 			if !ok {
@@ -1251,8 +1252,23 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		extentV = diameter
 	}
 
-	// In-plane basis in the render frame: two vectors orthogonal to the normal.
-	u := orthogonalVector(normalRender)
+	// Mounted interface frame with Web parity (F6, #668): the web renderer
+	// (HardwareMesh.tsx) mounts each placement as R_euler(rotationDeg) ·
+	// Q_normal where Q_normal is the shortest arc +Y→face normal, both in the
+	// board-local frame; the canonical hardware space (mount_frame.rb) is
+	// +X longitudinal, +Z outward normal. So the longitudinal axis is R·Q·+X
+	// (the bar-pull grip) and the outward mount normal is R·Q·+Y.
+	var rotXDeg, rotYDeg, rotZDeg float64
+	if hp.RotationDeg != nil {
+		rotXDeg, rotYDeg, rotZDeg = hp.RotationDeg.X, hp.RotationDeg.Y, hp.RotationDeg.Z
+	}
+	mountLocal := mulMat3(eulerXyzMatrix(rotXDeg, rotYDeg, rotZDeg), rotateYToNormalMatrix(normal))
+	longRender := mulMatVec3(m, columnVec3(mountLocal, 0))
+	outRender := mulMatVec3(m, columnVec3(mountLocal, 1))
+
+	// In-plane basis in the render frame for the preview box: the longitudinal
+	// axis plus its face-plane perpendicular.
+	u := longRender
 	v := cross3(normalRender, u)
 
 	centerRender := [3]float64{
@@ -1301,13 +1317,16 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 
 	// Authoritative hardware mounting frame in furniture space:
 	faceFurniture := [3]float64{snapMm(faceRender[0]), snapMm(faceRender[2]), snapMm(faceRender[1])}
-	normFurn := snapUnitVec3([3]float64{normalRender[0], normalRender[2], normalRender[1]})
-	uFurn := snapUnitVec3([3]float64{u[0], u[2], u[1]})
-	vFurn := snapUnitVec3(cross3(normFurn, uFurn))
+	// Workshop axes of the mounted interface: X longitudinal (grip), Z the
+	// outward mount normal (rotated with the placement), Y = Z×X keeps the
+	// basis right-handed (det +1) in the furniture frame.
+	longFurn := snapUnitVec3([3]float64{longRender[0], longRender[2], longRender[1]})
+	outFurn := snapUnitVec3([3]float64{outRender[0], outRender[2], outRender[1]})
+	inPlaneFurn := snapUnitVec3(cross3(outFurn, longFurn))
 	hwBasis := LayoutBasis{
-		X: uFurn,
-		Y: vFurn,
-		Z: normFurn,
+		X: longFurn,
+		Y: inPlaneFurn,
+		Z: outFurn,
 	}
 	hwLocalTransform := LayoutLocalTransform{
 		TranslationMm: faceFurniture,
@@ -1381,12 +1400,40 @@ func boardAABBRender(board *layoutBoard) (min [3]float64, size [3]float64) {
 	return min, [3]float64{max[0] - min[0], max[1] - min[1], max[2] - min[2]}
 }
 
-func orthogonalVector(n [3]float64) [3]float64 {
-	ref := [3]float64{0, 0, 1}
-	if math.Abs(n[2]) > 0.9 {
-		ref = [3]float64{1, 0, 0}
+// columnVec3 returns the i-th column of a 3x3 row-major matrix.
+func columnVec3(m [9]float64, i int) [3]float64 {
+	return [3]float64{m[i], m[3+i], m[6+i]}
+}
+
+// rotateYToNormalMatrix mirrors TS normalOrientationQuaternion
+// (HardwareMesh.tsx): the shortest-arc rotation taking +Y onto the unit face
+// normal n, as a 3x3 matrix. Identity for +Y; 180° about X for −Y; otherwise
+// the rotation axis is +Y × n = (n.z, 0, −n.x).
+func rotateYToNormalMatrix(n [3]float64) [9]float64 {
+	dot := n[1]
+	if dot >= 1-1e-9 {
+		return [9]float64{1, 0, 0, 0, 1, 0, 0, 0, 1}
 	}
-	return normalize3(cross3(n, ref))
+	if dot <= -1+1e-9 {
+		// 180° about X maps +Y onto −Y.
+		return [9]float64{1, 0, 0, 0, -1, 0, 0, 0, -1}
+	}
+	ax, ay, az := n[2], 0.0, -n[0]
+	axisLen := math.Sqrt(ax*ax + ay*ay + az*az)
+	if axisLen < 1e-9 {
+		return [9]float64{1, 0, 0, 0, 1, 0, 0, 0, 1}
+	}
+	sinHalf := math.Sqrt((1 - dot) / 2)
+	cosHalf := math.Sqrt((1 + dot) / 2)
+	x := (ax / axisLen) * sinHalf
+	y := (ay / axisLen) * sinHalf
+	z := (az / axisLen) * sinHalf
+	w := cosHalf
+	return [9]float64{
+		1 - 2*(y*y+z*z), 2*(x*y - w*z), 2*(x*z + w*y),
+		2*(x*y + w*z), 1 - 2*(x*x+z*z), 2*(y*z - w*x),
+		2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y),
+	}
 }
 
 func cross3(a, b [3]float64) [3]float64 {

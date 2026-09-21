@@ -358,6 +358,14 @@ module Granete
           offsets.is_a?(Array) && offsets.length == 2 && offsets.all? { |value| finite_number?(value) }
         end
 
+        # rotationDeg (#668 F6): optional per-axis board-frame Euler in degrees.
+        # Only {x,y,z} keys, each a finite number — anything else fails closed.
+        def valid_rotation_deg?(rotation)
+          rotation.is_a?(Hash) &&
+            rotation.keys.all? { |key| %w[x y z].include?(key) } &&
+            rotation.values.all? { |value| finite_number?(value) }
+        end
+
         def finite_number?(value)
           value.is_a?(Numeric) && value.to_f.finite?
         end
@@ -370,8 +378,12 @@ module Granete
           value.is_a?(String) || value == true || value == false || finite_number?(value)
         end
 
+        # v1 fields that have not entered the contract yet: an apparent
+        # capability (a field the resolver ignores) is rejected, never
+        # silently dropped. rotationDeg IS part of v1 (#668 F6): it is
+        # validated per-placement in AuthoringSnapshotParsing.
         def drifted_v1_fields?(placement)
-          placement.key?('rotationDeg') || placement.key?('handedness')
+          placement.key?('handedness')
         end
 
         def validate_relationship(relationship, component_ids)
@@ -403,7 +415,7 @@ module Granete
         COMPONENT_KEYS = %w[componentInstanceId componentDefinitionId catalogComponentId role transform].freeze
         PLACEMENT_REQUIRED_KEYS = %w[hardwarePlacementId catalogHardwareId hostComponentInstanceId
                                      anchorFace offsetMm].freeze
-        PLACEMENT_KEYS = (PLACEMENT_REQUIRED_KEYS + %w[placementKind]).freeze
+        PLACEMENT_KEYS = (PLACEMENT_REQUIRED_KEYS + %w[placementKind rotationDeg]).freeze
         PLACEMENT_KINDS = %w[manual derived].freeze
         RELATIONSHIP_KEYS = %w[relationshipId kind source targets joinerySystemId parameters].freeze
         ANCHOR_KEYS = %w[componentInstanceId role].freeze
@@ -489,9 +501,13 @@ module Granete
           unless ANCHOR_FACES.include?(placement['anchorFace'])
             raise AuthoringResolveContract::ContractError, "Placement #{id} con anchorFace desconocida"
           end
-          return if AuthoringSnapshotValues.valid_offsets?(placement['offsetMm'])
+          unless valid_offsets?(placement['offsetMm'])
+            raise AuthoringResolveContract::ContractError, "Placement #{id} con offsetMm inválido"
+          end
+          return unless placement.key?('rotationDeg')
+          return if AuthoringSnapshotValues.valid_rotation_deg?(placement['rotationDeg'])
 
-          raise AuthoringResolveContract::ContractError, "Placement #{id} con offsetMm inválido"
+          raise AuthoringResolveContract::ContractError, "Placement #{id} con rotationDeg inválido"
         end
 
         def validate_relationships(relationships, component_ids)

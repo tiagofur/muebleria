@@ -183,7 +183,7 @@ describe('validateAuthoringResolveRequest', () => {
     expect(codes(validateAuthoringResolveRequest(noTargets))).toContain('RELATIONSHIP_INVALID');
   });
 
-  test('hardware placements: host, face, offsets and removed v1 fields', () => {
+  test('hardware placements: host, face, offsets, rotationDeg shape and handedness', () => {
     const invalid = request({
       components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
       hardwarePlacements: [
@@ -204,9 +204,24 @@ describe('validateAuthoringResolveRequest', () => {
     for (const expected of ['HARDWARE_HOST_INVALID', 'HARDWARE_PLACEMENT_INVALID']) {
       expect(issueCodes).toContain(expected);
     }
-    // rotationDeg/handedness are NOT part of resolve v1: sending them (even
-    // with valid values) is an apparent-capability error.
+    // rotationDeg must be per-axis finite degrees (a scalar is not the wire
+    // shape) and handedness is still not part of resolve v1.
     expect(issueCodes.filter((code) => code === 'HARDWARE_PLACEMENT_INVALID').length).toBeGreaterThanOrEqual(3);
+
+    const nonFiniteAxis = request({
+      components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
+      hardwarePlacements: [
+        {
+          hardwarePlacementId: 'hp-1',
+          catalogHardwareId: 'hw-hinge',
+          hostComponentInstanceId: 'door-01',
+          anchorFace: 'front',
+          offsetMm: [298, 100],
+          rotationDeg: { y: Number.NaN },
+        },
+      ],
+    });
+    expect(codes(validateAuthoringResolveRequest(nonFiniteAxis))).toContain('HARDWARE_PLACEMENT_INVALID');
 
     const valid = request({
       components: [{ componentInstanceId: 'door-01', componentDefinitionId: 'mod-comp-door' }],
@@ -217,6 +232,7 @@ describe('validateAuthoringResolveRequest', () => {
           hostComponentInstanceId: 'door-01',
           anchorFace: 'front',
           offsetMm: [298, 100],
+          rotationDeg: { y: 90 },
         },
       ],
     });

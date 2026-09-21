@@ -67,6 +67,25 @@ describe('sketchupAuthoringResolve.schema.json', () => {
     }
   });
 
+  test('accepts per-axis hardware rotationDeg and rejects malformed rotationDeg', () => {
+    const scenarios = record(fixture).scenarios as unknown[];
+    const rotationScenario = record(scenarios.find((value) => {
+      const hardwarePlacements = record(record(record(value).request).furniture).hardwarePlacements;
+      return Array.isArray(hardwarePlacements) && hardwarePlacements.some((placement) =>
+        typeof placement === 'object' && placement !== null && 'rotationDeg' in placement,
+      );
+    }));
+    expect(requestValidator!(rotationScenario.request), ajv.errorsText(requestValidator!.errors)).toBe(true);
+
+    const malformed = structuredClone(rotationScenario.request);
+    const hardwarePlacements = record(record(malformed).furniture).hardwarePlacements;
+    if (!Array.isArray(hardwarePlacements) || hardwarePlacements.length === 0) {
+      throw new Error('fixture must contain hardware placements');
+    }
+    record(hardwarePlacements.find((placement) => 'rotationDeg' in record(placement))).rotationDeg = { x: 5, y: 10, w: 90 };
+    expect(requestValidator!(malformed)).toBe(false);
+  });
+
   test('rejects optional occurrence definition IDs, nested parameters, and response union leakage', () => {
     const scenarios = record(fixture).scenarios as unknown[];
     const acceptedScenario = record(scenarios.find((value) => {
