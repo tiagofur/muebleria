@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 const PROJECT_ID = '77777777-3333-4777-8777-333333333333';
 const QUOTE_LINE_ID = '88888888-3333-4888-8888-333333333333';
@@ -75,7 +75,7 @@ async function seedPairingProject(): Promise<SeededPairingProject> {
     name: 'Cocina Pairing',
   }, 'gate-pairing-create-design');
 
-  await client.updateDesignWorkingCopy(owner.token, design.id, {
+  await putWorkingCopyCurrent(client, owner.token, design.id, {
     items: instanceIds.map((fid) => ({
       furniture_instance_id: fid,
       parameters: { width: 700 },
@@ -272,7 +272,7 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     await page.keyboard.press('Escape');
 
     // 4. Publish R1 through the existing revision pipeline.
-    await client.updateDesignWorkingCopy(owner.token, design.id, {
+    await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: [{ furniture_instance_id: seeded.instanceIds[0]!, parameters: { width: 650 }, material_choices: {} }],
     });
     const r1 = await client.publishDesignRevision(owner.token, design.id, {
@@ -285,7 +285,7 @@ test.describe.serial('SketchUp pairing handoff (#499 Slice 2) Browser E2E', () =
     await expect(page.getByTestId('revision-node-R1')).toBeVisible();
 
     // 6. Edit and publish R2; R1 stays immutable in the lineage.
-    await client.updateDesignWorkingCopy(owner.token, design.id, {
+    await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: [
         { furniture_instance_id: seeded.instanceIds[0]!, parameters: { width: 650 }, material_choices: {} },
         { furniture_instance_id: seeded.instanceIds[1]!, parameters: { width: 750 }, material_choices: {} },

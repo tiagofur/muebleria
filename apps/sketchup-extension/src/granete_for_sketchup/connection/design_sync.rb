@@ -242,17 +242,41 @@ module Granete
 
           def sync_connected_design(model, binding)
             working, local = read_authorities(model, binding)
+            guard = local_guards(local)
+            return guard if guard
+
+            intent = IntentBuilder.build(working: working, local: local)
+            changes = { 'added' => intent[:added], 'updated' => intent[:updated],
+                        'removed' => intent[:removed] }
+            if changes.values.all?(&:empty?)
+              # Nothing to write, but a dirty entity whose fields already
+              # equal the authoritative state is confirmed too — its flag
+              # must not linger forever.
+              clear_authoring_dirty(model, dirty_local_ids(local))
+              return synchronized_result(binding, changes, working.updated_at, false)
+            end
+
+            write_intent(model, binding, working, intent, changes)
+          end
+
+          # Fail-closed guards over the local scan: unreadable furniture
+          # metadata and duplicate roots never reach a write.
+          def local_guards(local)
+            unless local[:invalid].empty?
+              return failure(:invalid_local_metadata,
+                             'hay muebles con metadata local ilegible; revisalos en el panel antes de sincronizar')
+            end
+
             duplicate_ids = local[:by_id].select { |_id, entries| entries.length > 1 }.keys
             if duplicate_ids.any?
               return failure(:duplicate_detected, ProjectFurniture::DUPLICATE_MESSAGE,
                              'duplicates' => duplicate_ids)
             end
 
-            intent = IntentBuilder.build(working: working, local: local)
-            changes = { 'added' => intent[:added], 'updated' => intent[:updated],
-                        'removed' => intent[:removed] }
-            return synchronized_result(binding, changes, working.updated_at, false) if changes.values.all?(&:empty?)
+            nil
+          end
 
+          def write_intent(model, binding, working, intent, changes)
             outcome = SafeWrite.write(service: @service, working: working,
                                       items: intent[:items], base_revision_id: binding.base_revision_id)
             authoritative = outcome['working']
@@ -274,6 +298,13 @@ module Granete
               model, @metadata_store_factory.call(model)
             )
             [working, local]
+          end
+
+          # Entities still carrying the persisted authoring-dirty flag.
+          def dirty_local_ids(local)
+            local[:by_id].select do |_id, entries|
+              entries.length == 1 && entries.first[:metadata]['authoringDirty'] == true
+            end.keys
           end
 
           def synchronized_result(binding, changes, working_version, converged)

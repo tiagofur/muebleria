@@ -387,6 +387,26 @@ class DesignSyncTest < Minitest::Test
     assert @transport.working_copy_puts.one?
   end
 
+  def test_unreadable_local_metadata_blocks_the_sync_without_writes
+    stub_working_copy([])
+    # A furnitureInstance entity whose identity is unreadable/missing fails
+    # closed instead of silently reading as a remove intent.
+    definition = @model.definitions.add('Broken root')
+    entity = @model.entities.add_instance(definition, Geom::Transformation.new)
+    MS.new(@model).write(entity, {
+                           'namespace' => 'com.granete.sketchup_extension', 'metadataVersion' => 1,
+                           'kind' => 'furnitureInstance',
+                           'identity' => { 'instanceRef' => 'local-only' },
+                           'intent' => { 'furnitureDefinitionId' => DEFINITION_ID,
+                                         'parameters' => {}, 'materialChoices' => {} }
+                         })
+
+    result = @synchronizer.synchronize_design
+    refute result['ok']
+    assert_equal 'invalid_local_metadata', result['code']
+    assert_empty @transport.working_copy_puts
+  end
+
   def test_unbound_model_fails_without_network
     unbound = SyncModel.new
     synchronizer = DSYNC::Synchronizer.new(

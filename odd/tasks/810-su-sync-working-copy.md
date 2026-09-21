@@ -91,12 +91,28 @@ No merge, no self-approval, no auto-close.
   identity reuse, diverged conflict never overwrites, save/close/reopen dirty
   persistence) — see REAL HOST result below.
 
+## Review round (CHANGES REQUESTED) — applied
+
+- Blocker fixed: the organization browser e2e seeds (30 `updateDesignWorkingCopy`
+  call sites across 16 specs) now write through `putWorkingCopyCurrent`
+  (tests/organization/support/api.ts): GET working copy → carry the canonical
+  token, mirroring the product writers. Full browser gate re-run:
+  **86/86 PASS** (`[organization-gate] PASS`).
+- Hardenings applied: unreadable local furniture metadata fails the sync
+  closed (`invalid_local_metadata`, no write) instead of reading as a remove
+  intent; the no-change path also clears stale authoring-dirty flags; the
+  Conflicto/Error card states keep the action enabled (Reintentar).
+- New proofs: `test_unreadable_local_metadata_blocks_the_sync_without_writes`
+  (unit 894/0) and the strengthened JS error-branch assertion (26/26).
+
 ## REAL HOST result
 
 PASS — SketchUp 2026 (arm64), TestUp CI via
 `-RubyStartupArg "TestUp:CI:Config:…/testup-ci-810.yml"` against the installed
-deterministic RBZ (sha256 925cb36b…): `progress/host_smoke_810_testup_ci.json`
-— 4/4 tests, 31 assertions, 0 failures, 0 errors
+deterministic RBZ at the FINAL code state (sha256 6d1d9ad0…):
+`progress/host_smoke_810_testup_ci.json`
+— 4/4 tests, 31 assertions, 0 failures, 0 errors (re-run after the review
+round so the evidence matches the final code)
 (`TC_DesignSyncSmoke`: golden sequence place→sync→edit width→move→delete→sync
 [update FI-001 + conscious remove FI-002 through the accepted V2 token],
 delete→re-place reuses FI-002 without a third identity, diverged conflict

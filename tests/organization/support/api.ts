@@ -1,4 +1,5 @@
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
+import type { DesignWorkingCopy, UpdateDesignWorkingCopyRequest } from '@granete/storage';
 import { TotpProvider, secretFromProvisioningUri } from './totp';
 
 export const GATE_MODULE_A_ID = 'a1111111-1111-4111-8111-111111111111';
@@ -10,6 +11,24 @@ export const LIFECYCLE_SUBJECT_EMAIL = 'browser-gate-lifecycle@example.com';
 // signed-grant media flow (never a session JWT in the URL).
 export const GATE_MEDIA_A_URL = '/api/media/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
 export const GATE_MEDIA_B_URL = '/api/media/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png';
+
+// #810 — every working-copy write carries the canonical workingVersion token
+// (the working-copy updated_at of the last authoritative read). Specs seed
+// state through this helper so they follow the same conflict-safe frontier
+// as the product writers.
+export async function putWorkingCopyCurrent(
+  client: GraneteApiClient,
+  token: string,
+  designId: string,
+  body: Omit<UpdateDesignWorkingCopyRequest, 'expected_working_version'>,
+): Promise<DesignWorkingCopy> {
+  const current = await client.getDesignWorkingCopy(token, designId);
+  return client.updateDesignWorkingCopy(token, designId, {
+    ...body,
+    expected_working_version: current.updated_at,
+  });
+}
+
 
 export interface LifecycleSubject {
   readonly email: string;

@@ -6290,11 +6290,19 @@
             designSyncBadge.textContent = "Conflicto";
             designSyncStatus.textContent = "El diseño cambió en el servidor. " +
               (dirty > 0 ? dirty + " cambio(s) local(es) esperan una nueva sincronización." : "Sincronizá de nuevo para ver el estado actual.");
-          } else if (lastOutcome && lastOutcome.kind === "error") {
+            btnDesignSync.disabled = false;
+            btnDesignSync.textContent = "Sincronizar diseño";
+            return;
+          }
+          if (lastOutcome && lastOutcome.kind === "error") {
             designSyncBadge.className = "status-badge invalid";
             designSyncBadge.textContent = "Error de sincronización";
             designSyncStatus.textContent = lastOutcome.reason || "No se pudo sincronizar el diseño.";
-          } else if (dirty > 0) {
+            btnDesignSync.disabled = false;
+            btnDesignSync.textContent = "Reintentar sincronización";
+            return;
+          }
+          if (dirty > 0) {
             designSyncBadge.className = "status-badge pending";
             designSyncBadge.textContent = "Pendiente";
             designSyncStatus.textContent = dirty + " cambio" + (dirty === 1 ? "" : "s") +
@@ -6303,11 +6311,10 @@
             btnDesignSync.disabled = false;
             btnDesignSync.textContent = "Sincronizar diseño";
             return;
-          } else {
-            designSyncBadge.className = "status-badge valid";
-            designSyncBadge.textContent = "Sincronizado";
-            designSyncStatus.textContent = "El diseño coincide con Granete.";
           }
+          designSyncBadge.className = "status-badge valid";
+          designSyncBadge.textContent = "Sincronizado";
+          designSyncStatus.textContent = "El diseño coincide con Granete.";
           btnDesignSync.disabled = dirty === 0;
           btnDesignSync.textContent = "Sincronizar diseño";
         }

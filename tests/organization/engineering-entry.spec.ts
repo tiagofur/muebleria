@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #738 — browser E2E of the canonical Engineering entry:
@@ -147,7 +147,7 @@ test.describe.serial('Engineering entry: canonical release → queue + workspace
       { name: 'Cocina Entrada Ingeniería' },
       'eng-entry-create-design',
     );
-    await client.updateDesignWorkingCopy(owner.token, design.id, {
+    await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
         furniture_definition_id: GATE_MODULE_A_ID,

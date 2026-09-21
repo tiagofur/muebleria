@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import ExcelJS from 'exceljs';
 import { PDFDocument } from 'pdf-lib';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { required } from './support/api';
+import { putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #642 / Delivery 3 — exact commercial PDF/XLSX exports, real browser E2E
@@ -159,7 +159,7 @@ test.beforeAll(async () => {
     { name: 'Cocina Export Exacto' },
     'gate-exact-export-design',
   );
-  await client.updateDesignWorkingCopy(token, design.id, {
+  await putWorkingCopyCurrent(client, token, design.id, {
     items: [
       { furniture_instance_id: instanceId, furniture_definition_id: EXPORT_MODULE_ID, parameters: { widthMm: 650, heightMm: 720, depthMm }, material_choices: REC_CHOICES },
     ],

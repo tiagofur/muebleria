@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 const PROJECT_ID = '77777777-5555-4777-8777-555555555555';
 const QUOTE_LINE_ID = '88888888-5555-4888-8888-555555555555';

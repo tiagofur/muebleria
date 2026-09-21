@@ -20,7 +20,7 @@ import {
 } from '@granete/excel';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #739 browser E2E against the real Go backend + PostgreSQL:
@@ -271,7 +271,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
       material_choices: { 'ENG-739-BODY': MAT_ID },
     });
     // R1: all three units at 600 mm.
-    await client.updateDesignWorkingCopy(token, design.id, {
+    await putWorkingCopyCurrent(client, token, design.id, {
       items: instanceIds.map((id) => workingItem(id, 600)),
     });
     const r1 = await client.publishDesignRevision(token, design.id, { source_type: 'manual', base_revision_id: null }, 'eng739-r1-cutting');
@@ -282,7 +282,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     await client.acceptProjectQuoteRevision(token, PROJECT_ID, q1.id, 'eng739-q1-acc-cutting');
 
     // R2: unit 3 grows to 650 mm (the manufacturing truth P1 will freeze).
-    await client.updateDesignWorkingCopy(token, design.id, {
+    await putWorkingCopyCurrent(client, token, design.id, {
       items: instanceIds.map((id, index) => workingItem(id, index === 2 ? 650 : 600)),
     });
     const r2 = await client.publishDesignRevision(token, design.id, { source_type: 'manual', base_revision_id: r1.id }, 'eng739-r2-cutting');

@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
-import { GATE_MODULE_A_ID, required } from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #768 — browser E2E of the compact "Preparación para fabricar" stepper:
@@ -169,7 +169,7 @@ test.describe.serial('Preparación para fabricar: stepper compacto Ingeniería/P
       { name: 'Cocina Flujo 768' },
       'flow-768-create-design',
     );
-    await client.updateDesignWorkingCopy(owner.token, design.id, {
+    await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
         furniture_definition_id: template.id,

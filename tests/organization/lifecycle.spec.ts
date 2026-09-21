@@ -1,11 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { GraneteApiClient } from '@granete/storage';
-import {
-  LIFECYCLE_SUBJECT_EMAIL,
-  type LifecycleSubject,
-  prepareLifecycleSubject,
-  required,
-} from './support/api';
+import { LIFECYCLE_SUBJECT_EMAIL, prepareLifecycleSubject, putWorkingCopyCurrent, required, type LifecycleSubject } from './support/api';
 
 async function installSessionRecorder(context: BrowserContext): Promise<void> {
   await context.addInitScript(() => {

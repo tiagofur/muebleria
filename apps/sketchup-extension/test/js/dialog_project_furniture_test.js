@@ -555,6 +555,7 @@ function runTests() {
     assert.equal(el(sandbox, 'design-sync-badge').className, 'status-badge invalid');
     assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Error de sincronización');
     assert.equal(el(sandbox, 'btn-design-sync').disabled, false);
+    assert.equal(el(sandbox, 'btn-design-sync').textContent, 'Reintentar sincronización');
   });
 
   return tests;

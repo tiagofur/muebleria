@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { required } from './support/api';
+import { putWorkingCopyCurrent, required } from './support/api';
 
 /**
  * #667 M2: Hardware 3D assets administration from React browser E2E

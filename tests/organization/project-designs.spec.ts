@@ -2,10 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  GATE_MODULE_A_ID,
-  required,
-} from './support/api';
+import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
 
 const PROJECT_ID = '77777777-2222-4777-8777-222222222222';
 const QUOTE_LINE_ID = '88888888-2222-4888-8888-222222222222';
@@ -141,7 +138,7 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
   );
 
   // 4. Update Working Copy with FI-A and FI-B
-  await client.updateDesignWorkingCopy(aOwner.token, design.id, {
+  await putWorkingCopyCurrent(client, aOwner.token, design.id, {
     items: [
       { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
       { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 800 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
@@ -157,7 +154,7 @@ async function prepareProjectDesigns(): Promise<SeededProjectDesigns> {
   );
 
   // 6. Update Working Copy after R1 to add FI-C (now 3 items)
-  await client.updateDesignWorkingCopy(aOwner.token, design.id, {
+  await putWorkingCopyCurrent(client, aOwner.token, design.id, {
     items: [
       { furniture_instance_id: instanceIds[0], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 600 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
       { furniture_instance_id: instanceIds[1], furniture_definition_id: GATE_MODULE_A_ID, parameters: { widthMm: 800 }, material_choices: { INTERIOR: material.id }, room_id: roomId },
