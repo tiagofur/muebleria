@@ -182,6 +182,17 @@ open SKP
 
 Una futura acción explícita “Quitar del diseño” puede reutilizar el lifecycle/sync normal, pero debe ser una intención consciente del usuario y no forma parte de la recuperación automática.
 
+### 6bis. La acción consciente existe: “Sincronizar diseño” (#810)
+
+La operación explícita **Sincronizar diseño** ES la intención consciente que esta sección reserva. La acción del usuario aplica el Design intent completo contra el Working Copy del backend en una sola escritura conflict-safe:
+
+- el nuevo estado se construye desde `WorkingCopy del servidor + dirty local intent` — nunca un full overwrite desde estado local reconstruido a ciegas: los ítems no marcados `authoringDirty` viajan verbatim y una edición local sólo reemplaza los campos exactos que SketchUp authora (parámetros, materiales, definición, transform, locator);
+- un ítem del WorkingCopy sin raíz local (`missing_local`) se elimina del Design por decisión del usuario: la FurnitureInstance del Project NO se toca (lifecycle soft), el panel la re-deriva como pendiente y recolocar reutiliza la misma identidad;
+- la escritura lleva la precondición canónica `expected_working_version` (token workingVersion = `updated_at` del WorkingCopy, validado bajo el lock autoritativo): un writer stale recibe 409 tipado y el estado más nuevo sobrevive;
+- el éxito se reporta sólo tras readback autoritativo; una respuesta perdida que se reintenta converge si el servidor ya iguala la intención y surge como Conflicto si avanzó a otro estado.
+
+Lo que SIGUE prohibido es la conversión automática al abrir/escanear: sólo el botón explícito aplica la intención.
+
 ## 7. Gates comerciales y de publicación
 
 Un diseño con cualquiera de estos estados:

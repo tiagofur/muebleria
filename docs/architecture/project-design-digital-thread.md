@@ -642,6 +642,21 @@ ya colocada hace focus del root existente; roots duplicados bloquean (preview
 furniture-instances, GET working-copy y su única superficie PUT
 (working-copy); la creación de unidades (POST, #390) sigue denegada.
 
+Frontera de escritura (#810): TODO PUT del working copy exige la precondición
+canónica `expected_working_version` — el token `workingVersion` (el
+`updated_at` del WorkingCopy tal como lo devolvió la última lectura
+autoritativa del writer) — validada bajo el lock autoritativo del servidor.
+Un token stale recibe 409 tipado `VERSION_CONFLICT` sin sobrescribir el
+estado más nuevo; omitirlo recibe 428 `PRECONDITION_REQUIRED`. La operación
+explícita "Sincronizar diseño" construye el estado deseado desde
+`WorkingCopy del servidor + dirty local intent` (adds de raíces locales,
+updates sólo de ítems con bandera `authoringDirty` persistida o transform
+distinto, removes conscientes de ítems `missing_local`), escribe por esa
+frontera y sólo reporta éxito tras readback autoritativo; una respuesta
+perdida que se reintenta converge cuando el servidor ya iguala la intención
+(ver `sketchup-host-reconciliation.md` §6bis). Quitar un ítem del Design NUNCA
+toca la FurnitureInstance del Project.
+
 ### Insert from catalog
 
 Con un Project conectado, la selección/búsqueda de una definición y su preview siguen siendo **transitorios**. No crear una unidad física sólo porque el usuario abrió una tarjeta o está moviendo una preview.

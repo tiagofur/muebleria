@@ -1526,6 +1526,62 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     expect(screen.queryByTestId('working-copy-banner')).not.toBeInTheDocument();
   });
 
+  // #810 — React stays a READER of the same backend truth: after a SketchUp
+  // sync mutates the server WorkingCopy (parameter edit + removal + a new
+  // workingVersion), an explicit refresh observes exactly that state. No
+  // parallel "SketchUp project" branch exists.
+  it('#810 manual refresh observes the exact WorkingCopy a SketchUp sync confirmed', async () => {
+    const workingCopies: Record<string, DesignWorkingCopy | null> = {
+      [DESIGN_1_ID]: {
+        ...mockWorkingCopy,
+        updated_at: '2026-09-04T09:00:00Z',
+        items: [
+          mockWorkingCopy.items![0]!,
+          {
+            ...mockWorkingCopy.items![0]!,
+            id: '44444444-0000-4000-8000-000000000002',
+            furniture_instance_id: '55555555-0000-4000-8000-000000000002',
+          },
+        ],
+      },
+    };
+    setupFetchMock({ workingCopyByDesign: workingCopies });
+    const { queryClient, keys } = renderScreen({
+      initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID },
+    });
+    expect(await screen.findByTestId('working-copy-banner')).toHaveTextContent(
+      '2 muebles modelados',
+    );
+
+    // SketchUp synchronized against the backend: one width edit landed and
+    // one unit left the design; the server minted a new workingVersion. The
+    // fetch mock serves the map by reference, so replacing the entry is the
+    // server-side state change.
+    workingCopies[DESIGN_1_ID] = {
+      ...workingCopies[DESIGN_1_ID]!,
+      updated_at: '2026-09-04T11:30:00Z',
+      items: [
+        {
+          ...workingCopies[DESIGN_1_ID]!.items![0]!,
+          parameters: { width: 750 },
+        },
+      ],
+    };
+
+    await queryClient.invalidateQueries({ queryKey: keys.designWorkingCopy(DESIGN_1_ID) });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('working-copy-banner')).toHaveTextContent(
+        '1 mueble modelado',
+      ),
+    );
+    const cached = queryClient.getQueryData<DesignWorkingCopy>(
+      keys.designWorkingCopy(DESIGN_1_ID),
+    );
+    expect(cached?.updated_at).toBe('2026-09-04T11:30:00Z');
+    expect(cached?.items[0]?.parameters.width).toBe(750);
+  });
+
   it('#641 working copy initial load exposes a status instead of disappearing', async () => {
     setupFetchMock({ workingCopyPending: true });
 
