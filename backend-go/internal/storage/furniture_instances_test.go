@@ -475,9 +475,15 @@ func TestTenantRLS_FurnitureInstancesDirectSQLCrossOrg(t *testing.T) {
 			t.Fatalf("cross-org UPDATE touched victim: rows=%d err=%v", tag.RowsAffected(), err)
 		}
 
-		// Identity is never hard-deleted through the runtime role at all.
-		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceB); err == nil {
-			t.Fatal("app role must not hold DELETE on furniture_instances")
+		// #815: hard deletes exist ONLY inside the storage-layer project-delete
+		// transaction. A cross-org victim is invisible to the DELETE policy
+		// (zero rows, no error), and a same-org direct delete hits the guard
+		// trigger — the REVOKE barrier this replaced.
+		if tag, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceB); err != nil || tag.RowsAffected() != 0 {
+			t.Fatalf("cross-org DELETE touched victim: rows=%d err=%v", tag.RowsAffected(), err)
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceA); err == nil || !strings.Contains(err.Error(), "only deletable through project deletion") {
+			t.Fatalf("direct same-org delete must hit the project-delete guard trigger: %v", err)
 		}
 
 		// Attaching an identity to a foreign-org project fails the WITH CHECK.

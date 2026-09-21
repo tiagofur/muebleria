@@ -1508,15 +1508,45 @@ func updateProjectTx(ctx context.Context, tx pgx.Tx, id string, p *domain.Projec
 }
 
 func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
-	query := `DELETE FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2);`
-	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("project not found")
-	}
-	return nil
+	return runInTenantTxErr(s, ctx, func(ctx context.Context) error {
+		tx := transactionFromContext(ctx)
+		if tx == nil {
+			return errors.New("project delete requires an active tenant transaction")
+		}
+		// #815: the durability triggers and delete grants guarding the
+		// project's commercial family open ONLY inside this transaction. The
+		// flag is transaction-scoped (set_config is_local) — commit and
+		// rollback both discard it, so nothing leaks to the pooled connection.
+		if _, err := tx.Exec(ctx,
+			`SELECT set_config('app.allow_project_cascade_delete', 'on', true)`); err != nil {
+			return fmt.Errorf("setting project delete guard: %w", err)
+		}
+		// NO ACTION grandchildren first: they reference quote/design revisions
+		// and releases that the projects cascade would otherwise delete while
+		// still referenced. Everything else (revisions, items, instances,
+		// designs, events, photos…) goes through the projects ON DELETE
+		// CASCADE with the guard held.
+		for _, table := range []string{
+			"design_publish_sessions",
+			"design_working_copies",
+			"production_release_manufacturing_snapshots",
+			"production_release_engineering",
+			"production_releases",
+		} {
+			if _, err := tx.Exec(ctx, `DELETE FROM `+table+` WHERE project_id = $1`, id); err != nil {
+				return fmt.Errorf("deleting %s for project %s: %w", table, id, err)
+			}
+		}
+		query := `DELETE FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2);`
+		tag, err := tx.Exec(ctx, query, id, OrgFromCtx(ctx))
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("project not found")
+		}
+		return nil
+	})
 }
 
 // ListModules returns the workshop's furniture modules with their measure
