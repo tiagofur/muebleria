@@ -189,6 +189,19 @@ func resolveBaseContextForItem(
 	item domain.ProjectItem,
 	catalog *domain.Catalog,
 ) *BaseResolutionContext {
+	if frozen := item.FrozenPricingContext; frozen != nil {
+		ctx := &BaseResolutionContext{BaseMode: frozen.BaseMode}
+		if frozen.BaseClearanceMm != nil {
+			clearance := *frozen.BaseClearanceMm
+			ctx.BaseClearanceMm = &clearance
+		}
+		if frozen.PlinthSides != nil {
+			ctx.PlinthSides = &PlinthSides{
+				Left: frozen.PlinthSides.Left, Right: frozen.PlinthSides.Right, Back: frozen.PlinthSides.Back,
+			}
+		}
+		return ctx
+	}
 	ctx := &BaseResolutionContext{}
 	if isModuleBaseMode(item.BaseMode) {
 		ctx.BaseMode = item.BaseMode

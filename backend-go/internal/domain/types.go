@@ -633,6 +633,10 @@ type ProjectItem struct {
 	// FloorStatus is shop-floor progress (PROD-3.1): pending|cut|edged|assembled|installed.
 	// Empty/omitted = pending. Does not affect BOM or pricing.
 	FloorStatus string `json:"floor_status,omitempty"`
+	// FrozenPricingContext is an internal immutable quote input. It is never
+	// accepted from Project APIs; requote pricing uses it instead of mutable
+	// project layout/base state.
+	FrozenPricingContext *QuoteCommercialPricingContext `json:"-"`
 }
 
 type Project struct {

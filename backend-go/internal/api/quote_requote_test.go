@@ -230,6 +230,7 @@ func TestHandleProjectQuoteRequote_ErrorMapping(t *testing.T) {
 		{"conflict blocks requote", domain.ErrRequoteBlockedByConflict, http.StatusConflict},
 		{"no commercial change", domain.ErrRequoteNoCommercialChange, http.StatusConflict},
 		{"stale base revision", domain.ErrQuoteRevisionConflict, http.StatusConflict},
+		{"legacy pricing context missing", domain.ErrQuoteCommercialSnapshotMissing, http.StatusConflict},
 		{"corrupt snapshot", domain.ErrInvalidRevisionSnapshot, http.StatusConflict},
 		{"invalid selection", domain.ErrRequoteInvalidSelection, http.StatusBadRequest},
 		{"quote revision not found", domain.ErrQuoteRevisionNotFound, http.StatusNotFound},

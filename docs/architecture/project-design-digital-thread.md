@@ -851,6 +851,17 @@ quoteLineId, moduleCode, moduleName, opciones {groupCode, groupLabel, choiceId,
 choiceLabel}} · capturedAt
 ```
 
+Cada unidad congela además el contexto interno necesario para una re-cotización
+exacta: `measurePresetId`, modo/base efectiva, pin estructural y retornos de
+zócalo derivados del layout. Las opciones heredadas a nivel de obra se aplanan
+como opciones efectivas por unidad. R1 sólo puede superponer dimensiones y
+materiales autorizados sobre ese contexto; nunca se infiere un preset desde la
+geometría ni se releen `project_items`/`kitchen_layout` mutables como historia.
+Un pin estructural `nil`/live se materializa como la revisión efectiva al crear
+Q1; los módulos fijos congelan evidencia explícita de independencia estructural.
+Snapshots anteriores sin este contexto siguen siendo legibles, pero fallan
+cerrado al re-cotizar con una recuperación accionable.
+
 Timestamps de lifecycle **reales** (`published_at`, `accepted_at`) los fijan los
 comandos de transición; `created_at`/`updated_at` nunca los sustituyen.
 
