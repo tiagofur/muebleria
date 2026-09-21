@@ -501,7 +501,7 @@ module Granete
           unless ANCHOR_FACES.include?(placement['anchorFace'])
             raise AuthoringResolveContract::ContractError, "Placement #{id} con anchorFace desconocida"
           end
-          unless valid_offsets?(placement['offsetMm'])
+          unless AuthoringSnapshotValues.valid_offsets?(placement['offsetMm'])
             raise AuthoringResolveContract::ContractError, "Placement #{id} con offsetMm inválido"
           end
           return unless placement.key?('rotationDeg')
