@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises';
 import {
   manufacturingLabelProjectionFromDemand,
   type ArtifactManifest,
-  type Catalog,
   type CutPlan,
   type ReleaseCuttingDemandView,
 } from '@granete/domain';
@@ -92,6 +91,12 @@ async function fetchDemand(seeded: Seeded): Promise<ReleaseCuttingDemandView> {
     units: raw.units.map((unit: Record<string, unknown>) => ({
       furnitureInstanceId: String(unit.furniture_instance_id),
       furnitureDefinitionId: String(unit.furniture_definition_id),
+      workshopOccurrenceOrdinal: Number(unit.workshop_occurrence_ordinal),
+      frozenModuleCode: (unit.module_code as string | null) ?? null,
+      frozenModuleName: (unit.module_name as string | null) ?? null,
+      frozenModuleWidthMm: (unit.module_width_mm as number | null) ?? null,
+      frozenModuleHeightMm: (unit.module_height_mm as number | null) ?? null,
+      frozenModuleDepthMm: (unit.module_depth_mm as number | null) ?? null,
       pieces: (unit.pieces as ReadonlyArray<Record<string, unknown>>).map((piece) => ({
         partId: String(piece.part_id),
         partCode: (piece.part_code as string | null) ?? null,
@@ -101,6 +106,8 @@ async function fetchDemand(seeded: Seeded): Promise<ReleaseCuttingDemandView> {
         widthMm: Number(piece.width_mm),
         thicknessMm: Number(piece.thickness_mm),
         materialId: String(piece.material_id),
+        frozenMaterialCode: (piece.material_code as string | null) ?? null,
+        frozenEdgeBandCode: (piece.edge_band_code as string | null) ?? null,
         edgeBandId: (piece.edge_band_id as string | null) ?? null,
         grain: Number(piece.grain) as 0 | 1,
         l1: Number(piece.l1) as 0 | 1,
@@ -520,10 +527,24 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
     await page.getByTestId('eng-tab-optimizacion').click();
     await expect(page.getByTestId('prod-opt-cutting-output')).toContainText('ptx-cadmatic-4@r5');
+    // The r5 receiver policy (HPP250-CAD4-R5-CANDIDATE) pins the machine's
+    // kerf (4.4) and the geometry trims it expects (fixed 10 mm bottom/left):
+    // the workshop sets them on the plan before generating, and a plan built
+    // with other values blocks honestly (kerf_not_uniform).
+    await page.getByLabel('Disco / Kerf (mm)').fill('4.4');
+    await page.getByLabel('Sup:', { exact: true }).fill('0');
+    await page.getByLabel('Inf:', { exact: true }).fill('10');
+    await page.getByLabel('Izq:', { exact: true }).fill('10');
+    await page.getByLabel('Der:', { exact: true }).fill('0');
     await page.getByRole('button', { name: /Generar Plan de Corte 2D/i }).click();
     await expect(page.getByTestId('prod-opt-summary')).toContainText('tablero');
     await page.getByRole('button', { name: /Guardar Plan/i }).click();
     await expect(page.getByTestId('prod-opt-save-ok')).toBeVisible();
+
+    // #793 review B2: the button must be ENABLED — readiness evaluated the
+    // complete labeled r5 job (frozen release identity + label authority),
+    // never a bare plan that would legitimately block.
+    await expect(page.getByTestId('prod-opt-export-ptx')).toBeEnabled();
 
     const files = await captureDownloads(page, () =>
       page.getByTestId('prod-opt-export-ptx').click(), 2,
@@ -551,11 +572,11 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     expect(route.config).toBeDefined();
     // #793: the productive bytes carry PARTS_INF/PARTS_UDI labels projected
     // from the frozen release demand. Independently recompute the label
-    // authority the browser flow used (same demand + catalog engineering
-    // inputs) and compile the same options for the readback.
+    // authority the browser flow used (the projection reads ONLY the
+    // snapshot-frozen identity — the live catalog is not an input) and
+    // compile the same options for the readback.
     const demand = await fetchDemand(seeded);
-    const catalog = (await repository.getCatalog()) as Catalog;
-    const manufacturingLabels = manufacturingLabelProjectionFromDemand(demand, catalog);
+    const manufacturingLabels = manufacturingLabelProjectionFromDemand(demand);
     const partLabels = await ptxPartLabelsFromManufacturingProjection(manufacturingLabels);
     const compileOptions = { ...route.config!.compileOptions, partLabels };
     const { mapping } = compileCutPlanToPtxDocument(plan, compileOptions);
@@ -601,12 +622,12 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
         operation: 'cutting',
         machineProfileId: 'client-a-machine-b-hpp250',
         machineProfileRevisionId: 'r1',
-        outputCompatibilityProfileId: 'ptx-generic',
-        outputCompatibilityProfileRevisionId: 'r1',
-        outputCompatibilityProfileDigest: 'd05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595',
-        postprocessorAdapterId: 'granete-ptx',
-        postprocessorAdapterVersion: '1.4.0',
-        postprocessorImplementationDigest: '8c13f67bfc8f1354984b90bbea1a3719b91905b62d63af570eec3d83a52a7916',
+        outputProfileId: 'ptx-generic',
+        outputProfileRevisionId: 'r1',
+        outputProfileDigest: 'd05d279e6c1e40ccb1fc9995d5e5d6c1b54112af5b62e91ba2275912872d4595',
+        adapterId: 'granete-ptx',
+        adapterVersion: '1.4.0',
+        adapterImplementationDigest: '8c13f67bfc8f1354984b90bbea1a3719b91905b62d63af570eec3d83a52a7916',
       },
       expectedVersion: cutting?.selection.version ?? 0,
     });

@@ -364,9 +364,31 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     expect((await bResponse).status()).toBe(200);
     const late = page.waitForResponse((response) => response.url().includes('/api/machine-output-selections') && response.status() === lateStatus);
     releaseA(); await late;
-    const output = await exportPtx(page, EXPORT_PROJECT_B_ID);
-    expect(output.startsWith('HEADER,')).toBe(true);
-    expect(output).not.toContain('[HEADER]');
+    // #793: org B is configured with the CADmatic r5 candidate, whose export
+    // requires a frozen release plan (label authority) — a synthetic project
+    // cannot produce documented bytes by design. The isolation claim under
+    // test is that the LATE org A response never governs org B's own state:
+    // prove it from org B's authoritative read model + the settings UI still
+    // showing org B's exact selection, never an org A-derived substitute.
+    const bBase = required('ORGANIZATION_API_BASE');
+    const bLogin = await new GraneteApiClient(bBase).login({
+      email: required('ORGANIZATION_GATE_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_B_SLUG'),
+    });
+    const bRepository = new APIWorkspaceRepository(bBase, { getAccessToken: () => bLogin.token });
+    const bRead = await bRepository.getMachineOutputSelections();
+    const bCutting = bRead.selections.find((s) => s.selection.selection.operation === 'cutting');
+    expect(bCutting?.selection.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-4');
+    expect(bCutting?.selection.selection.outputCompatibilityProfileRevisionId).toBe('r5');
+    // Org B's own settings UI still shows ITS exact pinned selection (the
+    // org A late response never substituted it).
+    await page.goto('/settings');
+    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await expect(page.getByTestId('machine-output-cutting-profile')).toHaveValue(
+      `ptx-cadmatic-4@r5#${CUTTING_CADMATIC4_CANDIDATE.outputProfileDigest}`,
+    );
   });
 
   test.afterAll(async () => {

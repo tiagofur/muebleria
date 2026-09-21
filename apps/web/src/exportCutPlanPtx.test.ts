@@ -287,7 +287,7 @@ describe('descarga del candidato CADmatic 4 (ptx-cadmatic-4@r5, #793)', () => {
     const plan: CutPlan = { ...basePlan, releaseBase: releaseBaseFromDemand(demand) };
 
     const bundles = await generateSelectedCuttingOutput(plan, cad5Selection(), 'by-material', {
-      manufacturingLabels: manufacturingLabelProjectionFromDemand(demand, catalog),
+      manufacturingLabels: manufacturingLabelProjectionFromDemand(demand),
     });
     expect(bundles.length).toBe(2);
 
@@ -345,10 +345,11 @@ function cad5Selection(): MachineOutputSelection {
 }
 
 /** Minimal frozen release demand + catalog engineering inputs (#793 lab). */
-function labRelease(materialIds: [string, string]): {
+function labRelease(materialIds: ['mat-a' | 'mat-b', 'mat-a' | 'mat-b']): {
   demand: ReleaseCuttingDemandView;
   catalog: Catalog;
 } {
+  const frozenCodeOf = (id: 'mat-a' | 'mat-b'): string => (id === 'mat-a' ? 'LAB18' : 'ALT18');
   const demand: ReleaseCuttingDemandView = {
     releaseId: '1b1b7930-0000-4000-8000-0000000000z1',
     releaseNumber: 2,
@@ -361,6 +362,12 @@ function labRelease(materialIds: [string, string]): {
         furnitureInstanceId: '1b1b7930-0000-4000-8000-0000000000u1',
         furnitureDefinitionId: 'MOD-LAB',
         workshopOccurrenceOrdinal: 1,
+        // #793 — snapshot-frozen industrial identity (as the server authors it).
+        frozenModuleCode: 'MOD-LAB',
+        frozenModuleName: 'Modulo Lab',
+        frozenModuleWidthMm: 600,
+        frozenModuleHeightMm: 720,
+        frozenModuleDepthMm: 450,
         pieces: [
           {
             partId: 'part-a',
@@ -371,6 +378,7 @@ function labRelease(materialIds: [string, string]): {
             widthMm: 320,
             thicknessMm: 18,
             materialId: materialIds[0],
+            frozenMaterialCode: frozenCodeOf(materialIds[0]),
             grain: 1,
             l1: 0,
             l2: 0,
@@ -386,6 +394,7 @@ function labRelease(materialIds: [string, string]): {
             widthMm: 400,
             thicknessMm: 18,
             materialId: materialIds[1],
+            frozenMaterialCode: frozenCodeOf(materialIds[1]),
             grain: 1,
             l1: 0,
             l2: 0,
@@ -509,7 +518,7 @@ describe('downloadCuttingArtifactBundles (#591 machine output)', () => {
     const { deps, blobs, downloads } = captureDeps();
     const release = buildCad5ReadyRelease();
     const bundles = await generateSelectedCuttingOutput(release.plan, cad5Selection(), 'unified', {
-      manufacturingLabels: manufacturingLabelProjectionFromDemand(release.demand, release.catalog),
+      manufacturingLabels: manufacturingLabelProjectionFromDemand(release.demand),
     });
 
     const result = await downloadCuttingArtifactBundles(

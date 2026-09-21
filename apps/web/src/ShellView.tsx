@@ -1063,17 +1063,22 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   // web-side yet — fields without authority stay empty instead of being
   // invented; real machining truth wiring belongs to the field-result
   // follow-up (#348).
+  //
+  // Dependency discipline: the demand CONTEXT object is rebuilt every render,
+  // so the memo keys on the underlying react-query `demand` reference
+  // (referentially stable while unchanged) — keying on the context itself
+  // would recompute every render and re-trigger the partLabels effect in a
+  // loop.
+  const engDemandReady =
+    engineeringDemandContext.kind === 'ready' ? engineeringDemandContext.demand : undefined;
   const engManufacturingLabels = useMemo<ManufacturingLabelProjection | undefined>(() => {
-    if (engineeringDemandContext.kind !== 'ready') return undefined;
+    if (!engDemandReady) return undefined;
     try {
-      return manufacturingLabelProjectionFromDemand(
-        engineeringDemandContext.demand,
-        catalog ?? null,
-      );
+      return manufacturingLabelProjectionFromDemand(engDemandReady);
     } catch {
       return undefined;
     }
-  }, [engineeringDemandContext, catalog]);
+  }, [engDemandReady]);
   const [engPartLabels, setEngPartLabels] = useState<readonly PtxPartLabelData[] | undefined>(
     undefined,
   );
