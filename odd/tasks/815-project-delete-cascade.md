@@ -194,3 +194,19 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
   ./internal/storage -run TestProjectOwnership -count=1` — PASS (1.37s);
   `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage -run
   'Test(DeleteProject|ProjectDelete)' -count=1` — PASS (12.25s).
+
+## R6 correction — database membership binding
+
+- [x] T34 The SECURITY DEFINER function now binds `app.organization_id`,
+  `app.user_id`, and `app.membership_id` to one live `memberships` row with
+  `status='active'` before project ownership is evaluated. This prevents forged,
+  foreign-organization, and suspended membership GUC tuples from using definer
+  authority; it grants neither direct DELETE nor BYPASSRLS.
+- [x] T35 The direct Factory project DELETE RLS matrix now asserts the real
+  `permission denied` result, rather than treating zero affected rows as the
+  product contract. The ownership Split Sales proof remains complete actors.
+- [x] T36 Reconciled current PR base `8fc0460f` with normal merge commit
+  `a0338d6d`; no rebase or force push.
+- [x] T37 Focused fresh PostgreSQL evidence after the migration change:
+  `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage -run
+  'Test(TenantRLS_SharedProjectSupportPlatformAndOwnershipMatrix|ProjectOwnership|DeleteProject)' -count=1` — PASS (16.53s).

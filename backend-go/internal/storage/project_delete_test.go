@@ -542,6 +542,52 @@ func TestDeleteProject_ManualGuardNeverAuthorizesSharedCatalogDeletes(t *testing
 	}
 }
 
+func TestDeleteProject_RejectsForgedOrInactiveActorMembership(t *testing.T) {
+	cases := []struct {
+		name    string
+		actor   storage.TenantActor
+		prepare func(t *testing.T, fx *requoteFixture)
+	}{
+		{
+			name:  "forged membership",
+			actor: storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA, MembershipID: "40000000-0000-0000-0000-0000000000ff"},
+		},
+		{
+			name:  "foreign organization membership",
+			actor: storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA, MembershipID: "40000000-0000-0000-0000-00000000000b"},
+		},
+		{
+			name:  "revoked membership",
+			actor: storage.TenantActor{OrganizationID: rlsOrgA, UserID: "40000000-0000-0000-0000-00000000000c", MembershipID: "40000000-0000-0000-0000-00000000000d"},
+			prepare: func(t *testing.T, fx *requoteFixture) {
+				t.Helper()
+				if _, err := fx.admin.Exec(context.Background(), `INSERT INTO users (id, email, normalized_email, password_hash, name, account_status) VALUES ('40000000-0000-0000-0000-00000000000c', 'suspended-delete@example.test', 'suspended-delete@example.test', 'x', 'Suspended delete', 'active')`); err != nil {
+					t.Fatalf("seed suspended actor user: %v", err)
+				}
+				if _, err := fx.admin.Exec(context.Background(), `INSERT INTO memberships (id, organization_id, user_id, roles, status) VALUES ('40000000-0000-0000-0000-00000000000d', $1, '40000000-0000-0000-0000-00000000000c', '{user}', 'suspended')`, rlsOrgA); err != nil {
+					t.Fatalf("seed suspended actor membership: %v", err)
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := setupRequoteFixture(t)
+			if tc.prepare != nil {
+				tc.prepare(t, fx)
+			}
+			err := fiTx(t, fx.store, tc.actor, func(ctx context.Context) error { return fx.store.DeleteProject(ctx, fx.projectID) })
+			if err == nil || !strings.Contains(err.Error(), "active actor membership") {
+				t.Fatalf("forged/inactive membership delete error=%v", err)
+			}
+			var count int
+			if err := fx.admin.QueryRow(context.Background(), `SELECT count(*) FROM projects WHERE id=$1`, fx.projectID).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("unauthorized actor changed project: count=%d err=%v", count, err)
+			}
+		})
+	}
+}
+
 func TestDeleteProject_RejectsBareOrganizationScope(t *testing.T) {
 	fx := setupRequoteFixture(t)
 	if err := fx.store.DeleteProject(storage.WithOrgCtx(context.Background(), rlsOrgA), fx.projectID); err == nil || !strings.Contains(err.Error(), "complete tenant actor") {

@@ -225,9 +225,9 @@ func TestTenantRLS_SharedProjectSupportPlatformAndOwnershipMatrix(t *testing.T) 
 	}
 
 	withRLSActor(t, fx.app, rlsOrgB, rlsUserB, func(tx pgx.Tx) {
-		tag, err := tx.Exec(ctx, `DELETE FROM projects WHERE id='40000000-0000-0000-0000-000000000001'`)
-		if err != nil || tag.RowsAffected() != 0 {
-			t.Fatalf("manufacturer must not delete shared project: rows=%d err=%v", tag.RowsAffected(), err)
+		_, err := tx.Exec(ctx, `DELETE FROM projects WHERE id='40000000-0000-0000-0000-000000000001'`)
+		if err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("manufacturer direct DELETE must be permission denied: %v", err)
 		}
 	})
 	withRLSActor(t, fx.app, rlsOrgA, rlsUserA, func(tx pgx.Tx) {

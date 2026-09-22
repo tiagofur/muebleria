@@ -324,6 +324,19 @@ BEGIN
         RAISE EXCEPTION 'project delete requires a writable organization scope';
     END IF;
 
+    -- The GUC tuple is only a transport mechanism. Bind it back to a live,
+    -- active membership before using SECURITY DEFINER privileges so a forged
+    -- user_id/membership_id/organization_id combination cannot authorize a tree.
+    PERFORM 1
+      FROM public.memberships membership
+     WHERE membership.id = public.app_current_membership_id()
+       AND membership.user_id = public.app_current_user_id()
+       AND membership.organization_id = actor_organization
+       AND membership.status = 'active';
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'project delete requires an active actor membership';
+    END IF;
+
     PERFORM 1
       FROM public.projects
      WHERE id = project_to_delete
