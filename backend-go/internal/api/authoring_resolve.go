@@ -231,7 +231,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, issues)
 		return
 	}
-	if choiceIssues := validateMaterialChoices(req.Furniture.MaterialChoices, catalog.Materials); len(choiceIssues) > 0 {
+	if choiceIssues := validateMaterialChoices(req.Furniture.MaterialChoices, catalog); len(choiceIssues) > 0 {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, choiceIssues)
 		return
 	}
@@ -326,12 +326,12 @@ type authoringTransformWire struct {
 }
 
 type authoringPlacementWire struct {
-	HardwarePlacementID     string     `json:"hardwarePlacementId"`
-	PlacementKind           string     `json:"placementKind,omitempty"`
-	CatalogHardwareID       string     `json:"catalogHardwareId"`
-	HostComponentInstanceID string     `json:"hostComponentInstanceId"`
-	AnchorFace              string     `json:"anchorFace"`
-	OffsetMm                []float64  `json:"offsetMm"`
+	HardwarePlacementID     string                      `json:"hardwarePlacementId"`
+	PlacementKind           string                      `json:"placementKind,omitempty"`
+	CatalogHardwareID       string                      `json:"catalogHardwareId"`
+	HostComponentInstanceID string                      `json:"hostComponentInstanceId"`
+	AnchorFace              string                      `json:"anchorFace"`
+	OffsetMm                []float64                   `json:"offsetMm"`
 	RotationDeg             *domain.HardwareRotationDeg `json:"rotationDeg,omitempty"`
 }
 
@@ -574,15 +574,11 @@ func authoringParametersFromDefinition(parameters map[string]any, module *domain
 	return dims, normalized, nil, nil
 }
 
-// validateMaterialChoices rejects unknown/inactive board choices up front so
-// the issue carries the resolve code instead of a raw engine error.
-func validateMaterialChoices(choices map[string]string, materials []domain.MaterialBoard) []domain.ContractIssue {
+// validateMaterialChoices validates the historical materialChoices wire map as
+// catalog option choices: board, hardware, and edge bands all share this map.
+func validateMaterialChoices(choices map[string]string, catalog domain.Catalog) []domain.ContractIssue {
 	if len(choices) == 0 {
 		return nil
-	}
-	active := make(map[string]bool, len(materials))
-	for _, material := range materials {
-		active[material.ID] = material.Active
 	}
 	roles := make([]string, 0, len(choices))
 	for role := range choices {
@@ -590,15 +586,47 @@ func validateMaterialChoices(choices map[string]string, materials []domain.Mater
 	}
 	sort.Strings(roles)
 	for _, role := range roles {
-		materialID := choices[role]
-		if active[materialID] {
+		choiceID := choices[role]
+		valid := false
+		groupCount := 0
+		for _, group := range catalog.OptionGroups {
+			if group.Code != role {
+				continue
+			}
+			groupCount++
+			member := false
+			for _, id := range group.OptionIDs {
+				if id == choiceID {
+					member = true
+					break
+				}
+			}
+			if !member {
+				continue
+			}
+			switch group.Kind {
+			case "board":
+				for _, material := range catalog.Materials {
+					valid = valid || material.ID == choiceID && material.Active
+				}
+			case "hardware":
+				for _, hardware := range catalog.Hardware {
+					valid = valid || hardware.ID == choiceID && hardware.Active
+				}
+			case "edge":
+				for _, edge := range catalog.Edges {
+					valid = valid || edge.ID == choiceID && edge.Active
+				}
+			}
+		}
+		if groupCount == 1 && valid {
 			continue
 		}
 		return []domain.ContractIssue{{
 			Code:     "MATERIAL_CHOICE_INVALID",
-			Message:  "la elección " + role + "=" + materialID + " no corresponde a un tablero activo del catálogo",
+			Message:  "la elección " + role + "=" + choiceID + " no corresponde a una opción activa del grupo de catálogo",
 			Severity: domain.IssueSeverityError, Path: "furniture.materialChoices." + role,
-			Remediation: "Choose an active material board for that role.",
+			Remediation: "Choose an active catalog option belonging to that group.",
 		}}
 	}
 	return nil

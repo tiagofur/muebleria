@@ -149,3 +149,48 @@ success masking, no #810/#811 revert. GET /layout endpoint is NOT removed.
   (first render paints Blanco INTERIOR + Moscato FRENTES with their
   photographic textures). Evidence commits add tests/evidence/docs only;
   product src unchanged since 2bedc514 → the run pins the final candidate.
+
+## Follow-up PR1: validate frozen catalog option kinds (2026-09-22)
+
+Issue #821 remains open and approved. The operator later reported that an
+existing project unit did not enter SketchUp: authoring rejected the frozen
+`BISAGRA` choice as `MATERIAL_CHOICE_INVALID` because it is hardware, not an
+active board. The same option map carries board, hardware and edge choices;
+discarding `BISAGRA` would lose commercial intent. This PR repairs that Go
+authoring boundary only. It does not include the local diagnostic UI or the
+intermediate `/auth/me` client, which lacks extension route authorization.
+
+- [x] T821-F1a Validate each frozen choice against its catalog option group,
+  kind, membership and active matching entity; preserve exact board finishes
+  and generic hardware/edge choices. Reject unknown, non-member, wrong-kind
+  and inactive choices. No host mutation, quote rewrite or fallback.
+- [ ] T821-F1b Independently verify insertion and exact finishes with the
+  PR1 backend and installed SketchUp process in a safe model. The operator's
+  successful v0.1.4 placement is valuable reported evidence, NOT an exact
+  PR1 process/version readback.
+
+Route: delegated direct, sole writer. Strict TDD from AGENTS.md; historical
+RED→GREEN focused Go evidence exists in the source work unit, and this slice
+must rerun Go API/engine, OpenAPI drift, affected-plan checks and diff check.
+Forecast: 319 authored source/test/contract +/- lines plus this scoped ODD
+record (under 400); generated types remain visible but excluded from authored
+count. Delivery: `ask-on-risk`, user-selected `stacked-to-main`. PR1 targets
+`origin/main` at `aa6e88c1`; later diagnostic, scoped-profile API and final
+v0.1.5 plugin slices start from main only after each preceding human merge.
+No push, PR creation, merge, server restart, host install or design mutation
+is part of this candidate. Rollback boundary: authoring choice validation,
+supporting catalog/fixture contract and their tests.
+
+PR1 verification: the source patch from local work unit `f58e4184` applied
+cleanly atop exact `aa6e88c1`, without intermediate Ruby identity commits.
+The original work unit observed RED 422 for `BISAGRA` and acceptance of an
+unknown group; its tests now cover BISAGRA/EDGE plus exact INTERIOR/FRENTES,
+and negative inactive, wrong-kind and non-member cases. On this isolated PR1
+tree, focused Go API/engine tests PASS; full `go test ./internal/api
+./internal/domain/engine -count=1` PASS; OpenAPI drift PASS; direct storage
+TypeScript typecheck PASS; shared TS authoring contract 10/10 PASS; Ruby
+authoring contract 47/47 and remote catalog provider 29/29 PASS. The
+conservative affected plan also selects full Go/storage/PostgreSQL, browser,
+visual and host lanes: NOT_RUN here, not a claim of integrated V2 proof.
+`git diff --check` PASS. The reported real v0.1.4 placement belongs to a
+different combined local candidate and does not pin this PR1 backend binary.

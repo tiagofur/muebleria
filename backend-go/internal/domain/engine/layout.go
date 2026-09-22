@@ -239,11 +239,11 @@ type resolveOptions struct {
 // board component of its structure, module-level instances and agregados, plus
 // visible hardware placements — at the given dimensions. dimsOverride wins
 // over the module's own external dimensions (the SketchUp dialog edits
-// widthMm/heightMm/depthMm freely). optionChoices maps option group code
-// (== component optionRole) to a material id — the same shape the React app
-// stores on project items — and resolves real boards (id/code/name/color) per
-// component. A provided choice pointing at an unknown or inactive material
-// fails loudly; a role without a choice keeps the role-palette fallback color.
+// widthMm/heightMm/depthMm freely). optionChoices carries generic catalog
+// choices by option group code, the same shape React stores on project items.
+// This layout uses board-role choices to resolve material metadata per board;
+// hardware and edge choices remain in the author's normalized intent for BOM
+// consumers. Invalid board choices fail; unchosen roles retain palette color.
 func ResolveFurnitureLayout(module domain.Module, catalog domain.Catalog, dimsOverride *LayoutDims, optionChoices map[string]string) (FurnitureLayout, error) {
 	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, dimsOverride, optionChoices, resolveOptions{})
 	return layout, err

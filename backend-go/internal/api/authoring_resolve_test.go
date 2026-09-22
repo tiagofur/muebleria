@@ -39,6 +39,14 @@ func authoringStubServer(t *testing.T) (*Server, string) {
 	fullCatalog := catalog
 	fullCatalog.Modules = []domain.Module{*module}
 	fullCatalog.Materials = materials
+	fullCatalog.Edges = []domain.EdgeBand{{ID: "edge-white", Active: true}, {ID: "edge-inactive", Active: false}}
+	fullCatalog.Hardware = append(fullCatalog.Hardware, domain.Hardware{ID: "hw-inactive", Active: false})
+	fullCatalog.OptionGroups = []domain.OptionGroup{
+		{Code: "FRENTE", Kind: "board", OptionIDs: []string{"mat-oak18"}},
+		{Code: "INTERIOR", Kind: "board", OptionIDs: []string{"mat-white18"}},
+		{Code: "BISAGRA", Kind: "hardware", OptionIDs: []string{"hw-hinge", "hw-inactive"}},
+		{Code: "EDGE", Kind: "edge", OptionIDs: []string{"edge-white", "edge-inactive"}},
+	}
 	server.Store = &stubStore{
 		getUserByEmail:     u,
 		moduleReturnedByID: module,
@@ -926,14 +934,17 @@ func TestAuthoringResolveMinimalSnapshotCarriesExactMaterialMetadata(t *testing.
 	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
 		FurnitureDefinitionID: authoringFixtureModuleID,
 		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
-		MaterialChoices:       map[string]string{"FRENTE": "mat-oak18", "INTERIOR": "mat-white18"},
+		MaterialChoices:       map[string]string{"FRENTE": "mat-oak18", "INTERIOR": "mat-white18", "BISAGRA": "hw-hinge"},
 	}))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST resolve status = %d body=%s", rec.Code, rec.Body.String())
 	}
 
 	var response struct {
-		Status   string `json:"status"`
+		Status             string `json:"status"`
+		NormalizedSnapshot struct {
+			MaterialChoices map[string]string `json:"materialChoices"`
+		} `json:"normalizedSnapshot"`
 		Resolved *struct {
 			Layout struct {
 				Components []struct {
@@ -954,6 +965,9 @@ func TestAuthoringResolveMinimalSnapshotCarriesExactMaterialMetadata(t *testing.
 	}
 	if response.Status != "accepted" || response.Resolved == nil {
 		t.Fatalf("expected accepted resolve: %s", rec.Body.String())
+	}
+	if response.NormalizedSnapshot.MaterialChoices["BISAGRA"] != "hw-hinge" {
+		t.Fatalf("normalized intent dropped quoted hinge: %+v", response.NormalizedSnapshot.MaterialChoices)
 	}
 
 	for _, board := range response.Resolved.Layout.Components {
@@ -985,6 +999,94 @@ func TestAuthoringResolveMinimalSnapshotCarriesExactMaterialMetadata(t *testing.
 	}
 	if roles["FRENTE"] == 0 || roles["INTERIOR"] == 0 || roles["LATERAL"] == 0 {
 		t.Fatalf("default occurrence expansion missing boards: %v", roles)
+	}
+}
+
+func TestAuthoringResolveRejectsInvalidCatalogOptions(t *testing.T) {
+	server, token := authoringStubServer(t)
+	revision := authoringCatalogRevision(t, server)
+	for _, tc := range []struct {
+		name, role, id string
+	}{
+		{"unknown group", "UNKNOWN", "mat-oak18"},
+		{"board not member", "INTERIOR", "mat-oak18"},
+		{"board wrong kind", "FRENTE", "hw-hinge"},
+		{"hardware not member", "BISAGRA", "hw-handle"},
+		{"hardware wrong kind", "BISAGRA", "mat-oak18"},
+		{"hardware inactive", "BISAGRA", "hw-inactive"},
+		{"edge wrong kind", "EDGE", "hw-hinge"},
+		{"edge inactive", "EDGE", "edge-inactive"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(revision, authoringResolveFurniture{
+				FurnitureDefinitionID: authoringFixtureModuleID,
+				MaterialChoices:       map[string]string{tc.role: tc.id},
+			}))
+			if rec.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+			}
+			assertIssueCode(t, rec.Body.Bytes(), "MATERIAL_CHOICE_INVALID")
+		})
+	}
+}
+
+func TestAuthoringResolveQuotedPluralFrontAndHingeChoices(t *testing.T) {
+	server, token := authoringStubServer(t)
+	store := server.Store.(*stubStore)
+	catalog := *store.catalogOverride
+	catalog.Components = append([]domain.Component(nil), catalog.Components...)
+	for i := range catalog.Components {
+		if catalog.Components[i].ID == "comp-door" {
+			catalog.Components[i].OptionRoles = []string{"FRENTES"}
+		}
+	}
+	catalog.OptionGroups = append(catalog.OptionGroups,
+		domain.OptionGroup{Code: "FRENTES", Kind: "board", OptionIDs: []string{"mat-oak18"}})
+	store.catalogOverride = &catalog
+
+	choices := map[string]string{
+		"INTERIOR": "mat-white18", "FRENTES": "mat-oak18",
+		"BISAGRA": "hw-hinge", "EDGE": "edge-white",
+	}
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+		MaterialChoices:       choices,
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST resolve status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		NormalizedSnapshot struct {
+			MaterialChoices map[string]string `json:"materialChoices"`
+		} `json:"normalizedSnapshot"`
+		Resolved struct {
+			Layout struct {
+				Components []struct {
+					OptionRole string `json:"optionRole"`
+					MaterialID string `json:"materialId"`
+				} `json:"components"`
+			} `json:"layout"`
+		} `json:"resolved"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	for role, id := range choices {
+		if response.NormalizedSnapshot.MaterialChoices[role] != id {
+			t.Fatalf("normalized %s = %q, want %q", role, response.NormalizedSnapshot.MaterialChoices[role], id)
+		}
+	}
+	seen := map[string]bool{}
+	for _, board := range response.Resolved.Layout.Components {
+		if want := choices[board.OptionRole]; board.OptionRole == "INTERIOR" || board.OptionRole == "FRENTES" {
+			if board.MaterialID != want {
+				t.Fatalf("%s board material = %q, want %q", board.OptionRole, board.MaterialID, want)
+			}
+			seen[board.OptionRole] = true
+		}
+	}
+	if !seen["INTERIOR"] || !seen["FRENTES"] {
+		t.Fatalf("quoted board roles were not resolved: %v", seen)
 	}
 }
 
