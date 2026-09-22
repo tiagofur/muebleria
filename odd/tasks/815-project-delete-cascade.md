@@ -182,3 +182,15 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
   membership UUID for its user and organization, rather than a merely shaped
   UUID. Focused bare-scope and pin lifecycle PostgreSQL proof remains PASS
   (2.32s).
+
+## R5 reviewer correction — Split Sales actor proof
+
+- [x] T32 `TestProjectOwnership_SplitSalesAndManufacturing` now seeds real Sales
+  and Factory users/memberships and invokes `DeleteProject` only inside
+  `WithinTenantTx` with complete actors. The Factory actor remains denied by the
+  Store/Sales project boundary; the active Sales actor canonically deletes it.
+  Bare `WithOrgCtx` is not used as delete authority.
+- [x] T33 Fresh PostgreSQL evidence: `GOFLAGS=-p=1 go test -parallel=1
+  ./internal/storage -run TestProjectOwnership -count=1` — PASS (1.37s);
+  `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage -run
+  'Test(DeleteProject|ProjectDelete)' -count=1` — PASS (12.25s).
