@@ -26,6 +26,7 @@ import type {
   ProjectItem,
   ProjectItemPlacement,
   ProjectKitchenLayout,
+  ResolvedHardwarePlacement,
 } from '@granete/domain';
 import {
   addKitchenSpace,
@@ -174,6 +175,36 @@ import {
 } from '../projectHelpers';
 import type { Catalog, ModuleBaseMode } from '@granete/domain';
 import { WorkspaceTabs } from '../../common/Tabs';
+
+/**
+ * F143 — resolves a scene-format hardware selection id back to the placement
+ * it names. BoardMesh emits `${componentInstanceId}:${hardwareId}:${index}`
+ * (#813); the index is the position in the BOARD's placement list (every
+ * placement sharing one part id, in resolver order) — the exact array
+ * BoardMesh maps over. A board can mix hardware models, so the lookup must
+ * index by part id first and only then check the hardware id.
+ */
+export function resolveHardwareDetailTarget(
+  placements: readonly ResolvedHardwarePlacement[],
+  selectedHardwareId: string,
+): ResolvedHardwarePlacement | null {
+  const segments = selectedHardwareId.split(':');
+  if (segments.length !== 3) return null;
+  const [componentInstanceId, hardwareId, indexRaw] = segments as [
+    string,
+    string,
+    string,
+  ];
+  if (!/^\d+$/.test(indexRaw)) return null;
+  const boardPlacements = placements.filter(
+    (p) => p.componentInstanceId === componentInstanceId,
+  );
+  const placement = boardPlacements[Number(indexRaw)];
+  return placement !== undefined && placement.hardwareId === hardwareId
+    ? placement
+    : null;
+}
+
 import { ModuleLibraryPanel, moduleDefaultDims } from './library/ModuleLibraryPanel';
 import { useLibraryCollections } from './library/useLibraryFavorites';
 import {
@@ -1002,11 +1033,9 @@ export function ProjectSpatialStudio({
       if (part) return { kind: 'part' as const, part };
     }
     if (detailHardwareId) {
-      const sep = detailHardwareId.indexOf(':');
-      const componentInstanceId = detailHardwareId.slice(0, sep);
-      const hardwareId = detailHardwareId.slice(sep + 1);
-      const placement = (mod.resolvedHardwarePlacements ?? []).find(
-        (p) => p.componentInstanceId === componentInstanceId && p.hardwareId === hardwareId,
+      const placement = resolveHardwareDetailTarget(
+        mod.resolvedHardwarePlacements ?? [],
+        detailHardwareId,
       );
       if (placement) {
         const hardware = catalog.hardware.find((h) => h.id === placement.hardwareId);

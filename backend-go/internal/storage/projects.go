@@ -1531,6 +1531,10 @@ func (s *PostgresStore) DeleteProjectWithMediaCleanup(
 	id string,
 	cleanup func(context.Context, []ProjectMediaFile),
 ) error {
+	actor, ok := TenantActorFromCtx(ctx)
+	if !ok || actor.OrganizationID == "" || actor.UserID == "" || actor.MembershipID == "" {
+		return errors.New("project delete requires a complete tenant actor")
+	}
 	return runInTenantTxErr(s, ctx, func(ctx context.Context) error {
 		tx := transactionFromContext(ctx)
 		if tx == nil {

@@ -142,11 +142,11 @@ func assertFurnitureInstancesSchema(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func fiActorA() storage.TenantActor {
-	return storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA}
+	return storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA, MembershipID: "40000000-0000-0000-0000-00000000000a"}
 }
 
 func fiActorB() storage.TenantActor {
-	return storage.TenantActor{OrganizationID: rlsOrgB, UserID: rlsUserB}
+	return storage.TenantActor{OrganizationID: rlsOrgB, UserID: rlsUserB, MembershipID: "40000000-0000-0000-0000-00000000000b"}
 }
 
 // fiTx runs store work under the app role inside one tenant transaction —

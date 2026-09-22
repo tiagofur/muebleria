@@ -206,7 +206,7 @@ vi.mock('../../preview3d', async (importOriginal) => {
           <button
             type="button"
             data-testid="mock-select-hardware"
-            onClick={() => props.onSelectHardware!('comp-1:h-1')}
+            onClick={() => props.onSelectHardware!('comp-1:h-1:0')}
           >
             mock select hardware
           </button>
@@ -257,7 +257,66 @@ vi.mock('../../preview3d', async (importOriginal) => {
   };
 });
 
-import { ProjectSpatialStudio } from './ProjectSpatialStudio';
+import {
+  ProjectSpatialStudio,
+  resolveHardwareDetailTarget,
+} from './ProjectSpatialStudio';
+import type { ResolvedHardwarePlacement } from '@granete/domain';
+
+function hwPlacement(
+  componentInstanceId: string,
+  hardwareId: string,
+): ResolvedHardwarePlacement {
+  return {
+    componentInstanceId,
+    hardwareId,
+    localPosition: [50, 18, 50],
+    localNormal: [0, 1, 0],
+    standoffMm: 25,
+    scale: 1,
+    rotationDeg: { x: 0, y: 0, z: 0 },
+  };
+}
+
+describe('resolveHardwareDetailTarget — scene-format selection id (#813)', () => {
+  // Mixed board: two hinges of one model + one handle between them.
+  const boardPlacements = [
+    hwPlacement('c-puerta-copy-0', 'h-hinge'),
+    hwPlacement('c-puerta-copy-0', 'h-handle'),
+    hwPlacement('c-puerta-copy-0', 'h-hinge'),
+    hwPlacement('c-otra-copy-0', 'h-hinge'),
+  ];
+
+  it('resolves repeated hardware on one board by board-list index', () => {
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-puerta-copy-0:h-hinge:0')).toBe(
+      boardPlacements[0],
+    );
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-puerta-copy-0:h-hinge:2')).toBe(
+      boardPlacements[2],
+    );
+  });
+
+  it('rejects an id whose hardware differs at the indexed position', () => {
+    // Index 1 on that board is the handle, not the hinge.
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-puerta-copy-0:h-hinge:1')).toBeNull();
+  });
+
+  it('resolves a single placement of a hardware model', () => {
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-puerta-copy-0:h-handle:1')).toBe(
+      boardPlacements[1],
+    );
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-otra-copy-0:h-hinge:0')).toBe(
+      boardPlacements[3],
+    );
+  });
+
+  it('fails closed on malformed or out-of-range ids', () => {
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-puerta-copy-0:h-hinge')).toBeNull();
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-puerta-copy-0:h-hinge:x')).toBeNull();
+    expect(resolveHardwareDetailTarget(boardPlacements, 'c-puerta-copy-0:h-hinge:9')).toBeNull();
+    expect(resolveHardwareDetailTarget(boardPlacements, 'garbage')).toBeNull();
+  });
+});
 
 beforeEach(() => {
   globalThis.localStorage?.clear();
@@ -2424,7 +2483,7 @@ describe('ProjectSpatialStudio F143 — modo detalle', () => {
     fireEvent.click(screen.getByTestId('mock-select-hardware'));
     expect(
       screen.getByTestId('spatial-studio-scene').getAttribute('data-selected-hardware'),
-    ).toBe('comp-1:h-1');
+    ).toBe('comp-1:h-1:0');
     // ESC baja un nivel: del detalle a la unidad (no cierra el studio)
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(

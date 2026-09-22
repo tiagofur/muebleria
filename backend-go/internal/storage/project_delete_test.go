@@ -66,6 +66,59 @@ func seedDeleteReleaseFamilyForOrganization(t *testing.T, admin *pgxpool.Pool, p
 	return designID
 }
 
+// seedDeleteCatalogPins creates real project-owned pins to immutable catalog rows.
+// The pins must disappear with the project; the catalog rows must not.
+func seedDeleteCatalogPins(t *testing.T, fx *requoteFixture) {
+	t.Helper()
+	ctx := context.Background()
+	statements := []string{
+		`INSERT INTO hardware_assets (id, organization_id, display_name, created_by) VALUES ('a2000000-0000-0000-0000-000000000001', '` + rlsOrgA + `', 'Delete fixture asset', '` + rlsUserA + `')`,
+		`INSERT INTO hardware_asset_revisions (id, organization_id, asset_id, revision_number, representation, storage_key, content_type, size_bytes, sha256, integrity_verified_at, created_by) VALUES ('a2000000-0000-0000-0000-000000000002', '` + rlsOrgA + `', 'a2000000-0000-0000-0000-000000000001', 1, 'glb', 'hardware/delete-fixture.glb', 'model/gltf-binary', 1, 'sha256-` + strings.Repeat("b", 64) + `', NOW(), '` + rlsUserA + `')`,
+		`INSERT INTO hardware_asset_validations (organization_id, asset_id, revision_id, sha256, tool, result, created_by) VALUES ('` + rlsOrgA + `', 'a2000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000002', 'sha256-` + strings.Repeat("b", 64) + `', 'delete-fixture', 'passed', '` + rlsUserA + `')`,
+		`INSERT INTO hardwares (id, code, name, unit, cost_per_unit, active, organization_id, visual_asset_id, visual_asset_revision_id) VALUES ('a2000000-0000-0000-0000-000000000003', 'DELETE-PIN-HW', 'Delete pin hardware', 'piece', 1, TRUE, '` + rlsOrgA + `', 'a2000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000002')`,
+		`INSERT INTO design_revision_hardware_assets (organization_id, project_id, design_revision_id, hardware_id, asset_id, asset_revision_id, representation, sha256) VALUES ('` + rlsOrgA + `', '` + fx.projectID + `', '` + fx.designRevID + `', 'a2000000-0000-0000-0000-000000000003', 'a2000000-0000-0000-0000-000000000001', 'a2000000-0000-0000-0000-000000000002', 'glb', 'sha256-` + strings.Repeat("b", 64) + `')`,
+		`INSERT INTO agregados (id, code, name, components, organization_id) VALUES ('delete-pin-agregado', 'DELETE-PIN-AGREGADO', 'Delete pin agregado', '[]'::jsonb, '` + rlsOrgA + `')`,
+		`INSERT INTO agregado_revisions (id, organization_id, agregado_id, revision_number, recipe, created_by) VALUES ('a2000000-0000-0000-0000-000000000004', '` + rlsOrgA + `', 'delete-pin-agregado', 1, '{}'::jsonb, '` + rlsUserA + `')`,
+		`UPDATE agregados SET current_revision_id='a2000000-0000-0000-0000-000000000004' WHERE organization_id='` + rlsOrgA + `' AND id='delete-pin-agregado'`,
+		`INSERT INTO published_assembly_snapshots (id, organization_id, agregado_id, agregado_revision_id, agregado_revision_number, resolved_width_mm, resolved_depth_mm, resolved_height_mm, payload_hash, snapshot, created_by) VALUES ('a2000000-0000-0000-0000-000000000005', '` + rlsOrgA + `', 'delete-pin-agregado', 'a2000000-0000-0000-0000-000000000004', 1, 1, 1, 1, 'delete-pin-hash', '{}'::jsonb, '` + rlsUserA + `')`,
+		`INSERT INTO design_revision_assembly_snapshots (organization_id, project_id, design_revision_id, agregado_id, slot_key, snapshot_id) VALUES ('` + rlsOrgA + `', '` + fx.projectID + `', '` + fx.designRevID + `', 'delete-pin-agregado', 'delete-pin', 'a2000000-0000-0000-0000-000000000005')`,
+	}
+	for _, statement := range statements {
+		if _, err := fx.admin.Exec(ctx, statement); err != nil {
+			t.Fatalf("seed catalog pin: %v\\n%s", err, statement)
+		}
+	}
+}
+
+func TestDeleteProject_RemovesPinsButPreservesSharedCatalog(t *testing.T) {
+	ctx := context.Background()
+	fx := setupRequoteFixture(t)
+	seedDeleteCatalogPins(t, fx)
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error { return fx.store.DeleteProject(ctx, fx.projectID) }); err != nil {
+		t.Fatal(err)
+	}
+	for _, table := range []string{"design_revision_hardware_assets", "design_revision_assembly_snapshots"} {
+		var count int
+		if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM `+table+` WHERE project_id=$1`, fx.projectID).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("%s pins remain=%d err=%v", table, count, err)
+		}
+	}
+	for _, check := range []string{
+		`SELECT count(*) FROM hardware_assets WHERE id='a2000000-0000-0000-0000-000000000001'`,
+		`SELECT count(*) FROM hardware_asset_revisions WHERE id='a2000000-0000-0000-0000-000000000002'`,
+		`SELECT count(*) FROM hardware_asset_validations WHERE asset_id='a2000000-0000-0000-0000-000000000001'`,
+		`SELECT count(*) FROM hardwares WHERE id='a2000000-0000-0000-0000-000000000003'`,
+		`SELECT count(*) FROM agregados WHERE organization_id='` + rlsOrgA + `' AND id='delete-pin-agregado'`,
+		`SELECT count(*) FROM agregado_revisions WHERE id='a2000000-0000-0000-0000-000000000004'`,
+		`SELECT count(*) FROM published_assembly_snapshots WHERE id='a2000000-0000-0000-0000-000000000005'`,
+	} {
+		var count int
+		if err := fx.admin.QueryRow(ctx, check).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("shared catalog lost query=%s count=%d err=%v", check, count, err)
+		}
+	}
+}
+
 func TestDeleteProject_RemovesFullCommercialHistoryFamily(t *testing.T) {
 	fx := setupRequoteFixture(t)
 	seedDeleteReleaseFamily(t, fx.admin, fx.projectID, fx.quoteRevID, fx.designRevID)
@@ -453,7 +506,7 @@ func TestProjectDeleteBoundaryHasSafeDeploymentOwnershipPosture(t *testing.T) {
 	var securityDefiner, appCanAssumeOwner, appSuperuser, appBypassRLS bool
 	if err := fx.admin.QueryRow(context.Background(), `
 		SELECT p.proowner::regrole::text, p.prosecdef,
-		       has_privs_of_role('granete_app', p.proowner), app.rolsuper, app.rolbypassrls
+		       pg_has_role('granete_app', p.proowner::regrole, 'USAGE'), app.rolsuper, app.rolbypassrls
 		FROM pg_proc p JOIN pg_roles app ON app.rolname='granete_app'
 		WHERE p.oid='delete_project_tree(uuid)'::regprocedure`).Scan(&owner, &securityDefiner, &appCanAssumeOwner, &appSuperuser, &appBypassRLS); err != nil {
 		t.Fatal(err)
@@ -465,14 +518,37 @@ func TestProjectDeleteBoundaryHasSafeDeploymentOwnershipPosture(t *testing.T) {
 
 func TestDeleteProject_ManualGuardNeverAuthorizesSharedCatalogDeletes(t *testing.T) {
 	fx := setupRequoteFixture(t)
-	withRLSActor(t, fx.store.Pool, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
-		if _, err := tx.Exec(context.Background(), `SELECT set_config('app.allow_project_cascade_delete','on',true)`); err != nil {
-			t.Fatal(err)
-		}
-		for _, table := range []string{"hardware_assets", "hardware_asset_revisions", "hardware_asset_validations", "published_assembly_snapshots", "agregado_revisions", "agregados"} {
-			if _, err := tx.Exec(context.Background(), `DELETE FROM `+table+` WHERE false`); err == nil || !strings.Contains(err.Error(), "permission denied") {
-				t.Errorf("manual guard DELETE %s error=%v, want permission denied", table, err)
+	seedDeleteCatalogPins(t, fx)
+	cases := []string{
+		`DELETE FROM hardware_assets WHERE id='a2000000-0000-0000-0000-000000000001'`,
+		`DELETE FROM hardware_asset_revisions WHERE id='a2000000-0000-0000-0000-000000000002'`,
+		`DELETE FROM hardware_asset_validations WHERE asset_id='a2000000-0000-0000-0000-000000000001'`,
+		`DELETE FROM hardwares WHERE id='a2000000-0000-0000-0000-000000000003'`,
+		`DELETE FROM published_assembly_snapshots WHERE id='a2000000-0000-0000-0000-000000000005'`,
+		`DELETE FROM agregado_revisions WHERE id='a2000000-0000-0000-0000-000000000004'`,
+		`DELETE FROM agregados WHERE organization_id='` + rlsOrgA + `' AND id='delete-pin-agregado'`,
+	}
+	for _, statement := range cases {
+		// Each expected permission error gets its own transaction so a PostgreSQL
+		// aborted transaction can never masquerade as a later denial.
+		withRLSActor(t, fx.store.Pool, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+			if _, err := tx.Exec(context.Background(), `SELECT set_config('app.allow_project_cascade_delete','on',true)`); err != nil {
+				t.Fatal(err)
 			}
-		}
-	})
+			if _, err := tx.Exec(context.Background(), statement); err == nil {
+				t.Errorf("manual guard DELETE %q unexpectedly succeeded", statement)
+			}
+		})
+	}
+}
+
+func TestDeleteProject_RejectsBareOrganizationScope(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	if err := fx.store.DeleteProject(storage.WithOrgCtx(context.Background(), rlsOrgA), fx.projectID); err == nil || !strings.Contains(err.Error(), "complete tenant actor") {
+		t.Fatalf("bare WithOrgCtx delete error=%v, want complete-actor rejection", err)
+	}
+	var count int
+	if err := fx.admin.QueryRow(context.Background(), `SELECT count(*) FROM projects WHERE id=$1`, fx.projectID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("bare scope delete changed project: count=%d err=%v", count, err)
+	}
 }

@@ -149,3 +149,32 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
   must not be upgraded implicitly.
 - [ ] T24 Pending real-PG execution in a stable harness, hardware/assembly pin
   fixture, Gate A, exact-head CI, and independent review.
+
+## R5 correction — actor authority and fixture completion
+
+- [x] T25 Route: delegated (four-plus affected files / one writer). A project
+  delete now requires a complete `TenantActor` (`organization`, `user`, and
+  `membership`) before it opens the tenant transaction. `WithOrgCtx` remains a
+  legacy scope helper and is deliberately not DELETE authority; `WithinTenantTx`
+  supplies the revalidated writable actor and the database function retains
+  `app_can_write_organization`.
+- [x] T26 Restored #815-foreign UI bytes from `origin/main`: BoardMesh again
+  includes the placement index in the duplicate hardware identity and its test,
+  plus ProjectSpatialStudio and its test return to the mainline behavior. This
+  is a surgical restoration, not a UI change.
+- [x] T27 Added real PostgreSQL catalog rows and project pins for hardware assets
+  and assembly snapshots. Canonical deletion removes only both pin families;
+  hardware assets/revisions/validations/hardware and agregado/revision/published
+  snapshot rows survive. Manual guard direct DELETE is attempted against real
+  rows in independent transactions and remains blocked (by table permission or
+  referential protection, never by a `WHERE false` no-op).
+- [x] T28 Focused fresh migration evidence:
+  `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage -run 'TestDeleteProject_(RemovesPinsButPreservesSharedCatalog|ManualGuardNeverAuthorizesSharedCatalogDeletes|RejectsBareOrganizationScope)' -count=1` — PASS (3.19s).
+- [ ] T29 Required before delivery complete: exact-head full backend suite, vet,
+  Foundation Gate A, remote CI/readback and independent review. PR stays
+  `Refs #815` / `Delivery: partial` until those results exist.
+- [x] T30 R5 full project-delete storage family rerun after the deployment readiness
+  catalog query correction: `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage
+  -run 'Test(DeleteProject|ProjectDelete)' -count=1` — PASS (12.78s). The
+  readiness query uses `pg_has_role`, which is available on the supported
+  PostgreSQL version; no runtime ownership/role assumption is granted.

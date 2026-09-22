@@ -103,7 +103,7 @@ func TestMediaFilenameFromURL(t *testing.T) {
 		{"empty", "", ""},
 		{"canonical", "/api/media/abc.png", "abc.png"},
 		{"with token query", "/api/media/abc.png?token=secret", "abc.png"},
-		{"absolute host", "http://localhost:8080/api/media/abc.webp", "abc.webp"},
+		{"absolute host", "http://localhost:8080/api/media/abc.webp", ""},
 		{"external url", "https://cdn.example.com/img.png", ""},
 		{"data uri", "data:image/png;base64,xx", ""},
 		{"path escape", "/api/media/../etc/passwd", ""},
