@@ -8,12 +8,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -210,21 +212,11 @@ const mediaURLPrefix = "/api/media/"
 // catalog media URL (external URLs, data:, empty, etc.) so callers can no-op.
 // It refuses path separators and ".." — same defenses as HandleMediaGet.
 func mediaFilenameFromURL(raw string) string {
-	if raw == "" {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || !strings.HasPrefix(parsed.Path, mediaURLPrefix) {
 		return ""
 	}
-	url := strings.TrimSpace(raw)
-	// Find the media prefix anywhere; tolerate absolute hosts.
-	idx := strings.Index(url, mediaURLPrefix)
-	if idx < 0 {
-		return ""
-	}
-	name := url[idx+len(mediaURLPrefix):]
-	// Drop query string ("?token=...") if present.
-	if i := strings.Index(name, "?"); i >= 0 {
-		name = name[:i]
-	}
-	name = strings.TrimSpace(name)
+	name := strings.TrimPrefix(parsed.Path, mediaURLPrefix)
 	if name == "" || strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
 		return ""
 	}
@@ -260,4 +252,33 @@ func deleteMediaFileByURL(ctx context.Context, mediaDir, url string) bool {
 		slog.Warn("media cleanup: failed to remove file", "path", path, "error", err)
 	}
 	return false
+}
+
+// deleteProjectMediaFiles is the API-owned post-commit cleanup boundary for a
+// deleted project. References are collected by storage before the cascade; this
+// function deliberately has no transaction return path, so an I/O failure can
+// never turn a committed DELETE into an HTTP 500.
+func deleteProjectMediaFiles(mediaDir string, files []storage.ProjectMediaFile) {
+	for _, file := range files {
+		if strings.TrimSpace(file.OrganizationID) == "" || strings.TrimSpace(mediaDir) == "" {
+			continue
+		}
+		if name := mediaFilenameFromURL(file.MediaURL); name != "" {
+			removeProjectMediaPath(mediaDir, file.OrganizationID, name)
+		}
+		if auth.DesignArtifactResourceKey(file.StorageKey) != "" {
+			removeProjectMediaPath(mediaDir, file.OrganizationID, filepath.FromSlash(file.StorageKey))
+		}
+	}
+}
+
+func removeProjectMediaPath(mediaDir, ownerOrgID, relativePath string) {
+	path := filepath.Join(mediaDir, ownerOrgID, relativePath)
+	root := filepath.Clean(mediaDir)
+	if !strings.HasPrefix(filepath.Clean(path), root+string(os.PathSeparator)) {
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		slog.Warn("project media cleanup: failed to remove file", "path", path, "error", err)
+	}
 }

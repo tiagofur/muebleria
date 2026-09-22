@@ -142,11 +142,11 @@ func assertFurnitureInstancesSchema(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func fiActorA() storage.TenantActor {
-	return storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA}
+	return storage.TenantActor{OrganizationID: rlsOrgA, UserID: rlsUserA, MembershipID: "40000000-0000-0000-0000-00000000000a"}
 }
 
 func fiActorB() storage.TenantActor {
-	return storage.TenantActor{OrganizationID: rlsOrgB, UserID: rlsUserB}
+	return storage.TenantActor{OrganizationID: rlsOrgB, UserID: rlsUserB, MembershipID: "40000000-0000-0000-0000-00000000000b"}
 }
 
 // fiTx runs store work under the app role inside one tenant transaction —
@@ -475,9 +475,21 @@ func TestTenantRLS_FurnitureInstancesDirectSQLCrossOrg(t *testing.T) {
 			t.Fatalf("cross-org UPDATE touched victim: rows=%d err=%v", tag.RowsAffected(), err)
 		}
 
-		// Identity is never hard-deleted through the runtime role at all.
-		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceB); err == nil {
-			t.Fatal("app role must not hold DELETE on furniture_instances")
+		// #815: only the canonical SECURITY DEFINER project boundary deletes
+		// project rows. Each intentional permission error runs under its own
+		// savepoint so PostgreSQL's failed-transaction state cannot mask the next
+		// assertion as SQLSTATE 25P02.
+		for _, id := range []string{fiInstanceB, fiInstanceA} {
+			if _, err := tx.Exec(ctx, "SAVEPOINT direct_delete_check"); err != nil {
+				t.Fatal(err)
+			}
+			_, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, id)
+			if _, rollbackErr := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT direct_delete_check"); rollbackErr != nil {
+				t.Fatal(rollbackErr)
+			}
+			if err == nil || !strings.Contains(err.Error(), "permission denied") {
+				t.Fatalf("direct DELETE %s must remain prohibited: %v", id, err)
+			}
 		}
 
 		// Attaching an identity to a foreign-org project fails the WITH CHECK.
