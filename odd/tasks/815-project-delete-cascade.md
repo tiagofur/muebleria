@@ -210,3 +210,10 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
 - [x] T37 Focused fresh PostgreSQL evidence after the migration change:
   `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage -run
   'Test(TenantRLS_SharedProjectSupportPlatformAndOwnershipMatrix|ProjectOwnership|DeleteProject)' -count=1` — PASS (16.53s).
+- [ ] T38 Exact-head final verification remains partial: `go vet ./...` — PASS.
+  `GOFLAGS=-p=1 go test -parallel=1 ./...` was launched but stalled in the
+  shared local harness after non-storage packages; it was stopped rather than
+  reported as PASS. `bash scripts/foundation-gate-a.sh --stage postgres` ran
+  and failed in `TestWebRefreshCookieLogoutRevokesClearsAndIsolatesSessions`
+  when an invitation request returned 401; no #815 product assertion failed in
+  the focused R6 suite.
