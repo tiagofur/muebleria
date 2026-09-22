@@ -2,12 +2,15 @@ package storage_test
 
 import (
 	"context"
+	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #815 — deleting a project must remove it together with its commercial and
@@ -27,6 +30,10 @@ const (
 )
 
 func seedDeleteReleaseFamily(t *testing.T, admin *pgxpool.Pool, projectID, quoteRevID, designRevID string) string {
+	return seedDeleteReleaseFamilyForOrganization(t, admin, projectID, quoteRevID, designRevID, rlsOrgA)
+}
+
+func seedDeleteReleaseFamilyForOrganization(t *testing.T, admin *pgxpool.Pool, projectID, quoteRevID, designRevID, organizationID string) string {
 	t.Helper()
 	ctx := context.Background()
 	var designID string
@@ -38,17 +45,17 @@ func seedDeleteReleaseFamily(t *testing.T, admin *pgxpool.Pool, projectID, quote
 		`INSERT INTO production_releases
 		 (id, organization_id, project_id, release_number, design_revision_id, quote_revision_id,
 		  manufacturing_fingerprint, released_by)
-		 VALUES ('` + deleteTestReleaseID + `', '` + rlsOrgA + `', '` + projectID + `', 1, '` + designRevID + `', '` + quoteRevID + `',
+		 VALUES ('` + deleteTestReleaseID + `', '` + organizationID + `', '` + projectID + `', 1, '` + designRevID + `', '` + quoteRevID + `',
 		  'sha256-` + strings.Repeat("a", 64) + `', '` + rlsUserA + `')`,
 		`INSERT INTO production_release_engineering
 		 (release_id, project_id, organization_id, status, started_by)
-		 VALUES ('` + deleteTestReleaseID + `', '` + projectID + `', '` + rlsOrgA + `', 'in_progress', '` + rlsUserA + `')`,
+		 VALUES ('` + deleteTestReleaseID + `', '` + projectID + `', '` + organizationID + `', 'in_progress', '` + rlsUserA + `')`,
 		`INSERT INTO production_release_manufacturing_snapshots
 		 (release_id, project_id, organization_id, schema_version, payload)
-		 VALUES ('` + deleteTestReleaseID + `', '` + projectID + `', '` + rlsOrgA + `', 1, '{}'::jsonb)`,
+		 VALUES ('` + deleteTestReleaseID + `', '` + projectID + `', '` + organizationID + `', 1, '{}'::jsonb)`,
 		`INSERT INTO design_publish_sessions
 		 (id, organization_id, project_id, design_id, base_revision_id, source, manifest, expires_at)
-		 VALUES ('` + deleteTestSessionID + `', '` + rlsOrgA + `', '` + projectID + `', '` + designID + `', '` + designRevID + `',
+		 VALUES ('` + deleteTestSessionID + `', '` + organizationID + `', '` + projectID + `', '` + designID + `', '` + designRevID + `',
 		  '{}'::jsonb, '{}'::jsonb, NOW() + INTERVAL '1 hour')`,
 	}
 	for _, statement := range statements {
@@ -116,6 +123,10 @@ func TestDeleteProject_DurabilityGuardsBlockDirectDeletes(t *testing.T) {
 		{"production_releases", `DELETE FROM production_releases WHERE id = '` + deleteTestReleaseID + `'`, "immutable history"},
 		{"production_release_engineering", `DELETE FROM production_release_engineering WHERE release_id = '` + deleteTestReleaseID + `'`, "durable history"},
 		{"production_release_manufacturing_snapshots", `DELETE FROM production_release_manufacturing_snapshots WHERE release_id = '` + deleteTestReleaseID + `'`, "immutable history"},
+		{"design_revision_artifacts", `DELETE FROM design_revision_artifacts WHERE project_id = '` + fx.projectID + `'`, "immutable history"},
+		{"design_revision_hardware_assets", `DELETE FROM design_revision_hardware_assets WHERE project_id = '` + fx.projectID + `'`, "immutable"},
+		{"design_revision_assembly_snapshots", `DELETE FROM design_revision_assembly_snapshots WHERE project_id = '` + fx.projectID + `'`, "immutable"},
+		{"design_publish_sessions", `DELETE FROM design_publish_sessions WHERE project_id = '` + fx.projectID + `'`, "only deletable"},
 	}
 	for _, testCase := range cases {
 		withRLSActor(t, fx.store.Pool, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
@@ -251,5 +262,147 @@ func TestProjectForeignKeysHaveExplicitDeleteLifecycle(t *testing.T) {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate project foreign keys: %v", err)
+	}
+}
+
+func TestDeleteProject_RejectsNonWritableOrganization(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	ctx := context.Background()
+	if _, err := fx.admin.Exec(ctx, `UPDATE organizations SET status='suspended', status_reason='test suspension' WHERE id=$1`, rlsOrgA); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = fx.admin.Exec(ctx, `UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, rlsOrgA)
+	})
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		return fx.store.DeleteProject(txCtx, fx.projectID)
+	}); err == nil || !strings.Contains(err.Error(), "writable organization scope") {
+		t.Fatalf("DeleteProject with non-writable organization error=%v, want writable-scope rejection", err)
+	}
+	var count int
+	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM projects WHERE id=$1`, fx.projectID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("project must survive rejected delete: count=%d err=%v", count, err)
+	}
+}
+
+func TestDeleteProject_StoreAuthorityDeletesFactoryPrivateReleaseTree(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	ctx := context.Background()
+	if _, err := fx.admin.Exec(ctx, `ALTER TABLE projects DISABLE TRIGGER protect_project_organization_ownership`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.admin.Exec(ctx, `UPDATE projects SET manufacturing_organization_id=$2 WHERE id=$1`, fx.projectID, rlsOrgB); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.admin.Exec(ctx, `ALTER TABLE projects ENABLE TRIGGER protect_project_organization_ownership`); err != nil {
+		t.Fatal(err)
+	}
+	seedDeleteReleaseFamilyForOrganization(t, fx.admin, fx.projectID, fx.quoteRevID, fx.designRevID, rlsOrgB)
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		return fx.store.DeleteProject(txCtx, fx.projectID)
+	}); err != nil {
+		t.Fatalf("Store-authorized DeleteProject of Factory release tree: %v", err)
+	}
+	for _, member := range []struct{ table, column string }{{"projects", "id"}, {"production_releases", "project_id"}, {"production_release_engineering", "project_id"}, {"production_release_manufacturing_snapshots", "project_id"}} {
+		var count int
+		if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM `+member.table+` WHERE `+member.column+`=$1`, fx.projectID).Scan(&count); err != nil || count != 0 {
+			t.Errorf("%s after Store->Factory delete count=%d err=%v", member.table, count, err)
+		}
+	}
+	// The canonical command does not mint cross-org table DELETE capability.
+	withRLSActor(t, fx.store.Pool, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+		if _, err := tx.Exec(ctx, `DELETE FROM production_release_engineering WHERE organization_id=$1`, rlsOrgB); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Errorf("post-command direct cross-org DELETE error=%v, want permission denied", err)
+		}
+	})
+}
+
+func TestDeleteProject_MediaCleanupRunsOnlyAfterCommit(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	ctx := context.Background()
+	photoPath := filepath.Join(t.TempDir(), "photo.jpg")
+	if err := os.WriteFile(photoPath, []byte("project photo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO project_photos (project_id, stage, url, organization_id) VALUES ($1, 'survey', '/api/media/delete-photo.jpg', $2)`, fx.projectID, rlsOrgA); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		return fx.store.DeleteProjectWithMediaCleanup(txCtx, fx.projectID, func(_ context.Context, files []storage.ProjectMediaFile) {
+			called = len(files) == 2 && files[0].MediaURL == "/api/media/delete-photo.jpg"
+			_ = os.Remove(photoPath)
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("post-commit cleanup did not receive the project media reference")
+	}
+	if _, err := os.Stat(photoPath); !os.IsNotExist(err) {
+		t.Fatalf("post-commit media file remains: %v", err)
+	}
+	var count int
+	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM projects WHERE id=$1`, fx.projectID).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("committed project count=%d err=%v", count, err)
+	}
+}
+
+func TestDeleteProject_MediaCleanupIsDiscardedOnRollbackAndMissingFileIsHarmless(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	ctx := context.Background()
+	photoPath := filepath.Join(t.TempDir(), "survives.jpg")
+	if err := os.WriteFile(photoPath, []byte("project photo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO project_photos (project_id, stage, url, organization_id) VALUES ($1, 'survey', '/api/media/rollback-photo.jpg', $2)`, fx.projectID, rlsOrgA); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	err := fx.store.WithinTenantTx(ctx, fiActorA(), func(txCtx context.Context) error {
+		if err := fx.store.DeleteProjectWithMediaCleanup(txCtx, fx.projectID, func(_ context.Context, _ []storage.ProjectMediaFile) { called = true; _ = os.Remove(photoPath) }); err != nil {
+			return err
+		}
+		return errors.New("force rollback after canonical delete")
+	})
+	if err == nil {
+		t.Fatal("expected forced rollback")
+	}
+	if called {
+		t.Fatal("cleanup ran despite rollback")
+	}
+	if _, err := os.Stat(photoPath); err != nil {
+		t.Fatalf("rollback must retain physical media: %v", err)
+	}
+	var count int
+	if err := fx.admin.QueryRow(ctx, `SELECT count(*) FROM projects WHERE id=$1`, fx.projectID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("rollback project count=%d err=%v", count, err)
+	}
+	// A missing file still allows the canonical delete to commit.
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		return fx.store.DeleteProjectWithMediaCleanup(txCtx, fx.projectID, func(_ context.Context, _ []storage.ProjectMediaFile) {
+			_ = os.Remove(filepath.Join(filepath.Dir(photoPath), "already-missing.jpg"))
+		})
+	}); err != nil {
+		t.Fatalf("missing post-commit media must not fail delete: %v", err)
+	}
+}
+
+func TestDeleteProject_PreservesExternalStockHistoryWithNullProject(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	ctx := context.Background()
+	movementID := "a1000000-0000-0000-0000-000000000099"
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO stock_movements (id, kind, material_id, type, delta, balance_after, project_id) VALUES ($1, 'tableros', 'external-history', 'salida', -1, 9, $2)`, movementID, fx.projectID); err != nil {
+		t.Fatal(err)
+	}
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error { return fx.store.DeleteProject(txCtx, fx.projectID) }); err != nil {
+		t.Fatal(err)
+	}
+	var projectID *string
+	if err := fx.admin.QueryRow(ctx, `SELECT project_id::text FROM stock_movements WHERE id=$1`, movementID).Scan(&projectID); err != nil {
+		t.Fatalf("external stock history must survive: %v", err)
+	}
+	if projectID != nil {
+		t.Fatalf("external stock project_id=%q, want NULL", *projectID)
 	}
 }

@@ -1544,8 +1544,15 @@ func (s *PostgresStore) DeleteProjectWithMediaCleanup(
 		var files []ProjectMediaFile
 		for rows.Next() {
 			var file ProjectMediaFile
-			if err := rows.Scan(&file.OrganizationID, &file.MediaURL, &file.StorageKey); err != nil {
+			var mediaURL, storageKey *string
+			if err := rows.Scan(&file.OrganizationID, &mediaURL, &storageKey); err != nil {
 				return fmt.Errorf("reading project media cleanup reference: %w", err)
+			}
+			if mediaURL != nil {
+				file.MediaURL = *mediaURL
+			}
+			if storageKey != nil {
+				file.StorageKey = *storageKey
 			}
 			files = append(files, file)
 		}

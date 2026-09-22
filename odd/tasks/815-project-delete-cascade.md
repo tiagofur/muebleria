@@ -5,52 +5,27 @@
 - **Base**: `main` @ bb04fc7c · **Rama**: `fix/815-project-delete-cascade`
 - **Escritor**: implementador (ZCode) · única escritura, sin mezclar WIP ajeno del árbol local
 
-## Causa raíz (capas confirmadas empíricamente contra PostgreSQL real)
+## Causa raíz (corregida contra PostgreSQL real)
 
-`DeleteProject` era un `DELETE FROM projects` desnudo; el cascade chocaba:
-
-1. **REVOKE DELETE a granete_app** en las hijas (el cascade corre con los
-   privilegios de quien borra): furniture_instances (000111), designs
-   (000113), design_revisions + items (000113), design_publish_sessions
-   (000114), quote_revisions + items (000115), production_releases (000119),
-   manufacturing snapshots (000122), release engineering (000134).
-2. **Triggers de inmutabilidad absolutos en DELETE** (11 funciones):
-   protect_quote_revision_immutability (000130), protect_design_revision_
-   immutability (000129), protect_release_engineering_transitions (000134),
-   protect_release_manufacturing_snapshot_immutability (000122),
-   protect_production_release_immutability (000119),
-   protect_design_revision_artifact_immutability (000114),
-   protect_design_revision_item_immutability (000113),
-   protect_quote_revision_item_immutability (000128),
-   protect_agregado_assembly_immutability (000135, familia assembly),
-   protect_hardware_asset_row_immutability (000131, design_revision_
-   hardware_assets).
-3. **Sin política RLS FOR DELETE** en toda la familia: un DELETE bajo RLS sin
-   política aplicable borra 0 filas silenciosamente (production_releases/
-   snapshots/engineering no tenían nada; el resto sólo SELECT/INSERT/UPDATE).
-4. **FKs nieto NO ACTION**: design_publish_sessions y design_working_copies →
-   design_revisions; production_releases → quote/design revisions;
-   snapshots/engineering → releases.
+`DeleteProject` era un `DELETE FROM projects` desnudo. Los FK cascades se
+executan con privilegios del dueño de tabla; **no** fallan porque `granete_app`
+tenga `REVOKE DELETE`. Los bloqueos reales fueron los triggers de
+inmutabilidad, RLS sobre los DELETE explícitos necesarios para FKs `NO ACTION`,
+los FKs `NO ACTION` mismos, y la frontera Store→Factory: el Store no ve bajo
+RLS los descendientes de producción privados de Factory.
 
 ## Solución implementada
 
-- **Migración 000137** (up/down simétricos):
-  - Las funciones de inmutabilidad permiten DELETE **solo** con el guard
-    transaccional `app.allow_project_cascade_delete = 'on'`
-    (`current_setting(..., true) IS DISTINCT FROM 'on'` — ojo trampa NULL:
-    `<> 'on'` con NULL no dispara el RAISE). UPDATE sigue absoluto.
-  - Trigger genérico `protect_project_scoped_delete_guard` en las tablas cuya
-    única barrera era el REVOKE: furniture_instances, designs,
-    design_publish_sessions.
-  - GRANT DELETE + CREATE POLICY *_delete (espejo del scope read:
-    app_can_access_project / owner-org) en las 14 tablas de la familia.
-  - rls_policy_inventory: rationale + policy_version bump en las 14.
-- **Storage `DeleteProject`**: `runInTenantTxErr` + `set_config` transaccional
-  del guard + borrado explícito de los nietos NO ACTION en orden
-  (design_publish_sessions → design_working_copies → snapshots → engineering →
-  production_releases) + `DELETE FROM projects` (el cascade hace el resto).
-  El guard muere con el commit (pool-safe).
-- Handler sin cambios de contrato.
+- **Migración 000137** define `delete_project_tree(uuid)` como boundary
+  `SECURITY DEFINER` estrecho: `search_path` fijo, `row_security=off`,
+  `app_can_write_organization` más ownership Store/Sales del proyecto y sólo
+  `EXECUTE` para `granete_app`. No concede DELETE directo cross-org.
+- La función materializa referencias media project-owned, activa el guard sólo
+  dentro de la transacción, borra los únicos nietos `NO ACTION` necesarios y
+  elimina el proyecto; los cascades cubren `design_working_copies`.
+- `DeleteProjectWithMediaCleanup` registra los archivos tras `OnCommit`; API
+  conserva la responsabilidad `MediaDir`, path/tenant safety, idempotencia y
+  logging best-effort.
 
 ## Tareas y evidencia
 
@@ -120,3 +95,27 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
 - [x] T11 Full backend checks at `7ff89cce`:
   `GOFLAGS=-p=1 go test -parallel=1 ./...` — PASS; `go vet ./...` — PASS.
   Foundation Gate A and real Store→Factory fixture remain pending (T10).
+
+## R2 review correction evidence
+
+- [x] T10 Added real PostgreSQL Store A → Factory B release/engineering/snapshot
+  fixture and post-command direct DELETE denial; canonical Store-owned delete
+  removes the private Factory family while direct application DELETE stays
+  permission-denied.
+- [x] T12 Restored `app_can_write_organization` inside the SECURITY DEFINER
+  boundary and added a negative non-writable-organization proof.
+- [x] T13 Added canonical transaction media proof: references are collected
+  before deletion, cleanup executes only after commit, rollback discards hooks
+  and retains DB/files, and a missing physical file stays successful.
+- [x] T14 Added direct-delete negatives for artifact/hardware/assembly/publish
+  families and a real `stock_movements.project_id` SET NULL survival proof.
+- [x] T15 Focused fresh-PostgreSQL tests passed before Foundation Gate A:
+  `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage -run 'Test(DeleteProject|ProjectDelete)' -count=1` — PASS (8.17s);
+  focused API media/RBAC — PASS (0.60s). `go test ./...` and `go vet ./...`
+  passed at the pre-correction candidate; `go vet ./...` passed after this
+  correction. A subsequent rerun encountered `SQLSTATE 57P01` while the local
+  Gate A ephemeral PostgreSQL was terminating; this is NOT a product PASS.
+- [ ] T16 Remaining acceptance: catalog hardware/assembly pin-versus-resource
+  fixture and `purchase_order_items.allocated_project_id` real SET NULL proof;
+  rerun Foundation Gate A and exact-HEAD full suite after the local PostgreSQL
+  harness is stable; independent review.

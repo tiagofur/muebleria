@@ -318,8 +318,8 @@ DECLARE
     actor_organization uuid;
 BEGIN
     actor_organization := public.app_current_organization_id();
-    IF actor_organization IS NULL THEN
-        RAISE EXCEPTION 'project delete requires an organization scope';
+    IF actor_organization IS NULL OR NOT public.app_can_write_organization(actor_organization) THEN
+        RAISE EXCEPTION 'project delete requires a writable organization scope';
     END IF;
 
     PERFORM 1

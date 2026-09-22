@@ -475,15 +475,14 @@ func TestTenantRLS_FurnitureInstancesDirectSQLCrossOrg(t *testing.T) {
 			t.Fatalf("cross-org UPDATE touched victim: rows=%d err=%v", tag.RowsAffected(), err)
 		}
 
-		// #815: hard deletes exist ONLY inside the storage-layer project-delete
-		// transaction. A cross-org victim is invisible to the DELETE policy
-		// (zero rows, no error), and a same-org direct delete hits the guard
-		// trigger — the REVOKE barrier this replaced.
-		if tag, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceB); err != nil || tag.RowsAffected() != 0 {
-			t.Fatalf("cross-org DELETE touched victim: rows=%d err=%v", tag.RowsAffected(), err)
+		// #815: only the canonical SECURITY DEFINER project boundary deletes
+		// project rows. Direct DELETE privileges remain revoked, so neither an
+		// invisible cross-org row nor a visible same-org row is writable here.
+		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceB); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("cross-org direct DELETE must remain prohibited: %v", err)
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceA); err == nil || !strings.Contains(err.Error(), "only deletable through project deletion") {
-			t.Fatalf("direct same-org delete must hit the project-delete guard trigger: %v", err)
+		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceA); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("same-org direct DELETE must remain prohibited: %v", err)
 		}
 
 		// Attaching an identity to a foreign-org project fails the WITH CHECK.
