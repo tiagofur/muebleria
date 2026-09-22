@@ -388,6 +388,88 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal 'FRENTES', front.dig(:metadata, 'intent', 'materialBindingRole')
   end
 
+  # #821 R1 regression — a PARTIAL WorkingCopy item overlays the frozen
+  # quoted finish; it never silently deletes the commercial roles it does not
+  # carry. Frozen INTERIOR=white/FRENTES=moscato + authored INTERIOR=black
+  # must seed {INTERIOR: black, FRENTES: moscato}. A working item without a
+  # local root routes to RESTORE, not place — so the composition is proven at
+  # the exact seam the placer consumes (placement_inputs), matching the
+  # reviewer's resolve-input invariant.
+  def test_place_existing_partial_working_item_overlays_without_dropping_frozen_choices
+    quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+    instance = PF::Contract.parse_instance!(
+      'id' => FI_1, 'project_id' => PROJECT_ID, 'origin' => 'quote', 'lifecycle_status' => 'active',
+      'furniture_definition_id' => DEFINITION_ID,
+      'display' => { 'name' => 'Gabinete Base 600',
+                     'dimensions_mm' => { 'width' => 600, 'height' => 720, 'depth' => 560 },
+                     'material_choices' => quoted_finish }
+    )
+    service = PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new)
+    partial_item = { 'furniture_instance_id' => FI_1,
+                     'furniture_definition_id' => DEFINITION_ID,
+                     'parameters' => { 'widthMm' => 600 },
+                     'material_choices' => { 'INTERIOR' => 'black-id' } }
+    @transport.respond(:get, "/designs/#{DESIGN_ID}/working-copy", 200,
+                       working_copy_body([partial_item]))
+    binding = MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R1)
+
+    _params, choices = PF::PlacementGuards.placement_inputs(
+      service, PF::IntentStore.new, binding, instance, @catalog.find_definition(DEFINITION_ID)
+    )
+
+    assert_equal({ 'INTERIOR' => 'black-id', 'FRENTES' => 'moscato-id' }, choices,
+                 'the partial authored item overlays; the frozen Moscato finish survives')
+
+    # The composed map drives the authoritative resolve: the front board
+    # still resolves Moscato with its photographic texture.
+    layout = @catalog.resolved_native_layout(DEFINITION_ID, {}, choices)
+    front = layout.boards.find { |b| b.option_role == 'FRENTES' }
+    assert_equal 'moscato-id', front.material_id
+    assert_equal '/textures/moscato.jpg', front.material_texture_url
+  end
+
+  # #821 R1 — the pending create-and-place intent composes with the frozen
+  # finish under the SAME authority rule (it is a delta, not a full snapshot:
+  # the roles it omits keep the commercial truth), and the FIRST render
+  # through the real place flow keeps the Moscato texture.
+  def test_place_existing_pending_intent_overlays_without_dropping_frozen_choices
+    quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_choices: quoted_finish)])
+    stub_working_copy(working_copy_body([]))
+    intent_store = PF::IntentStore.new
+    intent_store.store(FI_1, parameters: { 'widthMm' => 600 },
+                             material_choices: { 'INTERIOR' => 'black-id' })
+    texture_cache = FakeTextureCache.new
+    placer = PF::Placer.new(
+      model_provider: -> { @model },
+      binding_store_factory: -> { MB::Store.new(@model) },
+      model_binding_service: MB::Service.new(
+        transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new
+      ),
+      service: PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new),
+      metadata_store_factory: ->(_m) { MS.new(@model) },
+      catalog_provider: @catalog,
+      furniture_builder_factory: ->(m) { FBUILDER.new(metadata_store: MS.new(m), texture_cache: texture_cache) },
+      intent_store: intent_store, logger: NullLogger.new
+    )
+
+    result = placer.place(FI_1)
+    assert result['ok'], result.inspect
+
+    assert_equal({ 'INTERIOR' => 'black-id', 'FRENTES' => 'moscato-id' },
+                 @catalog.layout_resolves.last['choices'])
+
+    # FIRST render through the real place flow: the door keeps the frozen
+    # Moscato finish with its photographic texture.
+    painted = painted_boards(PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity'])
+    front = painted.find { |p| p[:role] == 'FRENTES' }
+    assert_equal 'Granete · Arauco Moscato 15mm', front[:material].name
+    assert_equal 'moscato.jpg', File.basename(front[:material].texture.filename),
+                 'the frozen Moscato finish must keep its photographic texture'
+    assert_includes texture_cache.resolved_urls, '/textures/moscato.jpg'
+  end
+
   # #821 regression — the second half of the acceptance sequence: changing
   # ONLY INTERIOR updates exactly that role; FRENTES keeps its material
   # identity and visual texture byte-for-byte, with no unrelated role churn.

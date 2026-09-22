@@ -994,6 +994,101 @@ func TestFurnitureInstances_ListSummariesFrozenQuoteChoicesAuthority(t *testing.
 	}
 }
 
+// TestFurnitureInstances_ListSummariesFrozenEmptySnapshotUnit (#821 R2): a
+// unit PRESENT in the authority snapshot with zero options is a frozen EMPTY
+// commercial authority — the live project_item_choices of the current link
+// must NOT leak back in (only snapshot-absent units keep the legacy live
+// fallback, proven by the test above).
+func TestFurnitureInstances_ListSummariesFrozenEmptySnapshotUnit(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+
+	const moduleWithDims = "50000000-0000-0000-0000-000000000004"
+	const quotedLine = "60000000-0000-0000-0000-000000000005"
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO modules (id, code, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+moduleWithDims+`', 'BASE-900', 'Gabinete Base 900', 900, 720, 560, '`+rlsOrgA+`')`); err != nil {
+		t.Fatal(err)
+	}
+
+	var unit *domain.FurnitureInstance
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var txErr error
+		unit, txErr = fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID:             fiSharedProject,
+			FurnitureDefinitionID: moduleWithDims,
+			Origin:                domain.FurnitureInstanceOriginQuote,
+			ActorUserID:           rlsUserA,
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+
+	// Current link with LIVE choices — the mutable commercial state.
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO project_items (id, project_id, module_id, quantity, organization_id)
+		VALUES ('`+quotedLine+`', '`+fiSharedProject+`', '`+moduleWithDims+`', 1, '`+rlsOrgA+`');
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES
+			('`+quotedLine+`', 'INTERIOR', '70000000-0000-0000-0000-0000000000c1', '`+rlsOrgA+`'),
+			('`+quotedLine+`', 'FRENTES', '70000000-0000-0000-0000-0000000000c2', '`+rlsOrgA+`');
+		INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+		VALUES ('`+rlsOrgA+`', '`+fiSharedProject+`', '`+quotedLine+`', '`+unit.ID+`', 'current')`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Accepted authority revision freezing the SAME unit with options=[].
+	zeroClearance := 0
+	snapshot, err := domain.BuildQuoteCommercialSnapshot(time.Date(2026, 9, 22, 10, 0, 0, 0, time.UTC), "MXN",
+		domain.QuoteCommercialIdentity{ID: fiSharedProject, Name: "Cliente Fixture"},
+		domain.QuoteCommercialIdentity{ID: fiSharedProject, Name: "Obra Fixture"},
+		domain.QuoteBreakdown{MarginFactor: 1},
+		[]domain.QuoteCommercialLine{{QuoteLineID: quotedLine, Quantity: 1, FurnitureInstanceIDs: []string{unit.ID}}},
+		[]domain.QuoteCommercialUnit{{
+			FurnitureInstanceID: unit.ID, QuoteLineID: quotedLine,
+			ModuleCode: "BASE-900", ModuleName: "Gabinete Base 900", LifecycleStatus: "active",
+			Options:        []domain.QuoteCommercialOption{},
+			PricingContext: &domain.QuoteCommercialPricingContext{BaseMode: "none", BaseClearanceMm: &zeroClearance, StructureIndependent: true},
+		}})
+	if err != nil {
+		t.Fatalf("build empty-options snapshot: %v", err)
+	}
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
+			OrganizationID: rlsOrgA, ProjectID: fiSharedProject, Status: "accepted",
+			SourceType: "manual", CreatedBy: rlsUserA, CommercialSnapshot: snapshot,
+			Items: []storage.CreateQuoteRevisionItemCommand{{
+				FurnitureInstanceID: unit.ID, FurnitureDefinitionID: moduleWithDims,
+				QuoteLineID: quotedLine, LifecycleStatus: "active",
+			}},
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("create accepted revision: %v", err)
+	}
+
+	var summaries []storage.FurnitureInstanceSummary
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var txErr error
+		summaries, txErr = fx.store.ListFurnitureInstanceSummariesByProject(ctx, fiSharedProject, false)
+		return txErr
+	}); err != nil {
+		t.Fatalf("list summaries: %v", err)
+	}
+	for _, row := range summaries {
+		if row.Instance.ID != unit.ID {
+			continue
+		}
+		if row.DisplayMaterialChoices != nil {
+			t.Fatalf("frozen EMPTY options must not fall back to live choices: got %+v, want nil",
+				row.DisplayMaterialChoices)
+		}
+		return
+	}
+	t.Fatalf("unit %s missing from summaries", unit.ID)
+}
+
 // TestFurnitureInstances_Duplicate (#391 / DT-7): copies an existing project
 // furniture instance within the same project. The new row receives origin='duplicate'
 // and origin_furniture_instance_id referencing the source instance, inheriting

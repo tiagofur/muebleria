@@ -354,7 +354,9 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 	// accepted revision wins; otherwise the highest revision number), and its
 	// per-unit snapshot options override the mutable current-link choices so
 	// SketchUp can never silently render a commercial state Q# no longer
-	// holds. Projects without a snapshot unit keep the #620 live fallback.
+	// holds. A unit PRESENT in the snapshot with zero options is a frozen
+	// EMPTY authority (no live fallback — R2); only units genuinely absent
+	// from the snapshot keep the #620 live fallback.
 	rows, err := s.db(ctx).Query(ctx, `
 		WITH authority_revision AS (
 			SELECT commercial_snapshot
@@ -365,15 +367,16 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 		),
 		snapshot_options AS (
 			SELECT unit->>'furnitureInstanceId' AS furniture_instance_id,
-			       jsonb_object_agg(option->>'groupCode', option->>'choiceId') AS option_choices
+			       (SELECT jsonb_object_agg(option->>'groupCode', option->>'choiceId')
+			        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(unit->'options') = 'array'
+			                                      THEN unit->'options' ELSE '[]'::jsonb END) AS option
+			        WHERE NULLIF(option->>'groupCode', '') IS NOT NULL
+			          AND NULLIF(option->>'choiceId', '') IS NOT NULL) AS option_choices
 			FROM authority_revision ar,
 			     jsonb_array_elements(CASE WHEN jsonb_typeof(ar.commercial_snapshot->'units') = 'array'
-			                               THEN ar.commercial_snapshot->'units' ELSE '[]'::jsonb END) unit,
-			     jsonb_array_elements(CASE WHEN jsonb_typeof(unit->'options') = 'array'
-			                               THEN unit->'options' ELSE '[]'::jsonb END) option
+			                               THEN ar.commercial_snapshot->'units' ELSE '[]'::jsonb END) AS unit
 			WHERE ar.commercial_snapshot IS NOT NULL
 			  AND unit->>'furnitureInstanceId' IS NOT NULL
-			GROUP BY 1
 		)
 		SELECT fi.*,
 			COALESCE(m.name, ''),
@@ -393,10 +396,10 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 			SELECT (pi.custom_dims->>'widthMm')::int AS width_mm,
 			       (pi.custom_dims->>'heightMm')::int AS height_mm,
 			       (pi.custom_dims->>'depthMm')::int AS depth_mm,
-			       COALESCE(so.option_choices,
+			       CASE WHEN so.furniture_instance_id IS NOT NULL THEN so.option_choices ELSE
 			       (SELECT jsonb_object_agg(pic.option_group_code, pic.choice_entity_id::text)
 			        FROM project_item_choices pic
-			        WHERE pic.project_item_id = pi.id)) AS option_choices
+			        WHERE pic.project_item_id = pi.id) END AS option_choices
 			FROM quote_line_furniture_instances ql
 			JOIN project_items pi ON pi.id = ql.quote_line_id
 			LEFT JOIN snapshot_options so ON so.furniture_instance_id = fi.id::text

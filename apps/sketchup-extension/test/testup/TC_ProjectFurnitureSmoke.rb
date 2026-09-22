@@ -3,8 +3,9 @@
 require 'json'
 require 'tmpdir'
 require 'fileutils'
-require 'zlib'
 require 'testup/testcase'
+
+require_relative '../support/smoke_textures'
 
 # Host smoke for #389 / DT-5 Place EXISTING FurnitureInstance: the INSTALLED
 # extension must materialize the native #415 hierarchy with the backend's
@@ -294,25 +295,11 @@ module Granete
       end
 
       # Emits a minimal valid PNG (8-bit truecolor) so the real host can load
-      # it as a material texture. Pure stdlib: no image gems in SketchUp.
+      # it as a material texture. Pure stdlib: no image gems in SketchUp. The
+      # emitter lives in test/support/smoke_textures.rb with a portable
+      # structural unit proof (#821 R3).
       def write_smoke_texture(name, rgb)
-        dir = Dir.mktmpdir('granete_smoke_textures')
-        path = File.join(dir, name)
-        width = height = 4
-        chunk = lambda do |type, data|
-          [data.bytesize].pack('N') + type + data + [Zlib.cRC32(type + data)].pack('N')
-        end
-        # Per-row filter byte 0 prepended at the byte-array level (binary-safe).
-        row = ([0] + (rgb * width)).pack('C*')
-        rows = Array.new(height) { row }
-        ihdr = [width, height, 8, 2, 0, 0, 0].pack('NNCCCCC')
-        signature = "\x89PNG\r\n\x1a\n".b
-        png = [signature,
-               chunk.call('IHDR', ihdr),
-               chunk.call('IDAT', Zlib::Deflate.deflate(rows.join)),
-               chunk.call('IEND', ''.b)].join
-        File.binwrite(path, png)
-        path
+        Granete::SketchUpExtension::SmokeTextures.write(name, rgb)
       end
 
       def top_level_furniture
