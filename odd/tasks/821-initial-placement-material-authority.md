@@ -3,7 +3,7 @@
 Issue: #821 — [P0][SU-MAT] Colocación inicial SketchUp pierde materiales/texturas exactas de la cotización
 Base: origin/main @ 7b5fc2b33b8e2dcc030bbb26d406c74626da75de
 Branch: fix/821-initial-placement-material-authority
-Status: implemented — V0/V1 green; V2 REAL HOST: NOT_TESTED (TestUp smoke added, not yet run on the installed RBZ)
+Status: hardening R1-R5 applied; V0/V1 green; V2 REAL HOST PASS (8/8)
 
 ## Proven first divergence (trace + empirical)
 
@@ -105,3 +105,47 @@ success masking, no #810/#811 revert. GET /layout endpoint is NOT removed.
 - Run TC_ProjectFurnitureSmoke (and ideally a live first-placement against
   the dev server) on the real SketchUp host with the installed RBZ built from
   this branch; attach evidence to close #821.
+
+## Hardening round (independent review R1-R5, 2026-09-22)
+
+- R1: `seed_material_choices` now composes by authority — base = frozen
+  display choices, overlay = explicit WorkingCopy roles (`compose_effective_choices`).
+  The pending create-and-place intent composes identically (it is a delta).
+  Regressions: partial item {INTERIOR: black} over frozen {INTERIOR: white,
+  FRENTES: moscato} resolves {INTERIOR: black, FRENTES: moscato} with the
+  Moscato texture kept on first render; same for the pending-intent variant.
+- R2: snapshot units PRESENT with options=[] are a frozen EMPTY authority —
+  `DisplayMaterialChoices` nil, live choices do NOT leak back (new PG test
+  TestFurnitureInstances_ListSummariesFrozenEmptySnapshotUnit; snapshot-absent
+  fallback test preserved).
+- R3: TestUp smoke PNG emitter extracted to test/support/smoke_textures.rb
+  (fixes `Zlib.cRC32` typo) with a portable structural unit proof (chunk CRC
+  recomputation, IDAT inflate, IHDR validation).
+- R4: dev catalog verified — ARA-BLA-FRO-15 has NO preview_texture_url (data
+  gap stands; expected live render = identity/color only until catalog data
+  provides it); ARA-MOS-15 carries /api/media/a40a….jpg. The synthetic PNG
+  smoke proves the renderer, NOT real Blanco texture.
+- R5: origin/main merged (10ae92b8, PR #816 project-delete); the shared test
+  file reconciled cleanly (fiActorA/B MembershipID + direct-DELETE savepoint
+  proofs coexist with the #821 tests).
+- Host smoke fixes (pre-existing latent bugs surfaced by the first real run):
+  bare `ProjectFurniture::` constants never resolved on the installed runtime
+  (now `Connection::ProjectFurniture::`); API add_instance does not clone
+  entity attribute dictionaries (duplicates now carry the identity
+  explicitly, matching real copy/paste); empty groups are purged by host
+  operations (the nesting test's parent group carries a face).
+
+## Final verification (candidate 2bedc514 + evidence commits)
+
+- Ruby rake verify: 914+6 runs, rubocop clean, RBZ deterministic
+  sha256 66a05c101c04f09e99374b3dddce21c68c099ad31b3bca644f4d9debb7fb0c30.
+- Go: storage full (434s, real PostgreSQL + RLS, post-merge with #815),
+  api 24.6s, domain+engine — green.
+- OpenAPI drift none; pnpm typecheck green; git diff --check clean.
+- REAL HOST (SketchUp 2026, arm64, installed RBZ 66a05c10…):
+  progress/host_smoke_821_testup_ci.json — Success, 8/8 tests, 49
+  assertions, 0 failures 0 errors, including
+  test_place_existing_with_resolved_layout_paints_quoted_finish_textures_first_render
+  (first render paints Blanco INTERIOR + Moscato FRENTES with their
+  photographic textures). Evidence commits add tests/evidence/docs only;
+  product src unchanged since 2bedc514 → the run pins the final candidate.

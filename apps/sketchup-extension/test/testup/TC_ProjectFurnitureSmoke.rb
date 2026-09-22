@@ -83,10 +83,19 @@ module Granete
           Sketchup.file_new
           assert Sketchup.open_file(path), 'the host must reopen the model'
 
-          located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+          located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
           refute_nil located['entity'], 'placed identity must resolve after reopen'
           assert_equal 1, located['duplicates'], 'reopen must not duplicate the identity'
         end
+      end
+
+      # A real UI copy/paste preserves the entity's attribute dictionaries —
+      # the API's add_instance does NOT clone them, so the duplicate carries
+      # the original's identity explicitly.
+      def duplicate_root_of(original)
+        copy = model.active_entities.add_instance(original.definition, original.transformation)
+        metadata_store.write(copy, metadata_store.read(original))
+        copy
       end
 
       def test_copy_paste_duplicate_identity_fails_loud_not_valid
@@ -99,11 +108,9 @@ module Granete
         )
         assert first['success'], first.inspect
 
-        model.selection.clear
-        model.selection.add(first['entity'])
-        model.active_entities.add_instance(first['entity'].definition, first['entity'].transformation)
+        duplicate_root_of(first['entity'])
 
-        located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
         assert_equal 2, located['duplicates'], 'a copied root keeps the same business id'
       end
 
@@ -114,9 +121,7 @@ module Granete
         )
         assert first['success'], first.inspect
 
-        model.selection.clear
-        model.selection.add(first['entity'])
-        model.active_entities.add_instance(first['entity'].definition, first['entity'].transformation)
+        duplicate_root_of(first['entity'])
 
         precheck = Connection::DuplicateResolver.validate_model(model)
         refute precheck['valid'], 'precheck must reject duplicate business identity'
@@ -137,8 +142,8 @@ module Granete
         # Identity by ID only: identical definition/parameters never collapse
         # the two units, and each top-level definition stays isolated (V1).
         refute_equal first['entity'].definition, second['entity'].definition
-        located_first = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
-        located_second = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_2)
+        located_first = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located_second = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_2)
         assert_equal 1, located_first['duplicates']
         assert_equal 1, located_second['duplicates']
       end
@@ -146,13 +151,17 @@ module Granete
       def test_placement_inside_nested_editing_context_lands_at_model_root
         parent_group = model.entities.add_group
         parent_group.name = 'Pared o ambiente'
+        # Non-empty geometry: the real host purges empty groups during model
+        # operations, which would turn the nesting assertion into a stale
+        # reference instead of a real check.
+        parent_group.entities.add_face([0, 0, 0], [100, 0, 0], [100, 100, 0], [0, 100, 0])
         result = builder.place_existing_furniture(
           model, furniture_instance_id: FI_1, definition: catalog_definition,
                  parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
         )
         assert result['success'], result.inspect
 
-        located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
         refute_nil located['entity'], 'placed furniture must be found at root level'
         assert_equal 1, located['duplicates']
         assert_includes model.entities.to_a, located['entity'], 'entity must be in model.entities root'
@@ -173,14 +182,14 @@ module Granete
           model, furniture_instance_id: FI_1, definition: catalog_definition,
                  parameters: parameters, material_choices: choices,
                  project_id: PROJECT_ID, design_id: DESIGN_ID,
-                 transformation: ProjectFurniture::TransformContract.to_host(contract),
+                 transformation: Connection::ProjectFurniture::TransformContract.to_host(contract),
                  prepare: false, preserve_parameters: true
         )
 
         assert result['success'], result.inspect
         root = result['entity']
         assert_empty model.selection, 'restore must not select the root or activate Move'
-        assert_equal contract, ProjectFurniture::TransformContract.from_host(root.transformation)
+        assert_equal contract, Connection::ProjectFurniture::TransformContract.from_host(root.transformation)
         metadata = metadata_store.read(root)
         assert_equal parameters, metadata.dig('intent', 'parameters')
         assert_equal choices, metadata.dig('intent', 'materialChoices')
@@ -206,7 +215,7 @@ module Granete
         )
         assert result['success'], result.inspect
 
-        located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
         refute_nil located['entity'], 'placed furniture must carry the server identity'
         by_role = {}
         located['entity'].definition.entities.grep(Sketchup::ComponentInstance).each do |child|
