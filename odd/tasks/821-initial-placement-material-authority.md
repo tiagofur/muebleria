@@ -208,3 +208,47 @@ After rebase, only confirmed stub/pure tests were rerun: focused Go API/engine
 contract 10/10 PASS, and Ruby fake-boundary suites 47/47 plus 29/29 PASS.
 The earlier full Go API/engine result belongs to the pre-drift base, not to
 this exact candidate. No DB, backend process or SketchUp model was touched.
+
+
+## Follow-up PR2: placement diagnostics and v0.1.4 (2026-09-22)
+
+PR1 catalog-option validation was merged as PR #825 at `3d14d645`;
+issue #821 remains open. This independent stacked-to-main slice addresses
+only the observable callback/UI failure state and v0.1.4 package identity.
+It deliberately excludes the intermediate `/auth/me` implementation and
+later scoped-profile/v0.1.5 correction.
+
+- [x] T821-F2 Correlate every place result, including host exception, to the
+  requested furnitureInstanceId; release the correct busy button on failure
+  or pending-position success, and retain a selectable diagnostic after the
+  toast. Do not mutate host geometry in the error path.
+- [x] T821-F4 Align source/footer/test/README version to v0.1.4 and build a
+  deterministic RBZ with package-byte readback. Installation/process proof
+  belongs to a separate safe-host step.
+
+Route: delegated direct, sole writer in isolated worktree. Strict TDD enabled
+by AGENTS.md; original work-unit evidence records one Ruby callback and one
+Node dialog RED failure before the GREEN change. On this exact slice rerun
+focused Ruby/JS and full Ruby `rake verify`, package/readback, diff check and
+preflight. Forecast 92 authored +/- code/test/version lines plus this scoped
+ODD record; generated/vendor output excluded, no code-golf. Delivery remains
+`ask-on-risk` with user-selected `stacked-to-main`; PR2 targets exact
+`origin/main` `3d14d645`, after merged PR1. Rollback boundary: dialog
+controller, project-furniture HtmlDialog error state and tests, plus v0.1.4
+version literals. No backend, PostgreSQL, browser, SketchUp install/model,
+push, PR creation or merge is authorized in this worker.
+
+PR2 verification on this isolated base: original `74c5c574` records RED one
+Ruby callback and one Node dialog failure before GREEN. Reapplied only its
+callback/error-state patch plus `d43a1aa5` package-version patch; no identity
+source or tests. Exact-slice Node project-furniture 27/27 PASS, Ruby dialog
+controller 44/44 (260 assertions) PASS. Full local Ruby `rake verify` PASS:
+916 unit (6218 assertions), 6 boundary (3251 assertions), zero failures;
+syntax/lint and deterministic RBZ readback PASS. RBZ SHA-256 is
+`804c67fd9fba790ff27a61ecee4e1a7e523c698326de909a96096d15c2d991b4`;
+archive readback confirms identity/footer v0.1.4, persistent selectable
+diagnostic, and callback correlation. `git diff --check` PASS. The operator's
+successful placement with Blanco/Moscato textures was reported for a prior
+combined v0.1.4 candidate, not this exact PR2 host process. V2 installation,
+live callback/error capture and real host model remain NOT_RUN;
+Go/PostgreSQL/browser are unchanged by this slice and not claimed.

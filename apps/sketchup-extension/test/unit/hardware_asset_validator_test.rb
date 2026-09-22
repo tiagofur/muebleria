@@ -144,7 +144,7 @@ class HardwareAssetValidatorTest < Minitest::Test
     assert_equal 'SketchUp', details['host']['application']
     assert_equal '24.0.145-stub', details['host']['version']
     assert_equal @validator.send(:detect_os), details['host']['os']
-    assert_equal '0.1.2', details['validatorVersion']
+    assert_equal Granete::SketchUpExtension::EXTENSION_VERSION, details['validatorVersion']
     refute_nil details['measuredBoundsMm']
     assert_in_delta 254.0, details['measuredBoundsMm']['widthMm'], 0.1
     assert_in_delta 127.0, details['measuredBoundsMm']['heightMm'], 0.1

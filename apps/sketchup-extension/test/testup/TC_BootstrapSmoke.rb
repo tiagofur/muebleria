@@ -12,7 +12,7 @@ module Granete
   module SketchUpExtension
     class TC_BootstrapSmoke < TestUp::TestCase
       EXPECTED_NAME = 'Granete for SketchUp'
-      EXPECTED_VERSION = '0.1.2'
+      EXPECTED_VERSION = '0.1.4'
       FIXTURE_PATH = File.join(
         File.expand_path('../..', __dir__),
         'test',

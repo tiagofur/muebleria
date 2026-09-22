@@ -565,6 +565,7 @@ module Granete
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           fi_id = payload['furnitureInstanceId'].to_s
           result = project_furniture_placer.place(fi_id)
+          result['instanceId'] ||= fi_id
           if result['ok'] && @position_sync_coordinator
             model = active_model
             binding = Connection::ModelBinding::Store.new(model).read
@@ -574,6 +575,7 @@ module Granete
               result = converged if converged['ok']
             end
           end
+          result['instanceId'] ||= fi_id
           execute_bridge(dialog, 'onPlaceFurnitureResult', result)
           handle_get_project_furniture(dialog) if result['ok']
           if result['ok']
@@ -582,7 +584,9 @@ module Granete
           end
         rescue StandardError => e
           @logger.error('project_furniture_place_failed', error: e)
-          execute_bridge(dialog, 'onPlaceFurnitureResult', { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+          execute_bridge(dialog, 'onPlaceFurnitureResult',
+                         { 'ok' => false, 'code' => 'error', 'instanceId' => fi_id,
+                           'reason' => 'No se pudo colocar el mueble (error interno de SketchUp).' })
         end
 
         # #390 / DT-6: Create and place from Catalog in design-first flow.
