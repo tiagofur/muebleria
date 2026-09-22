@@ -119,3 +119,19 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
   fixture and `purchase_order_items.allocated_project_id` real SET NULL proof;
   rerun Foundation Gate A and exact-HEAD full suite after the local PostgreSQL
   harness is stable; independent review.
+
+## R3 final correction — in progress
+
+- [x] T17 Direct `DELETE projects` revoked for `granete_app` in 000137 up and
+  restored by down; direct manual-GUC delete is covered separately from the
+  canonical function.
+- [x] T18 Media URL parser is fail-closed: only local absolute
+  `/api/media/<single-filename>` paths (optional query) qualify; external,
+  scheme-relative, data, nested, and traversal lookalikes cannot clean local
+  storage.
+- [x] T19 External stock and purchase allocation histories have real SET NULL
+  survival fixtures; deployment ownership posture is queried from `pg_proc` /
+  `pg_roles`; shared catalog direct deletes remain denied even with a manual
+  guard setting.
+- [ ] T20 Pending exact-head fresh tests and Gate A, catalog pin/resource
+  fixture, and independent review.

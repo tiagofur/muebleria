@@ -406,3 +406,69 @@ func TestDeleteProject_PreservesExternalStockHistoryWithNullProject(t *testing.T
 		t.Fatalf("external stock project_id=%q, want NULL", *projectID)
 	}
 }
+
+func TestDeleteProject_DirectProjectsDeleteRemainsDeniedEvenWithGuard(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	withRLSActor(t, fx.store.Pool, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+		if _, err := tx.Exec(context.Background(), `SELECT set_config('app.allow_project_cascade_delete','on',true)`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tx.Exec(context.Background(), `DELETE FROM projects WHERE id=$1`, fx.projectID); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("direct project delete with manual guard error=%v, want permission denied", err)
+		}
+	})
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error { return fx.store.DeleteProject(ctx, fx.projectID) }); err != nil {
+		t.Fatalf("canonical project delete: %v", err)
+	}
+}
+
+func TestDeleteProject_PreservesPurchaseAllocationHistoryWithNullProject(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	ctx := context.Background()
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO purchase_orders (id, number, status) VALUES ('delete-project-po', 'DELETE-PROJECT-PO', 'emitida')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO purchase_order_items (po_id, kind, material_id, quantity, allocated_project_id) VALUES ('delete-project-po', 'tableros', 'external-allocation', 1, $1)`, fx.projectID); err != nil {
+		t.Fatal(err)
+	}
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error { return fx.store.DeleteProject(txCtx, fx.projectID) }); err != nil {
+		t.Fatal(err)
+	}
+	var projectID *string
+	if err := fx.admin.QueryRow(ctx, `SELECT allocated_project_id::text FROM purchase_order_items WHERE po_id='delete-project-po' AND kind='tableros' AND material_id='external-allocation'`).Scan(&projectID); err != nil {
+		t.Fatalf("purchase allocation must survive: %v", err)
+	}
+	if projectID != nil {
+		t.Fatalf("purchase allocation project_id=%q, want NULL", *projectID)
+	}
+}
+
+func TestProjectDeleteBoundaryHasSafeDeploymentOwnershipPosture(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	var owner string
+	var securityDefiner, appCanAssumeOwner, appSuperuser, appBypassRLS bool
+	if err := fx.admin.QueryRow(context.Background(), `
+		SELECT p.proowner::regrole::text, p.prosecdef,
+		       has_privs_of_role('granete_app', p.proowner), app.rolsuper, app.rolbypassrls
+		FROM pg_proc p JOIN pg_roles app ON app.rolname='granete_app'
+		WHERE p.oid='delete_project_tree(uuid)'::regprocedure`).Scan(&owner, &securityDefiner, &appCanAssumeOwner, &appSuperuser, &appBypassRLS); err != nil {
+		t.Fatal(err)
+	}
+	if owner == "granete_app" || !securityDefiner || appCanAssumeOwner || appSuperuser || appBypassRLS {
+		t.Fatalf("unsafe delete boundary owner=%q definer=%v appCanAssumeOwner=%v superuser=%v bypassrls=%v", owner, securityDefiner, appCanAssumeOwner, appSuperuser, appBypassRLS)
+	}
+}
+
+func TestDeleteProject_ManualGuardNeverAuthorizesSharedCatalogDeletes(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	withRLSActor(t, fx.store.Pool, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+		if _, err := tx.Exec(context.Background(), `SELECT set_config('app.allow_project_cascade_delete','on',true)`); err != nil {
+			t.Fatal(err)
+		}
+		for _, table := range []string{"hardware_assets", "hardware_asset_revisions", "hardware_asset_validations", "published_assembly_snapshots", "agregado_revisions", "agregados"} {
+			if _, err := tx.Exec(context.Background(), `DELETE FROM `+table+` WHERE false`); err == nil || !strings.Contains(err.Error(), "permission denied") {
+				t.Errorf("manual guard DELETE %s error=%v, want permission denied", table, err)
+			}
+		}
+	})
+}

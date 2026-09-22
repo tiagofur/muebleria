@@ -223,3 +223,29 @@ func TestDeleteProjectMediaFilesIsIdempotentAndTenantScoped(t *testing.T) {
 	// A second cleanup after a partial prior attempt is harmless.
 	deleteProjectMediaFiles(dir, []storage.ProjectMediaFile{{OrganizationID: orgID, MediaURL: "/api/media/project.jpg"}})
 }
+
+func TestDeleteMediaFileByURLRejectsExternalLookalike(t *testing.T) {
+	dir := t.TempDir()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	local := filepath.Join(dir, storage.InitialOrganizationID, "same.jpg")
+	if err := os.MkdirAll(filepath.Dir(local), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(local, []byte("must survive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{
+		"https://attacker.example/api/media/same.jpg",
+		"//attacker.example/api/media/same.jpg",
+		"data:/api/media/same.jpg",
+		"/api/media/nested/same.jpg",
+		"/api/media/../same.jpg",
+	} {
+		if deleteMediaFileByURL(ctx, dir, raw) {
+			t.Errorf("external/unsafe URL %q unexpectedly deleted a file", raw)
+		}
+		if _, err := os.Stat(local); err != nil {
+			t.Errorf("local file removed by %q: %v", raw, err)
+		}
+	}
+}

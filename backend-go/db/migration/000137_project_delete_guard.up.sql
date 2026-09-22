@@ -307,6 +307,8 @@ CREATE TRIGGER protect_design_publish_sessions_delete_guard
 -- Direct DELETE privileges stay revoked.  `app.allow_project_cascade_delete`
 -- is meaningful only while this function executes with table-owner authority;
 -- setting it in an ordinary app transaction cannot grant table DELETE rights.
+REVOKE DELETE ON projects FROM granete_app;
+
 CREATE OR REPLACE FUNCTION delete_project_tree(project_to_delete uuid)
 RETURNS TABLE(owner_organization_id uuid, project_media_url text, project_storage_key text)
 LANGUAGE plpgsql

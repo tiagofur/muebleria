@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -211,21 +212,11 @@ const mediaURLPrefix = "/api/media/"
 // catalog media URL (external URLs, data:, empty, etc.) so callers can no-op.
 // It refuses path separators and ".." — same defenses as HandleMediaGet.
 func mediaFilenameFromURL(raw string) string {
-	if raw == "" {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || parsed.IsAbs() || parsed.Host != "" || !strings.HasPrefix(parsed.Path, mediaURLPrefix) {
 		return ""
 	}
-	url := strings.TrimSpace(raw)
-	// Find the media prefix anywhere; tolerate absolute hosts.
-	idx := strings.Index(url, mediaURLPrefix)
-	if idx < 0 {
-		return ""
-	}
-	name := url[idx+len(mediaURLPrefix):]
-	// Drop query string ("?token=...") if present.
-	if i := strings.Index(name, "?"); i >= 0 {
-		name = name[:i]
-	}
-	name = strings.TrimSpace(name)
+	name := strings.TrimPrefix(parsed.Path, mediaURLPrefix)
 	if name == "" || strings.Contains(name, "..") || strings.ContainsAny(name, "/\\") {
 		return ""
 	}

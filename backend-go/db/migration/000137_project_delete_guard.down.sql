@@ -198,6 +198,7 @@ DROP TRIGGER IF EXISTS protect_design_publish_sessions_delete_guard ON design_pu
 DROP FUNCTION IF EXISTS protect_project_scoped_delete_guard();
 
 DROP FUNCTION IF EXISTS delete_project_tree(uuid);
+GRANT DELETE ON projects TO granete_app;
 
 -- 000137 introduced no direct DELETE expansion: its canonical function owned
 -- the cross-org boundary.  Down only removes that function and restores the
