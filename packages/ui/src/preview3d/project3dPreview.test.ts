@@ -6,6 +6,7 @@ import type {
   Hardware,
   MaterialBoard,
   Module,
+  ModuleComponentInstance,
   OptionGroup,
   Project,
   Structure,
@@ -624,6 +625,307 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
       [...motorPartIds].sort(),
     );
     expect(placements.every((p) => p.hardwareId === 'hw-knob')).toBe(true);
+  });
+
+  it('G2: repeated agregado component entries preserve the BOM copy sequence', () => {
+    const agregadoId = 'agr-puerta-repetida';
+    const hardwarePlacement = {
+      hardwareId: 'hw-knob',
+      anchorFace: 'front' as const,
+      relativePosition: { xMm: 50, yMm: 50 },
+    };
+    const agregado: Agregado = {
+      id: agregadoId,
+      code: 'AGR-PUE-REP',
+      name: 'Puertas repetidas',
+      externalDims: { width: 596, height: 720, depth: 18 },
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+      ],
+    };
+    const module: Module = {
+      ...modWithHandle,
+      components: [],
+      agregados: [{ agregadoId, quantity: 1 }],
+    };
+    const expectedPartIds = [
+      `agr-${agregadoId}-u0c-puerta-copy-0`,
+      `agr-${agregadoId}-u0c-puerta-copy-1`,
+    ];
+    const mockBoardParts = expectedPartIds.map((id) => ({
+      id,
+      widthMm: 596,
+      thicknessMm: 18,
+      lengthMm: 720,
+    })) as unknown as Parameters<typeof resolveModuleHardwarePlacements>[1];
+
+    const placements = resolveModuleHardwarePlacements(
+      module,
+      mockBoardParts,
+      catalogWithHardware.hardware,
+      {
+        structures: catalogWithHardware.structures,
+        agregados: [agregado],
+      },
+    );
+
+    expect(placements.map((placement) => placement.componentInstanceId)).toEqual(
+      expectedPartIds,
+    );
+  });
+
+  it('G2: entries without placements still consume their copy number (#819)', () => {
+    // Mixed module list: the bare entry expands to copy-0 in the engine, so
+    // the knob on the second entry belongs to copy-1 — even though the first
+    // entry carries no placement override at all.
+    const hardwarePlacement = {
+      hardwareId: 'hw-knob',
+      anchorFace: 'front' as const,
+      relativePosition: { xMm: 50, yMm: 50 },
+    };
+    const module: Module = {
+      ...modWithHandle,
+      components: [
+        { componentId: 'c-puerta', quantity: 1 },
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+      ],
+      agregados: [],
+    };
+    const mockBoardParts = ['c-puerta-copy-0', 'c-puerta-copy-1'].map((id) => ({
+      id,
+      widthMm: 596,
+      thicknessMm: 18,
+      lengthMm: 720,
+    })) as unknown as Parameters<typeof resolveModuleHardwarePlacements>[1];
+
+    const placements = resolveModuleHardwarePlacements(
+      module,
+      mockBoardParts,
+      catalogWithHardware.hardware,
+      { structures: catalogWithHardware.structures },
+    );
+
+    expect(placements.map((placement) => placement.componentInstanceId)).toEqual([
+      'c-puerta-copy-1',
+    ]);
+  });
+
+  it('G2: repeated module component entries preserve the BOM copy sequence (#819)', () => {
+    const hardwarePlacement = {
+      hardwareId: 'hw-knob',
+      anchorFace: 'front' as const,
+      relativePosition: { xMm: 50, yMm: 50 },
+    };
+    const module: Module = {
+      ...modWithHandle,
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+      ],
+      agregados: [],
+    };
+    const expectedPartIds = ['c-puerta-copy-0', 'c-puerta-copy-1'];
+    const mockBoardParts = expectedPartIds.map((id) => ({
+      id,
+      widthMm: 596,
+      thicknessMm: 18,
+      lengthMm: 720,
+    })) as unknown as Parameters<typeof resolveModuleHardwarePlacements>[1];
+
+    const placements = resolveModuleHardwarePlacements(
+      module,
+      mockBoardParts,
+      catalogWithHardware.hardware,
+      { structures: catalogWithHardware.structures },
+    );
+
+    expect(placements.map((placement) => placement.componentInstanceId)).toEqual(
+      expectedPartIds,
+    );
+  });
+
+  // R3 hardening (#819): the tests above pin the resolver's logic against
+  // hand-built part ids. The ones below freeze the REAL contract — every
+  // placement must link to an id actually produced by the engine (the preview
+  // module's `parts` ARE resolveBom's boardParts), with no hand-copied id
+  // formula in the expectations: if the engine's id scheme ever changes, the
+  // preview must follow it, not the test.
+
+  function knobPuertaEntry(): ModuleComponentInstance {
+    return {
+      componentId: 'c-puerta',
+      quantity: 1,
+      overrides: {
+        hardwarePlacements: [
+          {
+            hardwareId: 'hw-knob',
+            anchorFace: 'front',
+            relativePosition: { xMm: 50, yMm: 50 },
+          },
+        ],
+      },
+    };
+  }
+
+  /** Structure without components: the module list is the only expansion scope. */
+  const structureWithoutComponents = {
+    ...structureWithPuerta,
+    components: [],
+  };
+
+  it('R3 T1: repeated module entries link each placement to its own real BOM part', () => {
+    const moduleVariant: Module = {
+      ...modWithHandle,
+      components: [knobPuertaEntry(), knobPuertaEntry()],
+    };
+    const preview = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [moduleVariant],
+      structures: [structureWithoutComponents],
+    });
+
+    const mod = preview.modules[0]!;
+    const puertaParts = mod.parts.filter((part) => part.id.includes('c-puerta'));
+    expect(puertaParts).toHaveLength(2);
+
+    const placements = mod.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(2);
+    for (const placement of placements) {
+      expect(mod.parts.some((part) => part.id === placement.componentInstanceId)).toBe(
+        true,
+      );
+    }
+    const placementIds = placements.map((p) => p.componentInstanceId);
+    expect(new Set(placementIds).size).toBe(2);
+    expect([...placementIds].sort()).toEqual(
+      [...puertaParts.map((p) => p.id)].sort(),
+    );
+  });
+
+  it('R3 T2: mixed module entries link the placement to the SECOND real BOM part', () => {
+    const moduleVariant: Module = {
+      ...modWithHandle,
+      components: [{ componentId: 'c-puerta', quantity: 1 }, knobPuertaEntry()],
+    };
+    const preview = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [moduleVariant],
+      structures: [structureWithoutComponents],
+    });
+
+    const mod = preview.modules[0]!;
+    const puertaParts = mod.parts.filter((part) => part.id.includes('c-puerta'));
+    expect(puertaParts).toHaveLength(2);
+
+    const placements = mod.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(1);
+    // The bare first entry still consumed copy-0 in the engine, so the knob
+    // belongs to the second real piece — taken from the BOM, not hardcoded.
+    expect(placements[0]!.componentInstanceId).toBe(puertaParts[1]!.id);
+  });
+
+  it('R3 T3: repeated agregado entries link each placement to its own real BOM part', () => {
+    const agregado: Agregado = {
+      id: 'agr-dos-puertas',
+      code: 'AGR-2P',
+      name: 'Dos puertas',
+      externalDims: { width: 596, height: 720, depth: 18 },
+      components: [knobPuertaEntry(), knobPuertaEntry()],
+    };
+    const moduleVariant: Module = {
+      ...modWithHandle,
+      components: [],
+      agregados: [{ agregadoId: agregado.id, quantity: 1 }],
+    };
+    const preview = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [moduleVariant],
+      structures: [structureWithoutComponents],
+      agregados: [agregado],
+    });
+
+    const mod = preview.modules[0]!;
+    const puertaParts = mod.parts.filter((part) => part.id.includes('c-puerta'));
+    expect(puertaParts).toHaveLength(2);
+
+    const placements = mod.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(2);
+    for (const placement of placements) {
+      expect(mod.parts.some((part) => part.id === placement.componentInstanceId)).toBe(
+        true,
+      );
+    }
+    const placementIds = placements.map((p) => p.componentInstanceId);
+    expect(new Set(placementIds).size).toBe(2);
+    expect([...placementIds].sort()).toEqual(
+      [...puertaParts.map((p) => p.id)].sort(),
+    );
+  });
+
+  it('R3 T4: base-mode-filtered component makes no part and shifts no placement', () => {
+    // A ZOCLO-board component is filtered before expansion when the base mode
+    // is not plinth_board (the fixture resolves to 'none'). It must vanish
+    // from the real BOM entirely while the surviving knob entry links to its
+    // own real part.
+    const zocloComponent: Component = {
+      id: 'c-zoclo-board',
+      code: 'COM-ZOCLO-BOARD',
+      name: 'Zócalo tablero',
+      placement: 'frontal',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 560,
+        widthMm: 596,
+        thicknessMm: 18,
+      },
+      defaultEdges: [],
+      optionRoles: ['ZOCLO'],
+      active: true,
+    };
+    const moduleVariant: Module = {
+      ...modWithHandle,
+      components: [
+        { componentId: 'c-zoclo-board', quantity: 2 },
+        knobPuertaEntry(),
+      ],
+    };
+    const preview = resolveProject3DPreview(projectWithHandle, {
+      ...catalogWithHardware,
+      modules: [moduleVariant],
+      structures: [structureWithoutComponents],
+      components: [...catalogWithHardware.components, zocloComponent],
+    });
+
+    const mod = preview.modules[0]!;
+    expect(mod.parts.some((part) => part.id.includes('c-zoclo-board'))).toBe(false);
+
+    const puertaParts = mod.parts.filter((part) => part.id.includes('c-puerta'));
+    expect(puertaParts).toHaveLength(1);
+
+    const placements = mod.resolvedHardwarePlacements;
+    expect(placements).toHaveLength(1);
+    expect(placements[0]!.componentInstanceId).toBe(puertaParts[0]!.id);
   });
 });
 
