@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -827,6 +828,157 @@ func TestFurnitureInstances_ListSummariesDisplay(t *testing.T) {
 	}
 	if row := got[bare.ID]; row.DisplayName != "" || row.DisplayDims != nil || row.DisplayMaterialChoices != nil {
 		t.Fatalf("bare summary = %+v, want no invented presentation", row)
+	}
+}
+
+// TestFurnitureInstances_ListSummariesFrozenQuoteChoicesAuthority (#821):
+// the material-choices seed of an authoring placement is the FROZEN commercial
+// snapshot of the project's authority quote revision — the same immutable
+// Q/R truth React renders as "Q# · Solo lectura". When the mutable
+// project_item_choices of the current link diverge (commercial re-edit or
+// partial loss), SketchUp must not silently render the wrong commercial
+// state; and units without a snapshot entry keep the #620 live fallback.
+func TestFurnitureInstances_ListSummariesFrozenQuoteChoicesAuthority(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+
+	const moduleWithDims = "50000000-0000-0000-0000-000000000003"
+	const frozenLine = "60000000-0000-0000-0000-000000000003"
+	const legacyLine = "60000000-0000-0000-0000-000000000004"
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO modules (id, code, name, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+moduleWithDims+`', 'BASE-450', 'Gabinete Base 450', 450, 720, 560, '`+rlsOrgA+`')`); err != nil {
+		t.Fatal(err)
+	}
+
+	create := func() *domain.FurnitureInstance {
+		t.Helper()
+		var instance *domain.FurnitureInstance
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			var txErr error
+			instance, txErr = fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+				ProjectID:             fiSharedProject,
+				FurnitureDefinitionID: moduleWithDims,
+				Origin:                domain.FurnitureInstanceOriginQuote,
+				ActorUserID:           rlsUserA,
+			})
+			return txErr
+		}); err != nil {
+			t.Fatalf("create instance: %v", err)
+		}
+		return instance
+	}
+	frozenUnit := create()
+	legacyUnit := create()
+
+	// Both units carry a current quote-line link with live choices.
+	for _, tc := range []struct {
+		line     string
+		instance *domain.FurnitureInstance
+	}{
+		{frozenLine, frozenUnit},
+		{legacyLine, legacyUnit},
+	} {
+		if _, err := fx.admin.Exec(ctx, `
+			INSERT INTO project_items (id, project_id, module_id, quantity, organization_id)
+			VALUES ('`+tc.line+`', '`+fiSharedProject+`', '`+moduleWithDims+`', 1, '`+rlsOrgA+`');
+			INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+			VALUES
+				('`+tc.line+`', 'INTERIOR', '70000000-0000-0000-0000-0000000000a3', '`+rlsOrgA+`'),
+				('`+tc.line+`', 'FRENTES', '70000000-0000-0000-0000-0000000000a4', '`+rlsOrgA+`');
+			INSERT INTO quote_line_furniture_instances (organization_id, project_id, quote_line_id, furniture_instance_id, state)
+			VALUES ('`+rlsOrgA+`', '`+fiSharedProject+`', '`+tc.line+`', '`+tc.instance.ID+`', 'current')`); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// The project's authority revision (accepted) freezes a DIFFERENT finish
+	// for frozenUnit only — legacyUnit stays out of the snapshot.
+	const frozenInterior = "70000000-0000-0000-0000-0000000000b1"
+	const frozenFront = "70000000-0000-0000-0000-0000000000b2"
+	frozenFinish := map[string]string{"INTERIOR": frozenInterior, "FRENTES": frozenFront}
+	zeroClearance := 0
+	snapshot, err := domain.BuildQuoteCommercialSnapshot(time.Date(2026, 9, 22, 9, 0, 0, 0, time.UTC), "MXN",
+		domain.QuoteCommercialIdentity{ID: fiSharedProject, Name: "Cliente Fixture"},
+		domain.QuoteCommercialIdentity{ID: fiSharedProject, Name: "Obra Fixture"},
+		domain.QuoteBreakdown{MarginFactor: 1},
+		[]domain.QuoteCommercialLine{{QuoteLineID: frozenLine, Quantity: 1, FurnitureInstanceIDs: []string{frozenUnit.ID}}},
+		[]domain.QuoteCommercialUnit{{
+			FurnitureInstanceID: frozenUnit.ID, QuoteLineID: frozenLine,
+			ModuleCode: "BASE-450", ModuleName: "Gabinete Base 450", LifecycleStatus: "active",
+			Options: []domain.QuoteCommercialOption{
+				{GroupCode: "FRENTES", GroupLabel: "Frentes", ChoiceID: frozenFront, ChoiceLabel: "Arauco Moscato 15mm"},
+				{GroupCode: "INTERIOR", GroupLabel: "Interior", ChoiceID: frozenInterior, ChoiceLabel: "Arauco Blanco Frosty 15mm"},
+			},
+			PricingContext: &domain.QuoteCommercialPricingContext{BaseMode: "none", BaseClearanceMm: &zeroClearance, StructureIndependent: true},
+		}})
+	if err != nil {
+		t.Fatalf("build frozen snapshot: %v", err)
+	}
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
+			OrganizationID: rlsOrgA, ProjectID: fiSharedProject, Status: "accepted",
+			SourceType: "manual", CreatedBy: rlsUserA, CommercialSnapshot: snapshot,
+			Items: []storage.CreateQuoteRevisionItemCommand{{
+				FurnitureInstanceID: frozenUnit.ID, FurnitureDefinitionID: moduleWithDims,
+				QuoteLineID: frozenLine, MaterialChoices: frozenFinish, LifecycleStatus: "active",
+			}},
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("create accepted revision: %v", err)
+	}
+
+	summaries := func() map[string]storage.FurnitureInstanceSummary {
+		t.Helper()
+		var out []storage.FurnitureInstanceSummary
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			var txErr error
+			out, txErr = fx.store.ListFurnitureInstanceSummariesByProject(ctx, fiSharedProject, false)
+			return txErr
+		}); err != nil {
+			t.Fatalf("list summaries: %v", err)
+		}
+		index := map[string]storage.FurnitureInstanceSummary{}
+		for _, row := range out {
+			index[row.Instance.ID] = row
+		}
+		return index
+	}
+
+	liveFinish := map[string]string{"INTERIOR": "70000000-0000-0000-0000-0000000000a3",
+		"FRENTES": "70000000-0000-0000-0000-0000000000a4"}
+
+	// The snapshot overrides the live choices for the frozen unit; the unit
+	// outside the snapshot keeps the #620 live fallback.
+	got := summaries()
+	if !reflect.DeepEqual(got[frozenUnit.ID].DisplayMaterialChoices, frozenFinish) {
+		t.Fatalf("frozen unit choices = %+v, want the authority snapshot finish %v",
+			got[frozenUnit.ID].DisplayMaterialChoices, frozenFinish)
+	}
+	if !reflect.DeepEqual(got[legacyUnit.ID].DisplayMaterialChoices, liveFinish) {
+		t.Fatalf("legacy unit choices = %+v, want the live fallback %v",
+			got[legacyUnit.ID].DisplayMaterialChoices, liveFinish)
+	}
+
+	// Cross-layer divergence: the mutable commercial state is re-edited (and
+	// even partially lost) while the accepted revision stays frozen. The
+	// authoring seed must keep rendering the frozen commercial state.
+	if _, err := fx.admin.Exec(ctx, `
+		UPDATE project_item_choices SET choice_entity_id = '`+frozenFront+`'
+		WHERE project_item_id = '`+frozenLine+`' AND option_group_code = 'INTERIOR';
+		DELETE FROM project_item_choices
+		WHERE project_item_id = '`+frozenLine+`' AND option_group_code = 'FRENTES'`); err != nil {
+		t.Fatal(err)
+	}
+	got = summaries()
+	if !reflect.DeepEqual(got[frozenUnit.ID].DisplayMaterialChoices, frozenFinish) {
+		t.Fatalf("diverged live state leaked into the seed: %+v, want frozen %v",
+			got[frozenUnit.ID].DisplayMaterialChoices, frozenFinish)
+	}
+	if !reflect.DeepEqual(got[legacyUnit.ID].DisplayMaterialChoices, liveFinish) {
+		t.Fatalf("legacy unit choices after divergence = %+v, want the live fallback %v",
+			got[legacyUnit.ID].DisplayMaterialChoices, liveFinish)
 	}
 }
 
