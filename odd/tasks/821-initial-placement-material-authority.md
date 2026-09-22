@@ -175,14 +175,15 @@ must rerun Go API/engine, OpenAPI drift, affected-plan checks and diff check.
 Forecast: 319 authored source/test/contract +/- lines plus this scoped ODD
 record (under 400); generated types remain visible but excluded from authored
 count. Delivery: `ask-on-risk`, user-selected `stacked-to-main`. PR1 targets
-`origin/main` at `aa6e88c1`; later diagnostic, scoped-profile API and final
+`origin/main` at `8c78eac9`; later diagnostic, scoped-profile API and final
 v0.1.5 plugin slices start from main only after each preceding human merge.
 No push, PR creation, merge, server restart, host install or design mutation
 is part of this candidate. Rollback boundary: authoring choice validation,
 supporting catalog/fixture contract and their tests.
 
 PR1 verification: the source patch from local work unit `f58e4184` applied
-cleanly atop exact `aa6e88c1`, without intermediate Ruby identity commits.
+cleanly, then PR1 rebased onto exact `8c78eac9`, without intermediate Ruby
+identity commits.
 The original work unit observed RED 422 for `BISAGRA` and acceptance of an
 unknown group; its tests now cover BISAGRA/EDGE plus exact INTERIOR/FRENTES,
 and negative inactive, wrong-kind and non-member cases. On this isolated PR1
@@ -194,3 +195,16 @@ conservative affected plan also selects full Go/storage/PostgreSQL, browser,
 visual and host lanes: NOT_RUN here, not a claim of integrated V2 proof.
 `git diff --check` PASS. The reported real v0.1.4 placement belongs to a
 different combined local candidate and does not pin this PR1 backend binary.
+PR1 work-unit commit after rebase: `a39ecb48` (`fix(sketchup): validate quoted catalog
+options by group kind`); this evidence SHA is recorded in a separate
+artifact-only commit. RDD is disabled/unmanaged; independent review is pending.
+
+Base drift and isolation correction: `8c78eac9` adds the approved
+`docs/architecture/test-database-isolation.md` contract. Automated tests must
+not write persistent `muebles`; full Go/storage/PostgreSQL and normal-backend
+browser suites remain NOT_RUN until an explicit throwaway DB is supplied.
+After rebase, only confirmed stub/pure tests were rerun: focused Go API/engine
+(including golden and BOM) PASS, OpenAPI drift PASS, storage `tsc` PASS, TS
+contract 10/10 PASS, and Ruby fake-boundary suites 47/47 plus 29/29 PASS.
+The earlier full Go API/engine result belongs to the pre-drift base, not to
+this exact candidate. No DB, backend process or SketchUp model was touched.
