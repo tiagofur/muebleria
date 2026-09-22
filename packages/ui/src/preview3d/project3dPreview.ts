@@ -503,62 +503,75 @@ export function resolveModuleHardwarePlacements(
     ...(module.agregados ?? []),
   ];
 
-  // Build the source set tagged with the per-source idPrefix that
-  // engine/bom.ts resolveComposedModule used to expand each instance.
-  // Structure + module use '' (backward compatible with the 31 Fase 2 face
-  // goldens). Each agregado instance is expanded per unit — mirroring the
-  // motor's `calculateAgregadoSubspaceUnits` (quantity units, unitIndex
-  // 0..N-1) — with prefix `agr-${agregadoId}-u${unitIndex}` (bom.ts ~665).
-  // Base-mode filtering need NOT be replicated here: parts bom.ts filtered out
-  // are absent from `partById`, so the lookup below skips them naturally.
+  // Build the source groups tagged with the idPrefix engine/bom.ts used for
+  // each expansion scope. The engine runs ONE expandComponentInstances call
+  // per scope — the structure list, the module list, and each agregado unit
+  // — and #434 made copy ids unique per component ACROSS each list (global
+  // per-scope counters, bom.ts:457-458/506), so two entries pointing at the
+  // same component no longer re-emit `-copy-0`. Structure + module use ''
+  // (backward compatible with the 31 Fase 2 face goldens). Each agregado
+  // instance is expanded per unit — mirroring the motor's
+  // `calculateAgregadoSubspaceUnits` (quantity units, unitIndex 0..N-1) —
+  // with prefix `agr-${agregadoId}-u${unitIndex}`.
+  // Base-mode filtering need NOT be replicated here: parts bom.ts filtered
+  // out are absent from `partById`, so the lookup below skips them naturally
+  // (and, like the engine — which filters the entry BEFORE expanding —, a
+  // skipped entry consumes no copy number).
   type Source = { inst: ModuleComponentInstance; prefix: string };
-  const sources: Source[] = [
-    ...(structure?.components ?? []).map((inst) => ({ inst, prefix: '' })),
-    ...(module.components ?? []).map((inst) => ({ inst, prefix: '' })),
+  const sourceGroups: Source[][] = [
+    (structure?.components ?? []).map((inst) => ({ inst, prefix: '' })),
+    (module.components ?? []).map((inst) => ({ inst, prefix: '' })),
   ];
   allAgregadoInstances.forEach((agrInst) => {
     const qty = Math.max(1, Math.floor(agrInst.quantity) || 1);
     for (let unitIndex = 0; unitIndex < qty; unitIndex++) {
       const prefix = `agr-${agrInst.agregadoId}-u${unitIndex}`;
       const unitInst = { ...agrInst, quantity: 1 };
-      for (const inst of resolveAgregadoInstance(unitInst, agregadosCatalog, unitIndex)
-        .components) {
-        sources.push({ inst, prefix });
-      }
+      sourceGroups.push(
+        resolveAgregadoInstance(unitInst, agregadosCatalog, unitIndex).components.map(
+          (inst) => ({ inst, prefix }),
+        ),
+      );
     }
   });
 
-  for (const { inst, prefix } of sources) {
-    const placements = inst.overrides?.hardwarePlacements;
-    if (!placements || placements.length === 0) continue;
+  for (const group of sourceGroups) {
+    // Mirrors engine/bom.ts expandComponentInstances (#434): one counter map
+    // per expansion scope; the copy index is global per component within the
+    // scope's list, not per entry.
+    const copyCounters = new Map<string, number>();
+    for (const { inst, prefix } of group) {
+      const placements = inst.overrides?.hardwarePlacements;
+      if (!placements || placements.length === 0) continue;
 
-    const qty = Math.max(1, Math.floor(inst.quantity) || 1);
-    for (let i = 0; i < qty; i++) {
-      // Mirrors engine/bom.ts expandComponentInstances:
-      // `${idPrefix}${component.id}-copy-${i}`.
-      const componentInstanceId = `${prefix}${inst.componentId}-copy-${i}`;
-      const part = partById.get(componentInstanceId);
-      if (!part) continue; // filtered by base mode / not a board — skip.
+      const qty = Math.max(1, Math.floor(inst.quantity) || 1);
+      for (let i = 0; i < qty; i++) {
+        const copyIndex = copyCounters.get(inst.componentId) ?? 0;
+        const componentInstanceId = `${prefix}${inst.componentId}-copy-${copyIndex}`;
+        const part = partById.get(componentInstanceId);
+        if (!part) continue; // filtered by base mode / not a board — skip.
 
-      for (const placement of placements) {
-        const targetId =
-          options.optionChoices?.[placement.hardwareId] ?? placement.hardwareId;
-        const hardware =
-          hardwareCatalog.find((h) => h.id === targetId) ??
-          hardwareCatalog.find((h) => h.id === placement.hardwareId);
-        // VH-09: swapped-to-cost-only or removed hardware renders nothing.
-        if (!hardware) continue;
-        const resolved = resolveHardwarePlacement({
-          componentInstanceId,
-          placement,
-          board: {
-            widthMm: part.widthMm,
-            thicknessMm: part.thicknessMm,
-            lengthMm: part.lengthMm,
-          },
-          hardware,
-        });
-        if (resolved) out.push(resolved);
+        copyCounters.set(inst.componentId, copyIndex + 1);
+        for (const placement of placements) {
+          const targetId =
+            options.optionChoices?.[placement.hardwareId] ?? placement.hardwareId;
+          const hardware =
+            hardwareCatalog.find((h) => h.id === targetId) ??
+            hardwareCatalog.find((h) => h.id === placement.hardwareId);
+          // VH-09: swapped-to-cost-only or removed hardware renders nothing.
+          if (!hardware) continue;
+          const resolved = resolveHardwarePlacement({
+            componentInstanceId,
+            placement,
+            board: {
+              widthMm: part.widthMm,
+              thicknessMm: part.thicknessMm,
+              lengthMm: part.lengthMm,
+            },
+            hardware,
+          });
+          if (resolved) out.push(resolved);
+        }
       }
     }
   }

@@ -625,6 +625,104 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
     );
     expect(placements.every((p) => p.hardwareId === 'hw-knob')).toBe(true);
   });
+
+  it('G2: repeated agregado component entries preserve the BOM copy sequence', () => {
+    const agregadoId = 'agr-puerta-repetida';
+    const hardwarePlacement = {
+      hardwareId: 'hw-knob',
+      anchorFace: 'front' as const,
+      relativePosition: { xMm: 50, yMm: 50 },
+    };
+    const agregado: Agregado = {
+      id: agregadoId,
+      code: 'AGR-PUE-REP',
+      name: 'Puertas repetidas',
+      externalDims: { width: 596, height: 720, depth: 18 },
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+      ],
+    };
+    const module: Module = {
+      ...modWithHandle,
+      components: [],
+      agregados: [{ agregadoId, quantity: 1 }],
+    };
+    const expectedPartIds = [
+      `agr-${agregadoId}-u0c-puerta-copy-0`,
+      `agr-${agregadoId}-u0c-puerta-copy-1`,
+    ];
+    const mockBoardParts = expectedPartIds.map((id) => ({
+      id,
+      widthMm: 596,
+      thicknessMm: 18,
+      lengthMm: 720,
+    })) as unknown as Parameters<typeof resolveModuleHardwarePlacements>[1];
+
+    const placements = resolveModuleHardwarePlacements(
+      module,
+      mockBoardParts,
+      catalogWithHardware.hardware,
+      {
+        structures: catalogWithHardware.structures,
+        agregados: [agregado],
+      },
+    );
+
+    expect(placements.map((placement) => placement.componentInstanceId)).toEqual(
+      expectedPartIds,
+    );
+  });
+
+  it('G2: repeated module component entries preserve the BOM copy sequence (#819)', () => {
+    const hardwarePlacement = {
+      hardwareId: 'hw-knob',
+      anchorFace: 'front' as const,
+      relativePosition: { xMm: 50, yMm: 50 },
+    };
+    const module: Module = {
+      ...modWithHandle,
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+      ],
+      agregados: [],
+    };
+    const expectedPartIds = ['c-puerta-copy-0', 'c-puerta-copy-1'];
+    const mockBoardParts = expectedPartIds.map((id) => ({
+      id,
+      widthMm: 596,
+      thicknessMm: 18,
+      lengthMm: 720,
+    })) as unknown as Parameters<typeof resolveModuleHardwarePlacements>[1];
+
+    const placements = resolveModuleHardwarePlacements(
+      module,
+      mockBoardParts,
+      catalogWithHardware.hardware,
+      { structures: catalogWithHardware.structures },
+    );
+
+    expect(placements.map((placement) => placement.componentInstanceId)).toEqual(
+      expectedPartIds,
+    );
+  });
 });
 
 describe('resolveProject3DPreview — base treatment (F087)', () => {
