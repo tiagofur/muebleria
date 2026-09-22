@@ -153,6 +153,31 @@ func (e *hwRouterEnv) do(t *testing.T, method, target, body string, idemKey stri
 	return rr
 }
 
+// TestProjectDelete_RouterUsesLiveMembershipAndCanonicalBoundary exercises the
+// full HTTP path: JWT middleware re-reads the live membership, opens the tenant
+// transaction, and the storage call reaches delete_project_tree SECURITY DEFINER.
+func TestProjectDelete_RouterUsesLiveMembershipAndCanonicalBoundary(t *testing.T) {
+	env := newHwAssetRouterEnv(t)
+	const customerID = "21000000-0000-0000-0000-0000000000f1"
+	const projectID = "21000000-0000-0000-0000-0000000000f2"
+	ctx := context.Background()
+	if _, err := env.pool.Exec(ctx, `INSERT INTO customers (id, name, organization_id, owner_user_id) VALUES ($1, 'HTTP delete customer', $2, $3)`, customerID, hwRouterOrg, hwRouterUser); err != nil {
+		t.Fatalf("seed project customer: %v", err)
+	}
+	if _, err := env.pool.Exec(ctx, `INSERT INTO projects (id, name, customer_id, status, organization_id, sales_organization_id, owner_user_id) VALUES ($1, 'HTTP delete project', $2, 'draft', $3, $3, $4)`, projectID, customerID, hwRouterOrg, hwRouterUser); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+
+	rr := env.do(t, http.MethodDelete, "/api/projects/"+projectID, "", "")
+	if rr.Code != http.StatusOK || strings.TrimSpace(rr.Body.String()) != `{"message":"project deleted"}` {
+		t.Fatalf("DELETE project status=%d body=%s, want canonical 200", rr.Code, rr.Body.String())
+	}
+	var remaining int
+	if err := env.pool.QueryRow(ctx, `SELECT count(*) FROM projects WHERE id=$1`, projectID).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatalf("HTTP canonical delete did not remove project: remaining=%d err=%v", remaining, err)
+	}
+}
+
 // uploadBytes issues the multipart byte upload through the real router at the
 // canonical client URL.
 func (e *hwRouterEnv) uploadBytes(t *testing.T, sessionID, representation, filename string, content []byte) *httptest.ResponseRecorder {

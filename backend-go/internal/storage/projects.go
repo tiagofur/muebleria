@@ -1507,16 +1507,67 @@ func updateProjectTx(ctx context.Context, tx pgx.Tx, id string, p *domain.Projec
 	return nil
 }
 
+// ProjectMediaFile identifies a physical object owned exclusively by a project.
+// OrganizationID is collected from the authoritative row before its cascade.
+type ProjectMediaFile struct {
+	OrganizationID string
+	MediaURL       string
+	StorageKey     string
+}
+
+// DeleteProject removes an authorized project through the database's narrow
+// SECURITY DEFINER boundary.  Direct application DELETE permissions remain
+// revoked; the function validates Store/Sales authority before it can bypass
+// RLS for Factory-private release descendants.
 func (s *PostgresStore) DeleteProject(ctx context.Context, id string) error {
-	query := `DELETE FROM projects WHERE id = $1 AND (organization_id = $2 OR sales_organization_id = $2);`
-	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
-	if err != nil {
-		return err
+	return s.DeleteProjectWithMediaCleanup(ctx, id, nil)
+}
+
+// DeleteProjectWithMediaCleanup registers physical cleanup only after the same
+// tenant transaction commits.  The callback is intentionally generic: storage
+// returns stable owner/key references, while the API owns MediaDir semantics.
+func (s *PostgresStore) DeleteProjectWithMediaCleanup(
+	ctx context.Context,
+	id string,
+	cleanup func(context.Context, []ProjectMediaFile),
+) error {
+	actor, ok := TenantActorFromCtx(ctx)
+	if !ok || actor.OrganizationID == "" || actor.UserID == "" || actor.MembershipID == "" {
+		return errors.New("project delete requires a complete tenant actor")
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("project not found")
-	}
-	return nil
+	return runInTenantTxErr(s, ctx, func(ctx context.Context) error {
+		tx := transactionFromContext(ctx)
+		if tx == nil {
+			return errors.New("project delete requires an active tenant transaction")
+		}
+		rows, err := tx.Query(ctx, `SELECT owner_organization_id, project_media_url, project_storage_key FROM delete_project_tree($1)`, id)
+		if err != nil {
+			return fmt.Errorf("deleting project tree: %w", err)
+		}
+		defer rows.Close()
+		var files []ProjectMediaFile
+		for rows.Next() {
+			var file ProjectMediaFile
+			var mediaURL, storageKey *string
+			if err := rows.Scan(&file.OrganizationID, &mediaURL, &storageKey); err != nil {
+				return fmt.Errorf("reading project media cleanup reference: %w", err)
+			}
+			if mediaURL != nil {
+				file.MediaURL = *mediaURL
+			}
+			if storageKey != nil {
+				file.StorageKey = *storageKey
+			}
+			files = append(files, file)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("reading project media cleanup references: %w", err)
+		}
+		if cleanup != nil && len(files) > 0 {
+			OnCommit(ctx, func(committed context.Context) { cleanup(committed, files) })
+		}
+		return nil
+	})
 }
 
 // ListModules returns the workshop's furniture modules with their measure

@@ -1720,7 +1720,15 @@ func (s *Server) HandleProjectByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "project not found")
 			return
 		}
-		err = s.Store.DeleteProject(r.Context(), id)
+		if cleaner, ok := s.Store.(interface {
+			DeleteProjectWithMediaCleanup(context.Context, string, func(context.Context, []storage.ProjectMediaFile)) error
+		}); ok && strings.TrimSpace(s.MediaDir) != "" {
+			err = cleaner.DeleteProjectWithMediaCleanup(r.Context(), id, func(_ context.Context, files []storage.ProjectMediaFile) {
+				deleteProjectMediaFiles(s.MediaDir, files)
+			})
+		} else {
+			err = s.Store.DeleteProject(r.Context(), id)
+		}
 		if err != nil {
 			respondWithInternalError(w, err, "handler")
 			return

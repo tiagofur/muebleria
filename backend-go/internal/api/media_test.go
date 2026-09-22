@@ -103,7 +103,7 @@ func TestMediaFilenameFromURL(t *testing.T) {
 		{"empty", "", ""},
 		{"canonical", "/api/media/abc.png", "abc.png"},
 		{"with token query", "/api/media/abc.png?token=secret", "abc.png"},
-		{"absolute host", "http://localhost:8080/api/media/abc.webp", "abc.webp"},
+		{"absolute host", "http://localhost:8080/api/media/abc.webp", ""},
 		{"external url", "https://cdn.example.com/img.png", ""},
 		{"data uri", "data:image/png;base64,xx", ""},
 		{"path escape", "/api/media/../etc/passwd", ""},
@@ -190,4 +190,62 @@ func TestDeleteMediaFileByURL(t *testing.T) {
 			t.Error("expected false when mediaDir is empty")
 		}
 	})
+}
+
+func TestDeleteProjectMediaFilesIsIdempotentAndTenantScoped(t *testing.T) {
+	dir := t.TempDir()
+	orgID := storage.InitialOrganizationID
+	artifactKey := "designs/publish/11111111-1111-4111-8111-111111111111/model-0123456789ab.skp"
+	photo := filepath.Join(dir, orgID, "project.jpg")
+	artifact := filepath.Join(dir, orgID, filepath.FromSlash(artifactKey))
+	for _, path := range []string{photo, artifact} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("project-owned"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	deleteProjectMediaFiles(dir, []storage.ProjectMediaFile{
+		{OrganizationID: orgID, MediaURL: "/api/media/project.jpg"},
+		{OrganizationID: orgID, StorageKey: artifactKey},
+		{OrganizationID: orgID, MediaURL: "/api/media/already-gone.jpg"},
+		// Invalid input cannot escape this organization directory.
+		{OrganizationID: orgID, StorageKey: "../outside"},
+	})
+	for _, path := range []string{photo, artifact} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("project-owned media remains at %s: %v", path, err)
+		}
+	}
+
+	// A second cleanup after a partial prior attempt is harmless.
+	deleteProjectMediaFiles(dir, []storage.ProjectMediaFile{{OrganizationID: orgID, MediaURL: "/api/media/project.jpg"}})
+}
+
+func TestDeleteMediaFileByURLRejectsExternalLookalike(t *testing.T) {
+	dir := t.TempDir()
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	local := filepath.Join(dir, storage.InitialOrganizationID, "same.jpg")
+	if err := os.MkdirAll(filepath.Dir(local), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(local, []byte("must survive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{
+		"https://attacker.example/api/media/same.jpg",
+		"//attacker.example/api/media/same.jpg",
+		"data:/api/media/same.jpg",
+		"/api/media/nested/same.jpg",
+		"/api/media/../same.jpg",
+	} {
+		if deleteMediaFileByURL(ctx, dir, raw) {
+			t.Errorf("external/unsafe URL %q unexpectedly deleted a file", raw)
+		}
+		if _, err := os.Stat(local); err != nil {
+			t.Errorf("local file removed by %q: %v", raw, err)
+		}
+	}
 }

@@ -23,6 +23,28 @@ func TestProjectOwnership_SplitSalesAndManufacturing(t *testing.T) {
 		t.Fatalf("create org Gamma: %v", err)
 	}
 
+	// DeleteProject is an authority boundary: scope alone is not sufficient.
+	// Seed real active memberships for the complete Sales and Factory actors.
+	const salesUser = "c2000000-0000-0000-0000-000000000001"
+	const factoryUser = "c2000000-0000-0000-0000-000000000002"
+	const salesMembership = "c2000000-0000-0000-0000-000000000003"
+	const factoryMembership = "c2000000-0000-0000-0000-000000000004"
+	if _, err := store.Pool.Exec(ctx, `INSERT INTO users (id, email, normalized_email, password_hash, name, account_status)
+		VALUES ($1, 'sales-delete@example.test', 'sales-delete@example.test', 'x', 'Sales delete', 'active'),
+		       ($2, 'factory-delete@example.test', 'factory-delete@example.test', 'x', 'Factory delete', 'active')`, salesUser, factoryUser); err != nil {
+		t.Fatalf("seed delete users: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx, `INSERT INTO memberships (id, organization_id, user_id, roles)
+		VALUES ($1, $2, $3, '{admin}'), ($4, $5, $6, '{admin}')`, salesMembership, orgSales, salesUser, factoryMembership, orgMfg, factoryUser); err != nil {
+		t.Fatalf("seed delete memberships: %v", err)
+	}
+	if _, err := store.Pool.Exec(ctx, `UPDATE organizations SET status='active', status_reason=NULL WHERE id IN ($1, $2)`, orgSales, orgMfg); err != nil {
+		t.Fatalf("activate delete organizations: %v", err)
+	}
+
+	salesActor := storage.TenantActor{OrganizationID: orgSales, UserID: salesUser, MembershipID: salesMembership}
+	factoryActor := storage.TenantActor{OrganizationID: orgMfg, UserID: factoryUser, MembershipID: factoryMembership}
+
 	// Module in orgSales catalog
 	const modID = "a1000000-0000-0000-0000-00000000000a"
 	if _, err := store.Pool.Exec(ctx,
@@ -121,16 +143,18 @@ func TestProjectOwnership_SplitSalesAndManufacturing(t *testing.T) {
 		t.Fatalf("sales org must see updated notes, got %q", updatedSales.Notes)
 	}
 
-	// 6. Delete restricted to sales/owning org
-	if err := store.DeleteProject(scoped(ctx, orgMfg), sharedProject.ID); err == nil {
-		// Mfg is not sales or owning organization (owning is orgSales)
-		// Wait, DeleteProject allows (organization_id = $2 OR sales_organization_id = $2)
-		// Since orgMfg is neither organization_id nor sales_organization_id, it should fail
-		t.Fatal("mfg org should not be able to delete project owned by sales org")
+	// 6. Delete restricted to the complete Sales actor. The Factory actor can
+	// access execution data but cannot cross the sales/owner deletion boundary.
+	if err := store.WithinTenantTx(ctx, factoryActor, func(txCtx context.Context) error {
+		return store.DeleteProject(txCtx, sharedProject.ID)
+	}); err == nil {
+		t.Fatal("factory actor should not be able to delete project owned by sales org")
 	}
 
-	if err := store.DeleteProject(scoped(ctx, orgSales), sharedProject.ID); err != nil {
-		t.Fatalf("sales org must be able to delete its project: %v", err)
+	if err := store.WithinTenantTx(ctx, salesActor, func(txCtx context.Context) error {
+		return store.DeleteProject(txCtx, sharedProject.ID)
+	}); err != nil {
+		t.Fatalf("sales actor must be able to delete its project: %v", err)
 	}
 }
 
