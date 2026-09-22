@@ -2387,6 +2387,43 @@ export function resetProjectStore(): void {
 
 const BACKEND_BREAKDOWN_DEBOUNCE_MS = 300;
 
+export async function readBackendCalculationErrorMessage(
+  response: Response,
+): Promise<string> {
+  const fallback = `No se pudo recalcular (${response.status})`;
+  try {
+    const body: unknown = await response.json();
+    if (
+      typeof body === 'object' &&
+      body !== null &&
+      'message' in body &&
+      typeof body.message === 'string' &&
+      body.message.trim()
+    ) {
+      return body.message;
+    }
+  } catch {
+    // Non-JSON body — keep the status-based fallback.
+  }
+  return fallback;
+}
+
+const BACKEND_CALCULATION_FAILURE_MESSAGE =
+  'No se pudo recalcular en el servidor; mostrando valores locales';
+
+export function notifyBackendCalculationFailure(
+  error: unknown,
+  toast: ToastFn,
+): string {
+  const detail = error instanceof Error ? error.message.trim() : '';
+  const message =
+    detail && !/^No se pudo recalcular \(\d+\)$/.test(detail)
+      ? `${BACKEND_CALCULATION_FAILURE_MESSAGE}: ${detail}`
+      : BACKEND_CALCULATION_FAILURE_MESSAGE;
+  toast({ type: 'error', message });
+  return message;
+}
+
 /**
  * Fetches backend breakdown for the selected project with 300ms debounce.
  * - On success: sets `backendBreakdown`.
@@ -2442,7 +2479,7 @@ export function useBackendBreakdownEffect(
           },
         );
         if (!res.ok) {
-          throw new Error(`No se pudo recalcular (${res.status})`);
+          throw new Error(await readBackendCalculationErrorMessage(res));
         }
         const data = breakdownFromApi(
           (await res.json()) as Record<string, unknown>,
@@ -2456,13 +2493,11 @@ export function useBackendBreakdownEffect(
       } catch (err) {
         console.error('Backend calculation error:', err);
         if (active) {
-          const message =
-            'No se pudo recalcular en el servidor; mostrando valores locales';
+          const message = notifyBackendCalculationFailure(err, toast);
           store.setState({
             backendBreakdown: null,
             breakdownError: message,
           });
-          toast({ type: 'error', message });
         }
       } finally {
         if (active) {
