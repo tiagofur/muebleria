@@ -135,3 +135,17 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
   guard setting.
 - [ ] T20 Pending exact-head fresh tests and Gate A, catalog pin/resource
   fixture, and independent review.
+
+## R4 correction evidence
+
+- [x] T21 Direct-delete permission negatives now isolate each deliberate PostgreSQL
+  error with a savepoint, preventing `25P02` from hiding a later assertion.
+- [x] T22 Stock and purchase-order fixtures now carry valid organization scope
+  and assert all preserved external-history fields while only the project link
+  becomes NULL.
+- [x] T23 R4 hardening keeps the legacy `WithOrgCtx` question scoped to the
+  tenant actor boundary: the canonical function requires a writable actor
+  installed by `WithinTenantTx`; a bare legacy org scope is not authority and
+  must not be upgraded implicitly.
+- [ ] T24 Pending real-PG execution in a stable harness, hardware/assembly pin
+  fixture, Gate A, exact-head CI, and independent review.

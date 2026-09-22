@@ -476,13 +476,20 @@ func TestTenantRLS_FurnitureInstancesDirectSQLCrossOrg(t *testing.T) {
 		}
 
 		// #815: only the canonical SECURITY DEFINER project boundary deletes
-		// project rows. Direct DELETE privileges remain revoked, so neither an
-		// invisible cross-org row nor a visible same-org row is writable here.
-		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceB); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("cross-org direct DELETE must remain prohibited: %v", err)
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, fiInstanceA); err == nil || !strings.Contains(err.Error(), "permission denied") {
-			t.Fatalf("same-org direct DELETE must remain prohibited: %v", err)
+		// project rows. Each intentional permission error runs under its own
+		// savepoint so PostgreSQL's failed-transaction state cannot mask the next
+		// assertion as SQLSTATE 25P02.
+		for _, id := range []string{fiInstanceB, fiInstanceA} {
+			if _, err := tx.Exec(ctx, "SAVEPOINT direct_delete_check"); err != nil {
+				t.Fatal(err)
+			}
+			_, err := tx.Exec(ctx, `DELETE FROM furniture_instances WHERE id=$1`, id)
+			if _, rollbackErr := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT direct_delete_check"); rollbackErr != nil {
+				t.Fatal(rollbackErr)
+			}
+			if err == nil || !strings.Contains(err.Error(), "permission denied") {
+				t.Fatalf("direct DELETE %s must remain prohibited: %v", id, err)
+			}
 		}
 
 		// Attaching an identity to a foreign-org project fails the WITH CHECK.

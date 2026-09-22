@@ -392,18 +392,20 @@ func TestDeleteProject_PreservesExternalStockHistoryWithNullProject(t *testing.T
 	fx := setupRequoteFixture(t)
 	ctx := context.Background()
 	movementID := "a1000000-0000-0000-0000-000000000099"
-	if _, err := fx.admin.Exec(ctx, `INSERT INTO stock_movements (id, kind, material_id, type, delta, balance_after, project_id) VALUES ($1, 'tableros', 'external-history', 'salida', -1, 9, $2)`, movementID, fx.projectID); err != nil {
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO stock_movements (id, organization_id, kind, material_id, type, delta, balance_after, project_id) VALUES ($1, $2, 'tableros', 'external-history', 'salida', -1, 9, $3)`, movementID, rlsOrgA, fx.projectID); err != nil {
 		t.Fatal(err)
 	}
 	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error { return fx.store.DeleteProject(txCtx, fx.projectID) }); err != nil {
 		t.Fatal(err)
 	}
 	var projectID *string
-	if err := fx.admin.QueryRow(ctx, `SELECT project_id::text FROM stock_movements WHERE id=$1`, movementID).Scan(&projectID); err != nil {
+	var organizationID, kind, materialID, movementType string
+	var delta float64
+	if err := fx.admin.QueryRow(ctx, `SELECT project_id::text, organization_id::text, kind, material_id, type, delta FROM stock_movements WHERE id=$1`, movementID).Scan(&projectID, &organizationID, &kind, &materialID, &movementType, &delta); err != nil {
 		t.Fatalf("external stock history must survive: %v", err)
 	}
-	if projectID != nil {
-		t.Fatalf("external stock project_id=%q, want NULL", *projectID)
+	if projectID != nil || organizationID != rlsOrgA || kind != "tableros" || materialID != "external-history" || movementType != "salida" || delta != -1 {
+		t.Fatalf("stock history mutated: project=%v org=%s kind=%s material=%s type=%s delta=%v", projectID, organizationID, kind, materialID, movementType, delta)
 	}
 }
 
@@ -425,21 +427,23 @@ func TestDeleteProject_DirectProjectsDeleteRemainsDeniedEvenWithGuard(t *testing
 func TestDeleteProject_PreservesPurchaseAllocationHistoryWithNullProject(t *testing.T) {
 	fx := setupRequoteFixture(t)
 	ctx := context.Background()
-	if _, err := fx.admin.Exec(ctx, `INSERT INTO purchase_orders (id, number, status) VALUES ('delete-project-po', 'DELETE-PROJECT-PO', 'emitida')`); err != nil {
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO purchase_orders (id, number, status, organization_id) VALUES ('delete-project-po', 'DELETE-PROJECT-PO', 'emitida', $1)`, rlsOrgA); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fx.admin.Exec(ctx, `INSERT INTO purchase_order_items (po_id, kind, material_id, quantity, allocated_project_id) VALUES ('delete-project-po', 'tableros', 'external-allocation', 1, $1)`, fx.projectID); err != nil {
+	if _, err := fx.admin.Exec(ctx, `INSERT INTO purchase_order_items (po_id, kind, material_id, quantity, unit_cost, organization_id, allocated_project_id) VALUES ('delete-project-po', 'tableros', 'external-allocation', 1, 42.5, $1, $2)`, rlsOrgA, fx.projectID); err != nil {
 		t.Fatal(err)
 	}
 	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error { return fx.store.DeleteProject(txCtx, fx.projectID) }); err != nil {
 		t.Fatal(err)
 	}
 	var projectID *string
-	if err := fx.admin.QueryRow(ctx, `SELECT allocated_project_id::text FROM purchase_order_items WHERE po_id='delete-project-po' AND kind='tableros' AND material_id='external-allocation'`).Scan(&projectID); err != nil {
+	var organizationID string
+	var quantity, unitCost float64
+	if err := fx.admin.QueryRow(ctx, `SELECT allocated_project_id::text, organization_id::text, quantity, unit_cost FROM purchase_order_items WHERE po_id='delete-project-po' AND kind='tableros' AND material_id='external-allocation'`).Scan(&projectID, &organizationID, &quantity, &unitCost); err != nil {
 		t.Fatalf("purchase allocation must survive: %v", err)
 	}
-	if projectID != nil {
-		t.Fatalf("purchase allocation project_id=%q, want NULL", *projectID)
+	if projectID != nil || organizationID != rlsOrgA || quantity != 1 || unitCost != 42.5 {
+		t.Fatalf("purchase allocation mutated: project=%v org=%s quantity=%v unitCost=%v", projectID, organizationID, quantity, unitCost)
 	}
 }
 
