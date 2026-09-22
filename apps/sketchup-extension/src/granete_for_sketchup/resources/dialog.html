@@ -80,6 +80,11 @@
         user-select: none;
       }
 
+      #pf-placement-error {
+        user-select: text;
+        white-space: pre-wrap;
+      }
+
       .shell {
         min-height: 100vh;
         display: flex;
@@ -1958,6 +1963,7 @@
           </div>
 
           <div id="pf-list-view" style="display: none;">
+            <p id="pf-placement-error" role="alert" class="card" style="display: none;"></p>
             <div class="library-header-row">
               <div class="card-title">Muebles del proyecto</div>
               <span id="pf-count-badge" class="library-count-badge">--</span>
@@ -2534,7 +2540,7 @@
         </div>
       </div>
 
-      <footer>Granete for SketchUp · v0.1.2</footer>
+      <footer>Granete for SketchUp · v0.1.4</footer>
     </div>
 
     <script>
@@ -6548,6 +6554,7 @@
 
         function placeFurnitureInstance(furnitureInstanceId, button) {
           if (!furnitureInstanceId || pfPlacing[furnitureInstanceId]) return;
+          document.getElementById("pf-placement-error").style.display = "none";
           pfPlacing[furnitureInstanceId] = button;
           button.disabled = true;
           button.textContent = "Colocando…";
@@ -6611,9 +6618,17 @@
           var button = pfPlacing[result.instanceId];
           delete pfPlacing[result.instanceId];
           if (result.ok) {
+            document.getElementById("pf-placement-error").style.display = "none";
             if (result.code === "already_placed") {
               showToast("success", "Ese mueble ya está colocado: se seleccionó el existente.");
             } else if (result.code === "pending_position") {
+              // The furniture was inserted locally but position sync is still
+              // pending — re-arm the button so the user can retry or confirm
+              // without waiting for the list refresh to reconstruct the card.
+              if (button) {
+                button.disabled = false;
+                button.textContent = "Colocar";
+              }
               showToast("info", "Mueble insertado, pero la sincronización de posición quedó pendiente.");
             } else {
               showToast("success", "✓ Mueble colocado y sincronizado con el diseño.");
@@ -6627,7 +6642,13 @@
             button.disabled = false;
             button.textContent = "Colocar";
           }
-          showToast("error", pfPlaceFailureMessage(result));
+          var message = pfPlaceFailureMessage(result);
+          var diagnostic = document.getElementById("pf-placement-error");
+          diagnostic.textContent = "No se pudo colocar el mueble. " + message +
+            "\nCódigo: " + (result.code || "unknown") +
+            " · Mueble: " + (result.instanceId || "sin identificador");
+          diagnostic.style.display = "block";
+          showToast("error", message);
         }
 
         function handleConfirmPlacementResult(result) {

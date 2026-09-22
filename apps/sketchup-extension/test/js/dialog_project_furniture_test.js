@@ -268,6 +268,20 @@ function runTests() {
     );
   });
 
+  test('placement failure stays selectable after the toast disappears', (sandbox) => {
+    sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
+    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    button.click();
+    sandbox.window.GraneteDialog.onPlaceFurnitureResult({
+      ok: false, code: 'resolution_failed', instanceId: FI_1,
+      reason: 'MATERIAL_CHOICE_INVALID'
+    });
+    assert.equal(button.disabled, false);
+    assert.ok(visible(el(sandbox, 'pf-placement-error')));
+    assert.ok(el(sandbox, 'pf-placement-error').textContent.includes('MATERIAL_CHOICE_INVALID'));
+    assert.ok(el(sandbox, 'pf-placement-error').textContent.includes(FI_1));
+  });
+
   test('distinct states: unbound, unreachable, stale_base render separately', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture({ state: 'unbound' });
     assert.ok(visible(el(sandbox, 'pf-unbound-state')));

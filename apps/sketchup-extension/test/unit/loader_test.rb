@@ -19,6 +19,6 @@ class LoaderTest < Minitest::Test
     assert enabled
     assert_equal 'Granete for SketchUp', extension.name
     assert_equal 'granete_for_sketchup/main', extension.loader
-    assert_equal '0.1.2', extension.version
+    assert_equal Granete::SketchUpExtension::EXTENSION_VERSION, extension.version
   end
 end

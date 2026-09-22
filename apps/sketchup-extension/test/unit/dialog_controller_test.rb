@@ -956,6 +956,43 @@ class DialogControllerTest < Minitest::Test
     assert(dialog.executed_scripts.any? { |script| script.include?('onProjectFurniture') })
   end
 
+  def test_place_callback_correlates_a_runtime_failure_to_requested_unit
+    placer = Object.new
+    placer.define_singleton_method(:place) { |_id| raise 'host refused insertion' }
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer
+    )
+    dialog = controller.show
+    id = '51000000-0000-0000-0000-0000000000f1'
+
+    dialog.callbacks.fetch('place_furniture_instance').call(nil, JSON.generate('furnitureInstanceId' => id))
+
+    assert(dialog.executed_scripts.any? do |script|
+      script.include?('onPlaceFurnitureResult') && script.include?(id) &&
+        script.include?('error interno de SketchUp') && !script.include?('host refused insertion')
+    end)
+  end
+
+  def test_place_callback_correlates_a_structured_placement_rejection
+    placer = Object.new
+    placer.define_singleton_method(:place) do |_id|
+      { 'ok' => false, 'code' => 'resolution_failed', 'reason' => 'MATERIAL_CHOICE_INVALID' }
+    end
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger, status_provider: StatusProvider.new, metadata_store: @store,
+      project_furniture_placer: placer
+    )
+    dialog = controller.show
+    id = '51000000-0000-0000-0000-0000000000f1'
+
+    dialog.callbacks.fetch('place_furniture_instance').call(nil, JSON.generate('furnitureInstanceId' => id))
+
+    assert(dialog.executed_scripts.any? do |script|
+      script.include?('onPlaceFurnitureResult') && script.include?(id) && script.include?('MATERIAL_CHOICE_INVALID')
+    end)
+  end
+
   def test_restore_failure_rearms_exact_action_and_refreshes_authority
     panels = 0
     placer = Object.new
