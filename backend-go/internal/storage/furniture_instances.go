@@ -324,12 +324,13 @@ type FurnitureInstanceSummary struct {
 	// to a quote line (project_items.custom_dims wins), else the module's
 	// default dimensions. nil when neither source knows any dimension.
 	DisplayDims *domain.ItemCustomDims
-	// DisplayMaterialChoices are the frozen quoted board choices (option
-	// group code -> material id) of the unit inside the commercial snapshot of
+	// DisplayMaterialChoices are the frozen quoted catalog choices (option
+	// group code -> entity id) of the unit inside the commercial snapshot of
 	// the project's authority quote revision — the exact immutable Q/R truth
 	// React renders as "Q# · Solo lectura" (#821). Legacy projects without a
 	// snapshot fall back to the live current-link option_choices (#620).
-	// nil when neither source carries a finish.
+	// nil when neither source carries an option choice. The historical field
+	// name also includes hardware and edge-band groups.
 	DisplayMaterialChoices map[string]string
 }
 
@@ -349,7 +350,7 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 	// the outer join can address fi.furniture_definition_id; the inner table
 	// stays unaliased so furnitureInstanceProjectScopeFmt keeps resolving.
 	//
-	// #821: the material choices seed is the FROZEN commercial truth. The
+	// #821: the option choices seed is the FROZEN commercial truth. The
 	// authority revision mirrors React's selectCommercialQuoteRevision (the
 	// accepted revision wins; otherwise the highest revision number), and its
 	// per-unit snapshot options override the mutable current-link choices so
