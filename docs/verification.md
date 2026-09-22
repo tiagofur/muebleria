@@ -71,10 +71,15 @@ by the approved issue when that lane uses one.
 - instalación de dependencias estricta sin fallbacks permisivos (`|| true`);
 - typecheck estricto (`pnpm typecheck`);
 - suite de tests obligatorios de TypeScript verdes;
-- suite de tests de backend Go (`go test ./...`) ejecutada y verde;
+- suite de tests de backend Go ejecutada y verde;
 - ningún error silenciado.
 
-> **Implementado (OC-001 + OC-002):** `./init.sh` valida harness, monorepo TS completo y backend Go. CI remoto corre en GitHub Actions (`.github/workflows/ci.yml`).
+> **Estado 2026-09-22:** `./init.sh` todavía invoca `go test ./...` directamente.
+> #823 debe reemplazar esa ruta por el runner PostgreSQL descartable definido en
+> `docs/architecture/test-database-isolation.md`. Mientras #823 no esté integrado,
+> no usar el harness histórico como forma de ejecutar tests escribibles contra el
+> PostgreSQL persistente de desarrollo; usar los gates/entornos efímeros existentes.
+> CI remoto ya usa un service container PostgreSQL efímero.
 
 ---
 
@@ -125,6 +130,29 @@ pnpm typecheck
 
 Ejecutar `go test` sobre el paquete afectado y, antes de cierre de feature server-side,
 la suite backend razonablemente completa definida por el repo.
+
+#### PostgreSQL real sin contaminar desarrollo (#823)
+
+Autoridad: `docs/architecture/test-database-isolation.md`.
+
+Los tests de integración pueden y deben usar PostgreSQL real, RLS real, roles reales,
+migrations y múltiples conexiones cuando el claim lo requiere, pero **nunca** escriben
+en una base persistente de desarrollo/producción. El entorno escribible debe ser un
+contenedor PostgreSQL efímero o una DB throwaway inequívocamente de test.
+
+`t.Cleanup`, DELETE por ID/nombre y restauración manual de valores son defensas
+secundarias, no aislamiento primario. Un test cancelado/fallido debe poder perder todo
+su cleanup sin dejar business rows en la DB normal.
+
+Estado actual: `scripts/organization-browser-gate.sh`, Pilot Readiness y varias suites
+throwaway ya cumplen. #823 migra los tests legacy que todavía aceptan
+`localhost:5445/muebles`, añade guardia fail-closed antes del primer write, blinda
+Playwright organization, enruta `init.sh` por el runner aislado y agrega un gate
+anti-regresión.
+
+Hasta integrar #823, una ejecución local directa de tests escribibles sólo es válida si
+el operador ha preparado explícitamente una DB/contenedor descartable; apuntar a
+`.../muebles` no es una receta de verificación aceptada.
 
 ### Granete for SketchUp — reconciliación del host
 
