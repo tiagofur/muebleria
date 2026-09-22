@@ -914,6 +914,80 @@ func TestAuthoringResolveParityWithGetLayout(t *testing.T) {
 	}
 }
 
+// #821: the MINIMAL accepted authoring snapshot (parameters + complete
+// materialChoices, default occurrences) — exactly what a first SketchUp
+// placement submits — must answer with the exact per-board material map and
+// photographic texture metadata the renderer paints. Chosen roles carry the
+// real board identity; unchosen roles keep the palette fallback and never
+// invent a texture.
+func TestAuthoringResolveMinimalSnapshotCarriesExactMaterialMetadata(t *testing.T) {
+	server, token := authoringStubServer(t)
+
+	rec := postAuthoringResolve(server, token, "", authoringFixtureRequest(authoringCatalogRevision(t, server), authoringResolveFurniture{
+		FurnitureDefinitionID: authoringFixtureModuleID,
+		Parameters:            map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0},
+		MaterialChoices:       map[string]string{"FRENTE": "mat-oak18", "INTERIOR": "mat-white18"},
+	}))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST resolve status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var response struct {
+		Status   string `json:"status"`
+		Resolved *struct {
+			Layout struct {
+				Components []struct {
+					ComponentInstanceID         string  `json:"componentInstanceId"`
+					OptionRole                  string  `json:"optionRole"`
+					MaterialID                  string  `json:"materialId"`
+					MaterialName                string  `json:"materialName"`
+					MaterialColorHex            string  `json:"materialColorHex"`
+					MaterialTextureURL          string  `json:"materialTextureUrl"`
+					MaterialTextureTileWidthMm  float64 `json:"materialTextureTileWidthMm"`
+					MaterialTextureTileLengthMm float64 `json:"materialTextureTileLengthMm"`
+				} `json:"components"`
+			} `json:"layout"`
+		} `json:"resolved"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode resolve: %v", err)
+	}
+	if response.Status != "accepted" || response.Resolved == nil {
+		t.Fatalf("expected accepted resolve: %s", rec.Body.String())
+	}
+
+	for _, board := range response.Resolved.Layout.Components {
+		switch board.OptionRole {
+		case "FRENTE":
+			if board.MaterialID != "mat-oak18" || board.MaterialName != "Roble Claro" ||
+				board.MaterialColorHex != "#c4a574" ||
+				board.MaterialTextureURL != "/api/media/materials/roble-claro-texture.webp" ||
+				board.MaterialTextureTileWidthMm != 600 || board.MaterialTextureTileLengthMm != 1200 {
+				t.Fatalf("FRENTE board %s material metadata = %+v, want the exact quoted Roble Claro finish with its photographic texture",
+					board.ComponentInstanceID, board)
+			}
+		case "INTERIOR":
+			if board.MaterialID != "mat-white18" || board.MaterialName != "Melamina Blanca" ||
+				board.MaterialColorHex != "#f5f5f0" || board.MaterialTextureURL != "" {
+				t.Fatalf("INTERIOR board %s material metadata = %+v, want the exact quoted Melamina Blanca finish without an invented texture",
+					board.ComponentInstanceID, board)
+			}
+		case "LATERAL", "FONDO":
+			if board.MaterialID != "" || board.MaterialTextureURL != "" {
+				t.Fatalf("unchosen role %s board %s invented material metadata: %+v",
+					board.OptionRole, board.ComponentInstanceID, board)
+			}
+		}
+	}
+	roles := map[string]int{}
+	for _, board := range response.Resolved.Layout.Components {
+		roles[board.OptionRole]++
+	}
+	if roles["FRENTE"] == 0 || roles["INTERIOR"] == 0 || roles["LATERAL"] == 0 {
+		t.Fatalf("default occurrence expansion missing boards: %v", roles)
+	}
+}
+
 // Stateless retries are deterministic: byte-identical responses, no receipts.
 func TestAuthoringResolveDeterministicRetries(t *testing.T) {
 	server, token := authoringStubServer(t)

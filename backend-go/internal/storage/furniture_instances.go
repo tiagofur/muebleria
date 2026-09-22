@@ -324,10 +324,12 @@ type FurnitureInstanceSummary struct {
 	// to a quote line (project_items.custom_dims wins), else the module's
 	// default dimensions. nil when neither source knows any dimension.
 	DisplayDims *domain.ItemCustomDims
-	// DisplayMaterialChoices are the quoted board choices (option group code
-	// -> material id) from the unit's current quote line option_choices, so an
-	// authoring placement seeds the finish the customer chose (#620). nil when
-	// the unit carries no quoted finish.
+	// DisplayMaterialChoices are the frozen quoted board choices (option
+	// group code -> material id) of the unit inside the commercial snapshot of
+	// the project's authority quote revision — the exact immutable Q/R truth
+	// React renders as "Q# · Solo lectura" (#821). Legacy projects without a
+	// snapshot fall back to the live current-link option_choices (#620).
+	// nil when neither source carries a finish.
 	DisplayMaterialChoices map[string]string
 }
 
@@ -335,7 +337,9 @@ type FurnitureInstanceSummary struct {
 // their presentation summary in one consistent snapshot. Quote-line custom
 // dimensions win over module defaults because they are the commercial truth
 // the physical unit was materialized from (#386); the module defaults are the
-// fallback for definition-less or unlinked units.
+// fallback for definition-less or unlinked units. Material choices seed from
+// the frozen authority-revision snapshot (#821) with the live current-link
+// choices as the legacy fallback (#620).
 func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Context, projectID string, includeTerminal bool) ([]FurnitureInstanceSummary, error) {
 	filter := `AND lifecycle_status = 'active'`
 	if includeTerminal {
@@ -344,7 +348,36 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 	// Inner select mirrors furnitureInstanceColumns but aliases each output so
 	// the outer join can address fi.furniture_definition_id; the inner table
 	// stays unaliased so furnitureInstanceProjectScopeFmt keeps resolving.
+	//
+	// #821: the material choices seed is the FROZEN commercial truth. The
+	// authority revision mirrors React's selectCommercialQuoteRevision (the
+	// accepted revision wins; otherwise the highest revision number), and its
+	// per-unit snapshot options override the mutable current-link choices so
+	// SketchUp can never silently render a commercial state Q# no longer
+	// holds. A unit PRESENT in the snapshot with zero options is a frozen
+	// EMPTY authority (no live fallback — R2); only units genuinely absent
+	// from the snapshot keep the #620 live fallback.
 	rows, err := s.db(ctx).Query(ctx, `
+		WITH authority_revision AS (
+			SELECT commercial_snapshot
+			FROM quote_revisions
+			WHERE project_id = $1
+			ORDER BY (status = 'accepted') DESC, revision_number DESC NULLS LAST, created_at DESC
+			LIMIT 1
+		),
+		snapshot_options AS (
+			SELECT unit->>'furnitureInstanceId' AS furniture_instance_id,
+			       (SELECT jsonb_object_agg(option->>'groupCode', option->>'choiceId')
+			        FROM jsonb_array_elements(CASE WHEN jsonb_typeof(unit->'options') = 'array'
+			                                      THEN unit->'options' ELSE '[]'::jsonb END) AS option
+			        WHERE NULLIF(option->>'groupCode', '') IS NOT NULL
+			          AND NULLIF(option->>'choiceId', '') IS NOT NULL) AS option_choices
+			FROM authority_revision ar,
+			     jsonb_array_elements(CASE WHEN jsonb_typeof(ar.commercial_snapshot->'units') = 'array'
+			                               THEN ar.commercial_snapshot->'units' ELSE '[]'::jsonb END) AS unit
+			WHERE ar.commercial_snapshot IS NOT NULL
+			  AND unit->>'furnitureInstanceId' IS NOT NULL
+		)
 		SELECT fi.*,
 			COALESCE(m.name, ''),
 			quoted.width_mm, quoted.height_mm, quoted.depth_mm,
@@ -363,11 +396,13 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 			SELECT (pi.custom_dims->>'widthMm')::int AS width_mm,
 			       (pi.custom_dims->>'heightMm')::int AS height_mm,
 			       (pi.custom_dims->>'depthMm')::int AS depth_mm,
+			       CASE WHEN so.furniture_instance_id IS NOT NULL THEN so.option_choices ELSE
 			       (SELECT jsonb_object_agg(pic.option_group_code, pic.choice_entity_id::text)
 			        FROM project_item_choices pic
-			        WHERE pic.project_item_id = pi.id) AS option_choices
+			        WHERE pic.project_item_id = pi.id) END AS option_choices
 			FROM quote_line_furniture_instances ql
 			JOIN project_items pi ON pi.id = ql.quote_line_id
+			LEFT JOIN snapshot_options so ON so.furniture_instance_id = fi.id::text
 			WHERE ql.furniture_instance_id = fi.id
 			  AND ql.project_id = fi.project_id
 			  AND ql.state = 'current'

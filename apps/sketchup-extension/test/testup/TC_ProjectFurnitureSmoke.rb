@@ -5,6 +5,8 @@ require 'tmpdir'
 require 'fileutils'
 require 'testup/testcase'
 
+require_relative '../support/smoke_textures'
+
 # Host smoke for #389 / DT-5 Place EXISTING FurnitureInstance: the INSTALLED
 # extension must materialize the native #415 hierarchy with the backend's
 # furnitureInstanceId stamped as authoritative business identity, keep the
@@ -81,10 +83,19 @@ module Granete
           Sketchup.file_new
           assert Sketchup.open_file(path), 'the host must reopen the model'
 
-          located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+          located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
           refute_nil located['entity'], 'placed identity must resolve after reopen'
           assert_equal 1, located['duplicates'], 'reopen must not duplicate the identity'
         end
+      end
+
+      # A real UI copy/paste preserves the entity's attribute dictionaries —
+      # the API's add_instance does NOT clone them, so the duplicate carries
+      # the original's identity explicitly.
+      def duplicate_root_of(original)
+        copy = model.active_entities.add_instance(original.definition, original.transformation)
+        metadata_store.write(copy, metadata_store.read(original))
+        copy
       end
 
       def test_copy_paste_duplicate_identity_fails_loud_not_valid
@@ -97,11 +108,9 @@ module Granete
         )
         assert first['success'], first.inspect
 
-        model.selection.clear
-        model.selection.add(first['entity'])
-        model.active_entities.add_instance(first['entity'].definition, first['entity'].transformation)
+        duplicate_root_of(first['entity'])
 
-        located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
         assert_equal 2, located['duplicates'], 'a copied root keeps the same business id'
       end
 
@@ -112,9 +121,7 @@ module Granete
         )
         assert first['success'], first.inspect
 
-        model.selection.clear
-        model.selection.add(first['entity'])
-        model.active_entities.add_instance(first['entity'].definition, first['entity'].transformation)
+        duplicate_root_of(first['entity'])
 
         precheck = Connection::DuplicateResolver.validate_model(model)
         refute precheck['valid'], 'precheck must reject duplicate business identity'
@@ -135,8 +142,8 @@ module Granete
         # Identity by ID only: identical definition/parameters never collapse
         # the two units, and each top-level definition stays isolated (V1).
         refute_equal first['entity'].definition, second['entity'].definition
-        located_first = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
-        located_second = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_2)
+        located_first = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located_second = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_2)
         assert_equal 1, located_first['duplicates']
         assert_equal 1, located_second['duplicates']
       end
@@ -144,13 +151,17 @@ module Granete
       def test_placement_inside_nested_editing_context_lands_at_model_root
         parent_group = model.entities.add_group
         parent_group.name = 'Pared o ambiente'
+        # Non-empty geometry: the real host purges empty groups during model
+        # operations, which would turn the nesting assertion into a stale
+        # reference instead of a real check.
+        parent_group.entities.add_face([0, 0, 0], [100, 0, 0], [100, 100, 0], [0, 100, 0])
         result = builder.place_existing_furniture(
           model, furniture_instance_id: FI_1, definition: catalog_definition,
                  parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
         )
         assert result['success'], result.inspect
 
-        located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
         refute_nil located['entity'], 'placed furniture must be found at root level'
         assert_equal 1, located['duplicates']
         assert_includes model.entities.to_a, located['entity'], 'entity must be in model.entities root'
@@ -171,17 +182,64 @@ module Granete
           model, furniture_instance_id: FI_1, definition: catalog_definition,
                  parameters: parameters, material_choices: choices,
                  project_id: PROJECT_ID, design_id: DESIGN_ID,
-                 transformation: ProjectFurniture::TransformContract.to_host(contract),
+                 transformation: Connection::ProjectFurniture::TransformContract.to_host(contract),
                  prepare: false, preserve_parameters: true
         )
 
         assert result['success'], result.inspect
         root = result['entity']
         assert_empty model.selection, 'restore must not select the root or activate Move'
-        assert_equal contract, ProjectFurniture::TransformContract.from_host(root.transformation)
+        assert_equal contract, Connection::ProjectFurniture::TransformContract.from_host(root.transformation)
         metadata = metadata_store.read(root)
         assert_equal parameters, metadata.dig('intent', 'parameters')
         assert_equal choices, metadata.dig('intent', 'materialChoices')
+      end
+
+      # #821 host smoke — the FIRST placement of a quoted unit must PAINT the
+      # exact commercial finish with its photographic textures, before any
+      # edit: INTERIOR=Arauco Blanco Frosty 15mm and FRENTES=Arauco Moscato
+      # 15mm resolved through a real parsed NativeLayout (the server boundary
+      # is pinned hermetically; here we prove the installed renderer assigns
+      # SketchUp Material objects whose texture is set on first insertion).
+      def test_place_existing_with_resolved_layout_paints_quoted_finish_textures_first_render
+        blanco = write_smoke_texture('blanco.png', [0xF3, 0xF7, 0xFA])
+        moscato = write_smoke_texture('moscato.png', [0x8A, 0x69, 0x4C])
+        quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+        layout = Library::LayoutContract.parse!(resolved_layout_body(blanco, moscato))
+
+        result = textured_builder.place_existing_furniture(
+          model, furniture_instance_id: FI_1, definition: catalog_definition,
+                 parameters: { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 },
+                 resolved_layout: layout, material_choices: quoted_finish,
+                 project_id: PROJECT_ID, design_id: DESIGN_ID, prepare: false
+        )
+        assert result['success'], result.inspect
+
+        located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        refute_nil located['entity'], 'placed furniture must carry the server identity'
+        by_role = {}
+        located['entity'].definition.entities.grep(Sketchup::ComponentInstance).each do |child|
+          meta = metadata_store.read(child)
+          role = meta.is_a?(Hash) ? meta.dig('intent', 'materialBindingRole') : nil
+          by_role[role] = child if role
+        end
+
+        interior = by_role['INTERIOR']
+        front = by_role['FRENTES']
+        refute_nil interior, 'INTERIOR board missing from first render'
+        refute_nil front, 'FRENTES board missing from first render'
+
+        interior_material = interior.material
+        refute_nil interior_material, 'INTERIOR board must be painted on first insertion'
+        assert_equal 'Granete · Arauco Blanco Frosty 15mm', interior_material.name
+        refute_nil interior_material.texture, 'INTERIOR must carry its photographic texture on FIRST insertion'
+        assert_equal 'blanco.png', File.basename(interior_material.texture.filename)
+
+        front_material = front.material
+        refute_nil front_material, 'FRENTES board must be painted on first insertion'
+        assert_equal 'Granete · Arauco Moscato 15mm', front_material.name
+        refute_nil front_material.texture, 'FRENTES must carry its photographic texture on FIRST insertion'
+        assert_equal 'moscato.png', File.basename(front_material.texture.filename)
       end
 
       private
@@ -196,6 +254,61 @@ module Granete
 
       def builder
         Model::FurnitureBuilder.new(metadata_store: metadata_store)
+      end
+
+      # #821: the texture cache passes existing absolute paths through
+      # verbatim, so locally generated PNGs stand in for downloaded textures
+      # without any network dependency.
+      def textured_builder
+        Model::FurnitureBuilder.new(
+          metadata_store: metadata_store,
+          texture_cache: Assets::TextureCache.new
+        )
+      end
+
+      # Server-shaped resolved layout with the two distinct quoted board
+      # materials (the exact wire form the authoring resolve publishes).
+      def resolved_layout_body(blanco_path, moscato_path)
+        board = lambda do |component_id, role, name, material_id, material_name, color, texture|
+          {
+            'componentInstanceId' => component_id,
+            'componentDefinitionId' => "st-#{role.downcase}",
+            'slotId' => role.downcase, 'role' => role, 'optionRole' => role,
+            'name' => name, 'kind' => 'board',
+            'transform' => { 'translationMm' => [0, 0, 0] },
+            'dimensionsMm' => [600, 15, 716],
+            'widthMm' => 600, 'thicknessMm' => 15, 'lengthMm' => 716,
+            'localTransform' => {
+              'translationMm' => [0, 0, 0],
+              'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+            },
+            'materialId' => material_id, 'materialCode' => material_id.upcase,
+            'materialName' => material_name, 'materialColorHex' => color,
+            'materialTextureUrl' => texture,
+            'materialTextureTileWidthMm' => 600, 'materialTextureTileLengthMm' => 600
+          }
+        end
+        {
+          'furnitureDefinitionId' => DEFINITION_ID,
+          'definitionName' => 'Gabinete Base 600',
+          'transformContract' => 'granete.local-basis.v1',
+          'dimensionsMm' => [600, 720, 560],
+          'components' => [
+            board.call('st-interior-copy-0', 'INTERIOR', 'Lateral', 'white-id',
+                       'Arauco Blanco Frosty 15mm', '#F3F7FA', blanco_path),
+            board.call('st-frentes-copy-0', 'FRENTES', 'Puerta', 'moscato-id',
+                       'Arauco Moscato 15mm', '#8A694C', moscato_path)
+          ],
+          'hardware' => []
+        }
+      end
+
+      # Emits a minimal valid PNG (8-bit truecolor) so the real host can load
+      # it as a material texture. Pure stdlib: no image gems in SketchUp. The
+      # emitter lives in test/support/smoke_textures.rb with a portable
+      # structural unit proof (#821 R3).
+      def write_smoke_texture(name, rgb)
+        Granete::SketchUpExtension::SmokeTextures.write(name, rgb)
       end
 
       def top_level_furniture

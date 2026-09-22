@@ -22,6 +22,7 @@ require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 MB = Granete::SketchUpExtension::Connection::ModelBinding
 PF = Granete::SketchUpExtension::Connection::ProjectFurniture
 MS = Granete::SketchUpExtension::Metadata::Store
+LIB = Granete::SketchUpExtension::Library
 FBUILDER = Granete::SketchUpExtension::Model::FurnitureBuilder
 
 # #389 / DT-5 — Project Furniture panel + Place EXISTING FurnitureInstance.
@@ -123,6 +124,30 @@ class ProjectFurnitureTest < Minitest::Test
   class FakeCatalog
     attr_reader :definitions, :layout_resolves
 
+    # #821 regression vocabulary: two distinct quoted board materials with
+    # photographic textures, mirroring the commercial demo (Arauco Blanco
+    # Frosty / Arauco Moscato). A third material exercises the edit target.
+    LAYOUT_MATERIALS = {
+      'white-id' => { 'id' => 'white-id', 'code' => 'ARA-BLA-FRO-15',
+                      'name' => 'Arauco Blanco Frosty 15mm', 'color' => '#F3F7FA',
+                      'texture' => '/textures/blanco.jpg' },
+      'moscato-id' => { 'id' => 'moscato-id', 'code' => 'ARA-MOS-15',
+                        'name' => 'Arauco Moscato 15mm', 'color' => '#8A694C',
+                        'texture' => '/textures/moscato.jpg' },
+      'white-2-id' => { 'id' => 'white-2-id', 'code' => 'ARA-BLA-NOV-15',
+                        'name' => 'Arauco Blanco Nova 15mm', 'color' => '#EFEFE9',
+                        'texture' => '/textures/blanco-nova.jpg' }
+    }.freeze
+
+    LAYOUT_ROLES = [
+      { 'role' => 'INTERIOR', 'name' => 'Lateral' },
+      { 'role' => 'FRENTES', 'name' => 'Puerta' }
+    ].freeze
+
+    PALETTE_FALLBACK = {
+      'INTERIOR' => '#d4c4a8', 'FRENTES' => '#c4a574'
+    }.freeze
+
     def initialize
       @layout_resolves = []
       @definitions = [
@@ -149,12 +174,75 @@ class ProjectFurnitureTest < Minitest::Test
     end
 
     # Records the authoritative resolve the placement asked for (#620: the
-    # quoted finish must reach the layout), then stays on the documented
-    # generic authoring path.
+    # quoted finish must reach the layout) and answers with a REAL parsed
+    # NativeLayout (#821): per-role board materials + photographic textures
+    # when the choice maps to a catalog material, palette fallback otherwise —
+    # the exact server semantics of the material-aware resolve boundary.
     def resolved_native_layout(definition_id, parameters = {}, choices = {})
       @layout_resolves << { 'definition_id' => definition_id,
                             'parameters' => parameters.dup, 'choices' => choices.dup }
-      nil
+      LIB::LayoutContract.parse!(layout_body(choices))
+    end
+
+    # Server-shaped resolved composition at the definition defaults: one board
+    # per material role, carrying the chosen material's identity + texture.
+    def layout_body(choices = {})
+      {
+        'furnitureDefinitionId' => DEFINITION_ID,
+        'definitionName' => 'Gabinete Base 600',
+        'transformContract' => 'granete.local-basis.v1',
+        'dimensionsMm' => [600, 720, 560],
+        'components' => LAYOUT_ROLES.each_with_index.map do |role_entry, index|
+          board = {
+            'componentInstanceId' => "st-#{role_entry['role'].downcase}-copy-#{index}",
+            'componentDefinitionId' => "st-#{role_entry['role'].downcase}",
+            'slotId' => role_entry['role'].downcase,
+            'role' => role_entry['role'], 'optionRole' => role_entry['role'],
+            'name' => role_entry['name'], 'kind' => 'board',
+            'transform' => { 'translationMm' => [0, 0, index * 20] },
+            'dimensionsMm' => [600, 15, 716],
+            'widthMm' => 600, 'thicknessMm' => 15, 'lengthMm' => 716,
+            'localTransform' => {
+              'translationMm' => [0, 0, index * 20],
+              'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+            }
+          }
+          material = LAYOUT_MATERIALS[choices[role_entry['role']]]
+          if material
+            board.merge!(
+              'materialId' => material['id'], 'materialCode' => material['code'],
+              'materialName' => material['name'], 'materialColorHex' => material['color'],
+              'materialTextureUrl' => material['texture'],
+              'materialTextureTileWidthMm' => 600, 'materialTextureTileLengthMm' => 600
+            )
+          else
+            board['materialColorHex'] = PALETTE_FALLBACK.fetch(role_entry['role'], '#c8b89a')
+          end
+          board
+        end,
+        'hardware' => []
+      }
+    end
+  end
+
+  # Materializes texture URLs as real local files — the contract a
+  # successfully downloaded texture satisfies for MaterialApplier.
+  class FakeTextureCache
+    attr_reader :resolved_urls
+
+    def initialize
+      require 'tmpdir'
+      @dir = Dir.mktmpdir('granete_pf_textures')
+      @resolved_urls = []
+    end
+
+    def resolve_texture(url)
+      return nil if url.nil? || url.to_s.strip.empty?
+
+      @resolved_urls << url
+      path = File.join(@dir, File.basename(url))
+      File.binwrite(path, "TEXTURE-#{url}") unless File.file?(path)
+      path
     end
   end
 
@@ -256,6 +344,177 @@ class ProjectFurnitureTest < Minitest::Test
 
     put = @transport.requests_for('PUT', %r{/working-copy}).first
     assert_equal quoted_finish, put['body']['items'].first['material_choices']
+  end
+
+  # #821 regression — the acceptance sequence verbatim: the quoted finish
+  # (INTERIOR=Blanco Frosty, FRENTES=Moscato, both with photographic
+  # textures) must be PAINTED by the FIRST placement, before any edit, from a
+  # real parsed NativeLayout — not merely recorded on the resolve call.
+  def test_place_existing_paints_quoted_finish_and_textures_on_first_placement
+    quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_choices: quoted_finish)])
+    stub_working_copy(working_copy_body([]))
+    texture_cache = FakeTextureCache.new
+    placer = build_placer(texture_cache: texture_cache)
+
+    result = placer.place(FI_1)
+    assert result['ok'], result.inspect
+
+    # The authoritative resolve carried the exact quoted finish.
+    assert_equal quoted_finish, @catalog.layout_resolves.last['choices']
+
+    root = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    refute_nil root
+    painted = painted_boards(root)
+    assert_equal 2, painted.length
+
+    interior = painted.find { |p| p[:role] == 'INTERIOR' }
+    front = painted.find { |p| p[:role] == 'FRENTES' }
+
+    # FIRST render, without touching anything: correct material identities
+    # AND their photographic textures on the SketchUp Material objects.
+    assert_equal 'Granete · Arauco Blanco Frosty 15mm', interior[:material].name
+    assert_equal '#F3F7FA', interior[:material].color
+    assert_equal 'blanco.jpg', File.basename(interior[:material].texture.filename)
+    assert_equal 'Granete · Arauco Moscato 15mm', front[:material].name
+    assert_equal '#8A694C', front[:material].color
+    assert_equal 'moscato.jpg', File.basename(front[:material].texture.filename)
+    assert_includes texture_cache.resolved_urls, '/textures/blanco.jpg'
+    assert_includes texture_cache.resolved_urls, '/textures/moscato.jpg'
+
+    # Child part metadata carries the resolved material binding role.
+    assert_equal 'INTERIOR', interior.dig(:metadata, 'intent', 'materialBindingRole')
+    assert_equal 'FRENTES', front.dig(:metadata, 'intent', 'materialBindingRole')
+  end
+
+  # #821 R1 regression — a PARTIAL WorkingCopy item overlays the frozen
+  # quoted finish; it never silently deletes the commercial roles it does not
+  # carry. Frozen INTERIOR=white/FRENTES=moscato + authored INTERIOR=black
+  # must seed {INTERIOR: black, FRENTES: moscato}. A working item without a
+  # local root routes to RESTORE, not place — so the composition is proven at
+  # the exact seam the placer consumes (placement_inputs), matching the
+  # reviewer's resolve-input invariant.
+  def test_place_existing_partial_working_item_overlays_without_dropping_frozen_choices
+    quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+    instance = PF::Contract.parse_instance!(
+      'id' => FI_1, 'project_id' => PROJECT_ID, 'origin' => 'quote', 'lifecycle_status' => 'active',
+      'furniture_definition_id' => DEFINITION_ID,
+      'display' => { 'name' => 'Gabinete Base 600',
+                     'dimensions_mm' => { 'width' => 600, 'height' => 720, 'depth' => 560 },
+                     'material_choices' => quoted_finish }
+    )
+    service = PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new)
+    partial_item = { 'furniture_instance_id' => FI_1,
+                     'furniture_definition_id' => DEFINITION_ID,
+                     'parameters' => { 'widthMm' => 600 },
+                     'material_choices' => { 'INTERIOR' => 'black-id' } }
+    @transport.respond(:get, "/designs/#{DESIGN_ID}/working-copy", 200,
+                       working_copy_body([partial_item]))
+    binding = MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R1)
+
+    _params, choices = PF::PlacementGuards.placement_inputs(
+      service, PF::IntentStore.new, binding, instance, @catalog.find_definition(DEFINITION_ID)
+    )
+
+    assert_equal({ 'INTERIOR' => 'black-id', 'FRENTES' => 'moscato-id' }, choices,
+                 'the partial authored item overlays; the frozen Moscato finish survives')
+
+    # The composed map drives the authoritative resolve: the front board
+    # still resolves Moscato with its photographic texture.
+    layout = @catalog.resolved_native_layout(DEFINITION_ID, {}, choices)
+    front = layout.boards.find { |b| b.option_role == 'FRENTES' }
+    assert_equal 'moscato-id', front.material_id
+    assert_equal '/textures/moscato.jpg', front.material_texture_url
+  end
+
+  # #821 R1 — the pending create-and-place intent composes with the frozen
+  # finish under the SAME authority rule (it is a delta, not a full snapshot:
+  # the roles it omits keep the commercial truth), and the FIRST render
+  # through the real place flow keeps the Moscato texture.
+  def test_place_existing_pending_intent_overlays_without_dropping_frozen_choices
+    quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_choices: quoted_finish)])
+    stub_working_copy(working_copy_body([]))
+    intent_store = PF::IntentStore.new
+    intent_store.store(FI_1, parameters: { 'widthMm' => 600 },
+                             material_choices: { 'INTERIOR' => 'black-id' })
+    texture_cache = FakeTextureCache.new
+    placer = PF::Placer.new(
+      model_provider: -> { @model },
+      binding_store_factory: -> { MB::Store.new(@model) },
+      model_binding_service: MB::Service.new(
+        transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new
+      ),
+      service: PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new),
+      metadata_store_factory: ->(_m) { MS.new(@model) },
+      catalog_provider: @catalog,
+      furniture_builder_factory: ->(m) { FBUILDER.new(metadata_store: MS.new(m), texture_cache: texture_cache) },
+      intent_store: intent_store, logger: NullLogger.new
+    )
+
+    result = placer.place(FI_1)
+    assert result['ok'], result.inspect
+
+    assert_equal({ 'INTERIOR' => 'black-id', 'FRENTES' => 'moscato-id' },
+                 @catalog.layout_resolves.last['choices'])
+
+    # FIRST render through the real place flow: the door keeps the frozen
+    # Moscato finish with its photographic texture.
+    painted = painted_boards(PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity'])
+    front = painted.find { |p| p[:role] == 'FRENTES' }
+    assert_equal 'Granete · Arauco Moscato 15mm', front[:material].name
+    assert_equal 'moscato.jpg', File.basename(front[:material].texture.filename),
+                 'the frozen Moscato finish must keep its photographic texture'
+    assert_includes texture_cache.resolved_urls, '/textures/moscato.jpg'
+  end
+
+  # #821 regression — the second half of the acceptance sequence: changing
+  # ONLY INTERIOR updates exactly that role; FRENTES keeps its material
+  # identity and visual texture byte-for-byte, with no unrelated role churn.
+  def test_update_of_only_interior_keeps_frentes_material_and_texture
+    quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+    @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
+                       [instance_body(FI_1, 'quote', display_choices: quoted_finish)])
+    stub_working_copy(working_copy_body([]))
+    texture_cache = FakeTextureCache.new
+    placer = build_placer(texture_cache: texture_cache)
+
+    assert placer.place(FI_1)['ok']
+    root = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    before = painted_boards(root)
+    front_before = before.find { |p| p[:role] == 'FRENTES' }
+    interior_before = before.find { |p| p[:role] == 'INTERIOR' }
+
+    # The current authoring edit path: merged choices = persisted intent ∪
+    # the single-role edit (dialog_controller#merged_material_choices), one
+    # server resolve, in-place rebuild.
+    persisted = MS.new(@model).read(root).dig('intent', 'materialChoices')
+    merged = persisted.merge('INTERIOR' => 'white-2-id')
+    layout = @catalog.resolved_native_layout(DEFINITION_ID,
+                                             MS.new(@model).read(root).dig('intent', 'parameters'), merged)
+    builder = FBUILDER.new(metadata_store: MS.new(@model), texture_cache: texture_cache)
+    outcome = builder.update_furniture(@model, root, @catalog.find_definition(DEFINITION_ID),
+                                       MS.new(@model).read(root).dig('intent', 'parameters'),
+                                       resolved_layout: layout, material_choices: merged,
+                                       transaction: false)
+    assert outcome['success'], outcome.inspect
+
+    after = painted_boards(root)
+    front_after = after.find { |p| p[:role] == 'FRENTES' }
+    interior_after = after.find { |p| p[:role] == 'INTERIOR' }
+
+    # INTERIOR updated as requested…
+    assert_equal 'Granete · Arauco Blanco Nova 15mm', interior_after[:material].name
+    assert_equal 'blanco-nova.jpg', File.basename(interior_after[:material].texture.filename)
+    refute_equal interior_before[:material].name, interior_after[:material].name
+
+    # …FRENTES material identity and visual texture unchanged.
+    assert_equal front_before[:material].name, front_after[:material].name
+    assert_equal 'Granete · Arauco Moscato 15mm', front_after[:material].name
+    assert_equal front_before[:material].texture.filename, front_after[:material].texture.filename
+    assert_equal 'moscato.jpg', File.basename(front_after[:material].texture.filename)
   end
 
   # A WorkingCopy item without its root is missing_local, never an ordinary
@@ -1479,7 +1738,7 @@ class ProjectFurnitureTest < Minitest::Test
     entity
   end
 
-  def build_placer(model: @model, transport: @transport)
+  def build_placer(model: @model, transport: @transport, texture_cache: nil)
     PF::Placer.new(
       model_provider: -> { model },
       binding_store_factory: -> { MB::Store.new(model) },
@@ -1492,10 +1751,24 @@ class ProjectFurnitureTest < Minitest::Test
       metadata_store_factory: ->(_m) { MS.new(model) },
       catalog_provider: @catalog,
       furniture_builder_factory: lambda { |m|
-        FBUILDER.new(metadata_store: MS.new(m))
+        FBUILDER.new(metadata_store: MS.new(m), texture_cache: texture_cache)
       },
       logger: NullLogger.new
     )
+  end
+
+  # Painted state of a placed furniture root's board children: the assigned
+  # SketchUp material + the child's persisted metadata, keyed by the resolved
+  # material binding role.
+  def painted_boards(root)
+    store = MS.new(@model)
+    root.definition.entities.to_a.filter_map do |child|
+      metadata = store.read(child)
+      next unless metadata.is_a?(Hash) && metadata.dig('intent', 'materialBindingRole')
+
+      { role: metadata.dig('intent', 'materialBindingRole'),
+        material: child.material, metadata: metadata }
+    end
   end
 
   def write_binding(model, base: REVISION_R1)

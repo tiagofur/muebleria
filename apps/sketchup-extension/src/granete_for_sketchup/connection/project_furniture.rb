@@ -14,9 +14,9 @@ module Granete
       #   * placement state is DERIVED per furnitureInstanceId from active
       #     project membership, exact DesignWorkingCopy intent and one
       #     top-level host inventory — no global placed flag exists;
-      #   * board choices seed from the authored working item or the
-      #     quoted finish on the instance display — a placement never
-      #     silently drops the acabado the customer chose (#620);
+      #   * board choices seed from the frozen quoted finish overlaid by
+      #     the authored working item's explicit roles — a placement never
+      #     silently drops the acabado the customer chose (#620, #821 R1);
       #   * resolution stays server-authoritative (display summary + layout);
       #   * the working copy update is a merge (GET → merge by
       #     furnitureInstanceId → PUT complete state) so other working items
@@ -245,28 +245,40 @@ module Granete
 
           # Authoritative inputs for placing an existing unit (#389 §8 +
           # #620): a pending create-and-place intent is resumed verbatim
-          # (recovery), else parameters seed from the quoted display and the
-          # board choices cascade below.
+          # (recovery, its choices composed with the frozen finish below),
+          # else parameters seed from the quoted display and the board
+          # choices cascade below.
           def placement_inputs(service, intent_store, binding, instance, definition)
             pending = intent_store.fetch(instance.id)
-            return [pending['parameters'], pending['material_choices']] if pending
+            if pending
+              return [pending['parameters'],
+                      compose_effective_choices(instance, pending['material_choices'])]
+            end
 
             [WorkingCopyMerger.placement_parameters(instance, definition),
              seed_material_choices(service, binding, instance)]
           end
 
-          # Board choices for placing an existing unit (#620): an authored
-          # working item wins (its material_choices are the design truth the
-          # confirm merge keeps verbatim, so the local render must match),
-          # else the quoted finish the server exposes on the instance
-          # display. Empty when neither source carries a finish — the layout
-          # then resolves server defaults, as before.
+          # Board choices for placing an existing unit (#620 + #821 R1): the
+          # FROZEN quoted finish from the instance display is the base and an
+          # authored working item OVERLAYS the roles it actually carries. A
+          # partial item (one edited role) must never silently delete the
+          # other frozen commercial options — that drop is exactly the
+          # first-render palette-fallback regression. No UI defaults or
+          # "first material" ever fill absent roles.
           def seed_material_choices(service, binding, instance)
             working = service.get_working_copy(binding.design_id)
             item = working.items.find { |candidate| candidate.furniture_instance_id == instance.id }
-            return item.material_choices.dup if item && !item.material_choices.nil? && !item.material_choices.empty?
+            compose_effective_choices(instance, item&.material_choices)
+          end
 
-            instance.display_material_choices || {}
+          # base = frozen display choices; overlay = explicit authored/intent
+          # choices. The overlay wins only for the keys it contains.
+          def compose_effective_choices(instance, overlay)
+            base = instance.display_material_choices || {}
+            return base.dup unless overlay.is_a?(Hash) && !overlay.empty?
+
+            base.merge(overlay)
           end
         end
 

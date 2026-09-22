@@ -8,6 +8,8 @@ require_relative '../../src/granete_for_sketchup/transport/adapter'
 require_relative '../../src/granete_for_sketchup/transport/http_adapter'
 require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contract'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
+require_relative '../../src/granete_for_sketchup/library/layout_contract'
+require_relative '../../src/granete_for_sketchup/library/authoring_resolve_contract'
 
 class RemoteCatalogProviderTest < Minitest::Test
   class FakeTransport
@@ -291,12 +293,19 @@ class RemoteCatalogProviderTest < Minitest::Test
   LAYOUT = {
     'furnitureDefinitionId' => '11111111-1111-1111-1111-111111111111',
     'definitionName' => 'Módulo Base',
+    'transformContract' => 'granete.local-basis.v1',
     'dimensionsMm' => [600, 720, 560],
     'components' => [
       { 'componentInstanceId' => 'st-side-l', 'slotId' => 'lateral_izquierdo', 'name' => 'Lateral',
-        'kind' => 'board', 'transform' => { 'translationMm' => [0, 0, 0] }, 'dimensionsMm' => [18, 560, 684] },
+        'kind' => 'board', 'transform' => { 'translationMm' => [0, 0, 0] }, 'dimensionsMm' => [18, 560, 684],
+        'widthMm' => 560, 'thicknessMm' => 18, 'lengthMm' => 684,
+        'localTransform' => { 'translationMm' => [0, 0, 0],
+                              'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] } } },
       { 'componentInstanceId' => 'mod-door', 'slotId' => 'puerta', 'name' => 'Puerta',
-        'kind' => 'board', 'transform' => { 'translationMm' => [2, 560, 2] }, 'dimensionsMm' => [596, 18, 716] }
+        'kind' => 'board', 'transform' => { 'translationMm' => [2, 560, 2] }, 'dimensionsMm' => [596, 18, 716],
+        'widthMm' => 596, 'thicknessMm' => 18, 'lengthMm' => 716,
+        'localTransform' => { 'translationMm' => [2, 560, 2],
+                              'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] } } }
     ],
     'hardware' => [
       { 'placementId' => 'mod-door-hw-0', 'hardwareId' => 'hw-handle', 'name' => 'Manija 160',
@@ -456,6 +465,196 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal 2, defs2.length
     assert_equal 2, transport.requests
     assert_equal({ 'If-None-Match' => '"workshop-v1"' }, transport.last_payload['headers'])
+  end
+
+  # --- #821: resolved_native_layout is the single productive material-aware
+  # --- resolve boundary (POST /furniture/authoring/resolve with the minimal
+  # --- accepted snapshot), NOT the legacy GET layout channel.
+
+  GOLDEN_AUTHORING = File.expand_path('../../../../contracts/sketchupAuthoringResolve.contract.json', __dir__)
+  PARITY_DEFINITION_ID = '22222222-2222-2222-2222-222222222222'
+  PARITY_CATALOG_REVISION = 'workshop-8588028751d3'
+
+  # Router-style transport with queued responses per [method, path] plus a
+  # request journal — the authoring boundary needs dynamic correlation echoes.
+  class RoutingTransport
+    attr_reader :requests
+
+    def initialize
+      @routes = {}
+      @requests = []
+    end
+
+    def configured?
+      true
+    end
+
+    def enqueue(method, path, response)
+      (@routes[[method.to_s.upcase, path]] ||= []) << response
+    end
+
+    def request(payload, authorization_header: nil)
+      method = payload['method'].to_s.upcase
+      path = payload['path']
+      @requests << { 'method' => method, 'path' => path, 'body' => payload['body'],
+                     'authorization' => authorization_header }
+      queue = @routes[[method, path]]
+      response = queue&.shift
+      raise Granete::SketchUpExtension::Transport::RequestError, "no route for #{method} #{path}" if response.nil?
+
+      response.respond_to?(:call) ? response.call(payload) : response
+    end
+
+    def requests_for(method, path_pattern)
+      @requests.select { |r| r['method'] == method.to_s.upcase && r['path'].match?(path_pattern) }
+    end
+  end
+
+  def authoring_golden
+    @authoring_golden ||= JSON.parse(File.read(GOLDEN_AUTHORING))
+  end
+
+  def parity_scenario
+    authoring_golden['scenarios'].find { |s| s['id'] == '01-params-materials-parity' }
+  end
+
+  # Rewrites the golden accepted response so its correlation echoes the exact
+  # request the provider generated (ids are SecureRandom inside the seam).
+  def echoing_accepted_response(scenario)
+    lambda do |payload|
+      request = payload['body']
+      body = JSON.parse(JSON.generate(scenario['response']))
+      body['inReplyToMessageId'] = request['messageId']
+      body['responseMessageId'] = "resolve-#{request['messageId']}"
+      body['idempotencyKey'] = request['idempotencyKey']
+      body['catalogRevision'] = request['furniture']['catalogRevision']
+      { 'status' => 200, 'body' => body }
+    end
+  end
+
+  def rejected_response(code:, message:, correlation_from:)
+    lambda do |payload|
+      request = payload['body']
+      body = {
+        'schemaId' => request['schemaId'], 'schemaName' => request['schemaName'],
+        'schemaVersion' => request['schemaVersion'], 'resolveContract' => request['schemaId'],
+        'responseMessageId' => "resolve-#{request['messageId']}",
+        'inReplyToMessageId' => request['messageId'],
+        'idempotencyKey' => request['idempotencyKey'],
+        'catalogRevision' => request['furniture']['catalogRevision'],
+        'status' => 'rejected',
+        'issues' => [{ 'code' => code, 'message' => message, 'severity' => 'error',
+                       'path' => 'furniture.materialChoices' }]
+      }
+      _ = correlation_from
+      { 'status' => 422, 'body' => body }
+    end
+  end
+
+  def contract_with_revision(revision_id)
+    contract = JSON.parse(JSON.generate(CONTRACT))
+    contract['revisionId'] = revision_id
+    contract
+  end
+
+  def test_resolved_native_layout_uses_the_authoring_resolve_boundary_with_minimal_snapshot
+    transport = RoutingTransport.new
+    transport.enqueue(:get, '/furniture/definitions', 'status' => 200,
+                                                      'body' => contract_with_revision(PARITY_CATALOG_REVISION))
+    transport.enqueue(:post, '/furniture/authoring/resolve', echoing_accepted_response(parity_scenario))
+    provider = build_provider(transport: transport)
+    refute_nil provider.find_definition(PARITY_DEFINITION_ID),
+               'the placer always resolves the definition first — the catalog pin is warm'
+
+    layout = provider.resolved_native_layout(PARITY_DEFINITION_ID,
+                                             { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 },
+                                             'FRENTE' => 'mat-oak18')
+
+    refute_nil layout
+    assert_instance_of Granete::SketchUpExtension::Library::NativeLayout, layout
+
+    # Exactly ONE authoring resolve — and NO legacy GET layout request.
+    posts = transport.requests_for('POST', %r{/furniture/authoring/resolve})
+    assert_equal 1, posts.length
+    assert_empty transport.requests_for('GET', %r{/layout}),
+                 'the productive boundary must not resolve through GET layout'
+
+    furniture = posts.first['body']['furniture']
+    assert_equal PARITY_DEFINITION_ID, furniture['furnitureDefinitionId']
+    assert_equal PARITY_CATALOG_REVISION, furniture['catalogRevision']
+    assert_equal({ 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 }, furniture['parameters'])
+    assert_equal({ 'FRENTE' => 'mat-oak18' }, furniture['materialChoices'])
+    refute_includes furniture.keys, 'components',
+                    'the minimal accepted snapshot omits occurrences (default expansion)'
+    refute_includes furniture.keys, 'hardwarePlacements'
+
+    # The chosen role resolves the real board material + photographic texture;
+    # unchosen roles keep the palette fallback — no silent monocolor repaint.
+    door = layout.boards.find { |b| b.option_role == 'FRENTE' }
+    assert_equal 'mod-comp-door-copy-0', door.component_instance_id
+    assert_equal 'mat-oak18', door.material_id
+    assert_equal 'Roble Claro', door.material_name
+    assert_equal '#c4a574', door.material_color_hex
+    assert_equal '/api/media/materials/roble-claro-texture.webp', door.material_texture_url
+    interior = layout.boards.find { |b| b.option_role == 'INTERIOR' }
+    assert_nil interior.material_id, 'roles without a commercial choice keep the palette fallback'
+  end
+
+  def test_resolved_native_layout_rejection_is_loud_and_never_falls_back_to_get
+    transport = RoutingTransport.new
+    transport.enqueue(:get, '/furniture/definitions', 'status' => 200,
+                                                      'body' => contract_with_revision(PARITY_CATALOG_REVISION))
+    transport.enqueue(:post, '/furniture/authoring/resolve',
+                      rejected_response(code: 'MATERIAL_CHOICE_INVALID',
+                                        message: 'la elección FRENTE=mat-ghost no corresponde a un tablero activo',
+                                        correlation_from: nil))
+    provider = build_provider(transport: transport)
+    refute_nil provider.find_definition(PARITY_DEFINITION_ID)
+
+    error = assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveError) do
+      provider.resolved_native_layout(PARITY_DEFINITION_ID, {}, 'FRENTE' => 'mat-ghost')
+    end
+    assert(error.issues.any? { |issue| issue.code == 'MATERIAL_CHOICE_INVALID' },
+           'the structured issue must reach the caller')
+    assert_empty transport.requests_for('GET', %r{/layout}),
+                 'a rejected commercial finish must NEVER degrade to the GET palette-fallback channel'
+  end
+
+  def test_resolved_native_layout_refetches_once_on_stale_catalog_revision
+    transport = RoutingTransport.new
+    transport.enqueue(:get, '/furniture/definitions', 'status' => 200,
+                                                      'body' => contract_with_revision(PARITY_CATALOG_REVISION))
+    transport.enqueue(:post, '/furniture/authoring/resolve',
+                      rejected_response(code: 'CATALOG_REVISION_STALE',
+                                        message: 'el catálogo cambió', correlation_from: nil))
+    transport.enqueue(:get, '/furniture/definitions', 'status' => 200,
+                                                      'body' => contract_with_revision('workshop-fresh-pin'))
+    transport.enqueue(:post, '/furniture/authoring/resolve', echoing_accepted_response(parity_scenario))
+    provider = build_provider(transport: transport)
+    refute_nil provider.find_definition(PARITY_DEFINITION_ID)
+
+    layout = provider.resolved_native_layout(PARITY_DEFINITION_ID, {}, 'FRENTE' => 'mat-oak18')
+
+    refute_nil layout
+    posts = transport.requests_for('POST', %r{/furniture/authoring/resolve})
+    assert_equal 2, posts.length
+    assert_equal PARITY_CATALOG_REVISION, posts.first['body']['furniture']['catalogRevision']
+    assert_equal 'workshop-fresh-pin', posts.last['body']['furniture']['catalogRevision'],
+                 'the retry pins the refreshed revision — never an implicit latest'
+    assert_instance_of Granete::SketchUpExtension::Library::NativeLayout, layout
+  end
+
+  def test_resolved_native_layout_keeps_the_get_channel_only_when_unpinned
+    transport = FakeTransport.new({ 'status' => 200, 'body' => LAYOUT })
+    provider = build_provider(transport: transport)
+
+    # No cached remote contract → no catalog revision pin → the provider
+    # cannot author and keeps the legacy GET channel (offline/dev catalogs).
+    layout = provider.resolved_native_layout('abc', { 'widthMm' => 600 })
+
+    refute_nil layout
+    assert_equal 'GET', transport.last_payload['method']
+    assert_equal '/furniture/definitions/abc/layout?widthMm=600', transport.last_payload['path']
   end
 
   private
