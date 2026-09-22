@@ -63,7 +63,16 @@
       deletes bloqueados (6 tablas, mensajes de trigger correctos);
       guard transaccional sin fuga al pool; down+replay restaura postura
       (REVOKE primero, política fuera, replay exacto).
-- [ ] T5 Suite storage completa serializada + api + verify_affected (en curso).
+- [x] T5 Verificación completa (HEAD e1f717eb):
+      - storage suite serializada completa: ok (234s, incluye los 4 tests nuevos
+        y la postura actualizada de furniture_instances).
+      - api suite: ok. `go build`/`go vet`: limpios.
+      - Foundation Gate A --stage postgres: PASS (236s, contenedor fresco,
+        aislamiento multi-org verificado con 000137 aplicada).
+      - Nota de infra: 5 tests (hardware/material persist + cross-org) conectan
+        directo a la DB `muebles` de DATABASE_URL — en local fallan si no existe
+        (en CI la crea el workflow); no son regresiones.
+      - CI remoto del HEAD: en curso al congelar; revisión independiente en curso.
 
 ## Límites conocidos (documentados, fuera de alcance)
 
