@@ -224,6 +224,69 @@ module Granete
         end
       end
 
+      # #821 — the single productive material-aware resolve boundary, mixed
+      # into RemoteCatalogProvider. Initial placement, rebuild and restore
+      # submit the SAME versioned authoring resolve the mutation/inspection
+      # flows use, with the minimal accepted snapshot: pinned catalog
+      # revision, parameters and the COMPLETE materialChoices map. Occurrences
+      # are omitted on purpose — the server expands the definition defaults,
+      # the exact expansion the legacy GET channel produced, so component
+      # identities stay stable across channels. Rejections are structured and
+      # LOUD: a wrong, partial or degraded commercial finish must never
+      # silently paint the role-palette fallback. nil = this provider cannot
+      # author right now (unpinned/offline); callers keep the legacy GET
+      # channel.
+      module PlacementAuthoringResolve
+        def resolved_native_layout(definition_id, parameters = {}, choices = {})
+          authoring_resolved_layout(definition_id, parameters, choices) || super
+        end
+
+        private
+
+        # A CATALOG_REVISION_STALE rejection refetches the workshop catalog
+        # once and retries against the fresh pin — the second stale answer
+        # propagates, never an implicit latest.
+        def authoring_resolved_layout(definition_id, parameters = {}, choices = {})
+          return nil unless @transport&.configured? && @auth_provider&.configured?
+
+          revision = catalog_revision
+          return nil if revision.nil?
+
+          submit_minimal_authoring_resolve(definition_id, parameters, choices, revision)&.layout
+        end
+
+        def submit_minimal_authoring_resolve(definition_id, parameters, choices, revision)
+          request = AuthoringResolveRequest.build_request(
+            message_id: "resolve-#{SecureRandom.hex(8)}",
+            idempotency_key: "resolve-#{SecureRandom.hex(8)}",
+            furniture: {
+              'furnitureDefinitionId' => definition_id,
+              'catalogRevision' => revision,
+              'parameters' => parameters || {},
+              'materialChoices' => choices || {}
+            }
+          )
+          resolve_authoring(request)
+        rescue AuthoringResolveError => e
+          raise unless placement_stale_catalog_rejection?(e)
+
+          @logger&.info('placement_authoring_catalog_stale_refetching', issues: e.issues.map(&:code))
+          refresh!
+          refreshed = catalog_revision
+          raise if refreshed.nil? || refreshed == revision
+
+          retry_request = JSON.parse(JSON.generate(request))
+          retry_request['furniture']['catalogRevision'] = refreshed
+          resolve_authoring(retry_request)
+        end
+
+        # Structured-code branch (#477 rule): never message substrings.
+        def placement_stale_catalog_rejection?(error)
+          error.respond_to?(:issues) &&
+            error.issues.any? { |issue| issue.respond_to?(:code) && issue.code == 'CATALOG_REVISION_STALE' }
+        end
+      end
+
       # Serves the workshop library from the Granete API using the
       # authenticated session, translating the shared contract shape
       # (camelCase, furniture/definitions envelope) into the internal form
@@ -234,6 +297,8 @@ module Granete
       # +fallback_provider+ (development/tests) is the only path back to a
       # local catalog.
       class RemoteCatalogProvider < BaseCatalogProvider
+        include PlacementAuthoringResolve
+
         SOURCE_REMOTE = 'remote'
         SOURCE_UNAUTHENTICATED = 'unauthenticated'
         SOURCE_LICENSE_BLOCKED = 'license_blocked'

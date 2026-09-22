@@ -3,6 +3,7 @@
 require 'json'
 require 'tmpdir'
 require 'fileutils'
+require 'zlib'
 require 'testup/testcase'
 
 # Host smoke for #389 / DT-5 Place EXISTING FurnitureInstance: the INSTALLED
@@ -184,6 +185,53 @@ module Granete
         assert_equal choices, metadata.dig('intent', 'materialChoices')
       end
 
+      # #821 host smoke — the FIRST placement of a quoted unit must PAINT the
+      # exact commercial finish with its photographic textures, before any
+      # edit: INTERIOR=Arauco Blanco Frosty 15mm and FRENTES=Arauco Moscato
+      # 15mm resolved through a real parsed NativeLayout (the server boundary
+      # is pinned hermetically; here we prove the installed renderer assigns
+      # SketchUp Material objects whose texture is set on first insertion).
+      def test_place_existing_with_resolved_layout_paints_quoted_finish_textures_first_render
+        blanco = write_smoke_texture('blanco.png', [0xF3, 0xF7, 0xFA])
+        moscato = write_smoke_texture('moscato.png', [0x8A, 0x69, 0x4C])
+        quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
+        layout = Library::LayoutContract.parse!(resolved_layout_body(blanco, moscato))
+
+        result = textured_builder.place_existing_furniture(
+          model, furniture_instance_id: FI_1, definition: catalog_definition,
+                 parameters: { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560 },
+                 resolved_layout: layout, material_choices: quoted_finish,
+                 project_id: PROJECT_ID, design_id: DESIGN_ID, prepare: false
+        )
+        assert result['success'], result.inspect
+
+        located = ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        refute_nil located['entity'], 'placed furniture must carry the server identity'
+        by_role = {}
+        located['entity'].definition.entities.grep(Sketchup::ComponentInstance).each do |child|
+          meta = metadata_store.read(child)
+          role = meta.is_a?(Hash) ? meta.dig('intent', 'materialBindingRole') : nil
+          by_role[role] = child if role
+        end
+
+        interior = by_role['INTERIOR']
+        front = by_role['FRENTES']
+        refute_nil interior, 'INTERIOR board missing from first render'
+        refute_nil front, 'FRENTES board missing from first render'
+
+        interior_material = interior.material
+        refute_nil interior_material, 'INTERIOR board must be painted on first insertion'
+        assert_equal 'Granete · Arauco Blanco Frosty 15mm', interior_material.name
+        refute_nil interior_material.texture, 'INTERIOR must carry its photographic texture on FIRST insertion'
+        assert_equal 'blanco.png', File.basename(interior_material.texture.filename)
+
+        front_material = front.material
+        refute_nil front_material, 'FRENTES board must be painted on first insertion'
+        assert_equal 'Granete · Arauco Moscato 15mm', front_material.name
+        refute_nil front_material.texture, 'FRENTES must carry its photographic texture on FIRST insertion'
+        assert_equal 'moscato.png', File.basename(front_material.texture.filename)
+      end
+
       private
 
       def model
@@ -196,6 +244,75 @@ module Granete
 
       def builder
         Model::FurnitureBuilder.new(metadata_store: metadata_store)
+      end
+
+      # #821: the texture cache passes existing absolute paths through
+      # verbatim, so locally generated PNGs stand in for downloaded textures
+      # without any network dependency.
+      def textured_builder
+        Model::FurnitureBuilder.new(
+          metadata_store: metadata_store,
+          texture_cache: Assets::TextureCache.new
+        )
+      end
+
+      # Server-shaped resolved layout with the two distinct quoted board
+      # materials (the exact wire form the authoring resolve publishes).
+      def resolved_layout_body(blanco_path, moscato_path)
+        board = lambda do |component_id, role, name, material_id, material_name, color, texture|
+          {
+            'componentInstanceId' => component_id,
+            'componentDefinitionId' => "st-#{role.downcase}",
+            'slotId' => role.downcase, 'role' => role, 'optionRole' => role,
+            'name' => name, 'kind' => 'board',
+            'transform' => { 'translationMm' => [0, 0, 0] },
+            'dimensionsMm' => [600, 15, 716],
+            'widthMm' => 600, 'thicknessMm' => 15, 'lengthMm' => 716,
+            'localTransform' => {
+              'translationMm' => [0, 0, 0],
+              'basis' => { 'x' => [1, 0, 0], 'y' => [0, 1, 0], 'z' => [0, 0, 1] }
+            },
+            'materialId' => material_id, 'materialCode' => material_id.upcase,
+            'materialName' => material_name, 'materialColorHex' => color,
+            'materialTextureUrl' => texture,
+            'materialTextureTileWidthMm' => 600, 'materialTextureTileLengthMm' => 600
+          }
+        end
+        {
+          'furnitureDefinitionId' => DEFINITION_ID,
+          'definitionName' => 'Gabinete Base 600',
+          'transformContract' => 'granete.local-basis.v1',
+          'dimensionsMm' => [600, 720, 560],
+          'components' => [
+            board.call('st-interior-copy-0', 'INTERIOR', 'Lateral', 'white-id',
+                       'Arauco Blanco Frosty 15mm', '#F3F7FA', blanco_path),
+            board.call('st-frentes-copy-0', 'FRENTES', 'Puerta', 'moscato-id',
+                       'Arauco Moscato 15mm', '#8A694C', moscato_path)
+          ],
+          'hardware' => []
+        }
+      end
+
+      # Emits a minimal valid PNG (8-bit truecolor) so the real host can load
+      # it as a material texture. Pure stdlib: no image gems in SketchUp.
+      def write_smoke_texture(name, rgb)
+        dir = Dir.mktmpdir('granete_smoke_textures')
+        path = File.join(dir, name)
+        width = height = 4
+        chunk = lambda do |type, data|
+          [data.bytesize].pack('N') + type + data + [Zlib.cRC32(type + data)].pack('N')
+        end
+        # Per-row filter byte 0 prepended at the byte-array level (binary-safe).
+        row = ([0] + (rgb * width)).pack('C*')
+        rows = Array.new(height) { row }
+        ihdr = [width, height, 8, 2, 0, 0, 0].pack('NNCCCCC')
+        signature = "\x89PNG\r\n\x1a\n".b
+        png = [signature,
+               chunk.call('IHDR', ihdr),
+               chunk.call('IDAT', Zlib::Deflate.deflate(rows.join)),
+               chunk.call('IEND', ''.b)].join
+        File.binwrite(path, png)
+        path
       end
 
       def top_level_furniture
