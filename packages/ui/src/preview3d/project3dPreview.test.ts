@@ -682,6 +682,46 @@ describe('resolveProject3DPreview — hardware placements bridge (Fase 2 WU3)', 
     );
   });
 
+  it('G2: entries without placements still consume their copy number (#819)', () => {
+    // Mixed module list: the bare entry expands to copy-0 in the engine, so
+    // the knob on the second entry belongs to copy-1 — even though the first
+    // entry carries no placement override at all.
+    const hardwarePlacement = {
+      hardwareId: 'hw-knob',
+      anchorFace: 'front' as const,
+      relativePosition: { xMm: 50, yMm: 50 },
+    };
+    const module: Module = {
+      ...modWithHandle,
+      components: [
+        { componentId: 'c-puerta', quantity: 1 },
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          overrides: { hardwarePlacements: [hardwarePlacement] },
+        },
+      ],
+      agregados: [],
+    };
+    const mockBoardParts = ['c-puerta-copy-0', 'c-puerta-copy-1'].map((id) => ({
+      id,
+      widthMm: 596,
+      thicknessMm: 18,
+      lengthMm: 720,
+    })) as unknown as Parameters<typeof resolveModuleHardwarePlacements>[1];
+
+    const placements = resolveModuleHardwarePlacements(
+      module,
+      mockBoardParts,
+      catalogWithHardware.hardware,
+      { structures: catalogWithHardware.structures },
+    );
+
+    expect(placements.map((placement) => placement.componentInstanceId)).toEqual([
+      'c-puerta-copy-1',
+    ]);
+  });
+
   it('G2: repeated module component entries preserve the BOM copy sequence (#819)', () => {
     const hardwarePlacement = {
       hardwareId: 'hw-knob',

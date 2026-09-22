@@ -538,12 +538,12 @@ export function resolveModuleHardwarePlacements(
   for (const group of sourceGroups) {
     // Mirrors engine/bom.ts expandComponentInstances (#434): one counter map
     // per expansion scope; the copy index is global per component within the
-    // scope's list, not per entry.
+    // scope's list, not per entry. Every EXPANDED entry consumes one number
+    // per copy — placements or not (the engine numbers components, and the
+    // placement override is a preview-only concern riding the instance).
     const copyCounters = new Map<string, number>();
     for (const { inst, prefix } of group) {
       const placements = inst.overrides?.hardwarePlacements;
-      if (!placements || placements.length === 0) continue;
-
       const qty = Math.max(1, Math.floor(inst.quantity) || 1);
       for (let i = 0; i < qty; i++) {
         const copyIndex = copyCounters.get(inst.componentId) ?? 0;
@@ -552,6 +552,8 @@ export function resolveModuleHardwarePlacements(
         if (!part) continue; // filtered by base mode / not a board — skip.
 
         copyCounters.set(inst.componentId, copyIndex + 1);
+        if (!placements || placements.length === 0) continue;
+
         for (const placement of placements) {
           const targetId =
             options.optionChoices?.[placement.hardwareId] ?? placement.hardwareId;
