@@ -2408,6 +2408,14 @@ export async function readBackendCalculationErrorMessage(
   return fallback;
 }
 
+/**
+ * Marks an error whose message came from the calculation endpoint's error
+ * envelope — the only detail worth surfacing to the user. Network failures
+ * (the fetch rejects with "Failed to fetch") and other non-HTTP errors carry
+ * transport noise, not an actionable cause; those keep the generic message.
+ */
+export class BackendCalculationHttpError extends Error {}
+
 const BACKEND_CALCULATION_FAILURE_MESSAGE =
   'No se pudo recalcular en el servidor; mostrando valores locales';
 
@@ -2415,7 +2423,8 @@ export function notifyBackendCalculationFailure(
   error: unknown,
   toast: ToastFn,
 ): string {
-  const detail = error instanceof Error ? error.message.trim() : '';
+  const detail =
+    error instanceof BackendCalculationHttpError ? error.message.trim() : '';
   const message =
     detail && !/^No se pudo recalcular \(\d+\)$/.test(detail)
       ? `${BACKEND_CALCULATION_FAILURE_MESSAGE}: ${detail}`
@@ -2479,7 +2488,9 @@ export function useBackendBreakdownEffect(
           },
         );
         if (!res.ok) {
-          throw new Error(await readBackendCalculationErrorMessage(res));
+          throw new BackendCalculationHttpError(
+            await readBackendCalculationErrorMessage(res),
+          );
         }
         const data = breakdownFromApi(
           (await res.json()) as Record<string, unknown>,
