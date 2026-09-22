@@ -191,3 +191,35 @@ func TestDeleteMediaFileByURL(t *testing.T) {
 		}
 	})
 }
+
+func TestDeleteProjectMediaFilesIsIdempotentAndTenantScoped(t *testing.T) {
+	dir := t.TempDir()
+	orgID := storage.InitialOrganizationID
+	artifactKey := "designs/publish/11111111-1111-4111-8111-111111111111/model-0123456789ab.skp"
+	photo := filepath.Join(dir, orgID, "project.jpg")
+	artifact := filepath.Join(dir, orgID, filepath.FromSlash(artifactKey))
+	for _, path := range []string{photo, artifact} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("project-owned"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	deleteProjectMediaFiles(dir, []storage.ProjectMediaFile{
+		{OrganizationID: orgID, MediaURL: "/api/media/project.jpg"},
+		{OrganizationID: orgID, StorageKey: artifactKey},
+		{OrganizationID: orgID, MediaURL: "/api/media/already-gone.jpg"},
+		// Invalid input cannot escape this organization directory.
+		{OrganizationID: orgID, StorageKey: "../outside"},
+	})
+	for _, path := range []string{photo, artifact} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("project-owned media remains at %s: %v", path, err)
+		}
+	}
+
+	// A second cleanup after a partial prior attempt is harmless.
+	deleteProjectMediaFiles(dir, []storage.ProjectMediaFile{{OrganizationID: orgID, MediaURL: "/api/media/project.jpg"}})
+}

@@ -84,3 +84,39 @@
 ## Entrega
 
 - Objetivo: complete (Closes #815).
+
+## R2 hardening — in progress
+
+- **Route**: delegated direct; trigger: mapped 4+ affected files and a multi-file
+  writer change. **TDD**: enabled by `AGENTS.md`; existing focused real-PG tests
+  were red against the first boundary shape (ambiguous/return-type function
+  errors), then green after the canonical function and cleanup boundary landed.
+- **Delivery strategy**: single PR #816; this correction remains under the
+  review-budget forecast and is a single coherent storage/migration/API work unit.
+- [x] T6 Replace app-local direct deletion with narrow `SECURITY DEFINER`
+  `delete_project_tree(uuid)`: fixed `search_path`, `row_security=off`, actor
+  project-authority check, transaction-local trigger guard, and only EXECUTE for
+  `granete_app`; removed 000137's generic DELETE grants/policies, including the
+  unnecessary `published_assembly_snapshots` surface. `design_working_copies`
+  is no longer explicitly deleted because its project/design cascade owns it.
+- [x] T7 Collect project photo URLs and publish/revision artifact keys before
+  cascade; register API-owned, owner-org/path-safe MediaDir deletion through
+  `storage.OnCommit`. Missing files are idempotent; other IO errors log after a
+  successful commit and do not alter the response.
+- [x] T8 Add real-PG FK lifecycle catalog invariant: all `projects` FKs must be
+  CASCADE except explicit SET NULL history (`stock_movements.project_id`,
+  `purchase_order_items.allocated_project_id`).
+- [x] T9 Focused evidence (local PostgreSQL fresh migration):
+  `GOFLAGS=-p=1 go test -parallel=1 ./internal/storage -run 'Test(DeleteProject|ProjectDelete)' -count=1` — PASS (4.03s);
+  `go test ./internal/api -run 'Test(DeleteProjectMediaFiles|DeleteMediaFileByURL|RBAC_.*DeleteProject)' -count=1` — PASS (0.52s).
+- [ ] T10 Required before claiming complete: explicit Store A → Factory B
+  integration fixture, DB rollback callback proof, full `go test ./...`,
+  `go vet ./...`, Foundation Gate A, and independent review.
+
+**R2 narrative correction**: FK cascades run as table owner; the real original
+barriers were durability triggers, RLS on explicit NO ACTION cleanup, NO ACTION
+FKs, and the Store/Factory visibility boundary. The canonical definer boundary
+is the sole authorized cross-org deletion path, not a generic app DELETE grant.
+- [x] T11 Full backend checks at `7ff89cce`:
+  `GOFLAGS=-p=1 go test -parallel=1 ./...` — PASS; `go vet ./...` — PASS.
+  Foundation Gate A and real Store→Factory fixture remain pending (T10).

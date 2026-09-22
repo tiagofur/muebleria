@@ -197,46 +197,8 @@ DROP TRIGGER IF EXISTS protect_designs_delete_guard ON designs;
 DROP TRIGGER IF EXISTS protect_design_publish_sessions_delete_guard ON design_publish_sessions;
 DROP FUNCTION IF EXISTS protect_project_scoped_delete_guard();
 
-DROP POLICY IF EXISTS quote_revisions_delete ON quote_revisions;
-DROP POLICY IF EXISTS quote_revision_items_delete ON quote_revision_items;
-DROP POLICY IF EXISTS designs_delete ON designs;
-DROP POLICY IF EXISTS design_revisions_delete ON design_revisions;
-DROP POLICY IF EXISTS design_revision_items_delete ON design_revision_items;
-DROP POLICY IF EXISTS design_revision_artifacts_delete ON design_revision_artifacts;
-DROP POLICY IF EXISTS design_revision_assembly_snapshots_delete ON design_revision_assembly_snapshots;
-DROP POLICY IF EXISTS design_revision_hardware_assets_delete ON design_revision_hardware_assets;
-DROP POLICY IF EXISTS design_publish_sessions_delete ON design_publish_sessions;
-DROP POLICY IF EXISTS production_releases_delete ON production_releases;
-DROP POLICY IF EXISTS release_engineering_delete ON production_release_engineering;
-DROP POLICY IF EXISTS release_manufacturing_snapshots_delete ON production_release_manufacturing_snapshots;
-DROP POLICY IF EXISTS published_assembly_snapshots_delete ON published_assembly_snapshots;
+DROP FUNCTION IF EXISTS delete_project_tree(uuid);
 
-REVOKE DELETE ON furniture_instances FROM granete_app;
-REVOKE DELETE ON designs FROM granete_app;
-REVOKE DELETE ON design_revisions FROM granete_app;
-REVOKE DELETE ON design_revision_items FROM granete_app;
-REVOKE DELETE ON design_revision_artifacts FROM granete_app;
-REVOKE DELETE ON design_revision_assembly_snapshots FROM granete_app;
-REVOKE DELETE ON design_revision_hardware_assets FROM granete_app;
-REVOKE DELETE ON design_publish_sessions FROM granete_app;
-REVOKE DELETE ON quote_revisions FROM granete_app;
-REVOKE DELETE ON quote_revision_items FROM granete_app;
-REVOKE DELETE ON production_releases FROM granete_app;
-REVOKE DELETE ON production_release_manufacturing_snapshots FROM granete_app;
-REVOKE DELETE ON production_release_engineering FROM granete_app;
-REVOKE DELETE ON published_assembly_snapshots FROM granete_app;
-
-UPDATE rls_policy_inventory
-SET rationale = replace(rationale,
-    ' Rows delete ONLY inside the storage-layer project-delete transaction (app.allow_project_cascade_delete guard, #815); direct deletes keep failing.',
-    ''),
-    policy_version = GREATEST(policy_version - 1, 1),
-    updated_at = NOW()
-WHERE table_name IN (
-    'furniture_instances', 'designs', 'design_revisions', 'design_revision_items',
-    'design_revision_artifacts', 'design_revision_assembly_snapshots',
-    'design_revision_hardware_assets', 'design_publish_sessions',
-    'quote_revisions', 'quote_revision_items',
-    'production_releases', 'production_release_manufacturing_snapshots',
-    'production_release_engineering', 'published_assembly_snapshots'
-);
+-- 000137 introduced no direct DELETE expansion: its canonical function owned
+-- the cross-org boundary.  Down only removes that function and restores the
+-- original absolute durability triggers above.

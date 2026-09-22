@@ -1,13 +1,10 @@
 -- #815: DELETE /api/projects/{id} must remove a project together with its
 -- commercial/durable family. Three layers blocked the projects ON DELETE
 -- CASCADE under the runtime role:
---   1. REVOKE DELETE on cascade children — the FK cascade runs with the
---      deleter's privileges, so every protected child meant
---      "permission denied for table …".
---   2. Absolute immutability triggers raising on DELETE
+--   1. Absolute immutability triggers raising on DELETE
 --      (quote_revisions, design_revisions, production_release_engineering,
 --      production_release_manufacturing_snapshots).
---   3. NO ACTION grandchildren referencing revisions/releases
+--   2. NO ACTION grandchildren referencing revisions/releases
 --      (design_publish_sessions, design_working_copies, production_releases,
 --      production_release_engineering, manufacturing snapshots).
 --
@@ -297,79 +294,70 @@ CREATE TRIGGER protect_design_publish_sessions_delete_guard
     BEFORE DELETE ON design_publish_sessions
     FOR EACH ROW EXECUTE FUNCTION protect_project_scoped_delete_guard();
 
--- 3) The cascade needs DELETE privileges; the triggers above remain the
---    semantic barrier. UPDATE immutability is untouched (still revoked where
---    it was revoked). RLS needs matching DELETE policies — without one, a
---    DELETE under row security silently targets zero rows. Each policy
---    mirrors its table's read scope exactly.
+-- 3) Canonical, narrow project-delete boundary.
+--
+-- Cascades execute with table-owner privilege; the original blockers were
+-- durability triggers, RLS on explicit NO ACTION cleanup, and those NO ACTION
+-- FKs.  This function is SECURITY DEFINER solely so an authorized Store/Sales
+-- actor can remove the one project tree that includes Factory-private release
+-- rows.  It validates that actor against the project before disabling RLS,
+-- fixes search_path, scopes the trigger guard to this transaction, and exposes
+-- no generic cross-organization DELETE capability.
+--
+-- Direct DELETE privileges stay revoked.  `app.allow_project_cascade_delete`
+-- is meaningful only while this function executes with table-owner authority;
+-- setting it in an ordinary app transaction cannot grant table DELETE rights.
+CREATE OR REPLACE FUNCTION delete_project_tree(project_to_delete uuid)
+RETURNS TABLE(owner_organization_id uuid, project_media_url text, project_storage_key text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+SET row_security = off
+AS $$
+DECLARE
+    actor_organization uuid;
+BEGIN
+    actor_organization := public.app_current_organization_id();
+    IF actor_organization IS NULL THEN
+        RAISE EXCEPTION 'project delete requires an organization scope';
+    END IF;
 
-GRANT DELETE ON furniture_instances TO granete_app;
-GRANT DELETE ON designs TO granete_app;
-GRANT DELETE ON design_revisions TO granete_app;
-GRANT DELETE ON design_revision_items TO granete_app;
-GRANT DELETE ON design_revision_artifacts TO granete_app;
-GRANT DELETE ON design_revision_assembly_snapshots TO granete_app;
-GRANT DELETE ON design_revision_hardware_assets TO granete_app;
-GRANT DELETE ON design_publish_sessions TO granete_app;
-GRANT DELETE ON quote_revisions TO granete_app;
-GRANT DELETE ON quote_revision_items TO granete_app;
-GRANT DELETE ON production_releases TO granete_app;
-GRANT DELETE ON production_release_manufacturing_snapshots TO granete_app;
-GRANT DELETE ON production_release_engineering TO granete_app;
-GRANT DELETE ON published_assembly_snapshots TO granete_app;
+    PERFORM 1
+      FROM public.projects
+     WHERE id = project_to_delete
+       AND (organization_id = actor_organization OR sales_organization_id = actor_organization);
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'project not found';
+    END IF;
 
-CREATE POLICY quote_revisions_delete ON quote_revisions
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY quote_revision_items_delete ON quote_revision_items
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY designs_delete ON designs
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY design_revisions_delete ON design_revisions
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY design_revision_items_delete ON design_revision_items
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY design_revision_artifacts_delete ON design_revision_artifacts
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY design_revision_assembly_snapshots_delete ON design_revision_assembly_snapshots
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY design_revision_hardware_assets_delete ON design_revision_hardware_assets
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY design_publish_sessions_delete ON design_publish_sessions
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY production_releases_delete ON production_releases
-    FOR DELETE TO granete_app
-    USING (app_can_access_project(project_id));
-CREATE POLICY release_engineering_delete ON production_release_engineering
-    FOR DELETE TO granete_app
-    USING (organization_id = app_current_organization_id() AND app_can_access_project(project_id));
-CREATE POLICY release_manufacturing_snapshots_delete ON production_release_manufacturing_snapshots
-    FOR DELETE TO granete_app
-    USING (organization_id = app_current_organization_id() AND app_can_access_project(project_id));
-CREATE POLICY published_assembly_snapshots_delete ON published_assembly_snapshots
-    FOR DELETE TO granete_app
-    USING (organization_id = app_current_organization_id());
+    -- Materialize project-owned physical references before metadata disappears.
+    RETURN QUERY
+      SELECT p.organization_id::uuid, p.url::text, NULL::text
+        FROM public.project_photos p
+       WHERE p.project_id = project_to_delete
+      UNION ALL
+      SELECT p.organization_id::uuid, p.thumbnail_url::text, NULL::text
+        FROM public.project_photos p
+       WHERE p.project_id = project_to_delete
+      UNION ALL
+      SELECT a.organization_id::uuid, NULL::text, a.storage_key::text
+        FROM public.design_publish_artifacts a
+       WHERE a.project_id = project_to_delete
+      UNION ALL
+      SELECT a.organization_id::uuid, NULL::text, a.storage_key::text
+        FROM public.design_revision_artifacts a
+       WHERE a.project_id = project_to_delete;
 
--- 4) Inventory: delete semantics changed on the protected family.
+    PERFORM set_config('app.allow_project_cascade_delete', 'on', true);
 
-UPDATE rls_policy_inventory
-SET rationale = rationale
-    || ' Rows delete ONLY inside the storage-layer project-delete transaction (app.allow_project_cascade_delete guard, #815); direct deletes keep failing.',
-    policy_version = policy_version + 1,
-    updated_at = NOW()
-WHERE table_name IN (
-    'furniture_instances', 'designs', 'design_revisions', 'design_revision_items',
-    'design_revision_artifacts', 'design_revision_assembly_snapshots',
-    'design_revision_hardware_assets', 'design_publish_sessions',
-    'quote_revisions', 'quote_revision_items',
-    'production_releases', 'production_release_manufacturing_snapshots',
-    'production_release_engineering', 'published_assembly_snapshots'
-);
+    -- These are the only grandchildren with NO ACTION edges into the cascade.
+    DELETE FROM public.design_publish_sessions WHERE project_id = project_to_delete;
+    DELETE FROM public.production_release_manufacturing_snapshots WHERE project_id = project_to_delete;
+    DELETE FROM public.production_release_engineering WHERE project_id = project_to_delete;
+    DELETE FROM public.production_releases WHERE project_id = project_to_delete;
+    DELETE FROM public.projects WHERE id = project_to_delete;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION delete_project_tree(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION delete_project_tree(uuid) TO granete_app;

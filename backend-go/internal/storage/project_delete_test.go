@@ -1,8 +1,8 @@
 package storage_test
 
 import (
-	"os"
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -106,9 +106,9 @@ func TestDeleteProject_DurabilityGuardsBlockDirectDeletes(t *testing.T) {
 	seedDeleteReleaseFamily(t, fx.admin, fx.projectID, fx.quoteRevID, fx.designRevID)
 
 	cases := []struct {
-		name    string
+		name      string
 		statement string
-		wantMsg string
+		wantMsg   string
 	}{
 		{"quote_revisions", `DELETE FROM quote_revisions WHERE id = '` + fx.quoteRevID + `'`, "cannot be deleted"},
 		{"design_revisions", `DELETE FROM design_revisions WHERE id = '` + fx.designRevID + `'`, "cannot be deleted"},
@@ -124,8 +124,8 @@ func TestDeleteProject_DurabilityGuardsBlockDirectDeletes(t *testing.T) {
 				t.Errorf("%s: direct delete under the app role unexpectedly succeeded", testCase.name)
 				return
 			}
-			if !strings.Contains(err.Error(), testCase.wantMsg) {
-				t.Errorf("%s: direct delete error = %q, want it to contain %q", testCase.name, err.Error(), testCase.wantMsg)
+			if !strings.Contains(err.Error(), testCase.wantMsg) && !strings.Contains(err.Error(), "permission denied") {
+				t.Errorf("%s: direct delete error = %q, want durability guard or permission denied", testCase.name, err.Error())
 			}
 		})
 	}
@@ -150,8 +150,8 @@ func TestDeleteProject_GuardIsTransactionScoped(t *testing.T) {
 			t.Error("guard leaked: direct quote_revision delete succeeded after a project delete")
 			return
 		}
-		if !strings.Contains(err.Error(), "cannot be deleted") {
-			t.Errorf("post-delete guard error = %q, want the immutability trigger", err.Error())
+		if !strings.Contains(err.Error(), "cannot be deleted") && !strings.Contains(err.Error(), "permission denied") {
+			t.Errorf("post-delete guard error = %q, want direct delete prohibition", err.Error())
 		}
 	})
 }
@@ -201,11 +201,55 @@ func TestProjectDeleteGuardMigrationDownAndReplay(t *testing.T) {
 		t.Fatalf("replay up 000137: %v", err)
 	}
 	if err := fx.admin.QueryRow(ctx,
-		`SELECT has_table_privilege('granete_app','quote_revisions','DELETE')`).Scan(&granted); err != nil || !granted {
-		t.Errorf("replay posture: granete_app DELETE on quote_revisions granted=%v err=%v", granted, err)
+		`SELECT has_table_privilege('granete_app','quote_revisions','DELETE')`).Scan(&granted); err != nil || granted {
+		t.Errorf("replay posture: direct DELETE must remain revoked, granted=%v err=%v", granted, err)
 	}
 	if err := fx.admin.QueryRow(ctx,
-		`SELECT count(*) FROM pg_policies WHERE policyname='quote_revisions_delete'`).Scan(&policyCount); err != nil || policyCount != 1 {
-		t.Errorf("replay posture: quote_revisions_delete policies=%d err=%v", policyCount, err)
+		`SELECT count(*) FROM pg_policies WHERE policyname='quote_revisions_delete'`).Scan(&policyCount); err != nil || policyCount != 0 {
+		t.Errorf("replay posture: no generic DELETE policy, policies=%d err=%v", policyCount, err)
+	}
+	var executable bool
+	if err := fx.admin.QueryRow(ctx, `SELECT has_function_privilege('granete_app', 'delete_project_tree(uuid)', 'EXECUTE')`).Scan(&executable); err != nil || !executable {
+		t.Errorf("replay posture: canonical project delete function executable=%v err=%v", executable, err)
+	}
+}
+
+func TestProjectForeignKeysHaveExplicitDeleteLifecycle(t *testing.T) {
+	fx := setupRequoteFixture(t)
+	rows, err := fx.admin.Query(context.Background(), `
+		SELECT child.relname, attribute.attname, constraint_.confdeltype
+		FROM pg_constraint constraint_
+		JOIN pg_class child ON child.oid = constraint_.conrelid
+		JOIN pg_class parent ON parent.oid = constraint_.confrelid
+		JOIN pg_attribute attribute ON attribute.attrelid = child.oid
+			AND attribute.attnum = ANY(constraint_.conkey)
+		WHERE constraint_.contype = 'f' AND parent.relname = 'projects'
+		ORDER BY child.relname, attribute.attname`)
+	if err != nil {
+		t.Fatalf("inspect project foreign keys: %v", err)
+	}
+	defer rows.Close()
+	setNull := map[string]bool{
+		"stock_movements.project_id":                true,
+		"purchase_order_items.allocated_project_id": true,
+	}
+	for rows.Next() {
+		var table, column, deleteType string
+		if err := rows.Scan(&table, &column, &deleteType); err != nil {
+			t.Fatal(err)
+		}
+		key := table + "." + column
+		if setNull[key] {
+			if deleteType != "n" { // PostgreSQL confdeltype: n = SET NULL.
+				t.Errorf("%s delete action=%q, want SET NULL", key, deleteType)
+			}
+			continue
+		}
+		if deleteType != "c" { // c = CASCADE; reject NO ACTION / RESTRICT.
+			t.Errorf("%s delete action=%q, want CASCADE or an explicit SET NULL allowlist entry", key, deleteType)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate project foreign keys: %v", err)
 	}
 }
