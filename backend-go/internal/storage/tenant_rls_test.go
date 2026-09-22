@@ -48,9 +48,9 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status, platform_admin) VALUES
 		 ('` + rlsUserA + `', 'rls-a@example.test', 'rls-a@example.test', 'x', 'RLS A', 'active', TRUE),
 		 ('` + rlsUserB + `', 'rls-b@example.test', 'rls-b@example.test', 'x', 'RLS B', 'active', FALSE)`,
-		`INSERT INTO memberships (organization_id, user_id, roles) VALUES
-		 ('` + rlsOrgA + `', '` + rlsUserA + `', '{admin}'),
-		 ('` + rlsOrgB + `', '` + rlsUserB + `', '{admin}')`,
+		`INSERT INTO memberships (id, organization_id, user_id, roles) VALUES
+			 ('40000000-0000-0000-0000-00000000000a', '` + rlsOrgA + `', '` + rlsUserA + `', '{admin}'),
+			 ('40000000-0000-0000-0000-00000000000b', '` + rlsOrgB + `', '` + rlsUserB + `', '{admin}')`,
 		`UPDATE organizations SET status='active', status_reason=NULL
 		 WHERE id IN ('` + rlsOrgA + `', '` + rlsOrgB + `')`,
 		`INSERT INTO customers (id, name, organization_id) VALUES

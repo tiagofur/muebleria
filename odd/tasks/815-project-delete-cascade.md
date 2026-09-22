@@ -178,3 +178,7 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
   -run 'Test(DeleteProject|ProjectDelete)' -count=1` — PASS (12.78s). The
   readiness query uses `pg_has_role`, which is available on the supported
   PostgreSQL version; no runtime ownership/role assumption is granted.
+- [x] T31 The RLS fixture now gives the compatible TenantActor the actual seeded
+  membership UUID for its user and organization, rather than a merely shaped
+  UUID. Focused bare-scope and pin lifecycle PostgreSQL proof remains PASS
+  (2.32s).
