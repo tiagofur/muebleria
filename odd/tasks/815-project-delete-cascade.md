@@ -217,3 +217,19 @@ is the sole authorized cross-org deletion path, not a generic app DELETE grant.
   and failed in `TestWebRefreshCookieLogoutRevokesClearsAndIsolatesSessions`
   when an invitation request returned 401; no #815 product assertion failed in
   the focused R6 suite.
+
+## R7 correction — authenticated HTTP boundary proof
+
+- [x] T39 Reconciled fetched `origin/main` `7b5fc2b3` with normal merge commit
+  `0abce315` before this validation.
+- [x] T40 Added a real router/PostgreSQL DELETE integration: JWT middleware
+  resolves live user/membership/session state, installs the TenantActor through
+  its tenant transaction, and an owned Store project reaches the definer
+  boundary, returns `200 {"message":"project deleted"}`, and is absent from
+  PostgreSQL afterwards. This is not a stub RBAC call.
+- [x] T41 Candidate evidence: HTTP integration PASS (1.36s); combined active
+  membership/RLS/ownership/project-delete PostgreSQL suite PASS (17.90s).
+- [ ] T42 Baseline Gate-A/full-suite comparison remains unproven in this single
+  worktree: prior candidate Gate A failed in invitation refresh behavior and
+  full suite stalled; it must be reproduced from a clean base or treated as
+  unresolved, not called pre-existing. Exact-head full/Gate A/CI remain pending.
