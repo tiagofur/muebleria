@@ -14,8 +14,11 @@ import {
 import type { ProjectDraft } from '@granete/ui';
 
 import {
+  BackendCalculationHttpError,
   createProjectStore,
   ensureProjectStore,
+  notifyBackendCalculationFailure,
+  readBackendCalculationErrorMessage,
   useBackendBreakdownEffect,
   type ProjectStoreDeps,
 } from './projectStore';
@@ -1359,6 +1362,67 @@ describe('projectStore — importNestingResult / updateKitchenLayout', () => {
 // ---------------------------------------------------------------------------
 
 describe('useBackendBreakdownEffect', () => {
+  it('includes the backend calculation error in the user-facing notification', () => {
+    const toast = vi.fn();
+
+    notifyBackendCalculationFailure(
+      new BackendCalculationHttpError(
+        "missing option choice for role 'ZOCLO' on part ZOCLO-AUTO",
+      ),
+      toast,
+    );
+
+    expect(toast).toHaveBeenCalledWith({
+      type: 'error',
+      message:
+        "No se pudo recalcular en el servidor; mostrando valores locales: missing option choice for role 'ZOCLO' on part ZOCLO-AUTO",
+    });
+  });
+
+  it('keeps the generic notification for a status-only calculation error', () => {
+    const toast = vi.fn();
+
+    notifyBackendCalculationFailure(
+      new BackendCalculationHttpError('No se pudo recalcular (400)'),
+      toast,
+    );
+
+    expect(toast).toHaveBeenCalledWith({
+      type: 'error',
+      message:
+        'No se pudo recalcular en el servidor; mostrando valores locales',
+    });
+  });
+
+  it('keeps the generic notification for network failures (no backend cause)', () => {
+    const toast = vi.fn();
+
+    // The fetch rejects before any HTTP response when the backend is down —
+    // "Failed to fetch" is transport noise, not an actionable cause.
+    notifyBackendCalculationFailure(new TypeError('Failed to fetch'), toast);
+
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith({
+      type: 'error',
+      message:
+        'No se pudo recalcular en el servidor; mostrando valores locales',
+    });
+  });
+
+  it('uses the API message from a flat calculation error envelope', async () => {
+    const response = new Response(
+      JSON.stringify({
+        code: 'BAD_REQUEST',
+        message: 'Falta material en el mueble',
+      }),
+      { status: 400 },
+    );
+
+    await expect(readBackendCalculationErrorMessage(response)).resolves.toBe(
+      'Falta material en el mueble',
+    );
+  });
+
   it('exports a function (hook wiring contract)', () => {
     expect(typeof useBackendBreakdownEffect).toBe('function');
   });
