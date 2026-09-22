@@ -252,3 +252,7 @@ successful placement with Blanco/Moscato textures was reported for a prior
 combined v0.1.4 candidate, not this exact PR2 host process. V2 installation,
 live callback/error capture and real host model remain NOT_RUN;
 Go/PostgreSQL/browser are unchanged by this slice and not claimed.
+
+PR2 work-unit commit: `01eeb6cb` (`fix(sketchup): recover placement errors
+in v0.1.4`). This SHA readback is recorded in a separate artifact-only
+commit; RDD disabled/unmanaged and independent exact-HEAD review pending.
