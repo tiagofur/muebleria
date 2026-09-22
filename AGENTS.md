@@ -56,7 +56,7 @@ overrides repository, GitHub, code, tests, or remote state.
 | Proyectar | `docs/proyectar-3d-north-star.md` y documentos de performance/usabilidad cuando afecte sus hot paths |
 | Producción / lifecycle | `docs/production-flow-v2.md`, `docs/project-lifecycle.md` |
 | Export / máquina | `docs/verification.md`, contratos y perfiles/adapters del receptor exacto |
-| Verificación / release | `docs/verification.md`, `docs/pilot-readiness.md`, aceptación específica de la issue |
+| Verificación / release | `docs/verification.md`, `docs/architecture/test-database-isolation.md`, `docs/pilot-readiness.md`, aceptación específica de la issue |
 
 El mapa detallado y las reglas de cada dominio del AGENTS anterior se conservan
 **sin borrar contenido** en `docs/demo/software-factory-agent-reference.md`.
@@ -103,6 +103,10 @@ contrato actual de inicio humano; sus invariantes de producto no se relajan.
   Código/identificadores en inglés; pnpm only para JS.
 - Nada de secretos/PII ni `.env` en git o diagnósticos. Sin SQL destructivo sin
   confirmación y backup; seed demo explícito. No usar `git stash` como depósito.
+- Tests automatizados nunca escriben en una base persistente de desarrollo/producción:
+  PostgreSQL real sí, pero sólo en contenedor/DB descartable. `t.Cleanup`/DELETE no son
+  frontera primaria. Contrato: `docs/architecture/test-database-isolation.md`; #823
+  elimina los fallbacks legacy a `localhost:5445/muebles` y añade enforcement fail-closed.
 - Pruebas exigidas por la issue siguen obligatorias, incluidas browser real,
   PostgreSQL/RLS, TestUp y readback de máquinas cuando apliquen. Infraestructura
   ausente es BLOCKED/NOT_RUN, no un PASS ni licencia para omitir el control.
