@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 // #387 / DT-3: Design aggregate and immutable DesignRevision snapshots
@@ -1175,7 +1176,9 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 
 	// 3. Validate items
 	seenFI := make(map[string]bool)
-	for _, item := range cmd.Items {
+	var consumptionCatalog *domain.Catalog
+	for i := range cmd.Items {
+		item := cmd.Items[i]
 		if !isValidUUID(item.FurnitureInstanceID) {
 			return nil, fmt.Errorf("%w: invalid furniture_instance_id: %s", domain.ErrInvalidDesignCommand, item.FurnitureInstanceID)
 		}
@@ -1201,6 +1204,31 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 		}
 		if fiStatus != string(domain.FurnitureInstanceLifecycleActive) {
 			return nil, fmt.Errorf("%w: furniture instance %s has terminal status %s", domain.ErrFurnitureInstanceLifecycleConflict, item.FurnitureInstanceID, fiStatus)
+		}
+		// #826 converge-at-write boundary (human decision 2026-09-22, revised
+		// from reject after test evidence broke #620/preflight-parity): incoming
+		// choices are intersected with the definition's consumed roles before
+		// persisting, so commercial seeds carrying unconsumable groups converge
+		// to the physical truth instead of freezing release-blocked revisions.
+		// The release gate stays the only hard fail-closed check.
+		if len(item.MaterialChoices) > 0 {
+			if consumptionCatalog == nil {
+				catalog, err := s.GetFullCatalog(ctx)
+				if err != nil {
+					return nil, err
+				}
+				consumptionCatalog = &catalog
+			}
+			filtered, ok := engine.IntersectConsumedOptionChoices(domain.DesignRevisionItem{
+				FurnitureInstanceID:   item.FurnitureInstanceID,
+				FurnitureDefinitionID: item.FurnitureDefinitionID,
+				DefinitionVersion:     item.DefinitionVersion,
+				Parameters:            item.Parameters,
+				MaterialChoices:       item.MaterialChoices,
+			}, *consumptionCatalog)
+			if ok {
+				cmd.Items[i].MaterialChoices = filtered
+			}
 		}
 	}
 

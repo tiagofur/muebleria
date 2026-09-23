@@ -34,6 +34,14 @@ func ResolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog) 
 }
 
 func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget) (*ResolvedReleaseUnit, error) {
+	return resolveReleaseUnitOpt(item, catalog, collection, true)
+}
+
+// resolveReleaseUnitOpt with strictChoices=false skips the choices≡consumed
+// tail validation: the #826 consumption helpers resolve with the FULL
+// commercial seed (extra roles included) to derive the consumed set, then let
+// callers intersect or reject explicitly.
+func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, strictChoices bool) (*ResolvedReleaseUnit, error) {
 	if strings.TrimSpace(item.FurnitureInstanceID) == "" || strings.TrimSpace(item.FurnitureDefinitionID) == "" {
 		return nil, fmt.Errorf("release unit requires physical and definition identities")
 	}
@@ -118,8 +126,10 @@ func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, 
 	if err != nil {
 		return nil, err
 	}
-	if err := validateReleaseUnitChoices(prepared, item.MaterialChoices, catalog, bom); err != nil {
-		return nil, err
+	if strictChoices {
+		if err := validateReleaseUnitChoices(prepared, item.MaterialChoices, catalog, bom); err != nil {
+			return nil, err
+		}
 	}
 	// #793 — freeze the module's industrial identity with the same catalog
 	// read that resolved the BOM. Effective dims: the item's explicit
@@ -140,9 +150,13 @@ func releaseUnitSafeInteger(value float64) bool {
 		math.Abs(value) <= math.Min(9007199254740991, float64(int(^uint(0)>>1)))
 }
 
-// Only choices consumed by the resolved definition are accepted. Reuse the
-// engine's explicit front-alias table; never infer role semantics from names.
-func validateReleaseUnitChoices(module domain.Module, choices map[string]string, catalog domain.Catalog, bom domain.ResolvedBom) error {
+// ConsumedOptionRoles is the single source of truth for "which option roles
+// the resolved definition actually consumes" (#826). The release gate below
+// and every seeding/materialization surface derive from THIS function so their
+// verdicts can never diverge. Keys are the effective choice roles — the direct
+// part role, or the legacy alias that satisfied it — and EDGE appears only
+// when a resolved board part carries edges.
+func ConsumedOptionRoles(module domain.Module, choices map[string]string, catalog domain.Catalog, bom domain.ResolvedBom) map[string]string {
 	consumed := map[string]string{}
 	for _, part := range bom.BoardParts {
 		role := part.OptionRole
@@ -168,6 +182,13 @@ func validateReleaseUnitChoices(module domain.Module, choices map[string]string,
 			}
 		}
 	}
+	return consumed
+}
+
+// Only choices consumed by the resolved definition are accepted. Reuse the
+// engine's explicit front-alias table; never infer role semantics from names.
+func validateReleaseUnitChoices(module domain.Module, choices map[string]string, catalog domain.Catalog, bom domain.ResolvedBom) error {
+	consumed := ConsumedOptionRoles(module, choices, catalog, bom)
 	for role, id := range choices {
 		if role == "" || id == "" || consumed[role] != id {
 			return fmt.Errorf("release unit choice %s is not consumed by the resolved definition", role)

@@ -209,7 +209,7 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 		return nil, fmt.Errorf("%w: existen líneas comerciales ajenas al working copy exacto", domain.ErrInvalidRevisionSnapshot)
 	}
 
-	snapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items)
+	snapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items, true)
 	if err != nil {
 		return nil, err
 	}

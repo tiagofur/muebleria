@@ -222,7 +222,7 @@ func (s *PostgresStore) CreateInitialQuoteRevision(ctx context.Context, cmd Crea
 	// transaction: authoritative amounts computed once from the SAME editable
 	// commercial state being snapshotted, plus the customer-facing
 	// descriptors. Shares the item build's consistency boundary.
-	commercialSnapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items)
+	commercialSnapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items, false)
 	if err != nil {
 		return nil, err
 	}
