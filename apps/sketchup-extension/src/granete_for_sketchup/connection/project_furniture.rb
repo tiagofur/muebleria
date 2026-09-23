@@ -64,6 +64,24 @@ module Granete
             @logger = logger
           end
 
+          # #469 non-secret authenticated-context fingerprint with EXPLICIT
+          # semantics. The bearer is deliberately NOT compared: providers
+          # mint short-lived tokens and a technical refresh of the SAME
+          # context must not abort a placement. Identity comes from the
+          # provider's session_context_id (stable across token refresh,
+          # changed by logout/re-enrollment/context switch, nil when the
+          # context is unknown or unreadable — nil NEVER equals nil: the
+          # callers treat an unknown context as fail-closed).
+          def context_fingerprint
+            context_id = @auth_provider.respond_to?(:session_context_id) ? @auth_provider.session_context_id : nil
+            return nil unless context_id.is_a?(String) && !context_id.empty?
+
+            base_url = @transport.respond_to?(:base_url) ? @transport.base_url : nil
+            [base_url, context_id]
+          rescue StandardError
+            nil
+          end
+
           def list_project_furniture(project_id)
             body = request(:get, "/projects/#{project_id}/furniture-instances")
             Contract.parse_instances!(body)
@@ -280,6 +298,29 @@ module Granete
 
             base.merge(overlay)
           end
+
+          # #469 gesture-context fingerprint: a deterministic digest of the
+          # authoritative composition the preview was generated from —
+          # definition identity, resolved dimensions AND the per-board
+          # geometry (size + local translation), so a board that changes
+          # width or placement under UNCHANGED ids is still detected when
+          # dimensionsMm is absent. The commit compares against it: a
+          # DIFFERENT composition means the accepted transform refers to a
+          # stale preview and must not be placed — the user regenerates the
+          # preview instead.
+          def layout_signature(layout)
+            return nil unless layout.is_a?(::Granete::SketchUpExtension::Library::NativeLayout)
+
+            boards = layout.boards.map do |board|
+              "#{board.component_instance_id}:#{board.geometry_fingerprint}"
+            end.sort
+            [
+              layout.furniture_definition_id,
+              layout.dimensions_mm ? layout.dimensions_mm.join('x') : 'no-dims',
+              boards.join(';'),
+              layout.hardware.map(&:placement_id).sort.join(',')
+            ].join('|')
+          end
         end
 
         # Helpers for design-first backend instance creation (#390 DT-6).
@@ -381,7 +422,15 @@ module Granete
           # to the Move tool; confirm_placement completes the sync with the
           # final transform. `pending_position` is an honest intermediate —
           # never success.
-          def place(furniture_instance_id)
+          #
+          # #469: with a `transformation` (the accepted preview gesture) the
+          # canonical insertion lands the unit directly at the user's final
+          # position and the Move handoff is skipped — same command, same
+          # identity, one undo operation. expected_layout_signature pins the
+          # composition the gesture previewed: a different one fails closed
+          # (composition_changed) BEFORE any insertion — the preview must be
+          # regenerated, never silently placed.
+          def place(furniture_instance_id, transformation: nil, expected_layout_signature: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
@@ -404,7 +453,9 @@ module Granete
             # (resume the confirm step) short-circuit here.
             return unit unless unit['unit']
 
-            insert_furniture_unit(model, context['binding'], unit['unit'])
+            insert_furniture_unit(model, context['binding'], unit['unit'],
+                                  transformation: transformation,
+                                  expected_layout_signature: expected_layout_signature)
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -414,6 +465,54 @@ module Granete
           rescue StandardError => e
             @logger.error('project_furniture_place_failed', error: e)
             failure(:place_failed, e.message)
+          end
+
+          # #469 — preview preparation for the shared placement tool: runs
+          # the SAME guards and server-side resolution as #place (binding,
+          # reconciliation, unit scope, definition, layout) but mutates
+          # nothing and allocates nothing. The transient tool consumes the
+          # returned layout/label for its preview; identity and productive
+          # state are untouched until the commit click revalidates through
+          # #place itself.
+          def prepare_placement_preview(furniture_instance_id)
+            model = @model_provider.call
+            return failure(:no_model, 'no hay un modelo activo') unless model
+
+            context = placement_context(model)
+            return context unless context['ok']
+
+            reconciliation = @host_reconciliation.projection
+            unless reconciliation['state'] == 'connected'
+              return failure(:host_reconciliation_required,
+                             reconciliation['reason'] || 'el estado local del diseño no se pudo reconciliar')
+            end
+
+            unit = resolve_unit(context['binding'], furniture_instance_id)
+            return unit unless unit['unit']
+
+            instance = unit['unit']
+            definition = @catalog_provider.find_definition(instance.furniture_definition_id)
+            unless definition
+              return failure(:definition_unavailable,
+                             'el catálogo del taller no incluye la definición de este mueble')
+            end
+
+            params, choices = PlacementGuards.placement_inputs(@service, @intent_store,
+                                                               context['binding'], instance, definition)
+            layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
+            { 'ok' => true, 'code' => 'preview_ready', 'instanceId' => instance.id,
+              'definition' => definition, 'parameters' => params,
+              'material_choices' => choices, 'layout' => layout,
+              'layout_signature' => PlacementGuards.layout_signature(layout) }
+          rescue Service::Error => e
+            failure(:service_error, e.message)
+          rescue PlacementResolutionError => e
+            failure(:resolution_failed, e.message)
+          rescue Contract::ContractError => e
+            failure(:bad_contract, e.message)
+          rescue StandardError => e
+            @logger.error('project_furniture_preview_prepare_failed', error: e)
+            failure(:preview_failed, e.message)
           end
 
           # #390 / DT-6: Design-first creation and placement from catalog.
@@ -429,7 +528,13 @@ module Granete
           # If backend fails: no local root is inserted (fails loud).
           # If local placement fails: backend identity remains in project (pending),
           #   never rolled back/deleted destructively from backend.
-          def create_and_place(definition_id:, parameters: {}, material_choices: {}, idempotency_key: nil)
+          #
+          # #469: with a `transformation` (the accepted preview gesture) the
+          # identity is still minted ONLY here — at the explicit commit — and
+          # the insertion lands at the user's final position with no Move
+          # handoff. Browsing/previewing the catalog never allocates identity.
+          def create_and_place(definition_id:, parameters: {}, material_choices: {}, idempotency_key: nil,
+                               transformation: nil, expected_layout_signature: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
@@ -439,7 +544,11 @@ module Granete
             prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
             return prep unless prep['ok']
 
-            execute_created_placement(model, context['binding'], prep, idempotency_key, material_choices)
+            signature_mismatch = composition_mismatch(expected_layout_signature, prep['layout'])
+            return signature_mismatch if signature_mismatch
+
+            execute_created_placement(model, context['binding'], prep, idempotency_key,
+                                      material_choices, transformation: transformation)
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -449,6 +558,36 @@ module Granete
           rescue StandardError => e
             @logger.error('project_furniture_create_and_place_failed', error: e)
             failure(:place_failed, e.message)
+          end
+
+          # #469 — catalog preview preparation: the connected Library entry
+          # point resolves definition + authoritative layout WITHOUT minting
+          # any backend identity (no POST /furniture-instances) — the
+          # FurnitureInstance is created canonically (#390) only inside the
+          # commit gesture.
+          def prepare_catalog_preview(definition_id:, parameters: {}, material_choices: {})
+            model = @model_provider.call
+            return failure(:no_model, 'no hay un modelo activo') unless model
+
+            context = placement_context(model)
+            return context unless context['ok']
+
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
+            return prep unless prep['ok']
+
+            { 'ok' => true, 'code' => 'preview_ready',
+              'definition' => prep['definition'], 'parameters' => prep['params'],
+              'material_choices' => material_choices, 'layout' => prep['layout'],
+              'layout_signature' => PlacementGuards.layout_signature(prep['layout']) }
+          rescue Service::Error => e
+            failure(:service_error, e.message)
+          rescue PlacementResolutionError => e
+            failure(:resolution_failed, e.message)
+          rescue Contract::ContractError => e
+            failure(:bad_contract, e.message)
+          rescue StandardError => e
+            @logger.error('project_furniture_catalog_preview_failed', error: e)
+            failure(:preview_failed, e.message)
           end
 
           # Step 2 — completes a pending placement with the position and
@@ -526,7 +665,8 @@ module Granete
 
           private
 
-          def execute_created_placement(model, binding, prep, idempotency_key, material_choices)
+          def execute_created_placement(model, binding, prep, idempotency_key, material_choices,
+                                        transformation: nil)
             key = PlacementCreation.fallback_idempotency_key(idempotency_key)
             created = @service.create_furniture_instance(
               binding.project_id,
@@ -539,7 +679,9 @@ module Granete
             return { 'ok' => true, 'code' => 'pending_position', 'instanceId' => created.id } if located['entity']
 
             inserted = insert_physical_unit(model, binding, created, prep['definition'],
-                                            prep['params'], material_choices, prep['layout'])
+                                            prep['params'], material_choices, prep['layout'],
+                                            transformation: transformation,
+                                            prepare: transformation.nil?)
             unless inserted['ok']
               msg = "el mueble se creó en el proyecto (#{created.id}) pero falló su inserción local: " \
                     "#{inserted['reason']}"
@@ -573,8 +715,11 @@ module Granete
 
           # Phase 3 — server-authoritative resolve + one undoable TOP-LEVEL
           # native placement. No working-copy write: the user still has to
-          # finalize the position (Move tool) and confirm.
-          def insert_furniture_unit(model, binding, instance)
+          # finalize the position (Move tool) and confirm. With a preview
+          # `transformation` the position is already final: the canonical
+          # insertion receives it verbatim and skips the Move handoff.
+          def insert_furniture_unit(model, binding, instance, transformation: nil,
+                                    expected_layout_signature: nil)
             definition = @catalog_provider.find_definition(instance.furniture_definition_id)
             unless definition
               return failure(:definition_unavailable,
@@ -583,14 +728,31 @@ module Granete
 
             params, choices = PlacementGuards.placement_inputs(@service, @intent_store, binding, instance, definition)
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
-            insert_physical_unit(model, binding, instance, definition, params, choices, layout)
+            signature_mismatch = composition_mismatch(expected_layout_signature, layout)
+            return signature_mismatch if signature_mismatch
+
+            insert_physical_unit(model, binding, instance, definition, params, choices, layout,
+                                 transformation: transformation, prepare: transformation.nil?)
           end
 
-          def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout)
+          # A pinned composition that no longer matches the freshly resolved
+          # layout fails closed BEFORE any insertion (#469 gesture context).
+          def composition_mismatch(expected_layout_signature, layout)
+            return nil unless expected_layout_signature
+            return nil if expected_layout_signature == PlacementGuards.layout_signature(layout)
+
+            failure(:composition_changed,
+                    'la composición del mueble cambió desde la vista previa; ' \
+                    'cancelá con Esc y generá la vista previa de nuevo')
+          end
+
+          def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout,
+                                   transformation: nil, prepare: true)
             result = @furniture_builder_factory.call(model).place_existing_furniture(
               model, furniture_instance_id: instance.id, definition: definition,
                      parameters: parameters, resolved_layout: layout, material_choices: choices,
-                     project_id: binding.project_id, design_id: binding.design_id
+                     project_id: binding.project_id, design_id: binding.design_id,
+                     transformation: transformation, prepare: prepare
             )
             return failure(:placement_failed, result['error']) unless result['success']
 

@@ -71,6 +71,22 @@ module Granete
           @local_transform['basis']
         end
 
+        # Canonical non-secret fingerprint of the geometry that defines
+        # this board's placement: size + translation + BASIS (the full
+        # #414 frame). Rotation-only changes — same ids, same sizes, same
+        # translation — still change the fingerprint, so gesture guards
+        # and preview derivation see exactly the same frame.
+        def geometry_fingerprint
+          basis = @local_transform['basis'] || {}
+          axes = %w[x y z].map do |axis|
+            vector = basis[axis].is_a?(Array) ? basis[axis] : [0.0, 0.0, 0.0]
+            vector.map { |value| value.to_f.round(6) }.join(',')
+          end
+          translation = @local_transform['translation'].to_a.map { |value| value.to_f.round(3) }
+          "#{@dims['width']}x#{@dims['thickness']}x#{@dims['length']}" \
+            "@#{translation.join(',')}/#{axes.join(';')}"
+        end
+
         def component_definition_id
           @identity['componentDefinitionId']
         end
@@ -327,6 +343,22 @@ module Granete
 
         def basis
           @local_transform['basis']
+        end
+
+        # Canonical non-secret fingerprint of the geometry that defines
+        # this board's placement: size + translation + BASIS (the full
+        # #414 frame). Rotation-only changes — same ids, same sizes, same
+        # translation — still change the fingerprint, so gesture guards
+        # and preview derivation see exactly the same frame.
+        def geometry_fingerprint
+          basis = @local_transform['basis'] || {}
+          axes = %w[x y z].map do |axis|
+            vector = basis[axis].is_a?(Array) ? basis[axis] : [0.0, 0.0, 0.0]
+            vector.map { |value| value.to_f.round(6) }.join(',')
+          end
+          translation = @local_transform['translation'].to_a.map { |value| value.to_f.round(3) }
+          "#{@dims['width']}x#{@dims['thickness']}x#{@dims['length']}" \
+            "@#{translation.join(',')}/#{axes.join(';')}"
         end
 
         def authoring_capability
