@@ -475,16 +475,21 @@ class FurniturePlacementToolTest < Minitest::Test
   end
 
   # Double activation (host select_tool + explicit controller activate)
-  # must not double the side effects.
+  # must not double the side effects. Owns its model: the global active
+  # model is order-dependent across the suite.
   def test_activate_is_idempotent
     placement_tool, = tool([[0.0, 0.0, 0.0]])
-    view = Sketchup.active_model.active_view
+    previous_model = SketchupStub.active_model
+    SketchupStub.active_model = SketchupStub::ModelStub.new
+    view = SketchupStub.active_model.active_view
     before = view.invalidations
 
     placement_tool.activate
     placement_tool.activate
 
     assert_equal before + 1, view.invalidations, 'exactly one activation effect'
+  ensure
+    SketchupStub.active_model = previous_model
   end
 
   def test_extents_from_layout_prefers_authoritative_dimensions_mm
