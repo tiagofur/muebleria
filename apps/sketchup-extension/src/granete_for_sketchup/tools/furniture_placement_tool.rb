@@ -81,6 +81,7 @@ module Granete
         COLOR_ANCHOR = [39, 174, 96].freeze      # Green — active anchor
         LINE_WIDTH = 2
         ANCHOR_LABEL_SIZE = 13
+        ANCHOR_LABEL_PIXEL_OFFSET = 14
 
         private
 
@@ -120,10 +121,21 @@ module Granete
             if view.respond_to?(:draw_points)
           return unless view.respond_to?(:draw_text)
 
-          label_pt = ::Geom::Point3d.new(anchor_point.x, anchor_point.y,
-                                         anchor_point.z + (6.0 / MM_PER_INCH))
-          view.draw_text(label_pt, "Ancla · #{anchor_label}",
+          view.draw_text(anchor_label_point(view, anchor_point), "Ancla · #{anchor_label}",
                          size: ANCHOR_LABEL_SIZE, color: preview_color(view, COLOR_ANCHOR), bold: true)
+        end
+
+        # draw_text takes SCREEN coordinates: project the 3D anchor with
+        # View#screen_coords and lift the label a few pixels above it.
+        # Older surfaces without screen_coords fall back to the 3D offset.
+        def anchor_label_point(view, anchor_point)
+          if view.respond_to?(:screen_coords)
+            screen = view.screen_coords(anchor_point)
+            return ::Geom::Point3d.new(screen.x, screen.y - ANCHOR_LABEL_PIXEL_OFFSET, 0)
+          end
+
+          ::Geom::Point3d.new(anchor_point.x, anchor_point.y,
+                              anchor_point.z + (6.0 / MM_PER_INCH))
         end
 
         def preview_color(view, rgb)
@@ -260,27 +272,28 @@ module Granete
         end
 
         # Cursor loop: InputPoint picking + invalidation only. There is
-        # nothing else this tool CAN do — it holds no service handles.
+        # nothing else this tool CAN do — it holds no service handles. An
+        # invalid pick INVALIDATES the previous position: a stale cursor
+        # never keeps the preview (or a later click) anchored to an old
+        # inference point.
         def onMouseMove(_flags, x_pos, y_pos, view)
           return unless active?
           return unless @input_point && view
 
-          @input_point.pick(view, x_pos, y_pos)
-          if @input_point.respond_to?(:valid?) && @input_point.valid? &&
-             @input_point.respond_to?(:position)
-            position = @input_point.position
-            @cursor_mm = [position.x.to_f * MM_PER_INCH, position.y.to_f * MM_PER_INCH,
-                          position.z.to_f * MM_PER_INCH]
-            @has_cursor = true
-          end
+          pick_position(view, x_pos, y_pos)
           view.invalidate
         end
 
         # The placement click commits exactly once: a double click, a
         # rebound callback or a late event after the terminal state is
-        # ignored (one gesture = one placement, #469 §4.2).
-        def onLButtonDown(_flags, _x_pos, _y_pos, view)
+        # ignored (one gesture = one placement, #469 §4.2). The click
+        # RE-PICKS the inference at the click's own coordinates and only
+        # commits on a fresh valid position — the accepted transform always
+        # reflects the position vigente at the gesture, never a stale one.
+        def onLButtonDown(_flags, x_pos, y_pos, view)
           return unless active?
+
+          pick_position(view, x_pos, y_pos)
           return unless @has_cursor
 
           transform = current_transform
@@ -308,6 +321,12 @@ module Granete
         def onCancel(_reason, view)
           cancel!(:escape)
           view&.invalidate if view.respond_to?(:invalidate)
+        end
+
+        # Controller-facing cancellation (e.g. the dialog closing with a
+        # live preview): same single-shot semantics as Esc.
+        def cancel_preview(reason)
+          cancel!(reason)
         end
 
         # Keeps the transient box inside the view's drawing frustum.
@@ -357,6 +376,23 @@ module Granete
         end
 
         private
+
+        # Shared inference read: pick at the given screen coordinates and
+        # either adopt the fresh position or invalidate the previous one.
+        def pick_position(view, x_pos, y_pos)
+          return unless @input_point
+
+          @input_point.pick(view, x_pos, y_pos)
+          if @input_point.respond_to?(:valid?) && @input_point.valid? &&
+             @input_point.respond_to?(:position)
+            position = @input_point.position
+            @cursor_mm = [position.x.to_f * MM_PER_INCH, position.y.to_f * MM_PER_INCH,
+                          position.z.to_f * MM_PER_INCH]
+            @has_cursor = true
+          else
+            @has_cursor = false
+          end
+        end
 
         def finish!(state)
           @state = state

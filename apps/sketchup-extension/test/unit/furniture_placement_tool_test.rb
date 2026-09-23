@@ -24,22 +24,31 @@ class FurniturePlacementToolTest < Minitest::Test
 
   # Scriptable InputPoint: each #pick advances to the next scripted
   # position (mm), mimicking host inference output.
+  # Scriptable InputPoint: each #pick advances to the next scripted
+  # position (mm); a nil entry models an INVALID pick (no inference).
+  # picked_coords records the screen coordinates of every pick so tests
+  # can prove the click re-picked at its own coordinates.
   class ScriptedInputPoint
-    attr_reader :pick_count, :position
+    attr_reader :pick_count, :position, :picked_coords
 
     def initialize(positions_mm)
       @positions = positions_mm
       @index = -1
       @pick_count = 0
       @valid = false
+      @picked_coords = []
     end
 
     def pick(_view, x_pos, y_pos, _other = nil)
-      _ = x_pos
-      _ = y_pos
+      @picked_coords << [x_pos, y_pos]
       @index += 1
       @pick_count += 1
-      current = @positions[@index] || @positions.last
+      current = @index < @positions.length ? @positions[@index] : @positions.last
+      if current.nil?
+        @valid = false
+        return
+      end
+
       @position = Geom::Point3d.new(current[0] / MM, current[1] / MM, current[2] / MM)
       @valid = true
     end
@@ -52,13 +61,24 @@ class FurniturePlacementToolTest < Minitest::Test
   # Records viewport drawing. Any model access would have to happen through
   # the injected model — see StrictModel.
   class RecordingView
-    attr_reader :draw_calls, :invalidations, :texts
+    attr_reader :draw_calls, :invalidations, :texts, :text_points, :screen_projections
 
     def initialize
       @draw_calls = []
       @invalidations = 0
       @texts = []
+      @text_points = []
+      @screen_projections = []
       @color = nil
+    end
+
+    # Host-faithful screen projection for draw_text: pixel x/y derived
+    # deterministically from the 3D point so tests can assert the exact
+    # label position.
+    def screen_coords(point)
+      projected = Geom::Point3d.new((point.x * 100).round(3), (point.y * 100).round(3), 0)
+      @screen_projections << point
+      projected
     end
 
     def invalidate
@@ -81,7 +101,8 @@ class FurniturePlacementToolTest < Minitest::Test
       @draw_calls << { mode: :points, points: points.length, color: @color }
     end
 
-    def draw_text(_point, text, _options = {})
+    def draw_text(point, text, _options = {})
+      @text_points << point
       @texts << text
     end
   end
@@ -304,14 +325,92 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_equal 1, @commits.length
   end
 
-  def test_click_before_any_cursor_position_is_ignored
-    placement_tool, = tool([[0.0, 0.0, 0.0]])
+  # No prior mouse move: the click still verifies its OWN inference — a
+  # valid pick at the click coordinates commits with that position; an
+  # invalid one commits nothing.
+  def test_click_without_prior_move_commits_only_on_its_own_valid_pick
+    placement_tool, = tool([[400.0, 300.0, 0.0]])
     placement_tool.activate
+    assert_nil placement_tool.current_transform, 'no cursor position before any pick'
 
     placement_tool.onLButtonDown(0, 10, 10, @view)
 
-    assert_empty @commits
+    assert_equal 1, @commits.length
+    assert_equal [400.0, 300.0, 0.0], point_mm(@commits.first, 0, 0, 0),
+                 'the commit uses the click-verified position, not a stale one'
+
+    invalid_tool, = tool([[0.0, 0.0, 0.0], nil])
+    invalid_tool.activate
+    move_cursor(invalid_tool)
+    invalid_tool.onLButtonDown(0, 10, 10, @view) # re-pick invalid
+    assert_empty @commits[1..], 'an invalid click pick commits nothing'
+  end
+
+  # An invalid pick INVALIDATES the previous position: the preview stops
+  # drawing and a click cannot commit against the stale point.
+  def test_invalid_pick_invalidates_stale_position
+    placement_tool, = tool([[1000.0, 2000.0, 0.0], nil, nil, [500.0, 500.0, 0.0]])
+    placement_tool.activate
+    move_cursor(placement_tool)
+    assert placement_tool.current_transform
+
+    placement_tool.onMouseMove(0, 20, 20, @view) # invalid inference
+    assert_nil placement_tool.current_transform, 'the stale position must be invalidated'
+    placement_tool.draw(@view)
+    assert_empty @view.draw_calls
+
+    placement_tool.onLButtonDown(0, 20, 20, @view) # click re-pick still invalid
+    assert_empty @commits, 'a click without a fresh valid position commits nothing'
     assert placement_tool.active?
+
+    move_cursor(placement_tool) # recovers on the next valid pick
+    placement_tool.onLButtonDown(0, 30, 30, @view)
+    assert_equal 1, @commits.length
+  end
+
+  # The click verifies the position AT THE CLICK: it re-picks at its own
+  # coordinates instead of trusting the last mouse-move inference.
+  def test_click_repicks_and_uses_click_position_not_last_move
+    placement_tool, input_point = tool([[1000.0, 2000.0, 0.0], [300.0, 400.0, 50.0]])
+    move_cursor(placement_tool) # first position from the move
+
+    placement_tool.onLButtonDown(0, 77, 88, @view) # re-pick yields position 2
+
+    assert_equal [[10, 10], [77, 88]], input_point.picked_coords,
+                 'the click must re-pick at its own coordinates'
+    assert_equal 1, @commits.length
+    # The committed transform anchors at the CLICK's inference, not the move's.
+    assert_equal [300.0, 400.0, 50.0], point_mm(@commits.first, 0, 0, 0)
+  end
+
+  # draw_text takes SCREEN coordinates: the label sits exactly at the
+  # projected anchor position (minus a small pixel lift), not at raw 3D.
+  def test_anchor_label_draws_at_projected_screen_point
+    placement_tool, = tool([[1000.0, 2000.0, 30.0]])
+    move_cursor(placement_tool)
+    placement_tool.draw(@view)
+
+    assert_equal 1, @view.text_points.length
+    anchor_world = Geom::Point3d.new(1000.0 / MM, 2000.0 / MM, 30.0 / MM)
+    expected = @view.screen_coords(anchor_world)
+    actual = @view.text_points.first
+    assert_in_epsilon expected.x, actual.x, 1e-9
+    assert_in_epsilon expected.y - 14, actual.y, 1e-9, 'label lifted a few pixels above the anchor'
+    assert_equal 0.0, actual.z
+  end
+
+  # Controller-facing cancellation (dialog close) shares Esc semantics:
+  # single-shot, zero residue, no model calls beyond tool restoration.
+  def test_cancel_preview_public_entry_cancels_once
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    move_cursor(placement_tool)
+
+    placement_tool.cancel_preview(:dialog_closed)
+    placement_tool.cancel_preview(:escape)
+
+    assert_equal [:dialog_closed], @cancels
+    assert placement_tool.cancelled?
+    assert_empty @commits
   end
 
   def test_extents_from_layout_prefers_authoritative_dimensions_mm
