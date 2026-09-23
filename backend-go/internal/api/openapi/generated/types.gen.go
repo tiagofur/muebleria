@@ -182,6 +182,26 @@ type MeResponse struct {
 	SessionScope SessionScope         `json:"session_scope"`
 }
 
+type SketchupProfileResponse struct {
+	User         SketchupProfileUser         `json:"user"`
+	Organization SketchupProfileOrganization `json:"organization"`
+	SessionScope SketchupProfileScope        `json:"session_scope"`
+}
+
+type SketchupProfileUser struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type SketchupProfileOrganization struct {
+	ID      string  `json:"id"`
+	License License `json:"license"`
+}
+
+type SketchupProfileScope struct {
+	OrganizationID string `json:"organization_id"`
+}
+
 type TeamMember struct {
 	MembershipID             string             `json:"membership_id"`
 	UserID                   string             `json:"user_id"`

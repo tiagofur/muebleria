@@ -52,6 +52,97 @@ func loginTestServer(t *testing.T) (*Server, *stubStore) {
 	return &Server{Store: st, JWTSecret: "unit-test-secret-0123456789abcdef"}, st
 }
 
+func TestSketchupProfileReturnsOnlyCurrentSessionIdentity(t *testing.T) {
+	server, _ := loginTestServer(t)
+	tc := auth.TokenContext{
+		Roles: []string{"vendedor"}, OrgID: "org-1", MembershipID: "u1:org-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+	}
+	extensionToken, err := auth.GenerateLegacyExtensionToken("u1", "u@example.com", tc, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	serve := func(path, token string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		RegisterRoutes(server).ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := serve("/api/auth/me", extensionToken); rec.Code != http.StatusForbidden {
+		t.Fatalf("full web session profile became visible to SketchUp: %d", rec.Code)
+	}
+	rec := serve("/api/auth/sketchup/profile", extensionToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("SketchUp profile status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	user, ok := body["user"].(map[string]any)
+	if !ok || len(user) != 2 || user["name"] != "U" || user["email"] != "u@example.com" {
+		t.Fatalf("profile user must expose only own name/email: %v", user)
+	}
+	organization, ok := body["organization"].(map[string]any)
+	if !ok || len(organization) != 2 || organization["id"] != "org-1" {
+		t.Fatalf("profile organization must be current scope only: %v", organization)
+	}
+	if _, ok := organization["license"].(map[string]any); !ok {
+		t.Fatalf("current organization license missing: %v", organization)
+	}
+	if body["memberships"] != nil || body["roles"] != nil || body["support"] != nil {
+		t.Fatalf("profile leaked full web session fields: %v", body)
+	}
+	if scope, ok := body["session_scope"].(map[string]any); !ok || len(scope) != 1 || scope["organization_id"] != "org-1" {
+		t.Fatalf("profile scope must contain only current organization: %v", body["session_scope"])
+	}
+	if cache := rec.Header().Get("Cache-Control"); cache != "no-store" {
+		t.Fatalf("private profile cache control = %q, want no-store", cache)
+	}
+
+	webToken, err := auth.GenerateLegacyWebToken("u1", "u@example.com", tc, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := serve("/api/auth/sketchup/profile", webToken); rec.Code != http.StatusForbidden {
+		t.Fatalf("web credential read SketchUp-only profile: %d", rec.Code)
+	}
+	wrongScope := tc
+	wrongScope.MembershipID = "u1:org-2"
+	wrongOrgToken, err := auth.GenerateLegacyExtensionToken("u1", "u@example.com", wrongScope, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := serve("/api/auth/sketchup/profile", wrongOrgToken); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong-org membership read SketchUp profile: %d", rec.Code)
+	}
+	supportToken, err := auth.GenerateLegacySupportToken("u1", "u@example.com", auth.SupportClaims{
+		OrgID: "org-1", SessionID: "support-1", OrganizationCredentialVersion: 1, Reason: "investigation",
+	}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := serve("/api/auth/sketchup/profile", supportToken); rec.Code == http.StatusOK {
+		t.Fatalf("support credential read SketchUp-only profile: %d", rec.Code)
+	}
+	if rec := serve("/api/auth/sketchup/profile", "invalid-token"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid credential profile status = %d", rec.Code)
+	}
+	if rec := serve("/api/auth/sketchup/profile?token=untrusted", extensionToken); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("query credential profile status = %d", rec.Code)
+	}
+	tc.AuthStartedAt = time.Now().Add(-31 * 24 * time.Hour)
+	expiredToken, err := auth.GenerateLegacyExtensionToken("u1", "u@example.com", tc, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec := serve("/api/auth/sketchup/profile", expiredToken); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expired credential profile status = %d", rec.Code)
+	}
+}
+
 type selectOrgTenantActorStore struct {
 	*stubStore
 	actor storage.TenantActor

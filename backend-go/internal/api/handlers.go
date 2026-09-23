@@ -2831,3 +2831,33 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 	}
 	respondWithJSON(w, http.StatusOK, resp)
 }
+
+// HandleSketchupProfile is the extension's current-session identity read.
+// Unlike /auth/me it never lists the account's other organizations or roles.
+func (s *Server) HandleSketchupProfile(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
+	if !ok || claims == nil || claims.Client != auth.ExtensionClient ||
+		authTransportFromClaims(claims) != openapi.AuthTransportSketchup ||
+		claims.OrgID == "" || claims.Support != nil {
+		respondWithError(w, http.StatusForbidden, "SketchUp session required")
+		return
+	}
+	u, err := s.Store.GetUserByID(r.Context(), claims.UserID)
+	if err != nil || u == nil || u.AccountStatus != domain.AccountStatusActive {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
+	if err != nil || m == nil || m.ID != claims.MembershipID || m.Organization.ID != claims.OrgID ||
+		m.Organization.Status != domain.OrganizationStatusActive {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, openapi.SketchupProfileResponse{
+		User: openapi.SketchupProfileUser{Name: u.Name, Email: u.Email},
+		Organization: openapi.SketchupProfileOrganization{
+			ID: claims.OrgID, License: toOpenAPIOrganization(m.Organization).License,
+		},
+		SessionScope: openapi.SketchupProfileScope{OrganizationID: claims.OrgID},
+	})
+}
