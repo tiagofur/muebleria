@@ -1901,6 +1901,9 @@ func (s *stubStore) CreateDesign(_ context.Context, cmd storage.CreateDesignComm
 	s.designsByID[d.ID] = *d
 	return d, nil
 }
+func (s *stubStore) PrepareDesignDraftUnits(_ context.Context, _ storage.PrepareDesignDraftUnitsCommand) error {
+	return nil
+}
 func (s *stubStore) GetDesignByID(_ context.Context, id string) (*domain.Design, error) {
 	if s.getDesignByIDErr != nil {
 		return nil, s.getDesignByIDErr

@@ -348,6 +348,7 @@ type Store interface {
 
 	// Design aggregate and immutable DesignRevision snapshots (#387 / DT-3, ADR-0003)
 	CreateDesign(ctx context.Context, cmd storage.CreateDesignCommand) (*domain.Design, error)
+	PrepareDesignDraftUnits(ctx context.Context, cmd storage.PrepareDesignDraftUnitsCommand) error
 	GetDesignByID(ctx context.Context, id string) (*domain.Design, error)
 	ListDesignsByProject(ctx context.Context, projectID string) ([]domain.Design, error)
 	GetDesignWorkingCopy(ctx context.Context, designID string) (*domain.DesignWorkingCopy, error)

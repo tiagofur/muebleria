@@ -246,9 +246,42 @@ func respondWithDesignError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Error de serialización del diseño", nil)
 	case errors.Is(err, domain.ErrFurnitureInstanceProjectNotWritable):
 		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "No tenés permiso para modificar el diseño de este proyecto", nil)
+	case errors.Is(err, domain.ErrFurnitureInstanceDurableHistory):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "Una unidad con historial durable no puede retirarse", nil)
 	default:
 		respondWithInternalError(w, err, "design operation")
 	}
+}
+
+// HandlePrepareDesignDraftUnits converges an existing Design's draft units at
+// the explicit handoff boundary. Reads never trigger this mutation.
+func (s *Server) HandlePrepareDesignDraftUnits(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateProjects), "no tenés permiso para preparar las unidades del diseño") {
+		return
+	}
+	projectID, designID := r.PathValue("projectId"), r.PathValue("designId")
+	if !isValidUUID(projectID) || !isValidUUID(designID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "projectId o designId inválido", nil)
+		return
+	}
+	if err := s.Store.PrepareDesignDraftUnits(r.Context(), storage.PrepareDesignDraftUnitsCommand{
+		ProjectID: projectID, DesignID: designID, ActorUserID: claims.UserID,
+		IP: clientIP(r), RequestID: RequestIDFromContext(r.Context()),
+	}); err != nil {
+		respondWithDesignError(w, err)
+		return
+	}
+	design, err := s.Store.GetDesignByID(r.Context(), designID)
+	if err != nil {
+		respondWithDesignError(w, err)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, toDesignDTO(*design))
 }
 
 // HandleProjectDesigns serves GET (list) and POST (create) for /api/projects/{projectId}/designs.
