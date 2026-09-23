@@ -300,3 +300,7 @@ generated-client typecheck is claimed. The affected-plan selects full Go,
 PostgreSQL/browser, SketchUp and visual lanes; no persistent DB, backend
 process, installed plugin or user's model was touched. Those V2 gates remain
 NOT_RUN, not substituted by the stub tests. No Ruby client/version change.
+
+PR3 work-unit commit: `e1b3e4e2` (`fix(sketchup): expose scoped
+device-session profile`); this exact SHA is recorded in a separate ODD
+artifact-only commit. RDD disabled/unmanaged; independent review pending.
