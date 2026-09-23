@@ -83,5 +83,120 @@ class TestDatabaseIsolationAntiRegression(unittest.TestCase):
         self.assertNotIn("(cd backend-go && go test ./... 2>&1)", init_content)
 
 
+    def test_go_tests_guard_database_url(self):
+        """Go integration test files that read DATABASE_URL must invoke ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL."""
+        violations = find_unguarded_database_url_in_go(ROOT)
+        self.assertEqual(
+            violations,
+            [],
+            "Found Go test file reading DATABASE_URL without invoking ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL:\n"
+            + "\n".join(violations),
+        )
+
+    def test_anti_regression_scanner_logic(self):
+        """Verify the scanner detects unguarded DATABASE_URL and permits guarded ones."""
+        # 1. Insecure snippet (reads DATABASE_URL and creates pool without guard)
+        insecure_content = """package foo_test
+import (
+    "os"
+    "testing"
+    "github.com/jackc/pgx/v5/pgxpool"
+)
+func TestInsecure(t *testing.T) {
+    url := os.Getenv("DATABASE_URL")
+    pool, _ := pgxpool.New(ctx, url)
+}
+"""
+        violations = check_go_content_for_unguarded_db_url("foo_test.go", insecure_content)
+        self.assertTrue(len(violations) > 0, "scanner must detect unguarded DATABASE_URL")
+
+        # 2. Secure snippet (reads DATABASE_URL and invokes ValidateTestDatabaseURL)
+        secure_content = """package foo_test
+import (
+    "os"
+    "testing"
+    "github.com/tiagofur/muebles-backend/internal/storage"
+    "github.com/jackc/pgx/v5/pgxpool"
+)
+func TestSecure(t *testing.T) {
+    url := os.Getenv("DATABASE_URL")
+    if err := storage.ValidateTestDatabaseURL(url); err != nil {
+        t.Fatal(err)
+    }
+    pool, _ := pgxpool.New(ctx, url)
+}
+"""
+        violations_secure = check_go_content_for_unguarded_db_url("foo_test.go", secure_content)
+        self.assertEqual(violations_secure, [], "scanner must permit guarded DATABASE_URL")
+
+        # 3. Secure admin snippet (invokes ValidateTestAdminDatabaseURL)
+        admin_content = """package foo_test
+import (
+    "os"
+    "testing"
+    "github.com/tiagofur/muebles-backend/internal/storage"
+)
+func TestAdmin(t *testing.T) {
+    url := os.Getenv("DATABASE_URL")
+    if err := storage.ValidateTestAdminDatabaseURL(url); err != nil {
+        t.Fatal(err)
+    }
+}
+"""
+        violations_admin = check_go_content_for_unguarded_db_url("foo_test.go", admin_content)
+        self.assertEqual(violations_admin, [], "scanner must permit ValidateTestAdminDatabaseURL")
+
+        # 4. testdb_guard_test.go itself does not trigger false positives
+        guard_test_path = ROOT / "backend-go/internal/storage/testdb_guard_test.go"
+        if guard_test_path.exists():
+            violations_guard = check_go_content_for_unguarded_db_url(
+                guard_test_path.relative_to(ROOT).as_posix(),
+                guard_test_path.read_text(encoding="utf-8")
+            )
+            self.assertEqual(violations_guard, [], "testdb_guard_test.go must not be flagged")
+
+
+def check_go_content_for_unguarded_db_url(rel_path: str, content: str) -> list[str]:
+    # Exclude files that define the guards or test their negative rejections
+    if rel_path in (
+        "backend-go/internal/storage/testdb_guard.go",
+        "backend-go/internal/storage/testdb_guard_test.go",
+    ):
+        return []
+
+    lines = content.splitlines()
+    reads_db_url_lines = []
+    for line_no, line in enumerate(lines, start=1):
+        if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
+            reads_db_url_lines.append(line_no)
+
+    if not reads_db_url_lines:
+        return []
+
+    # Check if file invokes ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL
+    has_guard = (
+        "ValidateTestDatabaseURL" in content
+        or "ValidateTestAdminDatabaseURL" in content
+    )
+
+    if not has_guard:
+        return [f"{rel_path}:{reads_db_url_lines[0]}: reads os.Getenv(\"DATABASE_URL\") without calling ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL"]
+
+    return []
+
+
+def find_unguarded_database_url_in_go(root: Path) -> list[str]:
+    violations = []
+    for p in (root / "backend-go").rglob("*_test.go"):
+        parts = p.parts
+        if ".git" in parts or "vendor" in parts:
+            continue
+        rel = p.relative_to(root).as_posix()
+        content = p.read_text(encoding="utf-8", errors="replace")
+        violations.extend(check_go_content_for_unguarded_db_url(rel, content))
+    return violations
+
+
 if __name__ == "__main__":
     unittest.main()
+

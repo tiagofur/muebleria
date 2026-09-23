@@ -414,7 +414,7 @@ func buildFixture() (*fixture, error) {
 	// Admin connection (to drop/create the throwaway database).
 	adminURL := *u
 	adminURL.Path = "/postgres"
-	if err := storage.ValidateTestDatabaseURL(adminURL.String()); err != nil {
+	if err := storage.ValidateTestAdminDatabaseURL(adminURL.String()); err != nil {
 		return nil, fmt.Errorf("admin DSN rejected by test db guard: %w", err)
 	}
 	admin, err := pgxpool.New(ctx, adminURL.String())

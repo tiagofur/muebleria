@@ -92,11 +92,29 @@ export GRANETE_TEST_DATABASE=1
 
 cd "${ROOT}/backend-go"
 
-# If arguments were provided to scripts/backend-test.sh, pass them to go test;
-# otherwise default to -p 1 ./...
-# Always pass -parallel 1 when running packages with concurrent migration/role tests.
+# Run tests with package serialization (-p 1) and process serialization (-parallel 1)
+# to ensure cluster-global DDL/roles and migrations do not conflict.
+GO_ARGS=()
+HAS_P=0
+HAS_PARALLEL=0
+
+for arg in "$@"; do
+  case "${arg}" in
+    -p|--p|-p=*|--p=*)
+      HAS_P=1
+      ;;
+    -parallel|--parallel|-parallel=*|--parallel=*)
+      HAS_PARALLEL=1
+      ;;
+  esac
+done
+
+[ "${HAS_P}" -eq 0 ] && GO_ARGS+=("-p" "1")
+[ "${HAS_PARALLEL}" -eq 0 ] && GO_ARGS+=("-parallel" "1")
+
 if [ $# -gt 0 ]; then
-  go test -parallel 1 "$@"
+  go test "${GO_ARGS[@]}" "$@"
 else
-  go test -p 1 -parallel 1 -timeout=30m ./...
+  go test "${GO_ARGS[@]}" -timeout=30m ./...
 fi
+

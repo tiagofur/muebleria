@@ -16,11 +16,16 @@ const testDBUrl = required('ORGANIZATION_TEST_DATABASE_URL');
 try {
   const parsed = new URL(testDBUrl);
   const dbName = parsed.pathname.replace(/^\//, '').toLowerCase();
-  if (!dbName || dbName === 'muebles' || dbName.includes('prod') || parsed.hostname.includes('prod')) {
-    throw new Error(`Unsafe test database URL rejected by fail-closed guard: ${testDBUrl}`);
+  const allowedTestDBs = ['granete_gate', 'granete_test', 'muebles_multiorg_test', 'muebles_pilot_readiness'];
+  const allowedPrefixes = ['granete_gate_', 'granete_test_', 'muebles_multiorg_test_', 'muebles_pilot_'];
+  const isAllowed = allowedTestDBs.includes(dbName) || allowedPrefixes.some(p => dbName.startsWith(p));
+
+  if (!dbName || dbName === 'muebles' || dbName === 'postgres' || dbName.includes('prod') || parsed.hostname.includes('prod') || !isAllowed) {
+    throw new Error(`Unsafe test database URL rejected by fail-closed guard (host=${parsed.host} db=${dbName})`);
   }
 } catch (err: any) {
-  throw new Error(`Invalid or unsafe ORGANIZATION_TEST_DATABASE_URL: ${err?.message || err}`);
+  const safeMessage = err?.message && !err.message.includes('://') ? err.message : 'database validation failed';
+  throw new Error(`Invalid or unsafe ORGANIZATION_TEST_DATABASE_URL: ${safeMessage}`);
 }
 
 const webPort = required('ORGANIZATION_WEB_PORT');

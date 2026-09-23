@@ -42,7 +42,7 @@ func multiOrgAdminDSN(t *testing.T) string {
 	}
 	u.Path = "/postgres"
 	adminDSN := u.String()
-	if err := storage.ValidateTestDatabaseURL(adminDSN); err != nil {
+	if err := storage.ValidateTestAdminDatabaseURL(adminDSN); err != nil {
 		t.Fatalf("multiOrgAdminDSN rejected unsafe test database: %v", err)
 	}
 	return adminDSN

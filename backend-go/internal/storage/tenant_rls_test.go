@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,7 +34,39 @@ type rlsFixture struct {
 	dbName string
 }
 
-var activeRLSDBName string
+func (fx *rlsFixture) DatabaseURL(t *testing.T) *url.URL {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set; skipping tenant RLS integration test")
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse DATABASE_URL: %v", err)
+	}
+	u.Path = "/" + fx.dbName
+	if err := storage.ValidateTestDatabaseURL(u.String()); err != nil {
+		t.Fatalf("DatabaseURL rejected unsafe test database: %v", err)
+	}
+	return u
+}
+
+var (
+	rlsDBMu         sync.RWMutex
+	activeRLSDBName string
+)
+
+func setActiveRLSDBName(name string) {
+	rlsDBMu.Lock()
+	defer rlsDBMu.Unlock()
+	activeRLSDBName = name
+}
+
+func getActiveRLSDBName() string {
+	rlsDBMu.RLock()
+	defer rlsDBMu.RUnlock()
+	return activeRLSDBName
+}
 
 func newRLSFixture(t *testing.T) *rlsFixture {
 	t.Helper()
@@ -62,10 +95,10 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 	if err != nil {
 		t.Fatalf("connect test db: %v", err)
 	}
-	activeRLSDBName = testDBName
+	setActiveRLSDBName(testDBName)
 	t.Cleanup(func() {
-		if activeRLSDBName == testDBName {
-			activeRLSDBName = ""
+		if getActiveRLSDBName() == testDBName {
+			setActiveRLSDBName("")
 		}
 		dbPool.Close()
 		if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+testDBName+` WITH (FORCE)`); err != nil {
@@ -152,8 +185,8 @@ func rlsDatabaseURL(t *testing.T) *url.URL {
 		t.Fatalf("parse DATABASE_URL: %v", err)
 	}
 	dbName := multiOrgTestDBName
-	if activeRLSDBName != "" {
-		dbName = activeRLSDBName
+	if active := getActiveRLSDBName(); active != "" {
+		dbName = active
 	}
 	u.Path = "/" + dbName
 	if err := storage.ValidateTestDatabaseURL(u.String()); err != nil {

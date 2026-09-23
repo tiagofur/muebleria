@@ -395,7 +395,7 @@ func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 	}
 	u.Path = "/postgres"
 	adminDSN := u.String()
-	if err := storage.ValidateTestDatabaseURL(adminDSN); err != nil {
+	if err := storage.ValidateTestAdminDatabaseURL(adminDSN); err != nil {
 		t.Fatalf("hwAssetE2EStore rejected unsafe admin database: %v", err)
 	}
 	dbName := "hwassets_api_e2e_" + fmt.Sprint(time.Now().UnixNano()%1000000)
