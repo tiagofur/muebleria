@@ -242,6 +242,101 @@ func TestRequote_FreezesOnlyConsumableRolesFromPoisonedSource(t *testing.T) {
 	}
 }
 
+// #826 review case 2 at the full affected path (real PostgreSQL + RLS under
+// the app role): a module whose entire BOM is one FIXED-ID hardware line
+// consumes no choice role, so a seeded surplus role must converge on write
+// and the published revision must clear the release gate — not be blocked by
+// release_snapshot_resolution.
+func TestReleaseGate_HardwareOnlyModuleSurplusChoicesConverge(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+
+	const hwOnlyModule = "52000000-0000-0000-0000-0000000000d2"
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id)
+		VALUES ('`+cs826Hardware+`', 'CS-HW', 'Jaladera CS', 'piece', 10, '`+rlsOrgA+`');
+		INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, organization_id)
+		VALUES ('`+hwOnlyModule+`', 'CS-HW-ONLY', 'Modulo solo herraje fijo', 0, 600, 720, 560, '`+rlsOrgA+`');
+		INSERT INTO hardware_lines (module_id, option_role, hardware_id, quantity, organization_id)
+		VALUES ('`+hwOnlyModule+`', 'FIXED', '`+cs826Hardware+`', 4, '`+rlsOrgA+`');`)
+
+	var fi *domain.FurnitureInstance
+	var design *domain.Design
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		var txErr error
+		fi, txErr = fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
+			ProjectID: csProject, FurnitureDefinitionID: hwOnlyModule,
+			Origin: domain.FurnitureInstanceOriginDesign, ActorUserID: rlsUserA,
+		})
+		if txErr != nil {
+			return txErr
+		}
+		design, txErr = fx.store.CreateDesign(ctx, storage.CreateDesignCommand{
+			ProjectID: csProject, Name: "826 hw-only gate", ActorUserID: rlsUserA,
+		})
+		return txErr
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wc, err := fiTxAnd(t, fx.rlsFixture, fiActorA(), func(ctx context.Context) (*domain.DesignWorkingCopy, error) {
+		return fx.store.GetDesignWorkingCopy(ctx, design.ID)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var revisionID string
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		if _, txErr := fx.store.UpdateDesignWorkingCopy(ctx, storage.UpdateDesignWorkingCopyCommand{
+			DesignID:               design.ID,
+			ExpectedWorkingVersion: &wc.UpdatedAt,
+			SourceType:             domain.DesignRevisionSourceSketchup,
+			ActorUserID:            rlsUserA,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{{
+				FurnitureInstanceID:   fi.ID,
+				FurnitureDefinitionID: hwOnlyModule,
+				MaterialChoices:       map[string]string{"JALADERA": cs826Hardware, "CORREDERA": cs826Hardware},
+			}},
+		}); txErr != nil {
+			return txErr
+		}
+		rev, txErr := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID: design.ID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
+		})
+		if txErr != nil {
+			return txErr
+		}
+		revisionID = rev.ID
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Convergence happened on write: the hardware-only definition consumes no
+	// role, so the surplus seed left the persisted working item empty.
+	if got := workingItemChoices(t, fx, design.ID, fi.ID); len(got) != 0 {
+		t.Fatalf("surplus choices must converge away for a hardware-only module, got %v", got)
+	}
+
+	// The release gate (the same evaluation the release command runs) accepts
+	// the published revision: hardware demand exists and choices ≡ consumed.
+	preflight, err := fiTxAnd(t, fx.rlsFixture, fiActorA(), func(ctx context.Context) (*domain.ManufacturingPreflightResult, error) {
+		return fx.store.EvaluateDesignRevisionPreflight(ctx, design.ID, revisionID)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, issue := range preflight.Issues {
+		if issue.Code == domain.PreflightIssueSnapshotResolution {
+			t.Fatalf("hardware-only revision must not hit the snapshot-resolution gate, issues: %+v", preflight.Issues)
+		}
+	}
+	if preflight.Status != domain.ManufacturingPreflightReady {
+		t.Fatalf("hardware-only revision must clear the release gate, got %s: %+v", preflight.Status, preflight.Issues)
+	}
+}
+
 func TestReconcile_DoesNotFillUnconsumableRoles(t *testing.T) {
 	fx := setupCommercialSnapshotFixture(t)
 	seed826CommercialGroups(t, fx)

@@ -107,3 +107,62 @@ func TestIntersectSkipsUnresolvableUnits(t *testing.T) {
 		t.Fatal("unresolvable units keep their choices untouched")
 	}
 }
+
+// #826 review case 2: an empty consumed-role set does NOT mean zero demand.
+// A module made only of FIXED-ID hardware lines resolves a valid hardware BOM
+// while consuming no choice role at all — surplus roles must converge there,
+// with the BOM byte-identical (fixed hardware ignores choices by definition).
+func TestIntersectConvergesWhenOnlyFixedHardwareConsumes(t *testing.T) {
+	item, catalog := consumptionFixture(t)
+	module := &catalog.Modules[0]
+	module.BoardParts = nil
+	module.HardwareLines = []domain.HardwareLine{{ID: "rail-fixed", HardwareID: "hinge", Quantity: 4}}
+	item.Parameters = nil
+	item.MaterialChoices = map[string]string{"JALADERA": "hinge", "CORREDERA": "hinge"}
+
+	before, err := resolveReleaseUnitOpt(item, catalog, nil, false)
+	if err != nil {
+		t.Fatalf("fixed-hardware module must resolve: %v", err)
+	}
+	if len(before.BOM.HardwareLines) == 0 {
+		t.Fatal("fixture must produce hardware demand")
+	}
+	filtered, ok := IntersectConsumedOptionChoices(item, catalog)
+	if !ok {
+		t.Fatal("hardware-demand BOM with no consumed roles must still converge")
+	}
+	if len(filtered) != 0 {
+		t.Fatalf("no role is consumed — every surplus role must converge away, got %+v", filtered)
+	}
+	converged := item
+	converged.MaterialChoices = filtered
+	after, err := resolveReleaseUnitOpt(converged, catalog, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeJSON, _ := json.Marshal(before.BOM)
+	afterJSON, _ := json.Marshal(after.BOM)
+	if string(beforeJSON) != string(afterJSON) {
+		t.Fatal("convergence changed the fixed-hardware BOM — not neutral")
+	}
+	// The strict release gate accepts the converged unit (choices ≡ consumed).
+	if _, err := ResolveReleaseUnit(converged, catalog); err != nil {
+		t.Fatalf("converged unit must be release-resolvable: %v", err)
+	}
+}
+
+// #826 review case 2 counterpart: a genuinely zero-demand unit (no board
+// parts, no hardware) keeps its choices — nothing proves any role unused and
+// the release gate already blocks it with the typed zero-demand verdict.
+func TestIntersectKeepsChoicesWhenBOMHasNoDemand(t *testing.T) {
+	item, catalog := consumptionFixture(t)
+	module := &catalog.Modules[0]
+	module.BoardParts = nil
+	module.HardwareLines = nil
+	item.Parameters = nil
+	item.MaterialChoices = map[string]string{"JALADERA": "hinge"}
+	filtered, ok := IntersectConsumedOptionChoices(item, catalog)
+	if ok || !reflect.DeepEqual(item.MaterialChoices, filtered) {
+		t.Fatal("zero-demand units keep their choices untouched")
+	}
+}

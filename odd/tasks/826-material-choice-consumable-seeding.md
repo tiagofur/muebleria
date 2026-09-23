@@ -3,7 +3,29 @@
 Issue: #826 — fix(authoring): material choices se siembran sin intersección con roles consumibles por la definición
 Base: origin/main @ 8c78eac9 (coordinado con PR #825 fix/821-catalog-option-kinds)
 Branch: fix/826-material-choice-consumable-seeding
-Status: candidate frozen @ 981144b0 + artifact sync; PR #829 (Closes #826, Delivery: complete) pending review
+Status: review R1 applied over fba32e85 (RED→GREEN→REFACTOR); PR #829 (Closes #826, Delivery: complete)
+
+## Review R1 (2026-09-22, sobre fba32e85) — RED→GREEN→REFACTOR
+
+- **Caso 2 (herraje fijo)**: guard corregido — el skip de convergencia pasa
+  de "consumed vacío" a "BOM sin demanda" (sin partes Y sin hardware). Un
+  módulo sólo-herraje-ID-fijo (cero roles consumidos, demanda válida) ahora
+  converge; BOM byte-idéntico. Tests: engine
+  (`TestIntersectConvergesWhenOnlyFixedHardwareConsumes`,
+  `TestIntersectKeepsChoicesWhenBOMHasNoDemand`) + storage PG/RLS hasta el
+  gate (`TestReleaseGate_HardwareOnlyModuleSurplusChoicesConverge` →
+  `EvaluateDesignRevisionPreflight` READY, sin release_snapshot_resolution).
+  RED confirmado en ambos niveles antes del cambio. Trap del fixture: el
+  routing requiere medidas válidas aunque el módulo sea fijo (declarar
+  width/height/depth en el módulo).
+- **Caso 1 (base-treatment)**: se MANTIENE el conservadurismo (no dropear
+  ZOCLO/ZOCLO_PERFIL/PATAS) — dropearlos desincroniza pricing (base context
+  del proyecto) del authoring. Test pineado documenta que el gate estricto
+  puede rechazarlos (preexistente). Decisión de producto documentada en la
+  issue #826 (límite conocido): alinear el resolve de release con el
+  `PricingContext.BaseMode` congelado requiere issue propia (semántica #727).
+- Refactor: `resolveUnitConsumption` único interno; guard por demanda.
+- Issue #826 aceptación reescrita a converge-at-write con el límite conocido.
 
 ## Outcome
 
