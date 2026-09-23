@@ -685,7 +685,8 @@ module Granete
             on_cancel: lambda { |reason|
               handle_placement_preview_cancelled(dialog, fi_id, 'instanceId',
                                                  session['gesture_id'], reason)
-            }
+            },
+            model: model
           )
           return unless activate_placement_preview(dialog, session, tool, 'instanceId' => fi_id)
 
@@ -722,7 +723,8 @@ module Granete
             on_cancel: lambda { |reason|
               handle_placement_preview_cancelled(dialog, definition_id, 'definitionId',
                                                  session['gesture_id'], reason)
-            }
+            },
+            model: model
           )
           return unless activate_placement_preview(dialog, session, tool, 'definitionId' => definition_id)
 
@@ -748,8 +750,8 @@ module Granete
           return if placement_preview_reentry?(session, 'project', furniture_instance_id, gesture_id)
 
           gesture_live = true
-          unless placement_preview_context_ok?(dialog, session, 'onPlaceFurnitureResult',
-                                               'instanceId' => furniture_instance_id)
+          unless placement_preview_gesture_context_ok?(dialog, session, 'onPlaceFurnitureResult',
+                                                       'instanceId' => furniture_instance_id)
             clear_placement_preview(session)
             return
           end
@@ -789,8 +791,8 @@ module Granete
           return if placement_preview_reentry?(session, 'catalog', session && session['key'], gesture_id)
 
           gesture_live = true
-          unless placement_preview_context_ok?(dialog, session, 'onCreateProjectFurnitureResult',
-                                               'definitionId' => session['key'])
+          unless placement_preview_gesture_context_ok?(dialog, session, 'onCreateProjectFurnitureResult',
+                                                       'definitionId' => session['key'])
             clear_placement_preview(session)
             return
           end
@@ -886,6 +888,7 @@ module Granete
         def placement_preview_session(kind, key, model, prepared)
           { 'kind' => kind, 'key' => key, 'model' => model,
             'binding' => placement_binding_triple(model),
+            'auth' => project_furniture_placer.service.context_fingerprint,
             'gesture_id' => "preview-#{(Time.now.to_f * 1000).to_i}-#{rand(0xffff).to_s(16)}#{rand(0xffff).to_s(16)}",
             'layout_signature' => prepared['layout_signature'],
             'extents' => prepared['extents'] }
@@ -907,6 +910,13 @@ module Granete
         rescue StandardError => e
           @logger.error('placement_preview_activation_failed', { 'error' => e }.merge(key_fields))
           @active_placement_preview = nil
+          # The failure may have happened AFTER select_tool pushed the
+          # tool: put the model back so the retry starts clean.
+          begin
+            model&.select_tool(nil)
+          rescue StandardError
+            nil
+          end
           execute_bridge(dialog, 'onPlacementPreviewStarted',
                          { 'ok' => false, 'code' => 'activation_failed',
                            'reason' => 'no se pudo activar la herramienta de colocación; inténtalo de nuevo' }
@@ -929,6 +939,13 @@ module Granete
           @logger.warn('placement_preview_commit_stale',
                        { 'kind' => kind, 'key' => key, 'gesture_id' => gesture_id })
           true
+        end
+
+        # Combined gesture-context guard: model + binding + authenticated
+        # context must all match the captured gesture.
+        def placement_preview_gesture_context_ok?(dialog, session, bridge_method, key_fields)
+          placement_preview_context_ok?(dialog, session, bridge_method, key_fields) &&
+            placement_preview_auth_ok?(dialog, session, bridge_method, key_fields)
         end
 
         # Exact-context guard: the click must land on the SAME model and
@@ -954,6 +971,21 @@ module Granete
           false
         end
 
+        # Authenticated-context guard: logout, a new session or a different
+        # backend invalidate the gesture even when the model and binding
+        # ids are identical. The comparison uses the service's NON-SECRET
+        # fingerprint (endpoint + one-way credential digest).
+        def placement_preview_auth_ok?(dialog, session, bridge_method, key_fields)
+          return true if project_furniture_placer.service.context_fingerprint == session['auth']
+
+          @logger.warn('placement_preview_auth_changed', key_fields)
+          execute_bridge(dialog, bridge_method,
+                         { 'ok' => false, 'code' => 'context_changed',
+                           'reason' => 'la sesión o el servidor cambió durante la colocación; nada fue colocado' }
+                         .merge(key_fields))
+          false
+        end
+
         def placement_binding_triple(model)
           binding = Connection::ModelBinding::Store.new(model).read
           return nil unless binding
@@ -961,11 +993,17 @@ module Granete
           [binding.project_id, binding.design_id, binding.base_revision_id]
         end
 
-        def build_placement_preview_tool(label:, extents_mm:, on_commit:, on_cancel:)
+        # The tool keeps the model captured at gesture time: ending an old
+        # tool must never select_tool over the CURRENT dynamic model (which
+        # may have moved on to another document). Extents carry their local
+        # minimum (origin_mm) so the anchor maps the real furniture box.
+        def build_placement_preview_tool(label:, extents_mm:, on_commit:, on_cancel:, model:)
           Tools::FurniturePlacementTool.new(
             label: label, extents_mm: extents_mm,
             on_commit: on_commit, on_cancel: on_cancel,
-            model_provider: method(:active_model), logger: @logger
+            model_provider: -> { model },
+            origin_mm: extents_mm[:origin_mm] || [0.0, 0.0, 0.0],
+            logger: @logger
           )
         end
 
@@ -2966,6 +3004,10 @@ module Granete
           dialog.set_file(resource_path)
           bind_callbacks(dialog)
           dialog.set_on_closed do
+            # #469: the dialog's own close (native X, close_dialog callback
+            # or controller.close) ends any live placement-preview gesture —
+            # idempotent, no recursion, no pushes to a closed dialog.
+            cancel_active_placement_preview
             detach_selection_observer
             @manufacturing_overlay&.disable
             @option_selector&.close

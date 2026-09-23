@@ -103,12 +103,19 @@ class PlacementPreviewControllerTest < Minitest::Test
   end
 
   class FakeAuth
+    UNSET = Object.new.freeze
+    attr_accessor :header_override
+
+    def initialize
+      @header_override = UNSET
+    end
+
     def configured?
       true
     end
 
     def authorization_header
-      'Bearer test-token'
+      @header_override.equal?(UNSET) ? 'Bearer test-token' : @header_override
     end
 
     def refresh_if_needed; end
@@ -119,10 +126,12 @@ class PlacementPreviewControllerTest < Minitest::Test
   # exactly the readback the real convergence validates against.
   class FakeTransport
     attr_reader :requests
+    attr_accessor :base_url
 
     def initialize
       @requests = []
       @routes = {}
+      @base_url = 'http://taller.local:8080/api'
     end
 
     def respond(method, path, status, body)
@@ -163,12 +172,14 @@ class PlacementPreviewControllerTest < Minitest::Test
 
   class FakeCatalog
     attr_reader :layout_resolves
-    attr_accessor :dims_mutable, :unusable_layout
+    attr_accessor :dims_mutable, :unusable_layout, :board_mutation, :shifted_layout
 
     def initialize
       @layout_resolves = []
       @dims_mutable = nil
       @unusable_layout = false
+      @board_mutation = nil
+      @shifted_layout = false
     end
 
     def find_definition(id)
@@ -189,7 +200,22 @@ class PlacementPreviewControllerTest < Minitest::Test
 
       body = layout_base_body
       body['dimensionsMm'] = @dims_mutable if @dims_mutable
+      apply_board_variants(body)
       LIB::LayoutContract.parse!(body)
+    end
+
+    # Board-level variants with UNCHANGED ids: shifted geometry (local
+    # minimum away from origin, no top-level dimensionsMm) and a board
+    # width mutation — the composition-fingerprint regression shapes.
+    def apply_board_variants(body)
+      if @shifted_layout
+        body.delete('dimensionsMm')
+        body['components'][0]['localTransform']['translationMm'] = [100, 50, 20]
+      end
+      return unless @board_mutation
+
+      body.delete('dimensionsMm')
+      body['components'][0]['widthMm'] = @board_mutation
     end
 
     def unusable_layout_object
@@ -242,6 +268,8 @@ class PlacementPreviewControllerTest < Minitest::Test
     stub_project_furniture
     stub_working_copy_get
 
+    @auth = FakeAuth.new
+    @auth_rotation = ->(new_header) { @auth.header_override = new_header }
     @placer = build_placer
     @coordinator = Granete::SketchUpExtension::Connection::PositionSyncCoordinator.new(
       model_provider: -> { Sketchup.active_model },
@@ -460,6 +488,154 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
+  # --- R2: the three REAL close routes all end the gesture, idempotently,
+  # without recursion or pushes to the closed dialog — and a dead tool can
+  # no longer commit afterwards.
+  def test_close_routes_cancel_the_preview_and_block_later_commits
+    %i[controller_close close_dialog_callback native_on_closed].each do |route|
+      @dialog = @controller.show # close rebuilds the dialog; rebind each pass
+      begin_preview(FI_1)
+      tool = active_tool
+      scripts_before = @dialog.executed_scripts.length
+
+      case route
+      when :controller_close then @controller.close
+      when :close_dialog_callback then @dialog.callbacks.fetch('close_dialog').call(nil)
+      when :native_on_closed
+        @dialog.instance_variable_get(:@on_closed).call
+      end
+
+      assert tool.cancelled?, "#{route}: the tool ends"
+      assert_nil active_preview_session, "#{route}: the session is consumed"
+      assert_equal scripts_before, @dialog.executed_scripts.length,
+                   "#{route}: no bridge push to a closed dialog"
+
+      # A late click on the dead tool commits nothing.
+      click(tool)
+      assert_empty @transport.requests_for('PUT', %r{/working-copy}), "#{route}: no commit after close"
+      assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    end
+  end
+
+  # The host switching tools (user picks another tool) deactivates ours:
+  # the preview cancels but the user's NEXT tool is never clobbered, and a
+  # new gesture still works afterwards.
+  def test_tool_switch_cancel_does_not_clobber_the_users_next_tool
+    begin_preview(FI_1)
+    tool = active_tool
+
+    user_tool = Object.new
+    @model.select_tool(user_tool)
+    tool.deactivate(@model.active_view)
+
+    assert tool.cancelled?
+    assert_nil active_preview_session
+    assert_equal user_tool, @model.selected_tools.last,
+                 'deactivation must not select_tool(nil) over the user choice'
+
+    begin_preview(FI_1)
+    click(active_tool)
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+  end
+
+  # A failure AFTER select_tool (activation explodes) cleans the model and
+  # the session; the retry works.
+  def test_failure_after_select_tool_cleans_up_and_retry_works
+    begin_preview(FI_1) # sanity: the flow works
+    active_tool.onKeyDown(27, false, 0, @model.active_view)
+
+    Sketchup.define_singleton_method(:status_text=) { |_text| raise 'status bar exploded' }
+    begin_preview(FI_1)
+  ensure
+    Sketchup.singleton_class.send(:remove_method, :status_text=) if Sketchup.respond_to?(:status_text=)
+
+    failure = bridge_scripts('onPlacementPreviewStarted').last
+    assert_includes failure, '"code":"activation_failed"', failure
+    assert_nil active_preview_session
+    assert_includes @model.selected_tools, nil,
+                    'the half-activated tool is replaced by the selection tool'
+    assert @model.selected_tools.last.nil? || !@model.selected_tools.last.is_a?(TOOL) ||
+           !@model.selected_tools.last.active?, 'no live preview tool remains'
+
+    begin_preview(FI_1)
+    click(active_tool)
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+  end
+
+  # --- R2 authenticated context: same model, same binding ids — but a new
+  # session (rotated credential), a logout or a different backend still
+  # invalidate the gesture before anything is placed.
+  def test_session_rotation_invalidates_the_gesture
+    begin_preview(FI_1)
+    tool = active_tool
+
+    @auth_rotation.call('Bearer a-brand-new-session')
+    click(tool)
+
+    result = bridge_scripts('onPlaceFurnitureResult').last
+    assert_includes result, '"code":"context_changed"', result
+    assert_includes result, 'la sesión o el servidor cambió'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+  end
+
+  def test_logout_invalidates_the_gesture
+    begin_preview(FI_1)
+    tool = active_tool
+
+    @auth_rotation.call(nil)
+    click(tool)
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, 'la sesión o el servidor cambió'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_backend_change_invalidates_the_gesture
+    begin_preview(FI_1)
+    tool = active_tool
+
+    @transport.base_url = 'http://otro-taller.local:9090/api'
+    click(tool)
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, 'la sesión o el servidor cambió'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  # --- R2 preview geometry: a layout whose boards sit away from the local
+  # origin (no dimensionsMm) keeps its minimum, and the committed transform
+  # anchors the REAL box minimum at the clicked point.
+  def test_shifted_layout_anchors_the_real_box_minimum
+    @catalog.shifted_layout = true
+    begin_preview(FI_1)
+    tool = active_tool
+    click(tool)
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+    root = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    stored = PF::TransformContract.from_host(root.transformation)
+    # BACK_LEFT_BOTTOM anchor = local minimum [100, 50, 20] at the click:
+    # translation = click - origin.
+    assert_in_delta CLICK_POSITION_MM[0] - 100.0, stored['translation_mm'][0], 1e-3
+    assert_in_delta CLICK_POSITION_MM[1] - 50.0, stored['translation_mm'][1], 1e-3
+    assert_in_delta CLICK_POSITION_MM[2] - 20.0, stored['translation_mm'][2], 1e-3
+  end
+
+  # Board geometry changing under UNCHANGED ids (and no top-level
+  # dimensionsMm) is still detected: width 600 → 900 fails closed.
+  def test_board_geometry_change_with_same_ids_fails_closed
+    @catalog.board_mutation = 600
+    begin_preview(FI_1)
+    tool = active_tool
+
+    @catalog.board_mutation = 900 # same ids, same definition — wider board
+    click(tool)
+
+    result = bridge_scripts('onPlaceFurnitureResult').last
+    assert_includes result, '"code":"composition_changed"', result
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+  end
+
   # Fix #6 regression: unresolvable catalog extents answer honestly with
   # definitionId — the old key: call crashed into a generic error instead.
   def test_catalog_preview_without_usable_extents_answers_preview_unavailable
@@ -560,9 +736,9 @@ class PlacementPreviewControllerTest < Minitest::Test
       model_provider: -> { Sketchup.active_model },
       binding_store_factory: ->(m) { MB::Store.new(m) },
       model_binding_service: MB::Service.new(
-        transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new
+        transport: @transport, auth_provider: @auth, logger: NullLogger.new
       ),
-      service: PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new),
+      service: PF::Service.new(transport: @transport, auth_provider: @auth, logger: NullLogger.new),
       metadata_store_factory: ->(m) { MS.new(m) },
       catalog_provider: @catalog,
       furniture_builder_factory: ->(m) { FBUILDER.new(metadata_store: MS.new(m)) },
