@@ -1,9 +1,10 @@
 # 826 Material choices seeding must intersect the definition's consumable roles
 
 Issue: #826 — fix(authoring): material choices se siembran sin intersección con roles consumibles por la definición
-Base: origin/main @ 8c78eac9 (coordinado con PR #825 fix/821-catalog-option-kinds)
+Base de desarrollo: origin/main @ 8c78eac9 (coordinado con PR #825 fix/821-catalog-option-kinds)
+Base de PR #829 en R1: 48465805
 Branch: fix/826-material-choice-consumable-seeding
-Status: review R1 applied over fba32e85 (RED→GREEN→REFACTOR); PR #829 (Closes #826, Delivery: complete)
+Status: alcance #826 implementado en R1 (e8c95026); PR #829 con size:exception autorizado, pendiente de revisión independiente y merge humano
 
 ## Review R1 (2026-09-22, sobre fba32e85) — RED→GREEN→REFACTOR
 
@@ -23,15 +24,19 @@ Status: review R1 applied over fba32e85 (RED→GREEN→REFACTOR); PR #829 (Close
   del proyecto) del authoring. Test pineado documenta que el gate estricto
   puede rechazarlos (preexistente). Decisión de producto documentada en la
   issue #826 (límite conocido): alinear el resolve de release con el
-  `PricingContext.BaseMode` congelado requiere issue propia (semántica #727).
+  `PricingContext.BaseMode` congelado se sigue por separado en #830 (semántica #727).
 - Refactor: `resolveUnitConsumption` único interno; guard por demanda.
 - Issue #826 aceptación reescrita a converge-at-write con el límite conocido.
 
 ## Outcome
 
-Ninguna superficie server persiste material choices con roles que la
-definición física de la unidad no consume. El gate de release sigue siendo el
-backstop, no el primer detector.
+Las superficies server cubiertas convergen elecciones sobrantes al escribir
+según los roles consumibles de la unidad; un BOM con demanda de herraje fijo
+y cero roles seleccionables también converge. El snapshot inicial quote-first
+permanece verbatim por #620 y los roles ZOCLO/ZOCLO_PERFIL/PATAS se conservan
+por la discrepancia de autoridad de base documentada en #830. El gate de
+release sigue siendo el backstop fail-closed; este PR no garantiza que esos
+roles base pasen el release bajo el modo por defecto del módulo.
 
 ## Proven root chain (2026-09-22, DB local + repro engine)
 
@@ -55,9 +60,9 @@ backstop, no el primer detector.
 - Quote-first initial snapshot queda VERBATIM (#620); design-first quote y
   requote intersectan (legacy healing). Reconcile fill-only consumible.
 - Conservadurismo del engine: roles base-treatment (ZOCLO/ZOCLO_PERFIL/PATAS)
-  nunca se dropean (consumo depende del base context del pricing); consumed
-  set VACÍO (definición degenerada) no toca nada (el gate bloquea por demanda
-  cero; dropear fabricaría deltas comerciales).
+  nunca se dropean (consumo depende del base context del pricing); un BOM sin
+  demanda (sin partes ni herrajes) no toca nada. Un set consumido vacío con
+  demanda de herraje fijo sí elimina elecciones sobrantes.
 
 ## Scope (implemented)
 
@@ -75,6 +80,8 @@ backstop, no el primer detector.
 Stages 2-4 del plan de herrajes; espejo TS exacto de consumibilidad; cambios
 al gate de release; display congelado (intacto, #821 R1/R2); ningún contrato
 OpenAPI/fixture cambia (no se introdujo error code nuevo tras la revisión).
+La autoridad del modo de base congelado y la liberación de esos roles quedan
+fuera de #826 y se siguen en #830.
 
 ## Verification
 
@@ -85,9 +92,16 @@ OpenAPI/fixture cambia (no se introdujo error code nuevo tras la revisión).
   ZOCLO}; requote desde Q1 envenenado congela {BODY} y el working queda
   convergido; reconcile llena sólo INTERIOR; los 3 contratos rotos por el
   reject/híbrido vuelven a VERDE (#620, preflight-parity, projection).
-- Suite completa storage+domain+engine+api: en curso.
-- V2: sin cambios de cliente/contrato → cubierto por suites; host SketchUp
-  sin cambios (cliente intacto).
+- Suites de código y CI: VERDE en e8c95026 (R1). La publicación de esta
+  corrección documental creará un nuevo HEAD que requiere lectura de CI
+  exact-head antes de afirmar que sigue verde.
+- R1 adicional: tests engine de herraje fijo y BOM sin demanda, más test
+  storage con PostgreSQL/RLS: `EvaluateDesignRevisionPreflight` READY.
+  Eso no ejecuta el recorrido completo de `CreateProductionRelease`.
+- V2: no hay cambios de cliente/contrato y el CI incluye checks generales
+  de navegador. El recorrido real navegador → SketchUp instalado →
+  `CreateProductionRelease` sigue NOT_TESTED en este cierre; esos checks y
+  las suites server no lo sustituyen.
 
 ## Tasks
 
@@ -97,4 +111,14 @@ OpenAPI/fixture cambia (no se introdujo error code nuevo tras la revisión).
 - [x] Reconcile fill-only consumible
 - [x] Tests storage (converge/requote legacy/reconcile) + contratos restaurados
 - [x] Suite completa + verify_affected + preflight --require-clean (backend full, openapi drift, factory scripts, typecheck, pnpm test, rake verify)
-- [x] PR #829 (Closes #826 + Delivery: complete) — pending independent review + human merge
+- [x] Alcance #826 aclarado en PR #829; límite de base vinculado a #830.
+- [x] Estrategia de entrega: PR único #829 con size:exception autorizado por
+  el maintainer; sin cadena de PRs.
+- [x] Ruta de este cierre: delegated direct, corrección documental acotada,
+  sin cambio de comportamiento.
+
+## Next step
+
+Revisar el CI exact-head tras publicar este documento; después corresponde
+la revisión independiente y el merge humano de PR #829. Ninguno de esos
+pasos se realizó en este cierre documental.
