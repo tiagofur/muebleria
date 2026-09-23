@@ -217,7 +217,7 @@ func (s *PostgresStore) ListProjectCommercialSummaries(ctx context.Context) ([]d
 			p.currency,
 			COALESCE(p.owner_user_id::text, ''),
 			p.organization_id::text,
-			p.sales_organization_id::text,
+			COALESCE(p.sales_organization_id::text, ''),
 			qr.id::text AS revision_id,
 			qr.revision_number,
 			qr.status AS revision_status,

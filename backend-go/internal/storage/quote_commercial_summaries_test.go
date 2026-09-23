@@ -662,6 +662,60 @@ func TestListProjectCommercialSummaries_SaleTotalCrossOrgFailClosed(t *testing.T
 	}
 }
 
+func TestListProjectCommercialSummaries_NullSalesOrganization(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+	const projectID = "40000000-0000-0000-0000-000000000642"
+	ctx := context.Background()
+	result, err := fx.admin.Exec(ctx, `
+		INSERT INTO projects (id, name, customer_id, status, organization_id,
+			sales_organization_id, manufacturing_organization_id)
+		VALUES ($1, 'No sales organization', $2, 'draft', $3, NULL, $4)
+	`, projectID, "30000000-0000-0000-0000-00000000000a", rlsOrgA, rlsOrgB)
+	if err != nil || result.RowsAffected() != 1 {
+		t.Fatalf("create project without sales organization: rows=%d err=%v", result.RowsAffected(), err)
+	}
+
+	withoutRevision := findSummary(t, listSummaries(t, fx, fiActorA()), projectID)
+	if withoutRevision.QuoteStatus != domain.ProjectCommercialQuoteStatusNone || withoutRevision.SaleTotal != nil {
+		t.Fatalf("pre-Q1 summary = status %s, saleTotal %v; want none and nil", withoutRevision.QuoteStatus, withoutRevision.SaleTotal)
+	}
+
+	if err := fiTx(t, fx.store, fiActorA(), func(txCtx context.Context) error {
+		created, txErr := fx.store.CreateFurnitureInstance(txCtx, storage.CreateFurnitureInstanceCommand{
+			ProjectID:             projectID,
+			FurnitureDefinitionID: fiModuleA,
+			Origin:                domain.FurnitureInstanceOriginQuote,
+			ActorUserID:           rlsUserA,
+			RequestID:             "cs-null-sales-org-inst-1",
+		})
+		if txErr != nil {
+			return txErr
+		}
+		_, txErr = createFixtureQuoteRevision(txCtx, fx.store, storage.CreateQuoteRevisionCommand{
+			OrganizationID: rlsOrgA,
+			ProjectID:      projectID,
+			Status:         "accepted",
+			SourceType:     "manual",
+			CreatedBy:      rlsUserA,
+			Items: []storage.CreateQuoteRevisionItemCommand{
+				{FurnitureInstanceID: created.ID, FurnitureDefinitionID: fiModuleA, LifecycleStatus: "active"},
+			},
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("create accepted revision: %v", err)
+	}
+
+	owner := findSummary(t, listSummaries(t, fx, fiActorA()), projectID)
+	if owner.SaleTotal == nil {
+		t.Fatal("owner organization must see the frozen retail sale total")
+	}
+	manufacturer := findSummary(t, listSummaries(t, fx, fiActorB()), projectID)
+	if manufacturer.SaleTotal != nil {
+		t.Fatalf("manufacturing-only organization saleTotal = %v, want nil", *manufacturer.SaleTotal)
+	}
+}
+
 // 2A negative proof (#27): accepting a QuoteRevision through the exact
 // lifecycle command does NOT write Project.status='accepted'. The commercial
 // authority lives in QuoteRevision.status; Project.status stays operational.
