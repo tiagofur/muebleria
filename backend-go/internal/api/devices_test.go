@@ -146,6 +146,13 @@ func TestDeviceToken_MintedBearerPassesSessionRegistryMiddleware(t *testing.T) {
 	if code := probe(body.AccessToken); code != http.StatusOK {
 		t.Fatalf("device bearer must pass the registry middleware, got %d", code)
 	}
+	profileReq := httptest.NewRequest(http.MethodGet, "/api/auth/sketchup/profile", nil)
+	profileReq.Header.Set("Authorization", "Bearer "+body.AccessToken)
+	profileRec := httptest.NewRecorder()
+	AuthMiddleware(mustAuthority(sessionRegistryTestSecret), users)(okHandler()).ServeHTTP(profileRec, profileReq)
+	if profileRec.Code != http.StatusOK {
+		t.Fatalf("device bearer must pass the own-profile capability, got %d", profileRec.Code)
+	}
 
 	// Revoking the registry session cuts the bearer on the next request,
 	// even with the JWT itself unexpired.
@@ -153,6 +160,13 @@ func TestDeviceToken_MintedBearerPassesSessionRegistryMiddleware(t *testing.T) {
 	users.sessions[sessionID].RevokedAt = &revoked
 	if code := probe(body.AccessToken); code != http.StatusUnauthorized {
 		t.Fatalf("revoked device session must cut the bearer, got %d", code)
+	}
+	profileReq = httptest.NewRequest(http.MethodGet, "/api/auth/sketchup/profile", nil)
+	profileReq.Header.Set("Authorization", "Bearer "+body.AccessToken)
+	profileRec = httptest.NewRecorder()
+	AuthMiddleware(mustAuthority(sessionRegistryTestSecret), users)(okHandler()).ServeHTTP(profileRec, profileReq)
+	if profileRec.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked device session reached own-profile capability: %d", profileRec.Code)
 	}
 }
 

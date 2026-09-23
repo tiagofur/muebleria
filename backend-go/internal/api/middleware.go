@@ -524,6 +524,8 @@ var extensionClientGetPrefixes = []string{
 var extensionClientExactGetPaths = map[string]struct{}{
 	"/api/projects":            {},
 	"/api/customers/summaries": {},
+	// #821: own current-session identity only; the full web /auth/me stays denied.
+	"/api/auth/sketchup/profile": {},
 }
 
 var extensionClientGetPatterns = []*regexp.Regexp{

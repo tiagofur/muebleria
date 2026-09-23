@@ -256,3 +256,47 @@ Go/PostgreSQL/browser are unchanged by this slice and not claimed.
 PR2 work-unit commit: `01eeb6cb` (`fix(sketchup): recover placement errors
 in v0.1.4`). This SHA readback is recorded in a separate artifact-only
 commit; RDD disabled/unmanaged and independent exact-HEAD review pending.
+
+
+## Follow-up PR3: scoped SketchUp identity endpoint (2026-09-22)
+
+PR #827 merged the PR2 diagnostic/v0.1.4 slice into exact `origin/main`
+`cd049733`; #821 remains open/approved. The installed extension still shows
+blank Usuario/Correo. Current Ruby's attempted full `/auth/me` read is not on
+main and would receive 403 from the ExtensionClient allowlist. The full web
+response also includes other memberships/support context, so it must not be
+opened to SketchUp. This PR adds ONLY the backend/API contract for a minimal
+current-device-session profile; the Ruby consumer and v0.1.5 are later slices.
+
+- [x] T821-F3a Add exact GET `/api/auth/sketchup/profile` capability for the
+  current extension bearer, active user/current organization membership and
+  license. Expose name/email plus current org/license/scope only; no other
+  memberships, roles or support context. Reject web/support/wrong-org,
+  malformed/expired/revoked and query credentials; preserve `/auth/me` denial.
+- [x] Generate Go/TS clients from OpenAPI and verify drift, safe stub-backed
+  HTTP route/middleware tests, package typecheck and clean diff. No persistent
+  PostgreSQL writes, Ruby client, package install or host mutation.
+
+Route: delegated direct, sole writer in isolated worktree. Strict TDD enabled
+by AGENTS.md: observe focused Go RED before implementation, then GREEN and
+REFACTOR; do not infer from the older monolithic candidate. Forecast ~180
+non-generated authored +/- lines plus scoped ODD (~30), below 400 advisory.
+Delivery remains `ask-on-risk`, user-selected `stacked-to-main`, PR3 based on
+`cd049733`. Rollback boundary: exact API route/allowlist/handler, minimal
+schema/generated clients and associated stub-backed tests. V2 live service
+and SketchUp display/logout readback remain later work, not this PR.
+
+PR3 TDD and verification: new stub-backed real-router HTTP test first returned
+404 for `/api/auth/sketchup/profile` (RED), while existing `/api/auth/me`
+remained denied to the extension. GREEN focused Go API run covers own
+name/email/current org/license with no other membership fields, no-store,
+web/query/malformed/expired/wrong-org/support rejection, and minted device
+bearer plus post-revocation denial: PASS. OpenAPI generated drift PASS;
+standalone generated TS client/types `tsc --noEmit` PASS; Go `gofmt -l` empty;
+`git diff --check` PASS. Full storage package typecheck could not run in
+this isolated worktree because it has no node_modules; using the shared
+compiler with worktree config found missing worktree Vitest types, so only
+generated-client typecheck is claimed. The affected-plan selects full Go,
+PostgreSQL/browser, SketchUp and visual lanes; no persistent DB, backend
+process, installed plugin or user's model was touched. Those V2 gates remain
+NOT_RUN, not substituted by the stub tests. No Ruby client/version change.

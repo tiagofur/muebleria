@@ -118,6 +118,7 @@ import type {
   SelectOrganizationRequest,
   SessionDirectory,
   SessionRevokeResponse,
+  SketchupProfileResponse,
   StartHardwareAssetUploadRequest,
   StartSupportSessionRequest,
   SupportSessionResponse,
@@ -156,6 +157,7 @@ export abstract class GeneratedGraneteApiClient {
   logoutSession(body: LogoutRequest, signal?: AbortSignal): Promise<LogoutResponse> { return this.request("POST", "/auth/logout", { schema: "LogoutResponse", bodySchema: "LogoutRequest", body, signal }); }
   selectOrganization(token: string, body: SelectOrganizationRequest, signal?: AbortSignal): Promise<LoginResponse> { return this.request("POST", "/auth/select-org", { schema: "LoginResponse", token, bodySchema: "SelectOrganizationRequest", body, signal }); }
   getSession(token: string, signal?: AbortSignal): Promise<MeResponse> { return this.request("GET", "/auth/me", { schema: "MeResponse", token, signal }); }
+  getSketchupProfile(token: string, signal?: AbortSignal): Promise<SketchupProfileResponse> { return this.request("GET", "/auth/sketchup/profile", { schema: "SketchupProfileResponse", token, signal }); }
   listInvitations(token: string, signal?: AbortSignal): Promise<ReadonlyArray<Invitation>> { return this.request("GET", "/org/invitations", { arrayOf: "Invitation", token, signal }); }
   createInvitation(token: string, body: CreateInvitationRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<CreateInvitationResponse> { return this.request("POST", "/org/invitations", { schema: "CreateInvitationResponse", token, bodySchema: "CreateInvitationRequest", body, idempotencyKey: key, signal }); }
   listPlatformOrganizations(token: string, signal?: AbortSignal): Promise<ReadonlyArray<PlatformOrganization>> { return this.request("GET", "/platform/organizations", { arrayOf: "PlatformOrganization", token, signal }); }

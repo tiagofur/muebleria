@@ -287,6 +287,7 @@ func RegisterRoutes(server *Server) http.Handler {
 
 	mux.Handle("POST /api/auth/select-org", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleSelectOrg))))
 	mux.Handle("GET /api/auth/me", authMW(http.HandlerFunc(server.HandleMe)))
+	mux.Handle("GET /api/auth/sketchup/profile", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleSketchupProfile)))))
 	mux.Handle("GET /api/auth/sessions", noStoreMiddleware(rejectSessionQueryToken(authMW(http.HandlerFunc(server.HandleListMySessions)))))
 	mux.Handle("POST /api/auth/sessions/{sessionId}/revoke", noStoreMiddleware(rejectSessionQueryToken(authMW(server.RequireIdempotency("auth.revoke-session", http.HandlerFunc(server.HandleRevokeMySession))))))
 

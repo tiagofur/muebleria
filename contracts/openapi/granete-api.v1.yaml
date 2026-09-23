@@ -186,6 +186,27 @@
         }
       }
     },
+    "/auth/sketchup/profile": {
+      "get": {
+        "operationId": "getSketchupProfile",
+        "description": "Current SketchUp bearer only. Returns no other memberships, roles, support context, or session credentials.",
+        "responses": {
+          "200": {
+            "description": "Current SketchUp identity and organization license",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SketchupProfileResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/org/invitations": {
       "get": {
         "operationId": "listInvitations",
@@ -5332,6 +5353,42 @@
           "session_scope": {
             "$ref": "#/components/schemas/SessionScope"
           }
+        }
+      },
+      "SketchupProfileResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["user", "organization", "session_scope"],
+        "properties": {
+          "user": { "$ref": "#/components/schemas/SketchupProfileUser" },
+          "organization": { "$ref": "#/components/schemas/SketchupProfileOrganization" },
+          "session_scope": { "$ref": "#/components/schemas/SketchupProfileScope" }
+        }
+      },
+      "SketchupProfileUser": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "email"],
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string", "format": "email" }
+        }
+      },
+      "SketchupProfileOrganization": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "license"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "license": { "$ref": "#/components/schemas/License" }
+        }
+      },
+      "SketchupProfileScope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["organization_id"],
+        "properties": {
+          "organization_id": { "type": "string", "format": "uuid" }
         }
       },
       "TeamMember": {
