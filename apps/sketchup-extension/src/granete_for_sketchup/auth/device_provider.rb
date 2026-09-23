@@ -339,22 +339,42 @@ module Granete
           }
         end
 
-        # Non-secret session-context identity with explicit semantics
-        # (#469 gesture guard): a one-way digest of the token's
-        # NON-VOLATILE claims (everything except exp/iat) plus the server
-        # endpoint. A technical refresh re-issues the same identity claims,
-        # so the SAME context keeps its id and a live placement gesture
-        # survives; logout (no token), a new enrollment or a backend switch
-        # changes or voids it. Returns nil when the context is unknown or
-        # unreadable — callers fail closed, never nil==nil. The bearer
-        # itself is never compared or exposed.
-        def session_context_id
-          refresh_if_needed if @access_token.to_s.empty? || access_token_expired?
-          payload = decode_session_payload
-          return nil unless payload.is_a?(Hash)
+        # Explicit identity projection: session (sid, auth_started_at),
+        # user, organization + membership, authorization epochs and the
+        # transport boundary. Everything a technical renewal preserves and
+        # a logout / re-enrollment / org change / session change alters.
+        CONTEXT_IDENTITY_CLAIMS = %w[
+          sub user_id email role roles org_id membership_id
+          membership_credential_version organization_credential_version
+          auth_started_at sid typ transport client ver aud iss
+          platform_admin support
+        ].freeze
 
-          claims = payload.except('exp', 'iat')
-          Digest::SHA256.hexdigest("#{stored_server_url}|#{claims.sort_by { |k, _| k }.inspect}")
+        # Non-secret session-context identity with explicit semantics
+        # (#469 gesture guard): a one-way digest of the token's projected
+        # identity claims plus the server endpoint. A technical refresh
+        # (new jti/nbf/exp/iat, same session) keeps the id so a live
+        # placement gesture survives; a new session, organization,
+        # membership or authorization epoch changes it; logout or a
+        # backend switch voids or changes it. The context is UNUSABLE
+        # (nil) when the token is still expired after an attempted
+        # refresh, the payload is empty, or the essential identity fields
+        # are missing — a decodable payload alone is not a valid identity.
+        # Callers fail closed; nil never equals nil. The bearer itself is
+        # never compared or exposed.
+        def session_context_id
+          return nil unless configured?
+
+          refresh_if_needed if @access_token.to_s.empty? || access_token_expired?
+          return nil if access_token_expired?
+
+          payload = decode_session_payload
+          return nil unless payload.is_a?(Hash) && !payload.empty?
+
+          identity = CONTEXT_IDENTITY_CLAIMS.to_h { |key| [key, payload[key]] }
+          return nil unless context_identity_complete?(identity)
+
+          Digest::SHA256.hexdigest("#{stored_server_url}|#{identity.sort_by { |k, _| k }.inspect}")
         rescue StandardError => e
           @logger&.error('session_context_id_failed', error: e)
           nil
@@ -406,6 +426,20 @@ module Granete
         def access_token_expired?
           sec = seconds_until_expiry
           sec.nil? || sec <= 0
+        end
+
+        # Essential identity fields: the user (sub or user_id — the Go
+        # issuer writes both with the same value) and the transport
+        # boundary (transport, typ or client). Without them a decodable
+        # payload is NOT a usable context identity.
+        def context_identity_complete?(identity)
+          user = identity['sub'].to_s
+          user = identity['user_id'].to_s if user.empty?
+          return false if user.empty?
+
+          boundary = [identity['transport'], identity['typ'], identity['client']]
+                     .compact.map(&:to_s).reject(&:empty?)
+          !boundary.empty?
         end
 
         def decode_session_payload
