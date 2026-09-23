@@ -107,7 +107,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		if errors.Is(err, errSkipDB) {
 			fmt.Printf("SKIP: pilot readiness suite requires PostgreSQL: %v\n", err)
-			fmt.Println("      start the dev DB (docker compose up -d db) or set DATABASE_URL;")
+			fmt.Println("      run via scripts/pilot-gate.sh or scripts/backend-test.sh with an isolated test DB;")
 			fmt.Println("      the mandatory pre-deploy gate is scripts/pilot-gate.sh")
 			os.Exit(0)
 		}
@@ -402,7 +402,7 @@ func (f *fixture) customerOrgID(t *testing.T, id string) string {
 func buildFixture() (*fixture, error) {
 	base := os.Getenv("DATABASE_URL")
 	if base == "" {
-		base = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		return skipOrErr("DATABASE_URL not set: %w", errSkipDB)
 	}
 	u, err := url.Parse(base)
 	if err != nil {
@@ -414,6 +414,9 @@ func buildFixture() (*fixture, error) {
 	// Admin connection (to drop/create the throwaway database).
 	adminURL := *u
 	adminURL.Path = "/postgres"
+	if err := storage.ValidateTestDatabaseURL(adminURL.String()); err != nil {
+		return nil, fmt.Errorf("admin DSN rejected by test db guard: %w", err)
+	}
 	admin, err := pgxpool.New(ctx, adminURL.String())
 	if err != nil {
 		return skipOrErr("connect admin dsn: %w", err)
@@ -429,6 +432,10 @@ func buildFixture() (*fixture, error) {
 
 	testURL := *u
 	testURL.Path = "/" + pilotTestDBName
+	if err := storage.ValidateTestDatabaseURL(testURL.String()); err != nil {
+		admin.Close()
+		return nil, fmt.Errorf("test DSN rejected by test db guard: %w", err)
+	}
 	pool, err := pgxpool.New(ctx, testURL.String())
 	if err != nil {
 		admin.Close()

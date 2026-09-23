@@ -13,10 +13,9 @@ import (
 // versioning). They are skipped unless DATABASE_URL is set AND reachable, so
 // `go test ./...` stays green in any environment sin base (fresh clone, etc.).
 // La CI provee Postgres vía service container con DATABASE_URL. Run them
-// locally against the docker compose Postgres with:
+// locally against an isolated ephemeral test DB:
 //
-//	DATABASE_URL=postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable \
-//	    go test ./internal/storage/ -run TestStructureRevision -v
+//	scripts/backend-test.sh -run TestStructureRevision -v
 //
 // skipIfNoDB aplica las migraciones embebidas, así que también corren contra
 // una base fresca (CI) sin requerir un server-start previo.
@@ -26,6 +25,9 @@ func skipIfNoDB(t *testing.T) *PostgresStore {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("skipIfNoDB rejected unsafe test database: %v", err)
 	}
 	store, err := NewPostgresStore(url)
 	if err != nil {

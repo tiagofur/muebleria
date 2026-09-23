@@ -68,7 +68,7 @@ async function addDraftLineViaUI(page: Page): Promise<void> {
 }
 
 async function appRoleRead(projectId: string, organizationId: string) {
-  const client = new Client({ connectionString: required('DATABASE_URL') });
+  const client = new Client({ connectionString: required('ORGANIZATION_TEST_DATABASE_URL') });
   await client.connect();
   try {
     await client.query('BEGIN READ ONLY');

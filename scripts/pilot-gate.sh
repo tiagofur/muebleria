@@ -57,8 +57,9 @@ cleanup_container() {
   fi
 }
 
-if [ -z "${DSN}" ]; then
-  DSN="postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+if [ -z "${DSN}" ] && [ -z "${GATE_CONTAINER}" ]; then
+  echo "[pilot-gate] sin DSN explícito; seleccionando contenedor postgres efímero automáticamente (--fresh-container)"
+  GATE_CONTAINER=1
 fi
 
 if [ -n "${GATE_CONTAINER}" ]; then
@@ -123,9 +124,9 @@ if [ "${PILOT_GATE_FOUNDATION_A:-}" = "1" ] && [ -z "${PILOT_GATE_STORAGE_PATTER
   STORAGE_PATTERN='^(TestTenantRLS_|TestGateAProvisioning|TestOrganizationLifecycleMigration_BackfillsCanonicalStatusAndEntitlements|TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture|TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole|TestSecurityAuditEnvelope)'
   echo "[pilot-gate] incluyendo fresh/upgrade y provisioning atomic de Foundation Gate A"
 fi
-DATABASE_URL="${DSN}" GOFLAGS='-p=1' go test ./internal/storage -run "${STORAGE_PATTERN}" -v -count=1
+DATABASE_URL="${DSN}" GRANETE_TEST_DATABASE=1 GOFLAGS='-p=1' go test ./internal/storage -run "${STORAGE_PATTERN}" -v -count=1
 
-if DATABASE_URL="${DSN}" PILOT_READINESS_GATE=1 \
+if DATABASE_URL="${DSN}" GRANETE_TEST_DATABASE=1 PILOT_READINESS_GATE=1 \
   GOFLAGS='-p=1' go test ./tests/pilotreadiness/ -v -count=1; then
   echo ""
   echo "[pilot-gate] ✅ Pilot Readiness PASS — el aislamiento multi-org está verificado."

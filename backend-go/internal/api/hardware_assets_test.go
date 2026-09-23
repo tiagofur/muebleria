@@ -387,14 +387,19 @@ func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live hardware assets integration test")
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {
 		t.Skipf("bad DATABASE_URL: %v", err)
 	}
+	u.Path = "/postgres"
+	adminDSN := u.String()
+	if err := storage.ValidateTestDatabaseURL(adminDSN); err != nil {
+		t.Fatalf("hwAssetE2EStore rejected unsafe admin database: %v", err)
+	}
 	dbName := "hwassets_api_e2e_" + fmt.Sprint(time.Now().UnixNano()%1000000)
-	admin, err := pgxpool.New(context.Background(), dsn)
+	admin, err := pgxpool.New(context.Background(), adminDSN)
 	if err != nil {
 		t.Skipf("no db: %v", err)
 	}
@@ -407,7 +412,11 @@ func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 		t.Skipf("create throwaway db: %v", err)
 	}
 	u.Path = "/" + dbName
-	pool, err := pgxpool.New(context.Background(), u.String())
+	testDSN := u.String()
+	if err := storage.ValidateTestDatabaseURL(testDSN); err != nil {
+		t.Fatalf("hwAssetE2EStore rejected unsafe test database: %v", err)
+	}
+	pool, err := pgxpool.New(context.Background(), testDSN)
 	if err != nil {
 		t.Fatalf("connect e2e db: %v", err)
 	}

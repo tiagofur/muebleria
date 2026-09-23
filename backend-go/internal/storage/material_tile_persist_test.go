@@ -9,12 +9,15 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-// Integration: requires local Postgres. Verifies texture tile mm columns
+// Integration: requires isolated test Postgres. Verifies texture tile mm columns
 // survive UpdateMaterialBoard + GetMaterialBoardByID.
 func TestMaterialBoard_PersistsTextureTileMm(t *testing.T) {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := storage.ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("TestMaterialBoard_PersistsTextureTileMm rejected unsafe test database: %v", err)
 	}
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)

@@ -15,20 +15,19 @@ import (
 func strPtr(s string) *string       { return &s }
 func ptrFloat64(v float64) *float64 { return &v }
 
-// Integration: requires local Postgres. Verifies the per-hardware preview
+// Integration: requires isolated test Postgres. Verifies the per-hardware preview
 // geometry + PBR nullable columns round-trip through Create/Update/Get:
 //   - nil pointer stays nil (NULL survives as "no preview", never coerced to 0);
 //   - an explicit previewMetalness = 0.0 is preserved (the Fase 1 lesson: 0.0 is
 //     a valid value that must NOT be erased — nullIfZeroFloat is NOT used);
 //   - all 8 fields round-trip together.
-//
-// Mirrors material_pbr_persist_test.go: same DATABASE_URL/fallback + skip guard,
-// and the cleanup that hard-deletes the row (registerCleanup runs before
-// pool.Close via t.Cleanup LIFO — see Fase 1 lesson).
 func TestHardware_PersistsPreviewGeometry(t *testing.T) {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := storage.ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("TestHardware_PersistsPreviewGeometry rejected unsafe test database: %v", err)
 	}
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)

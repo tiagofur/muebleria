@@ -12,7 +12,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-// Integration: requires local Postgres. Verifies the F080 part_finishes JSONB
+// Integration: requires isolated test Postgres. Verifies the F080 part_finishes JSONB
 // column round-trips through Create/Update/Get:
 //   - nil map stays NULL (legacy rows: every part uses the global finish);
 //   - a body/base/grip map round-trips exactly;
@@ -20,7 +20,10 @@ import (
 func TestHardware_PersistsPartFinishes(t *testing.T) {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := storage.ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("TestHardware_PersistsPartFinishes rejected unsafe test database: %v", err)
 	}
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)

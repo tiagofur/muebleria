@@ -15,15 +15,17 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-// These are integration tests against the local Postgres used by the backend
-// (DATABASE_URL or localhost:5445). They skip gracefully when no DB is up, like
-// material_tile_persist_test.go. Each test cleans up the rows it inserts.
+// These are integration tests against an isolated test Postgres (DATABASE_URL).
+// They skip gracefully when DATABASE_URL is not set.
 
 func connectStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := storage.ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("connectStore rejected unsafe test database: %v", err)
 	}
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)

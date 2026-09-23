@@ -12,12 +12,15 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-// Integration: requires local Postgres. F116 C3 + C4.
+// Integration: requires isolated test Postgres. F116 C3 + C4.
 func mustPool(t *testing.T) (*pgxpool.Pool, *storage.PostgresStore) {
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := storage.ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("mustPool rejected unsafe test database: %v", err)
 	}
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)
