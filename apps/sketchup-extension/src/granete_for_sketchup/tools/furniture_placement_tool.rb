@@ -12,6 +12,10 @@ module Granete
       module PlacementPreviewExtents
         module_function
 
+        # Returns {x:, y:, z:, origin_mm:} — the SIZES and the local MINIMUM
+        # of the resolved furniture box. origin_mm keeps the anchor mapping
+        # the REAL box (a layout whose boards start away from the local
+        # origin must not preview shifted relative to the commit).
         def from_layout(layout)
           from_dimensions(layout.respond_to?(:dimensions_mm) ? layout.dimensions_mm : nil) ||
             boards_extents(layout.respond_to?(:boards) ? layout.boards : [])
@@ -20,7 +24,7 @@ module Granete
         def from_dimensions(dims)
           return nil unless dims.is_a?(Array) && dims.length == 3 && dims.all? { |v| v.to_f.positive? }
 
-          { x: dims[0].to_f, y: dims[2].to_f, z: dims[1].to_f }
+          { x: dims[0].to_f, y: dims[2].to_f, z: dims[1].to_f, origin_mm: [0.0, 0.0, 0.0] }
         end
 
         def boards_extents(boards)
@@ -31,7 +35,8 @@ module Granete
           end
           return nil unless min.all?(&:finite?) && max.all?(&:finite?)
 
-          { x: max[0] - min[0], y: max[1] - min[1], z: max[2] - min[2] }
+          { x: max[0] - min[0], y: max[1] - min[1], z: max[2] - min[2],
+            origin_mm: min.dup }
         end
 
         def fold_corner(corner, min, max)
@@ -206,16 +211,21 @@ module Granete
         # the accepted Geom::Transformation; on_cancel receives a reason
         # (:escape / :tool_switched). Both fire at most once.
         def initialize(label:, extents_mm:, on_commit:, on_cancel:, anchor: :back_left_bottom, input_point_factory: nil,
-                       model_provider: nil, logger: nil)
+                       model_provider: nil, origin_mm: [0.0, 0.0, 0.0], logger: nil)
           unless extents_mm.is_a?(Hash) && %i[x y z].all? { |axis| extents_mm[axis].to_f.positive? }
             raise ArgumentError, 'extents_mm requiere x/y/z positivos (mm) del layout resuelto'
           end
           unless ANCHORS.include?(anchor.to_sym)
             raise ArgumentError, "ancla desconocida: #{anchor} (soportadas: #{ANCHORS.join(', ')})"
           end
+          unless origin_mm.is_a?(Array) && origin_mm.length == 3 &&
+                 origin_mm.all? { |v| v.is_a?(Numeric) && Float(v).finite? }
+            raise ArgumentError, 'origin_mm debe ser un triple numérico finito (mm)'
+          end
 
           @label = label.to_s
           @extents_mm = { x: extents_mm[:x].to_f, y: extents_mm[:y].to_f, z: extents_mm[:z].to_f }
+          @origin_mm = origin_mm.map(&:to_f)
           @anchor = anchor.to_sym
           @rotation_quarters = 0
           @on_commit = on_commit
@@ -250,16 +260,24 @@ module Granete
           @state == :cancelled
         end
 
+        # Idempotent: the host activates via select_tool AND the controller
+        # may activate explicitly — double activation must not double the
+        # side effects.
         def activate
+          return if @activated
+
+          @activated = true
           update_status_text
           invalidate_view
         end
 
         # Tool switched away, model closed, or another surface took over:
         # an uncommitted preview is a cancel with zero residue — never a
-        # ghost placement applied to the new context.
+        # ghost placement applied to the new context. Deactivation does NOT
+        # restore the selection tool: the host already moved to whatever
+        # tool the user chose, and select_tool(nil) here would clobber it.
         def deactivate(view)
-          cancel!(:tool_switched) if active?
+          cancel!(:tool_switched, restore: false) if active?
           view.invalidate if view.respond_to?(:invalidate)
         end
 
@@ -399,13 +417,13 @@ module Granete
           clear_status_text
         end
 
-        def cancel!(reason)
+        def cancel!(reason, restore: true)
           return unless active?
 
           finish!(:cancelled)
           invalidate_view
           @on_cancel.call(reason)
-          restore_selection_tool
+          restore_selection_tool if restore
         end
 
         def cycle_anchor!
@@ -433,12 +451,14 @@ module Granete
           [y_vec.dup, [-x_vec[0], -x_vec[1], -x_vec[2]]]
         end
 
-        # The anchor's local point in mm: back = y 0, front = y depth;
-        # left = x 0, right = x width; bottom = z 0.
+        # The anchor's local point in mm: back = y min, front = y min+depth;
+        # left = x min, right = x min+width; bottom = z min. The local
+        # minimum comes from the resolved layout so the anchor maps the
+        # REAL furniture box, not an origin-assuming approximation.
         def anchor_local_point
-          x = @anchor.to_s.include?('right') ? @extents_mm[:x] : 0.0
-          y = @anchor.to_s.include?('front') ? @extents_mm[:y] : 0.0
-          [x, y, 0.0]
+          x = @anchor.to_s.include?('right') ? @origin_mm[0] + @extents_mm[:x] : @origin_mm[0]
+          y = @anchor.to_s.include?('front') ? @origin_mm[1] + @extents_mm[:y] : @origin_mm[1]
+          [x, y, @origin_mm[2]]
         end
 
         # Local box corners (mm): ring 0..3 is the bottom face (0=BLB,
@@ -447,8 +467,10 @@ module Granete
           w = @extents_mm[:x]
           d = @extents_mm[:y]
           h = @extents_mm[:z]
-          bottom = [[0.0, 0.0, 0.0], [w, 0.0, 0.0], [w, d, 0.0], [0.0, d, 0.0]]
-          bottom.map(&:dup) + bottom.map { |c| [c[0], c[1], h] }
+          o = @origin_mm
+          bottom = [[o[0], o[1], o[2]], [o[0] + w, o[1], o[2]],
+                    [o[0] + w, o[1] + d, o[2]], [o[0], o[1] + d, o[2]]]
+          bottom.map(&:dup) + bottom.map { |c| [c[0], c[1], o[2] + h] }
         end
 
         def anchor_corner_index

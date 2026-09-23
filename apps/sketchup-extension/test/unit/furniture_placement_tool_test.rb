@@ -413,12 +413,86 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_empty @commits
   end
 
+  # A resolved layout whose boards sit AWAY from the local origin keeps
+  # its minimum: the anchor maps the real box, not an origin-shifted one.
+  def test_extents_fallback_keeps_the_local_minimum
+    boards = [board_at(translation: [100.0, 50.0, 20.0], size: [500.0, 400.0, 700.0])]
+    layout = Object.new
+    layout.define_singleton_method(:dimensions_mm) { nil }
+    layout.define_singleton_method(:boards) { boards }
+
+    extents = Tool.extents_from_layout(layout)
+
+    assert_equal 500.0, extents[:x]
+    assert_equal 400.0, extents[:y]
+    assert_equal 700.0, extents[:z]
+    assert_equal [100.0, 50.0, 20.0], extents[:origin_mm]
+  end
+
+  # Shifted box: the anchor corner is the MIN corner of the real box, and
+  # the committed transform maps exactly that corner to the cursor.
+  def test_anchor_maps_local_minimum_of_shifted_layout
+    placement_tool = Tool.new(
+      label: 'Desplazado', extents_mm: { x: 500.0, y: 400.0, z: 700.0 },
+      origin_mm: [100.0, 50.0, 20.0],
+      on_commit: ->(transform) { @commits << transform },
+      on_cancel: ->(reason) { @cancels << reason },
+      input_point_factory: -> { ScriptedInputPoint.new([[2000.0, 1500.0, 100.0]]) },
+      model_provider: -> { @model }
+    )
+    move_cursor(placement_tool)
+
+    transform = placement_tool.current_transform
+    # BACK_LEFT_BOTTOM anchor = local (100, 50, 20) sits at the cursor…
+    assert_equal [2000.0, 1500.0, 100.0], point_mm(transform, 100, 50, 20)
+    # …and the far corner (min + extents) lands where the box really ends.
+    assert_equal [2500.0, 1900.0, 800.0], point_mm(transform, 600, 450, 720)
+  end
+
+  # Deactivation by tool switch must NOT restore the selection tool: the
+  # host already moved to the tool the user chose next.
+  def test_deactivate_does_not_clobber_the_user_next_tool
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    move_cursor(placement_tool)
+
+    user_tool = Object.new
+    @model.select_tool(user_tool)
+    placement_tool.deactivate(@view)
+
+    assert_equal [:tool_switched], @cancels
+    assert_equal [user_tool], @model.selected_tools,
+                 'no select_tool(nil) after a tool switch — the user choice stays'
+  end
+
+  # Explicit ends (Esc / controller cancel) DO restore the selection tool.
+  def test_explicit_cancel_restores_the_selection_tool
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    move_cursor(placement_tool)
+
+    placement_tool.onKeyDown(27, false, 0, @view)
+
+    assert_equal [nil], @model.selected_tools
+  end
+
+  # Double activation (host select_tool + explicit controller activate)
+  # must not double the side effects.
+  def test_activate_is_idempotent
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    view = Sketchup.active_model.active_view
+    before = view.invalidations
+
+    placement_tool.activate
+    placement_tool.activate
+
+    assert_equal before + 1, view.invalidations, 'exactly one activation effect'
+  end
+
   def test_extents_from_layout_prefers_authoritative_dimensions_mm
     layout = Object.new.tap do |fake|
       fake.define_singleton_method(:dimensions_mm) { [600, 720, 560] }
     end
     extents = Tool.extents_from_layout(layout)
-    expected = { x: 600.0, y: 560.0, z: 720.0 }
+    expected = { x: 600.0, y: 560.0, z: 720.0, origin_mm: [0.0, 0.0, 0.0] }
     assert_equal expected, extents,
                  'dimensionsMm is [width, height, depth]; local Y is depth, Z is height'
   end
@@ -433,6 +507,8 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_equal 600.0, extents[:x]
     assert_equal 560.0, extents[:y]
     assert_equal 720.0, extents[:z]
+    assert_equal [0.0, 0.0, 0.0], extents[:origin_mm],
+                 'boards touching the local origin keep a zero minimum'
   end
 
   def test_extents_from_layout_rejects_unresolvable_input
