@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'json'
-require 'digest'
 
 module Granete
   module SketchUpExtension
@@ -65,17 +64,22 @@ module Granete
             @logger = logger
           end
 
-          # #469 non-secret authenticated-context fingerprint: the backend
-          # endpoint plus a ONE-WAY digest of the current credential —
-          # enough to detect logout, a new session or a backend switch
-          # even when model and binding ids are unchanged. The secret
-          # itself never travels or is stored anywhere.
+          # #469 non-secret authenticated-context fingerprint with EXPLICIT
+          # semantics. The bearer is deliberately NOT compared: providers
+          # mint short-lived tokens and a technical refresh of the SAME
+          # context must not abort a placement. Identity comes from the
+          # provider's session_context_id (stable across token refresh,
+          # changed by logout/re-enrollment/context switch, nil when the
+          # context is unknown or unreadable — nil NEVER equals nil: the
+          # callers treat an unknown context as fail-closed).
           def context_fingerprint
-            header = @auth_provider.respond_to?(:authorization_header) ? @auth_provider.authorization_header : nil
+            context_id = @auth_provider.respond_to?(:session_context_id) ? @auth_provider.session_context_id : nil
+            return nil unless context_id.is_a?(String) && !context_id.empty?
+
             base_url = @transport.respond_to?(:base_url) ? @transport.base_url : nil
-            [base_url, Digest::SHA256.hexdigest(header.to_s)]
+            [base_url, context_id]
           rescue StandardError
-            [nil, nil]
+            nil
           end
 
           def list_project_furniture(project_id)
@@ -308,9 +312,7 @@ module Granete
             return nil unless layout.is_a?(::Granete::SketchUpExtension::Library::NativeLayout)
 
             boards = layout.boards.map do |board|
-              "#{board.component_instance_id}:" \
-                "#{board.width_mm}x#{board.thickness_mm}x#{board.length_mm}" \
-                "@#{board.translation.map { |v| v.round(3) }.join(',')}"
+              "#{board.component_instance_id}:#{board.geometry_fingerprint}"
             end.sort
             [
               layout.furniture_definition_id,
