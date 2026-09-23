@@ -240,6 +240,8 @@ func respondWithDesignError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeVersionConflict, "El borrador de trabajo cambió; volvé a leer su estado antes de escribir", nil)
 	case errors.Is(err, storage.ErrWorkingCopyPreconditionRequired):
 		respondWithAPIError(w, http.StatusPreconditionRequired, openapi.ApiErrorCodePreconditionRequired, "expected_working_version es obligatorio: leé el WorkingCopy actual antes de escribir", nil)
+	case errors.Is(err, storage.ErrDraftUnitPreparationConflict):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "El borrador del proyecto está cambiando; volvé a intentar", nil)
 	case errors.Is(err, storage.ErrVersionConflict):
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "El borrador de trabajo cambió; volvé a leer su estado antes de reconciliar", nil)
 	case errors.Is(err, domain.ErrSerializationFailed):

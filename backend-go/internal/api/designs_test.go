@@ -69,6 +69,19 @@ func TestHandleProjectDesigns_CreateReturns201(t *testing.T) {
 	}
 }
 
+func TestHandleProjectDesigns_DraftPreparationConflictReturns409(t *testing.T) {
+	srv := &Server{Store: &stubStore{createDesignErr: storage.ErrDraftUnitPreparationConflict}}
+	req := designRequest(http.MethodPost, "/api/projects/"+designTestProjectID+"/designs",
+		`{"name":"Concurrent draft"}`, string(domain.RoleVendedor))
+	rr := httptest.NewRecorder()
+
+	srv.HandleProjectDesigns(rr, req)
+
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), `"code":"CONFLICT"`) {
+		t.Fatalf("draft preparation conflict status=%d body=%s, want typed 409", rr.Code, rr.Body.String())
+	}
+}
+
 func TestHandleProjectDesigns_CreateRoleGuard(t *testing.T) {
 	store := &stubStore{}
 	srv := &Server{Store: store}

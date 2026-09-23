@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/api"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -494,5 +495,242 @@ func TestPrequoteDesignPreparation_ConcurrentDraftEdit(t *testing.T) {
 	if err != nil || len(after) != 3 || after[0].FurnitureInstanceID != links[0].FurnitureInstanceID ||
 		after[1].FurnitureInstanceID != links[1].FurnitureInstanceID {
 		t.Fatalf("later edit did not converge without ID churn: links=%+v err=%v", after, err)
+	}
+}
+
+type prequoteConcurrentDesignResult struct {
+	id  string
+	err error
+}
+
+func prequoteLockWaitCount(t *testing.T, pool *pgxpool.Pool, queryFragment string) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(context.Background(), `
+		SELECT count(*) FROM pg_stat_activity
+		WHERE datname = current_database() AND wait_event_type = 'Lock'
+		  AND position($1 in query) > 0 AND pid <> pg_backend_pid()`, queryFragment).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+func prequoteAwaitLockWait(t *testing.T, pool *pgxpool.Pool, queryFragment string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if prequoteLockWaitCount(t, pool, queryFragment) > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("database operation %q did not reach the expected lock barrier", queryFragment)
+}
+
+// A test-only BEFORE INSERT gate holds the canonical materializer after its
+// line advisory lock and before the FI's project FK lock. The simultaneous
+// Design operation must not wait on that advisory while it owns FOR UPDATE on
+// the project; a recoverable conflict may be retried after materialization.
+func TestPrequoteDesignPreparation_ExplicitMaterializationLockOrder(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+	seedQuoteLines(t, fx, fiProjectAOnly, map[string]int{qlfiLineQty1: 1})
+	const gateKey int64 = 831831001
+	if _, err := fx.admin.Exec(context.Background(), `
+		CREATE FUNCTION prequote_block_fi_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN PERFORM pg_advisory_xact_lock(831831001); RETURN NEW; END $$;
+		CREATE TRIGGER prequote_block_fi_insert BEFORE INSERT ON furniture_instances
+		FOR EACH ROW WHEN (NEW.project_id = '`+fiProjectAOnly+`')
+		EXECUTE FUNCTION prequote_block_fi_insert()`); err != nil {
+		t.Fatal(err)
+	}
+	gate, err := fx.admin.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Rollback(context.Background())
+	if _, err := gate.Exec(context.Background(), `SELECT pg_advisory_xact_lock($1)`, gateKey); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	materialized := make(chan error, 1)
+	go func() {
+		_, err := fx.store.MaterializeQuoteLine(storage.WithTenantActorCtx(ctx, fiActorA()),
+			storage.MaterializeQuoteLineCommand{ProjectID: fiProjectAOnly, QuoteLineID: qlfiLineQty1, ActorUserID: rlsUserA})
+		materialized <- err
+	}()
+	prequoteAwaitLockWait(t, fx.admin, "INSERT INTO furniture_instances")
+	created := make(chan prequoteConcurrentDesignResult, 1)
+	go func() {
+		design, err := fx.store.CreateDesign(storage.WithTenantActorCtx(ctx, fiActorA()),
+			storage.CreateDesignCommand{ProjectID: fiProjectAOnly, Name: "Advisory race", ActorUserID: rlsUserA})
+		result := prequoteConcurrentDesignResult{err: err}
+		if design != nil {
+			result.id = design.ID
+		}
+		created <- result
+	}()
+	var designResult prequoteConcurrentDesignResult
+	select {
+	case designResult = <-created:
+		if !errors.Is(designResult.err, storage.ErrDraftUnitPreparationConflict) {
+			t.Fatalf("Design should fail recoverably while line materialization is active: %+v", designResult)
+		}
+	case <-time.After(5 * time.Second):
+		// The old project→advisory order reaches this lock wait. Releasing the
+		// gate below exposes the cycle with the FI project FK lock.
+		prequoteAwaitLockWait(t, fx.admin, "pg_advisory_xact_lock(hashtextextended")
+	}
+	if err := gate.Commit(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-materialized; err != nil {
+		t.Fatalf("canonical materialization did not complete: %v", err)
+	}
+	if designResult.err == nil && designResult.id == "" {
+		select {
+		case designResult = <-created:
+		case <-ctx.Done():
+			t.Fatal("Design did not resolve after materializer completed")
+		}
+	}
+	if designResult.err != nil && !errors.Is(designResult.err, storage.ErrDraftUnitPreparationConflict) {
+		t.Fatalf("Design returned untyped lock failure: %v", designResult.err)
+	}
+	links, err := listLinks(t, fx, fiActorA(), fiProjectAOnly, qlfiLineQty1)
+	if err != nil || len(links) != 1 {
+		t.Fatalf("materializer identity lost or duplicated: links=%+v err=%v", links, err)
+	}
+	var units, designs, quotes int
+	for _, check := range []struct {
+		query  string
+		target *int
+	}{
+		{`SELECT count(*) FROM furniture_instances WHERE project_id=$1`, &units},
+		{`SELECT count(*) FROM designs WHERE project_id=$1`, &designs},
+		{`SELECT count(*) FROM quote_revisions WHERE project_id=$1`, &quotes},
+	} {
+		if err := fx.admin.QueryRow(context.Background(), check.query, fiProjectAOnly).Scan(check.target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if units != 1 || quotes != 0 || (designResult.id == "" && designs != 0) {
+		t.Fatalf("conflicting attempt left partial FI/Design/Q state: units=%d designs=%d quotes=%d", units, designs, quotes)
+	}
+	if designResult.id == "" {
+		if _, err := fx.store.CreateDesign(storage.WithTenantActorCtx(context.Background(), fiActorA()),
+			storage.CreateDesignCommand{ProjectID: fiProjectAOnly, Name: "Advisory retry", ActorUserID: rlsUserA}); err != nil {
+			t.Fatalf("Design retry after materialization: %v", err)
+		}
+	}
+	converged, err := listLinks(t, fx, fiActorA(), fiProjectAOnly, qlfiLineQty1)
+	if err != nil || len(converged) != 1 || converged[0].FurnitureInstanceID != links[0].FurnitureInstanceID {
+		t.Fatalf("retry churned prepared identity: links=%+v err=%v", converged, err)
+	}
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT count(*) FROM designs WHERE project_id=$1`, fiProjectAOnly).Scan(&designs); err != nil || designs != 1 {
+		t.Fatalf("retry Design count=%d err=%v, want one", designs, err)
+	}
+}
+
+// An AFTER DELETE gate holds the line row while the ordinary RemoveProjectItem
+// command is between DELETE and its project timestamp update. Design must not
+// wait on that line while owning the project lock, or the two txs deadlock.
+func TestPrequoteDesignPreparation_RemoveLineLockOrder(t *testing.T) {
+	fx := setupDesignsTestFixture(t)
+	seedQuoteLines(t, fx, fiProjectAOnly, map[string]int{qlfiLineQty1: 1})
+	const gateKey int64 = 831831002
+	if _, err := fx.admin.Exec(context.Background(), `
+		CREATE FUNCTION prequote_block_line_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN PERFORM pg_advisory_xact_lock(831831002); RETURN OLD; END $$;
+		CREATE TRIGGER prequote_block_line_delete AFTER DELETE ON project_items
+		FOR EACH ROW WHEN (OLD.id = '`+qlfiLineQty1+`')
+		EXECUTE FUNCTION prequote_block_line_delete()`); err != nil {
+		t.Fatal(err)
+	}
+	gate, err := fx.admin.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Rollback(context.Background())
+	if _, err := gate.Exec(context.Background(), `SELECT pg_advisory_xact_lock($1)`, gateKey); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	removed := make(chan error, 1)
+	go func() {
+		removed <- fx.store.WithinTenantTx(ctx, fiActorA(), func(txCtx context.Context) error {
+			return fx.store.RemoveProjectItem(txCtx, fiProjectAOnly, qlfiLineQty1)
+		})
+	}()
+	prequoteAwaitLockWait(t, fx.admin, "DELETE FROM project_items")
+	created := make(chan prequoteConcurrentDesignResult, 1)
+	go func() {
+		design, err := fx.store.CreateDesign(storage.WithTenantActorCtx(ctx, fiActorA()),
+			storage.CreateDesignCommand{ProjectID: fiProjectAOnly, Name: "Removal race", ActorUserID: rlsUserA})
+		result := prequoteConcurrentDesignResult{err: err}
+		if design != nil {
+			result.id = design.ID
+		}
+		created <- result
+	}()
+	var designResult prequoteConcurrentDesignResult
+	select {
+	case designResult = <-created:
+		if !errors.Is(designResult.err, storage.ErrDraftUnitPreparationConflict) {
+			t.Fatalf("Design should fail recoverably during line deletion: %+v", designResult)
+		}
+	case <-time.After(5 * time.Second):
+		prequoteAwaitLockWait(t, fx.admin, "SELECT id::text FROM project_items")
+	}
+	if err := gate.Commit(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-removed; err != nil {
+		t.Fatalf("normal line removal did not complete: %v", err)
+	}
+	if designResult.err == nil && designResult.id == "" {
+		select {
+		case designResult = <-created:
+		case <-ctx.Done():
+			t.Fatal("Design did not resolve after line removal")
+		}
+	}
+	if designResult.err != nil && !errors.Is(designResult.err, storage.ErrDraftUnitPreparationConflict) {
+		t.Fatalf("Design returned untyped line lock failure: %v", designResult.err)
+	}
+	if designResult.id != "" {
+		t.Fatalf("Design committed while line removal was active: %s", designResult.id)
+	}
+	var lines, units, links, designs, quotes int
+	for _, check := range []struct {
+		query  string
+		target *int
+	}{
+		{`SELECT count(*) FROM project_items WHERE id=$1`, &lines},
+		{`SELECT count(*) FROM furniture_instances WHERE project_id=$1`, &units},
+		{`SELECT count(*) FROM quote_line_furniture_instances WHERE project_id=$1`, &links},
+		{`SELECT count(*) FROM designs WHERE project_id=$1`, &designs},
+		{`SELECT count(*) FROM quote_revisions WHERE project_id=$1`, &quotes},
+	} {
+		id := fiProjectAOnly
+		if check.target == &lines {
+			id = qlfiLineQty1
+		}
+		if err := fx.admin.QueryRow(context.Background(), check.query, id).Scan(check.target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if lines != 0 || units != 0 || links != 0 || designs != 0 || quotes != 0 {
+		t.Fatalf("removal left partial line/FI/link/Design/Q state: lines=%d units=%d links=%d designs=%d quotes=%d", lines, units, links, designs, quotes)
+	}
+	if _, err := fx.store.CreateDesign(storage.WithTenantActorCtx(context.Background(), fiActorA()),
+		storage.CreateDesignCommand{ProjectID: fiProjectAOnly, Name: "Removal retry", ActorUserID: rlsUserA}); err != nil {
+		t.Fatalf("Design retry after line removal: %v", err)
+	}
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT count(*) FROM furniture_instances WHERE project_id=$1`, fiProjectAOnly).Scan(&units); err != nil || units != 0 {
+		t.Fatalf("retry invented a unit after line removal: units=%d err=%v", units, err)
 	}
 }

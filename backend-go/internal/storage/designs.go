@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
@@ -16,6 +17,11 @@ import (
 
 // #387 / DT-3: Design aggregate and immutable DesignRevision snapshots
 // (ADR-0003, digital-thread §§7-10).
+
+// ErrDraftUnitPreparationConflict is retryable: a concurrent materializer or
+// draft-line mutation owns a lock that Design preparation cannot safely wait
+// for while holding the project row lock.
+var ErrDraftUnitPreparationConflict = errors.New("draft unit preparation conflicts with a concurrent change")
 
 type CreateDesignCommand struct {
 	ProjectID             string
@@ -278,8 +284,9 @@ func (s *PostgresStore) PrepareDesignDraftUnits(ctx context.Context, cmd Prepare
 }
 
 // prepareDraftProjectItemsTx requires a tenant transaction and a FOR UPDATE
-// lock on the owning project row. That lock serializes normal draft edits;
-// FOR SHARE on the current lines also protects against direct row updates.
+// lock on the owning project row. It must never wait on a line row or the
+// per-line advisory key while holding that project lock: standalone line
+// removal/materialization can own those locks before needing the project row.
 func (s *PostgresStore) prepareDraftProjectItemsTx(ctx context.Context, projectID, actorUserID, ip, requestID string) error {
 	var hasQuoteRevision bool
 	if err := s.db(ctx).QueryRow(ctx,
@@ -291,9 +298,9 @@ func (s *PostgresStore) prepareDraftProjectItemsTx(ctx context.Context, projectI
 		return nil
 	}
 	rows, err := s.db(ctx).Query(ctx,
-		`SELECT id::text FROM project_items WHERE project_id = $1 ORDER BY id FOR SHARE`, projectID)
+		`SELECT id::text FROM project_items WHERE project_id = $1 ORDER BY id FOR SHARE NOWAIT`, projectID)
 	if err != nil {
-		return err
+		return draftPreparationLockError(err)
 	}
 	lineIDs := []string{}
 	for rows.Next() {
@@ -306,7 +313,20 @@ func (s *PostgresStore) prepareDraftProjectItemsTx(ctx context.Context, projectI
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return draftPreparationLockError(err)
+	}
+	// MaterializeQuoteLine takes this exact key. Pre-acquiring it with try-lock
+	// keeps its later reentrant acquisition nonblocking under the project lock;
+	// a competing explicit materializer can finish after our tx backs out.
+	for _, lineID := range lineIDs {
+		var acquired bool
+		if err := s.db(ctx).QueryRow(ctx,
+			`SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))`, lineID).Scan(&acquired); err != nil {
+			return err
+		}
+		if !acquired {
+			return ErrDraftUnitPreparationConflict
+		}
 	}
 	for _, lineID := range lineIDs {
 		if _, err := s.MaterializeQuoteLine(ctx, MaterializeQuoteLineCommand{
@@ -317,6 +337,14 @@ func (s *PostgresStore) prepareDraftProjectItemsTx(ctx context.Context, projectI
 		}
 	}
 	return nil
+}
+
+func draftPreparationLockError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "55P03" { // lock_not_available from NOWAIT
+		return ErrDraftUnitPreparationConflict
+	}
+	return err
 }
 
 func (s *PostgresStore) GetDesignByID(ctx context.Context, designID string) (*domain.Design, error) {
