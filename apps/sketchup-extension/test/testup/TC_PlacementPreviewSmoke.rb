@@ -122,7 +122,13 @@ module Granete
                   .locate(model, Metadata::Store.new(model), FI_1)
         assert located['entity'], 'the committed placement must exist'
         assert_equal 1, located['duplicates'], 'no second unit may appear'
-        assert_empty transport.requests.select { |r| r['method'] == 'POST' },
+        # Prohibit FurnitureInstance CREATION specifically: binding:validate
+        # is a legitimate POST the guards issue; creating business identity
+        # while placing an existing unit is the actual invariant.
+        instance_creations = transport.requests.select do |request|
+          request['method'] == 'POST' && request['path'].match?(%r{/furniture-instances})
+        end
+        assert_empty instance_creations,
                      'placing an existing unit never creates business identity'
 
         root = located['entity']

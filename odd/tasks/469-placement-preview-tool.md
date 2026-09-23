@@ -3,7 +3,7 @@
 Issue: #469 — [P1][SU-UX-2] Constraint-aware furniture placement, snapping and repeat placement
 Base: origin/main @ 1484d20a2912e9132932c74653c67ffb1ed5d78b
 Branch: feat/469-placement-preview
-Status: implemented, pending independent review; V0/V1 green; V2 host NOT_RUN
+Status: R1 review corrections applied (CHANGES_REQUESTED on 2921e9f7); V0/V1 green; V2 host NOT_RUN
 
 ## Scope separation from parallel work (coordination registry)
 
@@ -76,9 +76,8 @@ rehearsal spec prepared but NOT_RUN (host).
 
 ## Observed evidence (this candidate)
 
-- `bundle exec rake verify` (syntax, rubocop, unit, boundary, package
-  readback): 944 unit runs / 6349 assertions + 6 boundary runs / 3287
-  assertions, 0 failures; 221 files lint-clean.
+- R1: `bundle exec rake verify`: 965 unit runs / 6491 assertions + 6
+  boundary runs / 3287 assertions, 0 failures; 222 files lint-clean.
 - Focused suites: `furniture_placement_tool_test.rb` 17 runs (anchor math on
   the 800×560×2100 asymmetric fixture, quarter-turn rigidity, double-click
   single commit, Esc/deactivate zero-residue, late-event discard, one
@@ -96,6 +95,37 @@ rehearsal spec prepared but NOT_RUN (host).
 - REAL HOST (TestUp `TC_PlacementPreviewSmoke`): NOT_RUN this session — no
   install/restart allowed; the owner coordinates the host validation. The
   spec covers preview → cancel → place → undo → redo with the invariants.
+
+## R1 review corrections (this candidate)
+
+1. Gesture context captured and verified: begin stores model + binding
+   triple + unique gesture id + layout fingerprint
+   (`PlacementGuards.layout_signature`: definition + dimensions +
+   occurrence ids); commit fails closed `context_changed` on a different
+   model OR a different binding inside the SAME model, and
+   `composition_changed` when the authoritative composition no longer
+   matches the previewed one — before any host/server mutation.
+2. No silent returns: a second entry point while a preview is live gets a
+   correlated `preview_busy` answer and its controls re-arm; select_tool /
+   activate failures answer `activation_failed` with the session
+   discarded — the retry works (tested).
+3. Invalid InputPoint picks invalidate the stale position (preview stops
+   drawing, click cannot commit on it); the click RE-PICKS at its own
+   coordinates and commits only on the fresh verified position. Single
+   confirmation and zero requests during movement preserved.
+4. The anchor label draws at the projected SCREEN point
+   (`View#screen_coords` + pixel lift); the test asserts the exact point.
+5. Smoke now prohibits POST /furniture-instances specifically (not the
+   legitimate binding:validate POSTs); new controller suite (14 tests)
+   covers the DialogController lifecycle end-to-end including the REAL
+   convergence through PositionSyncCoordinator/SafeWrite (one PUT with
+   the #810 workingVersion token + authoritative readback).
+6. Catalog extents failure fixed (`key_name:` call-site bug) with an
+   end-to-end negative test (`preview_unavailable` + definitionId).
+   Lifecycle: Esc, tool switch, model change, binding change and dialog
+   close all cancel cleanly; a late end of an OLD gesture cannot cancel,
+   clear or answer for a NEW one (gesture-matched handlers; the ensure
+   block only consumes the session of a gesture that actually ran).
 
 ## Remaining for #469 (not this increment)
 
