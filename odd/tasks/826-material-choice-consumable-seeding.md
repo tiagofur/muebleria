@@ -3,7 +3,7 @@
 Issue: #826 — fix(authoring): material choices se siembran sin intersección con roles consumibles por la definición
 Base: origin/main @ 8c78eac9 (coordinado con PR #825 fix/821-catalog-option-kinds)
 Branch: fix/826-material-choice-consumable-seeding
-Status: implemented, V1 verification in progress
+Status: candidate frozen @ 981144b0 + artifact sync; PR #829 (Closes #826, Delivery: complete) pending review
 
 ## Outcome
 
@@ -74,5 +74,5 @@ OpenAPI/fixture cambia (no se introdujo error code nuevo tras la revisión).
 - [x] Intersección design-first + requote (quote-first verbatim)
 - [x] Reconcile fill-only consumible
 - [x] Tests storage (converge/requote legacy/reconcile) + contratos restaurados
-- [ ] Suite completa + verify_affected + preflight --require-clean
-- [ ] PR (Closes #826 + Delivery: complete)
+- [x] Suite completa + verify_affected + preflight --require-clean (backend full, openapi drift, factory scripts, typecheck, pnpm test, rake verify)
+- [x] PR #829 (Closes #826 + Delivery: complete) — pending independent review + human merge
