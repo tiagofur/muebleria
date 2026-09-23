@@ -3,7 +3,7 @@
 Issue: #469 — [P1][SU-UX-2] Constraint-aware furniture placement, snapping and repeat placement
 Base: origin/main @ 1484d20a2912e9132932c74653c67ffb1ed5d78b
 Branch: feat/469-placement-preview
-Status: R1 review corrections applied (CHANGES_REQUESTED on 2921e9f7); V0/V1 green; V2 host NOT_RUN
+Status: R1+R2 review corrections applied (R2 on f0139899); V0/V1 green; V2 host NOT_RUN
 
 ## Scope separation from parallel work (coordination registry)
 
@@ -78,6 +78,9 @@ rehearsal spec prepared but NOT_RUN (host).
 
 - R1: `bundle exec rake verify`: 965 unit runs / 6491 assertions + 6
   boundary runs / 3287 assertions, 0 failures; 222 files lint-clean.
+- R2: `bundle exec rake verify`: 978 unit runs / 6558 assertions + 6
+  boundary runs / 3287 assertions, 0 failures; 222 files lint-clean
+  (controller lifecycle suite now 22 tests; tool suite 26).
 - Focused suites: `furniture_placement_tool_test.rb` 17 runs (anchor math on
   the 800×560×2100 asymmetric fixture, quarter-turn rigidity, double-click
   single commit, Esc/deactivate zero-residue, late-event discard, one
@@ -126,6 +129,36 @@ rehearsal spec prepared but NOT_RUN (host).
    close all cancel cleanly; a late end of an OLD gesture cannot cancel,
    clear or answer for a NEW one (gesture-matched handlers; the ensure
    block only consumes the session of a gesture that actually ran).
+
+## R2 review corrections (same candidate line)
+
+1. Real close: `cancel_active_placement_preview` runs from the dialog's
+   own `set_on_closed` (native X, `close_dialog` callback via
+   dialog.close, and controller.close all converge there), idempotent,
+   no recursion, no bridge pushes to a closed dialog; the three routes
+   are tested and a dead tool can no longer commit afterwards.
+2. Preview geometry: `layout_signature` now digests per-board geometry
+   (width×thickness×length + local translation) in addition to ids — a
+   600→900 board change under unchanged ids without dimensionsMm fails
+   closed; extents derivation keeps the local MINIMUM (origin_mm) so the
+   anchor maps the real furniture box (shifted-layout test proves the
+   committed transform anchors the box minimum at the click).
+3. Tool lifecycle: the tool holds the model captured at gesture time
+   (never the dynamic active model), deactivation by tool switch does
+   NOT select_tool(nil) over the user's next tool (explicit cancels
+   still restore), activate is idempotent (host select_tool + explicit
+   activation), and a failure AFTER select_tool cleans the model and
+   session with a working retry.
+4. Authenticated context: `Service#context_fingerprint` (backend
+   endpoint + one-way SHA-256 of the current credential — no secret
+   travels or persists) is captured with the gesture; logout, a rotated
+   session or a different backend invalidate the commit even when model
+   and binding ids are unchanged. Tested with doubles; no Keychain or
+   owner credentials touched.
+   Controller regressions run through the REAL boundaries: window
+   callbacks (dialog.callbacks fetches, set_on_closed block, close_dialog
+   route) and the host tool protocol (onMouseMove/onLButtonDown/
+   onKeyDown/deactivate on the actual selected tool).
 
 ## Remaining for #469 (not this increment)
 
