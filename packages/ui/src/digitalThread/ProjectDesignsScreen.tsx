@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import {
   Armchair,
@@ -295,6 +295,9 @@ export function ProjectDesignsScreen({
     readonly baseRevisionLabel: string | null;
     readonly designName: string;
   } | null>(null);
+  const preparingDraftUnits = useRef(false);
+  const [isPreparingDraftUnits, setIsPreparingDraftUnits] = useState(false);
+  const [prepareDraftUnitsError, setPrepareDraftUnitsError] = useState<string | null>(null);
 
   // Sync internal state when pinned initialContext changes from outside
   useEffect(() => {
@@ -629,19 +632,36 @@ export function ProjectDesignsScreen({
     setAuthorizingKind(null);
   };
 
-  const handleOpenInSketchUp = (): void => {
-    if (!selectedDesign) return;
-    // Exact selection rule: the grant pins the revision the user selected in
-    // the timeline (presentation default = highest), never an implicit
-    // "latest" resolved later by the server. No published revision ⇒ null.
-    setPairing({
-      designId: selectedDesign.id,
-      baseRevisionId: selectedRevisionHeader?.id ?? null,
-      baseRevisionLabel: selectedRevisionHeader
-        ? `R${selectedRevisionHeader.revision_number}`
-        : null,
-      designName: selectedDesign.name,
-    });
+  const handleOpenInSketchUp = async (): Promise<void> => {
+    if (!selectedDesign || preparingDraftUnits.current) return;
+    preparingDraftUnits.current = true;
+    setIsPreparingDraftUnits(true);
+    setPrepareDraftUnitsError(null);
+    try {
+      // An existing Design may have gained draft lines since creation. This
+      // explicit command converges project units before a pairing grant can
+      // expose the model; read-only users retain their prior read-only path.
+      if (canMutate) {
+        await api.prepareProjectDesignDraftUnits(token, projectId, selectedDesign.id);
+      }
+      // Exact selection rule: the grant pins the revision the user selected
+      // in the timeline, never an implicit latest resolved later by server.
+      setPairing({
+        designId: selectedDesign.id,
+        baseRevisionId: selectedRevisionHeader?.id ?? null,
+        baseRevisionLabel: selectedRevisionHeader
+          ? `R${selectedRevisionHeader.revision_number}`
+          : null,
+        designName: selectedDesign.name,
+      });
+    } catch {
+      setPrepareDraftUnitsError(
+        'No se pudieron preparar las unidades del borrador. Volvé a intentar antes de abrir SketchUp.',
+      );
+    } finally {
+      preparingDraftUnits.current = false;
+      setIsPreparingDraftUnits(false);
+    }
   };
 
   if (designsQuery.isLoading) {
@@ -688,7 +708,8 @@ export function ProjectDesignsScreen({
               type="button"
               className="btn btn-primary"
               data-testid="open-in-sketchup-btn"
-              onClick={handleOpenInSketchUp}
+              onClick={() => void handleOpenInSketchUp()}
+              disabled={isPreparingDraftUnits}
             >
               <ExternalLink size={16} />
               <span>Abrir en SketchUp</span>
@@ -768,6 +789,12 @@ export function ProjectDesignsScreen({
           </div>
         }
       />
+
+      {prepareDraftUnitsError && (
+        <p role="alert" data-testid="prepare-draft-units-error" className="alert alert--danger">
+          {prepareDraftUnitsError}
+        </p>
+      )}
 
       {/* Alternatives Selector */}
       {designs.length === 0 ? (
@@ -1030,7 +1057,8 @@ export function ProjectDesignsScreen({
                       type="button"
                       className="btn btn-secondary"
                       data-testid="no-revisions-open-sketchup-btn"
-                      onClick={handleOpenInSketchUp}
+                      onClick={() => void handleOpenInSketchUp()}
+                      disabled={isPreparingDraftUnits}
                     >
                       <ExternalLink size={14} strokeWidth={1.5} />
                       <span>Abrir en SketchUp para modelar</span>
@@ -1333,7 +1361,8 @@ export function ProjectDesignsScreen({
                             <button
                               type="button"
                               className="btn btn-secondary"
-                              onClick={handleOpenInSketchUp}
+                              onClick={() => void handleOpenInSketchUp()}
+                              disabled={isPreparingDraftUnits}
                               data-testid="preview-recovery-open-sketchup-btn"
                             >
                               <ExternalLink size={14} strokeWidth={1.5} />
@@ -1463,7 +1492,8 @@ export function ProjectDesignsScreen({
                             <button
                               type="button"
                               className="btn btn-secondary"
-                              onClick={handleOpenInSketchUp}
+                              onClick={() => void handleOpenInSketchUp()}
+                              disabled={isPreparingDraftUnits}
                               data-testid="artifact-recovery-open-sketchup-btn"
                             >
                               <ExternalLink size={14} strokeWidth={1.5} />

@@ -242,6 +242,7 @@ interface FetchMockOptions {
   // #499 pairing handoff
   pairingStatusFail?: boolean;
   pairingStatus?: 'pending' | 'exchanged' | 'cancelled' | 'expired';
+  prepareDraftUnitsFail?: boolean | (() => boolean);
   // #658 working-copy material provenance (default: honest empty — no candidates)
   materialProvenanceByDesign?: Record<string, DesignWorkingCopyMaterialProvenance>;
   materialProvenanceFail?: boolean;
@@ -439,6 +440,16 @@ function setupFetchMock(options: FetchMockOptions = {}) {
         });
       }
       return json([]);
+    }
+
+    // #831 existing-Design preparation is a server mutation before pairing.
+    if (method === 'POST' && path === `/projects/${PROJECT_ID}/designs/${DESIGN_1_ID}/draft-units:prepare`) {
+      (fetchMock as any).prepareDraftUnitsCalls = ((fetchMock as any).prepareDraftUnitsCalls ?? 0) + 1;
+      if (options.prepareDraftUnitsFail === true ||
+          (typeof options.prepareDraftUnitsFail === 'function' && options.prepareDraftUnitsFail())) {
+        return json({ code: 'CONFLICT', message: 'No se pudieron preparar las unidades' }, 409);
+      }
+      return json(mockDesigns[0]);
     }
 
     // 8. #499 pairing grants: create / status / cancel
@@ -1152,6 +1163,25 @@ describe('ProjectDesignsScreen — #499 SketchUp pairing handoff (Slice 2)', () 
     });
     // The frozen label shows the exact pinned revision.
     expect(screen.getByTestId('pairing-base-label')).toHaveTextContent('Base: R1');
+  });
+
+  it('#831 prepares an existing Design before pairing, and retries a failed preparation without minting a grant', async () => {
+    let fail = true;
+    const fetchMock = setupFetchMock({ prepareDraftUnitsFail: () => fail });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID }, canMutate: true });
+    await screen.findByTestId('revision-node-R1');
+    const user = userEvent.setup();
+
+    await user.click(screen.getByTestId('open-in-sketchup-btn'));
+    expect(await screen.findByTestId('prepare-draft-units-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('sketchup-pairing-modal')).not.toBeInTheDocument();
+    expect((fetchMock as any).lastPairingCreate).toBeUndefined();
+
+    fail = false;
+    await user.click(screen.getByTestId('open-in-sketchup-btn'));
+    expect(await screen.findByTestId('sketchup-pairing-modal')).toBeInTheDocument();
+    expect((fetchMock as any).prepareDraftUnitsCalls).toBe(2);
+    expect((fetchMock as any).lastPairingCreate).toEqual({ action: 'open_design', base_revision_id: REV_1_ID });
   });
 
   it('creates the grant with base_revision_id omitted when the design has no published revision', async () => {

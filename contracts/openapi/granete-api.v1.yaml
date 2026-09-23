@@ -2708,6 +2708,29 @@
         }
       }
     },
+    "/projects/{projectId}/designs/{designId}/draft-units:prepare": {
+      "post": {
+        "operationId": "prepareProjectDesignDraftUnits",
+        "summary": "Converge draft project lines to pending units before an existing Design handoff (#831)",
+        "parameters": [
+          { "$ref": "#/components/parameters/ProjectId" },
+          { "$ref": "#/components/parameters/DesignId" },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existing Design with draft units prepared",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Design" }
+              }
+            }
+          },
+          "409": { "$ref": "#/components/responses/ApiError" },
+          "default": { "$ref": "#/components/responses/ApiError" }
+        }
+      }
+    },
     "/projects/{projectId}/designs/{designId}/binding:validate": {
       "post": {
         "operationId": "validateProjectDesignModelBinding",

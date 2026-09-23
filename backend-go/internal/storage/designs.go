@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
@@ -16,6 +17,11 @@ import (
 
 // #387 / DT-3: Design aggregate and immutable DesignRevision snapshots
 // (ADR-0003, digital-thread §§7-10).
+
+// ErrDraftUnitPreparationConflict is retryable: a concurrent materializer or
+// draft-line mutation owns a lock that Design preparation cannot safely wait
+// for while holding the project row lock.
+var ErrDraftUnitPreparationConflict = errors.New("draft unit preparation conflicts with a concurrent change")
 
 type CreateDesignCommand struct {
 	ProjectID             string
@@ -25,6 +31,16 @@ type CreateDesignCommand struct {
 	ActorUserID           string
 	IP                    string
 	RequestID             string
+}
+
+// PrepareDesignDraftUnitsCommand is the explicit recovery/handoff intent for
+// an existing Design whose project gained draft lines after its creation.
+type PrepareDesignDraftUnitsCommand struct {
+	ProjectID   string
+	DesignID    string
+	ActorUserID string
+	IP          string
+	RequestID   string
 }
 
 type PublishDesignRevisionItemCommand struct {
@@ -138,11 +154,14 @@ func (s *PostgresStore) CreateDesign(ctx context.Context, cmd CreateDesignComman
 		return created, err
 	}
 
-	// Verify project exists and is accessible under tenant scope.
-	var projectOrgID string
+	// Lock the project before reading its draft lines. Generic project edits
+	// update this row before replacing lines, so preparation observes one
+	// coherent commercial draft and cannot race a normal edit into a partial
+	// set of physical identities.
+	var projectOrgID, projectStatus string
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT organization_id FROM projects WHERE id = $1
-	`, cmd.ProjectID).Scan(&projectOrgID)
+		SELECT organization_id, status FROM projects WHERE id = $1 FOR UPDATE
+	`, cmd.ProjectID).Scan(&projectOrgID, &projectStatus)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignNotFound
@@ -153,6 +172,16 @@ func (s *PostgresStore) CreateDesign(ctx context.Context, cmd CreateDesignComman
 	actorOrg := OrgFromCtx(ctx)
 	if actorOrg != "" && actorOrg != projectOrgID {
 		return nil, domain.ErrFurnitureInstanceProjectNotWritable
+	}
+
+	// #831: the first Design intent prepares existing draft quote lines as
+	// pending project units, without creating a QuoteRevision or placing items
+	// in the WorkingCopy. A Design sourced from a formal quote already has its
+	// own immutable commercial context and must not re-converge live lines.
+	if cmd.SourceQuoteRevisionID == "" && projectStatus == "draft" {
+		if err := s.prepareDraftProjectItemsTx(ctx, cmd.ProjectID, cmd.ActorUserID, cmd.IP, cmd.RequestID); err != nil {
+			return nil, err
+		}
 	}
 
 	var sourceQuoteRev *string
@@ -203,6 +232,119 @@ func (s *PostgresStore) CreateDesign(ctx context.Context, cmd CreateDesignComman
 	}
 
 	return design, nil
+}
+
+// PrepareDesignDraftUnits converges a previously created Design's live draft
+// project units before handoff. It is a POST-side mutation; GET/list readers
+// never invoke it. Both entry points use the same transactional helper.
+func (s *PostgresStore) PrepareDesignDraftUnits(ctx context.Context, cmd PrepareDesignDraftUnitsCommand) error {
+	if !isValidUUID(cmd.ProjectID) || !isValidUUID(cmd.DesignID) {
+		return domain.ErrDesignNotFound
+	}
+	if transactionFromContext(ctx) == nil {
+		actor, _ := TenantActorFromCtx(ctx)
+		if actor.OrganizationID == "" {
+			actor.OrganizationID = OrgFromCtx(ctx)
+		}
+		actor.UserID = nonEmptyOrDefault(actor.UserID, cmd.ActorUserID)
+		return s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+			return s.PrepareDesignDraftUnits(txCtx, cmd)
+		})
+	}
+	var projectOrgID, projectStatus string
+	err := s.db(ctx).QueryRow(ctx,
+		`SELECT organization_id, status FROM projects WHERE id = $1 FOR UPDATE`, cmd.ProjectID).
+		Scan(&projectOrgID, &projectStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrDesignNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if projectOrgID != OrgFromCtx(ctx) {
+		return domain.ErrFurnitureInstanceProjectNotWritable
+	}
+	var designStatus domain.DesignStatus
+	err = s.db(ctx).QueryRow(ctx,
+		`SELECT status FROM designs WHERE id = $1 AND project_id = $2`, cmd.DesignID, cmd.ProjectID).
+		Scan(&designStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.ErrDesignNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if designStatus != domain.DesignStatusActive {
+		return domain.ErrDesignNotActive
+	}
+	if projectStatus != "draft" {
+		return nil
+	}
+	return s.prepareDraftProjectItemsTx(ctx, cmd.ProjectID, cmd.ActorUserID, cmd.IP, cmd.RequestID)
+}
+
+// prepareDraftProjectItemsTx requires a tenant transaction and a FOR UPDATE
+// lock on the owning project row. It must never wait on a line row or the
+// per-line advisory key while holding that project lock: standalone line
+// removal/materialization can own those locks before needing the project row.
+func (s *PostgresStore) prepareDraftProjectItemsTx(ctx context.Context, projectID, actorUserID, ip, requestID string) error {
+	var hasQuoteRevision bool
+	if err := s.db(ctx).QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM quote_revisions WHERE project_id = $1)`, projectID).
+		Scan(&hasQuoteRevision); err != nil {
+		return err
+	}
+	if hasQuoteRevision {
+		return nil
+	}
+	rows, err := s.db(ctx).Query(ctx,
+		`SELECT id::text FROM project_items WHERE project_id = $1 ORDER BY id FOR SHARE NOWAIT`, projectID)
+	if err != nil {
+		return draftPreparationLockError(err)
+	}
+	lineIDs := []string{}
+	for rows.Next() {
+		var lineID string
+		if err := rows.Scan(&lineID); err != nil {
+			rows.Close()
+			return err
+		}
+		lineIDs = append(lineIDs, lineID)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return draftPreparationLockError(err)
+	}
+	// MaterializeQuoteLine takes this exact key. Pre-acquiring it with try-lock
+	// keeps its later reentrant acquisition nonblocking under the project lock;
+	// a competing explicit materializer can finish after our tx backs out.
+	for _, lineID := range lineIDs {
+		var acquired bool
+		if err := s.db(ctx).QueryRow(ctx,
+			`SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))`, lineID).Scan(&acquired); err != nil {
+			return err
+		}
+		if !acquired {
+			return ErrDraftUnitPreparationConflict
+		}
+	}
+	for _, lineID := range lineIDs {
+		if _, err := s.MaterializeQuoteLine(ctx, MaterializeQuoteLineCommand{
+			ProjectID: projectID, QuoteLineID: lineID,
+			ActorUserID: actorUserID, IP: ip, RequestID: requestID,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func draftPreparationLockError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "55P03" { // lock_not_available from NOWAIT
+		return ErrDraftUnitPreparationConflict
+	}
+	return err
 }
 
 func (s *PostgresStore) GetDesignByID(ctx context.Context, designID string) (*domain.Design, error) {
