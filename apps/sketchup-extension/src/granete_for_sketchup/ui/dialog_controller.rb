@@ -527,6 +527,15 @@ module Granete
           dialog.add_action_callback('synchronize_design') do
             handle_synchronize_design(dialog)
           end
+          # #469 — shared transient placement preview (Project + Library
+          # consume the same FurniturePlacementTool; only identity
+          # provenance differs at commit).
+          dialog.add_action_callback('begin_placement_preview') do |_c, p|
+            handle_begin_placement_preview(dialog, p)
+          end
+          dialog.add_action_callback('begin_catalog_placement_preview') do |_c, p|
+            handle_begin_catalog_placement_preview(dialog, p)
+          end
         end
 
         # Panel payload: binding-aware reconciliation per furnitureInstanceId.
@@ -645,6 +654,219 @@ module Granete
           @logger.error('project_furniture_cancel_failed', error: e)
           execute_bridge(dialog, 'onCancelPlacementResult',
                          { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # #469 — Proyecto: activate the shared transient placement tool for a
+        # pending FurnitureInstance. All server resolution happens HERE,
+        # outside the cursor loop; the tool itself holds no service. The
+        # click revalidates everything through the canonical #place command.
+        def handle_begin_placement_preview(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          fi_id = payload['furnitureInstanceId'].to_s
+          return if @active_placement_preview
+
+          model = active_model
+          prepared = project_furniture_placer.prepare_placement_preview(fi_id)
+          if prepared['ok']
+            extents = placement_preview_extents(prepared['layout'])
+            prepared = placement_preview_extents_failure(fi_id) unless extents
+          end
+          unless prepared['ok']
+            prepared['instanceId'] ||= fi_id
+            execute_bridge(dialog, 'onPlacementPreviewStarted', prepared)
+            return
+          end
+
+          tool = build_placement_preview_tool(
+            label: prepared['definition']['name'], extents_mm: extents,
+            on_commit: ->(transform) { handle_commit_placement_preview(dialog, fi_id, transform) },
+            on_cancel: ->(reason) { handle_placement_preview_cancelled(dialog, fi_id, 'instanceId', reason) }
+          )
+          @active_placement_preview = { 'kind' => 'project', 'key' => fi_id, 'model' => model }
+          model.select_tool(tool)
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => true, 'code' => 'preview_active', 'instanceId' => fi_id })
+        rescue StandardError => e
+          @logger.error('placement_preview_begin_failed', error: e)
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => false, 'code' => 'error', 'instanceId' => fi_id,
+                           'reason' => e.message })
+        end
+
+        # #469 — Biblioteca (connected #390 lane): same shared tool; NO
+        # backend identity is minted here — the FurnitureInstance is created
+        # canonically only inside the commit gesture.
+        def handle_begin_catalog_placement_preview(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          definition_id = payload['definitionId'].to_s
+          return if @active_placement_preview
+
+          model = active_model
+          prepared = project_furniture_placer.prepare_catalog_preview(
+            definition_id: definition_id,
+            parameters: payload['parameters'] || {},
+            material_choices: payload['materialChoices'] || {}
+          )
+          if prepared['ok']
+            extents = placement_preview_extents(prepared['layout'])
+            prepared = placement_preview_extents_failure(definition_id, key: 'definitionId') unless extents
+          end
+          unless prepared['ok']
+            prepared['definitionId'] ||= definition_id
+            execute_bridge(dialog, 'onPlacementPreviewStarted', prepared)
+            return
+          end
+
+          idempotency_key = payload['idempotencyKey']
+          tool = build_placement_preview_tool(
+            label: prepared['definition']['name'], extents_mm: extents,
+            on_commit: ->(transform) { handle_commit_catalog_preview(dialog, payload, transform) },
+            on_cancel: lambda { |reason|
+              handle_placement_preview_cancelled(dialog, definition_id,
+                                                 'definitionId', reason)
+            }
+          )
+          @active_placement_preview = { 'kind' => 'catalog', 'key' => definition_id,
+                                        'model' => model, 'idempotency_key' => idempotency_key }
+          model.select_tool(tool)
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => true, 'code' => 'preview_active', 'definitionId' => definition_id })
+        rescue StandardError => e
+          @logger.error('catalog_placement_preview_begin_failed', error: e)
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => false, 'code' => 'error', 'definitionId' => definition_id,
+                           'reason' => e.message })
+        end
+
+        # Preview click for an EXISTING project unit: the canonical #place
+        # command receives the accepted transform; identity is stamped
+        # verbatim (no new unit, no commercial quantity change) and the
+        # post-insert convergence syncs the working copy with readback.
+        def handle_commit_placement_preview(dialog, furniture_instance_id, transformation)
+          preview = @active_placement_preview
+          return if @placement_preview_committing
+
+          if preview.nil? || preview['kind'] != 'project' || preview['key'] != furniture_instance_id
+            @logger.warn('placement_preview_commit_stale', furniture_instance_id: furniture_instance_id)
+            return
+          end
+          unless active_model.equal?(preview['model'])
+            execute_bridge(dialog, 'onPlaceFurnitureResult',
+                           { 'ok' => false, 'code' => 'context_changed', 'instanceId' => furniture_instance_id,
+                             'reason' => 'el modelo activo cambió durante la colocación; nada fue colocado' })
+            return
+          end
+
+          @placement_preview_committing = true
+          result = project_furniture_placer.place(furniture_instance_id, transformation: transformation)
+          result = converge_preview_insert(dialog, result, furniture_instance_id) if result['ok']
+          result['instanceId'] ||= furniture_instance_id
+          execute_bridge(dialog, 'onPlaceFurnitureResult', result)
+          handle_get_project_furniture(dialog) if result['ok']
+          if result['ok']
+            scope = Host::CommandContract.furniture_scope({ 'furnitureInstanceId' => furniture_instance_id })
+            push_preflight_state(dialog, scope)
+          end
+        rescue StandardError => e
+          @logger.error('placement_preview_commit_failed', error: e)
+          execute_bridge(dialog, 'onPlaceFurnitureResult',
+                         { 'ok' => false, 'code' => 'error', 'instanceId' => furniture_instance_id,
+                           'reason' => 'No se pudo colocar el mueble (error interno de SketchUp).' })
+        ensure
+          @placement_preview_committing = false
+          clear_placement_preview(preview)
+        end
+
+        # Preview click for the connected catalog lane: the #390 canonical
+        # create happens HERE (identity minted at the explicit commit) and
+        # the insertion lands at the accepted transform.
+        def handle_commit_catalog_preview(dialog, payload, transformation)
+          preview = @active_placement_preview
+          return if @placement_preview_committing
+
+          if preview.nil? || preview['kind'] != 'catalog'
+            @logger.warn('catalog_preview_commit_stale')
+            return
+          end
+          unless active_model.equal?(preview['model'])
+            execute_bridge(dialog, 'onCreateProjectFurnitureResult',
+                           { 'ok' => false, 'code' => 'context_changed',
+                             'reason' => 'el modelo activo cambió durante la colocación; nada fue colocado' })
+            return
+          end
+
+          @placement_preview_committing = true
+          result = project_furniture_placer.create_and_place(
+            definition_id: payload['definitionId'].to_s,
+            parameters: payload['parameters'] || {},
+            material_choices: payload['materialChoices'] || {},
+            idempotency_key: preview['idempotency_key'],
+            transformation: transformation
+          )
+          result = converge_preview_insert(dialog, result, result['instanceId']) if result['ok']
+          execute_bridge(dialog, 'onCreateProjectFurnitureResult', result)
+          handle_get_project_furniture(dialog) if result['ok']
+          if result['ok'] && result['instanceId']
+            scope = Host::CommandContract.furniture_scope({ 'furnitureInstanceId' => result['instanceId'] })
+            push_preflight_state(dialog, scope)
+          end
+        rescue StandardError => e
+          @logger.error('catalog_preview_commit_failed', error: e)
+          execute_bridge(dialog, 'onCreateProjectFurnitureResult',
+                         { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        ensure
+          @placement_preview_committing = false
+          clear_placement_preview(preview)
+        end
+
+        # Esc / tool switch: the tool mutated nothing, so cancellation is
+        # pure UI state — re-arm the entry point and tell the user the unit
+        # stays pending.
+        def handle_placement_preview_cancelled(dialog, key, key_name, reason)
+          preview = @active_placement_preview
+          clear_placement_preview(preview)
+          @logger.info('placement_preview_cancelled', { reason: reason, key => key })
+          payload = { 'ok' => true, 'code' => 'preview_cancelled', 'reason' => reason.to_s }
+          payload[key_name] = key
+          execute_bridge(dialog, 'onPlacementPreviewCancelled', payload)
+        end
+
+        def build_placement_preview_tool(label:, extents_mm:, on_commit:, on_cancel:)
+          Tools::FurniturePlacementTool.new(
+            label: label, extents_mm: extents_mm,
+            on_commit: on_commit, on_cancel: on_cancel,
+            model_provider: method(:active_model), logger: @logger
+          )
+        end
+
+        # Authoritative preview extents: the resolved layout's dimensionsMm
+        # ([w, h, d]) or, when absent, the boards' local AABB — preview-only
+        # derivation that never touches productive geometry.
+        def placement_preview_extents(layout)
+          Tools::FurniturePlacementTool.extents_from_layout(layout)
+        end
+
+        def placement_preview_extents_failure(key, key_name: 'instanceId')
+          { 'ok' => false, 'code' => 'preview_unavailable',
+            'reason' => 'la composición resuelta no publicó dimensiones utilizables para la vista previa',
+            key_name => key }
+        end
+
+        def converge_preview_insert(_dialog, result, furniture_instance_id)
+          return result unless result['ok'] && furniture_instance_id && @position_sync_coordinator
+
+          model = active_model
+          binding = Connection::ModelBinding::Store.new(model).read
+          return result unless binding
+
+          preflight_review_session
+          converged = @position_sync_coordinator.converge_inserted_unit(model, binding, furniture_instance_id)
+          converged['ok'] ? converged : result
+        end
+
+        def clear_placement_preview(preview)
+          @active_placement_preview = nil if @active_placement_preview.equal?(preview) ||
+                                             @active_placement_preview == preview
         end
 
         def handle_restore_furniture_instance(dialog, payload_json)

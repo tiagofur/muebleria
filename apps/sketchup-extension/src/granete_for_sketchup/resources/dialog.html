@@ -4276,6 +4276,8 @@
           onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
           onCreateProjectFurnitureResult: function (result) { handleCreateProjectFurnitureResult(result); },
           getCatalogCreateIntentKey: function () { return catalogCreateIntentKey; },
+          onPlacementPreviewStarted: function (result) { handlePlacementPreviewStarted(result); },
+          onPlacementPreviewCancelled: function (result) { handlePlacementPreviewCancelled(result); },
           onConfirmPlacementResult: function (result) { handleConfirmPlacementResult(result); },
           onCancelPlacementResult: function (result) { handleCancelPlacementResult(result); },
           onRestoreFurnitureResult: function (result) { handleRestoreFurnitureResult(result); },
@@ -5317,7 +5319,14 @@
             materialChoices: libMaterialChoices
           };
 
-          if (isConnected && window.sketchup && window.sketchup.create_project_furniture) {
+          if (isConnected && window.sketchup && window.sketchup.begin_catalog_placement_preview) {
+            // #469: the SAME shared preview tool as the Project panel; the
+            // FurnitureInstance identity is minted at the commit click (#390),
+            // never while browsing or previewing.
+            btnInsert.innerHTML = icon("clock") + "<span>Vista previa en el modelo…</span>";
+            payload.idempotencyKey = getOrCreateCatalogIntentKey();
+            window.sketchup.begin_catalog_placement_preview(JSON.stringify(payload));
+          } else if (isConnected && window.sketchup && window.sketchup.create_project_furniture) {
             btnInsert.innerHTML = icon("clock") + "<span>Agregando al diseño…</span>";
             payload.idempotencyKey = getOrCreateCatalogIntentKey();
             window.sketchup.create_project_furniture(JSON.stringify(payload));
@@ -6558,7 +6567,11 @@
           pfPlacing[furnitureInstanceId] = button;
           button.disabled = true;
           button.textContent = "Colocando…";
-          if (window.sketchup && window.sketchup.place_furniture_instance) {
+          if (window.sketchup && window.sketchup.begin_placement_preview) {
+            // #469: transient cursor-following preview; the click commits
+            // through the canonical place command.
+            window.sketchup.begin_placement_preview(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
+          } else if (window.sketchup && window.sketchup.place_furniture_instance) {
             window.sketchup.place_furniture_instance(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
           } else {
             delete pfPlacing[furnitureInstanceId];
@@ -6566,6 +6579,53 @@
             button.textContent = "Colocar";
             showToast("error", "Colocar disponible sólo dentro de SketchUp.");
           }
+        }
+
+        // #469 — the shared placement tool activated (or refused host-side).
+        // While the preview follows the cursor the entry point stays honest:
+        // nothing is placed until the viewport click.
+        function handlePlacementPreviewStarted(result) {
+          result = result || {};
+          if (result.ok) {
+            showToast("info", "Vista previa activa: hacé clic en el modelo para colocar · Esc para cancelar.");
+            return;
+          }
+          var key = result.instanceId || result.definitionId;
+          var button = pfPlacing[key];
+          delete pfPlacing[key];
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Colocar";
+          }
+          if (!result.instanceId) {
+            // Catalog lane: re-arm the library insert entry point.
+            btnInsert.disabled = false;
+            updateLibraryInsertButton();
+          }
+          var message = pfPlaceFailureMessage(result);
+          var diagnostic = document.getElementById("pf-placement-error");
+          diagnostic.textContent = "No se pudo iniciar la colocación. " + message +
+            "\nCódigo: " + (result.code || "unknown");
+          diagnostic.style.display = "block";
+          showToast("error", message);
+        }
+
+        // #469 — Esc / tool switch: zero residue, the unit stays pending.
+        function handlePlacementPreviewCancelled(result) {
+          result = result || {};
+          var key = result.instanceId || result.definitionId;
+          var button = pfPlacing[key];
+          delete pfPlacing[key];
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Colocar";
+          }
+          if (!result.instanceId) {
+            // Catalog lane: re-arm the library insert entry point.
+            btnInsert.disabled = false;
+            updateLibraryInsertButton();
+          }
+          showToast("info", "Colocación cancelada: el mueble sigue pendiente.");
         }
 
         function confirmPlacementInstance(furnitureInstanceId, button) {
