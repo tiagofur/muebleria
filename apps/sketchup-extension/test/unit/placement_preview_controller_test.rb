@@ -102,12 +102,16 @@ class PlacementPreviewControllerTest < Minitest::Test
     include SketchupStub::AttributeContainer
   end
 
+  # Auth double mirroring the real semantics: the BEARER is short-lived
+  # and technically refreshed (volatile), session_context_id is the stable
+  # non-secret context identity that logout/re-enrollment change.
   class FakeAuth
     UNSET = Object.new.freeze
-    attr_accessor :header_override
+    attr_accessor :header_override, :context_id
 
     def initialize
       @header_override = UNSET
+      @context_id = 'device-context-1'
     end
 
     def configured?
@@ -116,6 +120,10 @@ class PlacementPreviewControllerTest < Minitest::Test
 
     def authorization_header
       @header_override.equal?(UNSET) ? 'Bearer test-token' : @header_override
+    end
+
+    def session_context_id
+      @context_id
     end
 
     def refresh_if_needed; end
@@ -172,7 +180,7 @@ class PlacementPreviewControllerTest < Minitest::Test
 
   class FakeCatalog
     attr_reader :layout_resolves
-    attr_accessor :dims_mutable, :unusable_layout, :board_mutation, :shifted_layout
+    attr_accessor :dims_mutable, :unusable_layout, :board_mutation, :shifted_layout, :basis_mutation
 
     def initialize
       @layout_resolves = []
@@ -180,6 +188,7 @@ class PlacementPreviewControllerTest < Minitest::Test
       @unusable_layout = false
       @board_mutation = nil
       @shifted_layout = false
+      @basis_mutation = false
     end
 
     def find_definition(id)
@@ -211,6 +220,11 @@ class PlacementPreviewControllerTest < Minitest::Test
       if @shifted_layout
         body.delete('dimensionsMm')
         body['components'][0]['localTransform']['translationMm'] = [100, 50, 20]
+      end
+      if @basis_mutation
+        body.delete('dimensionsMm')
+        body['components'][0]['localTransform']['basis'] =
+          { 'x' => [0, 1, 0], 'y' => [-1, 0, 0], 'z' => [0, 0, 1] }
       end
       return unless @board_mutation
 
@@ -562,14 +576,29 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
   end
 
-  # --- R2 authenticated context: same model, same binding ids — but a new
-  # session (rotated credential), a logout or a different backend still
-  # invalidate the gesture before anything is placed.
-  def test_session_rotation_invalidates_the_gesture
+  # --- R3 authenticated context with EXPLICIT semantics: the bearer is
+  # volatile (providers refresh it technically) and is NEVER the identity —
+  # logout, a new enrollment/session or a backend switch are what void a
+  # gesture; an unknown context never passes as equal.
+  def test_technical_token_refresh_keeps_the_gesture
     begin_preview(FI_1)
     tool = active_tool
 
-    @auth_rotation.call('Bearer a-brand-new-session')
+    # Same context identity, renewed bearer — the DeviceProvider's normal
+    # 15-minute technical refresh: the placement must NOT abort.
+    @auth.header_override = 'Bearer technically-renewed-token'
+    click(tool)
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true',
+                    'a technical refresh of the same context keeps the gesture'
+    assert_equal 1, @transport.requests_for('PUT', %r{/working-copy}).length
+  end
+
+  def test_new_enrollment_invalidates_the_gesture
+    begin_preview(FI_1)
+    tool = active_tool
+
+    @auth.context_id = 'device-context-2' # re-enrolled: a NEW context
     click(tool)
 
     result = bridge_scripts('onPlaceFurnitureResult').last
@@ -583,11 +612,13 @@ class PlacementPreviewControllerTest < Minitest::Test
     begin_preview(FI_1)
     tool = active_tool
 
-    @auth_rotation.call(nil)
+    @auth.context_id = nil # logged out: no context identity at all
     click(tool)
 
-    assert_includes bridge_scripts('onPlaceFurnitureResult').last, 'la sesión o el servidor cambió'
+    result = bridge_scripts('onPlaceFurnitureResult').last
+    assert_includes result, '"code":"context_changed"', result
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
+    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
   end
 
   def test_backend_change_invalidates_the_gesture
@@ -599,6 +630,41 @@ class PlacementPreviewControllerTest < Minitest::Test
 
     assert_includes bridge_scripts('onPlaceFurnitureResult').last, 'la sesión o el servidor cambió'
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  # A context that became UNREADABLE between begin and click fails closed —
+  # [nil] never equals [nil], unlike the old fingerprint comparison.
+  def test_unreadable_context_at_commit_fails_closed
+    begin_preview(FI_1)
+    tool = active_tool
+
+    @auth.define_singleton_method(:session_context_id) { raise 'session store unreadable' }
+    click(tool)
+
+    result = bridge_scripts('onPlaceFurnitureResult').last
+    assert_includes result, '"code":"context_changed"', result
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+  end
+
+  # A gesture may not even START without a pinnable context identity.
+  def test_begin_refuses_an_unknown_auth_context
+    @auth.context_id = nil
+
+    @dialog.callbacks.fetch('begin_placement_preview').call(
+      nil, JSON.generate('furnitureInstanceId' => FI_1)
+    )
+
+    failure = bridge_scripts('onPlacementPreviewStarted').last
+    assert_includes failure, '"code":"auth_context_unavailable"', failure
+    assert_includes failure, FI_1
+    assert_nil active_preview_session
+    assert_empty @model.selected_tools, 'no tool was pushed'
+
+    # Recovery: once the context is readable again the entry point works.
+    @auth.context_id = 'device-context-1'
+    begin_preview(FI_1)
+    assert active_tool.active?
   end
 
   # --- R2 preview geometry: a layout whose boards sit away from the local
@@ -634,6 +700,39 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_includes result, '"code":"composition_changed"', result
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
     assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+  end
+
+  # R3: a rotation-ONLY board change — same id, same sizes, same
+  # translation, dimensionsMm absent, only basis differs — changes the box
+  # the preview showed, so the gesture fails closed before inserting.
+  def test_board_basis_rotation_with_same_ids_sizes_translation_fails_closed
+    @catalog.basis_mutation = false
+    begin_preview(FI_1)
+    tool = active_tool
+
+    @catalog.basis_mutation = true # only the basis rotates 90° about Z
+    click(tool)
+
+    result = bridge_scripts('onPlaceFurnitureResult').last
+    assert_includes result, '"code":"composition_changed"', result
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+  end
+
+  def test_catalog_basis_rotation_never_mints_identity
+    stub_create_instance
+    @dialog.callbacks.fetch('begin_catalog_placement_preview').call(
+      nil, JSON.generate('definitionId' => DEFINITION_ID, 'parameters' => {},
+                         'materialChoices' => {}, 'idempotencyKey' => 'idem-9')
+    )
+    tool = active_tool
+
+    @catalog.basis_mutation = true
+    click(tool)
+
+    assert_includes bridge_scripts('onCreateProjectFurnitureResult').last, '"code":"composition_changed"'
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances}),
+                 'no identity may be created against a stale preview'
   end
 
   # Fix #6 regression: unresolvable catalog extents answer honestly with

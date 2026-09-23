@@ -3,7 +3,7 @@
 Issue: #469 — [P1][SU-UX-2] Constraint-aware furniture placement, snapping and repeat placement
 Base: origin/main @ 1484d20a2912e9132932c74653c67ffb1ed5d78b
 Branch: feat/469-placement-preview
-Status: R1+R2 review corrections applied (R2 on f0139899); V0/V1 green; V2 host NOT_RUN
+Status: R1+R2+R3 review corrections applied (R3 on 65fdd6d1); V0/V1 green; V2 host pending owner walk
 
 ## Scope separation from parallel work (coordination registry)
 
@@ -81,6 +81,10 @@ rehearsal spec prepared but NOT_RUN (host).
 - R2: `bundle exec rake verify`: 978 unit runs / 6558 assertions + 6
   boundary runs / 3287 assertions, 0 failures; 222 files lint-clean
   (controller lifecycle suite now 22 tests; tool suite 26).
+- R3: `bundle exec rake verify`: 983 unit runs / 6584 assertions + 6
+  boundary runs / 3287 assertions, 0 failures; 222 files lint-clean
+  (controller suite 27 tests: refresh-conserva, re-enrollment, logout,
+  backend, contexto ilegible, begin sin contexto, sólo-basis ×2).
 - Focused suites: `furniture_placement_tool_test.rb` 17 runs (anchor math on
   the 800×560×2100 asymmetric fixture, quarter-turn rigidity, double-click
   single commit, Esc/deactivate zero-residue, late-event discard, one
@@ -159,6 +163,27 @@ rehearsal spec prepared but NOT_RUN (host).
    callbacks (dialog.callbacks fetches, set_on_closed block, close_dialog
    route) and the host tool protocol (onMouseMove/onLButtonDown/
    onKeyDown/deactivate on the actual selected tool).
+
+## R3 review corrections (same candidate line)
+
+1. Geometric fingerprint now covers the full #414 frame:
+   `LayoutBoardTransform#geometry_fingerprint` (authority-owned) digests
+   size + translation + BASIS with rounding; `layout_signature` consumes
+   it, so a rotation-ONLY change (same id/sizes/translation, no
+   dimensionsMm) is detected as composition_changed before insert or
+   identity creation. The 600→900 and origin_mm regressions stay.
+2. Authenticated context with explicit semantics: the bearer is never
+   the identity. `Auth::Provider#session_context_id` (DeviceProvider:
+   one-way digest of the token's NON-VOLATILE claims + server endpoint;
+   base/Null: nil) is stable across a technical token refresh, changed
+   by logout/re-enrollment/backend switch, nil when unknown/unreadable.
+   The gesture STARTS only under a pinnable context
+   (auth_context_unavailable otherwise) and the commit guard fails
+   closed on nil — [nil] never equals [nil]. Server-side validations in
+   the canonical commands are untouched.
+   2026-09-23: v0.1.5 (65fdd6d1) installed on the owner's SketchUp 2026
+   for manual pruebas (backup of 0.1.4 kept); the R3 candidate is a
+   LATER HEAD — reinstall after review when the owner closes SketchUp.
 
 ## Remaining for #469 (not this increment)
 
