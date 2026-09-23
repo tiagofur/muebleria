@@ -143,17 +143,21 @@ test('#831 React-first creates draft units before Q1 through normal browser acti
   expect(after.quotes).toBe(0);
   expect(after.modeled).toBe(0);
 
-  // Start reading the body as soon as the response arrives. A later navigation
-  // can discard Chromium's response-body handle even when its status survived.
+  // Forward the real authenticated request and capture its server response
+  // before Chromium can discard the page response-body handle on navigation.
+  let designsBody: Array<{ id: string }> | undefined;
+  await page.route((url) => url.pathname === `/api/projects/${project.id}/designs`, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    designsBody = await response.json() as Array<{ id: string }>;
+    await route.fulfill({ response });
+  }, { times: 1 });
   const designsReadback = page.waitForResponse((r) => r.request().method() === 'GET' &&
-    new URL(r.url()).pathname === `/api/projects/${project.id}/designs`).then(async (response) => ({
-    status: response.status(),
-    body: await response.json() as Array<{ id: string }>,
-  }));
+    new URL(r.url()).pathname === `/api/projects/${project.id}/designs`);
   await page.goto(`/quotes/${project.id}/disenos`);
   const getDesigns = await designsReadback;
-  expect(getDesigns.status).toBe(200);
-  expect(getDesigns.body.some((item) => item.id === design.id)).toBe(true);
+  expect(getDesigns.status()).toBe(200);
+  expect(designsBody?.some((item) => item.id === design.id)).toBe(true);
   console.log(`[prequote-ui] GET designs 200 project=${project.id} design=${design.id}`);
 
   const workspaceResponse = page.waitForResponse((r) => r.request().method() === 'POST' &&
