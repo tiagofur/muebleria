@@ -40,6 +40,13 @@ func setupReleaseFixture(t *testing.T) *releaseFixture {
 func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *releaseFixture {
 	t.Helper()
 	fx := setupDesignsTestFixture(t)
+	// This release fixture freezes exactly the two units below. Remove the
+	// unrelated shared RLS seed line before Design creation, which now prepares
+	// every draft line rather than leaving it outside the physical set.
+	if _, err := fx.admin.Exec(context.Background(),
+		`DELETE FROM project_items WHERE id = '60000000-0000-0000-0000-000000000001'`); err != nil {
+		t.Fatal(err)
+	}
 	for _, statement := range []string{
 		`INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id)
 		 VALUES ('70000000-0000-0000-0000-000000000002', 'RELEASE-HINGE', 'Release hinge', 'piece', 12, '` + rlsOrgA + `')`,

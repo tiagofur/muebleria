@@ -538,6 +538,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// Revision publication is retry-safe through the durable idempotency receipt.
 	mux.Handle("GET /api/projects/{projectId}/designs", authMW(http.HandlerFunc(server.HandleProjectDesigns)))
 	mux.Handle("POST /api/projects/{projectId}/designs", authMW(server.RequireIdempotency("project.create-design", http.HandlerFunc(server.HandleProjectDesigns))))
+	mux.Handle("POST /api/projects/{projectId}/designs/{designId}/draft-units:prepare", authMW(server.RequireIdempotency("project.prepare-design-draft-units", http.HandlerFunc(server.HandlePrepareDesignDraftUnits))))
 	mux.Handle("GET /api/designs/{designId}", authMW(http.HandlerFunc(server.HandleDesign)))
 	mux.Handle("GET /api/designs/{designId}/working-copy", authMW(http.HandlerFunc(server.HandleDesignWorkingCopy)))
 	mux.Handle("PUT /api/designs/{designId}/working-copy", authMW(http.HandlerFunc(server.HandleDesignWorkingCopy)))

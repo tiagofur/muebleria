@@ -12,6 +12,13 @@ import (
 // #500 / WEB-DT-1: GetProjectFurnitureWorkspace against real PostgreSQL under the app role.
 func TestGetProjectFurnitureWorkspace_ProvenanceAndProjection(t *testing.T) {
 	fx := setupDesignsTestFixture(t)
+	// This projection fixture owns its exact four quote-line units plus one
+	// Design-origin unit. The shared RLS seed line is unrelated; a draft Design
+	// now correctly materializes it unless removed before this scenario.
+	if _, err := fx.admin.Exec(context.Background(),
+		`DELETE FROM project_items WHERE id = '60000000-0000-0000-0000-000000000001'`); err != nil {
+		t.Fatal(err)
+	}
 
 	// Seed two QuoteLines with the SAME definition (fiModuleA).
 	line1 := "51000000-0000-0000-0000-000000000001"
