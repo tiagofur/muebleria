@@ -143,12 +143,17 @@ test('#831 React-first creates draft units before Q1 through normal browser acti
   expect(after.quotes).toBe(0);
   expect(after.modeled).toBe(0);
 
+  // Start reading the body as soon as the response arrives. A later navigation
+  // can discard Chromium's response-body handle even when its status survived.
   const designsReadback = page.waitForResponse((r) => r.request().method() === 'GET' &&
-    new URL(r.url()).pathname === `/api/projects/${project.id}/designs`);
+    new URL(r.url()).pathname === `/api/projects/${project.id}/designs`).then(async (response) => ({
+    status: response.status(),
+    body: await response.json() as Array<{ id: string }>,
+  }));
   await page.goto(`/quotes/${project.id}/disenos`);
   const getDesigns = await designsReadback;
-  expect(getDesigns.status()).toBe(200);
-  expect((await getDesigns.json() as Array<{ id: string }>).some((item) => item.id === design.id)).toBe(true);
+  expect(getDesigns.status).toBe(200);
+  expect(getDesigns.body.some((item) => item.id === design.id)).toBe(true);
   console.log(`[prequote-ui] GET designs 200 project=${project.id} design=${design.id}`);
 
   const workspaceResponse = page.waitForResponse((r) => r.request().method() === 'POST' &&
