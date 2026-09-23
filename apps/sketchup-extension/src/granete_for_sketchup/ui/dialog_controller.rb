@@ -676,6 +676,8 @@ module Granete
             return
           end
 
+          return unless placement_preview_auth_available?(dialog, 'instanceId' => fi_id)
+
           session = placement_preview_session('project', fi_id, model, prepared)
           tool = build_placement_preview_tool(
             label: prepared['definition']['name'], extents_mm: prepared['extents'],
@@ -713,6 +715,8 @@ module Granete
             execute_bridge(dialog, 'onPlacementPreviewStarted', prepared)
             return
           end
+
+          return unless placement_preview_auth_available?(dialog, 'definitionId' => definition_id)
 
           session = placement_preview_session('catalog', definition_id, model, prepared)
           session['idempotency_key'] = payload['idempotencyKey']
@@ -971,17 +975,35 @@ module Granete
           false
         end
 
-        # Authenticated-context guard: logout, a new session or a different
-        # backend invalidate the gesture even when the model and binding
-        # ids are identical. The comparison uses the service's NON-SECRET
-        # fingerprint (endpoint + one-way credential digest).
+        # Authenticated-context guard with explicit semantics: a TECHNICAL
+        # token refresh keeps the same context identity (the gesture
+        # survives); logout, a new enrollment/session or a backend switch
+        # changes or voids it. An unknown/unreadable current context fails
+        # closed — nil never equals nil.
         def placement_preview_auth_ok?(dialog, session, bridge_method, key_fields)
-          return true if project_furniture_placer.service.context_fingerprint == session['auth']
+          current = project_furniture_placer.service.context_fingerprint
+          return true if current && session['auth'] && current == session['auth']
 
           @logger.warn('placement_preview_auth_changed', key_fields)
           execute_bridge(dialog, bridge_method,
                          { 'ok' => false, 'code' => 'context_changed',
                            'reason' => 'la sesión o el servidor cambió durante la colocación; nada fue colocado' }
+                         .merge(key_fields))
+          false
+        end
+
+        # A gesture may only start under a PINNABLE auth context: when the
+        # identity is unknown or unreadable there is nothing to verify the
+        # click against, so the entry point fails closed up front.
+        # Truthy when a pinnable context exists; false after answering the
+        # correlated failure (callers early-return on the falsy answer).
+        def placement_preview_auth_available?(dialog, key_fields)
+          return true if project_furniture_placer.service.context_fingerprint
+
+          @logger.warn('placement_preview_auth_unavailable', key_fields)
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => false, 'code' => 'auth_context_unavailable',
+                           'reason' => 'no se pudo confirmar la sesión para asegurar la colocación; reintentá' }
                          .merge(key_fields))
           false
         end

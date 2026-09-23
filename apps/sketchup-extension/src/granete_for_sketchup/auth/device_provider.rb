@@ -2,6 +2,7 @@
 
 require 'json'
 require 'base64'
+require 'digest'
 require 'fileutils'
 require 'time'
 
@@ -336,6 +337,27 @@ module Granete
             'user' => state&.dig('user'),
             'license' => state&.dig('license')
           }
+        end
+
+        # Non-secret session-context identity with explicit semantics
+        # (#469 gesture guard): a one-way digest of the token's
+        # NON-VOLATILE claims (everything except exp/iat) plus the server
+        # endpoint. A technical refresh re-issues the same identity claims,
+        # so the SAME context keeps its id and a live placement gesture
+        # survives; logout (no token), a new enrollment or a backend switch
+        # changes or voids it. Returns nil when the context is unknown or
+        # unreadable — callers fail closed, never nil==nil. The bearer
+        # itself is never compared or exposed.
+        def session_context_id
+          refresh_if_needed if @access_token.to_s.empty? || access_token_expired?
+          payload = decode_session_payload
+          return nil unless payload.is_a?(Hash)
+
+          claims = payload.except('exp', 'iat')
+          Digest::SHA256.hexdigest("#{stored_server_url}|#{claims.sort_by { |k, _| k }.inspect}")
+        rescue StandardError => e
+          @logger&.error('session_context_id_failed', error: e)
+          nil
         end
 
         def current_organization_id
