@@ -659,31 +659,36 @@ module Granete
         # #469 — Proyecto: activate the shared transient placement tool for a
         # pending FurnitureInstance. All server resolution happens HERE,
         # outside the cursor loop; the tool itself holds no service. The
-        # click revalidates everything through the canonical #place command.
+        # click revalidates everything through the canonical #place command
+        # against the EXACT gesture context captured here (model, binding,
+        # gesture id, composition fingerprint).
         def handle_begin_placement_preview(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           fi_id = payload['furnitureInstanceId'].to_s
-          return if @active_placement_preview
+          return if respond_placement_preview_busy(dialog, 'instanceId' => fi_id)
 
           model = active_model
           prepared = project_furniture_placer.prepare_placement_preview(fi_id)
-          if prepared['ok']
-            extents = placement_preview_extents(prepared['layout'])
-            prepared = placement_preview_extents_failure(fi_id) unless extents
-          end
+          prepared = prepare_preview_extents(prepared, fi_id, 'instanceId') if prepared['ok']
           unless prepared['ok']
             prepared['instanceId'] ||= fi_id
             execute_bridge(dialog, 'onPlacementPreviewStarted', prepared)
             return
           end
 
+          session = placement_preview_session('project', fi_id, model, prepared)
           tool = build_placement_preview_tool(
-            label: prepared['definition']['name'], extents_mm: extents,
-            on_commit: ->(transform) { handle_commit_placement_preview(dialog, fi_id, transform) },
-            on_cancel: ->(reason) { handle_placement_preview_cancelled(dialog, fi_id, 'instanceId', reason) }
+            label: prepared['definition']['name'], extents_mm: prepared['extents'],
+            on_commit: lambda { |transform|
+              handle_commit_placement_preview(dialog, fi_id, session['gesture_id'], transform)
+            },
+            on_cancel: lambda { |reason|
+              handle_placement_preview_cancelled(dialog, fi_id, 'instanceId',
+                                                 session['gesture_id'], reason)
+            }
           )
-          @active_placement_preview = { 'kind' => 'project', 'key' => fi_id, 'model' => model }
-          model.select_tool(tool)
+          return unless activate_placement_preview(dialog, session, tool, 'instanceId' => fi_id)
+
           execute_bridge(dialog, 'onPlacementPreviewStarted',
                          { 'ok' => true, 'code' => 'preview_active', 'instanceId' => fi_id })
         rescue StandardError => e
@@ -699,36 +704,28 @@ module Granete
         def handle_begin_catalog_placement_preview(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           definition_id = payload['definitionId'].to_s
-          return if @active_placement_preview
+          return if respond_placement_preview_busy(dialog, 'definitionId' => definition_id)
 
           model = active_model
-          prepared = project_furniture_placer.prepare_catalog_preview(
-            definition_id: definition_id,
-            parameters: payload['parameters'] || {},
-            material_choices: payload['materialChoices'] || {}
-          )
-          if prepared['ok']
-            extents = placement_preview_extents(prepared['layout'])
-            prepared = placement_preview_extents_failure(definition_id, key: 'definitionId') unless extents
-          end
+          prepared = begin_catalog_preview_preparation(payload, definition_id)
           unless prepared['ok']
-            prepared['definitionId'] ||= definition_id
             execute_bridge(dialog, 'onPlacementPreviewStarted', prepared)
             return
           end
 
-          idempotency_key = payload['idempotencyKey']
+          session = placement_preview_session('catalog', definition_id, model, prepared)
+          session['idempotency_key'] = payload['idempotencyKey']
+          session['payload'] = payload
           tool = build_placement_preview_tool(
-            label: prepared['definition']['name'], extents_mm: extents,
-            on_commit: ->(transform) { handle_commit_catalog_preview(dialog, payload, transform) },
+            label: prepared['definition']['name'], extents_mm: prepared['extents'],
+            on_commit: ->(transform) { handle_commit_catalog_preview(dialog, session['gesture_id'], transform) },
             on_cancel: lambda { |reason|
-              handle_placement_preview_cancelled(dialog, definition_id,
-                                                 'definitionId', reason)
+              handle_placement_preview_cancelled(dialog, definition_id, 'definitionId',
+                                                 session['gesture_id'], reason)
             }
           )
-          @active_placement_preview = { 'kind' => 'catalog', 'key' => definition_id,
-                                        'model' => model, 'idempotency_key' => idempotency_key }
-          model.select_tool(tool)
+          return unless activate_placement_preview(dialog, session, tool, 'definitionId' => definition_id)
+
           execute_bridge(dialog, 'onPlacementPreviewStarted',
                          { 'ok' => true, 'code' => 'preview_active', 'definitionId' => definition_id })
         rescue StandardError => e
@@ -741,24 +738,27 @@ module Granete
         # Preview click for an EXISTING project unit: the canonical #place
         # command receives the accepted transform; identity is stamped
         # verbatim (no new unit, no commercial quantity change) and the
-        # post-insert convergence syncs the working copy with readback.
-        def handle_commit_placement_preview(dialog, furniture_instance_id, transformation)
-          preview = @active_placement_preview
-          return if @placement_preview_committing
+        # post-insert convergence syncs the working copy with readback. The
+        # gesture must match the captured session: same gesture id, same
+        # model AND same binding — anything else fails closed before
+        # touching the host or the server, with a correlated answer.
+        def handle_commit_placement_preview(dialog, furniture_instance_id, gesture_id, transformation)
+          session = @active_placement_preview
+          gesture_live = false
+          return if placement_preview_reentry?(session, 'project', furniture_instance_id, gesture_id)
 
-          if preview.nil? || preview['kind'] != 'project' || preview['key'] != furniture_instance_id
-            @logger.warn('placement_preview_commit_stale', furniture_instance_id: furniture_instance_id)
-            return
-          end
-          unless active_model.equal?(preview['model'])
-            execute_bridge(dialog, 'onPlaceFurnitureResult',
-                           { 'ok' => false, 'code' => 'context_changed', 'instanceId' => furniture_instance_id,
-                             'reason' => 'el modelo activo cambió durante la colocación; nada fue colocado' })
+          gesture_live = true
+          unless placement_preview_context_ok?(dialog, session, 'onPlaceFurnitureResult',
+                                               'instanceId' => furniture_instance_id)
+            clear_placement_preview(session)
             return
           end
 
           @placement_preview_committing = true
-          result = project_furniture_placer.place(furniture_instance_id, transformation: transformation)
+          result = project_furniture_placer.place(
+            furniture_instance_id, transformation: transformation,
+                                   expected_layout_signature: session['layout_signature']
+          )
           result = converge_preview_insert(dialog, result, furniture_instance_id) if result['ok']
           result['instanceId'] ||= furniture_instance_id
           execute_bridge(dialog, 'onPlaceFurnitureResult', result)
@@ -774,34 +774,36 @@ module Granete
                            'reason' => 'No se pudo colocar el mueble (error interno de SketchUp).' })
         ensure
           @placement_preview_committing = false
-          clear_placement_preview(preview)
+          # Only a gesture that actually ran may consume the session: a
+          # stale/re-entered return must leave the LIVE gesture untouched.
+          clear_placement_preview(session) if gesture_live
         end
 
         # Preview click for the connected catalog lane: the #390 canonical
         # create happens HERE (identity minted at the explicit commit) and
-        # the insertion lands at the accepted transform.
-        def handle_commit_catalog_preview(dialog, payload, transformation)
-          preview = @active_placement_preview
-          return if @placement_preview_committing
+        # the insertion lands at the accepted transform — under the same
+        # gesture-context guards as the Project lane.
+        def handle_commit_catalog_preview(dialog, gesture_id, transformation)
+          session = @active_placement_preview
+          gesture_live = false
+          return if placement_preview_reentry?(session, 'catalog', session && session['key'], gesture_id)
 
-          if preview.nil? || preview['kind'] != 'catalog'
-            @logger.warn('catalog_preview_commit_stale')
-            return
-          end
-          unless active_model.equal?(preview['model'])
-            execute_bridge(dialog, 'onCreateProjectFurnitureResult',
-                           { 'ok' => false, 'code' => 'context_changed',
-                             'reason' => 'el modelo activo cambió durante la colocación; nada fue colocado' })
+          gesture_live = true
+          unless placement_preview_context_ok?(dialog, session, 'onCreateProjectFurnitureResult',
+                                               'definitionId' => session['key'])
+            clear_placement_preview(session)
             return
           end
 
+          payload = session['payload'] || {}
           @placement_preview_committing = true
           result = project_furniture_placer.create_and_place(
             definition_id: payload['definitionId'].to_s,
             parameters: payload['parameters'] || {},
             material_choices: payload['materialChoices'] || {},
-            idempotency_key: preview['idempotency_key'],
-            transformation: transformation
+            idempotency_key: session['idempotency_key'],
+            transformation: transformation,
+            expected_layout_signature: session['layout_signature']
           )
           result = converge_preview_insert(dialog, result, result['instanceId']) if result['ok']
           execute_bridge(dialog, 'onCreateProjectFurnitureResult', result)
@@ -816,19 +818,147 @@ module Granete
                          { 'ok' => false, 'code' => 'error', 'reason' => e.message })
         ensure
           @placement_preview_committing = false
-          clear_placement_preview(preview)
+          clear_placement_preview(session) if gesture_live
         end
 
-        # Esc / tool switch: the tool mutated nothing, so cancellation is
-        # pure UI state — re-arm the entry point and tell the user the unit
-        # stays pending.
-        def handle_placement_preview_cancelled(dialog, key, key_name, reason)
-          preview = @active_placement_preview
-          clear_placement_preview(preview)
-          @logger.info('placement_preview_cancelled', { reason: reason, key => key })
+        # Esc / tool switch / dialog close: the tool mutated nothing, so
+        # cancellation is pure UI state — re-arm the entry point and tell
+        # the user the unit stays pending. GESTURE-MATCHED: the late end of
+        # an old gesture can never cancel or clear a newer one.
+        def handle_placement_preview_cancelled(dialog, key, key_name, gesture_id, reason)
+          session = @active_placement_preview
+          @logger.info('placement_preview_cancelled', { 'reason' => reason.to_s, key => key })
+          return unless session && session['gesture_id'] == gesture_id && session['key'] == key
+
+          @active_placement_preview = nil
           payload = { 'ok' => true, 'code' => 'preview_cancelled', 'reason' => reason.to_s }
           payload[key_name] = key
           execute_bridge(dialog, 'onPlacementPreviewCancelled', payload)
+        end
+
+        # Closes any live preview gesture when the dialog closes. The
+        # session is cleared FIRST so the tool's cancel callback cannot
+        # re-enter controller state (and no bridge push is attempted on a
+        # dialog that is going away).
+        def cancel_active_placement_preview
+          session = @active_placement_preview
+          return unless session
+
+          @active_placement_preview = nil
+          session['tool']&.cancel_preview(:dialog_closed)
+        rescue StandardError => e
+          @logger&.error('placement_preview_close_cancel_failed', error: e)
+        end
+
+        # Another preview is already live: answer the NEW entry point
+        # honestly instead of leaving its controls stuck — the active
+        # gesture is untouched.
+        # Returns the busy payload it answered (truthy), or nil when no
+        # preview is live — callers early-return on the payload itself.
+        def respond_placement_preview_busy(dialog, key_fields)
+          return unless @active_placement_preview
+
+          @logger.warn('placement_preview_busy', key_fields)
+          busy = { 'ok' => false, 'code' => 'preview_busy',
+                   'reason' => 'ya hay una colocación en curso; terminála con un clic o con Esc ' \
+                               'antes de iniciar otra' }.merge(key_fields)
+          execute_bridge(dialog, 'onPlacementPreviewStarted', busy)
+          busy
+        end
+
+        # Catalog preparation + extents, answering definitionId on failure.
+        def begin_catalog_preview_preparation(payload, definition_id)
+          prepared = project_furniture_placer.prepare_catalog_preview(
+            definition_id: definition_id,
+            parameters: payload['parameters'] || {},
+            material_choices: payload['materialChoices'] || {}
+          )
+          prepared = prepare_preview_extents(prepared, definition_id, 'definitionId') if prepared['ok']
+          return prepared if prepared['ok']
+
+          prepared['definitionId'] ||= definition_id
+          prepared
+        end
+
+        # Gesture session: the exact context a later click must reproduce —
+        # the model object, the binding triple, a unique gesture id and the
+        # authoritative composition fingerprint the preview was built from.
+        def placement_preview_session(kind, key, model, prepared)
+          { 'kind' => kind, 'key' => key, 'model' => model,
+            'binding' => placement_binding_triple(model),
+            'gesture_id' => "preview-#{(Time.now.to_f * 1000).to_i}-#{rand(0xffff).to_s(16)}#{rand(0xffff).to_s(16)}",
+            'layout_signature' => prepared['layout_signature'],
+            'extents' => prepared['extents'] }
+        end
+
+        # Tool activation is part of the gesture: if select_tool or activate
+        # fails, the session is discarded and the entry point is answered
+        # with a correlated failure — a retry starts clean.
+        # Returns the live session on success, nil after answering the
+        # correlated failure (never a bare boolean: the session IS the proof
+        # the gesture is running).
+        def activate_placement_preview(dialog, session, tool, key_fields)
+          model = session['model']
+          model.select_tool(tool)
+          tool.activate
+          session['tool'] = tool
+          @active_placement_preview = session
+          session
+        rescue StandardError => e
+          @logger.error('placement_preview_activation_failed', { 'error' => e }.merge(key_fields))
+          @active_placement_preview = nil
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => false, 'code' => 'activation_failed',
+                           'reason' => 'no se pudo activar la herramienta de colocación; inténtalo de nuevo' }
+                           .merge(key_fields))
+          nil
+        end
+
+        # True (and logs) when the commit must be ignored: a re-entered
+        # gesture or a late commit from a gesture that already ended — its
+        # controls were recovered when that gesture terminated, so there is
+        # nothing to answer and a NEWER gesture must stay untouched.
+        def placement_preview_reentry?(session, kind, key, gesture_id)
+          if @placement_preview_committing
+            @logger.warn('placement_preview_commit_reentered', { 'kind' => kind, 'key' => key })
+            return true
+          end
+          return false if session && session['kind'] == kind && session['key'] == key &&
+                          session['gesture_id'] == gesture_id
+
+          @logger.warn('placement_preview_commit_stale',
+                       { 'kind' => kind, 'key' => key, 'gesture_id' => gesture_id })
+          true
+        end
+
+        # Exact-context guard: the click must land on the SAME model and
+        # the SAME binding the gesture captured. Otherwise nothing is
+        # placed and the entry point gets a correlated, honest failure.
+        def placement_preview_context_ok?(dialog, session, bridge_method, key_fields)
+          unless active_model.equal?(session['model'])
+            @logger.warn('placement_preview_model_changed', key_fields)
+            execute_bridge(dialog, bridge_method,
+                           { 'ok' => false, 'code' => 'context_changed',
+                             'reason' => 'el modelo activo cambió durante la colocación; nada fue colocado' }
+                           .merge(key_fields))
+            return false
+          end
+
+          return true if placement_binding_triple(active_model) == session['binding']
+
+          @logger.warn('placement_preview_binding_changed', key_fields)
+          execute_bridge(dialog, bridge_method,
+                         { 'ok' => false, 'code' => 'context_changed',
+                           'reason' => 'el enlace del modelo cambió durante la colocación; nada fue colocado' }
+                         .merge(key_fields))
+          false
+        end
+
+        def placement_binding_triple(model)
+          binding = Connection::ModelBinding::Store.new(model).read
+          return nil unless binding
+
+          [binding.project_id, binding.design_id, binding.base_revision_id]
         end
 
         def build_placement_preview_tool(label:, extents_mm:, on_commit:, on_cancel:)
@@ -842,11 +972,10 @@ module Granete
         # Authoritative preview extents: the resolved layout's dimensionsMm
         # ([w, h, d]) or, when absent, the boards' local AABB — preview-only
         # derivation that never touches productive geometry.
-        def placement_preview_extents(layout)
-          Tools::FurniturePlacementTool.extents_from_layout(layout)
-        end
+        def prepare_preview_extents(prepared, key, key_name)
+          extents = Tools::FurniturePlacementTool.extents_from_layout(prepared['layout'])
+          return prepared.merge('extents' => extents) if extents
 
-        def placement_preview_extents_failure(key, key_name: 'instanceId')
           { 'ok' => false, 'code' => 'preview_unavailable',
             'reason' => 'la composición resuelta no publicó dimensiones utilizables para la vista previa',
             key_name => key }
@@ -2747,6 +2876,9 @@ module Granete
 
         def close
           detach_selection_observer
+          # #469: closing the dialog ends any live placement-preview
+          # gesture — no ghost tool keeps following the cursor afterwards.
+          cancel_active_placement_preview
           # Overlay lifecycle (#470 §43): closing the dialog turns the
           # inspection mode off — no orphan markers, zero model impact.
           @manufacturing_overlay&.disable

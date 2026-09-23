@@ -6799,6 +6799,10 @@
             case "no_model": return "No hay un modelo activo en SketchUp.";
             case "placement_failed": return result.reason || "La colocación falló.";
             case "action_in_progress": return "La restauración de este mueble ya está en curso.";
+            case "preview_busy": return result.reason || "Ya hay una colocación en curso; terminála con un clic o con Esc.";
+            case "preview_unavailable": return result.reason || "La vista previa no está disponible para este mueble.";
+            case "activation_failed": return result.reason || "No se pudo activar la herramienta de colocación.";
+            case "composition_changed": return result.reason || "La composición del mueble cambió desde la vista previa; generála de nuevo.";
             case "working_copy_changed":
             case "authority_changed":
             case "binding_changed":
