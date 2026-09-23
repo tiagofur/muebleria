@@ -298,11 +298,17 @@ func (s *PostgresStore) ReconcileDesignWorkingMaterials(ctx context.Context, cmd
 
 	// 3. The exact working item (design-scoped, instance-scoped).
 	var rawMaterials []byte
+	var definitionID string
+	var definitionVersion *int
+	var rawParameters []byte
 	err = s.db(ctx).QueryRow(ctx, `
-		SELECT material_choices
+		SELECT material_choices,
+		       COALESCE(furniture_definition_id::text, ''),
+		       definition_version,
+		       COALESCE(parameters, 'null'::jsonb)
 		FROM design_working_items
 		WHERE design_id = $1 AND furniture_instance_id = $2
-	`, cmd.DesignID, cmd.FurnitureInstanceID).Scan(&rawMaterials)
+	`, cmd.DesignID, cmd.FurnitureInstanceID).Scan(&rawMaterials, &definitionID, &definitionVersion, &rawParameters)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// The instance exists but is not part of this working copy, or it
@@ -337,6 +343,31 @@ func (s *PostgresStore) ReconcileDesignWorkingMaterials(ctx context.Context, cmd
 	quoted, err := s.quotedOptionChoicesForInstance(ctx, cmd.FurnitureInstanceID, projectID)
 	if err != nil {
 		return nil, err
+	}
+	// #826: fill only roles the definition physically consumes — a quoted role
+	// the definition cannot consume would re-seed the release block. Skipped
+	// when consumption is not computable (release gate stays the backstop).
+	if len(quoted) > 0 && definitionID != "" {
+		parameters := map[string]any{}
+		if len(rawParameters) > 0 && string(rawParameters) != "null" {
+			if err := json.Unmarshal(rawParameters, &parameters); err != nil {
+				return nil, fmt.Errorf("%w: parameters del working item: %v", domain.ErrSerializationFailed, err)
+			}
+		}
+		catalog, catalogErr := s.GetFullCatalog(ctx)
+		if catalogErr != nil {
+			return nil, catalogErr
+		}
+		filtered, ok := engine.IntersectConsumedOptionChoices(domain.DesignRevisionItem{
+			FurnitureInstanceID:   cmd.FurnitureInstanceID,
+			FurnitureDefinitionID: definitionID,
+			DefinitionVersion:     definitionVersion,
+			Parameters:            parameters,
+			MaterialChoices:       quoted,
+		}, catalog)
+		if ok {
+			quoted = filtered
+		}
 	}
 	filled := map[string]string{}
 	preserved := map[string]string{}

@@ -75,7 +75,25 @@ func (s *PostgresStore) loadQuoteCommercialEnvelope(ctx context.Context, project
 // quoted (quote lines with base mode, presets, pins and kitchen layout). The
 // existing engine computes the breakdown once; per-unit descriptors come from
 // the exact item snapshot being frozen in the same command.
-func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand) (*domain.QuoteCommercialSnapshot, error) {
+// intersectConsumableChoices applies the #826 engine intersection to one quote
+// item: only roles the definition physically consumes survive the freeze.
+// BOM-neutral (engine guarantee) and skipped for unresolvable units, which the
+// release gate keeps guarding.
+func intersectConsumableChoices(item CreateQuoteRevisionItemCommand, catalog domain.Catalog) map[string]string {
+	filtered, ok := engine.IntersectConsumedOptionChoices(domain.DesignRevisionItem{
+		FurnitureInstanceID:   item.FurnitureInstanceID,
+		FurnitureDefinitionID: item.FurnitureDefinitionID,
+		DefinitionVersion:     item.DefinitionVersion,
+		Parameters:            item.Parameters,
+		MaterialChoices:       item.MaterialChoices,
+	}, catalog)
+	if !ok {
+		return item.MaterialChoices
+	}
+	return filtered
+}
+
+func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand, intersectConsumable bool) (*domain.QuoteCommercialSnapshot, error) {
 	envelope, err := s.loadQuoteCommercialEnvelope(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -142,6 +160,13 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 			return nil, fmt.Errorf("%w: no se pudo congelar el contexto comercial de la unidad %s", domain.ErrInvalidRevisionSnapshot, items[i].FurnitureInstanceID)
 		}
 		items[i].MaterialChoices = engine.EffectiveOptionChoices(items[i].MaterialChoices, levelChoices)
+		// #826: project-level defaults merge blindly. Design-first quotes
+		// freeze only roles the definition consumes so the frozen truth stays
+		// release-resolvable; quote-first keeps #620's verbatim ride-along
+		// (unmodeled units carry the customer's selected finish).
+		if intersectConsumable {
+			items[i].MaterialChoices = intersectConsumableChoices(items[i], catalog)
+		}
 		if items[i].PricingContext == nil {
 			var structurePin *int
 			structureIndependent := module.StructureID == ""
@@ -212,6 +237,14 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 	catalog, err := s.GetFullCatalog(ctx)
 	if err != nil {
 		return nil, err
+	}
+	// #826: the requote composition merges the source snapshot's frozen options
+	// (which may predate consumability seeding) with the design overlay. The
+	// NEW revision freezes only consumable roles — the source revision's
+	// history stays untouched. Runs before CreateQuoteRevision persists this
+	// same slice, so items and snapshot stay coherent.
+	for i := range items {
+		items[i].MaterialChoices = intersectConsumableChoices(items[i], catalog)
 	}
 	moduleByID := make(map[string]domain.Module, len(catalog.Modules))
 	for _, module := range catalog.Modules {
