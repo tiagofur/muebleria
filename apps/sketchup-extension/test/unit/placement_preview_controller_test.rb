@@ -221,8 +221,9 @@ class PlacementPreviewControllerTest < Minitest::Test
         body.delete('dimensionsMm')
         body['components'][0]['localTransform']['translationMm'] = [100, 50, 20]
       end
+      # Rotation-ONLY variant: dimensionsMm stays IDENTICAL on both ends
+      # so the sole difference is the board's basis.
       if @basis_mutation
-        body.delete('dimensionsMm')
         body['components'][0]['localTransform']['basis'] =
           { 'x' => [0, 1, 0], 'y' => [-1, 0, 0], 'z' => [0, 0, 1] }
       end
@@ -716,7 +717,9 @@ class PlacementPreviewControllerTest < Minitest::Test
     result = bridge_scripts('onPlaceFurnitureResult').last
     assert_includes result, '"code":"composition_changed"', result
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
-    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity']
+    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity'],
+               'no geometry may be inserted against the stale preview'
+    assert_empty @model.entities.instances
   end
 
   def test_catalog_basis_rotation_never_mints_identity

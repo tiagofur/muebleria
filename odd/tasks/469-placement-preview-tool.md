@@ -3,7 +3,7 @@
 Issue: #469 — [P1][SU-UX-2] Constraint-aware furniture placement, snapping and repeat placement
 Base: origin/main @ 1484d20a2912e9132932c74653c67ffb1ed5d78b
 Branch: feat/469-placement-preview
-Status: R1+R2+R3 review corrections applied (R3 on 65fdd6d1); V0/V1 green; V2 host pending owner walk
+Status: R1-R4 review corrections applied (R4 on b98c8637); V0/V1 green; V2 host pending owner walk
 
 ## Scope separation from parallel work (coordination registry)
 
@@ -85,6 +85,12 @@ rehearsal spec prepared but NOT_RUN (host).
   boundary runs / 3287 assertions, 0 failures; 222 files lint-clean
   (controller suite 27 tests: refresh-conserva, re-enrollment, logout,
   backend, contexto ilegible, begin sin contexto, sólo-basis ×2).
+- R4: `bundle exec rake verify`: 1022 unit runs / 6791 assertions + 6
+  boundary runs / 3287 assertions, 0 failures; 224 files lint-clean
+  (+11 real-DeviceProvider context tests, +1 counterfactual basis
+  characterization with its 27 inherited reruns). Installed host build
+  (v0.1.5 @65fdd6d1) predates R3/R4 — reinstall is OUT of scope for this
+  round and remains owner-coordinated.
 - Focused suites: `furniture_placement_tool_test.rb` 17 runs (anchor math on
   the 800×560×2100 asymmetric fixture, quarter-turn rigidity, double-click
   single commit, Esc/deactivate zero-residue, late-event discard, one
@@ -184,6 +190,33 @@ rehearsal spec prepared but NOT_RUN (host).
    2026-09-23: v0.1.5 (65fdd6d1) installed on the owner's SketchUp 2026
    for manual pruebas (backup of 0.1.4 kept); the R3 candidate is a
    LATER HEAD — reinstall after review when the owner closes SketchUp.
+
+## R4 review corrections (same candidate line)
+
+1. Session identity projection is EXPLICIT against the real Go issuer
+   (Authority.issueToken renews jti/nbf/exp/iat on every mint):
+   CONTEXT_IDENTITY_CLAIMS whitelists session (sid, auth_started_at),
+   user, org/membership, credential epochs, transport boundary — volatile
+   mint claims are excluded by construction. Validity gates: configured?,
+   refresh attempt, still-expired-after-refresh → nil, empty payload →
+   nil, missing essentials (user + transport boundary) → nil. A decodable
+   payload alone is not a usable identity. Go renewal behavior, token
+   validation and server authorization untouched.
+2. The REAL DeviceProvider runs hermetically
+   (device_provider_context_test.rb, 11 tests — same secure-storage
+   override as the #460 suite; no Keychain, no credentials, no network):
+   full renewal (jti+nbf+iat+exp) keeps identity; jti-only and nbf-only
+   keep it; new session / org / membership / credential epoch change it;
+   logout and expired-without-recovery yield nil; empty payload and
+   missing essentials yield nil; expired-with-recovery restores; backend
+   endpoint participates. FakeAuth controller tests kept.
+3. Rotation-only fixture now isolates basis: dimensionsMm IDENTICAL on
+   both endpoints, ids/sizes/translation unchanged, only basis rotates.
+   Counterfactual characterization test proves the old basis-less
+   signature is blind (placement wrongly succeeds) while the live
+   signature answers composition_changed — no geometry inserted, no
+   FurnitureInstance created on either lane. Width 600→900 and origin_mm
+   regressions preserved.
 
 ## Remaining for #469 (not this increment)
 
