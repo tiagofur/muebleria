@@ -200,7 +200,7 @@ class PlacementPreviewFlowTest < Minitest::Test
     assert result['ok']
 
     extents = TOOL.extents_from_layout(result['layout'])
-    expected = { x: 900.0, y: 500.0, z: 800.0 }
+    expected = { x: 900.0, y: 500.0, z: 800.0, origin_mm: [0.0, 0.0, 0.0] }
     assert_equal expected, extents,
                  'dimensionsMm [w,h,d] maps to local X=width, Y=depth, Z=height'
   end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'digest'
 
 module Granete
   module SketchUpExtension
@@ -62,6 +63,19 @@ module Granete
             @transport = transport
             @auth_provider = auth_provider
             @logger = logger
+          end
+
+          # #469 non-secret authenticated-context fingerprint: the backend
+          # endpoint plus a ONE-WAY digest of the current credential —
+          # enough to detect logout, a new session or a backend switch
+          # even when model and binding ids are unchanged. The secret
+          # itself never travels or is stored anywhere.
+          def context_fingerprint
+            header = @auth_provider.respond_to?(:authorization_header) ? @auth_provider.authorization_header : nil
+            base_url = @transport.respond_to?(:base_url) ? @transport.base_url : nil
+            [base_url, Digest::SHA256.hexdigest(header.to_s)]
+          rescue StandardError
+            [nil, nil]
           end
 
           def list_project_furniture(project_id)
@@ -282,18 +296,26 @@ module Granete
           end
 
           # #469 gesture-context fingerprint: a deterministic digest of the
-          # authoritative composition the preview was generated from
-          # (definition identity + resolved dimensions + occurrence ids).
-          # The commit compares against it: a DIFFERENT composition means
-          # the accepted transform refers to a stale preview and must not
-          # be placed — the user regenerates the preview instead.
+          # authoritative composition the preview was generated from —
+          # definition identity, resolved dimensions AND the per-board
+          # geometry (size + local translation), so a board that changes
+          # width or placement under UNCHANGED ids is still detected when
+          # dimensionsMm is absent. The commit compares against it: a
+          # DIFFERENT composition means the accepted transform refers to a
+          # stale preview and must not be placed — the user regenerates the
+          # preview instead.
           def layout_signature(layout)
             return nil unless layout.is_a?(::Granete::SketchUpExtension::Library::NativeLayout)
 
+            boards = layout.boards.map do |board|
+              "#{board.component_instance_id}:" \
+                "#{board.width_mm}x#{board.thickness_mm}x#{board.length_mm}" \
+                "@#{board.translation.map { |v| v.round(3) }.join(',')}"
+            end.sort
             [
               layout.furniture_definition_id,
               layout.dimensions_mm ? layout.dimensions_mm.join('x') : 'no-dims',
-              layout.boards.map(&:component_instance_id).sort.join(','),
+              boards.join(';'),
               layout.hardware.map(&:placement_id).sort.join(',')
             ].join('|')
           end
