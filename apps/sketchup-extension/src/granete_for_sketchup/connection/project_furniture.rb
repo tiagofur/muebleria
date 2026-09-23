@@ -280,6 +280,23 @@ module Granete
 
             base.merge(overlay)
           end
+
+          # #469 gesture-context fingerprint: a deterministic digest of the
+          # authoritative composition the preview was generated from
+          # (definition identity + resolved dimensions + occurrence ids).
+          # The commit compares against it: a DIFFERENT composition means
+          # the accepted transform refers to a stale preview and must not
+          # be placed — the user regenerates the preview instead.
+          def layout_signature(layout)
+            return nil unless layout.is_a?(::Granete::SketchUpExtension::Library::NativeLayout)
+
+            [
+              layout.furniture_definition_id,
+              layout.dimensions_mm ? layout.dimensions_mm.join('x') : 'no-dims',
+              layout.boards.map(&:component_instance_id).sort.join(','),
+              layout.hardware.map(&:placement_id).sort.join(',')
+            ].join('|')
+          end
         end
 
         # Helpers for design-first backend instance creation (#390 DT-6).
@@ -385,8 +402,11 @@ module Granete
           # #469: with a `transformation` (the accepted preview gesture) the
           # canonical insertion lands the unit directly at the user's final
           # position and the Move handoff is skipped — same command, same
-          # identity, one undo operation.
-          def place(furniture_instance_id, transformation: nil)
+          # identity, one undo operation. expected_layout_signature pins the
+          # composition the gesture previewed: a different one fails closed
+          # (composition_changed) BEFORE any insertion — the preview must be
+          # regenerated, never silently placed.
+          def place(furniture_instance_id, transformation: nil, expected_layout_signature: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
@@ -409,7 +429,9 @@ module Granete
             # (resume the confirm step) short-circuit here.
             return unit unless unit['unit']
 
-            insert_furniture_unit(model, context['binding'], unit['unit'], transformation: transformation)
+            insert_furniture_unit(model, context['binding'], unit['unit'],
+                                  transformation: transformation,
+                                  expected_layout_signature: expected_layout_signature)
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -456,7 +478,8 @@ module Granete
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
             { 'ok' => true, 'code' => 'preview_ready', 'instanceId' => instance.id,
               'definition' => definition, 'parameters' => params,
-              'material_choices' => choices, 'layout' => layout }
+              'material_choices' => choices, 'layout' => layout,
+              'layout_signature' => PlacementGuards.layout_signature(layout) }
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -487,7 +510,7 @@ module Granete
           # the insertion lands at the user's final position with no Move
           # handoff. Browsing/previewing the catalog never allocates identity.
           def create_and_place(definition_id:, parameters: {}, material_choices: {}, idempotency_key: nil,
-                               transformation: nil)
+                               transformation: nil, expected_layout_signature: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
@@ -496,6 +519,9 @@ module Granete
 
             prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
             return prep unless prep['ok']
+
+            signature_mismatch = composition_mismatch(expected_layout_signature, prep['layout'])
+            return signature_mismatch if signature_mismatch
 
             execute_created_placement(model, context['binding'], prep, idempotency_key,
                                       material_choices, transformation: transformation)
@@ -527,7 +553,8 @@ module Granete
 
             { 'ok' => true, 'code' => 'preview_ready',
               'definition' => prep['definition'], 'parameters' => prep['params'],
-              'material_choices' => material_choices, 'layout' => prep['layout'] }
+              'material_choices' => material_choices, 'layout' => prep['layout'],
+              'layout_signature' => PlacementGuards.layout_signature(prep['layout']) }
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -667,7 +694,8 @@ module Granete
           # finalize the position (Move tool) and confirm. With a preview
           # `transformation` the position is already final: the canonical
           # insertion receives it verbatim and skips the Move handoff.
-          def insert_furniture_unit(model, binding, instance, transformation: nil)
+          def insert_furniture_unit(model, binding, instance, transformation: nil,
+                                    expected_layout_signature: nil)
             definition = @catalog_provider.find_definition(instance.furniture_definition_id)
             unless definition
               return failure(:definition_unavailable,
@@ -676,8 +704,22 @@ module Granete
 
             params, choices = PlacementGuards.placement_inputs(@service, @intent_store, binding, instance, definition)
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
+            signature_mismatch = composition_mismatch(expected_layout_signature, layout)
+            return signature_mismatch if signature_mismatch
+
             insert_physical_unit(model, binding, instance, definition, params, choices, layout,
                                  transformation: transformation, prepare: transformation.nil?)
+          end
+
+          # A pinned composition that no longer matches the freshly resolved
+          # layout fails closed BEFORE any insertion (#469 gesture context).
+          def composition_mismatch(expected_layout_signature, layout)
+            return nil unless expected_layout_signature
+            return nil if expected_layout_signature == PlacementGuards.layout_signature(layout)
+
+            failure(:composition_changed,
+                    'la composición del mueble cambió desde la vista previa; ' \
+                    'cancelá con Esc y generá la vista previa de nuevo')
           end
 
           def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout,

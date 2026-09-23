@@ -83,12 +83,15 @@ class PlacementPreviewFlowTest < Minitest::Test
   end
 
   # Asymmetric authoritative layout: 900×800×500 with per-role materials —
-  # the resolved dimensionsMm drive the preview extents.
+  # the resolved dimensionsMm drive the preview extents. dims_mutable lets
+  # a test model the composition CHANGING between preview and commit.
   class FakeCatalog
     attr_reader :layout_resolves
+    attr_accessor :dims_mutable
 
     def initialize
       @layout_resolves = []
+      @dims_mutable = nil
       @definitions = [{
         'furniture_definition_id' => DEFINITION_ID,
         'code' => 'BASE-900', 'name' => 'Gabinete Asimétrico 900', 'category' => 'kitchen_base',
@@ -111,6 +114,12 @@ class PlacementPreviewFlowTest < Minitest::Test
     end
 
     def layout_body
+      body = layout_base_body
+      body['dimensionsMm'] = @dims_mutable if @dims_mutable
+      body
+    end
+
+    def layout_base_body
       {
         'furnitureDefinitionId' => DEFINITION_ID, 'definitionName' => 'Gabinete Asimétrico 900',
         'transformContract' => 'granete.local-basis.v1',
@@ -312,6 +321,56 @@ class PlacementPreviewFlowTest < Minitest::Test
     refute_nil front, 'the resolved front board must exist'
     assert_equal 'Granete · Roble Melamina', front.material.name
     assert_equal '#B08968', front.material.color
+  end
+
+  # #469 gesture context: a composition that changed since the preview was
+  # generated fails closed BEFORE any insertion — the user regenerates the
+  # preview instead of placing something different from what was shown.
+  def test_project_commit_fails_closed_when_composition_changed_since_preview
+    prepared = @placer.prepare_placement_preview(FI_1)
+    assert prepared['ok'], prepared.inspect
+    refute_nil prepared['layout_signature']
+
+    @catalog.dims_mutable = [850, 800, 500] # server re-composed between preview and click
+
+    result = @placer.place(FI_1, transformation: accepted_transform,
+                                 expected_layout_signature: prepared['layout_signature'])
+
+    refute result['ok']
+    assert_equal 'composition_changed', result['code']
+    assert_empty top_level_entities, 'nothing may be inserted against a stale preview'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_project_commit_accepts_matching_composition_fingerprint
+    prepared = @placer.prepare_placement_preview(FI_1)
+    assert prepared['ok']
+
+    result = @placer.place(FI_1, transformation: accepted_transform,
+                                 expected_layout_signature: prepared['layout_signature'])
+    assert result['ok'], result.inspect
+    assert_equal 1, top_level_entities.length
+  end
+
+  def test_catalog_commit_fails_closed_when_composition_changed_since_preview
+    prepared = @placer.prepare_catalog_preview(definition_id: DEFINITION_ID, parameters: {},
+                                               material_choices: {})
+    assert prepared['ok'], prepared.inspect
+    refute_nil prepared['layout_signature']
+
+    @catalog.dims_mutable = [1200, 800, 500]
+    stub_create_instance
+
+    result = @placer.create_and_place(definition_id: DEFINITION_ID, parameters: {},
+                                      material_choices: {}, idempotency_key: 'idem-1',
+                                      transformation: accepted_transform,
+                                      expected_layout_signature: prepared['layout_signature'])
+
+    refute result['ok']
+    assert_equal 'composition_changed', result['code']
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances}),
+                 'no identity may be minted against a stale preview'
+    assert_empty top_level_entities
   end
 
   private
