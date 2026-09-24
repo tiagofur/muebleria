@@ -614,7 +614,7 @@ Rollback remains discarding this non-delivery branch; no PR, merge, #839,
 - [x] **E2b — Real-launcher child regressions.** Observe safe RED, then GREEN:
   groups reach only Playwright/Vite; ambient DB/PG/secret canaries never reach
   any child; unknown modes stop before writable launch.
-- [ ] **E2c — Freeze for review.** V0/V1 checks, work-unit commit and exact
+- [x] **E2c — Freeze for review.** V0/V1 checks, work-unit commit and exact
   HEAD handoff. Ubuntu V2 remains pending the parent's deliberate dispatch.
 
 E2 local proof: safe RED against the real launcher before implementation:
@@ -633,3 +633,7 @@ removed it; the test checks the explicit injected locale separately rather
 than mistaking that Python artifact for launcher forwarding. The unchanged
 32-test, one-worker PTX workflow selection and download probes remain in place.
 V2 Ubuntu group runs are `NOT_RUN`, and no #839/DB/product changes occurred.
+E2 diagnostic work-unit commit:
+`c7dd8c7f4cac23eb449832f68b77b8e0bfc97ee3`. An artifact-only evidence
+commit follows; independent review and group-mode Ubuntu runs are pending.
+The writer did not push, dispatch, create a PR, or merge.
