@@ -673,3 +673,6 @@ CI-contract tests passed (one opt-in skip), 9 sanitizer/diagnostic tests
 passed; `bash -n`, `shellcheck`, `pnpm typecheck`, and `git diff --check`
 passed. Ubuntu V2 E2 remains NOT_RUN. Independent review of this new HEAD
 is pending; no remote operation or persistent database access occurred.
+The E2 corrective behavior-and-regression work-unit commit is
+`f2e98b738cc0aac0c5d0bc4e50bbb72ce3239464`; this artifact-only
+follow-up records its identity without changing executable behavior.
