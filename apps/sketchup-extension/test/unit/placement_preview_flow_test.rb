@@ -17,6 +17,7 @@ require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
 require_relative '../../src/granete_for_sketchup/library/layout_contract'
 require_relative '../../src/granete_for_sketchup/model/furniture_builder'
+require_relative '../../src/granete_for_sketchup/tools/placement_snap_engine'
 require_relative '../../src/granete_for_sketchup/tools/furniture_placement_tool'
 
 MB = Granete::SketchUpExtension::Connection::ModelBinding

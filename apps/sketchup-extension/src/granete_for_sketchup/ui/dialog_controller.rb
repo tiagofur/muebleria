@@ -1019,14 +1019,98 @@ module Granete
         # tool must never select_tool over the CURRENT dynamic model (which
         # may have moved on to another document). Extents carry their local
         # minimum (origin_mm) so the anchor maps the real furniture box.
+        # The managed-neighbor provider is built HERE for both lanes —
+        # Library and Project placement share the same tool, same engine
+        # and the same target resolution; only identity provenance differs.
         def build_placement_preview_tool(label:, extents_mm:, on_commit:, on_cancel:, model:)
           Tools::FurniturePlacementTool.new(
             label: label, extents_mm: extents_mm,
             on_commit: on_commit, on_cancel: on_cancel,
             model_provider: -> { model },
             origin_mm: extents_mm[:origin_mm] || [0.0, 0.0, 0.0],
-            logger: @logger
+            logger: @logger,
+            furniture_targets_provider: placement_furniture_targets_provider(model)
           )
+        end
+
+        # #469 increment 2 — pure-data provider of Granete-managed
+        # neighbors for side-to-side snapping. Targets are resolved by
+        # SERVER identity through ManagedFurniture metadata — never by
+        # component name/GUID — and the scan is local/read-only (no
+        # request, no mutation), so it is safe inside the cursor loop.
+        # Ambiguous roots (duplicated furnitureInstanceId) and erased or
+        # non-axis-aligned entities offer no candidate: an unsafe target
+        # fails closed instead of guessing.
+        def placement_furniture_targets_provider(model)
+          lambda do
+            index = Connection::ProjectFurniture::ManagedFurniture.index(
+              model, @metadata_store_factory.call(model)
+            )
+            index[:by_id].flat_map do |furniture_instance_id, entries|
+              next [] if entries.length != 1
+
+              placement_target_descriptor(furniture_instance_id, entries.first[:entity])
+            end
+          end
+        end
+
+        # World descriptor of one managed root for the snap engine. Host
+        # bounds are INCHES; the engine works in mm. The label comes from
+        # the entity display name (cosmetic only — identity stays the
+        # furnitureInstanceId above).
+        def placement_target_descriptor(furniture_instance_id, entity)
+          return [] unless entity.respond_to?(:bounds) && entity.respond_to?(:transformation)
+          return [] if entity.respond_to?(:valid?) && !entity.valid?
+
+          bounds = entity.bounds
+          return [] unless bounds.respond_to?(:min) && bounds.respond_to?(:max)
+
+          front = axis_aligned_horizontal_dir(entity.transformation.yaxis)
+          return [] unless front
+
+          [{
+            'furniture_instance_id' => furniture_instance_id,
+            'label' => placement_target_label(entity),
+            'min_mm' => bounds_mm(bounds.min),
+            'max_mm' => bounds_mm(bounds.max),
+            'front_dir' => front
+          }]
+        rescue StandardError => e
+          @logger.warn('placement_target_skipped', { 'error' => e.message })
+          []
+        end
+
+        # Host bounds corners are INCHES Point3d; the engine works in mm.
+        def bounds_mm(corner)
+          mm = 25.4
+          [(corner.x.to_f * mm), (corner.y.to_f * mm), (corner.z.to_f * mm)]
+        end
+
+        # Horizontal ±X/±Y unit direction of the root's front (+Y local)
+        # — nil when the instance is rotated off the quarter grid, so its
+        # sides have no exact axis-aligned plane to propose.
+        def axis_aligned_horizontal_dir(vector)
+          return nil unless vector.respond_to?(:x) && vector.respond_to?(:y) && vector.respond_to?(:z)
+
+          x = vector.x.to_f
+          y = vector.y.to_f
+          z = vector.z.to_f
+          epsilon = 1e-6
+          on_x = ((x.abs - 1.0).abs < epsilon) && y.abs < epsilon && z.abs < epsilon
+          return [x.positive? ? 1.0 : -1.0, 0.0, 0.0] if on_x
+
+          on_y = x.abs < epsilon && ((y.abs - 1.0).abs < epsilon) && z.abs < epsilon
+          return [0.0, y.positive? ? 1.0 : -1.0, 0.0] if on_y
+
+          nil
+        end
+
+        # Display label: the entity's human name without the technical id
+        # suffix. Cosmetic only — never identity authority.
+        def placement_target_label(entity)
+          name = entity.respond_to?(:name) ? entity.name.to_s : ''
+          label = name.sub(/\s*\([^()]*\)\s*\z/, '').strip
+          label.empty? ? 'Mueble' : label
         end
 
         # Authoritative preview extents: the resolved layout's dimensionsMm

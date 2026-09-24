@@ -35,12 +35,16 @@ module Geom
   end
 
   class BoundingBox
-    attr_accessor :width, :height, :depth
+    attr_accessor :width, :height, :depth, :min, :max
 
     def initialize(width = 0.0, height = 0.0, depth = 0.0)
       @width = width
       @height = height
       @depth = depth
+      # Host-faithful corners (BoundingBox#min/#max): defaults coherent
+      # with the size constructor; placement tests set them explicitly.
+      @min = Point3d.new(0.0, 0.0, 0.0)
+      @max = Point3d.new(width, height, depth)
     end
 
     def empty?
@@ -383,7 +387,7 @@ module SketchupStub
   class ComponentInstanceStub < Sketchup::ComponentInstance
     include AttributeContainer
 
-    attr_accessor :name, :material, :transformation
+    attr_accessor :name, :material, :transformation, :bounds
     attr_reader :definition, :persistent_id
 
     def initialize(definition, transform)
@@ -392,6 +396,10 @@ module SketchupStub
       @transformation = transform
       @name = ""
       @material = nil
+      # Host-faithful: ComponentInstance#bounds is the world-space box of
+      # the occurrence (the real host derives it; the stub defaults to the
+      # definition box and tests may override per instance).
+      @bounds = definition.bounds
       @persistent_id = SketchupStub.next_persistent_id
     end
 

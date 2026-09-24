@@ -3,7 +3,107 @@
 Issue: #469 — [P1][SU-UX-2] Constraint-aware furniture placement, snapping and repeat placement
 Base: origin/main @ 1484d20a2912e9132932c74653c67ffb1ed5d78b
 Branch: feat/469-placement-preview
-Status: R1-R4 review corrections applied (R4 on b98c8637); V0/V1 green; V2 host pending owner walk
+Status: MERGED via PR #832 (R1-R4). Increment 2 continues below.
+
+## Increment 2 — semantic snaps + exact mm offset + visual feedback
+
+Base: origin/main @ aec03be9 (includes #832 via 3394c60c)
+Branch: feat/469-semantic-snaps
+Status: IMPLEMENTED_PENDING_REVIEW
+
+Scope (this increment): the three semantic snap families over the EXISTING
+shared tool (no rewrite): wall/face back alignment (orientation derived from
+the face normal, never resizing), floor/base plane (transform-only), and
+furniture side-to-side against Granete-managed roots resolved by
+`ManagedFurniture` metadata identity (never component name/GUID); a
+deterministic candidate policy (per-axis ranking by displacement → type →
+key, cross-axis composition with orientation-consistency filter — unit
+tested); exact mm gap input through the host VCB (`onUserText` +
+`enableVCB?`, no event stealing); viewport feedback (aligned-face highlight
++ Spanish label with target/gap; no matrices/IDs in UX). Revalidation at
+click re-runs discovery from the fresh pick (stale targets cannot be
+committed by construction). Snap/offset only alter the top-level transform
+the canonical commit already consumes; negative proofs pin that
+extents/materials/layout signature are untouched. Excluded: repeat
+placement, #784, disconnected Library lane, dialog JS changes (VCB is
+host-native).
+
+### Design decisions pinned by tests
+
+- Face candidates come from the host InputPoint face only (pick ON the
+  plane); no synthetic ground plane — a free pick is never hijacked toward
+  z=0 (#832 free-follow semantics preserved, suite green).
+- Floor/base-plane candidates accept EITHER horizontal winding (±Z):
+  Face#normal sign is not authority for walls (round 1) nor for floors
+  (round 2) — a reversed floor is the same base plane; the smoke no
+  longer forces floor.reverse!.
+- Wall orientation is resolved from the CAMERA EYE side of the plane,
+  never from Face#normal (review P1: a reversed face must never leave the
+  furniture front facing the wall). No eye / eye exactly on the plane →
+  no wall candidate (fail-safe, never guessed).
+- Furniture sides are FINITE rectangles (review P1): the cursor must be
+  within TOLERANCE of the side along the constrained axis AND within
+  TOLERANCE of the side's span on the tangential axis and Z (clamped
+  interval distance). Close-in-X-but-meters-away-in-Y/Z is not a target.
+- Cursor-loop scan budget (review P1): the managed-neighbor provider (a
+  full local model index) runs exactly ONCE per gesture (lazy snapshot)
+  and exactly ONCE more at the click as commit-time revalidation against
+  CURRENT geometry — never one model index per mouse event (call-count
+  test pins 1 call for N moves, 2 with the click).
+- Tolerance 250mm on per-AXIS anchor displacement; ranking
+  (displacement, type furniture_side<face<floor, key) is a stable total
+  order; wall+floor compose across axes; conflicting orientation
+  proposals drop the weaker (never averaged/mirrored).
+- The VCB gap applies to the PRIMARY (best horizontal) constraint and is
+  keyed to that target's identity — it never leaks to a different or
+  absent target.
+- Arrows are answered with a hint while an orientation-proposing snap is
+  active (the target fixes the front); free/floor rotation unchanged.
+- Front-anchored grabs + wall snap exceed tolerance by construction
+  (anchor must jump one depth) — documented behavior: grab a back corner
+  to align to walls.
+- Duplicated furnitureInstanceId roots, erased entities and frames off
+  the quarter grid never become snap targets (fail closed).
+
+### Known limitation (remaining #469 scope — do not overclaim)
+
+Wall/face and side snapping support ONLY axis-aligned (quarter-grid)
+planes: sloped walls and furniture rotated to arbitrary angles offer no
+candidate. Arbitrary-angular support is remaining scope of #469; until
+it lands, wall/face snapping is not "complete".
+
+### Observed evidence (this candidate)
+
+- `bundle exec rake verify` (homebrew ruby 3.2.11 + vendor bundle) after
+  the three review P1 corrections AND the round-2 floor-winding/tie-break
+  fixes: 1069 unit runs / 6981 assertions + 6 boundary runs / 3323
+  assertions, 0 failures; 226 files lint-clean; RBZ verified readback,
+  sha256 `b6aa772e7c219f8c6e03eb3ae54909a67745f36a83bf86c19bd9b89e8620a5bc`.
+- Round-2 review fixes: floor winding parity (engine + tool) and the
+  same-axis tie test now proves BOTH candidates exist with equal
+  displacement before composing (it was vacuous once eye_mm became
+  mandatory for walls).
+- New/extended suites: `placement_snap_engine_test.rb` 25 runs (families,
+  policy, tie-breaks, gaps, reversed-face/eye resolution, finite-side
+  tangential/vertical distance, negatives); `furniture_placement_tool_
+  test.rb` 40 runs (+13: snap/VCB/stale/rigidity + reversed wall at tool
+  level + provider call-count budget (1 per gesture, +1 at click) +
+  fresh-geometry commit); `placement_preview_controller_test.rb` 31 runs
+  (+4: project-lane snapped commit with real PUT at x=600mm, catalog lane
+  parity, provider exclusions, no-requests scan).
+- TestUp `TC_PlacementPreviewSmoke` extended with
+  `test_semantic_snaps_wall_side_gap_and_undo` (wall orientation + 40mm
+  VCB gap, FI_1↔FI_2 side-to-side + 5mm gap, undo, cancel-with-snap):
+  NOT_RUN this session — no host available; owner-coordinated like R1-R4.
+
+### Remaining for #469 (after this increment)
+
+- Repeat placement; disconnected Library lane (`insert_furniture`);
+- arbitrary-ANGLE wall/furniture snap support (current: quarter-grid
+  only — see Known limitation);
+- real-host evidence for the whole walk (incl. this snap smoke);
+- UX polish from real-host usability (#506).
+
 
 ## Scope separation from parallel work (coordination registry)
 
