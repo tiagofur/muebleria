@@ -563,6 +563,13 @@ work unit. V2 Ubuntu A/B is `NOT_RUN` pending parent dispatch after review.
 The A/B canary confirms CI metadata and a harmless ambient marker reach only
 the B browser child, while backend/admin remain isolated and ambient PG,
 database, and credential-shaped keys are absent from all captured children.
+The fixture explicitly poisons `PGHOSTADDR`, `PGSERVICEFILE`, `PGOPTIONS`,
+`PGPASSWORD`, `PGPASSFILE`, the ambient fixture DSN, and a second DB URL;
+the real-launcher child capture confirms none of their keys or targets reaches
+the browser/backend/admin after preparation. Focused extension: 2/2 passed;
+full DB-free CI contract suite: 46 tests, one opt-in skipped. The behavioral
+RED was observed against the pre-switch launcher before D2 implementation;
+this explicit poison extension passed without a further production change.
 Diagnostic behavior work-unit commit:
 `319bbf05cdf38196ece245acd9651cb8323a4db1`. The final artifact-only
 evidence commit records this identity; independent review and Ubuntu runs

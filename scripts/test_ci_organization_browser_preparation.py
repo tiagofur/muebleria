@@ -75,7 +75,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "        'ci_metadata': os.environ.get('CI') == 'true' and os.environ.get('GITHUB_ACTIONS') == 'true',\n"
                 + "        'dangerous_keys': sorted(key for key in os.environ if key in\n"
                 + "            ('GITHUB_TOKEN', 'ACTIONS_RUNTIME_TOKEN', 'POSTGRES_PASSWORD',\n"
-                + "             'OTHER_DATABASE_URL', 'AWS_SECRET_ACCESS_KEY'))}\n"
+                + "             'OTHER_DATABASE_URL', 'OTHER_DB_URL', 'AWS_SECRET_ACCESS_KEY'))}\n"
                 + "    with capture.open('a') as stream: stream.write(json.dumps(record) + '\\n')\n"
                 + "    if name == 'go' and args[:2] == ['run', './cmd/testdb-preflight']:\n"
                 + "        if real_preflight:\n"
@@ -106,11 +106,16 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "TMPDIR": str(tmpdir),
                 "DATABASE_URL": "postgres://ambient:secret@127.0.0.1:5445/muebles",
                 "MIGRATION_DATABASE_URL": "postgres://ambient:secret@127.0.0.1:5445/muebles",
+                "ORGANIZATION_TEST_DATABASE_URL": "postgres://ambient:secret@127.0.0.1:5445/muebles",
                 "PGHOST": "persistent.example.invalid",
+                "PGHOSTADDR": "127.0.0.1",
                 "PGDATABASE": "muebles",
                 "PGPORT": "5445",
                 "PGSERVICE": "habitual",
+                "PGSERVICEFILE": str(tmpdir / 'ambient-service-file'),
+                "PGOPTIONS": "-c search_path=ambient",
                 "PGPASSWORD": "ambient-secret",
+                "PGPASSFILE": str(tmpdir / 'ambient-pass-file'),
                 "MEDIA_DIR": "ambient-media-dir-must-not-reach-children",
                 "GRANETE_DIAGNOSTIC_INERT_MARKER": "synthetic-inert",
                 "CI": "true",
@@ -119,6 +124,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "ACTIONS_RUNTIME_TOKEN": "synthetic-secret",
                 "POSTGRES_PASSWORD": "synthetic-secret",
                 "OTHER_DATABASE_URL": "postgres://synthetic:secret@127.0.0.1:5445/muebles",
+                "OTHER_DB_URL": "postgres://synthetic:secret@127.0.0.1:5445/muebles",
                 "AWS_SECRET_ACCESS_KEY": "synthetic-secret",
                 "PTX_DIAGNOSTIC_BROWSER_ENV": browser_variant,
                 "PTX_DIAGNOSTIC_DIR": str(tmpdir / 'diagnostic'),
