@@ -12,6 +12,7 @@ Ensures that:
 import os
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,6 +74,29 @@ class TestDatabaseIsolationAntiRegression(unittest.TestCase):
         content = runner_path.read_text(encoding="utf-8")
         self.assertIn("GRANETE_TEST_DATABASE=1", content)
         self.assertIn("granete_test", content)
+
+    def test_backend_test_runner_rejects_insecure_concurrency_flags(self):
+        """scripts/backend-test.sh must reject -p > 1 or -parallel > 1 before running tests."""
+        runner_path = ROOT / "scripts/backend-test.sh"
+        # Test -p 4
+        res_p = subprocess.run(
+            [str(runner_path), "-p", "4", "./..."],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res_p.returncode, 0)
+        self.assertIn("insecure package concurrency", res_p.stderr)
+
+        # Test -parallel 8
+        res_par = subprocess.run(
+            [str(runner_path), "-parallel", "8", "./..."],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res_par.returncode, 0)
+        self.assertIn("insecure test process concurrency", res_par.stderr)
 
     def test_init_sh_uses_backend_test_runner(self):
         """init.sh must use scripts/backend-test.sh rather than testing against dev DB."""
@@ -146,7 +170,29 @@ func TestAdmin(t *testing.T) {
         violations_admin = check_go_content_for_unguarded_db_url("foo_test.go", admin_content)
         self.assertEqual(violations_admin, [], "scanner must permit ValidateTestAdminDatabaseURL")
 
-        # 4. testdb_guard_test.go itself does not trigger false positives
+        # 4. Mixed file: contains safe function AND unsafe function => MUST FAIL (BLOCKER 2)
+        mixed_content = """package foo_test
+import (
+    "os"
+    "testing"
+    "github.com/tiagofur/muebles-backend/internal/storage"
+    "github.com/jackc/pgx/v5/pgxpool"
+)
+func TestSafe(t *testing.T) {
+    u := os.Getenv("DATABASE_URL")
+    if err := storage.ValidateTestDatabaseURL(u); err != nil {
+        t.Fatal(err)
+    }
+}
+func TestUnsafe(t *testing.T) {
+    u := os.Getenv("DATABASE_URL")
+    pool, _ := pgxpool.New(ctx, u)
+}
+"""
+        violations_mixed = check_go_content_for_unguarded_db_url("foo_test.go", mixed_content)
+        self.assertTrue(len(violations_mixed) > 0, "scanner must detect unsafe function even if file has safe function")
+
+        # 5. testdb_guard_test.go itself does not trigger false positives
         guard_test_path = ROOT / "backend-go/internal/storage/testdb_guard_test.go"
         if guard_test_path.exists():
             violations_guard = check_go_content_for_unguarded_db_url(
@@ -164,25 +210,45 @@ def check_go_content_for_unguarded_db_url(rel_path: str, content: str) -> list[s
     ):
         return []
 
-    lines = content.splitlines()
-    reads_db_url_lines = []
-    for line_no, line in enumerate(lines, start=1):
-        if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
-            reads_db_url_lines.append(line_no)
+    # Parse functions and check each function individually.
+    # Any function reading os.Getenv("DATABASE_URL") MUST invoke ValidateTestDatabaseURL,
+    # ValidateTestAdminDatabaseURL, TestDatabaseURL, or TestAdminDatabaseURL within that same function.
+    violations = []
+    # Pattern to split into functions (func ... { ... })
+    func_pattern = re.compile(r'(func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\s*\([^)]*\)[^{]*\{)', re.MULTILINE)
+    
+    # We find all function declarations and their positions
+    matches = list(func_pattern.finditer(content))
+    if not matches:
+        # If not inside a function, check top-level lines
+        lines = content.splitlines()
+        for line_no, line in enumerate(lines, start=1):
+            if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
+                violations.append(f"{rel_path}:{line_no}: reads os.Getenv(\"DATABASE_URL\") outside of guarded function")
+        return violations
 
-    if not reads_db_url_lines:
-        return []
+    for i, match in enumerate(matches):
+        start_pos = match.start()
+        func_name = match.group(2)
+        end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(content)
+        func_body = content[start_pos:end_pos]
 
-    # Check if file invokes ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL
-    has_guard = (
-        "ValidateTestDatabaseURL" in content
-        or "ValidateTestAdminDatabaseURL" in content
-    )
+        if 'os.Getenv("DATABASE_URL")' in func_body or "os.Getenv('DATABASE_URL')" in func_body:
+            # Check if this specific function invokes a guard
+            has_guard_in_func = (
+                "ValidateTestDatabaseURL" in func_body
+                or "ValidateTestAdminDatabaseURL" in func_body
+                or "TestDatabaseURL" in func_body
+                or "TestAdminDatabaseURL" in func_body
+            )
+            if not has_guard_in_func:
+                # Find line number
+                line_no = content[:start_pos].count("\n") + 1
+                violations.append(
+                    f"{rel_path}:{line_no}: function {func_name} reads os.Getenv(\"DATABASE_URL\") without calling ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL"
+                )
 
-    if not has_guard:
-        return [f"{rel_path}:{reads_db_url_lines[0]}: reads os.Getenv(\"DATABASE_URL\") without calling ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL"]
-
-    return []
+    return violations
 
 
 def find_unguarded_database_url_in_go(root: Path) -> list[str]:

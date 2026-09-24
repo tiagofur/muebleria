@@ -255,7 +255,7 @@ func TestCreateInitialDesignQuoteRevision_RejectsTerminalStatusCommittedWhileWai
 		t.Fatalf("lock project status=%q err=%v", status, err)
 	}
 	const applicationName = "design-q1-status-race"
-	tracingStore := newNamedRuntimeOrganizationStore(t, applicationName)
+	tracingStore := newNamedRuntimeOrganizationStore(t, fx.rlsFixture, applicationName)
 	result := make(chan error, 1)
 	go func() {
 		result <- fiTx(t, tracingStore, fiActorA(), func(ctx context.Context) error {
@@ -302,7 +302,7 @@ func TestCreateInitialDesignQuoteRevision_RemoveWinsWhileQuoteWaitsForInstanceLo
 	}
 
 	const applicationName = "design-q1-instance-race"
-	quoteStore := newNamedRuntimeOrganizationStore(t, applicationName)
+	quoteStore := newNamedRuntimeOrganizationStore(t, fx.rlsFixture, applicationName)
 	quoted := make(chan error, 1)
 	go func() {
 		quoted <- fiTx(t, quoteStore, fiActorA(), func(ctx context.Context) error {

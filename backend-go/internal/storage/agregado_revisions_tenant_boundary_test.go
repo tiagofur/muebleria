@@ -390,9 +390,9 @@ func TestAgregadoFamily_TenantBoundary_F1D_HistoricalPath(t *testing.T) {
 func TestAgregadoFamily_TenantBoundary_F1E_PooledConnectionReuse(t *testing.T) {
 	// The fixture only prepares the migrated database and the granete_app_test
 	// role; this test drives its own single-connection pool.
-	setupDesignsTestFixture(t)
+	fx := setupDesignsTestFixture(t)
 
-	appURL := rlsDatabaseURL(t)
+	appURL := fx.DatabaseURL(t)
 	appURL.User = url.UserPassword(rlsAppRole, "rls-test-password")
 	cfg, err := pgxpool.ParseConfig(appURL.String())
 	if err != nil {

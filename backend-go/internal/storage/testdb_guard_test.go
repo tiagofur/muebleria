@@ -159,3 +159,25 @@ func TestGuardDoesNotLeakPassword(t *testing.T) {
 	}
 }
 
+func TestTestDatabaseURL_Helper(t *testing.T) {
+	origFlag := os.Getenv("GRANETE_TEST_DATABASE")
+	origURL := os.Getenv("DATABASE_URL")
+	defer func() {
+		os.Setenv("GRANETE_TEST_DATABASE", origFlag)
+		os.Setenv("DATABASE_URL", origURL)
+	}()
+
+	os.Setenv("GRANETE_TEST_DATABASE", "1")
+	os.Setenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/granete_test")
+
+	url := storage.TestDatabaseURL(t)
+	if url != "postgres://postgres:postgres@localhost:5432/granete_test" {
+		t.Fatalf("unexpected url: %s", url)
+	}
+
+	adminURL := storage.TestAdminDatabaseURL(t)
+	if !strings.HasSuffix(adminURL, "/postgres") {
+		t.Fatalf("unexpected admin url: %s", adminURL)
+	}
+}
+

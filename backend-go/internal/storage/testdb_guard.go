@@ -159,3 +159,50 @@ func ValidateTestAdminDatabaseURL(rawURL string) error {
 	return nil
 }
 
+// TestDatabaseURL returns the validated writable test database URL from DATABASE_URL.
+// It skips the test if DATABASE_URL is unset, and fails the test via t.Fatalf if the URL
+// does not satisfy the fail-closed test database isolation contract.
+func TestDatabaseURL(t testingT) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	raw := os.Getenv("DATABASE_URL")
+	if strings.TrimSpace(raw) == "" {
+		t.Skip("DATABASE_URL not set; skipping live test database suite")
+	}
+	if err := ValidateTestDatabaseURL(raw); err != nil {
+		t.Fatalf("TestDatabaseURL rejected unsafe database: %v", err)
+	}
+	return raw
+}
+
+// TestAdminDatabaseURL returns the validated test admin database URL from DATABASE_URL,
+// routing to /postgres for infrastructure/maintenance operations (CREATE/DROP DATABASE).
+// It skips the test if DATABASE_URL is unset, and fails the test via t.Fatalf if the URL
+// does not satisfy the fail-closed test admin database isolation contract.
+func TestAdminDatabaseURL(t testingT) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	raw := os.Getenv("DATABASE_URL")
+	if strings.TrimSpace(raw) == "" {
+		t.Skip("DATABASE_URL not set; skipping live test database suite")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("TestAdminDatabaseURL parse error: %v", err)
+	}
+	u.Path = "/postgres"
+	adminURL := u.String()
+	if err := ValidateTestAdminDatabaseURL(adminURL); err != nil {
+		t.Fatalf("TestAdminDatabaseURL rejected unsafe database: %v", err)
+	}
+	return adminURL
+}
+
+type testingT interface {
+	Helper()
+	Skip(args ...any)
+	Fatalf(format string, args ...any)
+}
+

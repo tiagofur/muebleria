@@ -94,21 +94,53 @@ cd "${ROOT}/backend-go"
 
 # Run tests with package serialization (-p 1) and process serialization (-parallel 1)
 # to ensure cluster-global DDL/roles and migrations do not conflict.
-GO_ARGS=()
+# Reject any explicit -p or -parallel values other than 1.
 HAS_P=0
 HAS_PARALLEL=0
 
-for arg in "$@"; do
+i=1
+while [ $i -le $# ]; do
+  arg="${!i}"
   case "${arg}" in
-    -p|--p|-p=*|--p=*)
+    -p|--p)
+      j=$((i + 1))
+      if [ $j -le $# ]; then
+        val="${!j}"
+        if [ "${val}" != "1" ]; then
+          fail "insecure package concurrency: ${arg} ${val}. Automated tests must run with -p 1."
+        fi
+        HAS_P=1
+      fi
+      ;;
+    -p=*|--p=*)
+      val="${arg#*=}"
+      if [ "${val}" != "1" ]; then
+        fail "insecure package concurrency: ${arg}. Automated tests must run with -p 1."
+      fi
       HAS_P=1
       ;;
-    -parallel|--parallel|-parallel=*|--parallel=*)
+    -parallel|--parallel)
+      j=$((i + 1))
+      if [ $j -le $# ]; then
+        val="${!j}"
+        if [ "${val}" != "1" ]; then
+          fail "insecure test process concurrency: ${arg} ${val}. Automated tests must run with -parallel 1."
+        fi
+        HAS_PARALLEL=1
+      fi
+      ;;
+    -parallel=*|--parallel=*)
+      val="${arg#*=}"
+      if [ "${val}" != "1" ]; then
+        fail "insecure test process concurrency: ${arg}. Automated tests must run with -parallel 1."
+      fi
       HAS_PARALLEL=1
       ;;
   esac
+  i=$((i + 1))
 done
 
+GO_ARGS=()
 [ "${HAS_P}" -eq 0 ] && GO_ARGS+=("-p" "1")
 [ "${HAS_PARALLEL}" -eq 0 ] && GO_ARGS+=("-parallel" "1")
 
