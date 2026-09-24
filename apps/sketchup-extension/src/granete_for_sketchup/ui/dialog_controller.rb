@@ -3382,6 +3382,10 @@ module Granete
 
         def handle_dialog_ready(dialog)
           update_status(dialog)
+          # The dialog footer's version comes from the EXTENSION the host
+          # actually loaded (identity.rb) — never a hardcoded page string.
+          execute_bridge(dialog, 'setPluginVersion',
+                         { 'version' => Granete::SketchUpExtension::EXTENSION_VERSION })
           send_catalog(dialog)
           check_current_selection(dialog)
           refresh_binding_status

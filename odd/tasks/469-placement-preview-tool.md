@@ -76,9 +76,11 @@ it lands, wall/face snapping is not "complete".
 
 - `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle; env pin
   per memory) at the frozen candidate: RuboCop 228 files 0 offenses;
-  1113 unit runs / 7254 assertions, 0 failures; 6 boundary runs / 3359
-  assertions; RBZ deterministic readback, sha256
-  `0aff5ec2ceb17774ad1115d467e455fce494705e897e545f7df2c80adf3bfaf9`.
+  1113 unit runs / 7258 assertions, 0 failures (seed-stable: 4242/12345/
+  606/1/999 verdes tras hacer hermético el suite de fidelidad del
+  stub); 6 boundary runs / 3359 assertions; RBZ deterministic readback
+  (v0.1.6), sha256
+  `0e53528336d5fcdd54ddedf1218c0caa799353704ab5e9dd4ea4c339ee97b752`.
 - New `host_stub_faithfulness_test.rb` (3 runs, review r3 negative
   proof): the stub must never re-expose `Geom::BoundingBox#transform`
   nor `ComponentInstance#entities` — APIs the REAL host does not have;
@@ -225,6 +227,22 @@ it lands, wall/face snapping is not "complete".
    ComponentInstance sin #entities). El smoke añade un piso oculto
    MÁS CERCANO en Z al escenario D (visible=false vía la API real) —
    NOT_RUN, coordinado con el owner.
+
+### Versión 0.1.6 + footer de versión desde la fuente del plugin
+
+- `EXTENSION_VERSION` 0.1.5 → 0.1.6 (identity.rb, única fuente).
+- El rodapié del diálogo ya NO es texto plano: el markup lleva
+  `id="granete-version-footer"` sin versión hardcodeada (el texto
+  estático decía "v0.1.4" — dos versiones atrás) y
+  `handle_dialog_ready` empuja
+  `setPluginVersion({version: EXTENSION_VERSION})` por el bridge; el JS
+  de la página renderiza "Granete for SketchUp · v<versión>" (payload
+  sin versión no toca el texto). Tests: suite Ruby de dialog_controller
+  (orden status → setPluginVersion → setCatalog con el valor exacto de
+  identity.rb) + `dialog_version_footer_test.js` bajo node (sin literal
+  de versión en el markup + render del valor pusheado + nil-safety).
+- Instalación para pruebas del owner sobre SketchUp 2026.2 (host
+  cerrado; backup del 0.1.5 previo conservado).
 
 ## Scope separation from parallel work (coordination registry)
 

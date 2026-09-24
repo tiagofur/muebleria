@@ -12,6 +12,13 @@ require_relative '../test_helper'
 #   * Sketchup::ComponentInstance has NO #entities — its content lives
 #     on entity.definition.entities (Group is the one with #entities).
 class HostStubFaithfulnessTest < Minitest::Test
+  # Hermetic: other suites may leave SketchupStub.active_model nil at
+  # teardown — this suite builds its own model instead of inheriting
+  # global state.
+  def setup
+    SketchupStub.active_model = SketchupStub::ModelStub.new
+  end
+
   def test_bounding_box_exposes_no_phantom_transform
     box = Geom::BoundingBox.new(10.0, 20.0, 30.0)
 
