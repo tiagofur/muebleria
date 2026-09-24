@@ -281,7 +281,8 @@ Tasks:
   helper; no `onLButtonDown(0, 0, 0, ...)` remains in this smoke.
 - [x] T2 (route: delegated; trigger: verification): recorded static TestUp/lint,
   full rake verification, affected-gate selection/execution, diff/readback,
-  and the work-unit commit (SHA recorded below after creation).
+  and the work-unit commit
+  `aa23c81cb4c7716d0876a786ee16a2a863b0b08e`.
 
 Acceptance: local smoke still aims at approximately 1500/800/0 mm and now
 confirms at the viewport center so `onLButtonDown` fresh re-picks that exact
@@ -654,7 +655,7 @@ rehearsal spec prepared but NOT_RUN (host).
 
 ## Remaining for #469 (not this increment)
 
-- Semantic snapping (wall/face, furniture side-to-side, floor), numeric mm
-  offsets, repeat placement, anchor/rotation UX usability on the real host,
-  real-host evidence for the whole walk, disconnected Library lane
-  (`insert_furniture`) still origin-first (local-compat lane).
+- Repeat placement.
+- Polygon-aware floor footprint.
+- Final real-host evidence.
+- Polish #506.
