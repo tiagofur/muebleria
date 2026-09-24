@@ -271,12 +271,13 @@ module Granete
         n = [0.5, Math.sqrt(3.0) / 2.0, 0.0] # 30° wall normal (room side)
         tangent = [-n[1], n[0], 0.0] # wall run direction
 
-        # --- Fixture: floor + a vertical wall whose plane is rotated 30°.
+        # --- Fixture: floor (covering the aim's XY — base planes are
+        # spatially FINITE now) + a vertical wall rotated 30°.
         model.entities.add_face(
-          [Geom::Point3d.new(0, 0, 0),
-           Geom::Point3d.new(6000 / mm, 0, 0),
+          [Geom::Point3d.new(-6000 / mm, -4000 / mm, 0),
+           Geom::Point3d.new(6000 / mm, -4000 / mm, 0),
            Geom::Point3d.new(6000 / mm, 4000 / mm, 0),
-           Geom::Point3d.new(0, 4000 / mm, 0)]
+           Geom::Point3d.new(-6000 / mm, 4000 / mm, 0)]
         )
         wall = model.entities.add_face(
           [Geom::Point3d.new(0, 0, 0),
@@ -472,20 +473,33 @@ module Granete
       # wall and the floor COMPOSE through the real tool.
       def base_planes_provider
         lambda do
-          planes = []
-          model.entities.each do |entity|
-            next unless entity.is_a?(Sketchup::Face)
+          scan_base_planes(model.entities, Geom::Transformation.new)
+        end
+      end
 
-            normal = entity.normal
+      # Horizontal host faces (either winding, NESTED included via the
+      # accumulated world transform) as FINITE base planes — mirrors the
+      # controller scan so the picked wall and the floor COMPOSE through
+      # the real tool.
+      def scan_base_planes(entities, world_transform)
+        mm = 25.4
+        planes = []
+        entities.each do |entity|
+          if entity.is_a?(Sketchup::Face)
+            normal = entity.normal.transform(world_transform)
             next unless normal.z.abs > 1.0 - 1e-6 && normal.x.abs < 1e-6 && normal.y.abs < 1e-6
 
-            position = entity.vertices.first.position
-            mm = 25.4
+            bounds = entity.bounds.transform(world_transform)
+            position = entity.vertices.first.position.transform(world_transform)
             planes << { 'point_mm' => [position.x * mm, position.y * mm, position.z * mm],
-                        'normal_mm' => [0.0, 0.0, 1.0] }
+                        'normal_mm' => [0.0, 0.0, 1.0],
+                        'footprint_min_mm' => [bounds.min.x * mm, bounds.min.y * mm, bounds.min.z * mm],
+                        'footprint_max_mm' => [bounds.max.x * mm, bounds.max.y * mm, bounds.max.z * mm] }
+          elsif entity.respond_to?(:entities) && entity.respond_to?(:transformation)
+            planes.concat(scan_base_planes(entity.entities, world_transform * entity.transformation))
           end
-          planes
         end
+        planes
       end
 
       # Oriented frame of a managed root in mm (mirrors the controller

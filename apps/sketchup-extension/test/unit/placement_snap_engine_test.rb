@@ -239,6 +239,25 @@ class PlacementSnapEngineTest < Minitest::Test
     assert_nil solve(cursor_mm: [1000.0, 2000.0, 30.0])
   end
 
+  # Review r2 A: a footprint-bearing base plane is spatially FINITE — a
+  # platform whose Z is close but whose XY footprint is METERS away is
+  # NOT a candidate, while the same plane whose footprint covers the
+  # cursor snaps (B).
+  def test_base_plane_footprint_bounds_spatial_relevance
+    distant = { point_mm: [5000.0, 5000.0, 100.0], normal_mm: [0.0, 0.0, 1.0],
+                'footprint_min_mm' => [4800.0, 4800.0, 100.0],
+                'footprint_max_mm' => [6200.0, 6200.0, 100.0] }
+    assert_nil solve(cursor_mm: [100.0, 100.0, 30.0], faces: [distant]),
+               'close in Z (70mm) but meters away in XY: no snap'
+
+    near = distant.merge('point_mm' => [0.0, 0.0, 100.0],
+                         'footprint_min_mm' => [-1000.0, -1000.0, 100.0],
+                         'footprint_max_mm' => [1000.0, 1000.0, 100.0])
+    solution = solve(cursor_mm: [100.0, 100.0, 30.0], faces: [near])
+    refute_nil solution, 'the footprint covers the cursor: the floor snaps'
+    assert_in_delta 100.0, solution[:anchor_mm][2], 1e-9
+  end
+
   # ---- furniture side-to-side -------------------------------------------
 
   # Managed B03 at [0..600, 0..560, 0..720] facing +Y. Its RIGHT side

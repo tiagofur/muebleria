@@ -1049,29 +1049,59 @@ module Granete
         # proposes through the InputPoint face.
         def placement_base_planes_provider(model)
           lambda do
-            # Room fixtures (floor faces) live at the MODEL ROOT by design;
-            # the scan must not depend on any open editing context.
+            # Deterministic ROOT scan: active_entities changes with the
+            # user's open edit context and would make the gesture
+            # snapshot and the click revalidation disagree. Nested
+            # containers are handled by the recursive accumulated
+            # transform below.
             # rubocop:disable-next SketchupSuggestions/ModelEntities
             entities = model.respond_to?(:entities) ? model.entities : nil
             return [] unless entities.respond_to?(:each)
 
-            planes = []
-            entities.each do |entity|
-              next unless entity.is_a?(::Sketchup::Face)
-              next unless placement_horizontal_face?(entity)
-
-              vertex = entity.respond_to?(:vertices) ? entity.vertices.first : nil
-              position = vertex.respond_to?(:position) ? vertex.position : nil
-              next unless position.respond_to?(:x)
-
-              planes << { 'point_mm' => point_mm(position), 'normal_mm' => [0.0, 0.0, 1.0] }
-            end
-            planes
+            scan_base_planes(entities, Geom::Transformation.new)
           end
         end
 
-        # A face whose normal is vertical (either winding) — a base plane.
-        def placement_horizontal_face?(entity)
+        # Recursive horizontal-face scan: faces emit WORLD planes;
+        # Groups/ComponentInstances recurse with the accumulated
+        # transform (parent * child, SketchUp composition semantics) so
+        # room fixtures nested inside containers participate with their
+        # true world placement.
+        def scan_base_planes(entities, world_transform)
+          planes = []
+          entities.each do |entity|
+            if entity.is_a?(::Sketchup::Face)
+              plane = placement_face_world_plane(entity, world_transform)
+              planes << plane if plane
+            elsif entity.respond_to?(:entities) && entity.respond_to?(:transformation)
+              planes.concat(scan_base_planes(entity.entities, world_transform * entity.transformation))
+            end
+          end
+          planes
+        end
+
+        # One horizontal face as a WORLD base-plane descriptor: the world
+        # normal must stay vertical (a tilted container tilts its floors
+        # — rejected), and the plane carries the face's FINITE world
+        # footprint (transformed bounds XY interval) plus a world plane
+        # point, so the engine never treats a distant platform as an
+        # infinite floor.
+        def placement_face_world_plane(entity, world_transform)
+          return nil unless placement_local_horizontal_face?(entity)
+
+          normal = entity.normal.transform(world_transform)
+          return nil unless normal.x.to_f.abs < UNIT_EPSILON && normal.y.to_f.abs < UNIT_EPSILON &&
+                            normal.z.to_f.abs > 1.0 - UNIT_EPSILON
+
+          bounds = entity.bounds.transform(world_transform)
+          position = entity.vertices.first.position.transform(world_transform)
+          { 'point_mm' => point_mm(position), 'normal_mm' => [0.0, 0.0, 1.0],
+            'footprint_min_mm' => point_mm(bounds.min),
+            'footprint_max_mm' => point_mm(bounds.max) }
+        end
+
+        # A face whose LOCAL normal is vertical (either winding).
+        def placement_local_horizontal_face?(entity)
           normal = entity.respond_to?(:normal) ? entity.normal : nil
           normal.respond_to?(:z) && normal.x.to_f.abs < UNIT_EPSILON &&
             normal.y.to_f.abs < UNIT_EPSILON && normal.z.to_f.abs > 1.0 - UNIT_EPSILON

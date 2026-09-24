@@ -979,8 +979,8 @@ class PlacementPreviewControllerTest < Minitest::Test
   def test_wall_and_floor_compose_through_the_controller_tool_at_30_degrees
     mm = 25.4
     floor = @model.entities.add_face(
-      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(6000 / mm, 0, 0),
-       Geom::Point3d.new(6000 / mm, 4000 / mm, 0), Geom::Point3d.new(0, 4000 / mm, 0)]
+      [Geom::Point3d.new(-6000 / mm, -4000 / mm, 0), Geom::Point3d.new(6000 / mm, -4000 / mm, 0),
+       Geom::Point3d.new(6000 / mm, 4000 / mm, 0), Geom::Point3d.new(-6000 / mm, 4000 / mm, 0)]
     )
     floor.normal = Geom::Vector3d.new(0, 0, 1)
     normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
@@ -1019,6 +1019,58 @@ class PlacementPreviewControllerTest < Minitest::Test
     signed_wall = ((translation[0] - aim[0]) * normal[0]) + ((translation[1] - aim[1]) * normal[1])
     assert_in_delta 0.0, signed_wall, 1e-2, 'committed back corner on the wall plane'
     assert_in_delta 0.0, translation[2], 1e-2, 'committed base on the floor'
+  end
+
+  # Review r2 C: the base-plane scan recurses into Groups and Component
+  # instances with the ACCUMULATED world transform, and every plane keeps
+  # its FINITE world footprint — nested floors participate with their
+  # true world placement, a tilted container rejects, and the scan stays
+  # read-only.
+  def test_base_plane_provider_recurses_into_groups_and_components_with_world_transforms
+    mm = 25.4
+    # Floor nested in a Group translated to (1000, 2000, 50).
+    group = @model.entities.add_group
+    group.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(4000 / mm, 0, 0),
+       Geom::Point3d.new(4000 / mm, 4000 / mm, 0), Geom::Point3d.new(0, 4000 / mm, 0)]
+    )
+    group.transformation = Geom::Transformation.translation(
+      Geom::Vector3d.new(1000 / mm, 2000 / mm, 50 / mm)
+    )
+    # Equivalent floor inside a Component definition, instance at (3000, -500, 80).
+    definition = @model.definitions.add('Room fixture')
+    definition.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(4000 / mm, 0, 0),
+       Geom::Point3d.new(4000 / mm, 4000 / mm, 0), Geom::Point3d.new(0, 4000 / mm, 0)]
+    )
+    @model.entities.add_instance(
+      definition, Geom::Transformation.translation(Geom::Vector3d.new(3000 / mm, -500 / mm, 80 / mm))
+    )
+    # A tilted container floors nothing: its faces leave the horizontal.
+    tilted = @model.entities.add_group
+    tilted.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(1000 / mm, 0, 0),
+       Geom::Point3d.new(1000 / mm, 1000 / mm, 0), Geom::Point3d.new(0, 1000 / mm, 0)]
+    )
+    tilted.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(1, 0, 0),
+      Geom::Vector3d.new(0, 0, 1), Geom::Vector3d.new(0, -1, 0)
+    )
+
+    before = @transport.requests.length
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    assert_equal before, @transport.requests.length, 'the nested scan is purely local'
+    by_z = planes.group_by { |plane| plane['point_mm'][2].round(3) }
+    assert_includes by_z.keys, 50.0, 'the group-nested floor participates with its world Z'
+    assert_includes by_z.keys, 80.0, 'the component-nested floor participates with its world Z'
+    refute_includes by_z.keys, 0.0, 'the tilted container offers no base plane'
+    group_plane = by_z[50.0].first
+    assert_in_delta 1000.0, group_plane['footprint_min_mm'][0], 1e-6, 'world footprint X min'
+    assert_in_delta 2000.0, group_plane['footprint_min_mm'][1], 1e-6, 'world footprint Y min'
+    assert_in_delta 1000.0 + 4000.0, group_plane['footprint_max_mm'][0], 1e-6
+    assert_in_delta 2000.0 + 4000.0, group_plane['footprint_max_mm'][1], 1e-6
+    assert_equal [0.0, 0.0, 1.0], group_plane['normal_mm']
   end
 
   # The provider scan is read-only: running it repeatedly issues no

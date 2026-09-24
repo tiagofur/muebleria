@@ -996,7 +996,11 @@ class FurniturePlacementToolTest < Minitest::Test
   def test_wall_and_floor_compose_through_the_tool_at_30_degrees
     normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
     aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0] # on the wall, near the floor
-    floor_planes = -> { [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0] }] }
+    floor_planes = lambda do
+      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+         'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+         'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
+    end
     placement_tool, = tool([aim, aim], faces: [ScriptedFace.new(normal), ScriptedFace.new(normal)],
                                        base_planes: floor_planes)
     move_cursor(placement_tool)
@@ -1031,7 +1035,9 @@ class FurniturePlacementToolTest < Minitest::Test
     calls = 0
     floor_planes = lambda do
       calls += 1
-      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0] }]
+      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+         'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+         'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
     end
     aim = [500.0, 500.0, 100.0]
     placement_tool, = tool([aim] * 4, faces: [ScriptedFace.new([0.5, Math.sqrt(3.0) / 2.0, 0.0]), nil, nil, nil],
@@ -1050,9 +1056,16 @@ class FurniturePlacementToolTest < Minitest::Test
 
   # A floor plane far below the cursor is NOT a candidate: a free pick
   # high above the ground keeps following the raw inference (#469
-  # increment 1 rule preserved — no hijack toward z=0).
+  # increment 1 rule preserved — no hijack toward z=0). The footprint
+  # COVERS the cursor, so the rejection can only come from Z distance;
+  # the mirrored case (close Z, distant XY footprint) is pinned at the
+  # engine level — both dimensions of spatial relevance are required.
   def test_distant_floor_plane_never_hijacks_a_free_pick
-    floor_planes = -> { [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0] }] }
+    floor_planes = lambda do
+      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+         'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+         'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
+    end
     placement_tool, = tool([[1000.0, 2000.0, 1000.0], [1000.0, 2000.0, 1000.0]],
                            base_planes: floor_planes)
     move_cursor(placement_tool)
@@ -1064,6 +1077,45 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_equal 1, @commits.length
     assert_equal [1000.0, 2000.0, 1000.0], point_mm(@commits.first, 0, 0, 0),
                  'free placement at the raw inference'
+  end
+
+  # Review r2 D: the base-plane snapshot revalidates at the click — a
+  # nested floor MOVED between preview and click commits against the
+  # FRESH plane; a floor DELETED before the click falls safe (the wall
+  # constraint survives, Z follows the fresh free inference).
+  def test_click_revalidates_base_planes_against_fresh_nested_state
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0]
+    live = [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+              'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+              'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
+    moved, = tool([aim, aim], faces: [ScriptedFace.new(normal), ScriptedFace.new(normal)],
+                              base_planes: -> { live })
+    move_cursor(moved)
+    assert moved.active_snap
+    assert_in_delta 0.0, point_mm(moved.current_transform, 0, 0, 0)[2], 1e-4
+
+    live.replace([{ 'point_mm' => [0.0, 0.0, 120.0], 'normal_mm' => [0.0, 0.0, 1.0],
+                    'footprint_min_mm' => [-10_000.0, -10_000.0, 120.0],
+                    'footprint_max_mm' => [10_000.0, 10_000.0, 120.0] }])
+    moved.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    assert_in_delta 120.0, point_mm(@commits.first, 0, 0, 0)[2], 1e-4,
+                    'the committed base uses the CURRENT (moved) floor plane'
+
+    erased, = tool([aim, aim], faces: [ScriptedFace.new(normal), ScriptedFace.new(normal)],
+                               base_planes: -> { live })
+    move_cursor(erased)
+    live.clear # the nested floor is deleted before the click
+    erased.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 2, @commits.length
+    committed = point_mm(@commits.last, 0, 0, 0)
+    signed_wall = ((committed[0] - aim[0]) * normal[0]) + ((committed[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-4, 'the wall constraint survives (fresh pick)'
+    assert_in_delta aim[2], committed[2], 1e-4, 'Z falls back to the fresh free inference'
+    assert_equal(%i[face], erased.active_snap[:components].map { |c| c[:kind] })
   end
 
   private

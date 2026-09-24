@@ -32,10 +32,32 @@ module Geom
     def to_a
       [x, y, z]
     end
+
+    # Host-faithful: Vector3d#transform applies the direction (3x3) part
+    # of a transformation — no translation, exactly like the real API.
+    def transform(transformation)
+      m = transformation.to_a
+      Vector3d.new(
+        (m[0] * x) + (m[1] * y) + (m[2] * z),
+        (m[4] * x) + (m[5] * y) + (m[6] * z),
+        (m[8] * x) + (m[9] * y) + (m[10] * z)
+      )
+    end
   end
 
   class BoundingBox
     attr_accessor :width, :height, :depth, :min, :max
+
+    # Host-faithful: BoundingBox#transform returns the axis-aligned box
+    # of the transformed corners.
+    def transform(transformation)
+      corners = [min.x, max.x].product([min.y, max.y]).product([min.z, max.z])
+                 .map { |(px, py), pz| Point3d.new(px, py, pz).transform(transformation) }
+      box = BoundingBox.new
+      box.min = Point3d.new(corners.map(&:x).min, corners.map(&:y).min, corners.map(&:z).min)
+      box.max = Point3d.new(corners.map(&:x).max, corners.map(&:y).max, corners.map(&:z).max)
+      box
+    end
 
     def initialize(width = 0.0, height = 0.0, depth = 0.0)
       @width = width
@@ -256,6 +278,17 @@ module SketchupStub
     def vertices
       @points.map { |point| VertexStub.new(point) }
     end
+
+    # Host-faithful: Face#bounds is the face's box in its own container
+    # coordinates (memoized — stub points never move after creation).
+    def bounds
+      @bounds ||= begin
+        box = Geom::BoundingBox.new
+        box.min = Geom::Point3d.new(@points.map(&:x).min, @points.map(&:y).min, @points.map(&:z).min)
+        box.max = Geom::Point3d.new(@points.map(&:x).max, @points.map(&:y).max, @points.map(&:z).max)
+        box
+      end
+    end
   end
 
   # Host-faithful Vertex surface for face-derived scans.
@@ -422,6 +455,12 @@ module SketchupStub
       # definition box and tests may override per instance).
       @bounds = definition.bounds
       @persistent_id = SketchupStub.next_persistent_id
+    end
+
+    # Host-faithful: ComponentInstance#entities exposes the definition's
+    # entities (nested scans traverse instances like the real API).
+    def entities
+      @definition.entities
     end
 
     def valid?

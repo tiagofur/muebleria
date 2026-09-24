@@ -173,13 +173,20 @@ module Granete
         # is not semantic authority, and a geometrically identical floor
         # can be reversed (−Z): both are the same base plane. Rotation is
         # unconstrained — the floor never reorients, and a free pick away
-        # from any face is never hijacked toward z=0.
+        # from any face is never hijacked toward z=0. A base plane with a
+        # FOOTPRINT (the snapshot-scan shape) is spatially FINITE: the
+        # cursor must also be within TOLERANCE of the footprint interval
+        # on both XY axes, so a platform that is merely close in Z but
+        # meters away in XY is NOT a candidate. Footprint-less planes
+        # (the picked-face path) stay infinite: the pick is on the face
+        # by construction.
         def floor_candidates(faces, context)
           candidates = faces.filter_map do |plane|
             normal = normal_of(plane)
             next nil unless normal && normal.length == 3 &&
                             normal[0].abs < AXIS_EPSILON && normal[1].abs < AXIS_EPSILON &&
                             ((normal[2].abs - 1.0).abs < AXIS_EPSILON)
+            next nil unless near_footprint?(context[:cursor_mm], plane)
 
             z = point_of(plane)[2]
             build_candidate(
@@ -190,6 +197,20 @@ module Granete
             )
           end
           candidates.uniq { |candidate| candidate[:key] }
+        end
+
+        # Finite-footprint proximity for base planes: distance from the
+        # cursor to the world XY interval of the plane's footprint,
+        # clamped per axis (0 while inside). nil footprint = no finite
+        # bound declared (picked-face path).
+        def near_footprint?(cursor_mm, plane)
+          min = vector_field(plane, :footprint_min_mm, 'footprint_min_mm')
+          max = vector_field(plane, :footprint_max_mm, 'footprint_max_mm')
+          return true unless min && max
+
+          [0, 1].all? do |axis|
+            interval_distance(cursor_mm[axis], min[axis], max[axis]) <= TOLERANCE_MM
+          end
         end
 
         # Granete-managed furniture sides at ANY yaw around Z. Targets
