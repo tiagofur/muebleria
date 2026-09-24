@@ -1073,6 +1073,39 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_equal [0.0, 0.0, 1.0], group_plane['normal_mm']
   end
 
+  # Review r4 P1: the base-plane scan NEVER descends into a Granete
+  # furniture root (managed metadata kind == furnitureInstance — the
+  # placed cabinet's bottom board, shelves and tops are furniture, not
+  # room floors, and must not beat the architectural floor by a shorter
+  # Z distance). The architectural floor still participates.
+  def test_base_planes_prune_granete_furniture_and_keep_the_architectural_floor
+    mm = 25.4
+    @model.entities.add_face(
+      [Geom::Point3d.new(-6000 / mm, -4000 / mm, 0), Geom::Point3d.new(6000 / mm, -4000 / mm, 0),
+       Geom::Point3d.new(6000 / mm, 4000 / mm, 0), Geom::Point3d.new(-6000 / mm, 4000 / mm, 0)]
+    )
+    furniture = add_managed_root('fi-neighbor', 'Bajo (fi-neighbor)',
+                                 [0.0, 0.0, 0.0], [600.0 / mm, 560.0 / mm, 720.0 / mm])
+    definition = furniture.definition
+    # The placed cabinet's own horizontal faces: bottom board (z=0),
+    # shelf (z=400) and top (z=720).
+    [[0.0], [400.0], [720.0]].each do |(z)|
+      definition.entities.add_face(
+        [Geom::Point3d.new(0, 0, z / mm), Geom::Point3d.new(600 / mm, 0, z / mm),
+         Geom::Point3d.new(600 / mm, 560 / mm, z / mm), Geom::Point3d.new(0, 560 / mm, z / mm)]
+      )
+    end
+
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    plane_zs = planes.map { |plane| plane['point_mm'][2] }.map(&:round)
+    assert_equal [0], plane_zs.uniq,
+                 'ONLY the architectural floor participates: the furniture board/shelf/top never emit base planes'
+    assert_equal 1, planes.length
+    assert_in_delta(-6000.0, planes.first['footprint_min_mm'][0], 1e-6,
+                    'the surviving plane is the wide architectural floor')
+  end
+
   # The provider scan is read-only: running it repeatedly issues no
   # transport request (cursor-loop safety).
   def test_provider_scan_issues_no_requests

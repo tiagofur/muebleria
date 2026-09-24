@@ -199,10 +199,13 @@ module Granete
           candidates.uniq { |candidate| candidate[:key] }
         end
 
-        # Finite-footprint proximity for base planes: distance from the
-        # cursor to the world XY interval of the plane's footprint,
-        # clamped per axis (0 while inside). nil footprint = no finite
-        # bound declared (picked-face path).
+        # Bounding-rectangle proximity for base planes: distance from the
+        # cursor to the world XY min/max interval of the plane's
+        # footprint (a BOUNDING-RECTANGLE APPROXIMATION of the face's
+        # extent — concavities/holes are conservatively included; exact
+        # polygon-aware footprints are remaining #469 scope), clamped
+        # per axis (0 while inside). nil footprint = no finite bound
+        # declared (picked-face path).
         def near_footprint?(cursor_mm, plane)
           min = vector_field(plane, :footprint_min_mm, 'footprint_min_mm')
           max = vector_field(plane, :footprint_max_mm, 'footprint_max_mm')

@@ -76,9 +76,9 @@ it lands, wall/face snapping is not "complete".
 
 - `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle; env pin
   per memory) at the frozen candidate: RuboCop 228 files 0 offenses;
-  1101 unit runs / 7215 assertions, 0 failures; 6 boundary runs / 3359
+  1104 unit runs / 7223 assertions, 0 failures; 6 boundary runs / 3359
   assertions; RBZ deterministic readback, sha256
-  `ea307aa21cd8da4867f1bd3a3dbca2931a32997eae3ada4271996c8b83f640c5`.
+  `b119808183ff9a92f2dd39a72d39d1d4ab815d17ab4aa12ab222e4ed28424ea2`.
 - New `host_stub_faithfulness_test.rb` (3 runs, review r3 negative
   proof): the stub must never re-expose `Geom::BoundingBox#transform`
   nor `ComponentInstance#entities` — APIs the REAL host does not have;
@@ -166,6 +166,30 @@ it lands, wall/face snapping is not "complete".
    inventadas. Se preservan footprint finito, transforms acumulados,
    1 snapshot por gesto, 1 refresh en click y cero backend por mouse
    move.
+
+### Review corrections (ronda 4 sobre el candidato, mismo PR)
+
+1. **P1 — el scan de base planes NO desciende dentro de muebles
+   Granete**: todo Group/ComponentInstance cuyo metadata marque
+   `kind == furnitureInstance` (conectado o local) se PODA de la
+   recursión — los boards/estantes/tapas/herrajes de un mueble colocado
+   son mueble, no pisos de habitación, y no pueden convertirse en
+   candidatos "Piso" que le ganen al piso arquitectónico por menor
+   distancia Z. Regresión: mueble vecino con bottom board (z=0),
+   estante (z=400) y tapa (z=720) → ninguna cara horizontal suya emite
+   base plane; el piso arquitectónico cercano sí (y es el único). Se
+   preservan groups/components arquitectónicos anidados, transform
+   acumulado, footprint finito y el presupuesto 1/gesto + 1/click.
+2. **P2 — footprint documentado como aproximación**: el criterio actual
+   es una APROXIMACIÓN POR RECTÁNGULO DELIMITADOR (min/max XY de los
+   vértices mundiales) — conservadora ante caras cóncavas, L-shapes y
+   agujeros (los puntos del notch quedan incluidos; pinneado
+   explícitamente en el test del engine para que el cambio a un
+   footprint polygon-aware sea deliberado). SCOPE RESTANTE CONCRETO de
+   #469: reemplazar el bounding-rectangle por un footprint poligonal
+   real (loops con holes / prueba point-in-face o proximidad
+   equivalente). El código y el PR NO lo describen como footprint
+   exacto.
 
 ## Scope separation from parallel work (coordination registry)
 

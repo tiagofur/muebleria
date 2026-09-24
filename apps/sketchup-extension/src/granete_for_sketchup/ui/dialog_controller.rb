@@ -1058,7 +1058,7 @@ module Granete
             entities = model.respond_to?(:entities) ? model.entities : nil
             return [] unless entities.respond_to?(:each)
 
-            scan_base_planes(entities, Geom::Transformation.new)
+            scan_base_planes(entities, Geom::Transformation.new, @metadata_store_factory.call(model))
           end
         end
 
@@ -1066,34 +1066,54 @@ module Granete
         # containers recurse with the accumulated transform (parent *
         # child, SketchUp composition semantics) so room fixtures nested
         # inside Groups/Components participate with their true world
-        # placement. HOST-FAITHFUL access (a real ComponentInstance has
-        # no #entities — its content lives on the definition):
+        # placement. GRANETE FURNITURE ROOTS ARE PRUNED (managed
+        # metadata kind == furnitureInstance, connected or local): a
+        # placed cabinet's boards/shelves/tops are furniture, not room
+        # floors — they must never become "Piso" candidates that beat
+        # the architectural floor by a shorter Z distance. HOST-FAITHFUL
+        # access (a real ComponentInstance has no #entities — its
+        # content lives on the definition):
         #   Group              → entity.entities
         #   ComponentInstance  → entity.definition.entities
-        def scan_base_planes(entities, world_transform)
+        def scan_base_planes(entities, world_transform, metadata_store)
           planes = []
           entities.each do |entity|
             case entity
             when ::Sketchup::Face
               plane = placement_face_world_plane(entity, world_transform)
               planes << plane if plane
-            when ::Sketchup::Group
-              planes.concat(scan_base_planes(entity.entities, world_transform * entity.transformation))
-            when ::Sketchup::ComponentInstance
-              planes.concat(scan_base_planes(entity.definition.entities,
-                                             world_transform * entity.transformation))
+            when ::Sketchup::Group, ::Sketchup::ComponentInstance
+              next if granete_furniture_root?(entity, metadata_store)
+
+              child_entities = entity.is_a?(::Sketchup::Group) ? entity.entities : entity.definition.entities
+              planes.concat(scan_base_planes(child_entities,
+                                             world_transform * entity.transformation, metadata_store))
             end
           end
           planes
         end
 
+        # True when the entity's Granete metadata marks it as a managed
+        # furniture root (kind == furnitureInstance) — connected or
+        # local. The furniture's own geometry never contributes base
+        # planes.
+        def granete_furniture_root?(entity, metadata_store)
+          metadata = metadata_store.respond_to?(:read) ? metadata_store.read(entity) : nil
+          metadata.is_a?(Hash) && metadata['kind'] == 'furnitureInstance'
+        end
+
         # One horizontal face as a WORLD base-plane descriptor: the world
         # normal must stay vertical (a tilted container tilts its floors
-        # — rejected), and the plane carries the face's FINITE world
-        # footprint (the transformed VERTEX positions folded to a world
-        # XY interval — the real Geom::BoundingBox has no #transform to
-        # lean on) plus a world plane point, so the engine never treats
-        # a distant platform as an infinite floor.
+        # — rejected), and the plane carries a BOUNDING-RECTANGLE
+        # APPROXIMATION of its world extent (the transformed VERTEX
+        # positions folded to a world XY min/max interval — the real
+        # Geom::BoundingBox has no #transform to lean on) plus a world
+        # plane point, so the engine never treats a distant platform as
+        # an infinite floor. APPROXIMATION, NOT EXACT: concave faces,
+        # L-shapes, holes and notches are covered by their bounding
+        # rectangle (conservative over-inclusion near the notch);
+        # polygon-aware footprints (loops with holes) are remaining
+        # #469 scope.
         def placement_face_world_plane(entity, world_transform)
           return nil unless placement_local_horizontal_face?(entity)
           return nil unless placement_world_normal_vertical?(entity.normal, world_transform)

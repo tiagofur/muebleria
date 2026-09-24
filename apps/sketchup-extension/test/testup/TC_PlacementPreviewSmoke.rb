@@ -473,17 +473,18 @@ module Granete
       # wall and the floor COMPOSE through the real tool.
       def base_planes_provider
         lambda do
-          scan_base_planes(model.entities, Geom::Transformation.new)
+          scan_base_planes(model.entities, Geom::Transformation.new, Metadata::Store.new(model))
         end
       end
 
       # Horizontal host faces (either winding, nested containers included
       # via the accumulated world transform — Group#entities vs
-      # ComponentInstance#definition.entities, HOST-FAITHFUL) as FINITE
-      # base planes (vertex-derived world footprint) — mirrors the
-      # controller scan so the picked wall and the floor COMPOSE through
-      # the real tool.
-      def scan_base_planes(entities, world_transform)
+      # ComponentInstance#definition.entities, HOST-FAITHFUL; Granete
+      # furniture roots PRUNED by managed metadata kind) as base planes
+      # with a BOUNDING-RECTANGLE world footprint approximation —
+      # mirrors the controller scan so the picked wall and the floor
+      # COMPOSE through the real tool.
+      def scan_base_planes(entities, world_transform, metadata_store)
         mm = 25.4
         planes = []
         entities.each do |entity|
@@ -501,11 +502,13 @@ module Granete
             max = [0, 1, 2].map { |axis| positions.map { |point| point[axis] }.max }
             planes << { 'point_mm' => positions.first, 'normal_mm' => [0.0, 0.0, 1.0],
                         'footprint_min_mm' => min, 'footprint_max_mm' => max }
-          when Sketchup::Group
-            planes.concat(scan_base_planes(entity.entities, world_transform * entity.transformation))
-          when Sketchup::ComponentInstance
-            planes.concat(scan_base_planes(entity.definition.entities,
-                                           world_transform * entity.transformation))
+          when Sketchup::Group, Sketchup::ComponentInstance
+            metadata = metadata_store.read(entity)
+            next if metadata.is_a?(Hash) && metadata['kind'] == 'furnitureInstance'
+
+            children = entity.is_a?(Sketchup::Group) ? entity.entities : entity.definition.entities
+            planes.concat(scan_base_planes(children,
+                                           world_transform * entity.transformation, metadata_store))
           end
         end
         planes

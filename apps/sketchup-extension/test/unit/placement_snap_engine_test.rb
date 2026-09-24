@@ -239,6 +239,25 @@ class PlacementSnapEngineTest < Minitest::Test
     assert_nil solve(cursor_mm: [1000.0, 2000.0, 30.0])
   end
 
+  # Review r4 P2 (documented approximation): the base-plane footprint is
+  # a BOUNDING-RECTANGLE approximation of the face's world extent. A
+  # cursor hovering inside the notch of an L-shaped platform (inside the
+  # bounding rectangle, outside the physical polygon) still snaps —
+  # conservative over-inclusion, pinned here so the future
+  # polygon-aware footprint (loops with holes) changes this
+  # DELIBERATELY, not by accident.
+  def test_base_plane_footprint_is_a_bounding_rectangle_approximation
+    l_shape_bounding_rectangle = { point_mm: [0.0, 0.0, 0.0], normal_mm: [0.0, 0.0, 1.0],
+                                   'footprint_min_mm' => [0.0, 0.0, 0.0],
+                                   'footprint_max_mm' => [1000.0, 1000.0, 0.0] }
+    # Hover in the notch: x,y = 750,750 — inside the rectangle, outside
+    # the L's physical polygon.
+    solution = solve(cursor_mm: [750.0, 750.0, 30.0], faces: [l_shape_bounding_rectangle])
+
+    refute_nil solution, 'notch points are conservatively INCLUDED (bounding-rectangle approximation)'
+    assert_in_delta 0.0, solution[:anchor_mm][2], 1e-9
+  end
+
   # Review r2 A: a footprint-bearing base plane is spatially FINITE — a
   # platform whose Z is close but whose XY footprint is METERS away is
   # NOT a candidate, while the same plane whose footprint covers the
