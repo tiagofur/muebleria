@@ -230,3 +230,15 @@ recovery source of truth.
 - Publication completeness for #823 requires the leader's reconciliation of
   remaining issue acceptance against #835/#837 and exact-head checks; this
   candidate alone is not a self-approval or incident-resolution claim.
+- T2 behavior work-unit commit: `96c210594c24d75f10f49a00766129b62a1c70bf`
+  against base `6184b4d2d36c5c73e3fbcabde2c2785e5335e565`. It contains
+  492 additions and 69 deletions (561 authored lines) across product,
+  regressions, canonical documentation, and this existing task artifact. The
+  human-approved `size:exception` keeps the guard and its proofs together.
+- Direct Playwright limitation: the config and globalSetup now reject an
+  overridden fixture URL, but a deliberately forged standalone environment
+  could still provide markers plus a valid-looking fixture URL while directing
+  `ORGANIZATION_API_BASE` at another backend. No API-to-DB identity attestation
+  was added in T2. The canonical launcher builds both URLs from its disposable
+  container and supplies its own API base; do not generalize that proof to an
+  independently fabricated direct invocation.
