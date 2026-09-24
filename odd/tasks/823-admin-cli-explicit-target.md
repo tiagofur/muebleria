@@ -45,7 +45,7 @@ before the next commit; do not code-golf or silently assume `size:exception`.
 
 ## Tasks
 
-- [ ] **T1 — Fail closed at the admin CLI boundary.** Add a safe RED regression
+- [x] **T1 — Fail closed at the admin CLI boundary.** Add a safe RED regression
   for missing, empty, malformed, and `DATABASE_URL`-only configuration without
   connecting to the habitual database. Make `openStore` resolve and validate the
   explicit admin DSN before `NewPostgresStore`/Ping; reuse #835's test isolation
@@ -53,7 +53,7 @@ before the next commit; do not code-golf or silently assume `size:exception`.
   help, and the real invocation boundary. Keep explicit legitimate manual DSNs.
   Route: delegated writer; evidence: mapping and multi-file Go/test/docs work.
   Checks: focused DB-free RED/GREEN Go tests and syntax/build checks. Commit:
-  pending. Review: disabled/unmanaged.
+  `06694bc5c6bdfc62f35b7e9164795d7ad0576e0a`. Review: disabled/unmanaged.
 - [ ] **T2 — Guard the disposable browser preparation children.** Add safe RED
   coverage for absent marker/incomplete DSNs and child environment forwarding.
   Before server migration and each admin child, prove the exact disposable
@@ -67,10 +67,10 @@ before the next commit; do not code-golf or silently assume `size:exception`.
 
 ## Acceptance and verification record
 
-- [ ] Missing/empty/invalid admin DSN and `DATABASE_URL`-only fail before connect.
+- [x] Missing/empty/invalid admin DSN and `DATABASE_URL`-only fail before connect.
 - [ ] Test marker absent/incomplete or persistent DSNs cannot provision.
 - [ ] Exact valid disposable runtime/admin DSNs reach the intended children.
-- [ ] CLI errors redact credentials; help and docs name the same contract.
+- [x] CLI errors redact credentials; help and docs name the same contract.
 - [ ] Real disposable PostgreSQL positive passes; no persistent DB access.
 - [ ] Fresh independent review and exact HEAD/base checks before publication.
 
@@ -104,5 +104,8 @@ recovery source of truth.
 - Rollback boundary: revert this T1 work unit only (`backend-go/cmd/admin/main.go`,
   `backend-go/cmd/admin/database_target_test.go`, and the T1 documentation
   paragraph); no browser preparation behavior is included.
-- Commit: pending; the next bookkeeping commit will record the behavior
-  commit's exact SHA after it exists.
+- Behavior commit: `06694bc5c6bdfc62f35b7e9164795d7ad0576e0a`.
+  The isolated branch had 303 authored changed lines at this commit,
+  including this task document. The original 350-line feature forecast is
+  likely low; apply `ask-on-risk` before a later work-unit commit if the
+  projected running total crosses about 400. T2 remains open.
