@@ -9,16 +9,21 @@ module Granete
         # entities, but the authority here is furnitureInstanceId — searching
         # by it also proves duplicate roots fail loud (#391 preview) instead
         # of silently counting two business units.
+        # #469 increment 4: roots WITHOUT server identity (local catalog
+        # inserts) are indexed under :local_by_ref by their local
+        # instanceRef — never promoted to furnitureInstanceId — so semantic
+        # snapping can target placed local furniture too.
         module ManagedFurniture
           module_function
 
           # Reads every top-level entity exactly once and groups roots by the
-          # server-owned furnitureInstanceId. The returned index also keeps
-          # incompatible managed roots explicit so host reconciliation can
-          # fail closed instead of silently treating corrupt metadata as
-          # absence.
+          # server-owned furnitureInstanceId (plus the local instanceRef
+          # stream). The returned index also keeps incompatible managed
+          # roots explicit so host reconciliation can fail closed instead of
+          # silently treating corrupt metadata as absence.
           def index(model, metadata_store)
-            result = { by_id: Hash.new { |hash, key| hash[key] = [] }, invalid: [] }
+            result = { by_id: Hash.new { |hash, key| hash[key] = [] },
+                       local_by_ref: Hash.new { |hash, key| hash[key] = [] }, invalid: [] }
             return result unless model.respond_to?(:entities)
 
             # rubocop:disable-next SketchupSuggestions/ModelEntities
@@ -29,9 +34,7 @@ module Granete
               identity = metadata['identity']
               furniture_id = identity.is_a?(Hash) ? identity['furnitureInstanceId'] : nil
               if !furniture_id.is_a?(String) || furniture_id.strip.empty?
-                if metadata['kind'] == 'furnitureInstance'
-                  result[:invalid] << { entity: entity, reason: 'missing_furniture_instance_id' }
-                end
+                index_local_root(result, entity, metadata, identity)
                 next
               end
 
@@ -40,6 +43,23 @@ module Granete
               result[:invalid] << { entity: entity, reason: 'unreadable_metadata' }
             end
             result
+          end
+
+          # A managed furnitureInstance root with NO server identity stays
+          # in :invalid for the server lanes exactly as before (a bound
+          # model's reconciliation/design-sync must keep failing closed on
+          # local furniture — never silently ignore it) AND enters
+          # :local_by_ref under its local instanceRef so semantic snapping
+          # (#469) can target placed local furniture. The instanceRef is
+          # the compat locator, never a promoted business identity.
+          def index_local_root(result, entity, metadata, identity)
+            return unless metadata['kind'] == 'furnitureInstance'
+
+            local_ref = identity.is_a?(Hash) ? identity['instanceRef'] : nil
+            if local_ref.is_a?(String) && !local_ref.strip.empty?
+              result[:local_by_ref][local_ref] << { entity: entity, metadata: metadata }
+            end
+            result[:invalid] << { entity: entity, reason: 'missing_furniture_instance_id' }
           end
 
           # Returns { 'entity' => entity|nil, 'duplicates' => count } for the

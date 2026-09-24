@@ -708,12 +708,21 @@ module Granete
         # #469 — Biblioteca (connected #390 lane): same shared tool; NO
         # backend identity is minted here — the FurnitureInstance is created
         # canonically only inside the commit gesture.
+        # Increment 4: an UNBOUND model takes the LOCAL lane through this
+        # same entry point — the connection determines identity/persistence,
+        # never the placement interaction. A bound model in a non-connected
+        # state still fails closed through the connected lane (a
+        # project-bound model never silently receives local furniture).
         def handle_begin_catalog_placement_preview(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           definition_id = payload['definitionId'].to_s
           return if respond_placement_preview_busy(dialog, 'definitionId' => definition_id)
 
           model = active_model
+          if placement_binding_triple(model).nil?
+            return begin_local_catalog_placement_preview(dialog, payload, definition_id, model)
+          end
+
           prepared = begin_catalog_preview_preparation(payload, definition_id)
           unless prepared['ok']
             execute_bridge(dialog, 'onPlacementPreviewStarted', prepared)
@@ -829,6 +838,184 @@ module Granete
         ensure
           @placement_preview_committing = false
           clear_placement_preview(session) if gesture_live
+        end
+
+        # #469 increment 4 — local/disconnected Biblioteca lane: the model
+        # is NOT bound to a project, so the placement keeps LOCAL semantics
+        # (instanceRef identity, no FurnitureInstance, no working-copy PUT).
+        # The interaction is IDENTICAL to the connected lanes — the SAME
+        # shared tool built by the SAME controller authority (extents,
+        # snap providers, gesture guards); only the commit differs.
+        def begin_local_catalog_placement_preview(dialog, payload, definition_id, model)
+          prepared = local_catalog_preview_preparation(payload, definition_id)
+          unless prepared['ok']
+            execute_bridge(dialog, 'onPlacementPreviewStarted', prepared)
+            return
+          end
+
+          session = placement_preview_session('catalog_local', definition_id, model, prepared)
+          session['payload'] = payload
+          tool = build_placement_preview_tool(
+            label: prepared['definition']['name'], extents_mm: prepared['extents'],
+            on_commit: ->(transform) { handle_commit_local_catalog_preview(dialog, session['gesture_id'], transform) },
+            on_cancel: lambda { |reason|
+              handle_placement_preview_cancelled(dialog, definition_id, 'definitionId',
+                                                 session['gesture_id'], reason)
+            },
+            model: model
+          )
+          return unless activate_placement_preview(dialog, session, tool, 'definitionId' => definition_id)
+
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => true, 'code' => 'preview_active', 'definitionId' => definition_id })
+        rescue StandardError => e
+          @logger.error('local_catalog_preview_begin_failed', error: e)
+          execute_bridge(dialog, 'onPlacementPreviewStarted',
+                         { 'ok' => false, 'code' => 'error', 'definitionId' => definition_id,
+                           'reason' => e.message })
+        end
+
+        # Local-lane preparation: definition + composition WITHOUT any
+        # project binding. The composition authority is the resolvable
+        # server layout when the catalog can resolve one (the SAME
+        # dimensionsMm/layout_signature contract as the connected lane) or,
+        # offline, the generic authoring composition (normalized parameters
+        # — the exact values the commit's generic renderer consumes). One
+        # resolve HERE, outside the cursor loop; never per mouse event.
+        def local_catalog_preview_preparation(payload, definition_id)
+          definition = @catalog_provider.find_definition(definition_id)
+          unless definition
+            return { 'ok' => false, 'code' => 'definition_unavailable',
+                     'reason' => 'el catálogo del taller no incluye la definición de este mueble',
+                     'definitionId' => definition_id }
+          end
+
+          composition = local_catalog_composition(payload, definition)
+          extents = if composition['layout']
+                      Tools::FurniturePlacementTool.extents_from_layout(composition['layout'])
+                    else
+                      Model::GenericAuthoringRenderer.generic_extents(composition['parameters'])
+                    end
+          if extents.nil? || composition['layout_signature'].nil?
+            return { 'ok' => false, 'code' => 'preview_unavailable',
+                     'reason' => 'la composición resuelta no publicó dimensiones utilizables para la vista previa',
+                     'definitionId' => definition_id }
+          end
+
+          { 'ok' => true, 'code' => 'preview_ready', 'definition' => definition,
+            'parameters' => composition['parameters'], 'layout' => composition['layout'],
+            'layout_signature' => composition['layout_signature'], 'extents' => extents }
+        end
+
+        # The local lane's composition at one point in time: normalized
+        # parameters (the generic renderer's complete input) plus the
+        # best-effort authoritative layout. The SAME function runs at begin
+        # and at the click — its signature is what the commit compares.
+        def local_catalog_composition(payload, definition)
+          parameters = Model::FurnitureIntent.normalize_parameters(definition, payload['parameters'] || {})
+          layout = resolve_layout_for(definition, payload['parameters'], payload['materialChoices'])
+          signature = if layout
+                        Connection::ProjectFurniture::PlacementGuards.layout_signature(layout)
+                      else
+                        local_generic_signature(definition, parameters)
+                      end
+          { 'parameters' => parameters, 'layout' => layout, 'layout_signature' => signature }
+        end
+
+        # Offline composition digest: definition identity + declared schema
+        # + the normalized parameters. Any catalog drift between preview
+        # and click changes it and the local commit fails closed — the
+        # accepted transform never lands against a different composition.
+        def local_generic_signature(definition, parameters)
+          [
+            definition['furniture_definition_id'],
+            definition['definition_version'] || definition['definitionVersion'] || definition['version'],
+            (definition['parameters'] || []).map { |p| "#{p['name']}@#{p['defaultValue']}" }.join(','),
+            parameters.map { |name, value| "#{name}=#{value}" }.sort.join(',')
+          ].join('|')
+        end
+
+        # #469 increment 4 — the local-lane click: ONE builder commit at
+        # the accepted transform with LOCAL semantics (instanceRef, no
+        # FurnitureInstance, no working-copy PUT, no convergence). The
+        # gesture must still match the captured session (model + binding)
+        # and the composition must still answer the previewed signature —
+        # anything else fails closed BEFORE the model is touched.
+        def handle_commit_local_catalog_preview(dialog, gesture_id, transformation)
+          session = @active_placement_preview
+          gesture_live = false
+          return if placement_preview_reentry?(session, 'catalog_local', session && session['key'], gesture_id)
+
+          gesture_live = true
+          unless placement_preview_gesture_context_ok?(dialog, session, 'onInsertionResult',
+                                                       'definitionId' => session['key'])
+            clear_placement_preview(session)
+            return
+          end
+
+          inputs = local_catalog_commit_inputs(session)
+          clear_placement_preview(session)
+          if inputs[:code]
+            answer_local_preview_failure(dialog, session['key'], inputs[:code], inputs[:reason])
+            return
+          end
+
+          @placement_preview_committing = true
+          run_local_catalog_insert(dialog, session, inputs, transformation)
+        rescue StandardError => e
+          @logger.error('local_catalog_preview_commit_failed', error: e)
+          execute_bridge(dialog, 'onInsertionResult',
+                         { 'ok' => false, 'success' => false, 'code' => 'error',
+                           'definitionId' => session && session['key'],
+                           'error' => e.message, 'reason' => e.message })
+        ensure
+          @placement_preview_committing = false
+          clear_placement_preview(session) if gesture_live
+        end
+
+        # The productive local commit itself: ONE builder insert at the
+        # accepted transform, answered on the library insert channel with
+        # placed_via_preview so the UI never advertises a Move handoff.
+        def run_local_catalog_insert(dialog, session, inputs, transformation)
+          result = furniture_builder_for(active_model).insert_furniture(
+            active_model, inputs[:definition], session['payload']['parameters'] || {},
+            resolved_layout: inputs[:composition]['layout'],
+            material_choices: session['payload']['materialChoices'],
+            transformation: transformation, prepare: false
+          )
+          result['ok'] = result['success']
+          result['placed_via_preview'] = true
+          result['definitionId'] = session['key']
+          execute_bridge(dialog, 'onInsertionResult', result)
+          log_operation_result('furniture_inserted', session['key'], result)
+        end
+
+        # The local commit's inputs, resolved fresh at the click: the
+        # definition must still exist and the recomputed composition must
+        # still answer the previewed signature. A :code key means the
+        # correlated failure to answer instead of inputs.
+        def local_catalog_commit_inputs(session)
+          definition = @catalog_provider.find_definition(session['key'].to_s)
+          unless definition
+            return { code: 'definition_unavailable',
+                     reason: 'la definición ya no está disponible en el catálogo' }
+          end
+
+          composition = local_catalog_composition(session['payload'] || {}, definition)
+          if composition['layout_signature'] != session['layout_signature']
+            return { code: 'composition_changed',
+                     reason: 'la composición del mueble cambió desde la vista previa; generála de nuevo' }
+          end
+
+          { definition: definition, composition: composition }
+        end
+
+        # Local-lane failures answer the legacy insert result channel the
+        # library entry point listens to — correlated, honest, re-arming.
+        def answer_local_preview_failure(dialog, definition_id, code, reason)
+          execute_bridge(dialog, 'onInsertionResult',
+                         { 'ok' => false, 'success' => false, 'code' => code,
+                           'definitionId' => definition_id, 'error' => reason, 'reason' => reason })
         end
 
         # Esc / tool switch / dialog close: the tool mutated nothing, so
@@ -949,11 +1136,17 @@ module Granete
           true
         end
 
-        # Combined gesture-context guard: model + binding + authenticated
-        # context must all match the captured gesture.
+        # Combined gesture-context guard: model + binding must always match
+        # the captured gesture; the authenticated-context guard applies to
+        # the lanes whose commit talks to the server. The LOCAL lane
+        # (#469 increment 4) commits with no server-owned identity — its
+        # safety net is the composition signature comparison, so an unknown
+        # auth context cannot block it (the connection determines
+        # identity/persistence, never the placement interaction).
         def placement_preview_gesture_context_ok?(dialog, session, bridge_method, key_fields)
           placement_preview_context_ok?(dialog, session, bridge_method, key_fields) &&
-            placement_preview_auth_ok?(dialog, session, bridge_method, key_fields)
+            (session['kind'] == 'catalog_local' ||
+             placement_preview_auth_ok?(dialog, session, bridge_method, key_fields))
         end
 
         # Exact-context guard: the click must land on the SAME model and
@@ -1200,21 +1393,30 @@ module Granete
         # SERVER identity through ManagedFurniture metadata — never by
         # component name/GUID — and the scan is local/read-only (no
         # request, no mutation), so it is safe inside the cursor loop.
-        # Ambiguous roots (duplicated furnitureInstanceId), erased
-        # entities, non-rigid frames and units without a PERSISTED
-        # placement envelope offer no candidate: an unsafe target fails
-        # closed instead of guessing.
+        # #469 increment 4: placed LOCAL furniture (instanceRef identity,
+        # no furnitureInstanceId) joins the same stream under its local
+        # ref — no server identity is invented to earn snapping. Ambiguous
+        # roots (duplicated identity in either stream), erased entities,
+        # non-rigid frames and units without a PERSISTED placement
+        # envelope offer no candidate: an unsafe target fails closed
+        # instead of guessing.
         def placement_furniture_targets_provider(model)
           lambda do
             metadata_store = @metadata_store_factory.call(model)
             index = Connection::ProjectFurniture::ManagedFurniture.index(
               model, metadata_store
             )
-            index[:by_id].flat_map do |furniture_instance_id, entries|
+            server_targets = index[:by_id].flat_map do |furniture_instance_id, entries|
               next [] if entries.length != 1
 
               placement_target_descriptor(furniture_instance_id, entries.first[:entity], metadata_store)
             end
+            local_targets = index[:local_by_ref].flat_map do |instance_ref, entries|
+              next [] if entries.length != 1
+
+              placement_target_descriptor(instance_ref, entries.first[:entity], metadata_store)
+            end
+            server_targets + local_targets
           end
         end
 
