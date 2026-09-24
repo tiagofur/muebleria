@@ -122,6 +122,20 @@ ROLE_FLAGS="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate \
   -c "SELECT rolcanlogin, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'granete_app'")"
 [ "${ROLE_FLAGS}" = 't|f|f' ] || fail "runtime role must be LOGIN, NOSUPERUSER, NOBYPASSRLS"
 
+# The marker belongs to this disposable database, not to a process env value.
+# The backend later reads it through its runtime pool; Playwright reads it
+# independently through the fixture connection before any setup write.
+GATE_DB_MARKER="$(openssl rand -hex 32)"
+docker exec "${CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d granete_gate \
+  -c "ALTER DATABASE granete_gate SET granete.browser_gate_identity = '${GATE_DB_MARKER}'" >/dev/null \
+  || fail "disposable database identity could not be established"
+GATE_DB_IDENTITY_SHA256="$(python3 - "${GATE_DB_MARKER}" <<'PY'
+import hashlib, sys
+print(hashlib.sha256(sys.argv[1].encode()).hexdigest())
+PY
+)"
+unset GATE_DB_MARKER
+
 GATE_SERVER_ENV=("${GATE_BASE_ENV[@]}"
   JWT_SECRET="${JWT_SECRET}" REFRESH_TOKEN_PEPPER="${REFRESH_TOKEN_PEPPER}"
   MEDIA_SIGNING_KEY="${MEDIA_SIGNING_KEY}" MFA_ENCRYPTION_KEY="${MFA_ENCRYPTION_KEY}"
@@ -190,6 +204,7 @@ PY
 # only; the verified FLOW always goes through the real API.
 GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
   ORGANIZATION_TEST_DATABASE_URL="${ORGANIZATION_TEST_DATABASE_URL}"
+  ORGANIZATION_GATE_DB_IDENTITY_SHA256="${GATE_DB_IDENTITY_SHA256}"
   MEDIA_DIR="${MEDIA_DIR}"
   ORGANIZATION_WEB_PORT="${ORGANIZATION_WEB_PORT}"
   ORGANIZATION_GATE_EMAIL="${ORGANIZATION_GATE_EMAIL}"

@@ -187,6 +187,17 @@ se ejecuta con `pnpm test`. El preparador además
 fija la URL de fixture igual a la administrativa validada, y entrega las URL y
 markers explícitamente a backend, CLI administrativo y Playwright.
 
+Antes de que `globalSetup` escriba, Playwright coteja una identidad efímera
+que el launcher instala en la base descartable después del preflight. La lee
+por dos rutas independientes: la conexión de fixture y el pool runtime del
+backend, mediante una cabecera de prueba en el `GET /api/health` existente.
+La cabecera sólo se habilita con los markers y un destino de test validado;
+no se añade un endpoint de diagnóstico de producción. También se exige que
+`ORGANIZATION_API_BASE` y `VITE_API_BASE` coincidan, para que el preparador y
+la aplicación usen el mismo backend. Ausencia o discrepancia aborta antes de
+crear datos de organización. El guard de este harness rechaza opciones de URL
+o ambiente PostgreSQL que puedan falsificar la identidad de sesión.
+
 Sin esa evidencia, Playwright debe abortar **antes** de crear invitaciones, clientes, proyectos, diseños, FurnitureInstances o QuoteRevisions.
 
 ## 9. CI anti-regresión

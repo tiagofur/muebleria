@@ -65,6 +65,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "    record = {'command': command,\n"
                 + "        'runtime': target('DATABASE_URL'), 'migration': target('MIGRATION_DATABASE_URL'),\n"
                 + "        'fixture': target('ORGANIZATION_TEST_DATABASE_URL'),\n"
+                + "        'identity_digest': os.environ.get('ORGANIZATION_GATE_DB_IDENTITY_SHA256'),\n"
                 + "        'media_dir': os.environ.get('MEDIA_DIR'),\n"
                 + "        'isolated': os.environ.get('ORGANIZATION_TEST_ISOLATED'),\n"
                 + "        'testdb': os.environ.get('GRANETE_TEST_DATABASE'),\n"
@@ -162,6 +163,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             self.assertEqual(record['pg_keys'], [], record['command'])
         browser = [r for r in records if r['command'].startswith('pnpm ')]
         self.assertEqual(browser[0]['fixture'], migration)
+        self.assertRegex(browser[0]['identity_digest'], r'^[0-9a-f]{64}$')
+        self.assertTrue(all(r['identity_digest'] is None for r in records if not r['command'].startswith('pnpm ')))
         server = next(r for r in records if r['command'].startswith('server '))
         self.assertTrue(server['media_dir'].endswith('/media'))
         self.assertIn('/granete-organization-gate.', server['media_dir'])
@@ -202,6 +205,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             'different database': {'MIGRATION_DATABASE_URL': 'postgres://postgres:synthetic@127.0.0.1:56321/granete_test_other'},
             'runtime target override': {'DATABASE_URL': 'postgres://granete_app:synthetic@127.0.0.1:56321/granete_gate?dbname=muebles'},
             'migration target override': {'MIGRATION_DATABASE_URL': 'postgres://postgres:synthetic@127.0.0.1:56321/granete_gate?host=example.invalid'},
+            'runtime session marker override': {'DATABASE_URL': 'postgres://granete_app:synthetic@127.0.0.1:56321/granete_gate?options=-c%20granete.browser_gate_identity%3Dforged'},
+            'migration session marker override': {'MIGRATION_DATABASE_URL': 'postgres://postgres:synthetic@127.0.0.1:56321/granete_gate?options=-c%20granete.browser_gate_identity%3Dforged'},
         }
         for name, poison in cases.items():
             with self.subTest(name=name):

@@ -72,6 +72,10 @@ class TestDatabaseIsolationAntiRegression(unittest.TestCase):
         self.assertTrue(helper.exists())
         for path in (ROOT / "playwright.organization.config.ts", ROOT / "tests/organization/support/globalSetup.ts"):
             self.assertIn("assertOrganizationTestDatabaseURL", path.read_text(encoding="utf-8"))
+        setup = (ROOT / "tests/organization/support/globalSetup.ts").read_text(encoding="utf-8")
+        self.assertIn("assertOrganizationBackendDatabaseIdentity", setup)
+        self.assertLess(setup.index("await assertOrganizationBackendDatabaseIdentity()"),
+                        setup.index("await prepareAuthoritativeOrganizations()"))
         package = (ROOT / "package.json").read_text(encoding="utf-8")
         self.assertIn("tests/databaseIsolation.test.ts", package)
 

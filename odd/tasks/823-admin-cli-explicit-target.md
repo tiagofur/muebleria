@@ -320,3 +320,92 @@ recovery source of truth.
 - CI correction work-unit commit: `727a6140bd3354d1acc4e61cd8fc3d1308dbd50d`
   (46 additions, 1 deletion); fresh independent review and CI must target
   this correction plus its task-only evidence commit, not the prior PR HEAD.
+
+## T2 draft follow-up — exact-base browser diagnosis and DB identity
+
+Authorized continuation: keep PR #839 draft; compare base
+`6184b4d2d36c5c73e3fbcabde2c2785e5335e565` and candidate
+`8dca94be3595f5cce19aa5aebd016bd3a3489e7f` with the real launcher for
+each SHA and disposable PostgreSQL only. Do not touch #460, the persistent
+database, or unrelated PTX/401 behavior. No full CI until a corrected HEAD is
+independently reviewed. One PR, with the approved `size:exception`.
+
+- [x] **T2-F1 — Classify focused browser failures.** Run bounded equivalent
+  prequote-design repetitions on fresh disposable gates, recording fetch/body,
+  navigation, HTTP status, and authoritative persistence. Run PTX with its
+  serial prerequisites, record related HTTP and all download events, then only
+  the smallest preceding suite state if isolation passes. Compare env, media,
+  backend executable, URLs, and process lifecycle across both SHAs.
+- [x] **T2-F2 — Prove direct Playwright API-to-DB identity before writes.** Add
+  a test-only, non-secret handshake that reads a disposable DB-scoped identity
+  through the backend runtime pool and independently through the fixture DSN.
+  A missing or mismatched handshake must abort before globalSetup writes.
+  Observe safe RED then GREEN for positives and mismatches; validate with a real
+  disposable PostgreSQL/browser gate. Avoid a production diagnostic endpoint.
+- [ ] **T2-F3 — Freeze and hand off.** Record V0/V1/V2 checks, classify each
+  failure with causal limits, make one cohesive work-unit commit, and hand the
+  exact new HEAD/base to a fresh independent reviewer. No push or full CI by
+  this writer. Engram mirror remains pending due ambiguous active sessions.
+
+### Focused comparison and correction evidence
+
+- Base and candidate were exercised from clean, separate worktrees at the exact
+  pinned SHAs above. Each run used its SHA's real browser launcher, fresh
+  loopback-only PostgreSQL container with disposable data, synthetic credentials,
+  a sterile outer environment, and a process-group supervisor for the base's
+  `go run` child. Diagnostic overlays changed only the two test files during
+  diagnosis; they were restored before implementation. The base worktree was
+  clean and removed afterward. No `muebles` connection was made.
+- Prequote `:108`: five fresh gates per SHA, not five repetitions in one DB.
+  Base 4/5 and candidate 4/5 passed. Repetition four failed identically on
+  both: POST design 201, independent DB read `design persisted=true`, GET 200,
+  route fetch/body/json readable, main-frame navigation observed, but the
+  assertion read `designsBody=undefined`. This is classification **3:
+  pre-existing test race reproducible on base**, not a demonstrated T2 product
+  regression. `page.waitForResponse` ran ahead of the async route callback's
+  body assignment/fulfillment; the next navigation could dispose its response.
+  The minimal test-only correction awaits route completion before assertion
+  and next navigation. Five new candidate gates passed 5/5 after correction.
+- PTX `:307`: on both SHAs, the serial prerequisite prefix passed 3/3;
+  after the nearest state-changing predecessor (`engineering-cutting-demand`),
+  7/7; after the full immediate CI predecessor prefix (`cutting-demand`,
+  `engineering-entry`, `engineering-physical-gate`), 15/15. PDF and PTX emitted
+  `download` events with `.pdf`/`.ptx` suggested filenames; configured output
+  also emitted `.ptx.manifest.json`. Each final URL was `blob:`; no `/api/`
+  request fired in the capture window, so HTTP status, Content-Type,
+  Content-Disposition, and non-download error envelope do not exist for the
+  generated PTX file. Classification **4: not reproduced; CI cause remains
+  inconclusive**. No PTX code, test expectation, or timeout was changed.
+- Relevant T2 differences compared: candidate `env -i` passes explicit runtime,
+  migration, fixture and media targets; base inherited outer environment but
+  still constructed its own disposable URLs. Candidate runs the backend binary
+  directly and reaps its PID; base runs a `go run` parent and was additionally
+  process-group supervised during diagnosis. Both SHA outcomes above were
+  equivalent for the failing cases. No missing forwarded variable was found.
+- Direct Playwright RED: 6 DB-free tests exposed that URL/markers alone allowed
+  mismatched API, DB, role, or expected identity to reach setup. Go handler
+  tests failed to compile before implementation. GREEN: the launcher installs
+  a random marker as a disposable database setting after preflight; the backend
+  reads it via its actual runtime pool and emits only its digest on the existing
+  health response when both test markers and the test-target guard hold.
+  `globalSetup` compares that readback to an independent read-only fixture query
+  and a gate-issued digest, and requires the frontend/API URLs to match before
+  calling any setup writer. A production backend has no probe header.
+  URL/ambient session-option spoofing is rejected before a writable child.
+  Connection errors are redacted. Focused Go tests, 16 Vitest scenarios, real
+  launcher doubles including twelve DB-free negative preflights, static CI
+  checks, `bash -n`, `shellcheck`, `go vet`, and `pnpm typecheck` passed.
+  Final real disposable V2: the actual gate read back `granete_gate|2|2`,
+  logged backend/fixture identity match, and passed prequote plus PTX prefix
+  4/4. PostgreSQL container and gate backend were removed afterward.
+- Direct Playwright operational mismatch V2: with valid isolation markers and
+  a real disposable loopback PostgreSQL fixture, a deliberately wrong API
+  answered only `GET /api/health` with an incorrect identity. The actual
+  Playwright `globalSetup` exited nonzero on identity mismatch before the
+  fixture writer ran: the wrong API saw no POST, and the disposable database
+  still had zero public tables. The container was removed afterward. This
+  demonstrates the direct-invocation fail-closed boundary without touching
+  the persistent database.
+- Remaining: fresh independent review on the new work-unit HEAD/base, then one
+  full exact-head CI run by the leader. PR #839 remains draft and
+  `Refs #823` / `Delivery: partial`; the broader #823 acceptance remains open.

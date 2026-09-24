@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -46,6 +47,11 @@ func validateBrowserGateTargetPair(runtimeURL, migrationURL, expectedPort string
 		u, err := url.Parse(target.raw)
 		if err != nil || u.Hostname() != "127.0.0.1" || u.Port() != expectedPort || u.Path != "/granete_gate" {
 			return fmt.Errorf("%s target must match the disposable loopback instance and granete_gate database", target.name)
+		}
+		for key := range u.Query() {
+			if strings.EqualFold(key, "options") {
+				return fmt.Errorf("%s target cannot override the disposable database session identity", target.name)
+			}
 		}
 		if u.User == nil || u.User.Username() != target.user {
 			return fmt.Errorf("%s target must use its dedicated database role", target.name)
