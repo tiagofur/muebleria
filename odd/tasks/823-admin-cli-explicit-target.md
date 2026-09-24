@@ -317,3 +317,6 @@ recovery source of truth.
   regression, this task evidence, and the canonical isolation paragraph.
   Delivery remains `Refs #823` / `Delivery: partial` for the independent
   direct-Playwright/API-to-DB attestation gap and unproven full #823 DoD.
+- CI correction work-unit commit: `727a6140bd3354d1acc4e61cd8fc3d1308dbd50d`
+  (46 additions, 1 deletion); fresh independent review and CI must target
+  this correction plus its task-only evidence commit, not the prior PR HEAD.
