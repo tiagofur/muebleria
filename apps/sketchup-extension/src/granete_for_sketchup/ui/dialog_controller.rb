@@ -1023,9 +1023,10 @@ module Granete
         # tool must never select_tool over the CURRENT dynamic model (which
         # may have moved on to another document). Extents carry their local
         # minimum (origin_mm) so the anchor maps the real furniture box.
-        # The managed-neighbor provider is built HERE for both lanes —
-        # Library and Project placement share the same tool, same engine
-        # and the same target resolution; only identity provenance differs.
+        # The managed-neighbor and base-plane providers are built HERE for
+        # both lanes — Library and Project placement share the same tool,
+        # same engine and the same target resolution; only identity
+        # provenance differs.
         def build_placement_preview_tool(label:, extents_mm:, on_commit:, on_cancel:, model:)
           Tools::FurniturePlacementTool.new(
             label: label, extents_mm: extents_mm,
@@ -1033,8 +1034,47 @@ module Granete
             model_provider: -> { model },
             origin_mm: extents_mm[:origin_mm] || [0.0, 0.0, 0.0],
             logger: @logger,
-            furniture_targets_provider: placement_furniture_targets_provider(model)
+            furniture_targets_provider: placement_furniture_targets_provider(model),
+            base_planes_provider: placement_base_planes_provider(model)
           )
+        end
+
+        # #469 increment 3 (review) — pure-data provider of HORIZONTAL host
+        # base planes (top-level faces, either winding — the engine treats
+        # ±Z as the same floor) so a picked wall and the floor COMPOSE
+        # through the real tool. Local and read-only; the tool's snapshot
+        # budget keeps it at one scan per gesture plus one revalidation at
+        # the click — never a scan per mouse event. Top-level faces only:
+        # nested content keeps whatever its owning component's own pick
+        # proposes through the InputPoint face.
+        def placement_base_planes_provider(model)
+          lambda do
+            # Room fixtures (floor faces) live at the MODEL ROOT by design;
+            # the scan must not depend on any open editing context.
+            # rubocop:disable-next SketchupSuggestions/ModelEntities
+            entities = model.respond_to?(:entities) ? model.entities : nil
+            return [] unless entities.respond_to?(:each)
+
+            planes = []
+            entities.each do |entity|
+              next unless entity.is_a?(::Sketchup::Face)
+              next unless placement_horizontal_face?(entity)
+
+              vertex = entity.respond_to?(:vertices) ? entity.vertices.first : nil
+              position = vertex.respond_to?(:position) ? vertex.position : nil
+              next unless position.respond_to?(:x)
+
+              planes << { 'point_mm' => point_mm(position), 'normal_mm' => [0.0, 0.0, 1.0] }
+            end
+            planes
+          end
+        end
+
+        # A face whose normal is vertical (either winding) — a base plane.
+        def placement_horizontal_face?(entity)
+          normal = entity.respond_to?(:normal) ? entity.normal : nil
+          normal.respond_to?(:z) && normal.x.to_f.abs < UNIT_EPSILON &&
+            normal.y.to_f.abs < UNIT_EPSILON && normal.z.to_f.abs > 1.0 - UNIT_EPSILON
         end
 
         # #469 increments 2+3 — pure-data provider of Granete-managed
@@ -1042,18 +1082,20 @@ module Granete
         # SERVER identity through ManagedFurniture metadata — never by
         # component name/GUID — and the scan is local/read-only (no
         # request, no mutation), so it is safe inside the cursor loop.
-        # Ambiguous roots (duplicated furnitureInstanceId) and erased,
-        # tilted, scaled or mirrored entities offer no candidate: an
-        # unsafe target fails closed instead of guessing.
+        # Ambiguous roots (duplicated furnitureInstanceId), erased
+        # entities, non-rigid frames and units without a PERSISTED
+        # placement envelope offer no candidate: an unsafe target fails
+        # closed instead of guessing.
         def placement_furniture_targets_provider(model)
           lambda do
+            metadata_store = @metadata_store_factory.call(model)
             index = Connection::ProjectFurniture::ManagedFurniture.index(
-              model, @metadata_store_factory.call(model)
+              model, metadata_store
             )
             index[:by_id].flat_map do |furniture_instance_id, entries|
               next [] if entries.length != 1
 
-              placement_target_descriptor(furniture_instance_id, entries.first[:entity])
+              placement_target_descriptor(furniture_instance_id, entries.first[:entity], metadata_store)
             end
           end
         end
@@ -1061,18 +1103,21 @@ module Granete
         # Oriented-frame descriptor of one managed root for the snap
         # engine (#469 increment 3). The frame comes from the entity's
         # REAL rigid transform (world origin + horizontal unit right/front
-        # axes) and the LOCAL definition bounds — the materialized
-        # resolved furniture box. The world AABB (entity.bounds) is
-        # explicitly NOT the side authority: it is axis-aligned and stops
-        # being the furniture's real sides at any non-quarter yaw.
+        # axes) plus the PERSISTED placement envelope
+        # (`placementEnvelopeMm`: the layout-derived local box the
+        # canonical commit writes through PlacementPreviewExtents — the
+        # same authority the transient preview uses). The world AABB and
+        # the definition bounds are explicitly NOT the side authority:
+        # both aggregate whatever else the definition holds (protruding
+        # hardware/visual assets) and would displace real cabinet sides.
         # Host transform axes are INCHES-direction vectors; the engine
         # works in mm. The label comes from the entity display name
         # (cosmetic only — identity stays the furnitureInstanceId above).
-        def placement_target_descriptor(furniture_instance_id, entity)
-          return [] unless entity.respond_to?(:transformation) && entity.respond_to?(:definition)
+        def placement_target_descriptor(furniture_instance_id, entity, metadata_store)
+          return [] unless entity.respond_to?(:transformation)
           return [] if entity.respond_to?(:valid?) && !entity.valid?
 
-          frame = placement_target_frame(entity)
+          frame = placement_target_frame(entity, metadata_store)
           return [] unless frame
 
           [{
@@ -1093,9 +1138,10 @@ module Granete
         # UNIT right/front (any yaw, but no tilt and no scaling — a scaled
         # instance's axis vectors leave unit length), mutually orthogonal
         # and right-handed (right × front = +Z: a mirrored frame is not
-        # the furniture's own frame), with zaxis ≈ +Z (no tilt). nil when
-        # any check fails — such a target offers no candidate.
-        def placement_target_frame(entity)
+        # the furniture's own frame), with zaxis ≈ +Z (no tilt), and a
+        # usable PERSISTED placement envelope. nil when any check fails —
+        # such a target offers no candidate.
+        def placement_target_frame(entity, metadata_store)
           transform = entity.transformation
           right = horizontal_unit_dir_mm(transform.xaxis)
           front = horizontal_unit_dir_mm(transform.yaxis)
@@ -1103,12 +1149,34 @@ module Granete
           return nil unless (right[0] * front[1]) - (right[1] * front[0]) > 1.0 - UNIT_EPSILON
           return nil unless vertical_up_axis?(transform.zaxis)
 
-          bounds = entity.definition.bounds
-          return nil unless bounds.respond_to?(:min) && bounds.respond_to?(:max)
+          envelope = persisted_envelope(entity, metadata_store)
+          return nil unless envelope
 
           { origin_world_mm: point_mm(transform.origin),
             front_dir_mm: front, right_dir_mm: right,
-            local_min_mm: point_mm(bounds.min), local_max_mm: point_mm(bounds.max) }
+            local_min_mm: envelope[0], local_max_mm: envelope[1] }
+        end
+
+        # The persisted layout-derived placement box {min_mm:, max_mm:} as
+        # a [min, max] pair of mm triples — nil (fail-closed) when the
+        # metadata carries no valid envelope: the unit predates increment
+        # 3 or its commit had no authoritative layout.
+        def persisted_envelope(entity, metadata_store)
+          metadata = metadata_store.respond_to?(:read) ? metadata_store.read(entity) : nil
+          envelope = metadata.is_a?(Hash) ? metadata['placementEnvelopeMm'] : nil
+          min = mm_triple(envelope.is_a?(Hash) ? envelope['min_mm'] : nil)
+          max = mm_triple(envelope.is_a?(Hash) ? envelope['max_mm'] : nil)
+          return nil unless min && max
+
+          [min, max]
+        end
+
+        # A persisted coordinate triple: exactly 3 finite numerics in mm.
+        def mm_triple(value)
+          return nil unless value.is_a?(Array) && value.length == 3 &&
+                            value.all? { |component| component.is_a?(Numeric) && component.to_f.finite? }
+
+          value.map(&:to_f)
         end
 
         # Host Point3d (INCHES) → mm triple for frame/descriptor data.

@@ -250,6 +250,21 @@ module SketchupStub
     def mesh
       Sketchup::PolygonMesh.new(@points)
     end
+
+    # Host-faithful: Face#vertices returns Vertex objects exposing
+    # #position (used by the placement base-plane scan, #469 incr. 3).
+    def vertices
+      @points.map { |point| VertexStub.new(point) }
+    end
+  end
+
+  # Host-faithful Vertex surface for face-derived scans.
+  class VertexStub
+    attr_reader :position
+
+    def initialize(position)
+      @position = position
+    end
   end
 
   class TextureStub
@@ -318,6 +333,12 @@ module SketchupStub
     def get_attribute(dictionary, key)
       attributes[[dictionary, key]]
     end
+  end
+
+  # Host-faithful: every Sketchup Entity (faces included) carries
+  # attribute dictionaries — reconciliation scans read them on faces.
+  class FaceStub
+    include AttributeContainer
   end
 
   class GroupStub < Sketchup::Group
@@ -654,11 +675,14 @@ module SketchupStub
 
   class ViewStub < Sketchup::View
     attr_reader :images_written, :invalidations, :zoomed_entities
+    # Host-faithful: View#camera (the wall-snap room-side reference).
+    attr_accessor :camera
 
     def initialize
       @images_written = []
       @invalidations = 0
       @zoomed_entities = []
+      @camera = nil
     end
 
     # Overlay tool surface (#470): invalidations are observable so tests can

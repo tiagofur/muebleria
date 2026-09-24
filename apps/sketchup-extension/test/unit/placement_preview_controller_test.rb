@@ -49,14 +49,15 @@ require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
 
 # Host-faithful InputPoint stub for the controller-driven tool: the class
-# hook `next_position_mm` scripts what the host inference returns (nil = an
-# invalid pick). Defined once for the whole process; inert (nil) by default
-# so other suites that never set it see invalid picks, not phantom points.
+# hooks `next_position_mm`/`next_face` script what the host inference
+# returns (nil position = an invalid pick; nil face = free space pick).
+# Defined once for the whole process; inert (nil) by default so other
+# suites that never set it see invalid picks, not phantom points.
 unless defined?(Sketchup::InputPoint)
   module Sketchup
     class InputPoint
       class << self
-        attr_accessor :next_position_mm
+        attr_accessor :next_position_mm, :next_face
       end
 
       def pick(_view, _x_pos, _y_pos, _other = nil)
@@ -70,6 +71,12 @@ unless defined?(Sketchup::InputPoint)
       def position
         mm = self.class.next_position_mm
         Geom::Point3d.new(mm[0] / 25.4, mm[1] / 25.4, mm[2] / 25.4)
+      end
+
+      # Host-faithful: InputPoint#face exposes the picked face, nil in
+      # space. Scripted per test for the wall snap paths.
+      def face
+        self.class.next_face
       end
     end
   end
@@ -275,6 +282,7 @@ class PlacementPreviewControllerTest < Minitest::Test
   def setup
     SketchupStub.reset!
     Sketchup::InputPoint.next_position_mm = nil
+    Sketchup::InputPoint.next_face = nil
     @model = PreviewModel.new
     SketchupStub.active_model = @model
     @transport = FakeTransport.new
@@ -306,6 +314,7 @@ class PlacementPreviewControllerTest < Minitest::Test
 
   def teardown
     Sketchup::InputPoint.next_position_mm = nil
+    Sketchup::InputPoint.next_face = nil
     SketchupStub.reset!
   end
 
@@ -343,6 +352,14 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_equal 1, located['duplicates']
     assert_empty @transport.requests_for('POST', %r{/furniture-instances})
     assert_nil active_preview_session
+
+    # P1 (review): the canonical commit PERSISTS the layout-derived
+    # placement envelope (dimensionsMm [900, 800, 500] → local box
+    # [0..900, 0..500, 0..800]) — the semantic side authority later
+    # side-snapping consumes, never the definition bounds.
+    envelope = MS.new(@model).read(located['entity'])['placementEnvelopeMm']
+    assert_equal [0.0, 0.0, 0.0], envelope['min_mm']
+    assert_equal [900.0, 500.0, 800.0], envelope['max_mm']
 
     # Panel refresh + preflight push followed the placement.
     assert bridge_scripts('onProjectFurniture').length >= 2
@@ -886,6 +903,12 @@ class PlacementPreviewControllerTest < Minitest::Test
       Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(-1, 0, 0),
       Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(0, 0, 1)
     )
+    no_envelope = add_managed_root('fi-noenv', 'Sin envelope (fi-noenv)',
+                                   [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    MS.new(@model).write(no_envelope, { 'namespace' => MS::NAMESPACE,
+                                        'metadataVersion' => MS::METADATA_VERSION,
+                                        'kind' => 'furnitureInstance',
+                                        'identity' => { 'furnitureInstanceId' => 'fi-noenv' } })
     add_managed_root('fi-ok', 'Sano (fi-ok)', [0.0, 0.0, 0.0], [40.0, 40.0, 40.0])
 
     targets = @controller.send(:placement_furniture_targets_provider, @model).call
@@ -924,6 +947,80 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_in_delta 0.0, target['local_min_mm'][0], 1e-6
   end
 
+  # P1 (review): the semantic side envelope is the PERSISTED layout-derived
+  # placementEnvelopeMm, NEVER the definition bounds — the definition also
+  # aggregates hardware/visual assets, so a handle protruding past the
+  # cabinet side must not displace the side plane the snap aligns to.
+  def test_provider_uses_the_persisted_envelope_not_the_definition_bounds
+    protruding = add_managed_root('fi-protrude', 'Con herraje (fi-protrude)',
+                                  [0.0, 0.0, 0.0], [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    # The definition ALSO contains a protruding asset 200mm past the right
+    # side (host definition bounds grow; the placement envelope does not).
+    definition_bounds = Geom::BoundingBox.new
+    definition_bounds.min = Geom::Point3d.new(0.0, -100.0 / 25.4, 0.0)
+    definition_bounds.max = Geom::Point3d.new(800.0 / 25.4, 660.0 / 25.4, 900.0 / 25.4)
+    protruding.definition.bounds = definition_bounds
+
+    targets = @controller.send(:placement_furniture_targets_provider, @model).call
+
+    assert_equal(['fi-protrude'], targets.map { |t| t['furniture_instance_id'] })
+    target = targets.first
+    assert_in_delta 0.0, target['local_min_mm'][0], 1e-6
+    assert_in_delta 600.0, target['local_max_mm'][0], 1e-6,
+                    'the side plane stays at the CABINET side (envelope), not the asset extent'
+    assert_in_delta 560.0, target['local_max_mm'][1], 1e-6
+    assert_in_delta 720.0, target['local_max_mm'][2], 1e-6
+  end
+
+  # P1 (review): wall + floor must COMPOSE through the real tool — the
+  # picked 30° wall constrains XY (orientation + normal) while the
+  # gesture-scoped base-plane provider feeds the floor, and the commit
+  # carries both: back face ON the rotated wall plane, base ON the floor.
+  def test_wall_and_floor_compose_through_the_controller_tool_at_30_degrees
+    mm = 25.4
+    floor = @model.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(6000 / mm, 0, 0),
+       Geom::Point3d.new(6000 / mm, 4000 / mm, 0), Geom::Point3d.new(0, 4000 / mm, 0)]
+    )
+    floor.normal = Geom::Vector3d.new(0, 0, 1)
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0] # on the wall, near the floor
+    begin_preview(FI_1)
+    tool = active_tool
+    # Eye on the room side of the wall (the deterministic orientation
+    # reference; the ViewStub exposes the host camera).
+    eye_mm = [aim[0] + (normal[0] * 4000.0), aim[1] + (normal[1] * 4000.0), 1600.0]
+    @model.active_view.camera = Struct.new(:eye).new(
+      Geom::Point3d.new(eye_mm[0] / 25.4, eye_mm[1] / 25.4, eye_mm[2] / 25.4)
+    )
+
+    Sketchup::InputPoint.next_position_mm = aim
+    Sketchup::InputPoint.next_face = wall_face_stub(normal)
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    assert tool.active_snap, 'the 30° wall must offer a snap'
+    kinds = tool.active_snap[:components].map { |component| component[:kind] }.sort
+    assert_equal %i[face floor], kinds, 'wall + floor compose through the REAL tool'
+    transform = tool.current_transform
+    [[0, 0, 0], [900.0, 0, 0]].each do |corner|
+      placed = transform_point_mm(transform, corner)
+      signed = ((placed[0] - aim[0]) * normal[0]) + ((placed[1] - aim[1]) * normal[1])
+      assert_in_delta 0.0, signed, 1e-4, 'back face on the rotated wall plane'
+    end
+    assert_in_delta 0.0, transform_point_mm(transform, [0, 0, 0])[2], 1e-4,
+                    'base sits on the floor plane (composed constraint)'
+
+    tool.onLButtonDown(0, 50, 50, @model.active_view) # re-picks + revalidates
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    placed = put['body']['items'].find { |i| i['furniture_instance_id'] == FI_1 }
+    translation = placed['transform']['translation_mm']
+    signed_wall = ((translation[0] - aim[0]) * normal[0]) + ((translation[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-2, 'committed back corner on the wall plane'
+    assert_in_delta 0.0, translation[2], 1e-2, 'committed base on the floor'
+  end
+
   # The provider scan is read-only: running it repeatedly issues no
   # transport request (cursor-loop safety).
   def test_provider_scan_issues_no_requests
@@ -946,27 +1043,45 @@ class PlacementPreviewControllerTest < Minitest::Test
   end
 
   # Hand-crafted Granete-managed root in the stub model: identity through
-  # the metadata store (as the real builder writes), human name and the
-  # LOCAL definition box in INCHES (host semantics — the increment 3
-  # provider derives the oriented frame from the rigid transform plus
-  # these LOCAL extents, never from the instance world AABB) unless a
-  # rotated transformation is assigned afterwards by the test.
+  # the metadata store (as the real builder writes) plus the PERSISTED
+  # placement envelope (min/max in INCHES here, stored as the mm
+  # placementEnvelopeMm the increment 3 commit writes — the provider's
+  # side authority, never the definition bounds) and an identity frame
+  # unless a rotated transformation is assigned afterwards by the test.
+  # Set definition.bounds separately to model protruding assets.
   def add_managed_root(furniture_instance_id, name, min_in, max_in)
     definition = @model.definitions.add("Granete · #{name}")
-    definition.bounds = Geom::BoundingBox.new
-    definition.bounds.min = Geom::Point3d.new(*min_in)
-    definition.bounds.max = Geom::Point3d.new(*max_in)
     instance = @model.entities.add_instance(definition, Geom::Transformation.new)
     instance.name = name
+    mm = 25.4
     MS.new(@model).write(instance, { 'namespace' => MS::NAMESPACE,
                                      'metadataVersion' => MS::METADATA_VERSION,
                                      'kind' => 'furnitureInstance',
-                                     'identity' => { 'furnitureInstanceId' => furniture_instance_id } })
+                                     'identity' => { 'furnitureInstanceId' => furniture_instance_id },
+                                     'placementEnvelopeMm' => {
+                                       'min_mm' => min_in.map { |v| v * mm },
+                                       'max_mm' => max_in.map { |v| v * mm }
+                                     } })
     instance
   end
 
   def active_tool
     @model.selected_tools.last
+  end
+
+  # A picked-face stub with a world normal (mm) for the scripted
+  # InputPoint#face surface.
+  def wall_face_stub(normal_mm)
+    face = SketchupStub::FaceStub.new([])
+    face.normal = Geom::Vector3d.new(normal_mm[0], normal_mm[1], normal_mm[2])
+    face
+  end
+
+  # Local mm box corner → world mm through a Geom::Transformation.
+  def transform_point_mm(transform, corner_mm)
+    local = Geom::Point3d.new(corner_mm[0] / 25.4, corner_mm[1] / 25.4, corner_mm[2] / 25.4)
+    moved = local.transform(transform)
+    [moved.x * 25.4, moved.y * 25.4, moved.z * 25.4]
   end
 
   def click(tool)

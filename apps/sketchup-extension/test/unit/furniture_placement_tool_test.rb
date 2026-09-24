@@ -170,7 +170,7 @@ class FurniturePlacementToolTest < Minitest::Test
     @cancels = []
   end
 
-  def tool(positions_mm, anchor: :back_left_bottom, faces: nil, managed_targets: nil)
+  def tool(positions_mm, anchor: :back_left_bottom, faces: nil, managed_targets: nil, base_planes: nil)
     input_point = ScriptedInputPoint.new(positions_mm, faces)
     placement_tool = Tool.new(
       label: 'Torre horno', extents_mm: EXTENTS, anchor: anchor,
@@ -178,7 +178,8 @@ class FurniturePlacementToolTest < Minitest::Test
       on_cancel: ->(reason) { @cancels << reason },
       input_point_factory: -> { input_point },
       model_provider: -> { @model },
-      furniture_targets_provider: managed_targets
+      furniture_targets_provider: managed_targets,
+      base_planes_provider: base_planes
     )
     [placement_tool, input_point]
   end
@@ -987,6 +988,82 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_in_epsilon Math.sin(radians35), y_axis[0], 1e-6, 'the commit uses the FRESH 35° frame'
     assert_in_epsilon Math.cos(radians35), y_axis[1], 1e-6
     refute_in_epsilon preview_front[0], y_axis[0], 1e-4, 'the stale 30° orientation is gone'
+  end
+
+  # P1 (review): wall + floor must COMPOSE through the real tool — the
+  # picked 30° wall constrains XY while the gesture-scoped base-plane
+  # provider feeds the floor; preview AND commit carry both constraints.
+  def test_wall_and_floor_compose_through_the_tool_at_30_degrees
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0] # on the wall, near the floor
+    floor_planes = -> { [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0] }] }
+    placement_tool, = tool([aim, aim], faces: [ScriptedFace.new(normal), ScriptedFace.new(normal)],
+                                       base_planes: floor_planes)
+    move_cursor(placement_tool)
+
+    assert placement_tool.active_snap
+    kinds = placement_tool.active_snap[:components].map { |component| component[:kind] }.sort
+    assert_equal %i[face floor], kinds, 'the picked wall composes with the floor plane'
+    assert_equal :face, placement_tool.active_snap[:primary][:kind], 'the wall stays primary'
+
+    transform = placement_tool.current_transform
+    [[0, 0, 0], [EXTENTS[:x], 0, 0]].each do |corner|
+      placed = point_mm(transform, *corner)
+      signed = ((placed[0] - aim[0]) * normal[0]) + ((placed[1] - aim[1]) * normal[1])
+      assert_in_delta 0.0, signed, 1e-4, 'back face on the rotated wall plane'
+    end
+    assert_in_delta 0.0, point_mm(transform, 0, 0, 0)[2], 1e-4,
+                    'base sits on the floor plane (composed constraint)'
+
+    placement_tool.onLButtonDown(0, 10, 10, @view) # re-picks + revalidates both providers
+
+    assert_equal 1, @commits.length
+    committed_origin = point_mm(@commits.first, 0, 0, 0)
+    signed_wall = ((committed_origin[0] - aim[0]) * normal[0]) + ((committed_origin[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-4, 'committed back corner on the wall'
+    assert_in_delta 0.0, committed_origin[2], 1e-4, 'committed base on the floor'
+  end
+
+  # The base-plane scan follows the same budget as managed targets: one
+  # provider call per gesture regardless of mouse moves, plus exactly one
+  # commit-time revalidation.
+  def test_base_plane_provider_runs_once_per_gesture_and_once_at_click
+    calls = 0
+    floor_planes = lambda do
+      calls += 1
+      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0] }]
+    end
+    aim = [500.0, 500.0, 100.0]
+    placement_tool, = tool([aim] * 4, faces: [ScriptedFace.new([0.5, Math.sqrt(3.0) / 2.0, 0.0]), nil, nil, nil],
+                                      base_planes: floor_planes)
+
+    move_cursor(placement_tool, times: 4)
+
+    assert_equal 1, calls, 'four mouse moves scan the base planes exactly once'
+    assert placement_tool.active_snap
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 2, calls, 'the click revalidates the base planes exactly once'
+    assert_equal 1, @commits.length
+  end
+
+  # A floor plane far below the cursor is NOT a candidate: a free pick
+  # high above the ground keeps following the raw inference (#469
+  # increment 1 rule preserved — no hijack toward z=0).
+  def test_distant_floor_plane_never_hijacks_a_free_pick
+    floor_planes = -> { [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0] }] }
+    placement_tool, = tool([[1000.0, 2000.0, 1000.0], [1000.0, 2000.0, 1000.0]],
+                           base_planes: floor_planes)
+    move_cursor(placement_tool)
+
+    assert_nil placement_tool.active_snap, '1000mm above the floor offers no candidate'
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    assert_equal [1000.0, 2000.0, 1000.0], point_mm(@commits.first, 0, 0, 0),
+                 'free placement at the raw inference'
   end
 
   private

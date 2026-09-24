@@ -308,7 +308,7 @@ module Granete
           delta = face_to_anchor - plane_offset
           {
             kind: kind, normal_mm: normal, plane_point_mm: plane_point,
-            tangent_mm: tangent_of(normal, front_dir), aligned_side: aligned_side,
+            tangent_mm: tangent_of(normal), aligned_side: aligned_side,
             key: key, label: label,
             anchor_snapped_mm: add_scaled(cursor, normal, delta),
             displacement_mm: delta.abs,
@@ -316,16 +316,15 @@ module Granete
           }
         end
 
-        # Tangent of the constraint plane: the target front for furniture
-        # sides (the run direction), the normal's horizontal perpendicular
-        # for walls. nil for floors (a vertical constraint has no run
-        # direction). Informational — proximity math above uses it per
-        # family; kept in the candidate so no consumer reinvents axes.
-        def tangent_of(normal, front_dir)
-          return front_dir.dup if front_dir
+        # Tangent of the constraint plane: the horizontal perpendicular of
+        # the normal — for furniture sides that is ±the target front (the
+        # run direction) by construction, and for walls it is the wall's
+        # own run direction (never the front/normal itself). nil for
+        # floors (a vertical constraint has no run direction).
+        def tangent_of(normal)
           return nil if normal[2].abs > AXIS_EPSILON
 
-          [normal[1], -normal[0], 0.0]
+          [-normal[1], normal[0], 0.0]
         end
 
         # ---- selection policy -----------------------------------------

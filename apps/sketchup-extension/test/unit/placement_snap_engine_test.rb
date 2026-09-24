@@ -576,6 +576,44 @@ class PlacementSnapEngineTest < Minitest::Test
     assert_in_epsilon 1.0, Math.sqrt((front[0]**2) + (front[1]**2)), 1e-9, 'unit'
   end
 
+  # P2 (review): the candidate tangent is REALLY tangent to the constraint
+  # plane — for walls dot(normal, tangent) = 0 (never the front/normal
+  # itself); for furniture sides it is parallel to the target front (the
+  # run direction); floors carry no tangent.
+  def test_candidate_tangent_is_tangent_to_the_constraint_plane
+    wall_normal = dir_at_yaw(30.0)
+    plane_point = [0.0, 0.0, 0.0]
+    wall_cursor = add(plane_point, scale(wall_normal, 40.0))
+    wall_solution = solve(cursor_mm: wall_cursor,
+                          eye_mm: add(wall_cursor, scale(wall_normal, 9000.0)),
+                          faces: [{ point_mm: plane_point, normal_mm: wall_normal }])
+    refute_nil wall_solution
+    wall = wall_solution[:components].find { |component| component[:kind] == :face }
+    refute_nil wall
+    assert_in_delta 0.0, Engine.dot3(wall[:normal_mm], wall[:tangent_mm]), 1e-9,
+                    'wall tangent ⟂ wall normal'
+    assert_in_delta 0.0, wall[:tangent_mm][2], 1e-9, 'wall tangent is horizontal'
+
+    target = rotated_target(id: 'fi-T30', label: 'T30', yaw_degrees: 30.0,
+                            size: [600.0, 560.0, 720.0], at: [0.0, 0.0, 0.0])
+    front = dir_at_yaw(30.0)
+    right = [front[1], -front[0], 0.0]
+    side_cursor = add(scale(right, 640.0), scale(front, 280.0))
+    side_solution = solve(cursor_mm: side_cursor, managed_targets: [target])
+    refute_nil side_solution
+    side = side_solution[:components].find { |component| component[:kind] == :furniture_side }
+    refute_nil side
+    assert_in_delta 0.0, Engine.dot3(side[:normal_mm], side[:tangent_mm]), 1e-9,
+                    'side tangent ⟂ side normal'
+    assert Engine.parallel?(side[:tangent_mm], front), 'side tangent runs along the target front'
+
+    floor_solution = solve(cursor_mm: [100.0, 100.0, 30.0],
+                           faces: [{ point_mm: [0.0, 0.0, 0.0], normal_mm: [0.0, 0.0, 1.0] }])
+    refute_nil floor_solution
+    floor = floor_solution[:components].find { |component| component[:kind] == :floor }
+    assert_nil floor[:tangent_mm], 'a vertical constraint has no run direction'
+  end
+
   private
 
   def add(vec_a, vec_b)
