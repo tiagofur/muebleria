@@ -540,7 +540,7 @@ Engram mirror remains pending if the runtime cannot disambiguate its session.
   attribute/property names and href scheme, without Blob contents or secrets;
   retain CDP and Playwright filenames for PDF/PTX/manifest. Keep the 32-test
   one-worker PTX prefix; no general test repair.
-- [ ] **D2c — Freeze and handoff.** Run V0/V1 DB-free checks, commit the
+- [x] **D2c — Freeze and handoff.** Run V0/V1 DB-free checks, commit the
   coherent diagnostic work unit, and hand exact HEAD for independent review.
   V2 Ubuntu A/B remains `NOT_RUN` until parent dispatches reviewed commits.
 
@@ -563,3 +563,7 @@ work unit. V2 Ubuntu A/B is `NOT_RUN` pending parent dispatch after review.
 The A/B canary confirms CI metadata and a harmless ambient marker reach only
 the B browser child, while backend/admin remain isolated and ambient PG,
 database, and credential-shaped keys are absent from all captured children.
+Diagnostic behavior work-unit commit:
+`319bbf05cdf38196ece245acd9651cb8323a4db1`. The final artifact-only
+evidence commit records this identity; independent review and Ubuntu runs
+remain pending. No push, dispatch, PR, or merge was performed by the writer.
