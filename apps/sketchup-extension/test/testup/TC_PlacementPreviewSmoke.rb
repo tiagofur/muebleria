@@ -510,7 +510,7 @@ module Granete
         aim2_mm = [2600.0, 900.0, 0.0]
         aim_camera_at_mm(aim2_mm, [aim2_mm[0] - 3000.0, aim2_mm[1] - 3000.0, 2500.0])
         move_to_view_center(tool)
-        tool.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool)
 
         roots = model.entities.grep(Sketchup::ComponentInstance)
                      .select { |e| Metadata::Store.new(model).read(e).is_a?(Hash) }
