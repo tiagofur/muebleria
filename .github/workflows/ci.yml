@@ -8,9 +8,9 @@ on:
         required: true
         default: candidate
         type: choice
-        options: [candidate, base]
+        options: [candidate, base, fixed]
       ptx_browser_env:
-        description: 'Candidate Playwright/Vite child environment A/B only'
+        description: 'Candidate browser A/B; base/fixed require isolated'
         required: true
         default: isolated
         type: choice
@@ -42,7 +42,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Verify exact laboratory branch and prepare exact-base comparator
+      - name: Verify exact laboratory branch and prepare pinned source
         env:
           PTX_TARGET: ${{ inputs.ptx_target }}
           PTX_DIAGNOSTIC_BROWSER_ENV: ${{ inputs.ptx_browser_env }}
@@ -57,7 +57,10 @@ jobs:
           esac
           case "${PTX_TARGET}" in
             candidate) ;;
-            base)
+            base|fixed)
+              if [ "${PTX_TARGET}" = fixed ]; then
+                test "${PTX_DIAGNOSTIC_BROWSER_ENV}" = isolated
+              fi
               git diff --binary 24b014906e4fdd0963d4017df4865fc6527d9bca..HEAD -- \
                 apps/web/src/AppContent.tsx \
                 apps/web/src/exportCutPlanPtx.ts \
@@ -67,7 +70,17 @@ jobs:
                 tests/organization/engineering-state.spec.ts > "${RUNNER_TEMP}/ptx-overlay.patch"
               cp scripts/ptx-diagnostic-launcher.py "${RUNNER_TEMP}/ptx-diagnostic-launcher.py"
               cp scripts/ptx-diagnostic-sanitize.py "${RUNNER_TEMP}/ptx-diagnostic-sanitize.py"
-              git checkout --detach 6184b4d2d36c5c73e3fbcabde2c2785e5335e565
+              if [ "${PTX_TARGET}" = base ]; then
+                git checkout --detach 6184b4d2d36c5c73e3fbcabde2c2785e5335e565
+              else
+                PRODUCT_FIXED_SHA=611d6b79de229c3614022d211bca74ac32a42336
+                # checkout fetch-depth: 0 already fetched remote branches with
+                # its read-only credential; do not use ambient Git auth here.
+                product_ref=refs/remotes/origin/codex/839-ptx-product-snapshot
+                test "$(git rev-parse --verify "${product_ref}^{commit}")" = "${PRODUCT_FIXED_SHA}"
+                git checkout --detach "${PRODUCT_FIXED_SHA}"
+                test "$(git rev-parse HEAD)" = "${PRODUCT_FIXED_SHA}"
+              fi
               git apply --check "${RUNNER_TEMP}/ptx-overlay.patch"
               git apply "${RUNNER_TEMP}/ptx-overlay.patch"
               cp "${RUNNER_TEMP}/ptx-diagnostic-launcher.py" scripts/

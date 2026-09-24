@@ -676,3 +676,33 @@ is pending; no remote operation or persistent database access occurred.
 The E2 corrective behavior-and-regression work-unit commit is
 `f2e98b738cc0aac0c5d0bc4e50bbb72ce3239464`; this artifact-only
 follow-up records its identity without changing executable behavior.
+
+## Temporary T2 productive-HEAD Ubuntu proof carrier
+
+- Authorized diagnostic-only work unit: add one `fixed` manual-dispatch target
+  to the existing 32-test, one-worker prefix. It verifies temporary remote ref
+  `codex/839-ptx-product-snapshot` resolves to exact productive commit
+  `611d6b79de229c3614022d211bca74ac32a42336`, then checks out that SHA.
+  `ptx_browser_env` must be `isolated`; the actual productive launcher retains
+  its validated browser-only `LANG` and disposable DB preparation. No product
+  PR code, diagnostic branch merge, #460, or persistent DB access is involved.
+- The workflow carries only the existing six-file frontend/test instrumentation
+  overlay from pre-diagnostic candidate `24b014906e4fdd0963d4017df4865fc6527d9bca`.
+  It copies the existing patcher and sanitizer before checkout, then adds only
+  `VITE_PTX_DIAGNOSTIC` and copy-out of evidence to the product launcher.
+  The sanitizer admits `fixed` but still rejects credentials/DSNs in uploaded
+  events and trace, strips network and non-image resources, and does not require the older
+  diagnostic browser-environment name report for a successful fixed run.
+- Safe TDD RED: two focused contract tests failed because `fixed` was absent
+  from the workflow and sanitizer. GREEN: all 11 diagnostic contract tests
+  passed; combined launcher/diagnostic checks passed 20 tests with one opt-in
+  skip. A local throwaway worktree at the exact product SHA accepted the
+  binary overlay, patched launcher passed `bash -n`, and the source SHA stayed
+  exact; it was removed without a database connection. YAML parsed as ten
+  jobs and the run-step shell passed `bash -n`; `shellcheck`, Python compile and
+  `git diff --check` passed. Ubuntu V2 remains NOT_RUN until the parent pushes
+  the temporary ref and dispatches exactly one run.
+- Rollback boundary: remove this diagnostic-only workflow target, its fixed
+  sanitizer admission, focused contract checks, and this evidence paragraph.
+  The productive PR #839 and its locale correction are not part of this
+  temporary branch's rollback.

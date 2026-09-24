@@ -91,7 +91,7 @@ def screen_browser_env_names(raw: Path, output: Path, status: int, target: str) 
 
 def summarize_failure(raw: Path, output: Path, status: int, target: str) -> None:
     """Extract only fixed codes and booleans; never echo a raw failure line."""
-    if target not in {'candidate', 'base'}:
+    if target not in {'candidate', 'base', 'fixed'}:
         raise ValueError('invalid diagnostic target')
     output.mkdir(parents=True, exist_ok=True)
     log_path = raw / 'launcher.log'
@@ -132,7 +132,7 @@ def summarize_failure(raw: Path, output: Path, status: int, target: str) -> None
 
 def sanitize(raw: Path, output: Path, status: int, target: str) -> None:
     output.mkdir(parents=True, exist_ok=True)
-    if target not in {'candidate', 'base'}:
+    if target not in {'candidate', 'base', 'fixed'}:
         raise ValueError('invalid diagnostic target')
     has_browser_env_names = screen_browser_env_names(raw, output, status, target)
     events_path = raw / 'ptx-events.json'

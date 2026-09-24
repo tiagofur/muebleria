@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -22,6 +23,7 @@ SAFE_ENV_REPORT = (
     'ambient_db_pg_count=5\nambient_credential_count=2\nambient_proxy_count=1\n'
     'ambient_unclassified_key_count=12\n'
 )
+PRODUCT_FIXED_SHA = '611d6b79de229c3614022d211bca74ac32a42336'
 
 
 class PtxDiagnosticContractTest(unittest.TestCase):
@@ -83,6 +85,67 @@ class PtxDiagnosticContractTest(unittest.TestCase):
         self.assertIn('test "${PTX_TARGET}" = candidate', workflow)
         self.assertIn('browser_env_variant=%s', workflow)
         self.assertNotIn('env | sort', workflow)
+
+    def test_fixed_target_checks_exact_product_snapshot_and_preserves_launcher(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        self.assertIn('options: [candidate, base, fixed]', workflow)
+        self.assertIn('fetch-depth: 0', workflow)
+        self.assertIn('refs/remotes/origin/codex/839-ptx-product-snapshot', workflow)
+        self.assertIn('git rev-parse --verify "${product_ref}^{commit}"', workflow)
+        self.assertNotIn('git fetch --no-tags origin refs/heads/codex/839-ptx-product-snapshot', workflow)
+        self.assertIn(PRODUCT_FIXED_SHA, workflow)
+        self.assertIn('git checkout --detach "${PRODUCT_FIXED_SHA}"', workflow)
+        self.assertIn('git apply --check "${RUNNER_TEMP}/ptx-overlay.patch"', workflow)
+        self.assertIn('test "${PTX_DIAGNOSTIC_BROWSER_ENV}" = isolated', workflow)
+        self.assertIn('python3 scripts/ptx-diagnostic-launcher.py scripts/organization-browser-gate.sh', workflow)
+
+        product = subprocess.check_output(
+            ['git', 'show', f'{PRODUCT_FIXED_SHA}:scripts/organization-browser-gate.sh'],
+            cwd=ROOT, text=True,
+        )
+        launcher_spec = importlib.util.spec_from_file_location(
+            'ptx_launcher', ROOT / 'scripts/ptx-diagnostic-launcher.py'
+        )
+        assert launcher_spec and launcher_spec.loader
+        launcher = importlib.util.module_from_spec(launcher_spec)
+        launcher_spec.loader.exec_module(launcher)
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / 'organization-browser-gate.sh'
+            target.write_text(product)
+            launcher.patch_launcher(target)
+            patched = target.read_text()
+        self.assertIn('LANG="${BROWSER_LANG}"', patched)
+        self.assertIn('GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"', patched)
+        self.assertNotIn('PTX_BROWSER_MODE', patched)
+        self.assertIn('VITE_PTX_DIAGNOSTIC=1', patched)
+        self.assertIn("-name 'ptx-events.json'", patched)
+        self.assertEqual(patched.count('  VITE_PTX_DIAGNOSTIC=1\n'), 1)
+        cleanup_start = patched.index('  if [ -n "${PTX_DIAGNOSTIC_DIR:-}" ]; then\n')
+        cleanup_end = patched.index('  rm -rf "${TMP_ROOT}"', cleanup_start)
+        restored = patched[:cleanup_start] + patched[cleanup_end:]
+        restored = restored.replace('  VITE_PTX_DIAGNOSTIC=1\n', '', 1)
+        self.assertEqual(restored, product, 'diagnostic launcher changed product behavior')
+
+    def test_fixed_target_sanitizes_without_browser_env_name_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / 'raw'
+            raw.mkdir()
+            (raw / 'launcher.log').write_text('Running 32 tests using 1 worker\n')
+            (raw / 'ptx-events.json').write_text(json.dumps([{'stage': 'ptx-click-start'}]))
+            with zipfile.ZipFile(raw / 'ptx-raw-trace.zip', 'w') as trace:
+                trace.writestr('trace.trace', '{"type":"before","method":"click"}\n')
+                trace.writestr('trace.network', 'Authorization: Bearer forbidden')
+            safe = root / 'safe'
+            sanitize_module.summarize_failure(raw, safe, 0, 'fixed')
+            sanitize_module.sanitize(raw, safe, 0, 'fixed')
+            self.assertFalse((safe / 'browser-env-safe-names.txt').exists())
+            self.assertIn('browser_env_names=missing', (safe / 'sanitized-log.txt').read_text())
+            with zipfile.ZipFile(safe / 'ptx-trace-sanitized.zip') as trace:
+                self.assertEqual(trace.namelist(), ['trace.trace'])
+            (raw / 'ptx-events.json').write_text(json.dumps([{'stage': 'Authorization: Bearer unsafe'}]))
+            with self.assertRaisesRegex(ValueError, 'privacy boundary'):
+                sanitize_module.sanitize(raw, root / 'unsafe', 1, 'fixed')
 
     def test_safe_name_artifact_accepts_only_allowlisted_names_and_counts(self):
         with tempfile.TemporaryDirectory() as directory:
