@@ -162,9 +162,9 @@ function recordingTransitionRunner() {
 }
 
 describe('isGraneteApiUrl — bearer sólo para el origin+base exacto (SEC-4B §21)', () => {
-  it('acepta paths relativos y absolutos del API Granete', () => {
+  it('accepts absolute API URLs but not a root-relative path to another configured origin', () => {
     expect(isGraneteApiUrl(`${BASE}/projects`)).toBe(true);
-    expect(isGraneteApiUrl('/api/projects')).toBe(true);
+    expect(isGraneteApiUrl('/api/projects')).toBe(false);
   });
 
   it('rechaza origins externos y look-alikes (exact origin, no substring)', () => {
@@ -175,6 +175,76 @@ describe('isGraneteApiUrl — bearer sólo para el origin+base exacto (SEC-4B §
 });
 
 describe('authenticatedApiFetch — boundary de requests autenticadas', () => {
+  it('rejects a captured org A request before dispatch when the active scope is org B', async () => {
+    const intended = seedSession('access-A', 'org-A');
+    const fetchImpl = vi.fn(async () => json({ never: 'sent' }));
+    configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+    seedSession('access-B', 'org-B');
+
+    await expect(authenticatedApiFetch(`${BASE}/projects`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer access-A', 'Idempotency-Key': 'idem-A' },
+      body: '{}',
+    }, intended)).rejects.toBeInstanceOf(WebSessionTransitionError);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('uses current access only when the captured request is the same web identity', async () => {
+    const intended = seedSession('access-OLD');
+    seedSession('access-NEW');
+    const fetchImpl = vi.fn(async () => json({ ok: true }));
+    configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const response = await authenticatedApiFetch(`${BASE}/projects`, {
+      headers: { Authorization: 'Bearer access-OLD', 'X-Request-ID': 'request-1' },
+    }, intended);
+
+    expect(response.ok).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const headers = new Headers((fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>)[0]![1].headers);
+    expect(headers.get('Authorization')).toBe('Bearer access-NEW');
+    expect(headers.get('X-Request-ID')).toBe('request-1');
+  });
+
+  it('replays a same-identity late 401 with the already refreshed access without another rotation', async () => {
+    const intended = seedSession('access-OLD');
+    let finishFirst!: (response: Response) => void;
+    const first = new Promise<Response>((resolve) => { finishFirst = resolve; });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/auth/refresh')) throw new Error('Unexpected extra refresh');
+      return fetchImpl.mock.calls.length === 1 ? first : json({ ok: true });
+    });
+    configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const result = authenticatedApiFetch(`${BASE}/projects`, {}, intended);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    seedSession('access-NEW');
+    finishFirst(json({ code: 'UNAUTHORIZED' }, 401));
+
+    expect((await result).ok).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(new Headers((fetchImpl.mock.calls as unknown as Array<[string, RequestInit]>)[1]![1].headers).get('Authorization'))
+      .toBe('Bearer access-NEW');
+  });
+
+  it('does not replay after cancellation while refresh is pending', async () => {
+    const intended = seedSession('access-OLD');
+    const controller = new AbortController();
+    let finishRefresh!: (response: Response) => void;
+    const refresh = new Promise<Response>((resolve) => { finishRefresh = resolve; });
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/auth/refresh') ? refresh : json({ code: 'UNAUTHORIZED' }, 401));
+    configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+    const result = authenticatedApiFetch(`${BASE}/projects`, { signal: controller.signal }, intended);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    controller.abort();
+    finishRefresh(json(refreshBody()));
+
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('adjunta Authorization desde la memoria y reintenta UNA vez tras 401 + refresh mismo scope', async () => {
     seedSession('access-OLD');
     const calls: Array<{ url: string; authorization: string; body?: string; method: string }> = [];
@@ -428,6 +498,29 @@ describe('authenticatedApiFetch — boundary de requests autenticadas', () => {
 });
 
 describe('coordinatedWebRefresh — singleflight in-tab (§30)', () => {
+  it.each(['logout', 'organization switch'] as const)(
+    'does not resurrect an old credential after %s during a pending refresh',
+    async (change) => {
+      seedSession('access-A', 'org-A');
+      let finishRefresh!: (response: Response) => void;
+      const refresh = new Promise<Response>((resolve) => { finishRefresh = resolve; });
+      const fetchImpl = vi.fn(async () => refresh);
+      configureWebAuthClient({ baseUrl: BASE, fetchImpl: fetchImpl as unknown as typeof fetch });
+
+      const result = coordinatedWebRefresh();
+      await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+      if (change === 'logout') clearCredential();
+      else seedSession('access-B', 'org-B');
+      finishRefresh(json(refreshBody({ token: 'access-A', organization: {
+        id: 'org-A', name: 'Taller A', slug: 'taller-a', type: 'factory', status: 'active', license: { plan: 'pro', status: 'active' },
+      } })));
+
+      const outcome = await result;
+      expect(outcome.status).not.toBe('refreshed');
+      expect(getCredential()?.accessToken ?? null).toBe(change === 'logout' ? null : 'access-B');
+    },
+  );
+
   it('20 callers concurrentes comparten UNA rotación de cookie', async () => {
     seedSession('access-1');
     let rotations = 0;

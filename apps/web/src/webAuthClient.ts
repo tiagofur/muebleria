@@ -140,12 +140,9 @@ function apiOrigin(): string {
  */
 export function isGraneteApiUrl(url: string): boolean {
   try {
-    const base = new URL(apiOrigin(), globalThis.location?.href ?? 'http://localhost');
-    if (url.startsWith('/')) {
-      const path = url.split('?')[0] ?? url;
-      return path === base.pathname || path.startsWith(`${base.pathname}/`);
-    }
-    const parsed = new URL(url);
+    const pageUrl = globalThis.location?.href ?? 'http://localhost';
+    const base = new URL(apiOrigin(), pageUrl);
+    const parsed = new URL(url, pageUrl);
     return (
       parsed.origin === base.origin &&
       (parsed.pathname === base.pathname || parsed.pathname.startsWith(`${base.pathname}/`))
@@ -213,6 +210,7 @@ export type WebRefreshOutcome =
       readonly response: LoginResponse;
     }
   | { readonly status: 'terminal'; readonly code: WebRefreshTerminalCode | 'SESSION_ENDED' | 'CSRF_DENIED' }
+  | { readonly status: 'stale' }
   | { readonly status: 'network' };
 
 interface RefreshRun {
@@ -280,6 +278,12 @@ async function rotateCookie(): Promise<WebRefreshOutcome> {
   }
   const body = (await response.json()) as LoginResponse;
   const draft = credentialFromLoginResponse(body);
+  // A logout, org switch or another login may have changed the local slot
+  // while the cookie response was in flight. Never let that old response
+  // resurrect or replace the newer credential.
+  if (getCredential()?.generation !== previous?.generation) {
+    return { status: 'stale' };
+  }
   if (previous === null || previous.kind !== 'web' || isSameWebIdentity(previous, draft)) {
     // Rotación normal de LA MISMA identidad: aplica directo (sin transición).
     const credential = applyWebCredential(draft);
@@ -461,7 +465,7 @@ function maybeRefreshAfterWake(): void {
   const expiresIn = credentialExpiresIn();
   if (expiresIn !== null && expiresIn <= REFRESH_LEAD_MS) {
     void coordinatedWebRefresh().then((outcome) => {
-      if (outcome.status === 'terminal' || outcome.status === 'network') return;
+      if (outcome.status === 'terminal' || outcome.status === 'network' || outcome.status === 'stale') return;
       if (outcome.credential !== null) {
         scheduleWebAccessRefresh();
       }
@@ -489,6 +493,23 @@ export interface AuthenticatedFetchRequest {
   readonly signal?: AbortSignal | null;
 }
 
+function sameCredentialIdentity(left: CredentialSnapshot, right: CredentialSnapshot): boolean {
+  if (left.kind !== right.kind || left.sessionId !== right.sessionId || left.organizationId !== right.organizationId) {
+    return false;
+  }
+  return left.kind === 'support' || (right.kind === 'web' && left.userId === right.userId);
+}
+
+function requireCurrentScope(expected: CredentialSnapshot, current: CredentialSnapshot | null): asserts current is CredentialSnapshot {
+  if (current === null || !sameCredentialIdentity(expected, current)) {
+    throw new WebSessionTransitionError('La sesión cambió durante la operación');
+  }
+}
+
+function throwIfAborted(signal: AbortSignal | null | undefined): void {
+  signal?.throwIfAborted();
+}
+
 /**
  * fetch autenticado para la API Granete. Añade Authorization desde la
  * memoria SÓLO cuando la URL es API Granete (exact origin+base); ante 401 en
@@ -498,14 +519,25 @@ export interface AuthenticatedFetchRequest {
 export async function authenticatedApiFetch(
   url: string,
   request: AuthenticatedFetchRequest = {},
+  intendedCredential?: CredentialSnapshot,
 ): Promise<Response> {
   const isApi = isGraneteApiUrl(url);
-  const token = getAccessToken();
-  const headers = new Headers(request.headers ?? {});
-  if (isApi && token !== null && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`);
+  const credentialBefore = getCredential();
+  if (intendedCredential) {
+    if (!isApi) throw new WebSessionTransitionError('La request no pertenece al API autorizado');
+    requireCurrentScope(intendedCredential, credentialBefore);
   }
-  const credentialBefore: CredentialSnapshot | null = getCredential();
+  throwIfAborted(request.signal);
+  const headers = new Headers(request.headers ?? {});
+  if (intendedCredential && headers.has('Authorization')) {
+    const provided = headers.get('Authorization');
+    if (provided !== `Bearer ${intendedCredential.accessToken}` && provided !== `Bearer ${credentialBefore?.accessToken}`) {
+      throw new WebSessionTransitionError('El bearer no pertenece a la sesión capturada');
+    }
+  }
+  if (isApi && credentialBefore !== null && (intendedCredential || !headers.has('Authorization'))) {
+    headers.set('Authorization', `Bearer ${credentialBefore.accessToken}`);
+  }
   let response: Response;
   try {
     response = await fetchImpl()(url, {
@@ -518,43 +550,60 @@ export async function authenticatedApiFetch(
     if (error instanceof WebSessionEndedError || error instanceof WebSessionTransitionError) throw error;
     throw error;
   }
+  if (intendedCredential) requireCurrentScope(intendedCredential, getCredential());
+  throwIfAborted(request.signal);
   if (response.status !== 401 || !isApi || isAuthEndpoint(url)) {
     return response;
   }
   // 401 en endpoint de negocio: credential web → refresh coordinado.
   const active = getCredential();
-  if (active === null || active.kind !== 'web' || active.generation !== credentialBefore?.generation) {
+  if (active === null || active.kind !== 'web' || credentialBefore?.kind !== 'web') {
     return response;
   }
-  const outcome = await coordinatedWebRefresh();
-  if (outcome.status === 'network') {
-    return response; // el 401 original: la sesión local sigue siendo válida.
-  }
-  if (outcome.status === 'terminal') {
-    clearCredential();
-    broadcastWebSessionEvent({ type: 'session-ended' });
-    throw new WebSessionEndedError('La sesión expiró', outcome.code);
-  }
-  if (outcome.status === 'transitioned' || outcome.credential === null) {
-    // La sesión/scope cambió y la transición ya purgó S1: la operación
-    // original se preparó para otro tenant — NUNCA se reintenta bajo S2.
+  if (!sameCredentialIdentity(credentialBefore, active)) {
     throw new WebSessionTransitionError('La sesión cambió durante la operación');
+  }
+  let replayCredential: WebCredentialSnapshot;
+  if (active.generation !== credentialBefore.generation) {
+    // Another same-identity request already rotated the access while this 401
+    // was in flight. Reuse it; a second cookie rotation risks replay revocation.
+    replayCredential = active;
+  } else {
+    const outcome = await coordinatedWebRefresh();
+    throwIfAborted(request.signal);
+    if (outcome.status === 'network') {
+      return response; // el 401 original: la sesión local sigue siendo válida.
+    }
+    if (outcome.status === 'stale') {
+      throw new WebSessionTransitionError('La sesión cambió durante la operación');
+    }
+    if (outcome.status === 'terminal') {
+      if (getCredential()?.generation !== credentialBefore.generation) {
+        throw new WebSessionTransitionError('La sesión cambió durante la operación');
+      }
+      clearCredential();
+      broadcastWebSessionEvent({ type: 'session-ended' });
+      throw new WebSessionEndedError('La sesión expiró', outcome.code);
+    }
+    if (outcome.status === 'transitioned' || outcome.credential === null) {
+      throw new WebSessionTransitionError('La sesión cambió durante la operación');
+    }
+    replayCredential = outcome.credential;
   }
   const stillSame =
     credentialBefore !== null &&
     credentialBefore.kind === 'web' &&
-    outcome.credential.sessionId === credentialBefore.sessionId &&
-    outcome.credential.userId === credentialBefore.userId &&
-    (outcome.credential.organizationId ?? null) === (credentialBefore.organizationId ?? null) &&
-    getCredential()?.generation === outcome.credential.generation;
+    sameCredentialIdentity(credentialBefore, replayCredential) &&
+    getCredential()?.generation === replayCredential.generation;
   if (!stillSame) {
     // Defense-in-depth: la identidad volvió a moverse entre el refresh y el
     // retry — no reintentar.
     throw new WebSessionTransitionError('La sesión cambió durante la operación');
   }
+  throwIfAborted(request.signal);
   // Mismo scope con access nuevo: exactamente UN reintento.
   const retryHeaders = new Headers(request.headers ?? {});
-  retryHeaders.set('Authorization', `Bearer ${outcome.credential.accessToken}`);
+  retryHeaders.set('Authorization', `Bearer ${replayCredential.accessToken}`);
   return fetchImpl()(url, {
     method: request.method,
     headers: retryHeaders,

@@ -411,6 +411,7 @@ export function createWorkspaceStore(options?: InternalOptions) {
             });
             return;
           }
+          if (outcome.status === 'stale') return; // Another session owner already changed the credential.
           // network (5xx/fallo de red): la cookie sigue viva server-side; no
           // es un logout. Login screen con aviso de conexión, sin loop.
           set({
