@@ -21,8 +21,10 @@ module Granete
       #                      orientation is arbitrary/reversible; ±normal
       #                      alone never decides the room side; the cabinet
       #                      is never resized).
-      #   :floor           — base plane (a horizontal host face); snaps the
-      #                      box base to the plane. Rotation is
+      #   :floor           — base plane (a horizontal host face, EITHER
+      #                      winding: +Z and −Z normals are the same
+      #                      geometric floor — the base sits ON the plane
+      #                      and the pick already targets it); rotation is
       #                      unconstrained.
       #   :furniture_side  — side of a Granete-managed FurnitureInstance
       #                      (resolved by server identity, never by name):
@@ -163,14 +165,15 @@ module Granete
           end
         end
 
-        # Base planes: HORIZONTAL HOST FACES under the cursor (the normal
-        # host mechanism — a floor/reference face, the ground plane included
-        # when the model has that geometry). Rotation is unconstrained —
-        # the floor never reorients, and a free pick away from any face is
-        # never hijacked toward z=0.
+        # Base planes: HORIZONTAL HOST FACES under the cursor, EITHER
+        # winding — the wall fix already established that Face#normal sign
+        # is not semantic authority, and a geometrically identical floor
+        # can be reversed (−Z): both are the same base plane. Rotation is
+        # unconstrained — the floor never reorients, and a free pick away
+        # from any face is never hijacked toward z=0.
         def floor_candidates(faces, context)
           candidates = faces.filter_map do |plane|
-            next nil unless vertical_axis_up(normal_of(plane))
+            next nil unless vertical_axis_aligned(normal_of(plane))
 
             z = point_of(plane)[2]
             build_candidate(
@@ -418,9 +421,12 @@ module Granete
           axis_sign && axis_sign[0]
         end
 
-        def vertical_axis_up(normal)
+        # A horizontal axis-aligned normal (±Z): both windings identify
+        # the same base plane.
+        def vertical_axis_aligned(normal)
           normal && normal.length == 3 &&
-            normal[0].abs < AXIS_EPSILON && normal[1].abs < AXIS_EPSILON && normal[2] > AXIS_EPSILON
+            normal[0].abs < AXIS_EPSILON && normal[1].abs < AXIS_EPSILON &&
+            axis_aligned?(normal[2])
         end
 
         # A horizontal vector aligned to ±X/±Y (unit, z=0) → itself; nil

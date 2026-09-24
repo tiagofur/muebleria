@@ -119,10 +119,25 @@ class PlacementSnapEngineTest < Minitest::Test
     assert_equal 300.0, solution[:anchor_mm][2]
   end
 
-  # A downward-facing horizontal face is NOT a base plane.
-  def test_downward_face_is_not_a_floor_candidate
-    assert_nil solve(cursor_mm: [1000.0, 1000.0, 0.0],
-                     faces: [{ point_mm: [0.0, 0.0, 100.0], normal_mm: [0.0, 0.0, -1.0] }])
+  # A REVERSED floor face (−Z normal) is the SAME base plane as the
+  # unreversed one: the snap cannot depend on how the face was wound
+  # (the wall fix already established Face#normal sign is not authority).
+  def test_floor_snap_is_invariant_to_face_winding
+    unreversed = solve(cursor_mm: [1000.0, 1000.0, 950.0],
+                       faces: [{ point_mm: [0.0, 0.0, 1000.0], normal_mm: [0.0, 0.0, 1.0] }])
+    reversed_face = solve(cursor_mm: [1000.0, 1000.0, 950.0],
+                          faces: [{ point_mm: [0.0, 0.0, 1000.0], normal_mm: [0.0, 0.0, -1.0] }])
+    both = solve(cursor_mm: [1000.0, 1000.0, 950.0],
+                 faces: [{ point_mm: [0.0, 0.0, 1000.0], normal_mm: [0.0, 0.0, 1.0] },
+                         { point_mm: [0.0, 0.0, 1000.0], normal_mm: [0.0, 0.0, -1.0] }])
+
+    refute_nil unreversed, '+Z face is a base plane'
+    refute_nil reversed_face, 'the same floor reversed must offer the SAME snap'
+    assert_equal unreversed[:anchor_mm], reversed_face[:anchor_mm]
+    assert_equal 'Piso', reversed_face[:label]
+    assert_equal 1, both[:components].length,
+                 'both windings dedup to ONE base-plane candidate (same key)'
+    assert_equal 1000.0, both[:anchor_mm][2]
   end
 
   # No face at all → free placement (increment 1 behavior preserved).
@@ -211,12 +226,28 @@ class PlacementSnapEngineTest < Minitest::Test
 
   # Equal displacement on the SAME axis: the more specific intent wins
   # (furniture_side < face < floor), then the target key breaks the tie.
+  # The eye is required so the wall candidate really exists — and both
+  # candidates' displacements are verified BEFORE composing, so the tie
+  # itself is pinned, not just the winner.
   def test_same_axis_ranking_prefers_type_then_key
     wall = { point_mm: [500.0, 0.0, 0.0], normal_mm: [-1.0, 0.0, 0.0] }
     target = managed_target(id: 'fi-B03', label: 'B03',
                             min: [0.0, 0.0, 0.0], max: [500.0, 560.0, 720.0], front: [0.0, 1.0, 0.0])
-    # Both constrain axis 0 at plane x=500 with displacement 100.
-    solution = solve(cursor_mm: [400.0, 300.0, 0.0], faces: [wall], managed_targets: [target])
+    eye = [0.0, 300.0, 900.0] # resolvable: the wall's room side is −X
+    full_context = { cursor_mm: [400.0, 300.0, 0.0], extents_mm: EXTENTS, origin_mm: ORIGIN,
+                     anchor: :back_left_bottom, rotation_quarters: 0, eye_mm: eye }
+
+    face_candidates = Engine.face_candidates([wall], full_context)
+    side_candidates = Engine.furniture_side_candidates([target], full_context)
+    refute_empty face_candidates, 'the wall candidate must exist (eye provided)'
+    refute_empty side_candidates, 'the managed side candidate must exist'
+    assert_in_epsilon 100.0, face_candidates.first[:displacement_mm], 1e-9,
+                      'wall anchor lands on the plane x=500 (cursor at 400)'
+    assert_in_epsilon 100.0, side_candidates.first[:displacement_mm], 1e-9,
+                      'side anchor lands on the plane x=500 (cursor at 400)'
+
+    solution = solve(cursor_mm: [400.0, 300.0, 0.0], eye_mm: eye,
+                     faces: [wall], managed_targets: [target])
 
     refute_nil solution
     assert_equal :furniture_side, solution[:primary][:kind],

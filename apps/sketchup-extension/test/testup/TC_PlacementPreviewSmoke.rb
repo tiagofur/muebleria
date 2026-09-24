@@ -177,13 +177,12 @@ module Granete
            Geom::Point3d.new(0, 0, 3000 / mm)]
         )
         wall.reverse! if wall.normal.x.negative?
-        floor = model.entities.add_face(
+        model.entities.add_face(
           [Geom::Point3d.new(0, 0, 0),
            Geom::Point3d.new(6000 / mm, 0, 0),
            Geom::Point3d.new(6000 / mm, 4000 / mm, 0),
            Geom::Point3d.new(0, 4000 / mm, 0)]
         )
-        floor.reverse! if floor.normal.z.negative?
 
         prepared = placer.prepare_placement_preview(FI_1)
         assert prepared['ok'], prepared.inspect

@@ -768,6 +768,22 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_empty @model.selected_tools
   end
 
+  # A REVERSED floor face (−Z normal) is the same base plane as an
+  # unreversed one: the tool's discovery passes the winding through and
+  # the floor snap activates identically (no Face#normal sign authority).
+  def test_reversed_floor_face_activates_the_base_plane_snap
+    unreversed, = tool([[1000.0, 1000.0, 1000.0]], faces: [ScriptedFace.new([0.0, 0.0, 1.0])])
+    move_cursor(unreversed)
+    reversed_tool, = tool([[1000.0, 1000.0, 1000.0]], faces: [ScriptedFace.new([0.0, 0.0, -1.0])])
+    move_cursor(reversed_tool)
+
+    assert_equal 'Piso', unreversed.active_snap[:label]
+    assert_equal 'Piso', reversed_tool.active_snap[:label],
+                 'the reversed floor offers the SAME base-plane snap'
+    assert_equal [1000.0, 1000.0, 1000.0], reversed_tool.active_snap[:anchor_mm]
+    refute reversed_tool.active_snap[:constrains_rotation]
+  end
+
   # A REVERSED wall face (normal pointing −X, away from the room) must
   # produce the SAME placement as the unreversed face: the front is
   # resolved from the camera side, never from Face#normal — the furniture
