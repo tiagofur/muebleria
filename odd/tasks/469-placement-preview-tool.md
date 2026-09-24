@@ -3,7 +3,73 @@
 Issue: #469 — [P1][SU-UX-2] Constraint-aware furniture placement, snapping and repeat placement
 Base: origin/main @ 1484d20a2912e9132932c74653c67ffb1ed5d78b
 Branch: feat/469-placement-preview
-Status: R1-R4 review corrections applied (R4 on b98c8637); V0/V1 green; V2 host pending owner walk
+Status: MERGED via PR #832 (R1-R4). Increment 2 continues below.
+
+## Increment 2 — semantic snaps + exact mm offset + visual feedback
+
+Base: origin/main @ aec03be9 (includes #832 via 3394c60c)
+Branch: feat/469-semantic-snaps
+Status: IMPLEMENTED_PENDING_REVIEW
+
+Scope (this increment): the three semantic snap families over the EXISTING
+shared tool (no rewrite): wall/face back alignment (orientation derived from
+the face normal, never resizing), floor/base plane (transform-only), and
+furniture side-to-side against Granete-managed roots resolved by
+`ManagedFurniture` metadata identity (never component name/GUID); a
+deterministic candidate policy (per-axis ranking by displacement → type →
+key, cross-axis composition with orientation-consistency filter — unit
+tested); exact mm gap input through the host VCB (`onUserText` +
+`enableVCB?`, no event stealing); viewport feedback (aligned-face highlight
++ Spanish label with target/gap; no matrices/IDs in UX). Revalidation at
+click re-runs discovery from the fresh pick (stale targets cannot be
+committed by construction). Snap/offset only alter the top-level transform
+the canonical commit already consumes; negative proofs pin that
+extents/materials/layout signature are untouched. Excluded: repeat
+placement, #784, disconnected Library lane, dialog JS changes (VCB is
+host-native).
+
+### Design decisions pinned by tests
+
+- Face candidates come from the host InputPoint face only (pick ON the
+  plane); no synthetic ground plane — a free pick is never hijacked toward
+  z=0 (#832 free-follow semantics preserved, suite green).
+- Tolerance 250mm on per-AXIS anchor displacement; ranking
+  (displacement, type furniture_side<face<floor, key) is a stable total
+  order; wall+floor compose across axes; conflicting orientation
+  proposals drop the weaker (never averaged/mirrored).
+- The VCB gap applies to the PRIMARY (best horizontal) constraint and is
+  keyed to that target's identity — it never leaks to a different or
+  absent target.
+- Arrows are answered with a hint while an orientation-proposing snap is
+  active (the target fixes the front); free/floor rotation unchanged.
+- Front-anchored grabs + wall snap exceed tolerance by construction
+  (anchor must jump one depth) — documented behavior: grab a back corner
+  to align to walls.
+- Duplicated furnitureInstanceId roots, erased entities and frames off
+  the quarter grid never become snap targets (fail closed).
+
+### Observed evidence (this candidate)
+
+- `bundle exec rake verify` (homebrew ruby 3.2.11 + vendor bundle):
+  1061 unit runs / 6940 assertions + 6 boundary runs / 3323 assertions,
+  0 failures; 226 files lint-clean; RBZ verified readback,
+  sha256 `becb8c55de03dbbd2246dc0413800748085c362400926aacae73c01370a8866f`.
+- New/extended suites: `placement_snap_engine_test.rb` 20 runs (families,
+  policy, tie-breaks, gaps, negatives); `furniture_placement_tool_test.rb`
+  37 runs (+10 snap/VCB/stale/rigidity); `placement_preview_controller_
+  test.rb` 31 runs (+4: project-lane snapped commit with real PUT at
+  x=600mm, catalog lane parity, provider exclusions, no-requests scan).
+- TestUp `TC_PlacementPreviewSmoke` extended with
+  `test_semantic_snaps_wall_side_gap_and_undo` (wall orientation + 40mm
+  VCB gap, FI_1↔FI_2 side-to-side + 5mm gap, undo, cancel-with-snap):
+  NOT_RUN this session — no host available; owner-coordinated like R1-R4.
+
+### Remaining for #469 (after this increment)
+
+- Repeat placement; disconnected Library lane (`insert_furniture`);
+- real-host evidence for the whole walk (incl. this snap smoke);
+- UX polish from real-host usability (#506).
+
 
 ## Scope separation from parallel work (coordination registry)
 
