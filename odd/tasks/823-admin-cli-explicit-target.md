@@ -47,7 +47,7 @@ size exception remain the leader's responsibility.
 
 ## Tasks
 
-- [ ] **T1 — Fail closed at the admin CLI boundary.** Add a safe RED regression
+- [x] **T1 — Fail closed at the admin CLI boundary.** Add a safe RED regression
   for missing, empty, malformed, and `DATABASE_URL`-only configuration without
   connecting to the habitual database. Make `openStore` resolve and validate the
   explicit admin DSN before `NewPostgresStore`/Ping; reuse #835's test isolation
@@ -60,7 +60,8 @@ size exception remain the leader's responsibility.
   focused DB-free RED/GREEN Go tests, a real disposable positive, and
   syntax/build checks. Initial behavior commit:
   `06694bc5c6bdfc62f35b7e9164795d7ad0576e0a`; continuation commit:
-  pending. Review: disabled/unmanaged.
+  `a3a3998ae26f0d12c8da2094d26b9bcbc7c0f0d2`. Review:
+  disabled/unmanaged; fresh independent repository review remains pending.
 - [ ] **T2 — Deferred; not authorized in this PR.** Guard the disposable browser
   preparation children. Add safe RED
   coverage for absent marker/incomplete DSNs and child environment forwarding.
@@ -89,7 +90,7 @@ Engram task mirror `odd/823-admin-cli-explicit-target/tasks`: pending because
 Engram cannot choose among multiple active runtime sessions; this file is the
 recovery source of truth.
 
-## T1 implementation evidence (candidate before commit)
+## T1 implementation evidence (first work unit)
 
 - Scope: `cmd/admin` now requires an explicit migration URL before pool open,
   rejects incomplete/invalid URLs and target-overriding query options, applies
@@ -156,3 +157,11 @@ recovery source of truth.
   database-safe without separate disposable fixture preparation.
 - T2 server/admin child forwarding, browser preparation, broad suites, and
   independent review remain outside the T1 proof.
+- T1 behavior boundary: `06694bc5c6bdfc62f35b7e9164795d7ad0576e0a`
+  and `a3a3998ae26f0d12c8da2094d26b9bcbc7c0f0d2`, with task-only evidence
+  commits on the same branch. At the continuation behavior commit the running
+  authored count was 510 additions plus deletions across work-unit commits;
+  the net `origin/main..HEAD` diff was 464 lines including this task document,
+  or 306 product/test/documentation lines without the task document. Keep the
+  cohesive slice; the leader will handle publication policy and any required
+  size exception. Delivery remains partial because T2 is not implemented.
