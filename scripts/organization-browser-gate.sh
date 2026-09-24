@@ -15,7 +15,9 @@ cleanup() {
   rm -rf "${TMP_ROOT}"
   unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY ADMIN_PASSWORD ORGANIZATION_TEST_DATABASE_URL
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 fail() {
   printf '[organization-gate] FAIL: %s\n' "$1" >&2
@@ -128,7 +130,13 @@ GATE_SERVER_ENV=("${GATE_BASE_ENV[@]}"
   RATE_LIMIT_RPS=100 RATE_LIMIT_BURST=100)
 GATE_ADMIN_ENV=("${GATE_BASE_ENV[@]}" ADMIN_PASSWORD="${ADMIN_PASSWORD}")
 
-(cd "${ROOT}/backend-go" && "${GATE_SERVER_ENV[@]}" go run ./cmd/server >"${TMP_ROOT}/backend.log" 2>&1) &
+# go run forks a server child; killing its parent can leave that child connected
+# after the disposable container has been removed. Build first (no DB access),
+# then exec the binary so BACKEND_PID is the only writable server process.
+(cd "${ROOT}/backend-go" && "${GATE_BASE_ENV[@]}" go build -o "${TMP_ROOT}/granete-server" ./cmd/server) \
+  || fail "backend build failed before launch"
+(cd "${ROOT}/backend-go" && exec "${GATE_SERVER_ENV[@]}" \
+  "${TMP_ROOT}/granete-server" >"${TMP_ROOT}/backend.log" 2>&1) &
 BACKEND_PID=$!
 for _ in $(seq 1 120); do
   curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null 2>&1 && break

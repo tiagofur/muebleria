@@ -4,9 +4,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 
@@ -15,19 +17,22 @@ DEFAULT_GATE = ROOT / "scripts/organization-browser-gate.sh"
 
 
 class BrowserPreparationLauncherTest(unittest.TestCase):
-    def run_gate_with_doubles(self, preflight_exit, *, real_preflight=False, poison=None):
+    def run_gate_with_doubles(self, preflight_exit, *, real_preflight=False, poison=None,
+                              fail_admin=False, cancel_after_server=False):
         with tempfile.TemporaryDirectory(prefix="browser-preparation-double-") as tmp:
             tmpdir = Path(tmp)
             capture = tmpdir / "children.jsonl"
+            server_pid = tmpdir / "server.pid"
             bindir = tmpdir / "bin"
             bindir.mkdir()
             shim = bindir / "shim"
             shim.write_text(
                 "#!" + sys.executable + "\n"
-                + "import json, os, pathlib, sys, urllib.parse\n"
-                + "import subprocess\n"
+                + "import json, os, pathlib, subprocess, sys, time, urllib.parse\n"
                 + f"capture = pathlib.Path({str(capture)!r})\n"
+                + f"server_pid = pathlib.Path({str(server_pid)!r})\n"
                 + f"preflight_exit = {preflight_exit}\n"
+                + f"fail_admin = {fail_admin!r}\n"
                 + f"real_preflight = {real_preflight!r}\n"
                 + f"real_go = {shutil.which('go')!r}\n"
                 + f"poison = {poison or {}!r}\n"
@@ -42,14 +47,22 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "    elif args[0] == 'exec' and 'psql' in args: print('11111111-1111-4111-8111-111111111111')\n"
                 + "    elif args[0] == 'run': print('synthetic-container')\n"
                 + "    sys.exit(0)\n"
-                + "if name == 'curl': sys.exit(0)\n"
-                + "if name in ('go', 'pnpm'):\n"
+                + "if name == 'curl':\n"
+                + "    for _ in range(100):\n"
+                + "        if server_pid.exists(): break\n"
+                + "        time.sleep(0.01)\n"
+                + "    sys.exit(0)\n"
+                + "if name == 'go' and args[:1] == ['build']:\n"
+                + "    pathlib.Path(args[args.index('-o') + 1]).symlink_to(pathlib.Path(sys.argv[0]).resolve())\n"
+                + "    sys.exit(0)\n"
+                + "if name in ('go', 'pnpm', 'granete-server'):\n"
                 + "    def target(key):\n"
                 + "        raw = os.environ.get(key)\n"
                 + "        if not raw: return None\n"
                 + "        u = urllib.parse.urlparse(raw)\n"
                 + "        return [u.hostname, u.port, u.path, u.username]\n"
-                + "    record = {'command': name + ' ' + ' '.join(args[:3]),\n"
+                + "    command = 'server ./cmd/server' if name == 'granete-server' else name + ' ' + ' '.join(args[:3])\n"
+                + "    record = {'command': command,\n"
                 + "        'runtime': target('DATABASE_URL'), 'migration': target('MIGRATION_DATABASE_URL'),\n"
                 + "        'fixture': target('ORGANIZATION_TEST_DATABASE_URL'),\n"
                 + "        'isolated': os.environ.get('ORGANIZATION_TEST_ISOLATED'),\n"
@@ -64,6 +77,14 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "                else: prepared[key] = value\n"
                 + "            sys.exit(subprocess.run([real_go] + args, env=prepared, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode)\n"
                 + "        sys.exit(preflight_exit)\n"
+                + "    if name == 'granete-server':\n"
+                + "        server_pid.write_text(str(os.getpid()))\n"
+                + "        time.sleep(60)\n"
+                + "    if name == 'go' and args[:2] == ['run', './cmd/server']:\n"
+                + "        child = subprocess.Popen([sys.executable, '-c',\n"
+                + "            'import os,pathlib,time; pathlib.Path(' + repr(str(server_pid)) + ').write_text(str(os.getpid())); time.sleep(60)'])\n"
+                + "        child.wait()\n"
+                + "    if name == 'go' and args[:2] == ['run', './cmd/admin'] and fail_admin: sys.exit(1)\n"
                 + "    sys.exit(0)\n"
                 + "sys.exit(1)\n",
                 encoding="utf-8",
@@ -84,22 +105,49 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "PGPASSWORD": "ambient-secret",
             })
             gate = Path(os.environ.get("ORGANIZATION_GATE_TEST_SCRIPT", DEFAULT_GATE))
-            result = subprocess.run(
-                ["bash", str(gate), "tests/organization/prequote-design.spec.ts"],
-                cwd=ROOT, env=env, capture_output=True, text=True, timeout=90,
-            )
+            command = ["bash", str(gate), "tests/organization/prequote-design.spec.ts"]
+            if cancel_after_server:
+                process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                                           stderr=subprocess.PIPE, text=True)
+                try:
+                    deadline = time.monotonic() + 10
+                    while not server_pid.exists() and process.poll() is None and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    if not server_pid.exists():
+                        self.fail('fake server did not launch before cancellation')
+                    process.send_signal(signal.SIGTERM)
+                    stdout, stderr = process.communicate(timeout=20)
+                    result = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate(timeout=5)
+            else:
+                result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True,
+                                        text=True, timeout=90)
             records = [json.loads(line) for line in capture.read_text().splitlines()] if capture.exists() else []
-            return result, records
+            survivor = False
+            if server_pid.exists():
+                pid = int(server_pid.read_text())
+                try:
+                    os.kill(pid, 0)
+                    survivor = True
+                except ProcessLookupError:
+                    pass
+                if survivor:
+                    os.kill(pid, signal.SIGTERM)  # only this test-owned sleeper
+            return result, records, survivor
 
     def test_rejected_preflight_stops_before_writable_children(self):
-        result, records = self.run_gate_with_doubles(preflight_exit=1)
+        result, records, _ = self.run_gate_with_doubles(preflight_exit=1)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual([r for r in records if './cmd/server' in r['command'] or './cmd/admin' in r['command'] or r['command'].startswith('pnpm ')], [])
         self.assertEqual(len([r for r in records if './cmd/testdb-preflight' in r['command']]), 1)
 
     def test_real_launcher_passes_only_prepared_targets_to_every_child(self):
-        result, records = self.run_gate_with_doubles(preflight_exit=0)
+        result, records, survivor = self.run_gate_with_doubles(preflight_exit=0)
         self.assertEqual(result.returncode, 0, result.stderr[-800:])
+        self.assertFalse(survivor, 'backend process survived the successful launcher teardown')
         self.assertEqual(len(records), 8)  # preflight, server, five admin commands, Playwright
         self.assertEqual(len([r for r in records if './cmd/admin' in r['command']]), 5)
         runtime = ["127.0.0.1", 56321, "/granete_gate", "granete_app"]
@@ -112,6 +160,25 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             self.assertEqual(record['pg_keys'], [], record['command'])
         browser = [r for r in records if r['command'].startswith('pnpm ')]
         self.assertEqual(browser[0]['fixture'], migration)
+
+    def test_admin_failure_reaps_only_the_gate_server(self):
+        unrelated = subprocess.Popen(['sleep', '30'])
+        try:
+            result, records, survivor = self.run_gate_with_doubles(0, fail_admin=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(any('./cmd/server' in r['command'] for r in records))
+            self.assertFalse(survivor, 'backend child survived failure cleanup')
+            self.assertIsNone(unrelated.poll(), 'unrelated process was killed')
+        finally:
+            unrelated.terminate()
+            unrelated.wait(timeout=5)
+
+    def test_cancellation_reaps_the_server_without_running_admin(self):
+        result, records, survivor = self.run_gate_with_doubles(0, cancel_after_server=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(survivor, 'backend child survived cancellation cleanup')
+        self.assertFalse(any('./cmd/admin' in r['command'] for r in records),
+                         'admin launched after the gate was cancelled')
 
     @unittest.skipUnless(os.environ.get('GRANETE_TEST_REAL_GO_PREFLIGHT') == '1',
                          'opt-in local real Go preflight; DB-free and no Docker')
@@ -132,7 +199,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         }
         for name, poison in cases.items():
             with self.subTest(name=name):
-                result, records = self.run_gate_with_doubles(0, real_preflight=True, poison=poison)
+                result, records, _ = self.run_gate_with_doubles(0, real_preflight=True, poison=poison)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(len(records), 1, 'writable child launched after rejected target')
                 self.assertIn('./cmd/testdb-preflight', records[0]['command'])

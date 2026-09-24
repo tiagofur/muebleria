@@ -65,7 +65,9 @@ migraciones; `cmd/admin` recibe `MIGRATION_DATABASE_URL` explícita. Cada hijo,
 incluido Playwright, recibe un entorno limitado con `env -i`, no los `PG*` ni
 las URL heredadas del operador. El runner relee los dos usuarios y las dos
 organizaciones sintéticas en la base descartable y destruye backend, contenedor
-y directorio temporal mediante `trap`.
+y directorio temporal mediante `trap`. Compila el backend antes de lanzarlo y
+ejecuta directamente el binario: así el PID controlado por el `trap` es el del
+servidor, no el padre de un proceso `go run` que podría dejarlo vivo.
 
 ### Pilot Readiness y suites throwaway
 

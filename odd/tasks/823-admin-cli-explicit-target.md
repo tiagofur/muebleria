@@ -242,3 +242,38 @@ recovery source of truth.
   was added in T2. The canonical launcher builds both URLs from its disposable
   container and supplies its own API base; do not generalize that proof to an
   independently fabricated direct invocation.
+
+## T2 independent-review correction and delivery boundary
+
+- Fresh independent review of frozen HEAD
+  `ef8689958b2774a4f8fea0e103e8bf304495ba68` requested one bounded
+  correction: cleanup killed the `go run ./cmd/server` parent PID while its
+  server child could survive. No direct Playwright API-to-DB attestation was
+  attempted in this correction; that is an unproven separate boundary.
+- Safe RED: the real-launcher DB-free double reproduced a surviving server
+  child after an admin failure. A cancellation regression also failed because
+  the signal trap returned and the launcher continued instead of exiting.
+  Neither check contacted PostgreSQL or launched a real writable child.
+- GREEN: build the backend under the prepared, scoped environment before
+  launch, then `exec` the built server so the recorded PID is the process to
+  stop and wait for. `INT`/`TERM` exit nonzero and run the single `EXIT`
+  cleanup. Actual-launcher doubles now verify admin-failure and cancellation
+  teardown, no later admin command after cancellation, and preservation of an
+  unrelated sentinel process. No process-group-wide kill is used.
+- Focused verification: `bash -n scripts/organization-browser-gate.sh` and
+  `git diff --check` passed. `GRANETE_TEST_REAL_GO_PREFLIGHT=1 python3 -m
+  unittest discover -s scripts -p 'test_ci_*.py' -q` passed 44 tests, including
+  the ten DB-free real-Go negative preflights.
+- Disposable V2 rerun: a new `postgres:16-alpine` container on loopback with
+  tmpfs data, separate migration/runtime roles, and the actual browser gate
+  passed `tests/organization/prequote-design.spec.ts` in Chromium (2/2).
+  Safe readback showed `database=granete_gate users=2 organizations=2`.
+  Post-run inspection found no `granete-org-gate-*` container or gate server
+  process. The persistent database was not read or written.
+- Delivery is **`Refs #823` / `Delivery: partial`**, not issue closure: the
+  canonical launcher boundary has operational proof, but independent direct
+  Playwright with deliberately forged markers, valid-looking fixture DSN,
+  and `ORGANIZATION_API_BASE` aimed at another API lacks server-to-DB identity
+  attestation. Full #823 DoD (including legacy Go runner/fallback inventory)
+  remains separately unproven. Fresh review and exact-HEAD/base CI are still
+  pending after this correction commit. Do not resume #460 from this work.
