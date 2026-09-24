@@ -248,6 +248,8 @@ module Granete
           @active_snap = nil
           @snap_offset_mm = 0.0
           @snap_offset_key = nil
+          @eye_mm = nil
+          @managed_targets_snapshot = nil
           @input_point = if input_point_factory
                            input_point_factory.call
                          else
@@ -332,15 +334,17 @@ module Granete
         # The placement click commits exactly once: a double click, a
         # rebound callback or a late event after the terminal state is
         # ignored (one gesture = one placement, #469 §4.2). The click
-        # RE-PICKS the inference at the click's own coordinates and only
-        # commits on a fresh valid position — and the snap solution is
-        # RE-SOLVED from that fresh pick, so a target erased between move
-        # and click can never be committed against: the commit either uses
-        # a revalidated snap or falls back to free placement at the fresh
-        # inference (#469 stale-candidate rule).
+        # RE-PICKS the inference at its click's own coordinates and
+        # RE-FETCHES the managed-neighbor snapshot (revalidating the
+        # chosen targets against CURRENT model state — a target erased or
+        # moved between gesture start and click can never be committed
+        # against), then commits only on a fresh valid position: the
+        # commit either uses a revalidated snap or falls back to free
+        # placement at the fresh inference (#469 stale-candidate rule).
         def onLButtonDown(_flags, x_pos, y_pos, view)
           return unless active?
 
+          refresh_managed_targets!
           pick_position(view, x_pos, y_pos)
           return unless @has_cursor
 
@@ -474,6 +478,7 @@ module Granete
         def pick_position(view, x_pos, y_pos)
           return unless @input_point
 
+          @eye_mm = camera_eye_mm(view)
           @input_point.pick(view, x_pos, y_pos)
           if @input_point.respond_to?(:valid?) && @input_point.valid? &&
              @input_point.respond_to?(:position)
@@ -489,16 +494,29 @@ module Granete
         end
 
         # #469 increment 2 — semantic snap refresh. Local-only candidate
-        # discovery over pure data (InputPoint face + ground plane +
-        # managed-neighbor descriptors); the deterministic engine ranks and
-        # composes. No request, no mutation, no metadata write.
+        # discovery over pure data (InputPoint face + managed-neighbor
+        # descriptors + the viewing eye); the deterministic engine ranks
+        # and composes. No request, no mutation, no metadata write.
         def refresh_snap!
           @active_snap = PlacementSnapEngine.solve(
             cursor_mm: @cursor_mm, extents_mm: @extents_mm, origin_mm: @origin_mm,
             anchor: @anchor, rotation_quarters: @rotation_quarters,
-            faces: inferenced_planes, managed_targets: managed_targets
+            faces: inferenced_planes, managed_targets: managed_targets,
+            eye_mm: @eye_mm
           )
           update_status_text
+        end
+
+        # The viewer's eye in mm — the deterministic room-side reference
+        # for wall snapping (SketchUp face orientation is arbitrary; the
+        # ±normal alone never decides the room). nil when the surface
+        # exposes no camera: wall candidates are dropped, not guessed.
+        def camera_eye_mm(view)
+          camera = view.respond_to?(:camera) ? view.camera : nil
+          eye = camera.respond_to?(:eye) ? camera.eye : nil
+          return nil unless eye.respond_to?(:x)
+
+          [eye.x.to_f * MM_PER_INCH, eye.y.to_f * MM_PER_INCH, eye.z.to_f * MM_PER_INCH]
         end
 
         # Host face under the cursor — the wall/floor snap source through
@@ -518,11 +536,30 @@ module Granete
              normal_mm: [normal.x.to_f, normal.y.to_f, normal.z.to_f] }]
         end
 
+        # Managed-neighbor descriptors SNAPSHOT for the gesture: the
+        # provider (a full local model scan) runs exactly ONCE per cursor
+        # loop — mouse moves never re-index the model. The click re-fetches
+        # (#refresh_managed_targets!) to revalidate the chosen targets
+        # against current model state before committing.
         def managed_targets
           return [] unless @furniture_targets_provider
 
-          targets = @furniture_targets_provider.call
-          targets.is_a?(Array) ? targets : []
+          if @managed_targets_snapshot.nil?
+            targets = @furniture_targets_provider.call
+            @managed_targets_snapshot = targets.is_a?(Array) ? targets : []
+          end
+          @managed_targets_snapshot
+        end
+
+        # Commit-time revalidation: one fresh provider fetch replaces the
+        # gesture snapshot so the committed solution is solved against
+        # CURRENT entities — an erased or moved target simply stops being
+        # a candidate instead of being committed against stale geometry.
+        def refresh_managed_targets!
+          return unless @furniture_targets_provider
+
+          fresh = @furniture_targets_provider.call
+          @managed_targets_snapshot = fresh.is_a?(Array) ? fresh : []
         end
 
         # The world anchor position: the raw inference point in free mode,

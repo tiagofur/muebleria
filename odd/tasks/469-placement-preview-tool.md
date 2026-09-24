@@ -33,6 +33,19 @@ host-native).
 - Face candidates come from the host InputPoint face only (pick ON the
   plane); no synthetic ground plane — a free pick is never hijacked toward
   z=0 (#832 free-follow semantics preserved, suite green).
+- Wall orientation is resolved from the CAMERA EYE side of the plane,
+  never from Face#normal (review P1: a reversed face must never leave the
+  furniture front facing the wall). No eye / eye exactly on the plane →
+  no wall candidate (fail-safe, never guessed).
+- Furniture sides are FINITE rectangles (review P1): the cursor must be
+  within TOLERANCE of the side along the constrained axis AND within
+  TOLERANCE of the side's span on the tangential axis and Z (clamped
+  interval distance). Close-in-X-but-meters-away-in-Y/Z is not a target.
+- Cursor-loop scan budget (review P1): the managed-neighbor provider (a
+  full local model index) runs exactly ONCE per gesture (lazy snapshot)
+  and exactly ONCE more at the click as commit-time revalidation against
+  CURRENT geometry — never one model index per mouse event (call-count
+  test pins 1 call for N moves, 2 with the click).
 - Tolerance 250mm on per-AXIS anchor displacement; ranking
   (displacement, type furniture_side<face<floor, key) is a stable total
   order; wall+floor compose across axes; conflicting orientation
@@ -48,17 +61,28 @@ host-native).
 - Duplicated furnitureInstanceId roots, erased entities and frames off
   the quarter grid never become snap targets (fail closed).
 
+### Known limitation (remaining #469 scope — do not overclaim)
+
+Wall/face and side snapping support ONLY axis-aligned (quarter-grid)
+planes: sloped walls and furniture rotated to arbitrary angles offer no
+candidate. Arbitrary-angular support is remaining scope of #469; until
+it lands, wall/face snapping is not "complete".
+
 ### Observed evidence (this candidate)
 
-- `bundle exec rake verify` (homebrew ruby 3.2.11 + vendor bundle):
-  1061 unit runs / 6940 assertions + 6 boundary runs / 3323 assertions,
-  0 failures; 226 files lint-clean; RBZ verified readback,
-  sha256 `becb8c55de03dbbd2246dc0413800748085c362400926aacae73c01370a8866f`.
-- New/extended suites: `placement_snap_engine_test.rb` 20 runs (families,
-  policy, tie-breaks, gaps, negatives); `furniture_placement_tool_test.rb`
-  37 runs (+10 snap/VCB/stale/rigidity); `placement_preview_controller_
-  test.rb` 31 runs (+4: project-lane snapped commit with real PUT at
-  x=600mm, catalog lane parity, provider exclusions, no-requests scan).
+- `bundle exec rake verify` (homebrew ruby 3.2.11 + vendor bundle) after
+  the three review P1 corrections: 1068 unit runs / 6966 assertions +
+  6 boundary runs / 3323 assertions, 0 failures; 226 files lint-clean;
+  RBZ verified readback, sha256
+  `ec169f5bbe429a0d4201d0e2b567ad4a6114577e7003f6dc73d3d544f7b9c841`.
+- New/extended suites: `placement_snap_engine_test.rb` 24 runs (families,
+  policy, tie-breaks, gaps, reversed-face/eye resolution, finite-side
+  tangential/vertical distance, negatives); `furniture_placement_tool_
+  test.rb` 40 runs (+13: snap/VCB/stale/rigidity + reversed wall at tool
+  level + provider call-count budget (1 per gesture, +1 at click) +
+  fresh-geometry commit); `placement_preview_controller_test.rb` 31 runs
+  (+4: project-lane snapped commit with real PUT at x=600mm, catalog lane
+  parity, provider exclusions, no-requests scan).
 - TestUp `TC_PlacementPreviewSmoke` extended with
   `test_semantic_snaps_wall_side_gap_and_undo` (wall orientation + 40mm
   VCB gap, FI_1↔FI_2 side-to-side + 5mm gap, undo, cancel-with-snap):
@@ -67,6 +91,8 @@ host-native).
 ### Remaining for #469 (after this increment)
 
 - Repeat placement; disconnected Library lane (`insert_furniture`);
+- arbitrary-ANGLE wall/furniture snap support (current: quarter-grid
+  only — see Known limitation);
 - real-host evidence for the whole walk (incl. this snap smoke);
 - UX polish from real-host usability (#506).
 

@@ -15,10 +15,10 @@ class PlacementSnapEngineTest < Minitest::Test
   ORIGIN = [0.0, 0.0, 0.0].freeze
 
   def solve(cursor_mm:, anchor: :back_left_bottom, rotation_quarters: 0,
-            faces: [], managed_targets: [], extents: EXTENTS, origin: ORIGIN)
+            faces: [], managed_targets: [], extents: EXTENTS, origin: ORIGIN, eye_mm: nil)
     Engine.solve(cursor_mm: cursor_mm, extents_mm: extents, origin_mm: origin,
                  anchor: anchor, rotation_quarters: rotation_quarters,
-                 faces: faces, managed_targets: managed_targets)
+                 faces: faces, managed_targets: managed_targets, eye_mm: eye_mm)
   end
 
   # ---- wall / face ----------------------------------------------------
@@ -27,7 +27,7 @@ class PlacementSnapEngineTest < Minitest::Test
   # the front faces +X (into the room) and the anchor keeps the cursor's
   # other coordinates (slide along the wall).
   def test_wall_snap_aligns_back_face_and_orients_front_away
-    solution = solve(cursor_mm: [120.0, 2000.0, 30.0],
+    solution = solve(cursor_mm: [120.0, 2000.0, 30.0], eye_mm: [5000.0, 2000.0, 1600.0],
                      faces: [{ point_mm: [0.0, 1500.0, 0.0], normal_mm: [1.0, 0.0, 0.0] }])
 
     refute_nil solution
@@ -40,24 +40,43 @@ class PlacementSnapEngineTest < Minitest::Test
     assert_equal 120.0, face[:displacement_mm], 'displacement is the anchor jump'
   end
 
-  # The four horizontal normals derive the exact quarter turn each.
-  def test_wall_snap_derives_orientation_for_every_horizontal_normal
-    {
-      [1.0, 0.0, 0.0] => 3, [-1.0, 0.0, 0.0] => 1,
-      [0.0, 1.0, 0.0] => 0, [0.0, -1.0, 0.0] => 2
-    }.each do |normal, expected_quarters|
-      solution = solve(cursor_mm: [600.0, 600.0, 0.0],
-                       faces: [{ point_mm: [500.0, 500.0, 0.0], normal_mm: normal }])
-      refute_nil solution, "normal #{normal} must produce a wall candidate"
-      assert_equal expected_quarters, solution[:rotation_quarters],
-                   "front must map onto #{normal}"
+  # The quarter turn derives from the EYE side of the plane — the same
+  # physical wall reversed (±normal) must yield the SAME orientation: a
+  # reversed face can never leave the furniture front facing the wall.
+  def test_wall_orientation_comes_from_the_eye_side_not_the_face_normal
+    walls = [
+      { plane: [500.0, 500.0, 0.0], normals: [[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]],
+        eye_here: [600.0, 500.0, 0.0], q_here: 3, eye_there: [400.0, 500.0, 0.0], q_there: 1 },
+      { plane: [500.0, 500.0, 0.0], normals: [[0.0, 1.0, 0.0], [0.0, -1.0, 0.0]],
+        eye_here: [500.0, 600.0, 0.0], q_here: 0, eye_there: [500.0, 400.0, 0.0], q_there: 2 }
+    ]
+    walls.each do |wall|
+      { wall[:eye_here] => wall[:q_here], wall[:eye_there] => wall[:q_there] }.each do |eye, quarters|
+        wall[:normals].each do |normal|
+          solution = solve(cursor_mm: [600.0, 600.0, 0.0], eye_mm: eye,
+                           faces: [{ point_mm: wall[:plane], normal_mm: normal }])
+          refute_nil solution, "eye #{eye} normal #{normal} must produce a wall candidate"
+          assert_equal quarters, solution[:rotation_quarters],
+                       "eye #{eye}: front faces the eye side regardless of the normal sign #{normal}"
+        end
+      end
     end
+  end
+
+  # Without an eye (no camera context), or with the eye exactly on the
+  # plane, the room side is unresolvable: no wall candidate, no guess.
+  def test_wall_candidate_requires_a_resolvable_eye_side
+    face = { point_mm: [0.0, 1500.0, 0.0], normal_mm: [1.0, 0.0, 0.0] }
+    assert_nil solve(cursor_mm: [100.0, 2000.0, 30.0], faces: [face]), 'no eye → no candidate'
+    assert_nil solve(cursor_mm: [100.0, 2000.0, 30.0], faces: [face], eye_mm: [0.0, 2000.0, 900.0]),
+               'eye exactly on the plane → unresolvable → no candidate'
   end
 
   # A front-anchored grab still aligns the BACK: the anchor is one depth
   # away from the wall (the active anchor participates in the math).
   def test_wall_snap_with_front_anchor_places_anchor_a_depth_away
     solution = solve(cursor_mm: [600.0, 2000.0, 0.0], anchor: :front_left_bottom,
+                     eye_mm: [5000.0, 2000.0, 1600.0],
                      faces: [{ point_mm: [0.0, 1500.0, 0.0], normal_mm: [1.0, 0.0, 0.0] }])
 
     refute_nil solution
@@ -74,6 +93,7 @@ class PlacementSnapEngineTest < Minitest::Test
   # Beyond the tolerance there is no snap — the preview keeps the pick.
   def test_face_candidate_outside_tolerance_is_dropped
     assert_nil solve(cursor_mm: [Engine::TOLERANCE_MM + 1.0, 100.0, 0.0],
+                     eye_mm: [5000.0, 100.0, 900.0],
                      faces: [{ point_mm: [0.0, 100.0, 0.0], normal_mm: [1.0, 0.0, 0.0] }])
   end
 
@@ -148,6 +168,36 @@ class PlacementSnapEngineTest < Minitest::Test
     assert(solution[:components].any? { |component| component[:label].include?('lateral izquierdo') })
   end
 
+  # A side is a FINITE rectangle, not an infinite plane: close along the
+  # constrained axis but METERS away along the wall (tangential) or in
+  # height must NOT capture the snap.
+  def test_distant_tangential_target_is_not_a_candidate
+    target = managed_target(id: 'fi-B03', label: 'B03',
+                            min: [0.0, 0.0, 0.0], max: [600.0, 560.0, 720.0], front: [0.0, 1.0, 0.0])
+    # x is 100mm off the right side, but y=5000 is 4440mm past the side's
+    # 560mm span — meters away along the wall.
+    assert_nil solve(cursor_mm: [700.0, 5000.0, 0.0], managed_targets: [target])
+  end
+
+  def test_distant_vertical_target_is_not_a_candidate
+    target = managed_target(id: 'fi-B03', label: 'B03',
+                            min: [0.0, 0.0, 0.0], max: [600.0, 560.0, 720.0], front: [0.0, 1.0, 0.0])
+    # Hovering at z=2200 while the neighbor only reaches 720: no snap.
+    assert_nil solve(cursor_mm: [700.0, 300.0, 2200.0], managed_targets: [target])
+  end
+
+  # Beyond the rectangle's end but WITHIN the same tolerance margin the
+  # side is still proposed (overhang scenarios) — the rule is a margin,
+  # not a hard edge.
+  def test_nearby_overhang_beyond_the_side_end_still_snaps
+    target = managed_target(id: 'fi-B03', label: 'B03',
+                            min: [0.0, 0.0, 0.0], max: [600.0, 560.0, 720.0], front: [0.0, 1.0, 0.0])
+    # y=700 is 140mm past the 560mm side end — inside the 250mm margin.
+    solution = solve(cursor_mm: [700.0, 700.0, 0.0], managed_targets: [target])
+    refute_nil solution
+    assert_equal 600.0, solution[:anchor_mm][0]
+  end
+
   # A target rotated off the quarter grid has no axis-aligned sides: no
   # candidate (orientation-compatible filter).
   def test_furniture_target_off_the_quarter_grid_offers_nothing
@@ -181,14 +231,15 @@ class PlacementSnapEngineTest < Minitest::Test
     # Same axis 0: wall plane x=500 (displacement 20 at cursor 480) beats
     # the furniture side plane x=520 (displacement 40) despite the side's
     # higher type priority.
-    solution = solve(cursor_mm: [480.0, 300.0, 0.0], faces: [wall], managed_targets: [target])
+    solution = solve(cursor_mm: [480.0, 300.0, 0.0], eye_mm: [0.0, 300.0, 900.0],
+                     faces: [wall], managed_targets: [target])
     assert_equal :face, solution[:primary][:kind]
   end
 
   # Different axes compose: wall + floor form a corner, the horizontal
   # constraint stays primary (the run intent), and the label joins both.
   def test_wall_and_floor_compose_across_axes_with_horizontal_primary
-    solution = solve(cursor_mm: [100.0, 2000.0, 30.0],
+    solution = solve(cursor_mm: [100.0, 2000.0, 30.0], eye_mm: [5000.0, 2000.0, 1600.0],
                      faces: [{ point_mm: [0.0, 1500.0, 0.0], normal_mm: [1.0, 0.0, 0.0] },
                              { point_mm: [900.0, 900.0, 0.0], normal_mm: [0.0, 0.0, 1.0] }])
 
@@ -202,12 +253,12 @@ class PlacementSnapEngineTest < Minitest::Test
   # Orientation-conflicting constraints on different axes: the globally
   # best one wins and the conflicting one is dropped, never averaged.
   def test_orientation_conflict_drops_the_weaker_constraint
-    solution = solve(cursor_mm: [100.0, 100.0, 0.0],
-                     faces: [{ point_mm: [0.0, 0.0, 0.0], normal_mm: [1.0, 0.0, 0.0] },   # q3
-                             { point_mm: [0.0, 0.0, 0.0], normal_mm: [0.0, -1.0, 0.0] }]) # q2
+    solution = solve(cursor_mm: [100.0, 100.0, 0.0], eye_mm: [5000.0, 5000.0, 900.0],
+                     faces: [{ point_mm: [0.0, 0.0, 0.0], normal_mm: [1.0, 0.0, 0.0] },
+                             { point_mm: [0.0, 0.0, 0.0], normal_mm: [0.0, -1.0, 0.0] }])
 
     refute_nil solution
-    assert_equal 1, solution[:components].length, 'q2 conflicts with q3: one must go'
+    assert_equal 1, solution[:components].length, 'q0 conflicts with q3: one must go'
     assert_equal 3, solution[:rotation_quarters]
   end
 
@@ -252,7 +303,7 @@ class PlacementSnapEngineTest < Minitest::Test
   # extents it is given can never be altered by a snap or a gap.
   def test_solution_never_carries_or_changes_extents
     extents = { x: 800.0, y: 560.0, z: 720.0 }
-    solution = solve(cursor_mm: [120.0, 2000.0, 30.0],
+    solution = solve(cursor_mm: [120.0, 2000.0, 30.0], eye_mm: [5000.0, 2000.0, 1600.0],
                      faces: [{ point_mm: [0.0, 1500.0, 0.0], normal_mm: [1.0, 0.0, 0.0] }],
                      extents: extents)
     refute_nil solution

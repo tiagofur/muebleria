@@ -80,9 +80,20 @@ class FurniturePlacementToolTest < Minitest::Test
   end
 
   # Records viewport drawing. Any model access would have to happen through
-  # the injected model — see StrictModel.
+  # the injected model — see StrictModel. The optional camera models the
+  # host View#camera (eye in INCHES) — the deterministic room-side
+  # reference for wall snapping.
+  class ScriptedCamera
+    attr_accessor :eye
+
+    def initialize(eye_mm)
+      @eye = Geom::Point3d.new(eye_mm[0] / MM, eye_mm[1] / MM, eye_mm[2] / MM)
+    end
+  end
+
   class RecordingView
     attr_reader :draw_calls, :invalidations, :texts, :text_points, :screen_projections
+    attr_accessor :camera
 
     def initialize
       @draw_calls = []
@@ -91,6 +102,7 @@ class FurniturePlacementToolTest < Minitest::Test
       @text_points = []
       @screen_projections = []
       @color = nil
+      @camera = nil
     end
 
     # Host-faithful screen projection for draw_text: pixel x/y derived
@@ -153,6 +165,7 @@ class FurniturePlacementToolTest < Minitest::Test
   def setup
     @model = StrictModel.new
     @view = RecordingView.new
+    @view.camera = ScriptedCamera.new([3000.0, 2000.0, 1500.0])
     @commits = []
     @cancels = []
   end
@@ -753,6 +766,70 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_empty @commits
     assert_empty @cancels
     assert_empty @model.selected_tools
+  end
+
+  # A REVERSED wall face (normal pointing −X, away from the room) must
+  # produce the SAME placement as the unreversed face: the front is
+  # resolved from the camera side, never from Face#normal — the furniture
+  # can never end up facing the wall.
+  def test_reversed_wall_face_yields_the_same_orientation_as_unreversed
+    unreversed, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(unreversed)
+    reversed_tool, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([-1.0, 0.0, 0.0])])
+    move_cursor(reversed_tool)
+
+    assert_equal 3, unreversed.active_snap[:rotation_quarters]
+    assert_equal 3, reversed_tool.active_snap[:rotation_quarters],
+                 'the reversed face must orient identically — front away from the wall'
+    transform = reversed_tool.current_transform
+    [[0, 0, 0], [EXTENTS[:x], 0, 0]].each do |corner|
+      assert_in_epsilon 0.0, point_mm(transform, *corner)[0], 1e-6, 'back face on the wall'
+    end
+    assert_in_epsilon EXTENTS[:y], point_mm(transform, 0, EXTENTS[:y], 0)[0], 1e-6,
+                      'front one depth into the room (+X)'
+  end
+
+  # Performance guard (#469 review): the managed-neighbor provider (a full
+  # local model scan) runs exactly ONCE per cursor loop regardless of how
+  # many mouse moves fire, plus exactly ONE commit-time revalidation —
+  # never one full model index per mouse event.
+  def test_cursor_loop_indexes_the_model_once_and_click_revalidates_once
+    calls = 0
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    provider = lambda do
+      calls += 1
+      targets
+    end
+    placement_tool, = tool([[700.0, 300.0, 0.0]] * 5, managed_targets: provider)
+
+    move_cursor(placement_tool, times: 5)
+
+    assert_equal 1, calls, 'five mouse moves must index the model exactly once (gesture snapshot)'
+    assert placement_tool.active_snap
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 2, calls, 'the click revalidates the chosen targets exactly once'
+    assert_equal 1, @commits.length
+  end
+
+  # The commit-time revalidation uses CURRENT data: a target mutated after
+  # the gesture snapshot (moved neighbor) commits against the fresh plane,
+  # never the stale one.
+  def test_click_commits_against_fresh_target_geometry_not_the_snapshot
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0], [700.0, 300.0, 0.0]],
+                           managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    assert_in_epsilon 600.0, point_mm(placement_tool.current_transform, 0, 0, 0)[0], 1e-6
+
+    targets.replace([managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [650.0, 560.0, 720.0],
+                                    [0.0, 1.0, 0.0])])
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    assert_in_epsilon 650.0, point_mm(@commits.first, 0, 0, 0)[0], 1e-6,
+                      'the committed side plane is the CURRENT neighbor geometry'
   end
 
   private

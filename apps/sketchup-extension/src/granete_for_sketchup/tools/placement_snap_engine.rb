@@ -17,19 +17,30 @@ module Granete
       # Candidate families:
       #   :face            — wall/vertical host face; aligns the furniture
       #                      BACK face to the plane with the front facing
-      #                      along the face normal (orientation derived from
-      #                      the normal; the cabinet is never resized).
-      #   :floor           — base plane (ground z=0 or a horizontal host
-      #                      face); snaps the box base to the plane. Rotation
-      #                      is unconstrained.
+      #                      the EYE side of the plane (SketchUp face
+      #                      orientation is arbitrary/reversible; ±normal
+      #                      alone never decides the room side; the cabinet
+      #                      is never resized).
+      #   :floor           — base plane (a horizontal host face); snaps the
+      #                      box base to the plane. Rotation is
+      #                      unconstrained.
       #   :furniture_side  — side of a Granete-managed FurnitureInstance
       #                      (resolved by server identity, never by name):
       #                      existing side → new furniture opposite side,
       #                      fronts kept parallel to the target's front.
+      #                      The side is a FINITE rectangle: the cursor
+      #                      must be near it along the tangential axis and
+      #                      Z, not merely along the constrained axis.
+      #
+      # Current limitation (#469 remaining scope): only axis-aligned
+      # (quarter-grid) planes are supported — sloped walls and furniture
+      # rotated to arbitrary angles offer no candidate. Wall/face snapping
+      # is NOT complete until arbitrary angular support lands.
       #
       # Selection policy (deterministic, no hidden heuristics):
       #   1. A candidate exists only if its per-axis anchor displacement
-      #      |snapped − cursor| ≤ TOLERANCE_MM.
+      #      |snapped − cursor| ≤ TOLERANCE_MM (plus the finite-rectangle
+      #      rule for furniture sides above).
       #   2. Candidates constrain exactly ONE world axis each. Per axis the
       #      best candidate is (displacement rounded to 0.01mm, type
       #      priority furniture_side < face < floor, target key) — a stable
@@ -69,11 +80,17 @@ module Granete
         #   rotation_quarters / constrains_rotation
         #   anchor_mm:   snapped anchor position (gap 0)
         #   label:       Spanish UX label without the gap (no IDs/matrices)
+        # eye_mm: the viewer's eye position (mm). REQUIRED for wall/face
+        # candidates: SketchUp face orientation is arbitrary (a face can be
+        # reversed), so ±normal alone cannot decide which side is the room.
+        # The front is resolved deterministically toward the eye side of
+        # the plane; with no eye, or an eye exactly on the plane, the face
+        # candidate is dropped — never guessed.
         def solve(cursor_mm:, extents_mm:, origin_mm:, anchor:, rotation_quarters:,
-                  faces: [], managed_targets: [])
+                  faces: [], managed_targets: [], eye_mm: nil)
           context = { cursor_mm: cursor_mm.map(&:to_f), extents_mm: extents_mm,
                       origin_mm: origin_mm.map(&:to_f), anchor: anchor,
-                      rotation_quarters: rotation_quarters }
+                      rotation_quarters: rotation_quarters, eye_mm: eye_mm }
           candidates = face_candidates(faces, context) +
                        floor_candidates(faces, context) +
                        furniture_side_candidates(managed_targets, context)
@@ -116,23 +133,31 @@ module Granete
         # ---- discovery ------------------------------------------------
 
         # Vertical host faces (walls): the furniture back aligns to the
-        # plane and the front faces along the normal into the room. Sloped
-        # faces are not orientation-compatible and produce nothing
-        # (fail-safe: no snap beats an exact axis-aligned placement).
+        # plane and the front faces INTO THE ROOM. SketchUp face front/back
+        # orientation is arbitrary (a wall face can be reversed), so the
+        # ±normal alone never decides the room side: the front is resolved
+        # deterministically toward the EYE side of the plane. Without an
+        # eye, with an eye exactly on the plane, or for sloped faces
+        # (no axis-aligned plane) there is no candidate — fail-safe, no
+        # snap beats an unresolvable orientation.
         def face_candidates(faces, context)
           faces.filter_map do |plane|
-            normal = normal_of(plane)
-            axis_sign = horizontal_axis_sign(normal)
-            next nil unless axis_sign
+            axis = horizontal_axis_index(normal_of(plane))
+            next nil unless axis
+            next nil unless context[:eye_mm]
 
-            world_axis, sign = axis_sign
+            plane_value = point_of(plane)[axis]
+            eye_offset = context[:eye_mm][axis] - plane_value
+            next nil if eye_offset.abs <= AXIS_EPSILON
+
+            sign = eye_offset.positive? ? 1 : -1
             front_dir = [0.0, 0.0, 0.0]
-            front_dir[world_axis] = sign.to_f
+            front_dir[axis] = sign.to_f
             build_candidate(
-              kind: :face, axis: world_axis, sign: sign,
-              plane_value: point_of(plane)[world_axis],
+              kind: :face, axis: axis, sign: sign,
+              plane_value: plane_value,
               aligned_side: :back, front_dir: front_dir,
-              key: "face|#{world_axis}|#{sign}|#{point_of(plane)[world_axis].round(3)}",
+              key: "face|#{axis}|#{sign}|#{plane_value.round(3)}",
               label: 'Encajar a pared', context: context
             )
           end
@@ -163,15 +188,21 @@ module Granete
         # names/GUIDs are never authority. Both pairings keep the new
         # furniture front PARALLEL to the target's front (a run of
         # cabinets): target right side → new left side, target left side →
-        # new right side. A target whose frame is not axis-aligned
-        # (manually rotated off the quarter grid) offers no candidate: its
-        # sides have no exact axis-aligned plane.
+        # new right side. A side is a FINITE rectangle, not an infinite
+        # plane: the cursor must be within TOLERANCE of the rectangle
+        # (constrained axis + tangential axis + Z), so a neighbor that is
+        # merely close along the constrained axis but meters away along
+        # the wall or in height is NOT a candidate. A target whose frame
+        # is not axis-aligned (manually rotated off the quarter grid)
+        # offers no candidate: its sides have no exact axis-aligned plane.
         def furniture_side_candidates(managed_targets, context)
           candidates = []
           managed_targets.each do |target|
             front = unit_horizontal(front_of(target))
             next unless front
 
+            min_box = min_of(target)
+            max_box = max_of(target)
             right = cross_front_up(front)
             sides = [
               { outward: right, side_label: 'lateral derecho', aligned: :left },
@@ -182,9 +213,11 @@ module Granete
               next unless axis_sign
 
               world_axis, sign = axis_sign
+              next unless near_side_rectangle?(context[:cursor_mm], min_box, max_box, world_axis)
+
               candidates << build_candidate(
                 kind: :furniture_side, axis: world_axis, sign: sign,
-                plane_value: plane_value_along(min_of(target), max_of(target), world_axis, sign),
+                plane_value: plane_value_along(min_box, max_box, world_axis, sign),
                 aligned_side: side[:aligned],
                 front_dir: front,
                 key: "side|#{id_of(target)}|#{side[:side_label]}",
@@ -194,6 +227,27 @@ module Granete
             end
           end
           candidates
+        end
+
+        # Finite-side proximity: distance from the cursor to the side
+        # RECTANGLE, clamped per axis (0 while inside the span). The
+        # rectangle spans the target box along the tangential horizontal
+        # axis and Z; near-ness on the constrained axis is checked
+        # separately by the displacement tolerance filter.
+        def near_side_rectangle?(cursor_mm, min_box, max_box, constrained_axis)
+          tangential = constrained_axis.zero? ? 1 : 0
+          [tangential, 2].all? do |axis|
+            interval_distance(cursor_mm[axis], min_box[axis], max_box[axis]) <= TOLERANCE_MM
+          end
+        end
+
+        # Distance from a coordinate to [interval_min, interval_max]:
+        # 0 inside the interval, the gap to the nearest end otherwise.
+        def interval_distance(value, interval_min, interval_max)
+          return interval_min - value if value < interval_min
+          return value - interval_max if value > interval_max
+
+          0.0
         end
 
         # ---- candidate math -------------------------------------------
@@ -354,6 +408,14 @@ module Granete
           end
 
           nil
+        end
+
+        # The horizontal world axis a horizontal axis-aligned normal
+        # constrains (sign-agnostic — face orientation is arbitrary, the
+        # room side is resolved from the eye). nil when not axis-aligned.
+        def horizontal_axis_index(normal)
+          axis_sign = horizontal_axis_sign(normal)
+          axis_sign && axis_sign[0]
         end
 
         def vertical_axis_up(normal)
