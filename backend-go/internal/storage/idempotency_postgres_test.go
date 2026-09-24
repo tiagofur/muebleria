@@ -18,7 +18,10 @@ func idempotencyStores(t *testing.T) (*storage.PostgresStore, *storage.PostgresS
 	t.Helper()
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := storage.ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("idempotencyStores rejected unsafe test database: %v", err)
 	}
 	one, err := storage.NewPostgresStore(url)
 	if err != nil {

@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -32,14 +34,18 @@ func multiOrgAdminDSN(t *testing.T) string {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping multi-org migration test")
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {
 		t.Skipf("cannot parse DATABASE_URL: %v", err)
 	}
 	u.Path = "/postgres"
-	return u.String()
+	adminDSN := u.String()
+	if err := storage.ValidateTestAdminDatabaseURL(adminDSN); err != nil {
+		t.Fatalf("multiOrgAdminDSN rejected unsafe test database: %v", err)
+	}
+	return adminDSN
 }
 
 func multiOrgExec(t *testing.T, pool *pgxpool.Pool, sql string) {
@@ -56,35 +62,38 @@ func firstLine(sql string) string {
 	return sql
 }
 
-// multiOrgFreshDB drops+creates the throwaway database and returns a pool to
+// multiOrgFreshDB drops+creates a throwaway database and returns a pool to
 // it plus a closer that must run before the drop cleanup.
 func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	admin, err := pgxpool.New(context.Background(), multiOrgAdminDSN(t))
+	adminDSN := multiOrgAdminDSN(t)
+	admin, err := pgxpool.New(context.Background(), adminDSN)
 	if err != nil {
 		t.Skipf("no db: %v", err)
 	}
 	ctx := context.Background()
-	if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+multiOrgTestDBName+` WITH (FORCE)`); err != nil {
+	testDBName := fmt.Sprintf("%s_%d", multiOrgTestDBName, time.Now().UnixNano())
+	if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+testDBName+` WITH (FORCE)`); err != nil {
 		t.Skipf("drop test db: %v", err)
 	}
-	if _, err := admin.Exec(ctx, `CREATE DATABASE `+multiOrgTestDBName); err != nil {
+	if _, err := admin.Exec(ctx, `CREATE DATABASE `+testDBName); err != nil {
 		t.Skipf("create test db: %v", err)
 	}
 
 	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
-	}
 	u, _ := url.Parse(dsn)
-	u.Path = "/" + multiOrgTestDBName
-	pool, err := pgxpool.New(ctx, u.String())
+	u.Path = "/" + testDBName
+	testDSN := u.String()
+	if err := storage.ValidateTestDatabaseURL(testDSN); err != nil {
+		t.Fatalf("multiOrgFreshDB rejected unsafe test database: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, testDSN)
 	if err != nil {
 		t.Fatalf("connect test db: %v", err)
 	}
 	t.Cleanup(func() {
 		pool.Close()
-		if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+multiOrgTestDBName+` WITH (FORCE)`); err != nil {
+		if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+testDBName+` WITH (FORCE)`); err != nil {
 			t.Logf("cleanup drop: %v", err)
 		}
 		admin.Close()

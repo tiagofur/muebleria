@@ -12,19 +12,19 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-// Integration: requires local Postgres. Verifies the machining JSONB column
+// Integration: requires isolated test Postgres. Verifies the machining JSONB column
 // (F127) round-trips through Create/Update/Get:
 //   - nil profile stays nil (NULL = cost-only hardware, legacy rows);
 //   - a two-part profile (minifix-style cam + bolt) survives with every
 //     nullable scalar (depth) intact;
 //   - updating back to nil clears the footprint (UPDATE writes NULL).
-//
-// Mirrors hardware_preview_test.go: same DATABASE_URL/fallback + skip guard,
-// hard-delete cleanup before pool close.
 func TestHardware_PersistsMachiningProfile(t *testing.T) {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	}
+	if err := storage.ValidateTestDatabaseURL(url); err != nil {
+		t.Fatalf("TestHardware_PersistsMachiningProfile rejected unsafe test database: %v", err)
 	}
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	pool, err := pgxpool.New(ctx, url)

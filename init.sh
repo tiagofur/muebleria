@@ -145,8 +145,8 @@ if [ -f "backend-go/go.mod" ]; then
     EXIT_CODE=1
   else
     ok "go $(go version | awk '{print $3}')"
-    info "Ejecutando tests Go..."
-    if (cd backend-go && go test ./... 2>&1); then
+    info "Ejecutando tests Go con aislamiento de base de datos (scripts/backend-test.sh)..."
+    if ./scripts/backend-test.sh 2>&1; then
       ok "Todos los tests de Go pasan"
     else
       fail "Hay tests de Go rotos"

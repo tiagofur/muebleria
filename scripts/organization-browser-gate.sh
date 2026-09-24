@@ -159,6 +159,7 @@ export ORGANIZATION_TEST_OUTPUT="${TMP_ROOT}/playwright-output"
 # a snapshot. Read-only-from-app perspective: admin DSN for fixture seeding
 # only; the verified FLOW always goes through the real API.
 GATE_DB_PORT="$(docker port "${CONTAINER}" 5432/tcp | head -1 | awk -F: '{print $NF}')"
+export ORGANIZATION_TEST_ISOLATED=1
 export ORGANIZATION_TEST_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${GATE_DB_PORT}/granete_gate?sslmode=disable"
 
 cd "${ROOT}"

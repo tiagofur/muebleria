@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,17 +30,67 @@ type rlsFixture struct {
 	admin *pgxpool.Pool
 	app   *pgxpool.Pool
 	store *storage.PostgresStore
+	dbName string
+}
+
+func (fx *rlsFixture) DatabaseURL(t *testing.T) *url.URL {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set; skipping tenant RLS integration test")
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse DATABASE_URL: %v", err)
+	}
+	u.Path = "/" + fx.dbName
+	if err := storage.ValidateTestDatabaseURL(u.String()); err != nil {
+		t.Fatalf("DatabaseURL rejected unsafe test database: %v", err)
+	}
+	return u
 }
 
 func newRLSFixture(t *testing.T) *rlsFixture {
 	t.Helper()
-	admin := multiOrgFreshDB(t)
+	testDBName := fmt.Sprintf("%s_%d", multiOrgTestDBName, time.Now().UnixNano())
+	adminDSN := multiOrgAdminDSN(t)
+	admin, err := pgxpool.New(context.Background(), adminDSN)
+	if err != nil {
+		t.Skipf("no db: %v", err)
+	}
 	ctx := context.Background()
-	migrationStore := &storage.PostgresStore{Pool: admin}
+	if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+testDBName+` WITH (FORCE)`); err != nil {
+		t.Skipf("drop test db: %v", err)
+	}
+	if _, err := admin.Exec(ctx, `CREATE DATABASE `+testDBName); err != nil {
+		t.Skipf("create test db: %v", err)
+	}
+
+	dsn := os.Getenv("DATABASE_URL")
+	u, _ := url.Parse(dsn)
+	u.Path = "/" + testDBName
+	testDSN := u.String()
+	if err := storage.ValidateTestDatabaseURL(testDSN); err != nil {
+		t.Fatalf("newRLSFixture rejected unsafe test database: %v", err)
+	}
+	dbPool, err := pgxpool.New(ctx, testDSN)
+	if err != nil {
+		t.Fatalf("connect test db: %v", err)
+	}
+	t.Cleanup(func() {
+		dbPool.Close()
+		if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+testDBName+` WITH (FORCE)`); err != nil {
+			t.Logf("cleanup drop: %v", err)
+		}
+		admin.Close()
+	})
+
+	migrationStore := &storage.PostgresStore{Pool: dbPool}
 	if err := migrationStore.RunMigrations(ctx); err != nil {
 		t.Fatalf("RunMigrations: %v", err)
 	}
 
+	appRoleName := rlsAppRole
 	for _, statement := range []string{
 		`INSERT INTO organizations (id, name, slug, status) VALUES
 		 ('` + rlsOrgA + `', 'RLS A', 'rls-a', 'provisioning'),
@@ -75,17 +126,17 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		 ('80000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', NOW(), 0, 0, 0, 0, 0, 0, 1, 0, '` + rlsOrgA + `')`,
 		`INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES
 		 ('80000000-0000-0000-0000-000000000001', 'material', '90000000-0000-0000-0000-000000000001', 0, '` + rlsOrgA + `')`,
-		`DROP ROLE IF EXISTS ` + rlsAppRole,
-		`CREATE ROLE ` + rlsAppRole + ` LOGIN PASSWORD 'rls-test-password'
+		`DROP ROLE IF EXISTS ` + appRoleName,
+		`CREATE ROLE ` + appRoleName + ` LOGIN PASSWORD 'rls-test-password'
 		 NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS IN ROLE granete_app`,
 	} {
-		if _, err := admin.Exec(ctx, statement); err != nil {
+		if _, err := dbPool.Exec(ctx, statement); err != nil {
 			t.Fatalf("seed RLS fixture: %v\n%s", err, statement)
 		}
 	}
 
-	appURL := rlsDatabaseURL(t)
-	appURL.User = url.UserPassword(rlsAppRole, "rls-test-password")
+	appURL := *u
+	appURL.User = url.UserPassword(appRoleName, "rls-test-password")
 	app, err := pgxpool.New(ctx, appURL.String())
 	if err != nil {
 		t.Fatalf("connect app role: %v", err)
@@ -96,24 +147,11 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 	}
 	t.Cleanup(func() {
 		app.Close()
-		_, _ = admin.Exec(context.Background(), `DROP ROLE IF EXISTS `+rlsAppRole)
+		_, _ = admin.Exec(context.Background(), `DROP ROLE IF EXISTS `+appRoleName)
 	})
-	return &rlsFixture{admin: admin, app: app, store: &storage.PostgresStore{Pool: app}}
+	return &rlsFixture{admin: dbPool, app: app, store: &storage.PostgresStore{Pool: app}, dbName: testDBName}
 }
 
-func rlsDatabaseURL(t *testing.T) *url.URL {
-	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
-	}
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Fatalf("parse DATABASE_URL: %v", err)
-	}
-	u.Path = "/" + multiOrgTestDBName
-	return u
-}
 
 func setRLSActor(t *testing.T, tx pgx.Tx, organizationID, userID, supportSessionID string) {
 	t.Helper()

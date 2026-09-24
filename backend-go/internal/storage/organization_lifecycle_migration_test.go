@@ -36,9 +36,9 @@ func organizationLifecycleMigrationSQL(t *testing.T, version int, suffix string)
 	return string(contents)
 }
 
-func newNamedRuntimeOrganizationStore(t *testing.T, applicationName string) *storage.PostgresStore {
+func newNamedRuntimeOrganizationStore(t *testing.T, fx *rlsFixture, applicationName string) *storage.PostgresStore {
 	t.Helper()
-	config, err := pgxpool.ParseConfig(rlsDatabaseURL(t).String())
+	config, err := pgxpool.ParseConfig(fx.DatabaseURL(t).String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -532,10 +532,10 @@ func TestSupportSessionStartAndOrganizationSuspendSerializeOnOrganizationLock(t 
 			}
 			firstName := "support-race-first"
 			secondName := "support-race-second"
-			startStore := newNamedRuntimeOrganizationStore(t, firstName)
-			suspendStore := newNamedRuntimeOrganizationStore(t, secondName)
+			startStore := newNamedRuntimeOrganizationStore(t, fx, firstName)
+			suspendStore := newNamedRuntimeOrganizationStore(t, fx, secondName)
 			if !test.startFirst {
-				startStore, suspendStore = newNamedRuntimeOrganizationStore(t, secondName), newNamedRuntimeOrganizationStore(t, firstName)
+				startStore, suspendStore = newNamedRuntimeOrganizationStore(t, fx, secondName), newNamedRuntimeOrganizationStore(t, fx, firstName)
 			}
 			startService := application.NewOrganizationService(startStore)
 			suspendService := application.NewOrganizationService(suspendStore)
