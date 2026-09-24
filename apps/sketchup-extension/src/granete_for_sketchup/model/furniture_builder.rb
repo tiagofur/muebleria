@@ -230,6 +230,17 @@ module Granete
           existing = {} unless existing.is_a?(Hash)
           merged_choices != existing
         end
+
+        # #469 increment 3 — the placement envelope this commit persists:
+        # the SAME layout-derived local box the transient preview uses
+        # (dimensionsMm, falling back to the resolved boards AABB). This
+        # is the semantic authority later side-snapping reads — the host
+        # definition bounds aggregate hardware/visual assets that may
+        # protrude past the cabinet sides and must never displace a side
+        # plane. nil for a layout-less path (the stored envelope survives).
+        def placement_envelope(resolved_layout)
+          Tools::PlacementPreviewExtents.envelope_from_layout(resolved_layout)
+        end
       end
 
       # #389 / DT-5 — Place EXISTING project FurnitureInstance. Extracted
@@ -284,7 +295,8 @@ module Granete
                                            material_choices: material_choices,
                                            identity: { server: true, project_id: project_id,
                                                        design_id: design_id },
-                                           relationships: relationships)
+                                           relationships: relationships,
+                                           placement_envelope: placement_envelope(resolved_layout))
             model.commit_operation if transaction
           rescue StandardError => e
             model.abort_operation if transaction
@@ -373,7 +385,8 @@ module Granete
           MetadataWriter.write_furniture(
             @metadata_store, furniture, instance_id, definition, parameters,
             material_choices: material_choices, existing_metadata: existing_metadata,
-            migrated_from: MetadataWriter::PROVENANCE_FROM_LEGACY_GROUP
+            migrated_from: MetadataWriter::PROVENANCE_FROM_LEGACY_GROUP,
+            placement_envelope: placement_envelope(resolved_layout)
           )
           validate_migrated_replacement(furniture, instance_id, counts)
           furniture
@@ -729,7 +742,8 @@ module Granete
             counts = render_layout(model, furniture_definition, instance_id, definition, parameters,
                                    resolved_layout)
             MetadataWriter.write_furniture(@metadata_store, furniture, instance_id, definition, parameters,
-                                           material_choices: material_choices)
+                                           material_choices: material_choices,
+                                           placement_envelope: placement_envelope(resolved_layout))
             model.commit_operation
           rescue StandardError => e
             model.abort_operation
@@ -783,7 +797,8 @@ module Granete
             MetadataWriter.write_furniture(
               @metadata_store, furniture, instance_id, definition, parameters,
               material_choices: merged_material_choices, existing_metadata: existing_meta,
-              relationships: relationships, authoring_dirty: true
+              relationships: relationships, authoring_dirty: true,
+              placement_envelope: placement_envelope(resolved_layout)
             )
             model.commit_operation if transaction
           rescue StandardError => e
@@ -999,16 +1014,22 @@ module Granete
         # authoring_dirty (#810 rule C): true marks a local authoring edit
         # (parameters/materials) whose fields the working copy has not
         # confirmed yet; the explicit design sync clears it after readback.
+        # placement_envelope (#469 increment 3): the layout-derived local
+        # placement box {min_mm:, max_mm:} later semantic side-snapping
+        # consumes. Tri-state like relationships: nil preserves whatever
+        # the existing metadata carries; a Hash replaces it.
         # rubocop:disable-next Metrics/ParameterLists
         def write_furniture(store, furniture, instance_id, definition, parameters,
                             material_choices: nil, existing_metadata: nil, migrated_from: nil,
-                            identity: nil, relationships: nil, authoring_dirty: false)
+                            identity: nil, relationships: nil, authoring_dirty: false,
+                            placement_envelope: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
           rev_ref = definition['revisionId'] || definition['version'] || 'rev-1'
           metadata_payload = json_copy(existing_metadata.is_a?(Hash) ? existing_metadata : {})
           write_envelope(metadata_payload)
+          apply_placement_envelope(metadata_payload, placement_envelope)
           metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref,
                                                             rev_ref, identity: identity)
           metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
@@ -1079,6 +1100,20 @@ module Granete
           payload['namespace'] = 'com.granete.sketchup_extension'
           payload['metadataVersion'] = 1
           payload['kind'] = 'furnitureInstance'
+        end
+
+        # Tri-state placement envelope: nil (caller supplied none — a
+        # layout-less rebuild keeps the previously stored box) vs a Hash
+        # (the fresh authoritative layout-derived box replaces it).
+        def apply_placement_envelope(payload, placement_envelope)
+          case placement_envelope
+          when nil
+            nil
+          when Hash
+            payload['placementEnvelopeMm'] = placement_envelope
+          else
+            raise ArgumentError, 'placement_envelope debe ser nil o un Hash de envelope (min_mm/max_mm)'
+          end
         end
 
         def furniture_intent(payload, definition, parameters, material_choices)

@@ -2540,7 +2540,7 @@
         </div>
       </div>
 
-      <footer>Granete for SketchUp · v0.1.4</footer>
+      <footer id="granete-version-footer">Granete for SketchUp</footer>
     </div>
 
     <script>
@@ -4073,6 +4073,13 @@
 
         // Bridge exposed to Ruby
         window.GraneteDialog = {
+          setPluginVersion: function (payload) {
+            var footer = document.getElementById("granete-version-footer");
+            if (footer && payload && payload.version) {
+              footer.textContent = "Granete for SketchUp \u00b7 v" + String(payload.version);
+            }
+          },
+
           updateMediaUrl: function (payload) {
             if (!payload || !payload.filename || !payload.url) return;
             mediaUrls()[payload.filename] = payload.url;

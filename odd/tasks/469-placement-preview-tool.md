@@ -72,38 +72,177 @@ planes: sloped walls and furniture rotated to arbitrary angles offer no
 candidate. Arbitrary-angular support is remaining scope of #469; until
 it lands, wall/face snapping is not "complete".
 
-### Observed evidence (this candidate)
+### Observed evidence (this candidate — final HEAD after both review rounds)
 
-- `bundle exec rake verify` (homebrew ruby 3.2.11 + vendor bundle) after
-  the three review P1 corrections AND the round-2 floor-winding/tie-break
-  fixes: 1069 unit runs / 6981 assertions + 6 boundary runs / 3323
-  assertions, 0 failures; 226 files lint-clean; RBZ verified readback,
-  sha256 `b6aa772e7c219f8c6e03eb3ae54909a67745f36a83bf86c19bd9b89e8620a5bc`.
-- Round-2 review fixes: floor winding parity (engine + tool) and the
-  same-axis tie test now proves BOTH candidates exist with equal
-  displacement before composing (it was vacuous once eye_mm became
-  mandatory for walls).
-- New/extended suites: `placement_snap_engine_test.rb` 25 runs (families,
-  policy, tie-breaks, gaps, reversed-face/eye resolution, finite-side
-  tangential/vertical distance, negatives); `furniture_placement_tool_
-  test.rb` 40 runs (+13: snap/VCB/stale/rigidity + reversed wall at tool
-  level + provider call-count budget (1 per gesture, +1 at click) +
-  fresh-geometry commit); `placement_preview_controller_test.rb` 31 runs
-  (+4: project-lane snapped commit with real PUT at x=600mm, catalog lane
-  parity, provider exclusions, no-requests scan).
-- TestUp `TC_PlacementPreviewSmoke` extended with
-  `test_semantic_snaps_wall_side_gap_and_undo` (wall orientation + 40mm
-  VCB gap, FI_1↔FI_2 side-to-side + 5mm gap, undo, cancel-with-snap):
-  NOT_RUN this session — no host available; owner-coordinated like R1-R4.
+- `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle; env pin
+  per memory) at the frozen candidate: RuboCop 228 files 0 offenses;
+  1113 unit runs / 7258 assertions, 0 failures (seed-stable: 4242/12345/
+  606/1/999 verdes tras hacer hermético el suite de fidelidad del
+  stub); 6 boundary runs / 3359 assertions; RBZ deterministic readback
+  (v0.1.6), sha256
+  `0e53528336d5fcdd54ddedf1218c0caa799353704ab5e9dd4ea4c339ee97b752`.
+- New `host_stub_faithfulness_test.rb` (3 runs, review r3 negative
+  proof): the stub must never re-expose `Geom::BoundingBox#transform`
+  nor `ComponentInstance#entities` — APIs the REAL host does not have;
+  the faithful traversal (`Group#entities`, ComponentInstance via
+  `definition.entities`) is pinned positively.
+- Engine suite 36 runs: walls at 30°/37.5°/45°/23° (back on the rotated
+  plane, eye-side orientation, reversed-wall identical placement, exact
+  perpendicular gap 40mm along the normal — with the explicit negative
+  that no world-axis coordinate equals it), neighbor sides at
+  17/30/37.5/45/123° (fronts parallel, oriented plane x·right=600
+  exact), gap 5mm perpendicular to a 37° run, the world-AABB
+  negative-proof fixture (45°: oriented side plane ≠ AABB face), finite
+  rectangle along the ORIENTED run axis, FINITE base-plane footprint
+  (close-Z-but-meters-away-in-XY rejected; footprint covering the cursor
+  snaps), tilted/mirrored frames fail closed, wall+rotated-side corner
+  at 30°, wall+floor at 45°, horizontal-unit front, candidate tangents
+  ⟂ normals (dot=0; floors carry none).
+- Tool suite 50 runs: wall 30° back-face plane + reversed-wall transform
+  equality; arbitrary-yaw basis unit/orthogonal/+Z vertical det +1;
+  rotated neighbor 30° side-to-side with exact 5mm along the oriented
+  normal + rigidity; stale 30°→35° rotation committed with the FRESH
+  frame; wall+floor composition THROUGH the tool (preview + commit);
+  base-plane budget 1/gesto + 1/click; distant floor never hijacks a
+  free pick; base-plane click revalidation against a MOVED nested floor
+  (fresh plane) and a DELETED one (wall survives, Z free).
+- Controller suite 35 runs: the canonical commit PERSISTS
+  placementEnvelopeMm (dimensionsMm-derived) read back through the real
+  convergence path; provider uses the persisted envelope, never
+  definition.bounds (protruding-asset regression; units without
+  envelope excluded); rotated 45° root yields the oriented descriptor;
+  exclusions unmanaged/duplicated/erased/tilted/scaled/mirrored; the
+  base-plane provider RECURSES into Groups and Component instances with
+  the accumulated world transform (world footprint, tilted container
+  rejected, no requests); lanes compose wall 30° + floor through the
+  real tool with a real working-copy PUT.
+- TestUp `TC_PlacementPreviewSmoke`:
+  `test_arbitrary_angle_wall_neighbor_composition_and_undo` (A wall 30°
+  + 40mm VCB gap with camera-fixed room side, B same wall reversed →
+  identical placement, C managed neighbor rotated 30° → FI_2
+  side-to-side 5mm over the PERSISTED envelope, D wall+floor
+  composition THROUGH THE REAL TOOL with the controller-shaped
+  providers — recursive scan + finite footprints, E cancel zero
+  residue): NOT_RUN this session — no host available; owner-coordinated
+  like R1-R4.
 
-### Remaining for #469 (after this increment)
+### Review corrections (ronda 2 sobre el candidato, mismo PR)
 
-- Repeat placement; disconnected Library lane (`insert_furniture`);
-- arbitrary-ANGLE wall/furniture snap support (current: quarter-grid
-  only — see Known limitation);
-- real-host evidence for the whole walk (incl. this snap smoke);
-- UX polish from real-host usability (#506).
+1. **P1 — base planes espacialmente finitos + nesting**: el provider de
+   base planes ya no trata cada cara horizontal como un plano infinito
+   global. El scan es RECURSIVO (Groups/ComponentInstances con el
+   transform acumulado — los room fixtures no tienen que vivir en la
+   raíz; se parte de la raíz del modelo de forma determinista, no de
+   active_entities, para que snapshot y revalidación no diverjan con el
+   contexto de edición abierto) y cada plano conserva su FOOTPRINT
+   mundial (bounds transformados: intervalo XY + punto del plano); el
+   motor acepta un base plane sólo si el cursor está a ≤250mm del
+   footprint en AMBOS ejes XY además de la tolerancia Z — una plataforma
+   cercana en Z pero a metros en XY ya no gana. La normal MUNDIAL debe
+   seguir vertical (contenedor inclinado → sin candidato). Planes sin
+   footprint (la cara picada vía InputPoint) siguen infinitos: el pick
+   está sobre la cara por construcción. Presupuesto intacto: 1 scan por
+   gesto + 1 revalidación en click. Regresiones A (plataforma lejana en
+   XY, engine), B (piso bajo el cursor compone con pared, tool +
+   controller con PUT real), C (piso equivalente en Group y en
+   Component con transform, provider), D (piso movido/borrado pre-click:
+   commit contra el plano fresco o caída segura con la pared intacta,
+   tool).
+2. **P2 — evidencia consistente**: el body del PR y este artifact citan
+   exactamente el HEAD final (runs/assertions/archivos/RBZ arriba); los
+   números del primer candidato quedan sólo en el historial de pushes.
 
+### Review corrections (ronda 3 sobre el candidato, mismo PR)
+
+1. **P1 — APIs ficticias del stub eliminadas**: el footprint mundial de
+   un base plane se calcula desde las POSICIONES de los vértices
+   transformadas (`Face#vertices → position.transform(world) → min/max`)
+   — el `Geom::BoundingBox#transform` que el stub había inventado NO
+   existe en la API real y se eliminó. La recursión es HOST-FAITHFUL:
+   `Group → entity.entities`, `ComponentInstance →
+   entity.definition.entities` (un ComponentInstance real no tiene
+   #entities); el `ComponentInstanceStub#entities` inventado se
+   eliminó. Prueba negativa nueva (`host_stub_faithfulness_test.rb`)
+   prohíbe reintroducir ambas APIs fantasma y fija el camino fiel; los
+   tests de piso anidado en Group + Component siguen pasando sin APIs
+   inventadas. Se preservan footprint finito, transforms acumulados,
+   1 snapshot por gesto, 1 refresh en click y cero backend por mouse
+   move.
+
+### Review corrections (ronda 4 sobre el candidato, mismo PR)
+
+1. **P1 — el scan de base planes NO desciende dentro de muebles
+   Granete**: todo Group/ComponentInstance cuyo metadata marque
+   `kind == furnitureInstance` (conectado o local) se PODA de la
+   recursión — los boards/estantes/tapas/herrajes de un mueble colocado
+   son mueble, no pisos de habitación, y no pueden convertirse en
+   candidatos "Piso" que le ganen al piso arquitectónico por menor
+   distancia Z. Regresión: mueble vecino con bottom board (z=0),
+   estante (z=400) y tapa (z=720) → ninguna cara horizontal suya emite
+   base plane; el piso arquitectónico cercano sí (y es el único). Se
+   preservan groups/components arquitectónicos anidados, transform
+   acumulado, footprint finito y el presupuesto 1/gesto + 1/click.
+2. **P2 — footprint documentado como aproximación**: el criterio actual
+   es una APROXIMACIÓN POR RECTÁNGULO DELIMITADOR (min/max XY de los
+   vértices mundiales) — conservadora ante caras cóncavas, L-shapes y
+   agujeros (los puntos del notch quedan incluidos; pinneado
+   explícitamente en el test del engine para que el cambio a un
+   footprint polygon-aware sea deliberado). SCOPE RESTANTE CONCRETO de
+   #469: reemplazar el bounding-rectangle por un footprint poligonal
+   real (loops con holes / prueba point-in-face o proximidad
+   equivalente). El código y el PR NO lo describen como footprint
+   exacto.
+
+### Review corrections (ronda 5 sobre el candidato, mismo PR)
+
+1. **P1 — base planes respetan la VISIBILIDAD EFECTIVA del modelo**: el
+   scan mantiene el INSTANCE PATH durante la recursión y consulta la
+   API REAL `Model#drawing_element_visible?(path)` (verificada en la
+   documentación oficial: existe desde SketchUp 2020.0, acepta un
+   `Array<Sketchup::Drawingelement>` — o `InstancePath` — y responde por
+   el estado ACTUAL del modelo: flag propio, Tag/Layer y TODOS los
+   padres de la ruta). El único host objetivo del repo es SketchUp
+   2026.2 (README), donde el método existe y el bug documentado
+   (excepción cuando el ÚLTIMO elemento del path era Group/Component,
+   corregido en 2026.0) no aplica. Fallbacks EXPLÍCITOS y documentados
+   para hosts más viejos, nunca silenciosos: método ausente (<2020) →
+   caminata por-elemento (visible? + Layer visible? a lo largo de la
+   ruta); ArgumentError (bug <2026) → "no se puede decidir → descender"
+   — la llamada a nivel FACE (paths que terminan en Face, nunca
+   afectados por el bug) es la autoridad. Orden preservado: visibilidad
+   → prune furnitureInstance Granete → emitir Face / descender. El
+   click re-valida la visibilidad (un piso oculto entre preview y
+   commit no puede quedar en la solución). Presupuesto intacto: la
+   visibilidad se evalúa DENTRO de los scans 1/gesto + 1/click.
+   Regresiones: A piso oculto (z=80) ABSENT de los descriptores contra
+   un visible z=0; B Tag apagado (Layers#add + Layer#visible= +
+   Drawingelement#layer= — superficie REAL en el stub); C Group padre
+   oculto; D ComponentInstance padre con Tag apagado; E los mismos
+   contenedores anidados visibles siguen participando con transforms
+   acumulados; F click revalida (pared sobrevive, Z cae a la
+   inferencia fresca); G prune Granete sigue verde.
+   `host_stub_faithfulness_test.rb` fija la firma/semántica del
+   `drawing_element_visible?` del stub (propio, padre, tag) junto a
+   las negativas existentes (BoundingBox sin #transform;
+   ComponentInstance sin #entities). El smoke añade un piso oculto
+   MÁS CERCANO en Z al escenario D (visible=false vía la API real) —
+   NOT_RUN, coordinado con el owner.
+
+### Versión 0.1.6 + footer de versión desde la fuente del plugin
+
+- `EXTENSION_VERSION` 0.1.5 → 0.1.6 (identity.rb, única fuente).
+- El rodapié del diálogo ya NO es texto plano: el markup lleva
+  `id="granete-version-footer"` sin versión hardcodeada (el texto
+  estático decía "v0.1.4" — dos versiones atrás) y
+  `handle_dialog_ready` empuja
+  `setPluginVersion({version: EXTENSION_VERSION})` por el bridge; el JS
+  de la página renderiza "Granete for SketchUp · v<versión>" (payload
+  sin versión no toca el texto). Tests: suite Ruby de dialog_controller
+  (orden status → setPluginVersion → setCatalog con el valor exacto de
+  identity.rb) + `dialog_version_footer_test.js` bajo node (sin literal
+  de versión en el markup + render del valor pusheado + nil-safety).
+- Instalación para pruebas del owner sobre SketchUp 2026.2 (host
+  cerrado; backup del 0.1.5 previo conservado).
 
 ## Scope separation from parallel work (coordination registry)
 

@@ -32,6 +32,17 @@ module Geom
     def to_a
       [x, y, z]
     end
+
+    # Host-faithful: Vector3d#transform applies the direction (3x3) part
+    # of a transformation — no translation, exactly like the real API.
+    def transform(transformation)
+      m = transformation.to_a
+      Vector3d.new(
+        (m[0] * x) + (m[1] * y) + (m[2] * z),
+        (m[4] * x) + (m[5] * y) + (m[6] * z),
+        (m[8] * x) + (m[9] * y) + (m[10] * z)
+      )
+    end
   end
 
   class BoundingBox
@@ -204,6 +215,44 @@ module Sketchup
     end
   end
 
+  # Host-faithful Layer ("Tag" in modern UI naming) surface: the real
+  # Sketchup::Layer exposes name + visible?.
+  class Layer
+    attr_accessor :name
+
+    def initialize(name = '')
+      @name = name
+      @visible = true
+    end
+
+    def visible?
+      @visible
+    end
+
+    def visible=(flag)
+      @visible = !!flag
+    end
+  end
+
+  # Host-faithful Layers collection (Model#layers → Layers#add(name)).
+  class Layers
+    include Enumerable
+
+    def initialize
+      @layers = []
+    end
+
+    def each(&block)
+      @layers.each(&block)
+    end
+
+    def add(name)
+      layer = Layer.new(name)
+      @layers << layer
+      layer
+    end
+  end
+
   def self.version
     '24.0.145-stub'
   end
@@ -249,6 +298,53 @@ module SketchupStub
 
     def mesh
       Sketchup::PolygonMesh.new(@points)
+    end
+
+    # Host-faithful: Face#vertices returns Vertex objects exposing
+    # #position (used by the placement base-plane scan, #469 incr. 3).
+    def vertices
+      @points.map { |point| VertexStub.new(point) }
+    end
+
+    # Host-faithful: Face#bounds is the face's box in its own container
+    # coordinates (memoized — stub points never move after creation).
+    def bounds
+      @bounds ||= begin
+        box = Geom::BoundingBox.new
+        box.min = Geom::Point3d.new(@points.map(&:x).min, @points.map(&:y).min, @points.map(&:z).min)
+        box.max = Geom::Point3d.new(@points.map(&:x).max, @points.map(&:y).max, @points.map(&:z).max)
+        box
+      end
+    end
+  end
+
+  # Host-faithful Vertex surface for face-derived scans.
+  class VertexStub
+    attr_reader :position
+
+    def initialize(position)
+      @position = position
+    end
+  end
+
+  # Host-faithful Drawingelement visibility surface: the OWN hidden flag
+  # (visible?) and the element's Layer/Tag (REAL API surface). Effective
+  # visibility through a full instance path is Model#drawing_element_visible?.
+  module DrawingElementVisibility
+    def visible?
+      !@hidden
+    end
+
+    def visible=(flag)
+      @hidden = !flag
+    end
+
+    def layer
+      @layer ||= SketchupStub.active_model.layers.to_a.first
+    end
+
+    def layer=(target)
+      @layer = target
     end
   end
 
@@ -320,8 +416,17 @@ module SketchupStub
     end
   end
 
+  # Host-faithful: every Sketchup Entity (faces included) carries
+  # attribute dictionaries — reconciliation scans read them on faces;
+  # every Drawingelement carries the own-visibility/layer surface.
+  class FaceStub
+    include AttributeContainer
+    include DrawingElementVisibility
+  end
+
   class GroupStub < Sketchup::Group
     include AttributeContainer
+    include DrawingElementVisibility
 
     # Host-faithful: a real Group exposes its placement transformation
     # (#416 migration reads it to preserve the world placement).
@@ -386,6 +491,7 @@ module SketchupStub
 
   class ComponentInstanceStub < Sketchup::ComponentInstance
     include AttributeContainer
+    include DrawingElementVisibility
 
     attr_accessor :name, :material, :transformation, :bounds
     attr_reader :definition, :persistent_id
@@ -654,11 +760,14 @@ module SketchupStub
 
   class ViewStub < Sketchup::View
     attr_reader :images_written, :invalidations, :zoomed_entities
+    # Host-faithful: View#camera (the wall-snap room-side reference).
+    attr_accessor :camera
 
     def initialize
       @images_written = []
       @invalidations = 0
       @zoomed_entities = []
+      @camera = nil
     end
 
     # Overlay tool surface (#470): invalidations are observable so tests can
@@ -699,7 +808,7 @@ module SketchupStub
     include AttributeContainer
 
     attr_reader :active_entities, :selection, :definitions, :materials, :operations,
-                :selected_tools, :observers
+                :selected_tools, :observers, :layers
     attr_accessor :active_view
 
     def initialize
@@ -707,10 +816,27 @@ module SketchupStub
       @selection = SelectionStub.new
       @definitions = DefinitionListStub.new
       @materials = MaterialsStub.new
+      @layers = ::Sketchup::Layers.new
+      @layers.add('Layer0')
       @operations = []
       @selected_tools = []
       @active_view = ViewStub.new
       @observers = []
+    end
+
+    # Host-faithful Model#drawing_element_visible?(path) (REAL API,
+    # SketchUp 2020+): reports whether the element at the end of the
+    # instance path is visible given the CURRENT model state — own
+    # hidden flags AND Layer/Tag visibility along the WHOLE path. Accepts
+    # an Array<Drawingelement> like the real host.
+    def drawing_element_visible?(path)
+      elements = path.respond_to?(:to_a) ? path.to_a : Array(path)
+      elements.all? do |element|
+        own_visible = element.respond_to?(:visible?) ? element.visible? : true
+        layer = element.respond_to?(:layer) ? element.layer : nil
+        layer_visible = layer.respond_to?(:visible?) ? layer.visible? : true
+        own_visible && layer_visible
+      end
     end
 
     def entities

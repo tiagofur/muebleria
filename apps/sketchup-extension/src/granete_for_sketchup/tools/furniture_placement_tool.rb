@@ -1,83 +1,11 @@
 # frozen_string_literal: true
 
-# placement_snap_engine is loaded by the extension root (main.rb); tests
-# require it explicitly before this file.
+# placement_snap_engine and placement_preview_extents are loaded by the
+# extension root (main.rb); tests require them explicitly before this file.
+
 module Granete
   module SketchUpExtension
     module Tools
-      # #469 — preview-only extents derivation from the authoritative
-      # resolved layout. Prefers the layout's top-level dimensionsMm
-      # ([width, height, depth] → local X=width, Y=depth, Z=height); when
-      # absent, derives the local AABB of the resolved boards (#414
-      # transforms). Preview/compat math only: never baked into part
-      # geometry (interaction-model §7 keeps the AABB as preview-only).
-      module PlacementPreviewExtents
-        module_function
-
-        # Returns {x:, y:, z:, origin_mm:} — the SIZES and the local MINIMUM
-        # of the resolved furniture box. origin_mm keeps the anchor mapping
-        # the REAL box (a layout whose boards start away from the local
-        # origin must not preview shifted relative to the commit).
-        def from_layout(layout)
-          from_dimensions(layout.respond_to?(:dimensions_mm) ? layout.dimensions_mm : nil) ||
-            boards_extents(layout.respond_to?(:boards) ? layout.boards : [])
-        end
-
-        def from_dimensions(dims)
-          return nil unless dims.is_a?(Array) && dims.length == 3 && dims.all? { |v| v.to_f.positive? }
-
-          { x: dims[0].to_f, y: dims[2].to_f, z: dims[1].to_f, origin_mm: [0.0, 0.0, 0.0] }
-        end
-
-        def boards_extents(boards)
-          min = [Float::INFINITY, Float::INFINITY, Float::INFINITY]
-          max = [-Float::INFINITY, -Float::INFINITY, -Float::INFINITY]
-          boards.each do |board|
-            corners_for_board(board).each { |corner| fold_corner(corner, min, max) }
-          end
-          return nil unless min.all?(&:finite?) && max.all?(&:finite?)
-
-          { x: max[0] - min[0], y: max[1] - min[1], z: max[2] - min[2],
-            origin_mm: min.dup }
-        end
-
-        def fold_corner(corner, min, max)
-          3.times do |axis|
-            min[axis] = corner[axis] if corner[axis] < min[axis]
-            max[axis] = corner[axis] if corner[axis] > max[axis]
-          end
-        end
-
-        # Local box corners of one resolved board: its #414 transform
-        # (translationMm + orthonormal basis) applied to the local
-        # [0,width]×[0,thickness]×[0,length] box, all in mm.
-        def corners_for_board(board)
-          translation = board.respond_to?(:translation) ? board.translation : nil
-          basis = board.respond_to?(:basis) ? board.basis : nil
-          return [] unless translation.is_a?(Array) && basis.is_a?(Hash)
-
-          size = board_size(board)
-          [0.0, 1.0].repeated_permutation(3).map do |flags|
-            local = [flags[0] * size[0], flags[1] * size[1], flags[2] * size[2]]
-            transformed_corner(translation, basis, local)
-          end
-        end
-
-        def transformed_corner(translation, basis, local)
-          3.times.map do |axis|
-            translation[axis] +
-              ((basis['x'][axis] * local[0]) + (basis['y'][axis] * local[1]) +
-               (basis['z'][axis] * local[2]))
-          end
-        end
-
-        def board_size(board)
-          %i[width_mm thickness_mm length_mm].map do |getter|
-            board.respond_to?(getter) && board.public_send(getter) ? board.public_send(getter).to_f : 0.0
-          end
-        end
-      end
-
       # #469 — transient viewport painting for the placement preview. Pure
       # View#draw calls: the wireframe box, the highlighted front (+Y) face
       # and the visible anchor marker never enter model.entities.
@@ -182,9 +110,12 @@ module Granete
       # Y=depth with the front at +Y/max-depth, Z=height, origin at the
       # back-left-bottom corner). The semantic anchor names that corner of
       # the resolved extents the user "grabs"; Tab cycles it, ←/→ rotate in
-      # quarter turns about +Z through the anchor. Both affect ONLY the
-      # preview/top-level transform — never dimensions, geometry, materials
-      # or machining (#469 §5).
+      # quarter turns about +Z through the anchor (free-mode authoring
+      # control — increment 3 keeps it quarter-turn by design). Semantic
+      # snaps may instead propose an ARBITRARY yaw: the committed basis
+      # derives from the solution's unit front vector. All of these affect
+      # ONLY the preview/top-level transform — never dimensions, geometry,
+      # materials or machining (#469 §5).
       #
       # The click hands the ACCEPTED transform to the caller's canonical
       # commit command via on_commit; identity provenance stays entirely
@@ -223,13 +154,21 @@ module Granete
         # the accepted Geom::Transformation; on_cancel receives a reason
         # (:escape / :tool_switched). Both fire at most once.
         # furniture_targets_provider: optional pure-data callable returning
-        # Granete-managed neighbor descriptors for side-to-side snapping
-        # ({furniture_instance_id:, label:, min_mm:, max_mm:, front_dir:}).
-        # It is data-in/data-out — the tool still holds no transport,
-        # service or builder, so a cursor move can neither issue a request
-        # nor mutate the model.
+        # Granete-managed neighbor ORIENTED-FRAME descriptors for
+        # side-to-side snapping ({furniture_instance_id:, label:,
+        # origin_world_mm:, front_dir_mm:, right_dir_mm:, local_min_mm:,
+        # local_max_mm:}). base_planes_provider: optional pure-data
+        # callable returning horizontal host base-plane descriptors
+        # ({point_mm:, normal_mm:}) so a wall snap and the floor COMPOSE
+        # through the real tool. Both run exactly once per gesture (lazy
+        # snapshot) plus once at the click (revalidation) — never once
+        # per mouse event. They are data-in/data-out — the tool still
+        # holds no transport, service or builder, so a cursor move can
+        # neither issue a request nor mutate the model.
+        # rubocop:disable-next Metrics/ParameterLists -- host-tool DI surface
         def initialize(label:, extents_mm:, on_commit:, on_cancel:, anchor: :back_left_bottom, input_point_factory: nil,
-                       model_provider: nil, origin_mm: [0.0, 0.0, 0.0], logger: nil, furniture_targets_provider: nil)
+                       model_provider: nil, origin_mm: [0.0, 0.0, 0.0], logger: nil, furniture_targets_provider: nil,
+                       base_planes_provider: nil)
           validate_constructor_input!(extents_mm, anchor, origin_mm)
 
           @label = label.to_s
@@ -242,6 +181,7 @@ module Granete
           @logger = logger
           @model_provider = model_provider
           @furniture_targets_provider = furniture_targets_provider
+          @base_planes_provider = base_planes_provider
           @state = :active
           @cursor_mm = [0.0, 0.0, 0.0]
           @has_cursor = false
@@ -250,6 +190,7 @@ module Granete
           @snap_offset_key = nil
           @eye_mm = nil
           @managed_targets_snapshot = nil
+          @base_planes_snapshot = nil
           @input_point = if input_point_factory
                            input_point_factory.call
                          else
@@ -335,16 +276,18 @@ module Granete
         # rebound callback or a late event after the terminal state is
         # ignored (one gesture = one placement, #469 §4.2). The click
         # RE-PICKS the inference at its click's own coordinates and
-        # RE-FETCHES the managed-neighbor snapshot (revalidating the
-        # chosen targets against CURRENT model state — a target erased or
-        # moved between gesture start and click can never be committed
-        # against), then commits only on a fresh valid position: the
-        # commit either uses a revalidated snap or falls back to free
-        # placement at the fresh inference (#469 stale-candidate rule).
+        # RE-FETCHES the managed-neighbor and base-plane snapshots
+        # (revalidating the chosen targets against CURRENT model state —
+        # a target erased, moved or rotated between gesture start and
+        # click can never be committed against), then commits only on a
+        # fresh valid position: the commit either uses a revalidated
+        # snap or falls back to free placement at the fresh inference
+        # (#469 stale-candidate rule).
         def onLButtonDown(_flags, x_pos, y_pos, view)
           return unless active?
 
           refresh_managed_targets!
+          refresh_base_planes!
           pick_position(view, x_pos, y_pos)
           return unless @has_cursor
 
@@ -443,12 +386,15 @@ module Granete
 
         # The accepted top-level transform: the anchor corner sits at the
         # inference point — or at the snapped position when a semantic
-        # candidate is active — and the furniture frame is rotated about +Z
-        # through that anchor (quarter turns derived from the snap target
-        # when it proposes an orientation, e.g. front away from the wall).
-        # Rigid by construction — axes() only accepts orthonormal input,
-        # and quarter turns are exact. Snap and offset NEVER scale, resize
-        # or touch productive geometry: only this exterior transform moves.
+        # candidate is active — and the furniture frame is oriented about
+        # +Z through that anchor. A snap may propose an ARBITRARY yaw
+        # (increment 3): the world front comes from the solution as a unit
+        # horizontal vector and the basis is derived from it directly —
+        # x = front × up, y = front, z = up — unit, orthogonal and
+        # determinant +1 by construction (axes() only accepts orthonormal
+        # input). Free mode keeps the exact quarter-turn basis. Snap and
+        # offset NEVER scale, resize or touch productive geometry: only
+        # this exterior transform moves.
         def current_transform
           return nil unless @has_cursor
           return nil unless defined?(::Geom::Transformation) && defined?(::Geom::Point3d) &&
@@ -458,11 +404,11 @@ module Granete
           anchor_pt = ::Geom::Point3d.new(anchor_world[0] / MM_PER_INCH,
                                           anchor_world[1] / MM_PER_INCH,
                                           anchor_world[2] / MM_PER_INCH)
-          quarters = effective_rotation_quarters
+          x_axis, y_axis, z_axis = effective_basis
           ::Geom::Transformation.axes(anchor_pt,
-                                      ::Geom::Vector3d.new(*basis_for_rotation(:x, quarters)),
-                                      ::Geom::Vector3d.new(*basis_for_rotation(:y, quarters)),
-                                      ::Geom::Vector3d.new(*basis_for_rotation(:z, quarters))) *
+                                      ::Geom::Vector3d.new(*x_axis),
+                                      ::Geom::Vector3d.new(*y_axis),
+                                      ::Geom::Vector3d.new(*z_axis)) *
             ::Geom::Transformation.translation(
               ::Geom::Vector3d.new(-anchor_local_point[0] / MM_PER_INCH,
                                    -anchor_local_point[1] / MM_PER_INCH,
@@ -493,15 +439,16 @@ module Granete
           end
         end
 
-        # #469 increment 2 — semantic snap refresh. Local-only candidate
-        # discovery over pure data (InputPoint face + managed-neighbor
-        # descriptors + the viewing eye); the deterministic engine ranks
-        # and composes. No request, no mutation, no metadata write.
+        # #469 increments 2+3 — semantic snap refresh. Local-only candidate
+        # discovery over pure data (InputPoint face + gesture-scoped base
+        # planes + managed-neighbor descriptors + the viewing eye); the
+        # deterministic engine ranks and composes (a picked wall COMPOSES
+        # with the floor plane). No request, no mutation, no metadata
+        # write.
         def refresh_snap!
           @active_snap = PlacementSnapEngine.solve(
             cursor_mm: @cursor_mm, extents_mm: @extents_mm, origin_mm: @origin_mm,
-            anchor: @anchor, rotation_quarters: @rotation_quarters,
-            faces: inferenced_planes, managed_targets: managed_targets,
+            anchor: @anchor, faces: inferenced_planes, managed_targets: managed_targets,
             eye_mm: @eye_mm
           )
           update_status_text
@@ -519,11 +466,19 @@ module Granete
           [eye.x.to_f * MM_PER_INCH, eye.y.to_f * MM_PER_INCH, eye.z.to_f * MM_PER_INCH]
         end
 
-        # Host face under the cursor — the wall/floor snap source through
-        # the normal host mechanism (InputPoint face + world normal). No
-        # synthetic planes: away from any face the preview keeps following
-        # the raw inference exactly as #469 increment 1 did.
+        # Snap sources: the host face under the cursor (the wall snap
+        # source through the normal host mechanism: InputPoint face +
+        # world normal) PLUS the gesture-scoped horizontal base planes,
+        # so a picked wall and the floor COMPOSE in one solution. No
+        # synthetic planes: the base planes come from real host faces via
+        # the provider, and away from any face the preview keeps
+        # following the raw inference exactly as #469 increment 1 did.
         def inferenced_planes
+          picked_face_plane + base_planes
+        end
+
+        # The picked face as a plane descriptor (empty without a face).
+        def picked_face_plane
           face = @input_point.respond_to?(:face) ? @input_point.face : nil
           return [] unless face.respond_to?(:normal)
 
@@ -534,6 +489,21 @@ module Granete
           end
           [{ point_mm: @cursor_mm.dup,
              normal_mm: [normal.x.to_f, normal.y.to_f, normal.z.to_f] }]
+        end
+
+        # Horizontal base-plane descriptors SNAPSHOT for the gesture: the
+        # provider (a local scan of top-level host faces) runs exactly
+        # ONCE per cursor loop — mouse moves never re-scan the model. The
+        # click re-fetches (#refresh_base_planes!) so the committed floor
+        # constraint comes from CURRENT geometry.
+        def base_planes
+          return [] unless @base_planes_provider
+
+          if @base_planes_snapshot.nil?
+            planes = @base_planes_provider.call
+            @base_planes_snapshot = planes.is_a?(Array) ? planes : []
+          end
+          @base_planes_snapshot
         end
 
         # Managed-neighbor descriptors SNAPSHOT for the gesture: the
@@ -562,6 +532,15 @@ module Granete
           @managed_targets_snapshot = fresh.is_a?(Array) ? fresh : []
         end
 
+        # Commit-time base-plane revalidation: the committed floor
+        # constraint comes from the CURRENT host geometry.
+        def refresh_base_planes!
+          return unless @base_planes_provider
+
+          fresh = @base_planes_provider.call
+          @base_planes_snapshot = fresh.is_a?(Array) ? fresh : []
+        end
+
         # The world anchor position: the raw inference point in free mode,
         # the snapped anchor (with the exact gap when the persisted offset
         # belongs to the live primary constraint) with an active snap.
@@ -576,11 +555,28 @@ module Granete
           end
         end
 
-        def effective_rotation_quarters
+        # The effective world basis [x, y, z] axis vectors. Under an
+        # orientation-proposing snap it derives from the solution's
+        # ARBITRARY unit front (increment 3): right = front × up keeps the
+        # frame right-handed with determinant +1 at any yaw. Free mode
+        # (and the floor, which never reorients) keeps the exact
+        # quarter-turn basis about +Z.
+        def effective_basis
           solution = @active_snap
-          return @rotation_quarters unless solution && solution[:constrains_rotation]
+          front = solution && solution[:constrains_rotation] ? solution[:front_dir_mm] : nil
+          return basis_for_rotation(@rotation_quarters) unless front
 
-          solution[:rotation_quarters]
+          [[front[1], -front[0], 0.0], [front[0], front[1], 0.0], [0.0, 0.0, 1.0]]
+        end
+
+        # Quarter-turn basis about +Z (front stays front under rotation —
+        # the frame turns with the furniture, never mirrors): returns the
+        # [x, y, z] axis vectors.
+        def basis_for_rotation(quarters = @rotation_quarters)
+          x = [1.0, 0.0, 0.0]
+          y = [0.0, 1.0, 0.0]
+          quarters.abs.times { x, y = rotate_pair(x, y) }
+          [x, y, [0.0, 0.0, 1.0]]
         end
 
         # The gap shown to the designer: the persisted offset when it
@@ -632,16 +628,6 @@ module Granete
 
           @rotation_quarters = (((@rotation_quarters + direction) % 4) + 4) % 4
           refresh_snap!
-        end
-
-        # Quarter-turn basis about +Z (front stays front under rotation —
-        # the frame turns with the furniture, never mirrors).
-        def basis_for_rotation(axis, quarters = @rotation_quarters)
-          x = [1.0, 0.0, 0.0]
-          y = [0.0, 1.0, 0.0]
-          z = [0.0, 0.0, 1.0]
-          quarters.abs.times { x, y = rotate_pair(x, y) }
-          { x: x, y: y, z: z }.fetch(axis)
         end
 
         # One +90° turn about +Z: x̂ → ŷ, ŷ → -x̂ (right-handed, no mirror).
