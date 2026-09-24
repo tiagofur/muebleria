@@ -194,17 +194,19 @@ func TestDatabaseURL(t testingT) string {
 	return raw
 }
 
-// TestAdminDatabaseURL returns the validated test admin database URL from DATABASE_URL,
-// routing to /postgres for infrastructure/maintenance operations (CREATE/DROP DATABASE).
-// It skips the test if DATABASE_URL is unset, and fails the test via t.Fatalf if the URL
-// does not satisfy the fail-closed test admin database isolation contract.
+// TestAdminDatabaseURL returns the dedicated migration/admin URL from
+// MIGRATION_DATABASE_URL, routing it to /postgres for maintenance operations.
+// Runtime DATABASE_URL credentials are never elevated for fixture setup.
 func TestAdminDatabaseURL(t testingT) string {
 	if h, ok := t.(interface{ Helper() }); ok {
 		h.Helper()
 	}
-	raw := os.Getenv("DATABASE_URL")
+	raw := os.Getenv("MIGRATION_DATABASE_URL")
 	if strings.TrimSpace(raw) == "" {
-		t.Skip("DATABASE_URL not set; skipping live test database suite")
+		t.Skip("MIGRATION_DATABASE_URL not set; skipping live test database suite")
+	}
+	if err := ValidateTestAdminDatabaseURL(raw); err != nil {
+		t.Fatalf("TestAdminDatabaseURL rejected unsafe database: %v", err)
 	}
 	u, err := url.Parse(raw)
 	if err != nil {

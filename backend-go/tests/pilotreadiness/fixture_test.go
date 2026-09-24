@@ -213,13 +213,13 @@ func truncate(b []byte) string {
 }
 
 type loginResponse struct {
-	Token            string `json:"token"`
-	SessionID        string `json:"session_id"`
-	RefreshToken     string `json:"refresh_token"`
-	RefreshExpiresAt string `json:"refresh_expires_at"`
-	AccessExpiresAt   string `json:"access_expires_at"`
+	Token                    string `json:"token"`
+	SessionID                string `json:"session_id"`
+	RefreshToken             string `json:"refresh_token"`
+	RefreshExpiresAt         string `json:"refresh_expires_at"`
+	AccessExpiresAt          string `json:"access_expires_at"`
 	AbsoluteSessionExpiresAt string `json:"absolute_session_expires_at"`
-	User             struct {
+	User                     struct {
 		ID    string `json:"id"`
 		Email string `json:"email"`
 	} `json:"user"`
@@ -333,9 +333,9 @@ func (f *fixture) webRefresh(t *testing.T, sess *webSession) loginResponse {
 
 func webCookieHeaders(cookie string) map[string]string {
 	return map[string]string{
-		"Cookie":          "granete_web_refresh=" + cookie,
-		"Origin":          pilotWebOrigin,
-		"X-Granete-CSRF":  "1",
+		"Cookie":         "granete_web_refresh=" + cookie,
+		"Origin":         pilotWebOrigin,
+		"X-Granete-CSRF": "1",
 	}
 }
 
@@ -400,23 +400,35 @@ func (f *fixture) customerOrgID(t *testing.T, id string) string {
 // --- Bootstrap ------------------------------------------------------------------
 
 func buildFixture() (*fixture, error) {
-	base := os.Getenv("DATABASE_URL")
-	if base == "" {
+	runtimeBase := os.Getenv("DATABASE_URL")
+	if runtimeBase == "" {
 		return skipOrErr("DATABASE_URL not set: %w", errSkipDB)
 	}
-	u, err := url.Parse(base)
+	runtimeURL, err := url.Parse(runtimeBase)
 	if err != nil {
 		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
+	}
+	if err := storage.ValidateTestDatabaseURL(runtimeURL.String()); err != nil {
+		return nil, fmt.Errorf("runtime DSN rejected by test db guard: %w", err)
+	}
+	migrationBase := os.Getenv("MIGRATION_DATABASE_URL")
+	if migrationBase == "" {
+		return skipOrErr("MIGRATION_DATABASE_URL not set: %w", errSkipDB)
+	}
+	migrationURL, err := url.Parse(migrationBase)
+	if err != nil {
+		return nil, fmt.Errorf("parse MIGRATION_DATABASE_URL: %w", err)
+	}
+	if err := storage.ValidateTestAdminDatabaseURL(migrationURL.String()); err != nil {
+		return nil, fmt.Errorf("migration DSN rejected by test db guard: %w", err)
 	}
 
 	ctx := context.Background()
 
-	// Admin connection (to drop/create the throwaway database).
-	adminURL := *u
+	// Admin connection (to drop/create the throwaway database) is always derived
+	// from the dedicated migration authority, never from the runtime DSN.
+	adminURL := *migrationURL
 	adminURL.Path = "/postgres"
-	if err := storage.ValidateTestAdminDatabaseURL(adminURL.String()); err != nil {
-		return nil, fmt.Errorf("admin DSN rejected by test db guard: %w", err)
-	}
 	admin, err := pgxpool.New(ctx, adminURL.String())
 	if err != nil {
 		return skipOrErr("connect admin dsn: %w", err)
@@ -430,19 +442,19 @@ func buildFixture() (*fixture, error) {
 		return skipOrErr("create test db: %w", err)
 	}
 
-	testURL := *u
-	testURL.Path = "/" + pilotTestDBName
-	if err := storage.ValidateTestDatabaseURL(testURL.String()); err != nil {
+	migrationTestURL := *migrationURL
+	migrationTestURL.Path = "/" + pilotTestDBName
+	if err := storage.ValidateTestAdminDatabaseURL(migrationTestURL.String()); err != nil {
 		admin.Close()
-		return nil, fmt.Errorf("test DSN rejected by test db guard: %w", err)
+		return nil, fmt.Errorf("migration test DSN rejected by test db guard: %w", err)
 	}
-	pool, err := pgxpool.New(ctx, testURL.String())
+	pool, err := pgxpool.New(ctx, migrationTestURL.String())
 	if err != nil {
 		admin.Close()
 		return skipOrErr("connect test db: %w", err)
 	}
 
-	f := &fixture{pool: pool, adminPool: admin, dsn: testURL, store: &storage.PostgresStore{Pool: pool}}
+	f := &fixture{pool: pool, adminPool: admin, dsn: migrationTestURL, store: &storage.PostgresStore{Pool: pool}}
 
 	if err := f.store.RunMigrations(ctx); err != nil {
 		f.close()
@@ -469,21 +481,13 @@ func buildFixture() (*fixture, error) {
 		return nil, fmt.Errorf("set platform admin: %w", err)
 	}
 
-	// The HTTP server must use a real, direct, non-owner runtime login. The
-	// admin pool remains available only for fixture bootstrap and assertions.
-	const runtimeRole = "granete_pilot_app"
-	const runtimePassword = "pilot-runtime-password"
-	_, _ = admin.Exec(ctx, `DROP ROLE IF EXISTS `+runtimeRole)
-	if _, err := admin.Exec(ctx, `CREATE ROLE `+runtimeRole+` LOGIN PASSWORD '`+runtimePassword+`' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`); err != nil {
+	// The HTTP server uses the same unprivileged application authority exposed
+	// through DATABASE_URL. Admin credentials remain confined to setup above.
+	runtimeURL.Path = "/" + pilotTestDBName
+	if err := storage.ValidateTestDatabaseURL(runtimeURL.String()); err != nil {
 		f.close()
-		return nil, fmt.Errorf("create pilot runtime role: %w", err)
+		return nil, fmt.Errorf("pilot runtime DSN rejected by test db guard: %w", err)
 	}
-	if _, err := admin.Exec(ctx, `GRANT granete_app TO `+runtimeRole); err != nil {
-		f.close()
-		return nil, fmt.Errorf("grant pilot runtime privileges: %w", err)
-	}
-	runtimeURL := testURL
-	runtimeURL.User = url.UserPassword(runtimeRole, runtimePassword)
 	runtimePool, err := pgxpool.New(ctx, runtimeURL.String())
 	if err != nil {
 		f.close()
