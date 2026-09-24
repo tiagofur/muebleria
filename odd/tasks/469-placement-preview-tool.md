@@ -440,9 +440,9 @@ CNC/PTX, Inspector redesign, library versioning, real-host install.
   global); the actual surface is `apps/sketchup-extension` only — no
   backend/TS/contract files changed; CI re-validates the rest on the PR.
 
-## Increment 5 — repeat placement (stacked on increment 4)
+## Increment 5 — repeat placement
 
-Base: feat/469-local-library-placement @ ee3806fe (PR #840 — DEPENDS on it)
+Base: origin/main @ f1db9dbb (PR #840 merged)
 Branch: feat/469-repeat-placement
 Status: IMPLEMENTED_PENDING_REVIEW
 
