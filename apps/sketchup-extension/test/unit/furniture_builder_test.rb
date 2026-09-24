@@ -136,6 +136,36 @@ class FurnitureBuilderTest < Minitest::Test
                  @model.operations
   end
 
+  # #469 increment 4 — the placement-tool commit: the root is created at
+  # the ACCEPTED transform inside the ONE undoable operation, no Move
+  # handoff, no selection hijack, and the generic composition persists its
+  # placement envelope (the same shared authority the local preview used).
+  def test_insertion_with_transformation_places_at_final_pose_without_move_handoff
+    definition = @provider.find_definition('kitchen-base-standard')
+    accepted = Geom::Transformation.axes(Geom::Point3d.new(120 * MM, 40 * MM, 10 * MM),
+                                         Geom::Vector3d.new(0, 1, 0),
+                                         Geom::Vector3d.new(-1, 0, 0),
+                                         Geom::Vector3d.new(0, 0, 1))
+
+    result = @builder.insert_furniture(@model, definition, { 'widthMm' => 600 },
+                                       transformation: accepted, prepare: false)
+
+    assert result['success']
+    furniture = furniture_instance
+    assert_equal accepted, furniture.transformation, 'the click IS the placement — no create-then-move'
+    assert_in_delta 120 * MM, furniture.transformation.origin.x, 1e-9
+    assert_empty SketchupStub.send_actions, 'no selectMoveTool handoff'
+    assert_empty @model.selection.items
+    # Creation AND transform land in ONE operation (one undo removes it all).
+    assert_equal [[:start, 'Insertar Mueble Gabinete Base Estándar', true], :commit],
+                 @model.operations
+
+    envelope = @store.read(furniture)['placementEnvelopeMm']
+    assert_equal [0.0, 0.0, 0.0], envelope['min_mm']
+    assert_equal [600.0, 590.0, 720.0], envelope['max_mm'],
+                 'layout-less inserts persist the generic box the preview showed'
+  end
+
   def test_preserves_false_and_omits_missing_optional_parameters_in_authoritative_intent
     definition = JSON.parse(JSON.generate(@provider.find_definition('kitchen-base-standard')))
     definition['parameters'] << {

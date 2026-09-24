@@ -1,10 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
+import { assertOrganizationTestDatabaseURL } from './tests/organization/support/databaseIsolation';
 
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required by the organization browser gate`);
   return value;
 }
+
+// Fail-closed guard (#823): ensure browser organization gate runs strictly against
+// an isolated test database, never against persistent dev or production databases.
+const isolatedFlag = required('ORGANIZATION_TEST_ISOLATED');
+if (isolatedFlag !== '1') {
+  throw new Error('ORGANIZATION_TEST_ISOLATED=1 is required by the organization browser gate');
+}
+const testDBUrl = required('ORGANIZATION_TEST_DATABASE_URL');
+assertOrganizationTestDatabaseURL(testDBUrl);
 
 const webPort = required('ORGANIZATION_WEB_PORT');
 const baseURL = `http://127.0.0.1:${webPort}`;

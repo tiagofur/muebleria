@@ -29,6 +29,14 @@ func main() {
 		slog.Error("Invalid configuration, refusing to start", "error", err)
 		os.Exit(1)
 	}
+	if os.Getenv("ORGANIZATION_TEST_ISOLATED") == "1" {
+		// This opt-in probe must never become a way to boot a test-marked
+		// backend against an ordinary database before migrations run.
+		if err := validateBrowserGateServerTargets(cfg.DatabaseURL, cfg.MigrationDatabaseURL); err != nil {
+			slog.Error("Disposable browser database targets are required", "error", err)
+			os.Exit(1)
+		}
+	}
 
 	// Migrations use a dedicated owner-capable role. The pool is closed before
 	// runtime starts so request code never receives schema-owner credentials.
@@ -94,6 +102,16 @@ func main() {
 	// so the flag reaching here can only be a local dev/gate opt-out.
 	serverAPI.WebRefreshCookieInsecureLocalDev = cfg.WebRefreshCookieInsecureLocalDev
 	handler := api.RegisterRoutes(serverAPI)
+	if os.Getenv("ORGANIZATION_TEST_ISOLATED") == "1" {
+		handler = browserGateDatabaseIdentityHandler(handler,
+			func(ctx context.Context) (database, role, marker string, err error) {
+				err = store.Pool.QueryRow(ctx,
+					`SELECT current_database(), current_user,
+					        current_setting('granete.browser_gate_identity', true)`,
+				).Scan(&database, &role, &marker)
+				return
+			})
+	}
 
 	// Timeouts mitigate slowloris and hung clients (issue #20).
 	// TLS/HSTS: this process serves plain HTTP; terminate TLS at a reverse

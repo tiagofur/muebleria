@@ -42,20 +42,22 @@ require_relative '../../src/granete_for_sketchup/host/preflight_review'
 require_relative '../../src/granete_for_sketchup/host/preflight_review_session'
 require_relative '../../src/granete_for_sketchup/overlay/issue_navigation'
 require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
+require_relative '../../src/granete_for_sketchup/tools/placement_snap_engine'
 require_relative '../../src/granete_for_sketchup/tools/furniture_placement_tool'
 require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
 require_relative '../../src/granete_for_sketchup/assets/media_authorizer'
 
 # Host-faithful InputPoint stub for the controller-driven tool: the class
-# hook `next_position_mm` scripts what the host inference returns (nil = an
-# invalid pick). Defined once for the whole process; inert (nil) by default
-# so other suites that never set it see invalid picks, not phantom points.
+# hooks `next_position_mm`/`next_face` script what the host inference
+# returns (nil position = an invalid pick; nil face = free space pick).
+# Defined once for the whole process; inert (nil) by default so other
+# suites that never set it see invalid picks, not phantom points.
 unless defined?(Sketchup::InputPoint)
   module Sketchup
     class InputPoint
       class << self
-        attr_accessor :next_position_mm
+        attr_accessor :next_position_mm, :next_face
       end
 
       def pick(_view, _x_pos, _y_pos, _other = nil)
@@ -69,6 +71,12 @@ unless defined?(Sketchup::InputPoint)
       def position
         mm = self.class.next_position_mm
         Geom::Point3d.new(mm[0] / 25.4, mm[1] / 25.4, mm[2] / 25.4)
+      end
+
+      # Host-faithful: InputPoint#face exposes the picked face, nil in
+      # space. Scripted per test for the wall snap paths.
+      def face
+        self.class.next_face
       end
     end
   end
@@ -274,6 +282,7 @@ class PlacementPreviewControllerTest < Minitest::Test
   def setup
     SketchupStub.reset!
     Sketchup::InputPoint.next_position_mm = nil
+    Sketchup::InputPoint.next_face = nil
     @model = PreviewModel.new
     SketchupStub.active_model = @model
     @transport = FakeTransport.new
@@ -305,6 +314,7 @@ class PlacementPreviewControllerTest < Minitest::Test
 
   def teardown
     Sketchup::InputPoint.next_position_mm = nil
+    Sketchup::InputPoint.next_face = nil
     SketchupStub.reset!
   end
 
@@ -342,6 +352,14 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_equal 1, located['duplicates']
     assert_empty @transport.requests_for('POST', %r{/furniture-instances})
     assert_nil active_preview_session
+
+    # P1 (review): the canonical commit PERSISTS the layout-derived
+    # placement envelope (dimensionsMm [900, 800, 500] → local box
+    # [0..900, 0..500, 0..800]) — the semantic side authority later
+    # side-snapping consumes, never the definition bounds.
+    envelope = MS.new(@model).read(located['entity'])['placementEnvelopeMm']
+    assert_equal [0.0, 0.0, 0.0], envelope['min_mm']
+    assert_equal [900.0, 500.0, 800.0], envelope['max_mm']
 
     # Panel refresh + preflight push followed the placement.
     assert bridge_scripts('onProjectFurniture').length >= 2
@@ -807,6 +825,403 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
+  # ---- #469 increment 2: managed-neighbor snap targets -------------------
+
+  # The PROJECT lane's tool carries the managed-neighbor provider: a
+  # placed Granete root (resolved by furnitureInstanceId metadata) becomes
+  # a side-to-side snap target and the committed transform lands on its
+  # side at gap 0 — same identity, one PUT.
+  def test_project_lane_snaps_to_managed_neighbor_and_commits_the_gap_zero_side
+    add_managed_root(FI_2, "Base 600 (#{FI_2})", [0.0, 0.0, 0.0],
+                     [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    begin_preview(FI_1)
+    tool = active_tool
+
+    Sketchup::InputPoint.next_position_mm = [700.0, 280.0, 0.0]
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    side = tool.active_snap[:components].find { |c| c[:kind] == :furniture_side }
+    assert side, 'the managed neighbor must be offered as a snap target'
+    assert_equal FI_2, side[:furniture_instance_id], 'identity comes from metadata, not the name'
+    assert_includes side[:label], 'Base 600 · lateral derecho'
+
+    tool.onLButtonDown(0, 50, 50, @model.active_view) # re-picks the SAME aim
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    placed = put['body']['items'].find { |i| i['furniture_instance_id'] == FI_1 }
+    assert_in_delta 600.0, placed['transform']['translation_mm'][0], 1e-3,
+                    'the new left side sits on the neighbor right side (x=600mm)'
+  end
+
+  # The CATALOG lane shares the SAME provider and engine: identical snap
+  # behavior, only identity provenance differs (Library/Project parity).
+  def test_catalog_lane_shares_the_same_managed_neighbor_snap
+    add_managed_root(FI_2, "Base 600 (#{FI_2})", [0.0, 0.0, 0.0],
+                     [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    stub_create_instance
+    @dialog.callbacks.fetch('begin_catalog_placement_preview').call(
+      nil, JSON.generate('definitionId' => DEFINITION_ID, 'parameters' => {},
+                         'materialChoices' => {}, 'idempotencyKey' => 'idem-snap')
+    )
+    tool = active_tool
+
+    Sketchup::InputPoint.next_position_mm = [700.0, 280.0, 0.0]
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    side = tool.active_snap[:components].find { |c| c[:kind] == :furniture_side }
+    assert side, 'the catalog lane must resolve the same managed targets'
+    assert_equal FI_2, side[:furniture_instance_id]
+  end
+
+  # Negative provider proofs: unmanaged geometry, duplicated identity,
+  # erased entities and NON-RIGID frames (tilted, scaled, mirrored) never
+  # become snap targets — resolution is by managed identity, never by
+  # component name. Arbitrary YAW is valid (see the rotated-frame test).
+  def test_provider_excludes_unmanaged_duplicated_erased_and_non_rigid_targets
+    unmanaged = add_managed_root('fi-unmanaged', 'Cosa suelta (fi-unmanaged)',
+                                 [0.0, 0.0, 0.0], [100.0, 100.0, 100.0])
+    MS.new(@model).write(unmanaged, { 'namespace' => MS::NAMESPACE,
+                                      'metadataVersion' => MS::METADATA_VERSION,
+                                      'kind' => 'bootstrapIntent' }) # strip Granete furniture identity
+    add_managed_root('fi-dup', 'Duplicado A (fi-dup)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    add_managed_root('fi-dup', 'Duplicado B (fi-dup)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    erased = add_managed_root('fi-erased', 'Borrado (fi-erased)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    erased.define_singleton_method(:valid?) { false }
+    tilted = add_managed_root('fi-tilted', 'Inclinado (fi-tilted)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    tilted.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(1, 0, 0),
+      Geom::Vector3d.new(0, 0, 1), Geom::Vector3d.new(0, -1, 0)
+    )
+    scaled = add_managed_root('fi-scaled', 'Escalado (fi-scaled)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    scaled.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(1.5, 0, 0),
+      Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+    mirrored = add_managed_root('fi-mirrored', 'Espejado (fi-mirrored)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    mirrored.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(-1, 0, 0),
+      Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+    no_envelope = add_managed_root('fi-noenv', 'Sin envelope (fi-noenv)',
+                                   [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    MS.new(@model).write(no_envelope, { 'namespace' => MS::NAMESPACE,
+                                        'metadataVersion' => MS::METADATA_VERSION,
+                                        'kind' => 'furnitureInstance',
+                                        'identity' => { 'furnitureInstanceId' => 'fi-noenv' } })
+    add_managed_root('fi-ok', 'Sano (fi-ok)', [0.0, 0.0, 0.0], [40.0, 40.0, 40.0])
+
+    targets = @controller.send(:placement_furniture_targets_provider, @model).call
+
+    assert_equal ['fi-ok'], targets.map { |t| t['furniture_instance_id'] },
+                 'only the single healthy managed root is a target'
+    assert_equal 'Sano', targets.first['label'], 'display label strips the id suffix'
+  end
+
+  # #469 increment 3 — a root rotated to an arbitrary yaw IS a target: the
+  # descriptor carries the ORIENTED frame from the real rigid transform
+  # (world origin + unit front/right) plus the LOCAL definition extents —
+  # the world AABB is never part of the contract.
+  def test_provider_describes_rotated_roots_with_the_oriented_frame
+    half = Math.sqrt(2.0) / 2.0
+    rotated = add_managed_root('fi-rot45', 'Rotado 45 (fi-rot45)',
+                               [0.0, 0.0, 0.0], [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    rotated.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(10.0 / 25.4, 20.0 / 25.4, 0), Geom::Vector3d.new(half, -half, 0),
+      Geom::Vector3d.new(half, half, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+
+    targets = @controller.send(:placement_furniture_targets_provider, @model).call
+
+    assert_equal(['fi-rot45'], targets.map { |t| t['furniture_instance_id'] })
+    target = targets.first
+    assert_in_delta 10.0, target['origin_world_mm'][0], 1e-6, 'world origin from the transform'
+    assert_in_delta 20.0, target['origin_world_mm'][1], 1e-6
+    assert_in_delta half, target['front_dir_mm'][0], 1e-6, 'unit front at 45°'
+    assert_in_delta half, target['front_dir_mm'][1], 1e-6
+    assert_in_delta half, target['right_dir_mm'][0], 1e-6, 'unit right = front × up'
+    assert_in_delta(-half, target['right_dir_mm'][1], 1e-6)
+    assert_in_delta 600.0, target['local_max_mm'][0], 1e-6, 'LOCAL extents, not world AABB'
+    assert_in_delta 560.0, target['local_max_mm'][1], 1e-6
+    assert_in_delta 720.0, target['local_max_mm'][2], 1e-6
+    assert_in_delta 0.0, target['local_min_mm'][0], 1e-6
+  end
+
+  # P1 (review): the semantic side envelope is the PERSISTED layout-derived
+  # placementEnvelopeMm, NEVER the definition bounds — the definition also
+  # aggregates hardware/visual assets, so a handle protruding past the
+  # cabinet side must not displace the side plane the snap aligns to.
+  def test_provider_uses_the_persisted_envelope_not_the_definition_bounds
+    protruding = add_managed_root('fi-protrude', 'Con herraje (fi-protrude)',
+                                  [0.0, 0.0, 0.0], [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    # The definition ALSO contains a protruding asset 200mm past the right
+    # side (host definition bounds grow; the placement envelope does not).
+    definition_bounds = Geom::BoundingBox.new
+    definition_bounds.min = Geom::Point3d.new(0.0, -100.0 / 25.4, 0.0)
+    definition_bounds.max = Geom::Point3d.new(800.0 / 25.4, 660.0 / 25.4, 900.0 / 25.4)
+    protruding.definition.bounds = definition_bounds
+
+    targets = @controller.send(:placement_furniture_targets_provider, @model).call
+
+    assert_equal(['fi-protrude'], targets.map { |t| t['furniture_instance_id'] })
+    target = targets.first
+    assert_in_delta 0.0, target['local_min_mm'][0], 1e-6
+    assert_in_delta 600.0, target['local_max_mm'][0], 1e-6,
+                    'the side plane stays at the CABINET side (envelope), not the asset extent'
+    assert_in_delta 560.0, target['local_max_mm'][1], 1e-6
+    assert_in_delta 720.0, target['local_max_mm'][2], 1e-6
+  end
+
+  # P1 (review): wall + floor must COMPOSE through the real tool — the
+  # picked 30° wall constrains XY (orientation + normal) while the
+  # gesture-scoped base-plane provider feeds the floor, and the commit
+  # carries both: back face ON the rotated wall plane, base ON the floor.
+  def test_wall_and_floor_compose_through_the_controller_tool_at_30_degrees
+    mm = 25.4
+    floor = @model.entities.add_face(
+      [Geom::Point3d.new(-6000 / mm, -4000 / mm, 0), Geom::Point3d.new(6000 / mm, -4000 / mm, 0),
+       Geom::Point3d.new(6000 / mm, 4000 / mm, 0), Geom::Point3d.new(-6000 / mm, 4000 / mm, 0)]
+    )
+    floor.normal = Geom::Vector3d.new(0, 0, 1)
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0] # on the wall, near the floor
+    begin_preview(FI_1)
+    tool = active_tool
+    # Eye on the room side of the wall (the deterministic orientation
+    # reference; the ViewStub exposes the host camera).
+    eye_mm = [aim[0] + (normal[0] * 4000.0), aim[1] + (normal[1] * 4000.0), 1600.0]
+    @model.active_view.camera = Struct.new(:eye).new(
+      Geom::Point3d.new(eye_mm[0] / 25.4, eye_mm[1] / 25.4, eye_mm[2] / 25.4)
+    )
+
+    Sketchup::InputPoint.next_position_mm = aim
+    Sketchup::InputPoint.next_face = wall_face_stub(normal)
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    assert tool.active_snap, 'the 30° wall must offer a snap'
+    kinds = tool.active_snap[:components].map { |component| component[:kind] }.sort
+    assert_equal %i[face floor], kinds, 'wall + floor compose through the REAL tool'
+    transform = tool.current_transform
+    [[0, 0, 0], [900.0, 0, 0]].each do |corner|
+      placed = transform_point_mm(transform, corner)
+      signed = ((placed[0] - aim[0]) * normal[0]) + ((placed[1] - aim[1]) * normal[1])
+      assert_in_delta 0.0, signed, 1e-4, 'back face on the rotated wall plane'
+    end
+    assert_in_delta 0.0, transform_point_mm(transform, [0, 0, 0])[2], 1e-4,
+                    'base sits on the floor plane (composed constraint)'
+
+    tool.onLButtonDown(0, 50, 50, @model.active_view) # re-picks + revalidates
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    placed = put['body']['items'].find { |i| i['furniture_instance_id'] == FI_1 }
+    translation = placed['transform']['translation_mm']
+    signed_wall = ((translation[0] - aim[0]) * normal[0]) + ((translation[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-2, 'committed back corner on the wall plane'
+    assert_in_delta 0.0, translation[2], 1e-2, 'committed base on the floor'
+  end
+
+  # Review r2 C: the base-plane scan recurses into Groups and Component
+  # instances with the ACCUMULATED world transform, and every plane keeps
+  # its FINITE world footprint — nested floors participate with their
+  # true world placement, a tilted container rejects, and the scan stays
+  # read-only.
+  def test_base_plane_provider_recurses_into_groups_and_components_with_world_transforms
+    mm = 25.4
+    # Floor nested in a Group translated to (1000, 2000, 50).
+    group = @model.entities.add_group
+    group.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(4000 / mm, 0, 0),
+       Geom::Point3d.new(4000 / mm, 4000 / mm, 0), Geom::Point3d.new(0, 4000 / mm, 0)]
+    )
+    group.transformation = Geom::Transformation.translation(
+      Geom::Vector3d.new(1000 / mm, 2000 / mm, 50 / mm)
+    )
+    # Equivalent floor inside a Component definition, instance at (3000, -500, 80).
+    definition = @model.definitions.add('Room fixture')
+    definition.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(4000 / mm, 0, 0),
+       Geom::Point3d.new(4000 / mm, 4000 / mm, 0), Geom::Point3d.new(0, 4000 / mm, 0)]
+    )
+    @model.entities.add_instance(
+      definition, Geom::Transformation.translation(Geom::Vector3d.new(3000 / mm, -500 / mm, 80 / mm))
+    )
+    # A tilted container floors nothing: its faces leave the horizontal.
+    tilted = @model.entities.add_group
+    tilted.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(1000 / mm, 0, 0),
+       Geom::Point3d.new(1000 / mm, 1000 / mm, 0), Geom::Point3d.new(0, 1000 / mm, 0)]
+    )
+    tilted.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(1, 0, 0),
+      Geom::Vector3d.new(0, 0, 1), Geom::Vector3d.new(0, -1, 0)
+    )
+
+    before = @transport.requests.length
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    assert_equal before, @transport.requests.length, 'the nested scan is purely local'
+    by_z = planes.group_by { |plane| plane['point_mm'][2].round(3) }
+    assert_includes by_z.keys, 50.0, 'the group-nested floor participates with its world Z'
+    assert_includes by_z.keys, 80.0, 'the component-nested floor participates with its world Z'
+    refute_includes by_z.keys, 0.0, 'the tilted container offers no base plane'
+    group_plane = by_z[50.0].first
+    assert_in_delta 1000.0, group_plane['footprint_min_mm'][0], 1e-6, 'world footprint X min'
+    assert_in_delta 2000.0, group_plane['footprint_min_mm'][1], 1e-6, 'world footprint Y min'
+    assert_in_delta 1000.0 + 4000.0, group_plane['footprint_max_mm'][0], 1e-6
+    assert_in_delta 2000.0 + 4000.0, group_plane['footprint_max_mm'][1], 1e-6
+    assert_equal [0.0, 0.0, 1.0], group_plane['normal_mm']
+  end
+
+  # Review r4 P1: the base-plane scan NEVER descends into a Granete
+  # furniture root (managed metadata kind == furnitureInstance — the
+  # placed cabinet's bottom board, shelves and tops are furniture, not
+  # room floors, and must not beat the architectural floor by a shorter
+  # Z distance). The architectural floor still participates.
+  def test_base_planes_prune_granete_furniture_and_keep_the_architectural_floor
+    mm = 25.4
+    @model.entities.add_face(
+      [Geom::Point3d.new(-6000 / mm, -4000 / mm, 0), Geom::Point3d.new(6000 / mm, -4000 / mm, 0),
+       Geom::Point3d.new(6000 / mm, 4000 / mm, 0), Geom::Point3d.new(-6000 / mm, 4000 / mm, 0)]
+    )
+    furniture = add_managed_root('fi-neighbor', 'Bajo (fi-neighbor)',
+                                 [0.0, 0.0, 0.0], [600.0 / mm, 560.0 / mm, 720.0 / mm])
+    definition = furniture.definition
+    # The placed cabinet's own horizontal faces: bottom board (z=0),
+    # shelf (z=400) and top (z=720).
+    [[0.0], [400.0], [720.0]].each do |(z)|
+      definition.entities.add_face(
+        [Geom::Point3d.new(0, 0, z / mm), Geom::Point3d.new(600 / mm, 0, z / mm),
+         Geom::Point3d.new(600 / mm, 560 / mm, z / mm), Geom::Point3d.new(0, 560 / mm, z / mm)]
+      )
+    end
+
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    plane_zs = planes.map { |plane| plane['point_mm'][2] }.map(&:round)
+    assert_equal [0], plane_zs.uniq,
+                 'ONLY the architectural floor participates: the furniture board/shelf/top never emit base planes'
+    assert_equal 1, planes.length
+    assert_in_delta(-6000.0, planes.first['footprint_min_mm'][0], 1e-6,
+                    'the surviving plane is the wide architectural floor')
+  end
+
+  # Review r5 A: EFFECTIVE VISIBILITY — a hidden floor (closer in Z)
+  # never becomes a base-plane candidate; the hidden plane is ABSENT
+  # from the descriptors, not merely the loser.
+  def test_hidden_floor_never_becomes_a_base_plane_candidate
+    mm = 25.4
+    @model.entities.add_face(wide_floor_points(0.0, mm))
+    hidden = @model.entities.add_face(wide_floor_points(80.0, mm))
+    hidden.visible = false # REAL Drawingelement#visible= API
+
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    assert_equal 1, planes.length, 'only the visible floor participates'
+    assert_in_delta 0.0, planes.first['point_mm'][2], 1e-6
+    refute planes.any? { |plane| (plane['point_mm'][2] - 80.0).abs < 1e-6 },
+           'the hidden floor is not even a descriptor'
+  end
+
+  # Review r5 B: a face that is visible on its own but whose Tag/Layer
+  # is off never participates.
+  def test_tagged_off_floor_never_becomes_a_base_plane_candidate
+    mm = 25.4
+    @model.entities.add_face(wide_floor_points(0.0, mm))
+    tagged = @model.entities.add_face(wide_floor_points(80.0, mm))
+    off_tag = @model.layers.add('Apagado') # REAL Layers#add + Layer surface
+    off_tag.visible = false
+    tagged.layer = off_tag # REAL Drawingelement#layer=
+
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    assert_equal 1, planes.length
+    assert_in_delta 0.0, planes.first['point_mm'][2], 1e-6,
+                    'the tagged-off floor is invisible to the scan'
+  end
+
+  # Review r5 C+D+E: a floor inside a hidden Group or a tagged-off
+  # ComponentInstance is invisible; the SAME nested containers, when
+  # visible, keep participating with their accumulated transforms.
+  def test_floors_inside_hidden_containers_are_invisible_but_visible_ones_are_not
+    mm = 25.4
+    @model.entities.add_face(wide_floor_points(0.0, mm))
+
+    group = @model.entities.add_group
+    group.entities.add_face(wide_floor_points(0.0, mm))
+    group.transformation = Geom::Transformation.translation(Geom::Vector3d.new(0, 0, 80.0 / mm))
+    definition = @model.definitions.add('Nested room')
+    definition.entities.add_face(wide_floor_points(0.0, mm))
+    instance = @model.entities.add_instance(
+      definition, Geom::Transformation.translation(Geom::Vector3d.new(0, 0, 160.0 / mm))
+    )
+
+    group.visible = false # C: parent Group hidden
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+    assert_equal [0, 160], planes.map { |p| p['point_mm'][2].round }.sort,
+                 'the hidden group drops out; the visible component stays at its world Z'
+
+    group.visible = true
+    off_tag = @model.layers.add('Apagado')
+    off_tag.visible = false
+    instance.layer = off_tag # D: parent Component tagged off
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+    assert_equal [0, 80], planes.map { |p| p['point_mm'][2].round }.sort,
+                 'the tagged-off component drops; the visible group stays at its world Z'
+
+    instance.layer = @model.layers.to_a.first # restore Layer0
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+    assert_equal [0, 80, 160], planes.map { |p| p['point_mm'][2].round }.sort,
+                 'E: visible nested Group AND Component both participate with accumulated transforms'
+  end
+
+  # Review r5 F: visibility is revalidated at the click — a floor hidden
+  # between preview and commit cannot stay in the committed solution.
+  def test_click_revalidates_visibility_changes_before_committing
+    mm = 25.4
+    floor = @model.entities.add_face(wide_floor_points(0.0, mm))
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0]
+    begin_preview(FI_1)
+    tool = active_tool
+    eye_mm = [aim[0] + (normal[0] * 4000.0), aim[1] + (normal[1] * 4000.0), 1600.0]
+    @model.active_view.camera = Struct.new(:eye).new(
+      Geom::Point3d.new(eye_mm[0] / 25.4, eye_mm[1] / 25.4, eye_mm[2] / 25.4)
+    )
+    Sketchup::InputPoint.next_position_mm = aim
+    Sketchup::InputPoint.next_face = wall_face_stub(normal)
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    kinds = tool.active_snap[:components].map { |c| c[:kind] }.sort
+    assert_equal %i[face floor], kinds, 'preview composes wall + VISIBLE floor'
+
+    floor.visible = false # the floor disappears before the click
+
+    tool.onLButtonDown(0, 50, 50, @model.active_view) # re-picks + rescans
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    placed = put['body']['items'].find { |i| i['furniture_instance_id'] == FI_1 }
+    translation = placed['transform']['translation_mm']
+    signed_wall = ((translation[0] - aim[0]) * normal[0]) + ((translation[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-2, 'the wall constraint survives'
+    assert_in_delta aim[2], translation[2], 1e-2,
+                    'NO stale floor commit: Z follows the fresh free inference'
+  end
+
+  # The provider scan is read-only: running it repeatedly issues no
+  # transport request (cursor-loop safety).
+  def test_provider_scan_issues_no_requests
+    add_managed_root(FI_2, "Base 600 (#{FI_2})",
+                     [0.0, 0.0, 0.0], [10.0, 10.0, 10.0])
+    before = @transport.requests.length
+
+    provider = @controller.send(:placement_furniture_targets_provider, @model)
+    3.times { provider.call }
+
+    assert_equal before, @transport.requests.length, 'target discovery is purely local'
+  end
+
   private
 
   def begin_preview(furniture_instance_id)
@@ -815,8 +1230,55 @@ class PlacementPreviewControllerTest < Minitest::Test
     )
   end
 
+  # Hand-crafted Granete-managed root in the stub model: identity through
+  # the metadata store (as the real builder writes) plus the PERSISTED
+  # placement envelope (min/max in INCHES here, stored as the mm
+  # placementEnvelopeMm the increment 3 commit writes — the provider's
+  # side authority, never the definition bounds) and an identity frame
+  # unless a rotated transformation is assigned afterwards by the test.
+  # Set definition.bounds separately to model protruding assets.
+  def add_managed_root(furniture_instance_id, name, min_in, max_in)
+    definition = @model.definitions.add("Granete · #{name}")
+    instance = @model.entities.add_instance(definition, Geom::Transformation.new)
+    instance.name = name
+    mm = 25.4
+    MS.new(@model).write(instance, { 'namespace' => MS::NAMESPACE,
+                                     'metadataVersion' => MS::METADATA_VERSION,
+                                     'kind' => 'furnitureInstance',
+                                     'identity' => { 'furnitureInstanceId' => furniture_instance_id },
+                                     'placementEnvelopeMm' => {
+                                       'min_mm' => min_in.map { |v| v * mm },
+                                       'max_mm' => max_in.map { |v| v * mm }
+                                     } })
+    instance
+  end
+
   def active_tool
     @model.selected_tools.last
+  end
+
+  # Wide horizontal floor fixture points at a Z (mm) — top-level or
+  # inside a container.
+  def wide_floor_points(z_mm, inches_per_mm = 1.0 / 25.4)
+    [Geom::Point3d.new(-6000 * inches_per_mm, -4000 * inches_per_mm, z_mm * inches_per_mm),
+     Geom::Point3d.new(6000 * inches_per_mm, -4000 * inches_per_mm, z_mm * inches_per_mm),
+     Geom::Point3d.new(6000 * inches_per_mm, 4000 * inches_per_mm, z_mm * inches_per_mm),
+     Geom::Point3d.new(-6000 * inches_per_mm, 4000 * inches_per_mm, z_mm * inches_per_mm)]
+  end
+
+  # A picked-face stub with a world normal (mm) for the scripted
+  # InputPoint#face surface.
+  def wall_face_stub(normal_mm)
+    face = SketchupStub::FaceStub.new([])
+    face.normal = Geom::Vector3d.new(normal_mm[0], normal_mm[1], normal_mm[2])
+    face
+  end
+
+  # Local mm box corner → world mm through a Geom::Transformation.
+  def transform_point_mm(transform, corner_mm)
+    local = Geom::Point3d.new(corner_mm[0] / 25.4, corner_mm[1] / 25.4, corner_mm[2] / 25.4)
+    moved = local.transform(transform)
+    [moved.x * 25.4, moved.y * 25.4, moved.z * 25.4]
   end
 
   def click(tool)

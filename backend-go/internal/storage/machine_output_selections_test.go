@@ -220,13 +220,16 @@ func TestMachineOutputSelections_RLSTenantIsolation(t *testing.T) {
 
 func machineOutputAdminURL(t *testing.T) *url.URL {
 	t.Helper()
-	dsn := "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
-	if env := os.Getenv("DATABASE_URL"); env != "" {
-		dsn = env
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set; skipping machine output selections integration test")
 	}
 	u, err := url.Parse(dsn)
 	if err != nil {
 		t.Fatalf("parse dsn: %v", err)
+	}
+	if err := storage.ValidateTestDatabaseURL(u.String()); err != nil {
+		t.Fatalf("machineOutputAdminURL rejected unsafe test database: %v", err)
 	}
 	return u
 }

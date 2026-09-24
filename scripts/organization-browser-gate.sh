@@ -15,12 +15,22 @@ cleanup() {
   rm -rf "${TMP_ROOT}"
   unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY ADMIN_PASSWORD ORGANIZATION_TEST_DATABASE_URL
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 fail() {
   printf '[organization-gate] FAIL: %s\n' "$1" >&2
   exit 1
 }
+
+# Chromium needs a UTF-8 process locale to preserve Unicode download names.
+# Validate before starting Docker or any writable child; never inherit other
+# ambient locale, database, or credential settings into the scoped children.
+BROWSER_LANG="${LANG:-}"
+if [[ ! "${BROWSER_LANG}" =~ ^[A-Za-z][A-Za-z0-9_-]*\.[Uu][Tt][Ff]-?8(@[A-Za-z0-9_-]+)?$ ]]; then
+  fail "LANG must name a UTF-8 locale for the browser gate"
+fi
 
 for command in docker go pnpm curl openssl python3; do
   command -v "${command}" >/dev/null 2>&1 || fail "${command} is required"
@@ -61,6 +71,7 @@ docker run -d --rm --name "${CONTAINER}" \
   -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
   -e APP_DATABASE_PASSWORD="${APP_DATABASE_PASSWORD}" \
   -v "${ROOT}/scripts/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro" \
+  --tmpfs /var/lib/postgresql/data:rw \
   -p 127.0.0.1::5432 postgres:16-alpine >/dev/null
 
 # 120 s (2x the previous window): the init-complete log line plus a real
@@ -90,20 +101,64 @@ if [ -z "${POSTGRES_READY}" ]; then
   fail "PostgreSQL did not become ready"
 fi
 
-POSTGRES_PORT="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "${CONTAINER}")"
+POSTGRES_BIND="$(docker inspect -f '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostIp}}:{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "${CONTAINER}")"
+POSTGRES_HOST="${POSTGRES_BIND%:*}"
+POSTGRES_PORT="${POSTGRES_BIND##*:}"
+[ "${POSTGRES_HOST}" = '127.0.0.1' ] || fail "PostgreSQL must bind only to loopback"
 MIGRATION_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_gate?sslmode=disable"
 DATABASE_URL="postgres://granete_app:${APP_DATABASE_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_gate?sslmode=disable"
+ORGANIZATION_TEST_DATABASE_URL="${MIGRATION_DATABASE_URL}"
+ORGANIZATION_TEST_ISOLATED=1
+GRANETE_TEST_DATABASE=1
+
+# The same explicit, credential-bearing targets are validated without opening
+# either connection before the server can migrate or any admin child can write.
+# env -i prevents ambient DATABASE_URL, MIGRATION_DATABASE_URL, PG*, or production
+# markers from replacing the freshly constructed disposable child environment.
+GATE_BASE_ENV=(env -i
+  PATH="${PATH}" HOME="${HOME:-/}" TMPDIR="${TMPDIR:-/tmp}"
+  ORGANIZATION_TEST_ISOLATED="${ORGANIZATION_TEST_ISOLATED}"
+  GRANETE_TEST_DATABASE="${GRANETE_TEST_DATABASE}"
+  DATABASE_URL="${DATABASE_URL}"
+  MIGRATION_DATABASE_URL="${MIGRATION_DATABASE_URL}")
+(cd "${ROOT}/backend-go" && "${GATE_BASE_ENV[@]}" \
+  ORGANIZATION_GATE_POSTGRES_PORT="${POSTGRES_PORT}" \
+  go run ./cmd/testdb-preflight) || fail "disposable database preflight rejected targets"
+readonly DATABASE_URL MIGRATION_DATABASE_URL
 
 ROLE_FLAGS="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate \
   -c "SELECT rolcanlogin, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'granete_app'")"
 [ "${ROLE_FLAGS}" = 't|f|f' ] || fail "runtime role must be LOGIN, NOSUPERUSER, NOBYPASSRLS"
 
-export DATABASE_URL MIGRATION_DATABASE_URL JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY MEDIA_DIR ADMIN_PASSWORD
-export PORT="${BACKEND_PORT}"
-export CORS_ALLOWED_ORIGINS="http://127.0.0.1:${ORGANIZATION_WEB_PORT}"
-export RATE_LIMIT_RPS=100 RATE_LIMIT_BURST=100
+# The marker belongs to this disposable database, not to a process env value.
+# The backend later reads it through its runtime pool; Playwright reads it
+# independently through the fixture connection before any setup write.
+GATE_DB_MARKER="$(openssl rand -hex 32)"
+docker exec "${CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d granete_gate \
+  -c "ALTER DATABASE granete_gate SET granete.browser_gate_identity = '${GATE_DB_MARKER}'" >/dev/null \
+  || fail "disposable database identity could not be established"
+GATE_DB_IDENTITY_SHA256="$(python3 - "${GATE_DB_MARKER}" <<'PY'
+import hashlib, sys
+print(hashlib.sha256(sys.argv[1].encode()).hexdigest())
+PY
+)"
+unset GATE_DB_MARKER
 
-(cd "${ROOT}/backend-go" && go run ./cmd/server >"${TMP_ROOT}/backend.log" 2>&1) &
+GATE_SERVER_ENV=("${GATE_BASE_ENV[@]}"
+  JWT_SECRET="${JWT_SECRET}" REFRESH_TOKEN_PEPPER="${REFRESH_TOKEN_PEPPER}"
+  MEDIA_SIGNING_KEY="${MEDIA_SIGNING_KEY}" MFA_ENCRYPTION_KEY="${MFA_ENCRYPTION_KEY}"
+  MEDIA_DIR="${MEDIA_DIR}" PORT="${BACKEND_PORT}"
+  CORS_ALLOWED_ORIGINS="http://127.0.0.1:${ORGANIZATION_WEB_PORT}"
+  RATE_LIMIT_RPS=100 RATE_LIMIT_BURST=100)
+GATE_ADMIN_ENV=("${GATE_BASE_ENV[@]}" ADMIN_PASSWORD="${ADMIN_PASSWORD}")
+
+# go run forks a server child; killing its parent can leave that child connected
+# after the disposable container has been removed. Build first (no DB access),
+# then exec the binary so BACKEND_PID is the only writable server process.
+(cd "${ROOT}/backend-go" && "${GATE_BASE_ENV[@]}" go build -o "${TMP_ROOT}/granete-server" ./cmd/server) \
+  || fail "backend build failed before launch"
+(cd "${ROOT}/backend-go" && exec "${GATE_SERVER_ENV[@]}" \
+  "${TMP_ROOT}/granete-server" >"${TMP_ROOT}/backend.log" 2>&1) &
 BACKEND_PID=$!
 for _ in $(seq 1 120); do
   curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null 2>&1 && break
@@ -115,20 +170,26 @@ done
 curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null \
   || fail "backend health endpoint did not become ready"
 
-(cd "${ROOT}/backend-go" && go run ./cmd/admin create \
+(cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create \
   --email "${ORGANIZATION_GATE_A_OWNER_EMAIL}" --name "Browser Gate A Owner") >/dev/null
-(cd "${ROOT}/backend-go" && go run ./cmd/admin create \
+(cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create \
   --email "${ORGANIZATION_GATE_B_OWNER_EMAIL}" --name "Browser Gate B Owner") >/dev/null
-(cd "${ROOT}/backend-go" && go run ./cmd/admin create-platform-admin \
+(cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create-platform-admin \
   --email "${ORGANIZATION_GATE_A_OWNER_EMAIL}") >/dev/null
-(cd "${ROOT}/backend-go" && go run ./cmd/admin create-org \
+(cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create-org \
   --name "Browser Gate A" --slug browser-gate-a --type factory \
   --admin-email "${ORGANIZATION_GATE_A_OWNER_EMAIL}" \
   --idempotency-key browser-gate-a-bootstrap --license trial) >/dev/null
-(cd "${ROOT}/backend-go" && go run ./cmd/admin create-org \
+(cd "${ROOT}/backend-go" && "${GATE_ADMIN_ENV[@]}" go run ./cmd/admin create-org \
   --name "Browser Gate B" --slug browser-gate-b --type factory \
   --admin-email "${ORGANIZATION_GATE_B_OWNER_EMAIL}" \
   --idempotency-key browser-gate-b-bootstrap --license pro) >/dev/null
+SETUP_READBACK="$(docker exec "${CONTAINER}" psql -At -U postgres -d granete_gate \
+  -c "SELECT current_database(),
+      (SELECT count(*) FROM users WHERE email IN ('browser-gate-a-owner@example.com', 'browser-gate-b-owner@example.com')),
+      (SELECT count(*) FROM organizations WHERE slug IN ('browser-gate-a', 'browser-gate-b'))")"
+[ "${SETUP_READBACK}" = 'granete_gate|2|2' ] || fail "disposable users and organizations did not match preparation"
+printf '[organization-gate] disposable preparation readback: database=granete_gate users=2 organizations=2\n'
 # #460 SEC-3: canonical server media names (32 hex chars), placed under each
 # organization's partition like the real upload endpoint does — the browser
 # gate then exercises the signed-grant media flow end to end.
@@ -145,22 +206,26 @@ for org, name, data in (
     (root / org / name).write_bytes(base64.b64decode(data))
 PY
 
-export ORGANIZATION_WEB_PORT ORGANIZATION_GATE_EMAIL
-export ORGANIZATION_GATE_A_OWNER_EMAIL ORGANIZATION_GATE_B_OWNER_EMAIL
-export ORGANIZATION_GATE_ORG_A_SLUG=browser-gate-a
-export ORGANIZATION_GATE_ORG_B_SLUG=browser-gate-b
-export ORGANIZATION_GATE_ORG_SLUG=browser-gate-a
-export ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}"
-export ORGANIZATION_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
-export VITE_API_BASE="${ORGANIZATION_API_BASE}"
-export ORGANIZATION_TEST_OUTPUT="${TMP_ROOT}/playwright-output"
 # #642 legacy recovery: specs may seed PRE-migration row shapes (snapshot-less
 # quote revisions) that no API can produce — the modern commands always freeze
 # a snapshot. Read-only-from-app perspective: admin DSN for fixture seeding
 # only; the verified FLOW always goes through the real API.
-GATE_DB_PORT="$(docker port "${CONTAINER}" 5432/tcp | head -1 | awk -F: '{print $NF}')"
-export ORGANIZATION_TEST_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${GATE_DB_PORT}/granete_gate?sslmode=disable"
+GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
+  LANG="${BROWSER_LANG}"
+  ORGANIZATION_TEST_DATABASE_URL="${ORGANIZATION_TEST_DATABASE_URL}"
+  ORGANIZATION_GATE_DB_IDENTITY_SHA256="${GATE_DB_IDENTITY_SHA256}"
+  MEDIA_DIR="${MEDIA_DIR}"
+  ORGANIZATION_WEB_PORT="${ORGANIZATION_WEB_PORT}"
+  ORGANIZATION_GATE_EMAIL="${ORGANIZATION_GATE_EMAIL}"
+  ORGANIZATION_GATE_A_OWNER_EMAIL="${ORGANIZATION_GATE_A_OWNER_EMAIL}"
+  ORGANIZATION_GATE_B_OWNER_EMAIL="${ORGANIZATION_GATE_B_OWNER_EMAIL}"
+  ORGANIZATION_GATE_ORG_A_SLUG=browser-gate-a ORGANIZATION_GATE_ORG_B_SLUG=browser-gate-b
+  ORGANIZATION_GATE_ORG_SLUG=browser-gate-a
+  ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}"
+  ORGANIZATION_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
+  VITE_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
+  ORGANIZATION_TEST_OUTPUT="${TMP_ROOT}/playwright-output")
 
 cd "${ROOT}"
-pnpm exec playwright test --config=playwright.organization.config.ts "$@"
+"${GATE_BROWSER_ENV[@]}" pnpm exec playwright test --config=playwright.organization.config.ts "$@"
 printf '[organization-gate] PASS\n'

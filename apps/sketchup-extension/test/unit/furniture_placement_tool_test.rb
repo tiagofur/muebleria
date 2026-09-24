@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/tools/placement_snap_engine'
 require_relative '../../src/granete_for_sketchup/tools/furniture_placement_tool'
 
 # #469 — shared transient placement tool mechanics. These tests pin the
@@ -27,12 +28,16 @@ class FurniturePlacementToolTest < Minitest::Test
   # Scriptable InputPoint: each #pick advances to the next scripted
   # position (mm); a nil entry models an INVALID pick (no inference).
   # picked_coords records the screen coordinates of every pick so tests
-  # can prove the click re-picked at its own coordinates.
+  # can prove the click re-picked at its own coordinates. `faces` scripts
+  # the host InputPoint#face surface (one entry per pick; nil = no face),
+  # modelling wall/floor inference for the semantic snap (#469 incr. 2).
   class ScriptedInputPoint
     attr_reader :pick_count, :position, :picked_coords
+    attr_accessor :faces
 
-    def initialize(positions_mm)
+    def initialize(positions_mm, faces = nil)
       @positions = positions_mm
+      @faces = faces
       @index = -1
       @pick_count = 0
       @valid = false
@@ -56,12 +61,39 @@ class FurniturePlacementToolTest < Minitest::Test
     def valid?
       @valid
     end
+
+    # Host-faithful: InputPoint#face exposes the picked face, nil in space.
+    def face
+      return nil unless @faces
+
+      @faces[@index] || @faces.last
+    end
+  end
+
+  # Host-shaped face for scripted inference: a world normal only.
+  class ScriptedFace
+    attr_reader :normal
+
+    def initialize(normal_mm)
+      @normal = Geom::Vector3d.new(normal_mm[0], normal_mm[1], normal_mm[2])
+    end
   end
 
   # Records viewport drawing. Any model access would have to happen through
-  # the injected model — see StrictModel.
+  # the injected model — see StrictModel. The optional camera models the
+  # host View#camera (eye in INCHES) — the deterministic room-side
+  # reference for wall snapping.
+  class ScriptedCamera
+    attr_accessor :eye
+
+    def initialize(eye_mm)
+      @eye = Geom::Point3d.new(eye_mm[0] / MM, eye_mm[1] / MM, eye_mm[2] / MM)
+    end
+  end
+
   class RecordingView
     attr_reader :draw_calls, :invalidations, :texts, :text_points, :screen_projections
+    attr_accessor :camera
 
     def initialize
       @draw_calls = []
@@ -70,6 +102,7 @@ class FurniturePlacementToolTest < Minitest::Test
       @text_points = []
       @screen_projections = []
       @color = nil
+      @camera = nil
     end
 
     # Host-faithful screen projection for draw_text: pixel x/y derived
@@ -132,18 +165,21 @@ class FurniturePlacementToolTest < Minitest::Test
   def setup
     @model = StrictModel.new
     @view = RecordingView.new
+    @view.camera = ScriptedCamera.new([3000.0, 2000.0, 1500.0])
     @commits = []
     @cancels = []
   end
 
-  def tool(positions_mm, anchor: :back_left_bottom)
-    input_point = ScriptedInputPoint.new(positions_mm)
+  def tool(positions_mm, anchor: :back_left_bottom, faces: nil, managed_targets: nil, base_planes: nil)
+    input_point = ScriptedInputPoint.new(positions_mm, faces)
     placement_tool = Tool.new(
       label: 'Torre horno', extents_mm: EXTENTS, anchor: anchor,
       on_commit: ->(transform) { @commits << transform },
       on_cancel: ->(reason) { @cancels << reason },
       input_point_factory: -> { input_point },
-      model_provider: -> { @model }
+      model_provider: -> { @model },
+      furniture_targets_provider: managed_targets,
+      base_planes_provider: base_planes
     )
     [placement_tool, input_point]
   end
@@ -243,7 +279,7 @@ class FurniturePlacementToolTest < Minitest::Test
     yaxis = transform.yaxis
     zaxis = transform.zaxis
     assert_in_epsilon 1.0, Math.sqrt((xaxis.x**2) + (xaxis.y**2) + (xaxis.z**2))
-    assert_in_epsilon 0.0, (xaxis.x * yaxis.x) + (xaxis.y * yaxis.y) + (xaxis.z * yaxis.z)
+    assert_in_delta 0.0, (xaxis.x * yaxis.x) + (xaxis.y * yaxis.y) + (xaxis.z * yaxis.z)
     assert_in_epsilon 1.0, zaxis.z, 1e-9, 'Z stays vertical under a Z rotation'
   end
 
@@ -535,7 +571,608 @@ class FurniturePlacementToolTest < Minitest::Test
     end
   end
 
+  # ---- #469 increment 2: semantic snaps ---------------------------------
+
+  # Wall at x=0 facing +X: hovering near it, the preview transform puts
+  # the BACK face exactly on the plane, front facing +X, and the snap
+  # state is visible to the drawing layer. The cursor loop still touches
+  # nothing but the InputPoint (StrictModel guards every model call).
+  def test_wall_snap_moves_preview_back_face_onto_the_plane
+    placement_tool, = tool([[0.0, 2000.0, 30.0]],
+                           faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(placement_tool)
+
+    assert placement_tool.active_snap, 'a wall candidate must be active'
+    transform = placement_tool.current_transform
+    # Back face = local y in [0..0]; the four back corners sit at x=0.
+    [[0, 0, 0], [EXTENTS[:x], 0, 0], [0, 0, EXTENTS[:z]], [EXTENTS[:x], 0, EXTENTS[:z]]].each do |corner|
+      placed = point_mm(transform, *corner)
+      assert_in_delta 0.0, placed[0], 1e-6, 'every back corner lies on the wall plane'
+    end
+    # Front face one depth away, facing +X.
+    assert_in_epsilon EXTENTS[:y], point_mm(transform, 0, EXTENTS[:y], 0)[0], 1e-6
+    assert_in_epsilon 1.0, placement_tool.active_snap[:front_dir_mm][0], 1e-9, 'front maps to +X'
+    assert_empty @model.selected_tools, 'the snap loop must not touch the model'
+  end
+
+  # #469 increment 3 — a wall at 30°: the back face lands exactly on the
+  # rotated plane (through the picked point, normal from the face), the
+  # front faces the EYE side, and the committed basis keeps the real
+  # angle — never a rounded world axis.
+  def test_wall_snap_at_30_degrees_places_back_on_the_rotated_plane
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    cursor = [500.0, 500.0, 0.0]
+    placement_tool, = tool([cursor], faces: [ScriptedFace.new(normal)])
+    move_cursor(placement_tool)
+
+    assert placement_tool.active_snap, 'a 30° wall must offer a candidate'
+    assert_equal :face, placement_tool.active_snap[:primary][:kind]
+    assert_in_epsilon normal[0], placement_tool.active_snap[:front_dir_mm][0], 1e-9
+    assert_in_epsilon normal[1], placement_tool.active_snap[:front_dir_mm][1], 1e-9
+
+    transform = placement_tool.current_transform
+    [[0, 0, 0], [EXTENTS[:x], 0, 0], [0, 0, EXTENTS[:z]], [EXTENTS[:x], 0, EXTENTS[:z]]].each do |corner|
+      placed = point_mm(transform, *corner)
+      signed = ((placed[0] - cursor[0]) * normal[0]) + ((placed[1] - cursor[1]) * normal[1])
+      assert_in_delta 0.0, signed, 1e-6, 'every back corner lies on the 30° plane'
+    end
+    front_corner = point_mm(transform, 0, EXTENTS[:y], 0)
+    signed_front = ((front_corner[0] - cursor[0]) * normal[0]) + ((front_corner[1] - cursor[1]) * normal[1])
+    assert_in_epsilon EXTENTS[:y], signed_front, 1e-6, 'the front points into the room along the normal'
+  end
+
+  # The SAME reversed 30° wall (normal flipped) produces the identical
+  # physical placement — the room side comes from the camera eye, never
+  # from Face#normal, at any angle.
+  def test_reversed_wall_at_30_degrees_places_identically
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    cursor = [500.0, 500.0, 0.0]
+    unreversed, = tool([cursor], faces: [ScriptedFace.new(normal)])
+    move_cursor(unreversed)
+    reversed_tool, = tool([cursor], faces: [ScriptedFace.new([-normal[0], -normal[1], 0.0])])
+    move_cursor(reversed_tool)
+
+    assert unreversed.active_snap && reversed_tool.active_snap
+    assert_equal unreversed.active_snap[:anchor_mm].map { |v| v.round(9) },
+                 reversed_tool.active_snap[:anchor_mm].map { |v| v.round(9) },
+                 'identical physical placement for the reversed wall'
+    assert_equal(unreversed.active_snap[:front_dir_mm].map { |v| v.round(9) },
+                 reversed_tool.active_snap[:front_dir_mm].map { |v| v.round(9) })
+    assert_equal rounded_cells(unreversed.current_transform), rounded_cells(reversed_tool.current_transform),
+                 'the accepted transforms are identical'
+  end
+
+  # NEGATIVE (increment 3 §5): the accepted transform at an arbitrary yaw
+  # is a RIGID basis — unit orthogonal axes, determinant +1, +Z vertical.
+  def test_arbitrary_yaw_transform_is_orthonormal_right_handed_and_vertical
+    normal = [Math.sqrt(3.0) / 2.0, 0.5, 0.0]
+    placement_tool, = tool([[500.0, 500.0, 0.0]], faces: [ScriptedFace.new(normal)])
+    move_cursor(placement_tool)
+
+    assert placement_tool.active_snap
+    transform = placement_tool.current_transform
+    x = v3(transform.xaxis)
+    y = v3(transform.yaxis)
+    z = v3(transform.zaxis)
+    assert_in_epsilon 1.0, length3(x), 1e-9, '|X| = 1'
+    assert_in_epsilon 1.0, length3(y), 1e-9, '|Y| = 1'
+    assert_in_epsilon 1.0, length3(z), 1e-9, '|Z| = 1'
+    assert_in_delta 0.0, dot3(x, y), 1e-9, 'X ⟂ Y'
+    assert_in_delta 0.0, dot3(y, z), 1e-9, 'Y ⟂ Z'
+    assert_in_delta 0.0, dot3(x, z), 1e-9, 'X ⟂ Z'
+    assert_in_epsilon 1.0, det3(x, y, z), 1e-9, 'determinant = +1 (no mirror, no scale)'
+    assert_in_epsilon 1.0, z[2], 1e-9, '+Z stays vertical'
+    # The front basis keeps the exact angle — no axis rounding.
+    assert_in_epsilon normal[0], y[0], 1e-9
+    assert_in_epsilon normal[1], y[1], 1e-9
+  end
+
+  # Furniture side-to-side: a Granete-managed neighbor (descriptor by
+  # furnitureInstanceId) receives the new left side at gap 0.
+  def test_furniture_side_snap_from_managed_provider
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0]], managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    placement_tool.draw(@view)
+
+    side = placement_tool.active_snap[:components].find { |c| c[:kind] == :furniture_side }
+    assert side, 'the managed neighbor must be a snap target'
+    assert_equal 'fi-B03', side[:furniture_instance_id]
+    transform = placement_tool.current_transform
+    assert_in_epsilon 600.0, point_mm(transform, 0, 0, 0)[0], 1e-6,
+                      'the new left side sits exactly on x=600 at gap 0'
+    assert(@view.texts.any? { |text| text.include?('Encajar a B03 · lateral derecho · 0 mm') },
+           'the snap label names the target side and the live gap')
+  end
+
+  # VCB gap: with an active side snap, "5" + Enter separates the sides by
+  # exactly 5 mm — preview and commit. The box never resizes: the far
+  # corner stays one width away along the run axis.
+  def test_vcb_gap_applies_exact_mm_to_the_active_snap
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0], [700.0, 300.0, 0.0]],
+                           managed_targets: -> { targets })
+    move_cursor(placement_tool)
+
+    assert_equal true, placement_tool.onUserText('5', @view)
+
+    transform = placement_tool.current_transform
+    assert_in_epsilon 605.0, point_mm(transform, 0, 0, 0)[0], 1e-6, 'gap 5 mm'
+    assert_in_epsilon 605.0 + EXTENTS[:x], point_mm(transform, EXTENTS[:x], 0, 0)[0], 1e-6,
+                      'the box slides whole — width unchanged'
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+    assert_equal 1, @commits.length
+    assert_in_epsilon 605.0, point_mm(@commits.first, 0, 0, 0)[0], 1e-6,
+                      'the committed transform carries the exact gap'
+  end
+
+  # The gap belongs to its target: when the fresh pick at the click
+  # resolves a DIFFERENT primary (or none), the stored offset does not
+  # leak into an unrelated constraint.
+  def test_gap_does_not_leak_to_a_different_or_absent_target
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0], [5000.0, 5000.0, 0.0]],
+                           managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    placement_tool.onUserText('5', @view)
+
+    placement_tool.onLButtonDown(0, 10, 10, @view) # fresh pick far away: no snap
+
+    assert_equal 1, @commits.length
+    assert_nil placement_tool.active_snap
+    assert_equal [5000.0, 5000.0, 0.0], point_mm(@commits.first, 0, 0, 0),
+                 'free placement at the fresh inference, gap not applied'
+  end
+
+  # Stale-candidate rule: a target that disappears between move and click
+  # can never be committed against — the click re-solves from fresh data.
+  def test_erased_target_between_move_and_click_never_commits_the_snap
+    live = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    provider = -> { live }
+    placement_tool, = tool([[700.0, 300.0, 0.0], [700.0, 300.0, 0.0]], managed_targets: provider)
+    move_cursor(placement_tool)
+    assert placement_tool.active_snap
+
+    live.clear # the managed root is erased before the click
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+    assert_equal 1, @commits.length
+    assert_nil placement_tool.active_snap, 'no stale solution may survive the fresh pick'
+    assert_equal [700.0, 300.0, 0.0], point_mm(@commits.first, 0, 0, 0),
+                 'the commit falls back to the fresh free inference'
+  end
+
+  # Invalid inference clears the snap together with the position.
+  def test_invalid_pick_clears_the_active_snap
+    placement_tool, = tool([[0.0, 2000.0, 30.0], nil],
+                           faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(placement_tool)
+    assert placement_tool.active_snap
+
+    placement_tool.onMouseMove(0, 20, 20, @view) # invalid pick
+
+    assert_nil placement_tool.active_snap
+    assert_nil placement_tool.current_transform
+  end
+
+  # Rotation while an orientation snap is active is answered with a hint,
+  # not a silent fight with the target; free mode keeps ←/→ working.
+  def test_rotation_blocked_under_orientation_snap_but_free_mode_rotates
+    blocked, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(blocked)
+    blocked.onKeyDown(39, false, 0, @view)
+
+    assert_in_epsilon 1.0, blocked.active_snap[:front_dir_mm][0], 1e-9, 'the snap keeps fixing the front'
+    assert_equal 0, blocked.rotation_quarters, 'the user quarter was not consumed'
+
+    free, = tool([[1000.0, 2000.0, 0.0]])
+    move_cursor(free)
+    free.onKeyDown(39, false, 0, @view)
+    assert_equal 1, free.rotation_quarters
+    assert_nil free.active_snap
+  end
+
+  # Without an active snap the VCB has no reference: honest hint, zero
+  # state change, and invalid text never invents a distance.
+  def test_vcb_without_snap_or_with_invalid_text_is_answered_not_guessed
+    placement_tool, = tool([[1000.0, 2000.0, 0.0]])
+    move_cursor(placement_tool)
+
+    assert_equal true, placement_tool.onUserText('5', @view), 'handled with a hint'
+    assert_equal true, placement_tool.onUserText('cinco', @view)
+
+    walled, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(walled)
+    assert_equal true, walled.onUserText('cinco', @view), 'invalid text is answered, not guessed'
+    transform = walled.current_transform
+    assert_in_delta 0.0, point_mm(transform, 0, 0, 0)[0], 1e-6, 'gap stays 0'
+  end
+
+  # Cancel with a live snap: zero residue, nothing drawn afterwards —
+  # identical to increment 1 semantics.
+  def test_cancel_with_active_snap_leaves_zero_residue
+    placement_tool, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(placement_tool)
+    placement_tool.onUserText('25', @view)
+    assert placement_tool.active_snap
+
+    placement_tool.onKeyDown(27, false, 0, @view) # Esc
+
+    assert_equal [:escape], @cancels
+    assert_empty @commits
+    assert placement_tool.cancelled?
+    assert_empty @model.selected_tools.slice(1..) # only the restore call
+    placement_tool.draw(@view)
+    assert_empty @view.draw_calls, 'a cancelled snap preview draws nothing more'
+  end
+
+  # NEGATIVE: a snapped commit stays rigid and never resizes the box —
+  # every axis length of the placed box equals the preview extents, so no
+  # manufacturing dimension can be derived from wall/neighbor geometry.
+  def test_snapped_transform_is_rigid_and_never_resizes_the_box
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0]], managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    placement_tool.onUserText('40', @view)
+
+    transform = placement_tool.current_transform
+    origin = point_mm(transform, 0, 0, 0)
+    width_end = point_mm(transform, EXTENTS[:x], 0, 0)
+    depth_end = point_mm(transform, 0, EXTENTS[:y], 0)
+    height_end = point_mm(transform, 0, 0, EXTENTS[:z])
+    assert_in_epsilon EXTENTS[:x], distance(origin, width_end), 1e-6, 'width intact'
+    assert_in_epsilon EXTENTS[:y], distance(origin, depth_end), 1e-6, 'depth intact'
+    assert_in_epsilon EXTENTS[:z], distance(origin, height_end), 1e-6, 'height intact'
+  end
+
+  # Cursor movement with snap discovery still issues NO callbacks and no
+  # model access: discovery is pure data over the injected providers.
+  def test_snap_discovery_during_moves_never_calls_back_or_touches_the_model
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, input_point = tool([[700.0, 300.0, 0.0], [710.0, 310.0, 0.0], [720.0, 320.0, 0.0]],
+                                       faces: [ScriptedFace.new([1.0, 0.0, 0.0]), nil, nil],
+                                       managed_targets: -> { targets })
+    move_cursor(placement_tool, times: 3)
+
+    assert_equal 3, input_point.pick_count, 'still exactly one pick per move'
+    assert placement_tool.active_snap
+    assert_empty @commits
+    assert_empty @cancels
+    assert_empty @model.selected_tools
+  end
+
+  # A REVERSED floor face (−Z normal) is the same base plane as an
+  # unreversed one: the tool's discovery passes the winding through and
+  # the floor snap activates identically (no Face#normal sign authority).
+  def test_reversed_floor_face_activates_the_base_plane_snap
+    unreversed, = tool([[1000.0, 1000.0, 1000.0]], faces: [ScriptedFace.new([0.0, 0.0, 1.0])])
+    move_cursor(unreversed)
+    reversed_tool, = tool([[1000.0, 1000.0, 1000.0]], faces: [ScriptedFace.new([0.0, 0.0, -1.0])])
+    move_cursor(reversed_tool)
+
+    assert_equal 'Piso', unreversed.active_snap[:label]
+    assert_equal 'Piso', reversed_tool.active_snap[:label],
+                 'the reversed floor offers the SAME base-plane snap'
+    assert_equal [1000.0, 1000.0, 1000.0], reversed_tool.active_snap[:anchor_mm]
+    refute reversed_tool.active_snap[:constrains_rotation]
+  end
+
+  # A REVERSED wall face (normal pointing −X, away from the room) must
+  # produce the SAME placement as the unreversed face: the front is
+  # resolved from the camera side, never from Face#normal — the furniture
+  # can never end up facing the wall.
+  def test_reversed_wall_face_yields_the_same_orientation_as_unreversed
+    unreversed, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(unreversed)
+    reversed_tool, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([-1.0, 0.0, 0.0])])
+    move_cursor(reversed_tool)
+
+    assert_in_epsilon 1.0, unreversed.active_snap[:front_dir_mm][0], 1e-9
+    assert_in_epsilon 1.0, reversed_tool.active_snap[:front_dir_mm][0], 1e-9,
+                      'the reversed face must orient identically — front away from the wall'
+    transform = reversed_tool.current_transform
+    [[0, 0, 0], [EXTENTS[:x], 0, 0]].each do |corner|
+      assert_in_delta 0.0, point_mm(transform, *corner)[0], 1e-6, 'back face on the wall'
+    end
+    assert_in_epsilon EXTENTS[:y], point_mm(transform, 0, EXTENTS[:y], 0)[0], 1e-6,
+                      'front one depth into the room (+X)'
+  end
+
+  # Performance guard (#469 review): the managed-neighbor provider (a full
+  # local model scan) runs exactly ONCE per cursor loop regardless of how
+  # many mouse moves fire, plus exactly ONE commit-time revalidation —
+  # never one full model index per mouse event.
+  def test_cursor_loop_indexes_the_model_once_and_click_revalidates_once
+    calls = 0
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    provider = lambda do
+      calls += 1
+      targets
+    end
+    placement_tool, = tool([[700.0, 300.0, 0.0]] * 5, managed_targets: provider)
+
+    move_cursor(placement_tool, times: 5)
+
+    assert_equal 1, calls, 'five mouse moves must index the model exactly once (gesture snapshot)'
+    assert placement_tool.active_snap
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 2, calls, 'the click revalidates the chosen targets exactly once'
+    assert_equal 1, @commits.length
+  end
+
+  # The commit-time revalidation uses CURRENT data: a target mutated after
+  # the gesture snapshot (moved neighbor) commits against the fresh plane,
+  # never the stale one.
+  def test_click_commits_against_fresh_target_geometry_not_the_snapshot
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0], [700.0, 300.0, 0.0]],
+                           managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    assert_in_epsilon 600.0, point_mm(placement_tool.current_transform, 0, 0, 0)[0], 1e-6
+
+    targets.replace([managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [650.0, 560.0, 720.0],
+                                    [0.0, 1.0, 0.0])])
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    assert_in_epsilon 650.0, point_mm(@commits.first, 0, 0, 0)[0], 1e-6,
+                      'the committed side plane is the CURRENT neighbor geometry'
+  end
+
+  # #469 increment 3 — neighbor rotated to yaw 30° around Z: side-to-side
+  # keeps the fronts PARALLEL, the 5mm VCB gap separates the sides exactly
+  # along the ORIENTED normal, and the box never resizes or coerces to the
+  # quarter grid.
+  def test_rotated_neighbor_side_snap_keeps_parallel_fronts_and_exact_5mm_gap
+    yaw = 30.0
+    radians = yaw * Math::PI / 180.0
+    front = [Math.sin(radians), Math.cos(radians), 0.0]
+    right = [front[1], -front[0], 0.0]
+    size = [600.0, 560.0, 720.0]
+    targets = [rotated_target('fi-R30', 'R30', yaw, size, [0.0, 0.0, 0.0])]
+    # Cursor 40mm off the oriented right side, mid-run — expressed IN the
+    # target frame (a world offset changes the distance at every yaw).
+    cursor = [(right[0] * 640.0) + (front[0] * 280.0),
+              (right[1] * 640.0) + (front[1] * 280.0), 0.0]
+    placement_tool, = tool([cursor, cursor], managed_targets: -> { targets })
+    move_cursor(placement_tool)
+
+    side = placement_tool.active_snap && placement_tool.active_snap[:components]
+                                                       .find { |c| c[:kind] == :furniture_side }
+    assert side, 'the rotated managed neighbor must offer a side candidate'
+    assert_equal 'fi-R30', side[:furniture_instance_id]
+
+    assert_equal true, placement_tool.onUserText('5', @view)
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    transform = @commits.first
+    y_axis = v3(transform.yaxis)
+    assert_in_epsilon front[0], y_axis[0], 1e-6, 'fronts stay parallel at 30°'
+    assert_in_epsilon front[1], y_axis[1], 1e-6
+    # The new LEFT side (local x = 0 face) sits 5mm off the oriented side
+    # plane x·right = 600, measured along the normal.
+    [[0, 0, 0], [0, EXTENTS[:y], 0], [0, 0, EXTENTS[:z]]].each do |corner|
+      placed = point_mm(transform, *corner)
+      signed = (placed[0] * right[0]) + (placed[1] * right[1])
+      assert_in_epsilon 605.0, signed, 1e-6, 'left side exactly 5mm off the oriented plane'
+    end
+    # Rigid: the width still spans 800mm along the run axis.
+    width_end = point_mm(transform, EXTENTS[:x], 0, 0)
+    origin = point_mm(transform, 0, 0, 0)
+    assert_in_epsilon EXTENTS[:x], distance(origin, width_end), 1e-6, 'dimensions intact'
+  end
+
+  # Stale rotated target (increment 3 §13): the preview snaps against yaw
+  # 30°, the target ROTATES to 35° before the click, and the commit uses
+  # the FRESH frame — never the stale orientation.
+  def test_click_uses_the_fresh_yaw_when_target_rotates_between_move_and_click
+    live = [rotated_target('fi-R30', 'R30', 30.0, [600.0, 560.0, 720.0], [0.0, 0.0, 0.0])]
+    radians = 30.0 * Math::PI / 180.0
+    front = [Math.sin(radians), Math.cos(radians), 0.0]
+    right = [front[1], -front[0], 0.0]
+    cursor = [(right[0] * 640.0) + (front[0] * 280.0), (right[1] * 640.0) + (front[1] * 280.0), 0.0]
+    placement_tool, = tool([cursor, cursor], managed_targets: -> { live })
+    move_cursor(placement_tool)
+    assert placement_tool.active_snap, 'the 30° preview snap is live'
+    preview_front = placement_tool.active_snap[:front_dir_mm].dup
+
+    live.replace([rotated_target('fi-R30', 'R30', 35.0, [600.0, 560.0, 720.0], [0.0, 0.0, 0.0])])
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    y_axis = v3(@commits.first.yaxis)
+    radians35 = 35.0 * Math::PI / 180.0
+    assert_in_epsilon Math.sin(radians35), y_axis[0], 1e-6, 'the commit uses the FRESH 35° frame'
+    assert_in_epsilon Math.cos(radians35), y_axis[1], 1e-6
+    refute_in_epsilon preview_front[0], y_axis[0], 1e-4, 'the stale 30° orientation is gone'
+  end
+
+  # P1 (review): wall + floor must COMPOSE through the real tool — the
+  # picked 30° wall constrains XY while the gesture-scoped base-plane
+  # provider feeds the floor; preview AND commit carry both constraints.
+  def test_wall_and_floor_compose_through_the_tool_at_30_degrees
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0] # on the wall, near the floor
+    floor_planes = lambda do
+      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+         'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+         'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
+    end
+    placement_tool, = tool([aim, aim], faces: [ScriptedFace.new(normal), ScriptedFace.new(normal)],
+                                       base_planes: floor_planes)
+    move_cursor(placement_tool)
+
+    assert placement_tool.active_snap
+    kinds = placement_tool.active_snap[:components].map { |component| component[:kind] }.sort
+    assert_equal %i[face floor], kinds, 'the picked wall composes with the floor plane'
+    assert_equal :face, placement_tool.active_snap[:primary][:kind], 'the wall stays primary'
+
+    transform = placement_tool.current_transform
+    [[0, 0, 0], [EXTENTS[:x], 0, 0]].each do |corner|
+      placed = point_mm(transform, *corner)
+      signed = ((placed[0] - aim[0]) * normal[0]) + ((placed[1] - aim[1]) * normal[1])
+      assert_in_delta 0.0, signed, 1e-4, 'back face on the rotated wall plane'
+    end
+    assert_in_delta 0.0, point_mm(transform, 0, 0, 0)[2], 1e-4,
+                    'base sits on the floor plane (composed constraint)'
+
+    placement_tool.onLButtonDown(0, 10, 10, @view) # re-picks + revalidates both providers
+
+    assert_equal 1, @commits.length
+    committed_origin = point_mm(@commits.first, 0, 0, 0)
+    signed_wall = ((committed_origin[0] - aim[0]) * normal[0]) + ((committed_origin[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-4, 'committed back corner on the wall'
+    assert_in_delta 0.0, committed_origin[2], 1e-4, 'committed base on the floor'
+  end
+
+  # The base-plane scan follows the same budget as managed targets: one
+  # provider call per gesture regardless of mouse moves, plus exactly one
+  # commit-time revalidation.
+  def test_base_plane_provider_runs_once_per_gesture_and_once_at_click
+    calls = 0
+    floor_planes = lambda do
+      calls += 1
+      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+         'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+         'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
+    end
+    aim = [500.0, 500.0, 100.0]
+    placement_tool, = tool([aim] * 4, faces: [ScriptedFace.new([0.5, Math.sqrt(3.0) / 2.0, 0.0]), nil, nil, nil],
+                                      base_planes: floor_planes)
+
+    move_cursor(placement_tool, times: 4)
+
+    assert_equal 1, calls, 'four mouse moves scan the base planes exactly once'
+    assert placement_tool.active_snap
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 2, calls, 'the click revalidates the base planes exactly once'
+    assert_equal 1, @commits.length
+  end
+
+  # A floor plane far below the cursor is NOT a candidate: a free pick
+  # high above the ground keeps following the raw inference (#469
+  # increment 1 rule preserved — no hijack toward z=0). The footprint
+  # COVERS the cursor, so the rejection can only come from Z distance;
+  # the mirrored case (close Z, distant XY footprint) is pinned at the
+  # engine level — both dimensions of spatial relevance are required.
+  def test_distant_floor_plane_never_hijacks_a_free_pick
+    floor_planes = lambda do
+      [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+         'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+         'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
+    end
+    placement_tool, = tool([[1000.0, 2000.0, 1000.0], [1000.0, 2000.0, 1000.0]],
+                           base_planes: floor_planes)
+    move_cursor(placement_tool)
+
+    assert_nil placement_tool.active_snap, '1000mm above the floor offers no candidate'
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    assert_equal [1000.0, 2000.0, 1000.0], point_mm(@commits.first, 0, 0, 0),
+                 'free placement at the raw inference'
+  end
+
+  # Review r2 D: the base-plane snapshot revalidates at the click — a
+  # nested floor MOVED between preview and click commits against the
+  # FRESH plane; a floor DELETED before the click falls safe (the wall
+  # constraint survives, Z follows the fresh free inference).
+  def test_click_revalidates_base_planes_against_fresh_nested_state
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0]
+    live = [{ 'point_mm' => [0.0, 0.0, 0.0], 'normal_mm' => [0.0, 0.0, 1.0],
+              'footprint_min_mm' => [-10_000.0, -10_000.0, 0.0],
+              'footprint_max_mm' => [10_000.0, 10_000.0, 0.0] }]
+    moved, = tool([aim, aim], faces: [ScriptedFace.new(normal), ScriptedFace.new(normal)],
+                              base_planes: -> { live })
+    move_cursor(moved)
+    assert moved.active_snap
+    assert_in_delta 0.0, point_mm(moved.current_transform, 0, 0, 0)[2], 1e-4
+
+    live.replace([{ 'point_mm' => [0.0, 0.0, 120.0], 'normal_mm' => [0.0, 0.0, 1.0],
+                    'footprint_min_mm' => [-10_000.0, -10_000.0, 120.0],
+                    'footprint_max_mm' => [10_000.0, 10_000.0, 120.0] }])
+    moved.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 1, @commits.length
+    assert_in_delta 120.0, point_mm(@commits.first, 0, 0, 0)[2], 1e-4,
+                    'the committed base uses the CURRENT (moved) floor plane'
+
+    erased, = tool([aim, aim], faces: [ScriptedFace.new(normal), ScriptedFace.new(normal)],
+                               base_planes: -> { live })
+    move_cursor(erased)
+    live.clear # the nested floor is deleted before the click
+    erased.onLButtonDown(0, 10, 10, @view)
+
+    assert_equal 2, @commits.length
+    committed = point_mm(@commits.last, 0, 0, 0)
+    signed_wall = ((committed[0] - aim[0]) * normal[0]) + ((committed[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-4, 'the wall constraint survives (fresh pick)'
+    assert_in_delta aim[2], committed[2], 1e-4, 'Z falls back to the fresh free inference'
+    assert_equal(%i[face], erased.active_snap[:components].map { |c| c[:kind] })
+  end
+
   private
+
+  # Axis-aligned world-box fixture (min at the frame origin, front on a
+  # quarter direction) expressed as the ORIENTED frame descriptor the
+  # increment 3 provider/engine contract uses.
+  def managed_target(id, label, min_mm, max_mm, front_dir)
+    front = [front_dir[0].to_f, front_dir[1].to_f, 0.0]
+    length = Math.sqrt((front[0]**2) + (front[1]**2))
+    front = [front[0] / length, front[1] / length, 0.0]
+    right = [front[1], -front[0], 0.0]
+    { 'furniture_instance_id' => id, 'label' => label,
+      'origin_world_mm' => min_mm.map(&:to_f),
+      'front_dir_mm' => front, 'right_dir_mm' => right,
+      'local_min_mm' => [0.0, 0.0, 0.0],
+      'local_max_mm' => [max_mm[0] - min_mm[0], max_mm[1] - min_mm[1], max_mm[2] - min_mm[2]] }
+  end
+
+  # ORIENTED frame descriptor for a neighbor rotated by yaw around Z at a
+  # world position: unit front/right + LOCAL extents — the shape the real
+  # provider derives from the rigid transform + local definition bounds,
+  # never from the world AABB.
+  def rotated_target(id, label, yaw_degrees, size, at)
+    radians = yaw_degrees * Math::PI / 180.0
+    front = [Math.sin(radians), Math.cos(radians), 0.0]
+    right = [front[1], -front[0], 0.0]
+    { 'furniture_instance_id' => id, 'label' => label,
+      'origin_world_mm' => at, 'front_dir_mm' => front, 'right_dir_mm' => right,
+      'local_min_mm' => [0.0, 0.0, 0.0], 'local_max_mm' => size }
+  end
+
+  def v3(vector)
+    [vector.x.to_f, vector.y.to_f, vector.z.to_f]
+  end
+
+  def length3(vector)
+    Math.sqrt((vector[0]**2) + (vector[1]**2) + (vector[2]**2))
+  end
+
+  def dot3(vec_a, vec_b)
+    (vec_a[0] * vec_b[0]) + (vec_a[1] * vec_b[1]) + (vec_a[2] * vec_b[2])
+  end
+
+  def det3(x_vec, y_vec, z_vec)
+    dot3(x_vec, [(y_vec[1] * z_vec[2]) - (y_vec[2] * z_vec[1]),
+                 (y_vec[2] * z_vec[0]) - (y_vec[0] * z_vec[2]),
+                 (y_vec[0] * z_vec[1]) - (y_vec[1] * z_vec[0])])
+  end
+
+  def rounded_cells(transform)
+    transform.to_a.map { |value| value.round(9) }
+  end
+
+  def distance(from_point, to_point)
+    Math.sqrt(from_point.each_index.map { |i| (from_point[i] - to_point[i])**2 }.sum)
+  end
 
   # Identity-basis board at a translated position (#414 shape).
   def board_at(translation:, size:)

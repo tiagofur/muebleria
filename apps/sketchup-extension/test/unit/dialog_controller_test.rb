@@ -250,16 +250,20 @@ class DialogControllerTest < Minitest::Test
     )
   end
 
-  def test_dialog_ready_sends_status_and_catalog
+  def test_dialog_ready_sends_status_version_and_catalog
     dialog = @controller.show
     dialog.callbacks.fetch('dialog_ready').call(nil)
 
     scripts = dialog.executed_scripts
-    assert scripts.length >= 2
+    assert scripts.length >= 3
 
     assert_includes scripts[0], 'window.GraneteDialog && window.GraneteDialog.setStatus'
-    assert_includes scripts[1], 'window.GraneteDialog && window.GraneteDialog.setCatalog'
-    catalog_script = scripts[1]
+    # The footer's version comes from the LOADED extension (identity.rb),
+    # never a hardcoded page string.
+    assert_includes scripts[1], 'window.GraneteDialog && window.GraneteDialog.setPluginVersion'
+    assert_includes scripts[1], "\"version\":\"#{Granete::SketchUpExtension::EXTENSION_VERSION}\""
+    assert_includes scripts[2], 'window.GraneteDialog && window.GraneteDialog.setCatalog'
+    catalog_script = scripts[2]
     assert_includes catalog_script, '"source":"local"'
     assert_includes catalog_script, '"presets":[]'
     assert_includes catalog_script, '"materialCategories":[]'
