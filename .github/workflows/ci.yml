@@ -14,7 +14,7 @@ on:
         required: true
         default: isolated
         type: choice
-        options: [isolated, inherited-safe]
+        options: [isolated, inherited-safe, ci+locale, ci, locale, linux]
   push:
     branches: [main, master]
   pull_request:
@@ -52,7 +52,7 @@ jobs:
           git merge-base --is-ancestor 24b014906e4fdd0963d4017df4865fc6527d9bca HEAD
           case "${PTX_DIAGNOSTIC_BROWSER_ENV}" in
             isolated) ;;
-            inherited-safe) test "${PTX_TARGET}" = candidate ;;
+            inherited-safe|ci+locale|ci|locale|linux) test "${PTX_TARGET}" = candidate ;;
             *) exit 2 ;;
           esac
           case "${PTX_TARGET}" in
@@ -172,6 +172,7 @@ jobs:
           name: ptx-diagnostic-evidence
           path: |
             ${{ runner.temp }}/ptx-diagnostic/safe/ptx-events.json
+            ${{ runner.temp }}/ptx-diagnostic/safe/browser-env-safe-names.txt
             ${{ runner.temp }}/ptx-diagnostic/safe/ptx-trace-sanitized.zip
             ${{ runner.temp }}/ptx-diagnostic/safe/ptx-screenshot.png
             ${{ runner.temp }}/ptx-diagnostic/safe/sanitized-log.txt

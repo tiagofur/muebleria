@@ -15,6 +15,13 @@ assert SPEC and SPEC.loader
 sanitize_module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(sanitize_module)
 
+SAFE_ENV_REPORT = (
+    'variant=ci+locale\n'
+    'available_safe_names=CI,GITHUB_ACTIONS,LANG\n'
+    'forwarded_safe_names=CI,GITHUB_ACTIONS,LANG\n'
+    'ambient_db_pg_count=5\nambient_credential_count=2\nambient_proxy_count=1\n'
+)
+
 
 class PtxDiagnosticContractTest(unittest.TestCase):
     def test_manual_dispatch_has_only_one_executable_job(self):
@@ -46,6 +53,7 @@ class PtxDiagnosticContractTest(unittest.TestCase):
             raw = root / 'raw'
             raw.mkdir()
             (raw / 'launcher.log').write_text('Running 32 tests using 1 worker\n')
+            (raw / 'browser-env-safe-names.txt').write_text(SAFE_ENV_REPORT)
             (raw / 'ptx-events.json').write_text(json.dumps([{'stage': 'ptx-click-start', 'elapsedMs': 1}]))
             with zipfile.ZipFile(raw / 'ptx-raw-trace.zip', 'w') as trace:
                 trace.writestr('trace.trace', '{"type":"before","method":"click"}\n')
@@ -69,11 +77,27 @@ class PtxDiagnosticContractTest(unittest.TestCase):
     def test_browser_environment_switch_is_branch_only_and_candidate_only(self):
         workflow = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIn('ptx_browser_env:', workflow)
-        self.assertIn('options: [isolated, inherited-safe]', workflow)
+        self.assertIn('options: [isolated, inherited-safe, ci+locale, ci, locale, linux]', workflow)
         self.assertIn('PTX_DIAGNOSTIC_BROWSER_ENV: ${{ inputs.ptx_browser_env }}', workflow)
         self.assertIn('test "${PTX_TARGET}" = candidate', workflow)
         self.assertIn('browser_env_variant=%s', workflow)
         self.assertNotIn('env | sort', workflow)
+
+    def test_safe_name_artifact_accepts_only_allowlisted_names_and_counts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / 'raw'
+            raw.mkdir()
+            report = raw / 'browser-env-safe-names.txt'
+            report.write_text(SAFE_ENV_REPORT)
+            safe = root / 'safe'
+            sanitize_module.sanitize(raw, safe, 1, 'candidate')
+            self.assertEqual((safe / 'browser-env-safe-names.txt').read_text(), report.read_text())
+            for poison in ('GITHUB_TOKEN', 'CI=true', 'DATABASE_URL'):
+                report.write_text(report.read_text().replace('CI,GITHUB_ACTIONS,LANG', poison))
+                with self.subTest(poison=poison), self.assertRaises(ValueError):
+                    sanitize_module.sanitize(raw, root / f'bad-{len(poison)}', 1, 'candidate')
+                report.write_text(SAFE_ENV_REPORT)
 
     def test_anchor_probe_precedes_real_click(self):
         source = (ROOT / 'apps/web/src/exportOptimizer.ts').read_text()
@@ -97,6 +121,7 @@ class PtxDiagnosticContractTest(unittest.TestCase):
             raw = root / 'raw'
             raw.mkdir()
             (raw / 'launcher.log').write_text('Running 32 tests using 1 worker\n')
+            (raw / 'browser-env-safe-names.txt').write_text(SAFE_ENV_REPORT)
             safe = root / 'safe'
             sanitize_module.summarize_failure(raw, safe, 1, 'candidate')
             sanitize_module.sanitize(raw, safe, 1, 'candidate')

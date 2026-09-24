@@ -13,6 +13,12 @@ FORBIDDEN = re.compile(
     r"database_url|migration_database_url|\bdsn\b|api[_-]?key)"
 )
 TEXT_LIMIT = 500_000
+SAFE_ENV_NAMES = (
+    'CI', 'GITHUB_ACTIONS', 'RUNNER_OS', 'RUNNER_ARCH', 'LANG', 'LC_ALL',
+    'LC_CTYPE', 'LANGUAGE', 'USER', 'LOGNAME', 'SHELL',
+    'XDG_SESSION_TYPE', 'XDG_CURRENT_DESKTOP',
+)
+ENV_VARIANTS = {'isolated', 'inherited-safe', 'ci+locale', 'ci', 'locale', 'linux'}
 KNOWN_FAILURE_CODES = {
     'PostgreSQL did not become ready': 'postgres_not_ready',
     'backend exited before health readiness': 'backend_exited',
@@ -37,6 +43,49 @@ KNOWN_TEST_FILES = (
 def assert_safe(value: str) -> None:
     if len(value) > TEXT_LIMIT or FORBIDDEN.search(value):
         raise ValueError('diagnostic content failed the privacy boundary')
+
+
+def screen_browser_env_names(raw: Path, output: Path, status: int, target: str) -> bool:
+    """Retain only known harmless variable names and dropped-class counts."""
+    source = raw / 'browser-env-safe-names.txt'
+    if not source.exists():
+        if target == 'candidate' and status == 0:
+            raise ValueError('successful candidate is missing browser environment names')
+        return False
+    content = source.read_text()
+    if len(content) > 4096 or not content.endswith('\n'):
+        raise ValueError('invalid browser environment name report')
+    lines = content.splitlines()
+    expected_fields = (
+        'variant', 'available_safe_names', 'forwarded_safe_names',
+        'ambient_db_pg_count', 'ambient_credential_count', 'ambient_proxy_count',
+    )
+    if len(lines) != len(expected_fields):
+        raise ValueError('invalid browser environment name report')
+    fields = {}
+    for line, expected in zip(lines, expected_fields):
+        key, separator, value = line.partition('=')
+        if key != expected or separator != '=':
+            raise ValueError('invalid browser environment name report')
+        fields[key] = value
+    if fields['variant'] not in ENV_VARIANTS:
+        raise ValueError('invalid browser environment variant')
+    for field in ('available_safe_names', 'forwarded_safe_names'):
+        names = fields[field].split(',') if fields[field] else []
+        if len(names) != len(set(names)) or any(name not in SAFE_ENV_NAMES for name in names):
+            raise ValueError('browser environment report contains unsafe names')
+        if names != [name for name in SAFE_ENV_NAMES if name in names]:
+            raise ValueError('browser environment report names are out of order')
+    available = set(fields['available_safe_names'].split(',')) if fields['available_safe_names'] else set()
+    forwarded = set(fields['forwarded_safe_names'].split(',')) if fields['forwarded_safe_names'] else set()
+    if not forwarded <= available:
+        raise ValueError('browser environment report claims absent keys forwarded')
+    for field in expected_fields[3:]:
+        if not re.fullmatch(r'0|[1-9][0-9]{0,4}', fields[field]):
+            raise ValueError('invalid browser environment class count')
+    assert_safe(content)
+    (output / 'browser-env-safe-names.txt').write_text(content)
+    return True
 
 
 def summarize_failure(raw: Path, output: Path, status: int, target: str) -> None:
@@ -84,6 +133,7 @@ def sanitize(raw: Path, output: Path, status: int, target: str) -> None:
     output.mkdir(parents=True, exist_ok=True)
     if target not in {'candidate', 'base'}:
         raise ValueError('invalid diagnostic target')
+    has_browser_env_names = screen_browser_env_names(raw, output, status, target)
     events_path = raw / 'ptx-events.json'
     events = []
     if events_path.exists():
@@ -150,6 +200,7 @@ def sanitize(raw: Path, output: Path, status: int, target: str) -> None:
         f'workers={observed_count.group(2) if observed_count else "not_reported"}\n'
         f'frontend_events={len(events)}\n'
         f'trace={"sanitized" if retained_trace else "missing"}\ntrace_network=excluded\n'
+        f'browser_env_names={"screened" if has_browser_env_names else "missing"}\n'
         'trace_snapshots=excluded\nraw_launcher_log=not_uploaded\n'
     )
 

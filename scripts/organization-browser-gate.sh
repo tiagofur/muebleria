@@ -30,10 +30,11 @@ fail() {
   exit 1
 }
 
-case "${PTX_DIAGNOSTIC_BROWSER_ENV:-isolated}" in
+PTX_BROWSER_MODE="${PTX_DIAGNOSTIC_BROWSER_ENV:-isolated}"
+case "${PTX_BROWSER_MODE}" in
   isolated) ;;
-  inherited-safe)
-    [ -n "${PTX_DIAGNOSTIC_DIR:-}" ] || fail "inherited-safe browser environment requires the temporary diagnostic harness"
+  inherited-safe|ci+locale|ci|locale|linux)
+    [ -n "${PTX_DIAGNOSTIC_DIR:-}" ] || fail "browser environment variant requires the temporary diagnostic harness"
     ;;
   *) fail "unknown temporary browser environment variant" ;;
 esac
@@ -216,20 +217,71 @@ PY
 # quote revisions) that no API can produce — the modern commands always freeze
 # a snapshot. Read-only-from-app perspective: admin DSN for fixture seeding
 # only; the verified FLOW always goes through the real API.
-if [ "${PTX_DIAGNOSTIC_BROWSER_ENV:-isolated}" = inherited-safe ]; then
-  # Diagnostic only: preserve runner/browser metadata while stripping every
-  # ambient database target and credential-shaped key before explicit T2
-  # disposable targets are reapplied below. Backend/admin stay on GATE_BASE_ENV.
+# Only these harmless names may appear in uploaded diagnostics. Values never do.
+GATE_BROWSER_SAFE_NAMES=(CI GITHUB_ACTIONS RUNNER_OS RUNNER_ARCH
+  LANG LC_ALL LC_CTYPE LANGUAGE USER LOGNAME SHELL
+  XDG_SESSION_TYPE XDG_CURRENT_DESKTOP)
+GATE_BROWSER_AVAILABLE_NAMES=()
+GATE_BROWSER_FORWARDED_NAMES=()
+for key in "${GATE_BROWSER_SAFE_NAMES[@]}"; do
+  if [ "${!key+x}" = x ]; then GATE_BROWSER_AVAILABLE_NAMES+=("${key}"); fi
+done
+ambient_db_pg_count=0
+ambient_credential_count=0
+ambient_proxy_count=0
+if [ "${PTX_BROWSER_MODE}" = inherited-safe ]; then
+  # Experiment 1 comparator only: backend/admin retain GATE_BASE_ENV.
   GATE_BROWSER_PREFIX=(env)
-  while IFS= read -r key; do
-    key_upper="$(LC_ALL=C tr '[:lower:]' '[:upper:]' <<< "${key}")"
-    case "${key_upper}" in
-      PG*|*DATABASE*|DB_*|*DB_URL*|*DB_HOST*|*DB_NAME*|*DB_PORT*|*DB_USER*|*DB_PASS*|*POSTGRES*|*DSN*|*CONNECTION*|*SECRET*|*TOKEN*|*PASSWORD*|*PASSWD*|*CREDENTIAL*|*PRIVATE*KEY*|*ACCESS*KEY*|*API*KEY*|*COOKIE*|*SESSION*|*AUTH*|DOCKER_HOST|DOCKER_CONTEXT|KUBECONFIG|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY)
-        GATE_BROWSER_PREFIX+=(-u "${key}") ;;
-    esac
-  done < <(compgen -e)
+  for key in "${GATE_BROWSER_AVAILABLE_NAMES[@]}"; do
+    # The existing inherited-safe scrub removes SESSION-shaped keys, including
+    # this harmless XDG name; report what reaches the child, not what existed.
+    if [ "${key}" != XDG_SESSION_TYPE ]; then GATE_BROWSER_FORWARDED_NAMES+=("${key}"); fi
+  done
 else
   GATE_BROWSER_PREFIX=(env -i)
+  case "${PTX_BROWSER_MODE}" in
+    ci+locale) group_names=(CI GITHUB_ACTIONS RUNNER_OS RUNNER_ARCH LANG LC_ALL LC_CTYPE LANGUAGE) ;;
+    ci) group_names=(CI GITHUB_ACTIONS RUNNER_OS RUNNER_ARCH) ;;
+    locale) group_names=(LANG LC_ALL LC_CTYPE LANGUAGE) ;;
+    linux) group_names=(USER LOGNAME SHELL XDG_SESSION_TYPE XDG_CURRENT_DESKTOP) ;;
+    isolated) ;;
+  esac
+  if [ "${PTX_BROWSER_MODE}" != isolated ]; then
+    for key in "${group_names[@]}"; do
+      if [ "${!key+x}" = x ]; then
+        GATE_BROWSER_PREFIX+=("${key}=${!key}")
+        GATE_BROWSER_FORWARDED_NAMES+=("${key}")
+      fi
+    done
+  fi
+fi
+# Count dangerous *classes*, never upload their names or values. Inherited-safe
+# removes every matching ambient key before reapplying disposable T2 targets.
+while IFS= read -r key; do
+  key_upper="$(LC_ALL=C tr '[:lower:]' '[:upper:]' <<< "${key}")"
+  case "${key_upper}" in
+    PG*|*DATABASE*|DB_*|*DB_URL*|*DB_HOST*|*DB_NAME*|*DB_PORT*|*DB_USER*|*DB_PASS*|*POSTGRES*|*DSN*|*CONNECTION*)
+      ambient_db_pg_count=$((ambient_db_pg_count + 1))
+      if [ "${PTX_BROWSER_MODE}" = inherited-safe ]; then GATE_BROWSER_PREFIX+=(-u "${key}"); fi ;;
+    *SECRET*|*TOKEN*|*PASSWORD*|*PASSWD*|*CREDENTIAL*|*PRIVATE*KEY*|*ACCESS*KEY*|*API*KEY*|*COOKIE*|*SESSION*|*AUTH*)
+      ambient_credential_count=$((ambient_credential_count + 1))
+      if [ "${PTX_BROWSER_MODE}" = inherited-safe ]; then GATE_BROWSER_PREFIX+=(-u "${key}"); fi ;;
+    DOCKER_HOST|DOCKER_CONTEXT|KUBECONFIG|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY)
+      ambient_proxy_count=$((ambient_proxy_count + 1))
+      if [ "${PTX_BROWSER_MODE}" = inherited-safe ]; then GATE_BROWSER_PREFIX+=(-u "${key}"); fi ;;
+  esac
+done < <(compgen -e)
+if [ -n "${PTX_DIAGNOSTIC_DIR:-}" ]; then
+  mkdir -p "${PTX_DIAGNOSTIC_DIR}"
+  join_safe_names() { local IFS=,; printf '%s' "$*"; }
+  {
+    printf 'variant=%s\n' "${PTX_BROWSER_MODE}"
+    printf 'available_safe_names=%s\n' "$(join_safe_names "${GATE_BROWSER_AVAILABLE_NAMES[@]}")"
+    printf 'forwarded_safe_names=%s\n' "$(join_safe_names "${GATE_BROWSER_FORWARDED_NAMES[@]}")"
+    printf 'ambient_db_pg_count=%s\n' "${ambient_db_pg_count}"
+    printf 'ambient_credential_count=%s\n' "${ambient_credential_count}"
+    printf 'ambient_proxy_count=%s\n' "${ambient_proxy_count}"
+  } > "${PTX_DIAGNOSTIC_DIR}/browser-env-safe-names.txt"
 fi
 GATE_BROWSER_ENV=("${GATE_BROWSER_PREFIX[@]}"
   PATH="${PATH}" HOME="${HOME:-/}" TMPDIR="${TMPDIR:-/tmp}"

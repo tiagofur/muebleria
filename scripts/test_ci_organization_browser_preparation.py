@@ -73,9 +73,15 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "        'pg_keys': sorted(key for key in os.environ if key.startswith('PG')),\n"
                 + "        'ambient_inert': 'GRANETE_DIAGNOSTIC_INERT_MARKER' in os.environ,\n"
                 + "        'ci_metadata': os.environ.get('CI') == 'true' and os.environ.get('GITHUB_ACTIONS') == 'true',\n"
+                + "        'safe_names': sorted(key for key in os.environ if key in\n"
+                + "            ('CI', 'GITHUB_ACTIONS', 'RUNNER_OS', 'RUNNER_ARCH', 'LANG', 'LC_ALL',\n"
+                + "             'LANGUAGE', 'USER', 'LOGNAME', 'SHELL',\n"
+                + "             'XDG_SESSION_TYPE', 'XDG_CURRENT_DESKTOP')),\n"
+                + "        'lc_ctype_explicit': os.environ.get('LC_CTYPE') == 'C',\n"
                 + "        'dangerous_keys': sorted(key for key in os.environ if key in\n"
                 + "            ('GITHUB_TOKEN', 'ACTIONS_RUNTIME_TOKEN', 'POSTGRES_PASSWORD',\n"
-                + "             'OTHER_DATABASE_URL', 'OTHER_DB_URL', 'AWS_SECRET_ACCESS_KEY'))}\n"
+                + "             'OTHER_DATABASE_URL', 'OTHER_DB_URL', 'AWS_SECRET_ACCESS_KEY',\n"
+                + "             'HTTP_PROXY'))}\n"
                 + "    with capture.open('a') as stream: stream.write(json.dumps(record) + '\\n')\n"
                 + "    if name == 'go' and args[:2] == ['run', './cmd/testdb-preflight']:\n"
                 + "        if real_preflight:\n"
@@ -120,12 +126,24 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "GRANETE_DIAGNOSTIC_INERT_MARKER": "synthetic-inert",
                 "CI": "true",
                 "GITHUB_ACTIONS": "true",
+                "RUNNER_OS": "Linux",
+                "RUNNER_ARCH": "X64",
+                "LANG": "C",
+                "LC_ALL": "C",
+                "LC_CTYPE": "C",
+                "LANGUAGE": "en",
+                "USER": "synthetic-user",
+                "LOGNAME": "synthetic-user",
+                "SHELL": "/bin/bash",
+                "XDG_SESSION_TYPE": "tty",
+                "XDG_CURRENT_DESKTOP": "headless",
                 "GITHUB_TOKEN": "synthetic-secret",
                 "ACTIONS_RUNTIME_TOKEN": "synthetic-secret",
                 "POSTGRES_PASSWORD": "synthetic-secret",
                 "OTHER_DATABASE_URL": "postgres://synthetic:secret@127.0.0.1:5445/muebles",
                 "OTHER_DB_URL": "postgres://synthetic:secret@127.0.0.1:5445/muebles",
                 "AWS_SECRET_ACCESS_KEY": "synthetic-secret",
+                "HTTP_PROXY": "http://ambient.invalid",
                 "PTX_DIAGNOSTIC_BROWSER_ENV": browser_variant,
                 "PTX_DIAGNOSTIC_DIR": str(tmpdir / 'diagnostic'),
             })
@@ -151,6 +169,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True,
                                         text=True, timeout=90)
             records = [json.loads(line) for line in capture.read_text().splitlines()] if capture.exists() else []
+            safe_report = tmpdir / 'diagnostic' / 'browser-env-safe-names.txt'
+            result.browser_safe_report = safe_report.read_text() if safe_report.exists() else None
             survivor = False
             if server_pid.exists():
                 pid = int(server_pid.read_text())
@@ -230,6 +250,47 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         result, records, _ = self.run_gate_with_doubles(0, browser_variant='unknown')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(records, [])
+
+    def test_safe_groups_affect_only_browser_child(self):
+        ci = {'CI', 'GITHUB_ACTIONS', 'RUNNER_OS', 'RUNNER_ARCH'}
+        locale = {'LANG', 'LC_ALL', 'LANGUAGE'}
+        linux = {'USER', 'LOGNAME', 'SHELL', 'XDG_SESSION_TYPE', 'XDG_CURRENT_DESKTOP'}
+        for variant, expected in (
+            ('ci+locale', ci | locale), ('ci', ci),
+            ('locale', locale), ('linux', linux),
+        ):
+            with self.subTest(variant=variant):
+                result, records, survivor = self.run_gate_with_doubles(0, browser_variant=variant)
+                self.assertEqual(result.returncode, 0, result.stderr[-800:])
+                self.assertFalse(survivor)
+                self.assertEqual(len(records), 8)
+                browser = next(r for r in records if r['command'].startswith('pnpm '))
+                self.assertEqual(set(browser['safe_names']), expected)
+                self.assertEqual(browser['lc_ctype_explicit'], variant in ('ci+locale', 'locale'))
+                self.assertEqual(browser['pg_keys'], [])
+                self.assertEqual(browser['dangerous_keys'], [])
+                self.assertEqual(browser['runtime'], ['127.0.0.1', 56321, '/granete_gate', 'granete_app'])
+                self.assertEqual(browser['migration'], ['127.0.0.1', 56321, '/granete_gate', 'postgres'])
+                self.assertEqual(browser['fixture'], browser['migration'])
+                self.assertRegex(browser['identity_digest'], r'^[0-9a-f]{64}$')
+                for child in (r for r in records if r is not browser):
+                    self.assertEqual(child['safe_names'], [], child['command'])
+                    self.assertFalse(child['lc_ctype_explicit'], child['command'])
+                    self.assertEqual(child['pg_keys'], [], child['command'])
+                    self.assertEqual(child['dangerous_keys'], [], child['command'])
+                self.assertIsNotNone(result.browser_safe_report)
+                report = dict(line.split('=', 1) for line in result.browser_safe_report.splitlines())
+                self.assertEqual(report['variant'], variant)
+                forwarded = set(report['forwarded_safe_names'].split(','))
+                if variant in ('ci+locale', 'locale'):
+                    self.assertEqual(forwarded, expected | {'LC_CTYPE'})
+                else:
+                    self.assertEqual(forwarded, expected)
+                self.assertGreater(int(report['ambient_db_pg_count']), 0)
+                self.assertGreater(int(report['ambient_credential_count']), 0)
+                self.assertGreater(int(report['ambient_proxy_count']), 0)
+                self.assertNotIn('synthetic-user', result.browser_safe_report)
+                self.assertNotIn('ambient.invalid', result.browser_safe_report)
 
     def test_cancellation_reaps_the_server_without_running_admin(self):
         result, records, survivor = self.run_gate_with_doubles(0, cancel_after_server=True)

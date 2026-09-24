@@ -574,3 +574,62 @@ Diagnostic behavior work-unit commit:
 `319bbf05cdf38196ece245acd9651cb8323a4db1`. The final artifact-only
 evidence commit records this identity; independent review and Ubuntu runs
 remain pending. No push, dispatch, PR, or merge was performed by the writer.
+
+Experiment 1 V2 subsequently observed on the reviewed diagnostic HEAD
+`1669140dff978f9e2cd4693744692fb799e395d6`: run 36037531885 with
+`isolated` failed after three Chromium and Playwright download events, each
+with `suggestedFilename=download`, while the DOM anchor attribute/property
+retained the requested filename and `blob:` scheme. Run 36038172721 with
+`inherited-safe` passed 32/32 and the three names retained `.pdf`, `.ptx`,
+and `.manifest.json`. Both used Ubuntu image `20260920.314.1`, x86_64,
+the same PostgreSQL image digest, disposable preparation, and the same
+functional candidate. This establishes a browser-child environment effect,
+not which omitted variable causes it. Earlier `NOT_RUN` statements above
+describe local handoff status, not the later Ubuntu result. No #839 change.
+
+## E2 — Temporary safe-variable group bisection (Experiment 2 only)
+
+Authorized only because D2 A/B diverged. Retain the exact 32-test prefix,
+one worker, disposable database, backend/admin `env -i`, and DOM/CDP/Playwright
+probes. Start from isolated browser env and add only explicit safe groups:
+`ci+locale`, `ci`, `locale`, then `linux` if needed. The CI group contains
+CI, GITHUB_ACTIONS, RUNNER_OS, RUNNER_ARCH; locale contains LANG, LC_ALL,
+LC_CTYPE, LANGUAGE; Linux user/runtime contains USER, LOGNAME, SHELL and
+non-path XDG session metadata only. These are diagnostic variants, not a
+final product allowlist. Never forward ambient DB/PG/proxy or credential
+variables. Available/forwarded variable **names** may be recorded only from
+this harmless allowlist, with dropped sensitive classes represented by counts;
+no values, raw environment, or secret-bearing names may be uploaded.
+
+Route: delegated direct sole writer across launcher, manual workflow, privacy
+sanitizer, and DB-free real-launcher regressions. Strict TDD remains enabled;
+safe runner: `python3 -m unittest scripts.test_ci_organization_browser_preparation
+scripts.test_ptx_diagnostic_contract`. V2 Ubuntu group runs are parent-owned
+and `NOT_RUN` until independent review of the new exact diagnostic HEAD.
+Rollback remains discarding this non-delivery branch; no PR, merge, #839,
+#460, main, or persistent DB mutation.
+
+- [x] **E2a — Name-only, fail-closed group switch.** Add the guarded modes and
+  allowlisted safe-name report, preserving T2 child environments and privacy.
+- [x] **E2b — Real-launcher child regressions.** Observe safe RED, then GREEN:
+  groups reach only Playwright/Vite; ambient DB/PG/secret canaries never reach
+  any child; unknown modes stop before writable launch.
+- [ ] **E2c — Freeze for review.** V0/V1 checks, work-unit commit and exact
+  HEAD handoff. Ubuntu V2 remains pending the parent's deliberate dispatch.
+
+E2 local proof: safe RED against the real launcher before implementation:
+all four requested group modes rejected before child launch, the branch
+workflow lacked those choices, and the sanitizer did not retain the name-only
+artifact. GREEN: 17 focused DB-free Python cases (one opt-in skipped), 47 CI
+contract cases (one opt-in skipped), `shellcheck`, `bash -n`, Python compile,
+YAML parse (10 jobs), `pnpm typecheck`, and `git diff --check` passed. Real
+launcher doubles verify the exact safe CI/locale/Linux groups reach only
+Playwright/Vite, with all backend/admin children still isolated; poisoned
+PG/DB/proxy/credential-shaped keys never reach a child. The safe report lists
+only allowlisted variable names plus dropped-class counts, and the sanitizer
+rejects secret-named or value-looking substitutions. On macOS, Python's
+startup can synthesize `LC_CTYPE` in child-double processes even when `env -i`
+removed it; the test checks the explicit injected locale separately rather
+than mistaking that Python artifact for launcher forwarding. The unchanged
+32-test, one-worker PTX workflow selection and download probes remain in place.
+V2 Ubuntu group runs are `NOT_RUN`, and no #839/DB/product changes occurred.
