@@ -23,6 +23,7 @@ module Granete
       DESIGN_ID = '52000000-0000-0000-0000-000000000001'
       REVISION_R1 = '53000000-0000-0000-0000-000000000001'
       FI_1 = '51000000-0000-0000-0000-0000000000f1'
+      FI_2 = '51000000-0000-0000-0000-0000000000f2'
 
       def self.installed_extension
         Sketchup.extensions.to_a.find { |extension| extension.name == EXPECTED_NAME }
@@ -158,7 +159,159 @@ module Granete
         model.select_tool(nil)
       end
 
+      # #469 increment 2 — semantic snap walk on the REAL host: wall/face
+      # snap with orientation, furniture side-to-side against a managed
+      # root, exact mm gap through the VCB path, cancel with a live snap
+      # and undo. NOT_RUN in sessions without the owner-installed host.
+      def test_semantic_snaps_wall_side_gap_and_undo
+        transport = ScriptedTransport.new
+        transport.stub_working_copy([])
+        placer = build_placer(transport)
+        mm = 25.4
+
+        # --- Fixture: a wall face at x=0 facing +X and a floor face z=0.
+        wall = model.entities.add_face(
+          [Geom::Point3d.new(0, 0, 0),
+           Geom::Point3d.new(0, 4000 / mm, 0),
+           Geom::Point3d.new(0, 4000 / mm, 3000 / mm),
+           Geom::Point3d.new(0, 0, 3000 / mm)]
+        )
+        wall.reverse! if wall.normal.x.negative?
+        floor = model.entities.add_face(
+          [Geom::Point3d.new(0, 0, 0),
+           Geom::Point3d.new(6000 / mm, 0, 0),
+           Geom::Point3d.new(6000 / mm, 4000 / mm, 0),
+           Geom::Point3d.new(0, 4000 / mm, 0)]
+        )
+        floor.reverse! if floor.normal.z.negative?
+
+        prepared = placer.prepare_placement_preview(FI_1)
+        assert prepared['ok'], prepared.inspect
+        extents = Tools::FurniturePlacementTool.extents_from_layout(prepared['layout'])
+
+        # --- Wall snap: aim at the wall face; the back face must align to
+        # the plane and the front must face +X (away from the wall).
+        aim_view_at(Geom::Point3d.new(0, 1500 / mm, 900 / mm))
+        commits = []
+        tool = snap_tool(placer, extents, commits, FI_1)
+        move_to_view_center(tool)
+        assert tool.active_snap, 'hovering the wall face must produce a snap'
+        assert_equal :face, tool.active_snap[:primary][:kind]
+        assert_equal 3, tool.active_snap[:rotation_quarters], 'front maps to +X (q3)'
+
+        # --- Exact gap through the VCB path: 40mm off the wall.
+        assert_equal true, tool.onUserText('40', model.active_view)
+        tool.onLButtonDown(0, 0, 0, model.active_view)
+        assert_equal 1, commits.length
+        assert commits.first['ok'], commits.first.inspect
+        root = Connection::ProjectFurniture::ManagedFurniture
+               .locate(model, Metadata::Store.new(model), FI_1)['entity']
+        assert root, 'the snapped placement must exist'
+        box = root.bounds
+        assert_in_delta 40.0, box.min.x * mm, 5.0,
+                        'the back face rests 40mm off the wall (VCB gap)'
+        Sketchup.undo # remove the placed unit; keep the fixture clean
+
+        # --- Furniture side-to-side: FI_1 is placed canonically as the
+        # neighbor; FI_2 is placed by the preview aiming right of the
+        # neighbor's right side (gap 0, then exactly 5mm via the VCB).
+        neighbor_place = placer.place(FI_1, transformation: Geom::Transformation.new)
+        assert neighbor_place['ok'], neighbor_place.inspect
+        neighbor = Connection::ProjectFurniture::ManagedFurniture
+                   .locate(model, Metadata::Store.new(model), FI_1)['entity']
+        refute_nil neighbor, 'the neighbor unit must be placed'
+        side_x_mm = neighbor.bounds.max.x * mm
+        aim_view_at(Geom::Point3d.new((side_x_mm + 100) / mm, 300 / mm, 0))
+        commits2 = []
+        tool2 = snap_tool(placer, extents, commits2, FI_2)
+        move_to_view_center(tool2)
+        side = tool2.active_snap && tool2.active_snap[:components]
+                                         .find { |c| c[:kind] == :furniture_side }
+        assert side, 'a Granete-managed neighbor must be offered as a side target'
+        assert_equal FI_1, side[:furniture_instance_id]
+
+        assert_equal true, tool2.onUserText('5', model.active_view)
+        tool2.onLButtonDown(0, 0, 0, model.active_view)
+        assert_equal 1, commits2.length
+        assert commits2.first['ok'], commits2.first.inspect
+        placed2 = Connection::ProjectFurniture::ManagedFurniture
+                  .locate(model, Metadata::Store.new(model), FI_2)['entity']
+        refute_nil placed2, 'FI_2 must be placed'
+        assert_in_delta side_x_mm + 5.0, placed2.bounds.min.x * mm, 5.0,
+                        'the new left side rests 5mm off the neighbor right side'
+        Sketchup.undo
+
+        # --- Cancel with a live snap leaves zero residue.
+        aim_view_at(Geom::Point3d.new(0, 1500 / mm, 900 / mm))
+        commits3 = []
+        tool3 = snap_tool(placer, extents, commits3, FI_2)
+        move_to_view_center(tool3)
+        assert tool3.active_snap
+        entities_before = model.entities.count
+        tool3.onKeyDown(27, false, 0, model.active_view) # Esc
+        assert tool3.cancelled?
+        assert_empty commits3
+        assert_equal entities_before, model.entities.count, 'cancel keeps zero residue'
+      ensure
+        model.select_tool(nil)
+      end
+
       private
+
+      # Shared tool factory for the snap walk: the SAME provider wiring the
+      # dialog controller uses (managed neighbors by server identity).
+      def snap_tool(placer, extents, commits, furniture_instance_id)
+        metadata_store = Metadata::Store.new(model)
+        provider = lambda do
+          index = Connection::ProjectFurniture::ManagedFurniture.index(model, metadata_store)
+          index[:by_id].flat_map do |fi_id, entries|
+            next [] if entries.length != 1
+
+            entity = entries.first[:entity]
+            next [] unless entity.respond_to?(:bounds) && entity.respond_to?(:transformation)
+            next [] if entity.respond_to?(:valid?) && !entity.valid?
+
+            mm = 25.4
+            front_axis = entity.transformation.yaxis
+            front = if front_axis.x.abs < 1e-6 && (front_axis.y.abs - 1.0).abs < 1e-6
+                      [0.0, 1.0, 0.0]
+                    elsif front_axis.y.abs < 1e-6 && (front_axis.x.abs - 1.0).abs < 1e-6
+                      [front_axis.x.positive? ? 1.0 : -1.0, 0.0, 0.0]
+                    end
+            next [] unless front
+
+            [{ 'furniture_instance_id' => fi_id,
+               'label' => entity.name.to_s.sub(/\s*\([^()]*\)\s*\z/, '').strip,
+               'min_mm' => [entity.bounds.min.x * mm, entity.bounds.min.y * mm, entity.bounds.min.z * mm],
+               'max_mm' => [entity.bounds.max.x * mm, entity.bounds.max.y * mm, entity.bounds.max.z * mm],
+               'front_dir' => front }]
+          end
+        end
+        prepared = placer.prepare_placement_preview(furniture_instance_id)
+        tool = Tools::FurniturePlacementTool.new(
+          label: prepared['definition']['name'], extents_mm: extents,
+          on_commit: lambda { |transform|
+            commits << placer.place(furniture_instance_id, transformation: transform)
+          },
+          on_cancel: ->(_reason) {},
+          model_provider: -> { Sketchup.active_model },
+          furniture_targets_provider: provider
+        )
+        model.select_tool(tool)
+        tool.activate
+        tool
+      end
+
+      # Centers the camera on an aim point so a view-center pick rays
+      # through it (host-faithful aiming for the smoke).
+      def aim_view_at(point)
+        box = Geom::BoundingBox.new
+        box.add(point)
+        padding = Geom::Point3d.new(200 / 25.4, 200 / 25.4, 200 / 25.4)
+        box.add(point.offset(Geom::Vector3d.new(padding.x, 0, 0)))
+        box.add(point.offset(Geom::Vector3d.new(-padding.x, 0, 0)))
+        model.active_view.zoom(box)
+      end
 
       def reactivate_preview(placer, extents, commits)
         prepared = placer.prepare_placement_preview(FI_1)
@@ -295,6 +448,12 @@ module Granete
         def stub_project_furniture
           respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
                   [{ 'id' => FI_1, 'project_id' => PROJECT_ID,
+                     'furniture_definition_id' => 'def-smoke',
+                     'origin' => 'quote', 'lifecycle_status' => 'active', 'version' => 1,
+                     'created_at' => '2026-09-23T00:00:00Z', 'updated_at' => '2026-09-23T00:00:00Z',
+                     'display' => { 'name' => 'Base 600',
+                                    'dimensions_mm' => { 'width' => 600, 'height' => 720, 'depth' => 560 } } },
+                   { 'id' => FI_2, 'project_id' => PROJECT_ID,
                      'furniture_definition_id' => 'def-smoke',
                      'origin' => 'quote', 'lifecycle_status' => 'active', 'version' => 1,
                      'created_at' => '2026-09-23T00:00:00Z', 'updated_at' => '2026-09-23T00:00:00Z',

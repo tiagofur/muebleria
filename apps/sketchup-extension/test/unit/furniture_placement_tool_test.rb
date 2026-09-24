@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../test_helper'
+require_relative '../../src/granete_for_sketchup/tools/placement_snap_engine'
 require_relative '../../src/granete_for_sketchup/tools/furniture_placement_tool'
 
 # #469 — shared transient placement tool mechanics. These tests pin the
@@ -27,12 +28,16 @@ class FurniturePlacementToolTest < Minitest::Test
   # Scriptable InputPoint: each #pick advances to the next scripted
   # position (mm); a nil entry models an INVALID pick (no inference).
   # picked_coords records the screen coordinates of every pick so tests
-  # can prove the click re-picked at its own coordinates.
+  # can prove the click re-picked at its own coordinates. `faces` scripts
+  # the host InputPoint#face surface (one entry per pick; nil = no face),
+  # modelling wall/floor inference for the semantic snap (#469 incr. 2).
   class ScriptedInputPoint
     attr_reader :pick_count, :position, :picked_coords
+    attr_accessor :faces
 
-    def initialize(positions_mm)
+    def initialize(positions_mm, faces = nil)
       @positions = positions_mm
+      @faces = faces
       @index = -1
       @pick_count = 0
       @valid = false
@@ -55,6 +60,22 @@ class FurniturePlacementToolTest < Minitest::Test
 
     def valid?
       @valid
+    end
+
+    # Host-faithful: InputPoint#face exposes the picked face, nil in space.
+    def face
+      return nil unless @faces
+
+      @faces[@index] || @faces.last
+    end
+  end
+
+  # Host-shaped face for scripted inference: a world normal only.
+  class ScriptedFace
+    attr_reader :normal
+
+    def initialize(normal_mm)
+      @normal = Geom::Vector3d.new(normal_mm[0], normal_mm[1], normal_mm[2])
     end
   end
 
@@ -136,14 +157,15 @@ class FurniturePlacementToolTest < Minitest::Test
     @cancels = []
   end
 
-  def tool(positions_mm, anchor: :back_left_bottom)
-    input_point = ScriptedInputPoint.new(positions_mm)
+  def tool(positions_mm, anchor: :back_left_bottom, faces: nil, managed_targets: nil)
+    input_point = ScriptedInputPoint.new(positions_mm, faces)
     placement_tool = Tool.new(
       label: 'Torre horno', extents_mm: EXTENTS, anchor: anchor,
       on_commit: ->(transform) { @commits << transform },
       on_cancel: ->(reason) { @cancels << reason },
       input_point_factory: -> { input_point },
-      model_provider: -> { @model }
+      model_provider: -> { @model },
+      furniture_targets_provider: managed_targets
     )
     [placement_tool, input_point]
   end
@@ -535,7 +557,214 @@ class FurniturePlacementToolTest < Minitest::Test
     end
   end
 
+  # ---- #469 increment 2: semantic snaps ---------------------------------
+
+  # Wall at x=0 facing +X: hovering near it, the preview transform puts
+  # the BACK face exactly on the plane, front facing +X, and the snap
+  # state is visible to the drawing layer. The cursor loop still touches
+  # nothing but the InputPoint (StrictModel guards every model call).
+  def test_wall_snap_moves_preview_back_face_onto_the_plane
+    placement_tool, = tool([[0.0, 2000.0, 30.0]],
+                           faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(placement_tool)
+
+    assert placement_tool.active_snap, 'a wall candidate must be active'
+    transform = placement_tool.current_transform
+    # Back face = local y in [0..0]; the four back corners sit at x=0.
+    [[0, 0, 0], [EXTENTS[:x], 0, 0], [0, 0, EXTENTS[:z]], [EXTENTS[:x], 0, EXTENTS[:z]]].each do |corner|
+      placed = point_mm(transform, *corner)
+      assert_in_epsilon 0.0, placed[0], 1e-6, 'every back corner lies on the wall plane'
+    end
+    # Front face one depth away, facing +X.
+    assert_in_epsilon EXTENTS[:y], point_mm(transform, 0, EXTENTS[:y], 0)[0], 1e-6
+    assert_equal 3, placement_tool.active_snap[:rotation_quarters]
+    assert_empty @model.selected_tools, 'the snap loop must not touch the model'
+  end
+
+  # Furniture side-to-side: a Granete-managed neighbor (descriptor by
+  # furnitureInstanceId) receives the new left side at gap 0.
+  def test_furniture_side_snap_from_managed_provider
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0]], managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    placement_tool.draw(@view)
+
+    side = placement_tool.active_snap[:components].find { |c| c[:kind] == :furniture_side }
+    assert side, 'the managed neighbor must be a snap target'
+    assert_equal 'fi-B03', side[:furniture_instance_id]
+    transform = placement_tool.current_transform
+    assert_in_epsilon 600.0, point_mm(transform, 0, 0, 0)[0], 1e-6,
+                      'the new left side sits exactly on x=600 at gap 0'
+    assert(@view.texts.any? { |text| text.include?('Encajar a B03 · lateral derecho · 0 mm') },
+           'the snap label names the target side and the live gap')
+  end
+
+  # VCB gap: with an active side snap, "5" + Enter separates the sides by
+  # exactly 5 mm — preview and commit. The box never resizes: the far
+  # corner stays one width away along the run axis.
+  def test_vcb_gap_applies_exact_mm_to_the_active_snap
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0], [700.0, 300.0, 0.0]],
+                           managed_targets: -> { targets })
+    move_cursor(placement_tool)
+
+    assert_equal true, placement_tool.onUserText('5', @view)
+
+    transform = placement_tool.current_transform
+    assert_in_epsilon 605.0, point_mm(transform, 0, 0, 0)[0], 1e-6, 'gap 5 mm'
+    assert_in_epsilon 605.0 + EXTENTS[:x], point_mm(transform, EXTENTS[:x], 0, 0)[0], 1e-6,
+                      'the box slides whole — width unchanged'
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+    assert_equal 1, @commits.length
+    assert_in_epsilon 605.0, point_mm(@commits.first, 0, 0, 0)[0], 1e-6,
+                      'the committed transform carries the exact gap'
+  end
+
+  # The gap belongs to its target: when the fresh pick at the click
+  # resolves a DIFFERENT primary (or none), the stored offset does not
+  # leak into an unrelated constraint.
+  def test_gap_does_not_leak_to_a_different_or_absent_target
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0], [5000.0, 5000.0, 0.0]],
+                           managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    placement_tool.onUserText('5', @view)
+
+    placement_tool.onLButtonDown(0, 10, 10, @view) # fresh pick far away: no snap
+
+    assert_equal 1, @commits.length
+    assert_nil placement_tool.active_snap
+    assert_equal [5000.0, 5000.0, 0.0], point_mm(@commits.first, 0, 0, 0),
+                 'free placement at the fresh inference, gap not applied'
+  end
+
+  # Stale-candidate rule: a target that disappears between move and click
+  # can never be committed against — the click re-solves from fresh data.
+  def test_erased_target_between_move_and_click_never_commits_the_snap
+    live = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    provider = -> { live }
+    placement_tool, = tool([[700.0, 300.0, 0.0], [700.0, 300.0, 0.0]], managed_targets: provider)
+    move_cursor(placement_tool)
+    assert placement_tool.active_snap
+
+    live.clear # the managed root is erased before the click
+
+    placement_tool.onLButtonDown(0, 10, 10, @view)
+    assert_equal 1, @commits.length
+    assert_nil placement_tool.active_snap, 'no stale solution may survive the fresh pick'
+    assert_equal [700.0, 300.0, 0.0], point_mm(@commits.first, 0, 0, 0),
+                 'the commit falls back to the fresh free inference'
+  end
+
+  # Invalid inference clears the snap together with the position.
+  def test_invalid_pick_clears_the_active_snap
+    placement_tool, = tool([[0.0, 2000.0, 30.0], nil],
+                           faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(placement_tool)
+    assert placement_tool.active_snap
+
+    placement_tool.onMouseMove(0, 20, 20, @view) # invalid pick
+
+    assert_nil placement_tool.active_snap
+    assert_nil placement_tool.current_transform
+  end
+
+  # Rotation while an orientation snap is active is answered with a hint,
+  # not a silent fight with the target; free mode keeps ←/→ working.
+  def test_rotation_blocked_under_orientation_snap_but_free_mode_rotates
+    blocked, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(blocked)
+    blocked.onKeyDown(39, false, 0, @view)
+
+    assert_equal 3, blocked.active_snap[:rotation_quarters], 'the snap keeps fixing the front'
+    assert_equal 0, blocked.rotation_quarters, 'the user quarter was not consumed'
+
+    free, = tool([[1000.0, 2000.0, 0.0]])
+    move_cursor(free)
+    free.onKeyDown(39, false, 0, @view)
+    assert_equal 1, free.rotation_quarters
+    assert_nil free.active_snap
+  end
+
+  # Without an active snap the VCB has no reference: honest hint, zero
+  # state change, and invalid text never invents a distance.
+  def test_vcb_without_snap_or_with_invalid_text_is_answered_not_guessed
+    placement_tool, = tool([[1000.0, 2000.0, 0.0]])
+    move_cursor(placement_tool)
+
+    assert_equal true, placement_tool.onUserText('5', @view), 'handled with a hint'
+    assert_equal true, placement_tool.onUserText('cinco', @view)
+
+    walled, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(walled)
+    assert_equal true, walled.onUserText('cinco', @view), 'invalid text is answered, not guessed'
+    transform = walled.current_transform
+    assert_in_epsilon 0.0, point_mm(transform, 0, 0, 0)[0], 1e-6, 'gap stays 0'
+  end
+
+  # Cancel with a live snap: zero residue, nothing drawn afterwards —
+  # identical to increment 1 semantics.
+  def test_cancel_with_active_snap_leaves_zero_residue
+    placement_tool, = tool([[0.0, 2000.0, 30.0]], faces: [ScriptedFace.new([1.0, 0.0, 0.0])])
+    move_cursor(placement_tool)
+    placement_tool.onUserText('25', @view)
+    assert placement_tool.active_snap
+
+    placement_tool.onKeyDown(27, false, 0, @view) # Esc
+
+    assert_equal [:escape], @cancels
+    assert_empty @commits
+    assert placement_tool.cancelled?
+    assert_empty @model.selected_tools.slice(1..) # only the restore call
+    placement_tool.draw(@view)
+    assert_empty @view.draw_calls, 'a cancelled snap preview draws nothing more'
+  end
+
+  # NEGATIVE: a snapped commit stays rigid and never resizes the box —
+  # every axis length of the placed box equals the preview extents, so no
+  # manufacturing dimension can be derived from wall/neighbor geometry.
+  def test_snapped_transform_is_rigid_and_never_resizes_the_box
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, = tool([[700.0, 300.0, 0.0]], managed_targets: -> { targets })
+    move_cursor(placement_tool)
+    placement_tool.onUserText('40', @view)
+
+    transform = placement_tool.current_transform
+    origin = point_mm(transform, 0, 0, 0)
+    width_end = point_mm(transform, EXTENTS[:x], 0, 0)
+    depth_end = point_mm(transform, 0, EXTENTS[:y], 0)
+    height_end = point_mm(transform, 0, 0, EXTENTS[:z])
+    assert_in_epsilon EXTENTS[:x], distance(origin, width_end), 1e-6, 'width intact'
+    assert_in_epsilon EXTENTS[:y], distance(origin, depth_end), 1e-6, 'depth intact'
+    assert_in_epsilon EXTENTS[:z], distance(origin, height_end), 1e-6, 'height intact'
+  end
+
+  # Cursor movement with snap discovery still issues NO callbacks and no
+  # model access: discovery is pure data over the injected providers.
+  def test_snap_discovery_during_moves_never_calls_back_or_touches_the_model
+    targets = [managed_target('fi-B03', 'B03', [0.0, 0.0, 0.0], [600.0, 560.0, 720.0], [0.0, 1.0, 0.0])]
+    placement_tool, input_point = tool([[700.0, 300.0, 0.0], [710.0, 310.0, 0.0], [720.0, 320.0, 0.0]],
+                                       faces: [ScriptedFace.new([1.0, 0.0, 0.0]), nil, nil],
+                                       managed_targets: -> { targets })
+    move_cursor(placement_tool, times: 3)
+
+    assert_equal 3, input_point.pick_count, 'still exactly one pick per move'
+    assert placement_tool.active_snap
+    assert_empty @commits
+    assert_empty @cancels
+    assert_empty @model.selected_tools
+  end
+
   private
+
+  def managed_target(id, label, min_mm, max_mm, front_dir)
+    { 'furniture_instance_id' => id, 'label' => label,
+      'min_mm' => min_mm, 'max_mm' => max_mm, 'front_dir' => front_dir }
+  end
+
+  def distance(from_point, to_point)
+    Math.sqrt(from_point.each_index.map { |i| (from_point[i] - to_point[i])**2 }.sum)
+  end
 
   # Identity-basis board at a translated position (#414 shape).
   def board_at(translation:, size:)
