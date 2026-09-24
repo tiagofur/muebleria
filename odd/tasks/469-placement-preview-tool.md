@@ -198,13 +198,49 @@ redesign.
   `test_arbitrary_angle_wall_neighbor_composition_and_undo` (A wall 30°
   + 40mm VCB gap with camera-fixed room side, B same wall reversed →
   identical placement, C managed neighbor rotated 30° → FI_2 side-to-side
-  5mm, D engine wall+floor composition from REAL faces, E cancel zero
+  5mm over the PERSISTED envelope, D wall+floor composition THROUGH THE
+  REAL TOOL with the controller-shaped providers, E cancel zero
   residue) and the provider/orientation assertions updated to the frame
   contract: NOT_RUN this session — no host available; owner-coordinated
   like R1-R4.
-- Wall+floor composition remains engine-level composition exactly as in
-  increment 2 (the tool passes the single picked host face per event;
-  multi-face collection is not part of this increment).
+- After the review corrections: `bundle exec rake verify` — RuboCop 227
+  files 0 offenses; 1094 unit runs / 7174 assertions; 6 boundary runs /
+  3359 assertions; RBZ sha256
+  `cbd6957d8f58bf5f9ec5fecec85904e0744c0b0d42f06c8bc4ed1dbe594b9547`.
+  Suites: engine 35 (+tangencia), tool 49 (+composición por el tool,
+  presupuesto base-planes, no-hijack z), controller 34 (+persistencia
+  del envelope en el commit real, envelope-vs-definition-bounds, lanes
+  componen pared+piso a 30°).
+
+### Review corrections (ronda 1 sobre el candidato, mismo PR)
+
+1. **P1 — wall+floor compone a través del tool REAL**: el engine ya
+   componía múltiples constraints, pero `inferenced_planes` entregaba una
+   sola cara picada. Nuevo `base_planes_provider` (datos puros, caras
+   horizontales top-level, cualquier winding) cableado por el controller
+   para ambos lanes; el tool lo consume con el MISMO presupuesto
+   gesture-scoped que los vecinos gestionados (1 snapshot por gesto +
+   1 revalidación en click — probado por call-count). La pared picada +
+   el piso componen en preview Y commit (tool + controller lane tests
+   con pared 30°: cara trasera en el plano rotado + base en z=0). Un
+   piso lejano (>250mm bajo el cursor) sigue sin capturar un pick libre.
+2. **P1 — envelope semántico persistido, no definition.bounds**: la
+   definición agrega boards + herrajes/assets visuales; un herraje
+   protruyente no puede desplazar el lateral del gabinete. El commit
+   canónico ahora persiste `placementEnvelopeMm` derivado de la MISMA
+   autoridad que el preview (`PlacementPreviewExtents` → dimensionsMm
+   con fallback AABB de boards resueltos), tri-state como relationships
+   (nil preserva). El provider lee el envelope de la metadata y falla
+   cerrado sin él (regresión: definition.bounds 800mm vs envelope 600mm
+   → el lado queda en 600; unidades sin envelope no son target).
+   `PlacementPreviewExtents` extraído a su propio archivo (autoridad
+   compartida builder/tool; sin require_relative en src — main.rb
+   ordena, test_helper carga para las suites).
+3. **P2 — tangent realmente tangente**: `tangent_of` es la perpendicular
+   horizontal de la normal (para laterales coincide con ±front por
+   construcción; paredes usan su dirección de corrida, nunca el
+   front/normal). Tests fijan dot(normal, tangent)=0 y paralelismo al
+   front del target; el piso no lleva tangente.
 
 ## Scope separation from parallel work (coordination registry)
 

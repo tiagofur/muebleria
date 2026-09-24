@@ -347,9 +347,13 @@ module Granete
         )
         front_n = [-0.5, Math.sqrt(3.0) / 2.0, 0.0] # local +Y rotated 30° about +Z
         right_n = [front_n[1], -front_n[0], 0.0]
-        nb = neighbor.definition.bounds
-        side_x_mm = nb.max.x * mm
-        run_mid_mm = ((nb.min.y + nb.max.y) / 2.0) * mm
+        # The ORIENTED side plane comes from the PERSISTED placement
+        # envelope the canonical commit just wrote (layout-derived box),
+        # never the definition bounds.
+        envelope = Metadata::Store.new(model).read(neighbor)['placementEnvelopeMm']
+        refute_nil envelope, 'the canonical commit persists placementEnvelopeMm'
+        side_x_mm = envelope['max_mm'][0].to_f
+        run_mid_mm = ((envelope['min_mm'][1].to_f + envelope['max_mm'][1].to_f) / 2.0)
         aim_c = [(right_n[0] * (side_x_mm + 100.0)) + (front_n[0] * run_mid_mm),
                  (right_n[1] * (side_x_mm + 100.0)) + (front_n[1] * run_mid_mm), 0.0]
         aim_camera_at_mm(aim_c, [(right_n[0] * 4000) + 0.0, (right_n[1] * 4000) + 0.0, 2500.0])
@@ -377,29 +381,29 @@ module Granete
                         'fronts stay parallel at 30° (no quarter-grid coercion)'
         Sketchup.undo
 
-        # --- D: wall 30° + floor compose into ONE solution with REAL host
-        # face geometry feeding the engine (point + world normal in mm).
-        floor_face = model.entities.grep(Sketchup::Face).find do |face|
-          face.normal.z.abs > 0.999
-        end
-        refute_nil floor_face, 'the floor face must exist'
-        wall_point = wall.vertices.first.position.to_a.map { |v| v * mm }
-        wall_normal = [wall.normal.x, wall.normal.y, wall.normal.z]
-        floor_point = floor_face.vertices.first.position.to_a.map { |v| v * mm }
-        cursor_d = [(aim[0] + (n[0] * 60.0)), (aim[1] + (n[1] * 60.0)), 25.0]
-        solution = Tools::PlacementSnapEngine.solve(
-          cursor_mm: cursor_d, extents_mm: extents, origin_mm: [0.0, 0.0, 0.0],
-          anchor: :back_left_bottom,
-          faces: [{ point_mm: wall_point, normal_mm: wall_normal },
-                  { point_mm: floor_point, normal_mm: [0.0, 0.0, 1.0] }],
-          eye_mm: [(aim[0] + (n[0] * 6000.0)), (aim[1] + (n[1] * 6000.0)), 1600.0]
-        )
-        refute_nil solution, 'wall 30° + floor must compose from real faces'
-        assert_equal 2, solution[:components].length, 'one wall constraint + one floor constraint'
-        assert_in_delta 0.0,
-                        ((solution[:anchor_mm][0] * n[0]) + (solution[:anchor_mm][1] * n[1])), 1e-3,
-                        'composed anchor rests on the rotated wall plane'
-        assert_in_delta 0.0, solution[:anchor_mm][2], 1e-3, 'and on the floor'
+        # --- D (review P1): wall 30° + floor compose THROUGH THE REAL TOOL —
+        # the picked wall constrains XY while the gesture-scoped base-plane
+        # provider feeds the floor; preview and commit carry both.
+        aim_d = [aim[0], aim[1], 100.0] # on the wall, near the floor corner
+        aim_camera_at_mm(aim_d, [n[0] * 4000, n[1] * 4000, 0.0])
+        commits_d = []
+        tool_d = snap_tool(placer, extents, commits_d, FI_2)
+        move_to_view_center(tool_d)
+        assert tool_d.active_snap, 'aiming at the 30° wall near the floor must snap'
+        kinds_d = tool_d.active_snap[:components].map { |c| c[:kind] }.sort
+        assert_equal %i[face floor], kinds_d, 'wall + floor compose through the real tool'
+
+        tool_d.onLButtonDown(0, 0, 0, model.active_view)
+        assert_equal 1, commits_d.length
+        assert commits_d.first['ok'], commits_d.first.inspect
+        placed_d = Connection::ProjectFurniture::ManagedFurniture
+                   .locate(model, Metadata::Store.new(model), FI_2)['entity']
+        refute_nil placed_d, 'the composed placement must exist'
+        anchor_d = placed_d.transformation.origin.to_a.map { |v| v * mm }
+        assert_in_delta 0.0, (anchor_d[0] * n[0]) + (anchor_d[1] * n[1]), 5.0,
+                        'committed back corner on the rotated wall plane'
+        assert_in_delta 0.0, anchor_d[2], 5.0, 'committed base on the floor'
+        Sketchup.undo
 
         # --- E: cancel with a live arbitrary-angle snap leaves zero residue.
         aim_camera_at_mm(aim, [n[0] * 4000, n[1] * 4000, 0.0])
@@ -418,10 +422,12 @@ module Granete
 
       private
 
-      # Shared tool factory for the snap walk: the SAME provider wiring the
-      # dialog controller uses (managed neighbors by server identity with
-      # the ORIENTED frame — rigid transform + LOCAL definition extents,
-      # never the world AABB).
+      # Shared tool factory for the snap walk: the SAME provider wiring
+      # the dialog controller uses (managed neighbors by server identity
+      # with the ORIENTED frame — rigid transform + the PERSISTED
+      # layout-derived placement envelope, never the world AABB or the
+      # definition bounds — plus the gesture-scoped horizontal base-plane
+      # scan so wall+floor composes through the real tool).
       def snap_tool(placer, extents, commits, furniture_instance_id)
         metadata_store = Metadata::Store.new(model)
         provider = lambda do
@@ -430,10 +436,10 @@ module Granete
             next [] if entries.length != 1
 
             entity = entries.first[:entity]
-            next [] unless entity.respond_to?(:transformation) && entity.respond_to?(:definition)
+            next [] unless entity.respond_to?(:transformation)
             next [] if entity.respond_to?(:valid?) && !entity.valid?
 
-            frame = oriented_frame_mm(entity)
+            frame = oriented_frame_mm(entity, metadata_store)
             next [] unless frame
 
             [{ 'furniture_instance_id' => fi_id,
@@ -453,17 +459,41 @@ module Granete
           },
           on_cancel: ->(_reason) {},
           model_provider: -> { Sketchup.active_model },
-          furniture_targets_provider: provider
+          furniture_targets_provider: provider,
+          base_planes_provider: base_planes_provider
         )
         model.select_tool(tool)
         tool.activate
         tool
       end
 
+      # Horizontal top-level host faces (either winding) as base planes —
+      # the same gesture-scoped scan the controller wires, so the picked
+      # wall and the floor COMPOSE through the real tool.
+      def base_planes_provider
+        lambda do
+          planes = []
+          model.entities.each do |entity|
+            next unless entity.is_a?(Sketchup::Face)
+
+            normal = entity.normal
+            next unless normal.z.abs > 1.0 - 1e-6 && normal.x.abs < 1e-6 && normal.y.abs < 1e-6
+
+            position = entity.vertices.first.position
+            mm = 25.4
+            planes << { 'point_mm' => [position.x * mm, position.y * mm, position.z * mm],
+                        'normal_mm' => [0.0, 0.0, 1.0] }
+          end
+          planes
+        end
+      end
+
       # Oriented frame of a managed root in mm (mirrors the controller
       # provider): horizontal UNIT right/front, right-handed, zaxis +Z,
-      # LOCAL definition extents. nil fails closed.
-      def oriented_frame_mm(entity)
+      # and the PERSISTED placementEnvelopeMm (the layout-derived box the
+      # canonical commit writes — hardware/asset protrusions never move
+      # it). nil fails closed.
+      def oriented_frame_mm(entity, metadata_store)
         mm = 25.4
         transform = entity.transformation
         right = horizontal_unit_mm(transform.xaxis)
@@ -474,11 +504,13 @@ module Granete
         zaxis = transform.zaxis
         return nil unless zaxis.x.abs < 1e-6 && zaxis.y.abs < 1e-6 && ((zaxis.z - 1.0).abs < 1e-6)
 
-        bounds = entity.definition.bounds
+        envelope = metadata_store.read(entity)['placementEnvelopeMm'] if metadata_store.read(entity)
+        return nil unless envelope.is_a?(Hash)
+
         { origin_world_mm: [transform.origin.x * mm, transform.origin.y * mm, transform.origin.z * mm],
           front_dir_mm: front, right_dir_mm: right,
-          local_min_mm: [bounds.min.x * mm, bounds.min.y * mm, bounds.min.z * mm],
-          local_max_mm: [bounds.max.x * mm, bounds.max.y * mm, bounds.max.z * mm] }
+          local_min_mm: envelope['min_mm'].map(&:to_f),
+          local_max_mm: envelope['max_mm'].map(&:to_f) }
       end
 
       def horizontal_unit_mm(vector)
