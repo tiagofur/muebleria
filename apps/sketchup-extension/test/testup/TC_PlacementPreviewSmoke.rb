@@ -384,7 +384,16 @@ module Granete
 
         # --- D (review P1): wall 30° + floor compose THROUGH THE REAL TOOL —
         # the picked wall constrains XY while the gesture-scoped base-plane
-        # provider feeds the floor; preview and commit carry both.
+        # provider feeds the floor; preview and commit carry both. A hidden
+        # floor CLOSER in Z must not even be a candidate (effective
+        # visibility).
+        hidden_floor = model.entities.add_face(
+          [Geom::Point3d.new(-6000 / mm, -4000 / mm, 80 / mm),
+           Geom::Point3d.new(6000 / mm, -4000 / mm, 80 / mm),
+           Geom::Point3d.new(6000 / mm, 4000 / mm, 80 / mm),
+           Geom::Point3d.new(-6000 / mm, 4000 / mm, 80 / mm)]
+        )
+        hidden_floor.visible = false # REAL Drawingelement#visible= API
         aim_d = [aim[0], aim[1], 100.0] # on the wall, near the floor corner
         aim_camera_at_mm(aim_d, [n[0] * 4000, n[1] * 4000, 0.0])
         commits_d = []
@@ -473,7 +482,8 @@ module Granete
       # wall and the floor COMPOSE through the real tool.
       def base_planes_provider
         lambda do
-          scan_base_planes(model.entities, Geom::Transformation.new, Metadata::Store.new(model))
+          scan_base_planes(model.entities, Geom::Transformation.new,
+                           Metadata::Store.new(model), model, [])
         end
       end
 
@@ -484,10 +494,17 @@ module Granete
       # with a BOUNDING-RECTANGLE world footprint approximation —
       # mirrors the controller scan so the picked wall and the floor
       # COMPOSE through the real tool.
-      def scan_base_planes(entities, world_transform, metadata_store)
+      def scan_base_planes(entities, world_transform, metadata_store, host_model, instance_path)
         mm = 25.4
         planes = []
         entities.each do |entity|
+          child_path = instance_path + [entity]
+          # EFFECTIVE visibility (real API, SU 2020+): own flag, Tag/Layer
+          # and every parent under the current model state.
+          visible = host_model.respond_to?(:drawing_element_visible?) &&
+                    host_model.drawing_element_visible?(child_path)
+          next unless visible
+
           case entity
           when Sketchup::Face
             normal = entity.normal.transform(world_transform)
@@ -508,7 +525,8 @@ module Granete
 
             children = entity.is_a?(Sketchup::Group) ? entity.entities : entity.definition.entities
             planes.concat(scan_base_planes(children,
-                                           world_transform * entity.transformation, metadata_store))
+                                           world_transform * entity.transformation,
+                                           metadata_store, host_model, child_path))
           end
         end
         planes

@@ -37,4 +37,33 @@ class HostStubFaithfulnessTest < Minitest::Test
     assert_respond_to group, :entities, 'Group#entities IS real host API'
     assert_respond_to group, :transformation
   end
+
+  # Model#drawing_element_visible? IS real host API (SketchUp 2020.0):
+  # the effective-visibility authority for the base-plane scan. The stub
+  # must keep the REAL call shape — it accepts an Array<Drawingelement>
+  # instance path (the real host also takes a Sketchup::InstancePath)
+  # and answers from the CURRENT model state (own hidden flags and
+  # Layer/Tag visibility along the whole path).
+  def test_model_drawing_element_visible_signature_and_effective_semantics
+    model = SketchupStub.active_model
+    assert_respond_to model, :drawing_element_visible?, 'real API since SketchUp 2020.0'
+
+    group = model.entities.add_group
+    face = group.entities.add_face(
+      [Geom::Point3d.new(0, 0, 0), Geom::Point3d.new(10, 0, 0),
+       Geom::Point3d.new(10, 10, 0), Geom::Point3d.new(0, 10, 0)]
+    )
+
+    assert_equal true, model.drawing_element_visible?([group, face]), 'visible path'
+    face.visible = false
+    assert_equal false, model.drawing_element_visible?([group, face]), 'own flag hides'
+    face.visible = true
+    group.visible = false
+    assert_equal false, model.drawing_element_visible?([group, face]), 'hidden PARENT hides (effective)'
+    group.visible = true
+    off_tag = model.layers.add('off')
+    off_tag.visible = false
+    face.layer = off_tag
+    assert_equal false, model.drawing_element_visible?([group, face]), 'Tag/Layer off hides'
+  end
 end

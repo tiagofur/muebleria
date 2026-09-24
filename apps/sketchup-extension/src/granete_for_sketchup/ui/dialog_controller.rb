@@ -1058,7 +1058,8 @@ module Granete
             entities = model.respond_to?(:entities) ? model.entities : nil
             return [] unless entities.respond_to?(:each)
 
-            scan_base_planes(entities, Geom::Transformation.new, @metadata_store_factory.call(model))
+            scan_base_planes(entities, Geom::Transformation.new,
+                             @metadata_store_factory.call(model), model, [])
           end
         end
 
@@ -1066,7 +1067,11 @@ module Granete
         # containers recurse with the accumulated transform (parent *
         # child, SketchUp composition semantics) so room fixtures nested
         # inside Groups/Components participate with their true world
-        # placement. GRANETE FURNITURE ROOTS ARE PRUNED (managed
+        # placement. EFFECTIVE VISIBILITY FIRST (#469 review r5): the
+        # scan keeps the INSTANCE PATH and a surface the designer cannot
+        # see (own hidden flag, Tag/Layer off, hidden/tagged-off parent
+        # anywhere up the path) never participates — snapping extends
+        # VISIBLE inference. GRANETE FURNITURE ROOTS ARE PRUNED (managed
         # metadata kind == furnitureInstance, connected or local): a
         # placed cabinet's boards/shelves/tops are furniture, not room
         # floors — they must never become "Piso" candidates that beat
@@ -1075,9 +1080,12 @@ module Granete
         # content lives on the definition):
         #   Group              → entity.entities
         #   ComponentInstance  → entity.definition.entities
-        def scan_base_planes(entities, world_transform, metadata_store)
+        def scan_base_planes(entities, world_transform, metadata_store, model, instance_path)
           planes = []
           entities.each do |entity|
+            child_path = instance_path + [entity]
+            next unless effective_path_visible?(model, child_path)
+
             case entity
             when ::Sketchup::Face
               plane = placement_face_world_plane(entity, world_transform)
@@ -1087,10 +1095,46 @@ module Granete
 
               child_entities = entity.is_a?(::Sketchup::Group) ? entity.entities : entity.definition.entities
               planes.concat(scan_base_planes(child_entities,
-                                             world_transform * entity.transformation, metadata_store))
+                                             world_transform * entity.transformation,
+                                             metadata_store, model, child_path))
             end
           end
           planes
+        end
+
+        # Effective visibility of the FULL instance path through the REAL
+        # host API: Model#drawing_element_visible? (SketchUp 2020+;
+        # accepts an Array<Sketchup::Drawingelement>) accounts for the
+        # element's own hidden flag, its Tag/Layer and every parent's
+        # state under the CURRENT model options. The only supported host
+        # target (SketchUp 2026.2, see the extension README) always has
+        # the method and the fixed implementation. Documented defensive
+        # paths for older hosts, never silent:
+        #   * method absent (< 2020): explicit per-element fallback walk
+        #     (own visible? + own Layer visible? along the path);
+        #   * ArgumentError: documented host bug FIXED in 2026.0 (the
+        #     call threw when the path's last element was a
+        #     Group/ComponentInstance). It can only surface on the
+        #     pre-descend subtree probe; treat as "cannot decide →
+        #     descend" — the FACE-level call (paths end in a Face) is
+        #     authoritative and never hits the bug.
+        def effective_path_visible?(model, instance_path)
+          return true if instance_path.empty?
+
+          if model.respond_to?(:drawing_element_visible?)
+            begin
+              return model.drawing_element_visible?(instance_path)
+            rescue ArgumentError
+              return true
+            end
+          end
+
+          instance_path.all? do |element|
+            own_visible = element.respond_to?(:visible?) ? element.visible? : true
+            layer = element.respond_to?(:layer) ? element.layer : nil
+            layer_visible = layer.respond_to?(:visible?) ? layer.visible? : true
+            own_visible && layer_visible
+          end
         end
 
         # True when the entity's Granete metadata marks it as a managed

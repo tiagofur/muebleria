@@ -215,6 +215,44 @@ module Sketchup
     end
   end
 
+  # Host-faithful Layer ("Tag" in modern UI naming) surface: the real
+  # Sketchup::Layer exposes name + visible?.
+  class Layer
+    attr_accessor :name
+
+    def initialize(name = '')
+      @name = name
+      @visible = true
+    end
+
+    def visible?
+      @visible
+    end
+
+    def visible=(flag)
+      @visible = !!flag
+    end
+  end
+
+  # Host-faithful Layers collection (Model#layers → Layers#add(name)).
+  class Layers
+    include Enumerable
+
+    def initialize
+      @layers = []
+    end
+
+    def each(&block)
+      @layers.each(&block)
+    end
+
+    def add(name)
+      layer = Layer.new(name)
+      @layers << layer
+      layer
+    end
+  end
+
   def self.version
     '24.0.145-stub'
   end
@@ -289,6 +327,27 @@ module SketchupStub
     end
   end
 
+  # Host-faithful Drawingelement visibility surface: the OWN hidden flag
+  # (visible?) and the element's Layer/Tag (REAL API surface). Effective
+  # visibility through a full instance path is Model#drawing_element_visible?.
+  module DrawingElementVisibility
+    def visible?
+      !@hidden
+    end
+
+    def visible=(flag)
+      @hidden = !flag
+    end
+
+    def layer
+      @layer ||= SketchupStub.active_model.layers.to_a.first
+    end
+
+    def layer=(target)
+      @layer = target
+    end
+  end
+
   class TextureStub
     attr_accessor :filename, :size, :width, :height
 
@@ -358,13 +417,16 @@ module SketchupStub
   end
 
   # Host-faithful: every Sketchup Entity (faces included) carries
-  # attribute dictionaries — reconciliation scans read them on faces.
+  # attribute dictionaries — reconciliation scans read them on faces;
+  # every Drawingelement carries the own-visibility/layer surface.
   class FaceStub
     include AttributeContainer
+    include DrawingElementVisibility
   end
 
   class GroupStub < Sketchup::Group
     include AttributeContainer
+    include DrawingElementVisibility
 
     # Host-faithful: a real Group exposes its placement transformation
     # (#416 migration reads it to preserve the world placement).
@@ -429,6 +491,7 @@ module SketchupStub
 
   class ComponentInstanceStub < Sketchup::ComponentInstance
     include AttributeContainer
+    include DrawingElementVisibility
 
     attr_accessor :name, :material, :transformation, :bounds
     attr_reader :definition, :persistent_id
@@ -745,7 +808,7 @@ module SketchupStub
     include AttributeContainer
 
     attr_reader :active_entities, :selection, :definitions, :materials, :operations,
-                :selected_tools, :observers
+                :selected_tools, :observers, :layers
     attr_accessor :active_view
 
     def initialize
@@ -753,10 +816,27 @@ module SketchupStub
       @selection = SelectionStub.new
       @definitions = DefinitionListStub.new
       @materials = MaterialsStub.new
+      @layers = ::Sketchup::Layers.new
+      @layers.add('Layer0')
       @operations = []
       @selected_tools = []
       @active_view = ViewStub.new
       @observers = []
+    end
+
+    # Host-faithful Model#drawing_element_visible?(path) (REAL API,
+    # SketchUp 2020+): reports whether the element at the end of the
+    # instance path is visible given the CURRENT model state — own
+    # hidden flags AND Layer/Tag visibility along the WHOLE path. Accepts
+    # an Array<Drawingelement> like the real host.
+    def drawing_element_visible?(path)
+      elements = path.respond_to?(:to_a) ? path.to_a : Array(path)
+      elements.all? do |element|
+        own_visible = element.respond_to?(:visible?) ? element.visible? : true
+        layer = element.respond_to?(:layer) ? element.layer : nil
+        layer_visible = layer.respond_to?(:visible?) ? layer.visible? : true
+        own_visible && layer_visible
+      end
     end
 
     def entities

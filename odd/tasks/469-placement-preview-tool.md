@@ -76,9 +76,9 @@ it lands, wall/face snapping is not "complete".
 
 - `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle; env pin
   per memory) at the frozen candidate: RuboCop 228 files 0 offenses;
-  1104 unit runs / 7223 assertions, 0 failures; 6 boundary runs / 3359
+  1113 unit runs / 7254 assertions, 0 failures; 6 boundary runs / 3359
   assertions; RBZ deterministic readback, sha256
-  `b119808183ff9a92f2dd39a72d39d1d4ab815d17ab4aa12ab222e4ed28424ea2`.
+  `0aff5ec2ceb17774ad1115d467e455fce494705e897e545f7df2c80adf3bfaf9`.
 - New `host_stub_faithfulness_test.rb` (3 runs, review r3 negative
   proof): the stub must never re-expose `Geom::BoundingBox#transform`
   nor `ComponentInstance#entities` — APIs the REAL host does not have;
@@ -190,6 +190,41 @@ it lands, wall/face snapping is not "complete".
    real (loops con holes / prueba point-in-face o proximidad
    equivalente). El código y el PR NO lo describen como footprint
    exacto.
+
+### Review corrections (ronda 5 sobre el candidato, mismo PR)
+
+1. **P1 — base planes respetan la VISIBILIDAD EFECTIVA del modelo**: el
+   scan mantiene el INSTANCE PATH durante la recursión y consulta la
+   API REAL `Model#drawing_element_visible?(path)` (verificada en la
+   documentación oficial: existe desde SketchUp 2020.0, acepta un
+   `Array<Sketchup::Drawingelement>` — o `InstancePath` — y responde por
+   el estado ACTUAL del modelo: flag propio, Tag/Layer y TODOS los
+   padres de la ruta). El único host objetivo del repo es SketchUp
+   2026.2 (README), donde el método existe y el bug documentado
+   (excepción cuando el ÚLTIMO elemento del path era Group/Component,
+   corregido en 2026.0) no aplica. Fallbacks EXPLÍCITOS y documentados
+   para hosts más viejos, nunca silenciosos: método ausente (<2020) →
+   caminata por-elemento (visible? + Layer visible? a lo largo de la
+   ruta); ArgumentError (bug <2026) → "no se puede decidir → descender"
+   — la llamada a nivel FACE (paths que terminan en Face, nunca
+   afectados por el bug) es la autoridad. Orden preservado: visibilidad
+   → prune furnitureInstance Granete → emitir Face / descender. El
+   click re-valida la visibilidad (un piso oculto entre preview y
+   commit no puede quedar en la solución). Presupuesto intacto: la
+   visibilidad se evalúa DENTRO de los scans 1/gesto + 1/click.
+   Regresiones: A piso oculto (z=80) ABSENT de los descriptores contra
+   un visible z=0; B Tag apagado (Layers#add + Layer#visible= +
+   Drawingelement#layer= — superficie REAL en el stub); C Group padre
+   oculto; D ComponentInstance padre con Tag apagado; E los mismos
+   contenedores anidados visibles siguen participando con transforms
+   acumulados; F click revalida (pared sobrevive, Z cae a la
+   inferencia fresca); G prune Granete sigue verde.
+   `host_stub_faithfulness_test.rb` fija la firma/semántica del
+   `drawing_element_visible?` del stub (propio, padre, tag) junto a
+   las negativas existentes (BoundingBox sin #transform;
+   ComponentInstance sin #entities). El smoke añade un piso oculto
+   MÁS CERCANO en Z al escenario D (visible=false vía la API real) —
+   NOT_RUN, coordinado con el owner.
 
 ## Scope separation from parallel work (coordination registry)
 

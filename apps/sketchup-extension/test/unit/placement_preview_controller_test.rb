@@ -1106,6 +1106,109 @@ class PlacementPreviewControllerTest < Minitest::Test
                     'the surviving plane is the wide architectural floor')
   end
 
+  # Review r5 A: EFFECTIVE VISIBILITY — a hidden floor (closer in Z)
+  # never becomes a base-plane candidate; the hidden plane is ABSENT
+  # from the descriptors, not merely the loser.
+  def test_hidden_floor_never_becomes_a_base_plane_candidate
+    mm = 25.4
+    @model.entities.add_face(wide_floor_points(0.0, mm))
+    hidden = @model.entities.add_face(wide_floor_points(80.0, mm))
+    hidden.visible = false # REAL Drawingelement#visible= API
+
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    assert_equal 1, planes.length, 'only the visible floor participates'
+    assert_in_delta 0.0, planes.first['point_mm'][2], 1e-6
+    refute planes.any? { |plane| (plane['point_mm'][2] - 80.0).abs < 1e-6 },
+           'the hidden floor is not even a descriptor'
+  end
+
+  # Review r5 B: a face that is visible on its own but whose Tag/Layer
+  # is off never participates.
+  def test_tagged_off_floor_never_becomes_a_base_plane_candidate
+    mm = 25.4
+    @model.entities.add_face(wide_floor_points(0.0, mm))
+    tagged = @model.entities.add_face(wide_floor_points(80.0, mm))
+    off_tag = @model.layers.add('Apagado') # REAL Layers#add + Layer surface
+    off_tag.visible = false
+    tagged.layer = off_tag # REAL Drawingelement#layer=
+
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+
+    assert_equal 1, planes.length
+    assert_in_delta 0.0, planes.first['point_mm'][2], 1e-6,
+                    'the tagged-off floor is invisible to the scan'
+  end
+
+  # Review r5 C+D+E: a floor inside a hidden Group or a tagged-off
+  # ComponentInstance is invisible; the SAME nested containers, when
+  # visible, keep participating with their accumulated transforms.
+  def test_floors_inside_hidden_containers_are_invisible_but_visible_ones_are_not
+    mm = 25.4
+    @model.entities.add_face(wide_floor_points(0.0, mm))
+
+    group = @model.entities.add_group
+    group.entities.add_face(wide_floor_points(0.0, mm))
+    group.transformation = Geom::Transformation.translation(Geom::Vector3d.new(0, 0, 80.0 / mm))
+    definition = @model.definitions.add('Nested room')
+    definition.entities.add_face(wide_floor_points(0.0, mm))
+    instance = @model.entities.add_instance(
+      definition, Geom::Transformation.translation(Geom::Vector3d.new(0, 0, 160.0 / mm))
+    )
+
+    group.visible = false # C: parent Group hidden
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+    assert_equal [0, 160], planes.map { |p| p['point_mm'][2].round }.sort,
+                 'the hidden group drops out; the visible component stays at its world Z'
+
+    group.visible = true
+    off_tag = @model.layers.add('Apagado')
+    off_tag.visible = false
+    instance.layer = off_tag # D: parent Component tagged off
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+    assert_equal [0, 80], planes.map { |p| p['point_mm'][2].round }.sort,
+                 'the tagged-off component drops; the visible group stays at its world Z'
+
+    instance.layer = @model.layers.to_a.first # restore Layer0
+    planes = @controller.send(:placement_base_planes_provider, @model).call
+    assert_equal [0, 80, 160], planes.map { |p| p['point_mm'][2].round }.sort,
+                 'E: visible nested Group AND Component both participate with accumulated transforms'
+  end
+
+  # Review r5 F: visibility is revalidated at the click — a floor hidden
+  # between preview and commit cannot stay in the committed solution.
+  def test_click_revalidates_visibility_changes_before_committing
+    mm = 25.4
+    floor = @model.entities.add_face(wide_floor_points(0.0, mm))
+    normal = [0.5, Math.sqrt(3.0) / 2.0, 0.0]
+    aim = [-Math.sqrt(3.0) / 2.0 * 2000.0, 1000.0, 100.0]
+    begin_preview(FI_1)
+    tool = active_tool
+    eye_mm = [aim[0] + (normal[0] * 4000.0), aim[1] + (normal[1] * 4000.0), 1600.0]
+    @model.active_view.camera = Struct.new(:eye).new(
+      Geom::Point3d.new(eye_mm[0] / 25.4, eye_mm[1] / 25.4, eye_mm[2] / 25.4)
+    )
+    Sketchup::InputPoint.next_position_mm = aim
+    Sketchup::InputPoint.next_face = wall_face_stub(normal)
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    kinds = tool.active_snap[:components].map { |c| c[:kind] }.sort
+    assert_equal %i[face floor], kinds, 'preview composes wall + VISIBLE floor'
+
+    floor.visible = false # the floor disappears before the click
+
+    tool.onLButtonDown(0, 50, 50, @model.active_view) # re-picks + rescans
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    placed = put['body']['items'].find { |i| i['furniture_instance_id'] == FI_1 }
+    translation = placed['transform']['translation_mm']
+    signed_wall = ((translation[0] - aim[0]) * normal[0]) + ((translation[1] - aim[1]) * normal[1])
+    assert_in_delta 0.0, signed_wall, 1e-2, 'the wall constraint survives'
+    assert_in_delta aim[2], translation[2], 1e-2,
+                    'NO stale floor commit: Z follows the fresh free inference'
+  end
+
   # The provider scan is read-only: running it repeatedly issues no
   # transport request (cursor-loop safety).
   def test_provider_scan_issues_no_requests
@@ -1152,6 +1255,15 @@ class PlacementPreviewControllerTest < Minitest::Test
 
   def active_tool
     @model.selected_tools.last
+  end
+
+  # Wide horizontal floor fixture points at a Z (mm) — top-level or
+  # inside a container.
+  def wide_floor_points(z_mm, inches_per_mm = 1.0 / 25.4)
+    [Geom::Point3d.new(-6000 * inches_per_mm, -4000 * inches_per_mm, z_mm * inches_per_mm),
+     Geom::Point3d.new(6000 * inches_per_mm, -4000 * inches_per_mm, z_mm * inches_per_mm),
+     Geom::Point3d.new(6000 * inches_per_mm, 4000 * inches_per_mm, z_mm * inches_per_mm),
+     Geom::Point3d.new(-6000 * inches_per_mm, 4000 * inches_per_mm, z_mm * inches_per_mm)]
   end
 
   # A picked-face stub with a world normal (mm) for the scripted
