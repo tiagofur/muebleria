@@ -277,3 +277,7 @@ recovery source of truth.
   attestation. Full #823 DoD (including legacy Go runner/fallback inventory)
   remains separately unproven. Fresh review and exact-HEAD/base CI are still
   pending after this correction commit. Do not resume #460 from this work.
+- Correction work-unit commit: `564ef00f2a139186d33ad036b82727cf0d050607`
+  (129 additions, 17 deletions). The branch has 719 authored additions plus
+  deletions across its three commits before this task-only evidence update;
+  the human-approved `size:exception` applies to the cohesive T2 PR.
