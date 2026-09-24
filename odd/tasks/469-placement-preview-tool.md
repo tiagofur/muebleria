@@ -72,175 +72,78 @@ planes: sloped walls and furniture rotated to arbitrary angles offer no
 candidate. Arbitrary-angular support is remaining scope of #469; until
 it lands, wall/face snapping is not "complete".
 
-### Observed evidence (this candidate)
-
-- `bundle exec rake verify` (homebrew ruby 3.2.11 + vendor bundle) after
-  the three review P1 corrections AND the round-2 floor-winding/tie-break
-  fixes: 1069 unit runs / 6981 assertions + 6 boundary runs / 3323
-  assertions, 0 failures; 226 files lint-clean; RBZ verified readback,
-  sha256 `b6aa772e7c219f8c6e03eb3ae54909a67745f36a83bf86c19bd9b89e8620a5bc`.
-- Round-2 review fixes: floor winding parity (engine + tool) and the
-  same-axis tie test now proves BOTH candidates exist with equal
-  displacement before composing (it was vacuous once eye_mm became
-  mandatory for walls).
-- New/extended suites: `placement_snap_engine_test.rb` 25 runs (families,
-  policy, tie-breaks, gaps, reversed-face/eye resolution, finite-side
-  tangential/vertical distance, negatives); `furniture_placement_tool_
-  test.rb` 40 runs (+13: snap/VCB/stale/rigidity + reversed wall at tool
-  level + provider call-count budget (1 per gesture, +1 at click) +
-  fresh-geometry commit); `placement_preview_controller_test.rb` 31 runs
-  (+4: project-lane snapped commit with real PUT at x=600mm, catalog lane
-  parity, provider exclusions, no-requests scan).
-- TestUp `TC_PlacementPreviewSmoke` extended with
-  `test_semantic_snaps_wall_side_gap_and_undo` (wall orientation + 40mm
-  VCB gap, FI_1↔FI_2 side-to-side + 5mm gap, undo, cancel-with-snap):
-  NOT_RUN this session — no host available; owner-coordinated like R1-R4.
-
-### Remaining for #469 (after this increment)
-
-- Repeat placement; disconnected Library lane (`insert_furniture`);
-- arbitrary-ANGLE wall/furniture snap support (current: quarter-grid
-  only — see Known limitation);
-- real-host evidence for the whole walk (incl. this snap smoke);
-- UX polish from real-host usability (#506).
-
-
-## Increment 3 — arbitrary-angle planar snapping (generalize quarter grid)
-
-Base: origin/main @ 0e179d39 (includes #836 via merge 0e179d39)
-Branch: feat/469-arbitrary-angle-snaps
-Status: IMPLEMENTED_PENDING_REVIEW
-
-Scope (this increment): generalize the #836 snap model from world-axis +
-quarter-turn to VECTOR planar constraints so any yaw in the XY plane works:
-vertical wall faces with arbitrary horizontal normals (back-face alignment,
-room side still resolved from the CAMERA EYE, never `Face#normal`, invariant
-to `reverse!`); managed furniture with arbitrary yaw around Z snapped
-side-to-side using the target's ORIENTED LOCAL FRAME (rigid transform +
-local definition extents — the world AABB `entity.bounds` is explicitly
-NOT a side authority for rotated furniture); exact mm gap applied ALONG
-the snap normal vector (not a world-axis coordinate); wall+floor
-composition at any angle; click-time revalidation against the FRESH frame
-(rotated/moved/erased targets never commit stale). The committed transform
-stays a rigid top-level placement: orthonormal basis +Z vertical,
-determinant +1, no scale/mirror, part geometry untouched. Free-mode manual
-rotation (←/→) REMAINS quarter-turn (spec §11). Excluded (spec §16):
-repeat placement, #784, multi-select, disconnected Library lane, tilted
-furniture, sloped floors, arbitrary 3D surfaces, CNC/materials/PTX/UI
-redesign.
-
-### Design decisions pinned by tests
-
-- Engine candidates are now `plane_point_mm` + unit `normal_mm` +
-  `tangent_mm` + `front_dir_mm` + `anchor_snapped_mm` — no axis/sign/
-  rotation_quarters. A candidate's snapped anchor is
-  `cursor + normal·(s − d)` where `d = (cursor−p)·normal` and `s` is the
-  local-axis distance from the aligned face to the anchor measured INTO
-  the box; displacement is `|s − d|`. No vector is ever rounded to its
-  nearest world axis (negative proof against axis-rounding regression).
-- Composition slots are orientation-relative, not world-axis: with the
-  winning front f (first front-bearing candidate in the stable rank
-  order), a horizontal candidate constrains the FRONT axis (normal ∥ ±f)
-  or the RIGHT axis (normal ∥ ±right(f)); per-slot best composes (a wall
-  + perpendicular side corner at any angle), conflicting orientations
-  drop (never averaged). The floor keeps its own vertical slot and never
-  reorients.
-- Solution exposes `front_dir_mm` (+ `constrains_rotation`) instead of a
-  quarter turn; the tool builds the rigid basis directly:
-  `x = [fy, −fx, 0]`, `y = f`, `z = [0,0,1]` (unit, orthogonal,
-  determinant +1 by construction — asserted in tests).
-- Target descriptors are oriented frames
-  `{origin_world_mm, front_dir_mm, right_dir_mm, local_min_mm,
-  local_max_mm}` built from the entity's REAL rigid transform (world
-  origin + horizontal unit x/y axes, right-handed, zaxis ≈ +Z) and the
-  LOCAL definition bounds (the materialized resolved box — placement
-  preview authority only). Tilted, scaled, mirrored or non-rigid frames
-  fail closed (no candidate), replacing #836's off-quarter-grid
-  rejection.
-- Finite side rectangles are measured in the ORIENTED frame: cursor
-  projected onto (normal, tangent=front, Z) with clamped interval
-  distances against the LOCAL extents spans — never world-X/Y spans.
-- The VCB gap offsets the anchor along the primary candidate's normal
-  vector (`anchor += normal·gap_mm`); perpendicular wall↔back and
-  side↔side distances are exact at 30°/37.5°/45°/17°/123° (tested).
-- Cursor-loop budget unchanged: one provider snapshot per gesture, one
-  revalidation at click (the oriented frame is built inside those two
-  calls only); no requests per mouse move.
-
-### Observed evidence (this candidate)
+### Observed evidence (this candidate — final HEAD after both review rounds)
 
 - `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle; env pin
-  per memory): RuboCop 226 files 0 offenses; 1086 unit runs / 7116
-  assertions, 0 failures; 6 boundary runs / 3323 assertions; RBZ verified
-  readback, sha256
-  `af202ca870a4625840c1154c1e12b8e6296be46a922259b608927a901cf456ea`.
-- Engine suite 34 runs (+9): walls at 30°/37.5°/45°/23° (back on the
-  rotated plane, eye-side orientation, reversed-wall identical placement,
-  exact perpendicular gap 40mm along the normal — with the explicit
-  negative that no world-axis coordinate equals it), neighbor sides at
-  17/30/37.5/45/123° (fronts parallel, oriented plane x·right=600 exact),
-  gap 5mm perpendicular to a 37° run, the world-AABB negative-proof
-  fixture (rotated 45°: oriented side plane ≠ AABB face — the snap uses
-  the oriented one), finite rectangle along the ORIENTED run axis,
-  tilted/mirrored frames fail closed, wall+rotated-side corner
-  composition at 30°, wall+floor at 45°, horizontal-unit front invariant.
-- Tool suite 46 runs (+5): wall 30° back-face plane + reversed-wall
-  transform equality; arbitrary-yaw basis is unit/orthogonal/+Z vertical
-  with determinant +1; rotated neighbor 30° side-to-side with exact 5mm
-  along the oriented normal + rigidity; stale 30°→35° rotation committed
-  with the FRESH frame; axis-aligned suite preserved on the new contract.
-- Controller suite 32 runs (provider rewritten): rotated 45° root yields
-  the oriented descriptor (world origin from the transform, unit
-  front/right, LOCAL extents); exclusions now unmanaged/duplicated/
-  erased/tilted/scaled/mirrored; snapped Project lane + catalog parity
-  + no-requests scan preserved.
-- TestUp `TC_PlacementPreviewSmoke` extended with
+  per memory) at the frozen candidate: RuboCop 227 files 0 offenses;
+  1098 unit runs / 7209 assertions, 0 failures; 6 boundary runs / 3359
+  assertions; RBZ deterministic readback, sha256
+  `46e8eafe002d98cd7735ae78316123ac1d01c2324423126737e5fa50000d8170`.
+- Engine suite 36 runs: walls at 30°/37.5°/45°/23° (back on the rotated
+  plane, eye-side orientation, reversed-wall identical placement, exact
+  perpendicular gap 40mm along the normal — with the explicit negative
+  that no world-axis coordinate equals it), neighbor sides at
+  17/30/37.5/45/123° (fronts parallel, oriented plane x·right=600
+  exact), gap 5mm perpendicular to a 37° run, the world-AABB
+  negative-proof fixture (45°: oriented side plane ≠ AABB face), finite
+  rectangle along the ORIENTED run axis, FINITE base-plane footprint
+  (close-Z-but-meters-away-in-XY rejected; footprint covering the cursor
+  snaps), tilted/mirrored frames fail closed, wall+rotated-side corner
+  at 30°, wall+floor at 45°, horizontal-unit front, candidate tangents
+  ⟂ normals (dot=0; floors carry none).
+- Tool suite 50 runs: wall 30° back-face plane + reversed-wall transform
+  equality; arbitrary-yaw basis unit/orthogonal/+Z vertical det +1;
+  rotated neighbor 30° side-to-side with exact 5mm along the oriented
+  normal + rigidity; stale 30°→35° rotation committed with the FRESH
+  frame; wall+floor composition THROUGH the tool (preview + commit);
+  base-plane budget 1/gesto + 1/click; distant floor never hijacks a
+  free pick; base-plane click revalidation against a MOVED nested floor
+  (fresh plane) and a DELETED one (wall survives, Z free).
+- Controller suite 35 runs: the canonical commit PERSISTS
+  placementEnvelopeMm (dimensionsMm-derived) read back through the real
+  convergence path; provider uses the persisted envelope, never
+  definition.bounds (protruding-asset regression; units without
+  envelope excluded); rotated 45° root yields the oriented descriptor;
+  exclusions unmanaged/duplicated/erased/tilted/scaled/mirrored; the
+  base-plane provider RECURSES into Groups and Component instances with
+  the accumulated world transform (world footprint, tilted container
+  rejected, no requests); lanes compose wall 30° + floor through the
+  real tool with a real working-copy PUT.
+- TestUp `TC_PlacementPreviewSmoke`:
   `test_arbitrary_angle_wall_neighbor_composition_and_undo` (A wall 30°
   + 40mm VCB gap with camera-fixed room side, B same wall reversed →
-  identical placement, C managed neighbor rotated 30° → FI_2 side-to-side
-  5mm over the PERSISTED envelope, D wall+floor composition THROUGH THE
-  REAL TOOL with the controller-shaped providers, E cancel zero
-  residue) and the provider/orientation assertions updated to the frame
-  contract: NOT_RUN this session — no host available; owner-coordinated
+  identical placement, C managed neighbor rotated 30° → FI_2
+  side-to-side 5mm over the PERSISTED envelope, D wall+floor
+  composition THROUGH THE REAL TOOL with the controller-shaped
+  providers — recursive scan + finite footprints, E cancel zero
+  residue): NOT_RUN this session — no host available; owner-coordinated
   like R1-R4.
-- After the review corrections: `bundle exec rake verify` — RuboCop 227
-  files 0 offenses; 1094 unit runs / 7174 assertions; 6 boundary runs /
-  3359 assertions; RBZ sha256
-  `cbd6957d8f58bf5f9ec5fecec85904e0744c0b0d42f06c8bc4ed1dbe594b9547`.
-  Suites: engine 35 (+tangencia), tool 49 (+composición por el tool,
-  presupuesto base-planes, no-hijack z), controller 34 (+persistencia
-  del envelope en el commit real, envelope-vs-definition-bounds, lanes
-  componen pared+piso a 30°).
 
-### Review corrections (ronda 1 sobre el candidato, mismo PR)
+### Review corrections (ronda 2 sobre el candidato, mismo PR)
 
-1. **P1 — wall+floor compone a través del tool REAL**: el engine ya
-   componía múltiples constraints, pero `inferenced_planes` entregaba una
-   sola cara picada. Nuevo `base_planes_provider` (datos puros, caras
-   horizontales top-level, cualquier winding) cableado por el controller
-   para ambos lanes; el tool lo consume con el MISMO presupuesto
-   gesture-scoped que los vecinos gestionados (1 snapshot por gesto +
-   1 revalidación en click — probado por call-count). La pared picada +
-   el piso componen en preview Y commit (tool + controller lane tests
-   con pared 30°: cara trasera en el plano rotado + base en z=0). Un
-   piso lejano (>250mm bajo el cursor) sigue sin capturar un pick libre.
-2. **P1 — envelope semántico persistido, no definition.bounds**: la
-   definición agrega boards + herrajes/assets visuales; un herraje
-   protruyente no puede desplazar el lateral del gabinete. El commit
-   canónico ahora persiste `placementEnvelopeMm` derivado de la MISMA
-   autoridad que el preview (`PlacementPreviewExtents` → dimensionsMm
-   con fallback AABB de boards resueltos), tri-state como relationships
-   (nil preserva). El provider lee el envelope de la metadata y falla
-   cerrado sin él (regresión: definition.bounds 800mm vs envelope 600mm
-   → el lado queda en 600; unidades sin envelope no son target).
-   `PlacementPreviewExtents` extraído a su propio archivo (autoridad
-   compartida builder/tool; sin require_relative en src — main.rb
-   ordena, test_helper carga para las suites).
-3. **P2 — tangent realmente tangente**: `tangent_of` es la perpendicular
-   horizontal de la normal (para laterales coincide con ±front por
-   construcción; paredes usan su dirección de corrida, nunca el
-   front/normal). Tests fijan dot(normal, tangent)=0 y paralelismo al
-   front del target; el piso no lleva tangente.
+1. **P1 — base planes espacialmente finitos + nesting**: el provider de
+   base planes ya no trata cada cara horizontal como un plano infinito
+   global. El scan es RECURSIVO (Groups/ComponentInstances con el
+   transform acumulado — los room fixtures no tienen que vivir en la
+   raíz; se parte de la raíz del modelo de forma determinista, no de
+   active_entities, para que snapshot y revalidación no diverjan con el
+   contexto de edición abierto) y cada plano conserva su FOOTPRINT
+   mundial (bounds transformados: intervalo XY + punto del plano); el
+   motor acepta un base plane sólo si el cursor está a ≤250mm del
+   footprint en AMBOS ejes XY además de la tolerancia Z — una plataforma
+   cercana en Z pero a metros en XY ya no gana. La normal MUNDIAL debe
+   seguir vertical (contenedor inclinado → sin candidato). Planes sin
+   footprint (la cara picada vía InputPoint) siguen infinitos: el pick
+   está sobre la cara por construcción. Presupuesto intacto: 1 scan por
+   gesto + 1 revalidación en click. Regresiones A (plataforma lejana en
+   XY, engine), B (piso bajo el cursor compone con pared, tool +
+   controller con PUT real), C (piso equivalente en Group y en
+   Component con transform, provider), D (piso movido/borrado pre-click:
+   commit contra el plano fresco o caída segura con la pared intacta,
+   tool).
+2. **P2 — evidencia consistente**: el body del PR y este artifact citan
+   exactamente el HEAD final (runs/assertions/archivos/RBZ arriba); los
+   números del primer candidato quedan sólo en el historial de pushes.
 
 ## Scope separation from parallel work (coordination registry)
 
