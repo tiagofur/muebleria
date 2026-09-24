@@ -19,10 +19,11 @@ DEFAULT_GATE = ROOT / "scripts/organization-browser-gate.sh"
 class BrowserPreparationLauncherTest(unittest.TestCase):
     def run_gate_with_doubles(self, preflight_exit, *, real_preflight=False, poison=None,
                               fail_admin=False, cancel_after_server=False,
-                              browser_variant='isolated'):
+                              browser_variant='isolated', ambient_overrides=None):
         with tempfile.TemporaryDirectory(prefix="browser-preparation-double-") as tmp:
             tmpdir = Path(tmp)
             capture = tmpdir / "children.jsonl"
+            docker_run_marker = tmpdir / "docker-run"
             server_pid = tmpdir / "server.pid"
             bindir = tmpdir / "bin"
             bindir.mkdir()
@@ -31,6 +32,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "#!" + sys.executable + "\n"
                 + "import json, os, pathlib, subprocess, sys, time, urllib.parse\n"
                 + f"capture = pathlib.Path({str(capture)!r})\n"
+                + f"docker_run_marker = pathlib.Path({str(docker_run_marker)!r})\n"
                 + f"server_pid = pathlib.Path({str(server_pid)!r})\n"
                 + f"preflight_exit = {preflight_exit}\n"
                 + f"fail_admin = {fail_admin!r}\n"
@@ -46,7 +48,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "    elif args[0] == 'exec' and 'rolcanlogin' in ' '.join(args): print('t|f|f')\n"
                 + "    elif args[0] == 'exec' and 'current_database()' in ' '.join(args): print('granete_gate|2|2')\n"
                 + "    elif args[0] == 'exec' and 'psql' in args: print('11111111-1111-4111-8111-111111111111')\n"
-                + "    elif args[0] == 'run': print('synthetic-container')\n"
+                + "    elif args[0] == 'run': docker_run_marker.touch(); print('synthetic-container')\n"
                 + "    sys.exit(0)\n"
                 + "if name == 'curl':\n"
                 + "    for _ in range(100):\n"
@@ -73,6 +75,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "        'pg_keys': sorted(key for key in os.environ if key.startswith('PG')),\n"
                 + "        'ambient_inert': 'GRANETE_DIAGNOSTIC_INERT_MARKER' in os.environ,\n"
                 + "        'ci_metadata': os.environ.get('CI') == 'true' and os.environ.get('GITHUB_ACTIONS') == 'true',\n"
+                + "        'locale_metadata': os.environ.get('LANG') == 'C' and os.environ.get('LC_ALL') == 'C' and os.environ.get('LANGUAGE') == 'en',\n"
+                + "        'linux_metadata': os.environ.get('USER') == 'synthetic-user' and os.environ.get('LOGNAME') == 'synthetic-user' and os.environ.get('SHELL') == '/bin/bash' and os.environ.get('XDG_SESSION_TYPE') == 'tty' and os.environ.get('XDG_CURRENT_DESKTOP') == 'headless',\n"
                 + "        'safe_names': sorted(key for key in os.environ if key in\n"
                 + "            ('CI', 'GITHUB_ACTIONS', 'RUNNER_OS', 'RUNNER_ARCH', 'LANG', 'LC_ALL',\n"
                 + "             'LANGUAGE', 'USER', 'LOGNAME', 'SHELL',\n"
@@ -147,6 +151,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "PTX_DIAGNOSTIC_BROWSER_ENV": browser_variant,
                 "PTX_DIAGNOSTIC_DIR": str(tmpdir / 'diagnostic'),
             })
+            if ambient_overrides:
+                env.update(ambient_overrides)
             gate = Path(os.environ.get("ORGANIZATION_GATE_TEST_SCRIPT", DEFAULT_GATE))
             command = ["bash", str(gate), "tests/organization/prequote-design.spec.ts"]
             if cancel_after_server:
@@ -171,6 +177,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             records = [json.loads(line) for line in capture.read_text().splitlines()] if capture.exists() else []
             safe_report = tmpdir / 'diagnostic' / 'browser-env-safe-names.txt'
             result.browser_safe_report = safe_report.read_text() if safe_report.exists() else None
+            result.docker_run_started = docker_run_marker.exists()
             survivor = False
             if server_pid.exists():
                 pid = int(server_pid.read_text())
@@ -266,6 +273,9 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 self.assertEqual(len(records), 8)
                 browser = next(r for r in records if r['command'].startswith('pnpm '))
                 self.assertEqual(set(browser['safe_names']), expected)
+                self.assertEqual(browser['ci_metadata'], variant in ('ci+locale', 'ci'))
+                self.assertEqual(browser['locale_metadata'], variant in ('ci+locale', 'locale'))
+                self.assertEqual(browser['linux_metadata'], variant == 'linux')
                 self.assertEqual(browser['lc_ctype_explicit'], variant in ('ci+locale', 'locale'))
                 self.assertEqual(browser['pg_keys'], [])
                 self.assertEqual(browser['dangerous_keys'], [])
@@ -275,6 +285,9 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 self.assertRegex(browser['identity_digest'], r'^[0-9a-f]{64}$')
                 for child in (r for r in records if r is not browser):
                     self.assertEqual(child['safe_names'], [], child['command'])
+                    self.assertFalse(child['ci_metadata'], child['command'])
+                    self.assertFalse(child['locale_metadata'], child['command'])
+                    self.assertFalse(child['linux_metadata'], child['command'])
                     self.assertFalse(child['lc_ctype_explicit'], child['command'])
                     self.assertEqual(child['pg_keys'], [], child['command'])
                     self.assertEqual(child['dangerous_keys'], [], child['command'])
@@ -289,8 +302,36 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 self.assertGreater(int(report['ambient_db_pg_count']), 0)
                 self.assertGreater(int(report['ambient_credential_count']), 0)
                 self.assertGreater(int(report['ambient_proxy_count']), 0)
+                self.assertGreater(int(report['ambient_unclassified_key_count']), 0)
                 self.assertNotIn('synthetic-user', result.browser_safe_report)
                 self.assertNotIn('ambient.invalid', result.browser_safe_report)
+
+    def test_contaminated_safe_group_values_fail_before_disposable_writer(self):
+        cases = (
+            ('ci', 'CI', 'postgres://local/muebles'),
+            ('ci', 'GITHUB_ACTIONS', 'synthetic-secret'),
+            ('ci', 'RUNNER_OS', 'Windows'),
+            ('ci', 'RUNNER_ARCH', 'ARM64'),
+            ('locale', 'LANG', 'postgres://local/muebles'),
+            ('locale', 'LC_ALL', 'synthetic-secret'),
+            ('locale', 'LC_CTYPE', 'C.UTF-8\nTOKEN'),
+            ('locale', 'LANGUAGE', 'en:postgres://local/muebles'),
+            ('linux', 'USER', 'synthetic-secret'),
+            ('linux', 'LOGNAME', 'postgres://local/muebles'),
+            ('linux', 'SHELL', '/tmp/credential-shell'),
+            ('linux', 'XDG_SESSION_TYPE', 'synthetic-secret'),
+            ('linux', 'XDG_CURRENT_DESKTOP', 'postgres://local/muebles'),
+        )
+        for variant, key, value in cases:
+            with self.subTest(variant=variant, key=key):
+                result, records, _ = self.run_gate_with_doubles(
+                    0, browser_variant=variant, ambient_overrides={key: value},
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(result.docker_run_started, key)
+                self.assertEqual(records, [], key)
+                self.assertIn('unsafe browser diagnostic value', result.stderr)
+                self.assertNotIn(value, result.stderr)
 
     def test_cancellation_reaps_the_server_without_running_admin(self):
         result, records, survivor = self.run_gate_with_doubles(0, cancel_after_server=True)

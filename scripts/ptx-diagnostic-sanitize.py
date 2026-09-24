@@ -59,6 +59,7 @@ def screen_browser_env_names(raw: Path, output: Path, status: int, target: str) 
     expected_fields = (
         'variant', 'available_safe_names', 'forwarded_safe_names',
         'ambient_db_pg_count', 'ambient_credential_count', 'ambient_proxy_count',
+        'ambient_unclassified_key_count',
     )
     if len(lines) != len(expected_fields):
         raise ValueError('invalid browser environment name report')

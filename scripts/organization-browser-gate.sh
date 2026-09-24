@@ -39,6 +39,49 @@ case "${PTX_BROWSER_MODE}" in
   *) fail "unknown temporary browser environment variant" ;;
 esac
 
+# Validate optional browser-only metadata before Docker or any writable child.
+# A harmless key name alone does not make its ambient value safe to forward.
+PTX_BROWSER_GROUP_NAMES=()
+case "${PTX_BROWSER_MODE}" in
+  ci+locale) PTX_BROWSER_GROUP_NAMES=(CI GITHUB_ACTIONS RUNNER_OS RUNNER_ARCH LANG LC_ALL LC_CTYPE LANGUAGE) ;;
+  ci) PTX_BROWSER_GROUP_NAMES=(CI GITHUB_ACTIONS RUNNER_OS RUNNER_ARCH) ;;
+  locale) PTX_BROWSER_GROUP_NAMES=(LANG LC_ALL LC_CTYPE LANGUAGE) ;;
+  linux) PTX_BROWSER_GROUP_NAMES=(USER LOGNAME SHELL XDG_SESSION_TYPE XDG_CURRENT_DESKTOP) ;;
+esac
+locale_pattern='^(C(\.[A-Za-z0-9-]{1,12})?|POSIX|[a-z]{2,3}(_[A-Z]{2})?(\.[A-Za-z0-9-]{1,12})?(@[A-Za-z0-9_-]{1,24})?)$'
+validate_browser_group_value() {
+  local key="$1" value="$2" part upper
+  # Never print the value: the reject path is itself an artifact boundary.
+  upper="$(LC_ALL=C tr '[:lower:]' '[:upper:]' <<< "${value}")"
+  case "${upper}" in
+    *SECRET*|*TOKEN*|*PASSWORD*|*CREDENTIAL*|*BEARER*|*COOKIE*|*POSTGRES*|*MUEBLES*|*://*) return 1 ;;
+  esac
+  case "${key}" in
+    CI|GITHUB_ACTIONS) [[ "${value}" = true || "${value}" = false ]] ;;
+    RUNNER_OS) [[ "${value}" = Linux ]] ;;
+    RUNNER_ARCH) [[ "${value}" = X64 ]] ;;
+    LANG|LC_ALL|LC_CTYPE) [[ "${value}" =~ ${locale_pattern} ]] ;;
+    LANGUAGE)
+      [[ "${value}" != :* && "${value}" != *: && "${value}" != *::* ]] || return 1
+      local parts=()
+      IFS=: read -r -a parts <<< "${value}"
+      for part in "${parts[@]}"; do [[ "${part}" =~ ${locale_pattern} ]] || return 1; done
+      ;;
+    USER|LOGNAME) [[ "${value}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] ;;
+    SHELL) [[ "${value}" = /bin/bash || "${value}" = /usr/bin/bash ]] ;;
+    XDG_SESSION_TYPE) [[ "${value}" = tty || "${value}" = x11 || "${value}" = wayland || "${value}" = headless ]] ;;
+    XDG_CURRENT_DESKTOP) [[ "${value}" = GNOME || "${value}" = KDE || "${value}" = XFCE || "${value}" = Unity || "${value}" = MATE || "${value}" = Cinnamon || "${value}" = LXQt || "${value}" = headless ]] ;;
+    *) return 1 ;;
+  esac
+}
+if [ "${PTX_BROWSER_MODE}" != isolated ] && [ "${PTX_BROWSER_MODE}" != inherited-safe ]; then
+  for key in "${PTX_BROWSER_GROUP_NAMES[@]}"; do
+    if [ "${!key+x}" = x ] && [ -n "${!key}" ]; then
+      validate_browser_group_value "${key}" "${!key}" || fail "unsafe browser diagnostic value for ${key}"
+    fi
+  done
+fi
+
 for command in docker go pnpm curl openssl python3; do
   command -v "${command}" >/dev/null 2>&1 || fail "${command} is required"
 done
@@ -229,6 +272,7 @@ done
 ambient_db_pg_count=0
 ambient_credential_count=0
 ambient_proxy_count=0
+ambient_unclassified_key_count=0
 if [ "${PTX_BROWSER_MODE}" = inherited-safe ]; then
   # Experiment 1 comparator only: backend/admin retain GATE_BASE_ENV.
   GATE_BROWSER_PREFIX=(env)
@@ -239,16 +283,9 @@ if [ "${PTX_BROWSER_MODE}" = inherited-safe ]; then
   done
 else
   GATE_BROWSER_PREFIX=(env -i)
-  case "${PTX_BROWSER_MODE}" in
-    ci+locale) group_names=(CI GITHUB_ACTIONS RUNNER_OS RUNNER_ARCH LANG LC_ALL LC_CTYPE LANGUAGE) ;;
-    ci) group_names=(CI GITHUB_ACTIONS RUNNER_OS RUNNER_ARCH) ;;
-    locale) group_names=(LANG LC_ALL LC_CTYPE LANGUAGE) ;;
-    linux) group_names=(USER LOGNAME SHELL XDG_SESSION_TYPE XDG_CURRENT_DESKTOP) ;;
-    isolated) ;;
-  esac
   if [ "${PTX_BROWSER_MODE}" != isolated ]; then
-    for key in "${group_names[@]}"; do
-      if [ "${!key+x}" = x ]; then
+    for key in "${PTX_BROWSER_GROUP_NAMES[@]}"; do
+      if [ "${!key+x}" = x ] && [ -n "${!key}" ]; then
         GATE_BROWSER_PREFIX+=("${key}=${!key}")
         GATE_BROWSER_FORWARDED_NAMES+=("${key}")
       fi
@@ -269,6 +306,8 @@ while IFS= read -r key; do
     DOCKER_HOST|DOCKER_CONTEXT|KUBECONFIG|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY)
       ambient_proxy_count=$((ambient_proxy_count + 1))
       if [ "${PTX_BROWSER_MODE}" = inherited-safe ]; then GATE_BROWSER_PREFIX+=(-u "${key}"); fi ;;
+    CI|GITHUB_ACTIONS|RUNNER_OS|RUNNER_ARCH|LANG|LC_ALL|LC_CTYPE|LANGUAGE|USER|LOGNAME|SHELL|XDG_CURRENT_DESKTOP) ;;
+    *) ambient_unclassified_key_count=$((ambient_unclassified_key_count + 1)) ;;
   esac
 done < <(compgen -e)
 if [ -n "${PTX_DIAGNOSTIC_DIR:-}" ]; then
@@ -281,6 +320,7 @@ if [ -n "${PTX_DIAGNOSTIC_DIR:-}" ]; then
     printf 'ambient_db_pg_count=%s\n' "${ambient_db_pg_count}"
     printf 'ambient_credential_count=%s\n' "${ambient_credential_count}"
     printf 'ambient_proxy_count=%s\n' "${ambient_proxy_count}"
+    printf 'ambient_unclassified_key_count=%s\n' "${ambient_unclassified_key_count}"
   } > "${PTX_DIAGNOSTIC_DIR}/browser-env-safe-names.txt"
 fi
 GATE_BROWSER_ENV=("${GATE_BROWSER_PREFIX[@]}"

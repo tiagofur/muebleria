@@ -637,3 +637,39 @@ E2 diagnostic work-unit commit:
 `c7dd8c7f4cac23eb449832f68b77b8e0bfc97ee3`. An artifact-only evidence
 commit follows; independent review and group-mode Ubuntu runs are pending.
 The writer did not push, dispatch, create a PR, or merge.
+
+E2 independent review reopened the group value boundary before any Ubuntu
+dispatch: allowlisted **names** alone do not make an ambient **value** safe.
+For example, CI could carry a credential-like value or LANG a PostgreSQL DSN;
+copying either into a browser `env -i` child would violate the diagnostic
+isolation claim. Keep the prior group-name and sanitizer work, but reopen
+only value admission and its real-launcher regressions. The review also noted
+the safe-name report covers only 13 preselected keys; record an explicit
+unclassified-key count if possible, never call that an exhaustive safe-key
+inventory.
+
+- [x] **E2d — Validate optional group values before any writer.** Enforce a
+  narrow per-key harmless domain at launcher entry for selected group keys;
+  reject unknown, credential- or DSN-looking values without echoing them.
+  Observe DB-free RED for contaminated safe-name canaries with zero writable
+  child, then GREEN positives/negatives on the actual launcher.
+- [x] **E2e — Honest inventory and handoff.** Add only a count for ambient
+  non-sensitive-name-unclassified keys if safe, update sanitizer regression,
+  run focused/static/typecheck, commit one bounded correction and hand its
+  exact clean HEAD for a new independent review. Ubuntu V2 remains NOT_RUN.
+
+E2 review correction evidence: 13 contaminated-value cases first failed
+against the real launcher (all allowed the disposable Docker writer); after
+per-key value admission moved ahead of Docker, the same cases passed with no
+Docker run and no backend/admin/Playwright child. The reject diagnostic names
+only the selected fixed key, never its value. Positive real-launcher doubles
+prove CI, locale, or Linux values reach only the browser child, while admin
+and backend remain `env -i` and the disposable DSNs/markers/identity are
+unchanged. The name report now adds `ambient_unclassified_key_count`; this
+is a count of remaining ambient keys, **not** a safe-name inventory or a
+claim that all omissions were classified. Its schema and privacy boundary
+are tested. DB-free checks: 18 focused tests passed (one opt-in skip), 48
+CI-contract tests passed (one opt-in skip), 9 sanitizer/diagnostic tests
+passed; `bash -n`, `shellcheck`, `pnpm typecheck`, and `git diff --check`
+passed. Ubuntu V2 E2 remains NOT_RUN. Independent review of this new HEAD
+is pending; no remote operation or persistent database access occurred.

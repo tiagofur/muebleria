@@ -20,6 +20,7 @@ SAFE_ENV_REPORT = (
     'available_safe_names=CI,GITHUB_ACTIONS,LANG\n'
     'forwarded_safe_names=CI,GITHUB_ACTIONS,LANG\n'
     'ambient_db_pg_count=5\nambient_credential_count=2\nambient_proxy_count=1\n'
+    'ambient_unclassified_key_count=12\n'
 )
 
 
