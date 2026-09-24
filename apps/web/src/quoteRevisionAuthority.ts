@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQuery, type QueryKey } from '@tanstack/react-query';
 import {
   type QuoteCommercialSnapshot,
@@ -83,6 +83,17 @@ export function useQuoteRevisionAuthority(args: {
     enabled: Boolean(args.token && args.projectId),
     retry: false,
   });
+  // Test-only browser seam: invokes the mounted authority query's real
+  // React Query refetch without adding a visible workflow or exposing credentials.
+  useEffect(() => {
+    const target = window as Window & {
+      __graneteBrowserTestSeam?: boolean;
+      __graneteRefetchQuoteRevisionsForTest?: () => Promise<unknown>;
+    };
+    if (target.__graneteBrowserTestSeam !== true) return;
+    target.__graneteRefetchQuoteRevisionsForTest = () => query.refetch();
+    return () => { delete target.__graneteRefetchQuoteRevisionsForTest; };
+  }, [query.refetch]);
   const retry = () => void query.refetch();
   const revisions: ReadonlyArray<QuoteRevisionDetail> = query.data ?? [];
 
