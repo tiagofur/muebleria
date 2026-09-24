@@ -42,6 +42,7 @@ require_relative '../../src/granete_for_sketchup/host/preflight_review'
 require_relative '../../src/granete_for_sketchup/host/preflight_review_session'
 require_relative '../../src/granete_for_sketchup/overlay/issue_navigation'
 require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
+require_relative '../../src/granete_for_sketchup/tools/placement_snap_engine'
 require_relative '../../src/granete_for_sketchup/tools/furniture_placement_tool'
 require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
 require_relative '../../src/granete_for_sketchup/ui/dialog_controller'
@@ -807,12 +808,121 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
+  # ---- #469 increment 2: managed-neighbor snap targets -------------------
+
+  # The PROJECT lane's tool carries the managed-neighbor provider: a
+  # placed Granete root (resolved by furnitureInstanceId metadata) becomes
+  # a side-to-side snap target and the committed transform lands on its
+  # side at gap 0 — same identity, one PUT.
+  def test_project_lane_snaps_to_managed_neighbor_and_commits_the_gap_zero_side
+    add_managed_root(FI_2, "Base 600 (#{FI_2})", [0.0, 0.0, 0.0],
+                     [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    begin_preview(FI_1)
+    tool = active_tool
+
+    Sketchup::InputPoint.next_position_mm = [700.0, 280.0, 0.0]
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    side = tool.active_snap[:components].find { |c| c[:kind] == :furniture_side }
+    assert side, 'the managed neighbor must be offered as a snap target'
+    assert_equal FI_2, side[:furniture_instance_id], 'identity comes from metadata, not the name'
+    assert_includes side[:label], 'Base 600 · lateral derecho'
+
+    tool.onLButtonDown(0, 50, 50, @model.active_view) # re-picks the SAME aim
+
+    assert_includes bridge_scripts('onPlaceFurnitureResult').last, '"ok":true'
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    placed = put['body']['items'].find { |i| i['furniture_instance_id'] == FI_1 }
+    assert_in_delta 600.0, placed['transform']['translation_mm'][0], 1e-3,
+                    'the new left side sits on the neighbor right side (x=600mm)'
+  end
+
+  # The CATALOG lane shares the SAME provider and engine: identical snap
+  # behavior, only identity provenance differs (Library/Project parity).
+  def test_catalog_lane_shares_the_same_managed_neighbor_snap
+    add_managed_root(FI_2, "Base 600 (#{FI_2})", [0.0, 0.0, 0.0],
+                     [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    stub_create_instance
+    @dialog.callbacks.fetch('begin_catalog_placement_preview').call(
+      nil, JSON.generate('definitionId' => DEFINITION_ID, 'parameters' => {},
+                         'materialChoices' => {}, 'idempotencyKey' => 'idem-snap')
+    )
+    tool = active_tool
+
+    Sketchup::InputPoint.next_position_mm = [700.0, 280.0, 0.0]
+    tool.onMouseMove(0, 50, 50, @model.active_view)
+
+    side = tool.active_snap[:components].find { |c| c[:kind] == :furniture_side }
+    assert side, 'the catalog lane must resolve the same managed targets'
+    assert_equal FI_2, side[:furniture_instance_id]
+  end
+
+  # Negative provider proofs: unmanaged geometry, duplicated identity and
+  # erased/off-grid entities never become snap targets — resolution is by
+  # managed identity, never by component name.
+  def test_provider_excludes_unmanaged_duplicated_erased_and_off_grid_targets
+    unmanaged = add_managed_root('fi-unmanaged', 'Cosa suelta (fi-unmanaged)',
+                                 [0.0, 0.0, 0.0], [100.0, 100.0, 100.0])
+    MS.new(@model).write(unmanaged, { 'namespace' => MS::NAMESPACE,
+                                      'metadataVersion' => MS::METADATA_VERSION,
+                                      'kind' => 'bootstrapIntent' }) # strip Granete furniture identity
+    add_managed_root('fi-dup', 'Duplicado A (fi-dup)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    add_managed_root('fi-dup', 'Duplicado B (fi-dup)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    erased = add_managed_root('fi-erased', 'Borrado (fi-erased)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    erased.define_singleton_method(:valid?) { false }
+    off_grid = add_managed_root('fi-offgrid', 'Rotado (fi-offgrid)', [0.0, 0.0, 0.0],
+                                [50.0, 50.0, 50.0])
+    off_grid.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(0.7, 0.7, 0.0),
+      Geom::Vector3d.new(-0.7, 0.7, 0.0), Geom::Vector3d.new(0, 0, 1)
+    )
+    add_managed_root('fi-ok', 'Sano (fi-ok)', [0.0, 0.0, 0.0], [40.0, 40.0, 40.0])
+
+    targets = @controller.send(:placement_furniture_targets_provider, @model).call
+
+    assert_equal ['fi-ok'], targets.map { |t| t['furniture_instance_id'] },
+                 'only the single healthy axis-aligned managed root is a target'
+    assert_equal 'Sano', targets.first['label'], 'display label strips the id suffix'
+  end
+
+  # The provider scan is read-only: running it repeatedly issues no
+  # transport request (cursor-loop safety).
+  def test_provider_scan_issues_no_requests
+    add_managed_root(FI_2, "Base 600 (#{FI_2})",
+                     [0.0, 0.0, 0.0], [10.0, 10.0, 10.0])
+    before = @transport.requests.length
+
+    provider = @controller.send(:placement_furniture_targets_provider, @model)
+    3.times { provider.call }
+
+    assert_equal before, @transport.requests.length, 'target discovery is purely local'
+  end
+
   private
 
   def begin_preview(furniture_instance_id)
     @dialog.callbacks.fetch('begin_placement_preview').call(
       nil, JSON.generate('furnitureInstanceId' => furniture_instance_id)
     )
+  end
+
+  # Hand-crafted Granete-managed root in the stub model: identity through
+  # the metadata store (as the real builder writes), human name, world
+  # bounds in INCHES (host semantics) and an identity frame unless a
+  # rotated transformation is assigned afterwards by the test.
+  def add_managed_root(furniture_instance_id, name, min_in, max_in)
+    definition = @model.definitions.add("Granete · #{name}")
+    instance = @model.entities.add_instance(definition, Geom::Transformation.new)
+    instance.name = name
+    bounds = Geom::BoundingBox.new
+    bounds.min = Geom::Point3d.new(*min_in)
+    bounds.max = Geom::Point3d.new(*max_in)
+    instance.bounds = bounds
+    MS.new(@model).write(instance, { 'namespace' => MS::NAMESPACE,
+                                     'metadataVersion' => MS::METADATA_VERSION,
+                                     'kind' => 'furnitureInstance',
+                                     'identity' => { 'furnitureInstanceId' => furniture_instance_id } })
+    instance
   end
 
   def active_tool

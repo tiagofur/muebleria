@@ -87,6 +87,7 @@ module Granete
         observers/entities_observer
         tools/internal_component_move_tool
         tools/mount_frame_tool
+        tools/placement_snap_engine
         tools/furniture_placement_tool
         ui/option_selector_controller
         ui/migration_review_controller
