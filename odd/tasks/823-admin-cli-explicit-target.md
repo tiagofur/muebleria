@@ -507,3 +507,5 @@ frontend/test probe files apply cleanly over exact base `6184b4d2`; the
 base's launcher receives only artifact-copy/browser diagnostic hooks. No
 database connection, Ubuntu execution, PR change, or product delivery was
 claimed. Fresh independent review is pending on the corrected exact HEAD.
+The correction work-unit commit is
+`027db58670bad317781f9e73f80a06ad37166a20`.
