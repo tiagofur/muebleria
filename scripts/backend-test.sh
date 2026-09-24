@@ -84,8 +84,10 @@ if [ -z "${POSTGRES_READY}" ]; then
 fi
 
 MIGRATION_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_test?sslmode=disable"
-DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_test?sslmode=disable"
 APP_DATABASE_URL="postgres://granete_app:${APP_DATABASE_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_test?sslmode=disable"
+# Runtime tests must use the real unprivileged application role. Migration setup
+# remains explicitly privileged, satisfying the #823 role-separation contract.
+DATABASE_URL="${APP_DATABASE_URL}"
 
 export DATABASE_URL MIGRATION_DATABASE_URL APP_DATABASE_URL
 export GRANETE_TEST_DATABASE=1
