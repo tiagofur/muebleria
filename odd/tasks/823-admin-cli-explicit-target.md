@@ -11,13 +11,18 @@ The incident's account containment and data remediation are separate. This
 change must not read or write the persistent database, touch the paused #460
 worktree, or perform cleanup. Use synthetic data in tests and the PR.
 
+T2 continuation: PR #837 was merged by human decision. The independent T2
+branch starts from new `origin/main` at
+`6184b4d2d36c5c73e3fbcabde2c2785e5335e565`; it does not reuse the T1
+branch or reapply T1 commits. T2 is now authorized; its PR targets `main`.
+
 ## Scope and constraints
 
 - Require an explicit, valid `MIGRATION_DATABASE_URL` for every admin CLI
   operation before opening a connection. Do not fall back to `DATABASE_URL` or
   any implicit persistent target. Preserve explicit legitimate admin use
   outside tests, without imposing test markers on human operations.
-- Deferred #823 scope, not part of this T1 PR: validate and explicitly pass
+- T2 scope, separate from the merged T1 PR: validate and explicitly pass
   the runtime and admin DSNs used by the browser preparation's server and admin
   children. Keep its disposable container and loopback binding, and do not
   give the privileged migration role to the application runtime.
@@ -61,8 +66,9 @@ size exception remain the leader's responsibility.
   syntax/build checks. Initial behavior commit:
   `06694bc5c6bdfc62f35b7e9164795d7ad0576e0a`; continuation commit:
   `a3a3998ae26f0d12c8da2094d26b9bcbc7c0f0d2`. Review:
-  disabled/unmanaged; fresh independent repository review remains pending.
-- [ ] **T2 — Deferred; not authorized in this PR.** Guard the disposable browser
+  disabled/unmanaged; the separate T1 candidate was independently reviewed,
+  checked, and merged by a human via PR #837. T2 needs its own review.
+- [x] **T2 — Guard the browser preparation boundary.** Guard the disposable browser
   preparation children. Add safe RED
   coverage for absent marker/incomplete DSNs and child environment forwarding.
   Before server migration and each admin child, prove the exact disposable
@@ -72,13 +78,14 @@ size exception remain the leader's responsibility.
   PostgreSQL preparation end-to-end. Do not rewrite the full runner.
   Route: delegated writer; evidence: shell, Go validation, tests, and docs.
   Checks: focused DB-free negatives, `bash -n`, relevant static gate, and real
-  disposable positive. Commit: pending. Review: disabled/unmanaged.
+  disposable positive. Commit identity: recorded below after the work-unit
+  commit. Review: disabled/unmanaged; fresh repository review pending.
 
 ## Acceptance and verification record
 
 - [x] Missing/empty/invalid admin DSN and `DATABASE_URL`-only fail before connect.
-- [ ] Test marker absent/incomplete or persistent DSNs cannot provision.
-- [ ] Exact valid disposable runtime/admin DSNs reach the intended children.
+- [x] Test marker absent/incomplete or persistent DSNs cannot provision.
+- [x] Exact valid disposable runtime/admin DSNs reach the intended children.
 - [x] CLI errors redact credentials; help and docs name the same contract.
 - [x] Real disposable PostgreSQL positive passes; no persistent DB access.
 - [ ] Fresh independent review and exact HEAD/base checks before publication.
@@ -165,3 +172,61 @@ recovery source of truth.
   or 306 product/test/documentation lines without the task document. Keep the
   cohesive slice; the leader will handle publication policy and any required
   size exception. Delivery remains partial because T2 is not implemented.
+
+## T2 continuation — isolated browser preparation candidate
+
+- Base: `origin/main` at `6184b4d2d36c5c73e3fbcabde2c2785e5335e565`
+  after human merge of #837. One writer in the clean
+  `fix/823-browser-preparation-guard` worktree. No #460 paths changed.
+- Route: delegated direct, because shell launcher, Go guard/tests, CI gate,
+  and canonical documentation are non-trivial multi-file work. Strict TDD
+  remains enabled by `AGENTS.md`; RDD is clone-locally off. Delivery strategy
+  remains sequential PRs to `main`, never a stacked tracker. The user
+  explicitly approved `size:exception` for one cohesive T2 PR rather than
+  splitting protection from its regression; no code-golf or artificial slice.
+- Safe RED: `go test -count=1 ./cmd/testdb-preflight` failed to compile for
+  missing `validateBrowserGateTargetPair`. The real-shell double test against
+  the *base* launcher failed because it did not invoke preflight and did not
+  pass test markers to the server/admin children. No PostgreSQL connection or
+  writable child ran in these RED checks.
+- GREEN: Go preflight tests reject absent markers, absent runtime/admin URL,
+  persistent target on either side, mismatched instance/base, target-overriding
+  URL query, wrong role, and non-loopback/missing port without connecting.
+  The launcher calls that shared-validator-based preflight before the server
+  or five admin commands, passes scoped `env -i` with both DSNs/markers to
+  every child, and supplies Playwright the same validated fixture target.
+  Real-launcher doubles confirm ambient database/PG variables do not leak.
+  Local opt-in integration runs the *real Go preflight* through that launcher
+  for ten unsafe cases and observes exactly the preflight child, no writer.
+- Direct Playwright RED: the pre-change config's actual `--list` entrypoint
+  accepted a fixture URL with `?dbname=muebles`; a mocked globalSetup test
+  observed that the same URL reached `prepareAuthoritativeOrganizations`.
+  GREEN: config and globalSetup now call one shared TypeScript target guard,
+  rejecting host/port/database/service query overrides, non-loopback or
+  incomplete URLs before any API setup. The direct config negative rejects
+  before a web server starts; its safe synthetic positive lists 2 tests. The
+  globalSetup regression has four negative override cases plus a safe
+  positive, and the root `pnpm test` script/CI static check retain this gate.
+- V2 positive: `scripts/organization-browser-gate.sh --list
+  tests/organization/prequote-design.spec.ts` ran real disposable PostgreSQL,
+  migrations, runtime backend, five admin commands, and safe readback
+  (`granete_gate|2|2`), then destroyed the container. A second run executed
+  the actual Chromium `prequote-design.spec.ts` flow: 2/2 tests passed after
+  the same setup/readback. No persistent DB was read or written. The runner
+  checks `granete_app` as LOGIN/NOSUPERUSER/NOBYPASSRLS before server start.
+- V0/V1 checked so far: `bash -n`, focused Go preflight/admin tests,
+  `git diff --check`, `go vet`, 42 Python CI tests (one opt-in skip), 5 direct
+  Playwright fixture guard tests, and ten opt-in real-Go-preflight negative
+  launcher cases passed. `pnpm test` and `pnpm typecheck` passed with all DB
+  environment variables absent; the new Vitest fixture guard is in the root
+  test command. The full disposable browser gate passed 2/2 Chromium tests
+  again after the direct guard change. Broader exact-head CI and fresh
+  independent review remain pending until candidate freeze.
+- Rollback boundary: `backend-go/cmd/testdb-preflight/`,
+  `scripts/organization-browser-gate.sh`, its CI launcher regression test,
+  shared direct Playwright guard/tests and wiring, root test script, and the
+  T2 paragraphs in the canonical isolation contract. The merged T1 admin CLI
+  contract and shared URL validators are not part of T2 rollback.
+- Publication completeness for #823 requires the leader's reconciliation of
+  remaining issue acceptance against #835/#837 and exact-head checks; this
+  candidate alone is not a self-approval or incident-resolution claim.

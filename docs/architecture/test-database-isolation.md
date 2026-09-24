@@ -1,8 +1,9 @@
 # Test Database Isolation — PostgreSQL y E2E
 
-> Estado: **contrato canónico aprobado para implementación**.  
-> Enforcement completo: pendiente en #823.  
-> Este documento distingue lo que ya existe de lo que #823 debe hacer fail-closed.
+> Estado: **contrato canónico**.
+> El runner Go y el CLI administrativo ya tienen guardas; el preparador browser
+> valida ambos destinos antes de lanzar procesos escribibles. La aceptación
+> completa de #823 depende de la revisión y las pruebas del candidato exacto.
 
 ## 1. Objetivo
 
@@ -54,7 +55,17 @@ No reiniciar infraestructura que ya cumple.
 
 ### Organization browser gate
 
-`scripts/organization-browser-gate.sh` crea PostgreSQL temporal, ejecuta migraciones/backend/Playwright contra esa instancia y destruye backend, contenedor y directorio temporal mediante `trap`. Éste es el patrón canónico para E2E React ↔ Go ↔ PostgreSQL.
+`scripts/organization-browser-gate.sh` crea PostgreSQL temporal con datos en
+`tmpfs` y bind sólo a `127.0.0.1`. Antes de arrancar el backend (que ejecuta
+migraciones) o `cmd/admin`, pasa ambas URL explícitas por
+`cmd/testdb-preflight`: reutiliza los validadores de test y comprueba markers,
+base, puerto e instancia compartidos, y roles distintos. El backend recibe
+`granete_app` (sin superusuario ni `BYPASSRLS`) para runtime y `postgres` para
+migraciones; `cmd/admin` recibe `MIGRATION_DATABASE_URL` explícita. Cada hijo,
+incluido Playwright, recibe un entorno limitado con `env -i`, no los `PG*` ni
+las URL heredadas del operador. El runner relee los dos usuarios y las dos
+organizaciones sintéticas en la base descartable y destruye backend, contenedor
+y directorio temporal mediante `trap`.
 
 ### Pilot Readiness y suites throwaway
 
@@ -112,8 +123,8 @@ Cuando `GRANETE_TEST_DATABASE=1`, el CLI aplica además
 `ValidateTestAdminDatabaseURL`: sólo admite los destinos de prueba autorizados.
 Fuera de la preparación automatizada, una operación administrativa humana
 puede usar una URL persistente **explícita**; no se le exige un marcador de test.
-La preparación browser todavía debe demostrar que ambos DSN de sus procesos
-apuntan al contenedor descartable antes de ejecutar comandos.
+La preparación browser valida los dos DSN contra el puerto del contenedor
+descartable antes del primer proceso que pueda migrar o crear datos.
 
 ## 6. Guardia fail-closed en Go
 
@@ -154,14 +165,23 @@ debe fallar antes del primer INSERT/migration escribible.
 
 El runner browser ya crea infraestructura efímera. #823 debe impedir ejecución accidental contra el backend normal.
 
-Contrato sugerido:
+Contrato exigido por el preparador:
 
 ```text
 ORGANIZATION_TEST_ISOLATED=1
 ORGANIZATION_TEST_DATABASE_URL=<test-only DSN>
+GRANETE_TEST_DATABASE=1
+DATABASE_URL=<runtime role en la misma DB descartable>
+MIGRATION_DATABASE_URL=<migration role en la misma DB descartable>
 ```
 
-`tests/organization/support/globalSetup.ts` y/o la config deben validar ambos antes de `prepareAuthoritativeOrganizations()`.
+`tests/organization/support/globalSetup.ts` y la config usan el mismo guard
+de URL de fixture antes de `prepareAuthoritativeOrganizations()`: exige destino
+loopback, puerto/credenciales explícitos, nombre de test permitido y rechaza
+opciones de consulta que sustituyan host, puerto o base. Su regresión DB-free
+se ejecuta con `pnpm test`. El preparador además
+fija la URL de fixture igual a la administrativa validada, y entrega las URL y
+markers explícitamente a backend, CLI administrativo y Playwright.
 
 Sin esa evidencia, Playwright debe abortar **antes** de crear invitaciones, clientes, proyectos, diseños, FurnitureInstances o QuoteRevisions.
 
@@ -173,7 +193,11 @@ La regla debe tener un gate ejecutable. Como mínimo debe detectar:
 - nuevos helpers de integración que abran `DATABASE_URL` escribible fuera de la abstracción permitida;
 - cambios que permitan organization E2E sin guardia aislada.
 
-El check estático no sustituye las pruebas operacionales del helper.
+`scripts/test_ci_organization_browser_preparation.py` ejecuta el launcher real
+con dobles sin conexión: verifica que un preflight rechazado no lanza backend,
+CLI ni Playwright y que todos los hijos reciben los destinos y markers
+preparados sin heredar `PG*`. El check no sustituye las pruebas Go del
+validador ni una ejecución operativa contra PostgreSQL descartable.
 
 ## 10. Seed y arranque normal
 
