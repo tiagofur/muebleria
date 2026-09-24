@@ -462,3 +462,7 @@ explicitly excludes every ordinary job on manual dispatch; only the scoped
 diagnostic job is runnable. The raw log and raw trace stay on the ephemeral
 runner; only privacy-screened event/action trace/screenshot/metadata files can
 be uploaded, and a sanitizer failure withholds diagnostic evidence.
+
+D1a diagnostic work-unit commit: `27ef22ea721ccac0ac258bc5018297c30c27b167`
+(`test(ci): add temporary PTX prefix diagnostic lab`). This is not a PR
+delivery and has no review, Ubuntu runtime result, or issue-closure authority.
