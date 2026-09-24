@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -120,4 +124,42 @@ func TestUsageNamesRequiredMigrationURL(t *testing.T) {
 	if !strings.Contains(string(output), "MIGRATION_DATABASE_URL") || strings.Contains(string(output), "DATABASE_URL    Postgres DSN (defaults") {
 		t.Fatalf("admin usage does not state the required explicit target")
 	}
+}
+
+func TestOpenStoreAgainstDisposablePostgres(t *testing.T) {
+	if testing.Short() || os.Getenv("ADMIN_CLI_DISPOSABLE_POSTGRES") != "1" {
+		t.Skip("requires an explicitly prepared disposable PostgreSQL container")
+	}
+	if os.Getenv("GRANETE_TEST_DATABASE") != "1" {
+		t.Fatal("disposable PostgreSQL check requires the test database marker")
+	}
+	raw := os.Getenv("MIGRATION_DATABASE_URL")
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() != "127.0.0.1" || !strings.HasPrefix(u.Path, "/granete_test_admin_") || u.User == nil {
+		t.Fatal("disposable PostgreSQL check requires an explicit loopback test target")
+	}
+	port, err := strconv.Atoi(u.Port())
+	if err != nil || port < 1 || port > 65535 || port == 5445 {
+		t.Fatal("disposable PostgreSQL check requires a non-habitual explicit host port")
+	}
+	if err := storage.ValidateTestAdminDatabaseURL(raw); err != nil {
+		t.Fatal("disposable PostgreSQL target rejected by test guard")
+	}
+
+	store, closeStore, err := openStore()
+	if err != nil {
+		t.Fatalf("admin store did not connect to the verified disposable target: %v", err)
+	}
+	defer closeStore()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var database, user string
+	var serverPort int
+	if err := store.Pool.QueryRow(ctx, "SELECT current_database(), current_user, inet_server_port()").Scan(&database, &user, &serverPort); err != nil {
+		t.Fatal("could not read back the disposable PostgreSQL destination")
+	}
+	if database != strings.TrimPrefix(u.Path, "/") || user != u.User.Username() || serverPort != 5432 {
+		t.Fatalf("connected to an unexpected PostgreSQL destination: database=%q user=%q server_port=%d", database, user, serverPort)
+	}
+	t.Logf("verified disposable PostgreSQL destination: database=%q user=%q server_port=%d", database, user, serverPort)
 }

@@ -128,6 +128,12 @@ Deben rechazar al menos:
 
 Una forma válida puede combinar `GRANETE_TEST_DATABASE=1` con nombres como `granete_test_*`, `granete_gate`, `muebles_multiorg_test` u otra allowlist explícita.
 
+Los validadores compartidos de conexiones de test escribibles y administrativas
+rechazan URLs sin host explícito y parámetros de consulta (`host`, `port`,
+`dbname`, `service` y variantes) capaces de sustituir el destino visible. Así,
+la URL que pasa la allowlist no puede resolverse silenciosamente hacia otra
+base mediante opciones de conexión.
+
 Negative proof obligatorio:
 
 ```sh

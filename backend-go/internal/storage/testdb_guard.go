@@ -16,9 +16,9 @@ var (
 // A writable test/business connection MUST match one of these AND have an explicit test environment marker.
 // NOTE: "postgres" is NOT an allowed writable test/business database. It is only permitted for admin/maintenance connections via ValidateTestAdminDatabaseURL.
 var allowedWritableTestDBNames = map[string]bool{
-	"granete_gate":         true, // Gate A / Organization browser gate
-	"muebles_multiorg_test": true, // Multi-org migration & RLS isolation tests
-	"granete_test":         true, // Canonical ephemeral test runner DB
+	"granete_gate":            true, // Gate A / Organization browser gate
+	"muebles_multiorg_test":   true, // Multi-org migration & RLS isolation tests
+	"granete_test":            true, // Canonical ephemeral test runner DB
 	"muebles_pilot_readiness": true, // Pilot readiness integration test DB
 }
 
@@ -68,6 +68,22 @@ func parseAndValidateCommon(rawURL string) (*url.URL, string, error) {
 		// url.Parse errors include the raw URL which may leak credentials (e.g. parse "postgres://user:pass@...").
 		// Redact raw URL details to prevent credential leaks on malformed input.
 		return nil, "", fmt.Errorf("%w: invalid database URL (%s)", ErrTestDBGuardRejected, SanitizeDatabaseURL(rawURL))
+	}
+	if (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Hostname() == "" {
+		return nil, "", fmt.Errorf("%w: explicit postgres URL host is required", ErrTestDBGuardRejected)
+	}
+	query, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: invalid database URL query", ErrTestDBGuardRejected)
+	}
+	// pgx/libpq target options can replace the URL's visible host, port, or
+	// database after the guard has already approved its path. Reject them before
+	// returning a writable or admin test URL.
+	for key := range query {
+		switch strings.ToLower(key) {
+		case "host", "hostaddr", "port", "dbname", "database", "service", "servicefile":
+			return nil, "", fmt.Errorf("%w: database URL query overrides its target", ErrTestDBGuardRejected)
+		}
 	}
 
 	dbName := strings.TrimPrefix(u.Path, "/")
@@ -207,4 +223,3 @@ type testingT interface {
 	Skip(args ...any)
 	Fatalf(format string, args ...any)
 }
-
