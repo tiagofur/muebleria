@@ -33,6 +33,10 @@ host-native).
 - Face candidates come from the host InputPoint face only (pick ON the
   plane); no synthetic ground plane — a free pick is never hijacked toward
   z=0 (#832 free-follow semantics preserved, suite green).
+- Floor/base-plane candidates accept EITHER horizontal winding (±Z):
+  Face#normal sign is not authority for walls (round 1) nor for floors
+  (round 2) — a reversed floor is the same base plane; the smoke no
+  longer forces floor.reverse!.
 - Wall orientation is resolved from the CAMERA EYE side of the plane,
   never from Face#normal (review P1: a reversed face must never leave the
   furniture front facing the wall). No eye / eye exactly on the plane →
@@ -71,11 +75,15 @@ it lands, wall/face snapping is not "complete".
 ### Observed evidence (this candidate)
 
 - `bundle exec rake verify` (homebrew ruby 3.2.11 + vendor bundle) after
-  the three review P1 corrections: 1068 unit runs / 6966 assertions +
-  6 boundary runs / 3323 assertions, 0 failures; 226 files lint-clean;
-  RBZ verified readback, sha256
-  `ec169f5bbe429a0d4201d0e2b567ad4a6114577e7003f6dc73d3d544f7b9c841`.
-- New/extended suites: `placement_snap_engine_test.rb` 24 runs (families,
+  the three review P1 corrections AND the round-2 floor-winding/tie-break
+  fixes: 1069 unit runs / 6981 assertions + 6 boundary runs / 3323
+  assertions, 0 failures; 226 files lint-clean; RBZ verified readback,
+  sha256 `b6aa772e7c219f8c6e03eb3ae54909a67745f36a83bf86c19bd9b89e8620a5bc`.
+- Round-2 review fixes: floor winding parity (engine + tool) and the
+  same-axis tie test now proves BOTH candidates exist with equal
+  displacement before composing (it was vacuous once eye_mm became
+  mandatory for walls).
+- New/extended suites: `placement_snap_engine_test.rb` 25 runs (families,
   policy, tie-breaks, gaps, reversed-face/eye resolution, finite-side
   tangential/vertical distance, negatives); `furniture_placement_tool_
   test.rb` 40 runs (+13: snap/VCB/stale/rigidity + reversed wall at tool
