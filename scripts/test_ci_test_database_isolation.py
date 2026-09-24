@@ -66,6 +66,19 @@ class TestDatabaseIsolationAntiRegression(unittest.TestCase):
         self.assertIn("ORGANIZATION_TEST_ISOLATED", setup_content)
         self.assertIn("ORGANIZATION_TEST_DATABASE_URL", setup_content)
 
+    def test_direct_browser_target_guard_stays_wired_into_ci(self):
+        """Both direct entrypoints use the same target guard, and pnpm test executes its regression."""
+        helper = ROOT / "tests/organization/support/databaseIsolation.ts"
+        self.assertTrue(helper.exists())
+        for path in (ROOT / "playwright.organization.config.ts", ROOT / "tests/organization/support/globalSetup.ts"):
+            self.assertIn("assertOrganizationTestDatabaseURL", path.read_text(encoding="utf-8"))
+        setup = (ROOT / "tests/organization/support/globalSetup.ts").read_text(encoding="utf-8")
+        self.assertIn("assertOrganizationBackendDatabaseIdentity", setup)
+        self.assertLess(setup.index("await assertOrganizationBackendDatabaseIdentity()"),
+                        setup.index("await prepareAuthoritativeOrganizations()"))
+        package = (ROOT / "package.json").read_text(encoding="utf-8")
+        self.assertIn("tests/databaseIsolation.test.ts", package)
+
     def test_canonical_backend_test_runner_exists(self):
         """scripts/backend-test.sh must exist, be executable, and run ephemeral postgres."""
         runner_path = ROOT / "scripts/backend-test.sh"
@@ -387,4 +400,3 @@ def find_unguarded_database_url_in_go(root: Path) -> list[str]:
 
 if __name__ == "__main__":
     unittest.main()
-

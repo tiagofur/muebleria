@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { assertOrganizationTestDatabaseURL } from './tests/organization/support/databaseIsolation';
 
 function required(name: string): string {
   const value = process.env[name];
@@ -13,20 +14,7 @@ if (isolatedFlag !== '1') {
   throw new Error('ORGANIZATION_TEST_ISOLATED=1 is required by the organization browser gate');
 }
 const testDBUrl = required('ORGANIZATION_TEST_DATABASE_URL');
-try {
-  const parsed = new URL(testDBUrl);
-  const dbName = parsed.pathname.replace(/^\//, '').toLowerCase();
-  const allowedTestDBs = ['granete_gate', 'granete_test', 'muebles_multiorg_test', 'muebles_pilot_readiness'];
-  const allowedPrefixes = ['granete_gate_', 'granete_test_', 'muebles_multiorg_test_', 'muebles_pilot_'];
-  const isAllowed = allowedTestDBs.includes(dbName) || allowedPrefixes.some(p => dbName.startsWith(p));
-
-  if (!dbName || dbName === 'muebles' || dbName === 'postgres' || dbName.includes('prod') || parsed.hostname.includes('prod') || !isAllowed) {
-    throw new Error(`Unsafe test database URL rejected by fail-closed guard (host=${parsed.host} db=${dbName})`);
-  }
-} catch (err: any) {
-  const safeMessage = err?.message && !err.message.includes('://') ? err.message : 'database validation failed';
-  throw new Error(`Invalid or unsafe ORGANIZATION_TEST_DATABASE_URL: ${safeMessage}`);
-}
+assertOrganizationTestDatabaseURL(testDBUrl);
 
 const webPort = required('ORGANIZATION_WEB_PORT');
 const baseURL = `http://127.0.0.1:${webPort}`;

@@ -13,7 +13,7 @@
     "build": "pnpm -r --if-present run build",
     "build:desktop": "pnpm --filter @granete/desktop package",
     "release:desktop": "pnpm --filter @granete/desktop dist",
-    "test": "pnpm -r --if-present run test",
+    "test": "pnpm -r --if-present run test && pnpm exec vitest run tests/databaseIsolation.test.ts",
     "typecheck": "pnpm -r --if-present run typecheck",
     "visual": "playwright test --config=playwright.config.ts",
     "smoke": "playwright test --config=playwright.config.ts tests/smoke",

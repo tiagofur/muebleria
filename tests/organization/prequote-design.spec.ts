@@ -145,19 +145,33 @@ test('#831 React-first creates draft units before Q1 through normal browser acti
 
   // Forward the real authenticated request and capture its server response
   // before Chromium can discard the page response-body handle on navigation.
-  let designsBody: Array<{ id: string }> | undefined;
+  let resolveDesignsBody!: (body: Array<{ id: string }>) => void;
+  let rejectDesignsBody!: (error: unknown) => void;
+  const designsBodyReady = new Promise<Array<{ id: string }>>((resolve, reject) => {
+    resolveDesignsBody = resolve;
+    rejectDesignsBody = reject;
+  });
   await page.route((url) => url.pathname === `/api/projects/${project.id}/designs`, async (route) => {
     if (route.request().method() !== 'GET') return route.continue();
-    const response = await route.fetch();
-    designsBody = await response.json() as Array<{ id: string }>;
-    await route.fulfill({ response });
+    try {
+      const response = await route.fetch();
+      const body = await response.json() as Array<{ id: string }>;
+      await route.fulfill({ response });
+      resolveDesignsBody(body);
+    } catch (error) {
+      rejectDesignsBody(error);
+      throw error;
+    }
   }, { times: 1 });
   const designsReadback = page.waitForResponse((r) => r.request().method() === 'GET' &&
     new URL(r.url()).pathname === `/api/projects/${project.id}/designs`);
   await page.goto(`/quotes/${project.id}/disenos`);
   const getDesigns = await designsReadback;
   expect(getDesigns.status()).toBe(200);
-  expect(designsBody?.some((item) => item.id === design.id)).toBe(true);
+  // The response event can precede completion of the asynchronous route
+  // callback. Wait for the captured body before asserting or navigating again.
+  const designsBody = await designsBodyReady;
+  expect(designsBody.some((item) => item.id === design.id)).toBe(true);
   console.log(`[prequote-ui] GET designs 200 project=${project.id} design=${design.id}`);
 
   const workspaceResponse = page.waitForResponse((r) => r.request().method() === 'POST' &&
