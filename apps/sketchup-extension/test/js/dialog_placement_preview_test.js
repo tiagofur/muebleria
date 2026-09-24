@@ -84,6 +84,7 @@ function buildSandbox(withPreviewCallbacks) {
     restore_furniture_instance: (p) => bridgeCalls.push({ action: 'restore_furniture_instance', payload: JSON.parse(p) }),
     select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
     synchronize_design: () => bridgeCalls.push({ action: 'synchronize_design' }),
+    insert_furniture: (p) => bridgeCalls.push({ action: 'insert_furniture', payload: JSON.parse(p) }),
     enroll: () => {}, logout: () => {}, close_dialog: () => {}
   };
   if (withPreviewCallbacks) {
@@ -307,6 +308,74 @@ tests.push(() => {
     'legacy create_project_furniture fallback works');
 });
 
+tests.push(() => {
+  // #469 increment 4 — DISCONNECTED library: the actual user entry point
+  // (btnInsert on an unbound model) routes to the SAME shared preview
+  // callback. The legacy origin-first insert must NOT fire while previewing.
+  const sandbox = runDialog(true);
+  sandbox.window.GraneteDialog.setCatalog([
+    { furniture_definition_id: 'def-local', name: 'Bajo Local', category: 'kitchen_base',
+      parameters: [
+        { name: 'widthMm', defaultValue: 600 },
+        { name: 'heightMm', defaultValue: 720 },
+        { name: 'depthMm', defaultValue: 590 }
+      ] }
+  ]);
+  const card = el(sandbox, 'library-cards-grid').children[0];
+  card.click();
+  const btnInsert = el(sandbox, 'btn-insert');
+  btnInsert.click();
+
+  const preview = sandbox.__bridge.find((c) => c.action === 'begin_catalog_placement_preview');
+  assert.ok(preview, 'disconnected insert routes to the shared preview entry point');
+  assert.equal(preview.payload.definitionId, 'def-local');
+  assert.equal(sandbox.__bridge.find((c) => c.action === 'insert_furniture'), undefined,
+    'the legacy origin-first insert must not fire');
+  assert.equal(sandbox.__bridge.find((c) => c.action === 'create_project_furniture'), undefined,
+    'no identity creation either — the model is not bound');
+  assert.equal(btnInsert.disabled, true, 'entry point stays disabled while previewing');
+
+  // The committed parameters travel on the preview payload.
+  assert.ok(preview.payload.parameters && typeof preview.payload.parameters === 'object',
+    'configured parameters ride the preview payload');
+  assert.ok(preview.payload.materialChoices,
+    'configured material choices ride the preview payload');
+
+  // Esc re-arms the disconnected entry point.
+  sandbox.window.GraneteDialog.onPlacementPreviewCancelled(
+    { ok: true, definitionId: 'def-local', reason: 'escape' });
+  assert.equal(btnInsert.disabled, false, 'cancel re-arms insert');
+
+  // The local commit flows through onInsertionResult with placed_via_preview:
+  // success copy WITHOUT the legacy Move-tool hint.
+  btnInsert.click();
+  sandbox.window.GraneteDialog.onPlacementPreviewStarted({ ok: true, definitionId: 'def-local' });
+  sandbox.window.GraneteDialog.onInsertionResult(
+    { success: true, name: 'Bajo Local', placed_via_preview: true, component_count: 5 });
+  assert.equal(btnInsert.disabled, false, 'commit re-arms insert');
+  const toast = el(sandbox, 'toast-message').textContent;
+  assert.ok(/Bajo Local insertado/.test(toast), 'success copy shown');
+  assert.equal(/movelo a su lugar/.test(toast), false,
+    'the preview-lane success must not advertise a Move handoff');
+});
+
+tests.push(() => {
+  // Legacy fallback only: a host WITHOUT the preview callback keeps the
+  // origin-first local insert (and its Move hint is then true).
+  const sandbox = runDialog(false);
+  sandbox.window.GraneteDialog.setCatalog([
+    { furniture_definition_id: 'def-local', name: 'Bajo Local', category: 'kitchen_base',
+      parameters: [{ name: 'widthMm', defaultValue: 600 }] }
+  ]);
+  el(sandbox, 'library-cards-grid').children[0].click();
+  el(sandbox, 'btn-insert').click();
+  assert.ok(sandbox.__bridge.find((c) => c.action === 'insert_furniture'),
+    'legacy origin-first insert remains as the compat fallback');
+  sandbox.window.GraneteDialog.onInsertionResult({ success: true, name: 'Bajo Local' });
+  assert.ok(/movelo a su lugar/.test(el(sandbox, 'toast-message').textContent),
+    'the legacy lane still explains the real Move handoff');
+});
+
 const results = [];
 const names = [
   'legacy place fallback without preview callbacks',
@@ -317,7 +386,9 @@ const names = [
   'commit flows through existing place result handler',
   'commit failure re-arms without false success',
   'connected library insert uses shared preview and re-arms on cancel',
-  'legacy connected create fallback without preview callbacks'
+  'legacy connected create fallback without preview callbacks',
+  'disconnected library insert uses shared preview without legacy insert',
+  'legacy origin-first insert fallback keeps its Move hint'
 ];
 tests.forEach((fn, index) => {
   try {
