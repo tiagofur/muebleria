@@ -24,6 +24,14 @@ fail() {
   exit 1
 }
 
+# Chromium needs a UTF-8 process locale to preserve Unicode download names.
+# Validate before starting Docker or any writable child; never inherit other
+# ambient locale, database, or credential settings into the scoped children.
+BROWSER_LANG="${LANG:-}"
+if [[ ! "${BROWSER_LANG}" =~ ^[A-Za-z][A-Za-z0-9_-]*\.[Uu][Tt][Ff]-?8(@[A-Za-z0-9_-]+)?$ ]]; then
+  fail "LANG must name a UTF-8 locale for the browser gate"
+fi
+
 for command in docker go pnpm curl openssl python3; do
   command -v "${command}" >/dev/null 2>&1 || fail "${command} is required"
 done
@@ -203,6 +211,7 @@ PY
 # a snapshot. Read-only-from-app perspective: admin DSN for fixture seeding
 # only; the verified FLOW always goes through the real API.
 GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
+  LANG="${BROWSER_LANG}"
   ORGANIZATION_TEST_DATABASE_URL="${ORGANIZATION_TEST_DATABASE_URL}"
   ORGANIZATION_GATE_DB_IDENTITY_SHA256="${GATE_DB_IDENTITY_SHA256}"
   MEDIA_DIR="${MEDIA_DIR}"

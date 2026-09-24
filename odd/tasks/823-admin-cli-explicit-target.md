@@ -366,7 +366,8 @@ independently reviewed. One PR, with the approved `size:exception`.
   body assignment/fulfillment; the next navigation could dispose its response.
   The minimal test-only correction awaits route completion before assertion
   and next navigation. Five new candidate gates passed 5/5 after correction.
-- PTX `:307`: on both SHAs, the serial prerequisite prefix passed 3/3;
+- PTX `:307` (initial focused comparison, superseded by the Linux A/B below):
+  on both SHAs, the serial prerequisite prefix passed 3/3;
   after the nearest state-changing predecessor (`engineering-cutting-demand`),
   7/7; after the full immediate CI predecessor prefix (`cutting-demand`,
   `engineering-entry`, `engineering-physical-gate`), 15/15. PDF and PTX emitted
@@ -374,14 +375,16 @@ independently reviewed. One PR, with the approved `size:exception`.
   also emitted `.ptx.manifest.json`. Each final URL was `blob:`; no `/api/`
   request fired in the capture window, so HTTP status, Content-Type,
   Content-Disposition, and non-download error envelope do not exist for the
-  generated PTX file. Classification **4: not reproduced; CI cause remains
-  inconclusive**. No PTX code, test expectation, or timeout was changed.
+  generated PTX file. This comparison alone was inconclusive; the subsequent
+  same-runner A/B isolated the CI filename regression. No PTX product code,
+  test expectation, or timeout was changed.
 - Relevant T2 differences compared: candidate `env -i` passes explicit runtime,
   migration, fixture and media targets; base inherited outer environment but
   still constructed its own disposable URLs. Candidate runs the backend binary
   directly and reaps its PID; base runs a `go run` parent and was additionally
   process-group supervised during diagnosis. Both SHA outcomes above were
-  equivalent for the failing cases. No missing forwarded variable was found.
+  equivalent for those focused cases. The later diagnostic prefix identified
+  the browser child's missing `LANG` as the relevant environment delta.
 - Direct Playwright RED: 6 DB-free tests exposed that URL/markers alone allowed
   mismatched API, DB, role, or expected identity to reach setup. Go handler
   tests failed to compile before implementation. GREEN: the launcher installs
@@ -409,3 +412,52 @@ independently reviewed. One PR, with the approved `size:exception`.
 - Remaining: fresh independent review on the new work-unit HEAD/base, then one
   full exact-head CI run by the leader. PR #839 remains draft and
   `Refs #823` / `Delivery: partial`; the broader #823 acceptance remains open.
+
+## T2 Linux browser filename correction
+
+- Scope and route: delegated direct, one sole writer on the existing productive
+  PR #839 branch; strict TDD from `AGENTS.md`; no diagnostic branch or #460 edits.
+  Existing `size:exception` applies to the cohesive T2 PR. This correction
+  changes only the browser child environment, its actual-launcher regression,
+  and this artifact. Product PTX/CADmatic export remains untouched.
+- Causal evidence: on diagnostic HEAD `c665165bbd828e3f6143b975b83e742763601748`
+  and the same Ubuntu runner image, the 32-test prefix with isolated browser
+  environment failed with `suggestedFilename="download"` for PDF, PTX, and
+  manifest (run 36043055408); forwarding only `LANG` passed 32/32 with their
+  proper extensions (run 36042472576). The DOM `download` attribute/property
+  and blob href were correct before click in both modes. CDP already reported
+  the generic name without `LANG`, so the defect is the Linux browser harness
+  environment rather than exporter output or Playwright's event mapping.
+  Chromium's internal locale conversion is a supported inference, not a traced
+  internal execution path. The diagnostic branch is evidence only, not merged.
+- Safe RED: the focused DB-free real-launcher double failed 10 assertions:
+  UTF-8 `LANG` did not reach Playwright, and missing/non-UTF-8 `LANG` still
+  launched writable children. No PostgreSQL connection occurred.
+- GREEN: the launcher requires a non-empty, recognizable UTF-8 `LANG` before
+  Docker or any writable child. It accepts `.UTF-8`, `.utf8`, and `.UTF8`
+  case-insensitively, rejects unsafe values without echoing them, and adds only
+  that validated value to `GATE_BROWSER_ENV` under `env -i`. `GATE_BASE_ENV`,
+  `GATE_SERVER_ENV`, and `GATE_ADMIN_ENV` are unchanged. The real-launcher
+  double confirms browser-only forwarding; all listed ambient `PG*` keys,
+  ambient DSNs, and sampled credential variables remain excluded. No fallback
+  locale, timeout, filename rewrite, or PTX test relaxation was added.
+- Focused V1: seven Python launcher tests passed with one opt-in real-Go test
+  skipped; the broader DB-free `test_ci_*.py` collection passed 46 tests with
+  the same one skip. `pnpm test` and `pnpm typecheck` passed with all DB connection
+  environment variables absent. V0 `bash -n`, `shellcheck`, and
+  `git diff --check` passed. `verify_affected.py --base origin/main --plan`
+  was read-only and conservatively selected broader jobs; it did not run them.
+  Go source was not changed, so focused Go checks are not applicable to this
+  correction. The new HEAD's operational Ubuntu 32-test prefix, independent
+  review, and full CI remain pending; prior diagnostic runs are not proof for
+  the productive HEAD.
+- Test-shim caveat: Python can set `LC_CTYPE` itself while coercing the C
+  locale, even when `env -i` supplied no locale variables. The shim therefore
+  asserts no `LC_ALL`/`LANGUAGE` forwarding and the launcher array is the
+  evidence that `LC_CTYPE` is not explicitly forwarded; treating Python's
+  post-start `LC_CTYPE` as an inherited leak would be a false positive.
+- Rollback boundary: this `LANG` validation and browser-only forwarding in
+  `scripts/organization-browser-gate.sh` plus its regression in
+  `scripts/test_ci_organization_browser_preparation.py`. The existing T2 DB
+  isolation, direct-Playwright identity handshake, and merged T1 stay intact.
+  Delivery remains `Refs #823` / `Delivery: partial`; #823 remains open.

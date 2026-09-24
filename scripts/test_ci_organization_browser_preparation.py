@@ -18,7 +18,8 @@ DEFAULT_GATE = ROOT / "scripts/organization-browser-gate.sh"
 
 class BrowserPreparationLauncherTest(unittest.TestCase):
     def run_gate_with_doubles(self, preflight_exit, *, real_preflight=False, poison=None,
-                              fail_admin=False, cancel_after_server=False):
+                              fail_admin=False, cancel_after_server=False,
+                              browser_lang="en_US.UTF-8"):
         with tempfile.TemporaryDirectory(prefix="browser-preparation-double-") as tmp:
             tmpdir = Path(tmp)
             capture = tmpdir / "children.jsonl"
@@ -69,7 +70,12 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "        'media_dir': os.environ.get('MEDIA_DIR'),\n"
                 + "        'isolated': os.environ.get('ORGANIZATION_TEST_ISOLATED'),\n"
                 + "        'testdb': os.environ.get('GRANETE_TEST_DATABASE'),\n"
-                + "        'pg_keys': sorted(key for key in os.environ if key.startswith('PG'))}\n"
+                + "        'lang': os.environ.get('LANG'),\n"
+                # Python may set LC_CTYPE itself while coercing the C locale;
+                # its os.environ cannot attest the raw env passed to execve.
+                + "        'other_locale_keys': sorted(key for key in ('LC_ALL', 'LANGUAGE') if key in os.environ),\n"
+                + "        'pg_keys': sorted(key for key in os.environ if key.startswith('PG')),\n"
+                + "        'ambient_secret_keys': sorted(key for key in ('AMBIENT_SECRET', 'AWS_SECRET_ACCESS_KEY') if key in os.environ)}\n"
                 + "    with capture.open('a') as stream: stream.write(json.dumps(record) + '\\n')\n"
                 + "    if name == 'go' and args[:2] == ['run', './cmd/testdb-preflight']:\n"
                 + "        if real_preflight:\n"
@@ -101,12 +107,25 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "DATABASE_URL": "postgres://ambient:secret@127.0.0.1:5445/muebles",
                 "MIGRATION_DATABASE_URL": "postgres://ambient:secret@127.0.0.1:5445/muebles",
                 "PGHOST": "persistent.example.invalid",
+                "PGHOSTADDR": "203.0.113.1",
                 "PGDATABASE": "muebles",
                 "PGPORT": "5445",
                 "PGSERVICE": "habitual",
+                "PGSERVICEFILE": "/nonexistent/ambient-service-file",
+                "PGOPTIONS": "-c search_path=public",
                 "PGPASSWORD": "ambient-secret",
+                "PGPASSFILE": "/nonexistent/ambient-passfile",
+                "LC_ALL": "en_US.UTF-8",
+                "LC_CTYPE": "en_US.UTF-8",
+                "LANGUAGE": "en_US:en",
+                "AMBIENT_SECRET": "must-not-reach-children",
+                "AWS_SECRET_ACCESS_KEY": "must-not-reach-children",
                 "MEDIA_DIR": "ambient-media-dir-must-not-reach-children",
             })
+            if browser_lang is None:
+                env.pop("LANG", None)
+            else:
+                env["LANG"] = browser_lang
             gate = Path(os.environ.get("ORGANIZATION_GATE_TEST_SCRIPT", DEFAULT_GATE))
             command = ["bash", str(gate), "tests/organization/prequote-design.spec.ts"]
             if cancel_after_server:
@@ -161,6 +180,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             self.assertEqual(record['isolated'], '1', record['command'])
             self.assertEqual(record['testdb'], '1', record['command'])
             self.assertEqual(record['pg_keys'], [], record['command'])
+            self.assertEqual(record['other_locale_keys'], [], record['command'])
+            self.assertEqual(record['ambient_secret_keys'], [], record['command'])
         browser = [r for r in records if r['command'].startswith('pnpm ')]
         self.assertEqual(browser[0]['fixture'], migration)
         self.assertRegex(browser[0]['identity_digest'], r'^[0-9a-f]{64}$')
@@ -169,6 +190,24 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         self.assertTrue(server['media_dir'].endswith('/media'))
         self.assertIn('/granete-organization-gate.', server['media_dir'])
         self.assertEqual(browser[0]['media_dir'], server['media_dir'])
+        self.assertEqual(browser[0]['lang'], 'en_US.UTF-8')
+        self.assertTrue(all(r['lang'] is None for r in records if not r['command'].startswith('pnpm ')))
+
+    def test_browser_accepts_utf8_locale_spellings_without_forwarding_to_other_children(self):
+        for value in ('en_US.utf8', 'C.UTF8', 'en_US.uTf-8'):
+            with self.subTest(lang=value):
+                result, records, _ = self.run_gate_with_doubles(0, browser_lang=value)
+                self.assertEqual(result.returncode, 0, result.stderr[-800:])
+                self.assertEqual(records[-1]['lang'], value)
+                self.assertTrue(all(r['lang'] is None for r in records[:-1]))
+
+    def test_missing_or_non_utf8_locale_stops_before_writable_children(self):
+        for value in (None, '', 'C', 'en_US.ISO-8859-1', 'en_US.UTF-16', 'en_US.UTF-8\nPGHOST=muebles'):
+            with self.subTest(lang=value):
+                result, records, _ = self.run_gate_with_doubles(0, browser_lang=value)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(records, [], 'writable child launched with unsafe LANG')
+                self.assertIn('LANG', result.stderr)
 
     def test_admin_failure_reaps_only_the_gate_server(self):
         unrelated = subprocess.Popen(['sleep', '30'])
