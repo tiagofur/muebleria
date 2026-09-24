@@ -477,26 +477,35 @@ module Granete
         end
       end
 
-      # Horizontal host faces (either winding, NESTED included via the
-      # accumulated world transform) as FINITE base planes — mirrors the
+      # Horizontal host faces (either winding, nested containers included
+      # via the accumulated world transform — Group#entities vs
+      # ComponentInstance#definition.entities, HOST-FAITHFUL) as FINITE
+      # base planes (vertex-derived world footprint) — mirrors the
       # controller scan so the picked wall and the floor COMPOSE through
       # the real tool.
       def scan_base_planes(entities, world_transform)
         mm = 25.4
         planes = []
         entities.each do |entity|
-          if entity.is_a?(Sketchup::Face)
+          case entity
+          when Sketchup::Face
             normal = entity.normal.transform(world_transform)
             next unless normal.z.abs > 1.0 - 1e-6 && normal.x.abs < 1e-6 && normal.y.abs < 1e-6
 
-            bounds = entity.bounds.transform(world_transform)
-            position = entity.vertices.first.position.transform(world_transform)
-            planes << { 'point_mm' => [position.x * mm, position.y * mm, position.z * mm],
-                        'normal_mm' => [0.0, 0.0, 1.0],
-                        'footprint_min_mm' => [bounds.min.x * mm, bounds.min.y * mm, bounds.min.z * mm],
-                        'footprint_max_mm' => [bounds.max.x * mm, bounds.max.y * mm, bounds.max.z * mm] }
-          elsif entity.respond_to?(:entities) && entity.respond_to?(:transformation)
+            positions = entity.vertices
+                              .map { |vertex| vertex.position.transform(world_transform) }
+                              .map { |position| [position.x * mm, position.y * mm, position.z * mm] }
+            next if positions.empty?
+
+            min = [0, 1, 2].map { |axis| positions.map { |point| point[axis] }.min }
+            max = [0, 1, 2].map { |axis| positions.map { |point| point[axis] }.max }
+            planes << { 'point_mm' => positions.first, 'normal_mm' => [0.0, 0.0, 1.0],
+                        'footprint_min_mm' => min, 'footprint_max_mm' => max }
+          when Sketchup::Group
             planes.concat(scan_base_planes(entity.entities, world_transform * entity.transformation))
+          when Sketchup::ComponentInstance
+            planes.concat(scan_base_planes(entity.definition.entities,
+                                           world_transform * entity.transformation))
           end
         end
         planes

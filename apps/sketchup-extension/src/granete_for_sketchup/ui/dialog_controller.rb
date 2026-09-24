@@ -1063,18 +1063,25 @@ module Granete
         end
 
         # Recursive horizontal-face scan: faces emit WORLD planes;
-        # Groups/ComponentInstances recurse with the accumulated
-        # transform (parent * child, SketchUp composition semantics) so
-        # room fixtures nested inside containers participate with their
-        # true world placement.
+        # containers recurse with the accumulated transform (parent *
+        # child, SketchUp composition semantics) so room fixtures nested
+        # inside Groups/Components participate with their true world
+        # placement. HOST-FAITHFUL access (a real ComponentInstance has
+        # no #entities — its content lives on the definition):
+        #   Group              → entity.entities
+        #   ComponentInstance  → entity.definition.entities
         def scan_base_planes(entities, world_transform)
           planes = []
           entities.each do |entity|
-            if entity.is_a?(::Sketchup::Face)
+            case entity
+            when ::Sketchup::Face
               plane = placement_face_world_plane(entity, world_transform)
               planes << plane if plane
-            elsif entity.respond_to?(:entities) && entity.respond_to?(:transformation)
+            when ::Sketchup::Group
               planes.concat(scan_base_planes(entity.entities, world_transform * entity.transformation))
+            when ::Sketchup::ComponentInstance
+              planes.concat(scan_base_planes(entity.definition.entities,
+                                             world_transform * entity.transformation))
             end
           end
           planes
@@ -1083,21 +1090,38 @@ module Granete
         # One horizontal face as a WORLD base-plane descriptor: the world
         # normal must stay vertical (a tilted container tilts its floors
         # — rejected), and the plane carries the face's FINITE world
-        # footprint (transformed bounds XY interval) plus a world plane
-        # point, so the engine never treats a distant platform as an
-        # infinite floor.
+        # footprint (the transformed VERTEX positions folded to a world
+        # XY interval — the real Geom::BoundingBox has no #transform to
+        # lean on) plus a world plane point, so the engine never treats
+        # a distant platform as an infinite floor.
         def placement_face_world_plane(entity, world_transform)
           return nil unless placement_local_horizontal_face?(entity)
+          return nil unless placement_world_normal_vertical?(entity.normal, world_transform)
 
-          normal = entity.normal.transform(world_transform)
-          return nil unless normal.x.to_f.abs < UNIT_EPSILON && normal.y.to_f.abs < UNIT_EPSILON &&
-                            normal.z.to_f.abs > 1.0 - UNIT_EPSILON
+          positions = entity.vertices
+                            .map { |vertex| vertex.position.transform(world_transform) }
+                            .map { |position| point_mm(position) }
+          return nil if positions.empty?
 
-          bounds = entity.bounds.transform(world_transform)
-          position = entity.vertices.first.position.transform(world_transform)
-          { 'point_mm' => point_mm(position), 'normal_mm' => [0.0, 0.0, 1.0],
-            'footprint_min_mm' => point_mm(bounds.min),
-            'footprint_max_mm' => point_mm(bounds.max) }
+          footprint = world_footprint(positions)
+          { 'point_mm' => positions.first, 'normal_mm' => [0.0, 0.0, 1.0],
+            'footprint_min_mm' => footprint[0], 'footprint_max_mm' => footprint[1] }
+        end
+
+        # The face's WORLD normal stays vertical (a tilted container
+        # tilts its floors — rejected).
+        def placement_world_normal_vertical?(normal, world_transform)
+          world = normal.transform(world_transform)
+          world.x.to_f.abs < UNIT_EPSILON && world.y.to_f.abs < UNIT_EPSILON &&
+            world.z.to_f.abs > 1.0 - UNIT_EPSILON
+        end
+
+        # World min/max corner pair folded from transformed vertex
+        # positions (mm triples).
+        def world_footprint(positions)
+          min = [0, 1, 2].map { |axis| positions.map { |point| point[axis] }.min }
+          max = [0, 1, 2].map { |axis| positions.map { |point| point[axis] }.max }
+          [min, max]
         end
 
         # A face whose LOCAL normal is vertical (either winding).

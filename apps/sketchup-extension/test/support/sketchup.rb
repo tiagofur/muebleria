@@ -48,17 +48,6 @@ module Geom
   class BoundingBox
     attr_accessor :width, :height, :depth, :min, :max
 
-    # Host-faithful: BoundingBox#transform returns the axis-aligned box
-    # of the transformed corners.
-    def transform(transformation)
-      corners = [min.x, max.x].product([min.y, max.y]).product([min.z, max.z])
-                 .map { |(px, py), pz| Point3d.new(px, py, pz).transform(transformation) }
-      box = BoundingBox.new
-      box.min = Point3d.new(corners.map(&:x).min, corners.map(&:y).min, corners.map(&:z).min)
-      box.max = Point3d.new(corners.map(&:x).max, corners.map(&:y).max, corners.map(&:z).max)
-      box
-    end
-
     def initialize(width = 0.0, height = 0.0, depth = 0.0)
       @width = width
       @height = height
@@ -455,12 +444,6 @@ module SketchupStub
       # definition box and tests may override per instance).
       @bounds = definition.bounds
       @persistent_id = SketchupStub.next_persistent_id
-    end
-
-    # Host-faithful: ComponentInstance#entities exposes the definition's
-    # entities (nested scans traverse instances like the real API).
-    def entities
-      @definition.entities
     end
 
     def valid?

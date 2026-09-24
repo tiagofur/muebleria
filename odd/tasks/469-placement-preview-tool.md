@@ -75,10 +75,15 @@ it lands, wall/face snapping is not "complete".
 ### Observed evidence (this candidate — final HEAD after both review rounds)
 
 - `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle; env pin
-  per memory) at the frozen candidate: RuboCop 227 files 0 offenses;
-  1098 unit runs / 7209 assertions, 0 failures; 6 boundary runs / 3359
+  per memory) at the frozen candidate: RuboCop 228 files 0 offenses;
+  1101 unit runs / 7215 assertions, 0 failures; 6 boundary runs / 3359
   assertions; RBZ deterministic readback, sha256
-  `46e8eafe002d98cd7735ae78316123ac1d01c2324423126737e5fa50000d8170`.
+  `ea307aa21cd8da4867f1bd3a3dbca2931a32997eae3ada4271996c8b83f640c5`.
+- New `host_stub_faithfulness_test.rb` (3 runs, review r3 negative
+  proof): the stub must never re-expose `Geom::BoundingBox#transform`
+  nor `ComponentInstance#entities` — APIs the REAL host does not have;
+  the faithful traversal (`Group#entities`, ComponentInstance via
+  `definition.entities`) is pinned positively.
 - Engine suite 36 runs: walls at 30°/37.5°/45°/23° (back on the rotated
   plane, eye-side orientation, reversed-wall identical placement, exact
   perpendicular gap 40mm along the normal — with the explicit negative
@@ -144,6 +149,23 @@ it lands, wall/face snapping is not "complete".
 2. **P2 — evidencia consistente**: el body del PR y este artifact citan
    exactamente el HEAD final (runs/assertions/archivos/RBZ arriba); los
    números del primer candidato quedan sólo en el historial de pushes.
+
+### Review corrections (ronda 3 sobre el candidato, mismo PR)
+
+1. **P1 — APIs ficticias del stub eliminadas**: el footprint mundial de
+   un base plane se calcula desde las POSICIONES de los vértices
+   transformadas (`Face#vertices → position.transform(world) → min/max`)
+   — el `Geom::BoundingBox#transform` que el stub había inventado NO
+   existe en la API real y se eliminó. La recursión es HOST-FAITHFUL:
+   `Group → entity.entities`, `ComponentInstance →
+   entity.definition.entities` (un ComponentInstance real no tiene
+   #entities); el `ComponentInstanceStub#entities` inventado se
+   eliminó. Prueba negativa nueva (`host_stub_faithfulness_test.rb`)
+   prohíbe reintroducir ambas APIs fantasma y fija el camino fiel; los
+   tests de piso anidado en Group + Component siguen pasando sin APIs
+   inventadas. Se preservan footprint finito, transforms acumulados,
+   1 snapshot por gesto, 1 refresh en click y cero backend por mouse
+   move.
 
 ## Scope separation from parallel work (coordination registry)
 
