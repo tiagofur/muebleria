@@ -192,7 +192,22 @@ func TestUnsafe(t *testing.T) {
         violations_mixed = check_go_content_for_unguarded_db_url("foo_test.go", mixed_content)
         self.assertTrue(len(violations_mixed) > 0, "scanner must detect unsafe function even if file has safe function")
 
-        # 5. testdb_guard_test.go itself does not trigger false positives
+        # 5. Top-level variable reading DATABASE_URL => MUST FAIL
+        toplevel_var_content = """package foo_test
+import (
+    "os"
+    "testing"
+)
+var unsafeDSN = os.Getenv("DATABASE_URL")
+
+func TestFoo(t *testing.T) {
+    _ = unsafeDSN
+}
+"""
+        violations_toplevel = check_go_content_for_unguarded_db_url("foo_test.go", toplevel_var_content)
+        self.assertTrue(len(violations_toplevel) > 0, "scanner must detect top-level var reading os.Getenv(DATABASE_URL)")
+
+        # 6. testdb_guard_test.go itself does not trigger false positives
         guard_test_path = ROOT / "backend-go/internal/storage/testdb_guard_test.go"
         if guard_test_path.exists():
             violations_guard = check_go_content_for_unguarded_db_url(
@@ -210,23 +225,30 @@ def check_go_content_for_unguarded_db_url(rel_path: str, content: str) -> list[s
     ):
         return []
 
-    # Parse functions and check each function individually.
-    # Any function reading os.Getenv("DATABASE_URL") MUST invoke ValidateTestDatabaseURL,
+    # Any access to DATABASE_URL outside of a function (e.g. global/top-level var) is strictly forbidden.
+    # Furthermore, any function reading os.Getenv("DATABASE_URL") MUST invoke ValidateTestDatabaseURL,
     # ValidateTestAdminDatabaseURL, TestDatabaseURL, or TestAdminDatabaseURL within that same function.
     violations = []
-    # Pattern to split into functions (func ... { ... })
+    # Pattern to find function start: func ... (
     func_pattern = re.compile(r'(func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\s*\([^)]*\)[^{]*\{)', re.MULTILINE)
     
-    # We find all function declarations and their positions
     matches = list(func_pattern.finditer(content))
+    
+    # 1. Check top-level content before the first function, between functions, and after the last function
     if not matches:
-        # If not inside a function, check top-level lines
-        lines = content.splitlines()
-        for line_no, line in enumerate(lines, start=1):
+        # Whole file is top-level (no functions)
+        for line_no, line in enumerate(content.splitlines(), start=1):
             if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
-                violations.append(f"{rel_path}:{line_no}: reads os.Getenv(\"DATABASE_URL\") outside of guarded function")
-        return violations
+                violations.append(f"{rel_path}:{line_no}: top-level code reads os.Getenv(\"DATABASE_URL\") outside of guarded function")
+    else:
+        # Check before first function
+        top_before = content[:matches[0].start()]
+        if 'os.Getenv("DATABASE_URL")' in top_before or "os.Getenv('DATABASE_URL')" in top_before:
+            for line_no, line in enumerate(top_before.splitlines(), start=1):
+                if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
+                    violations.append(f"{rel_path}:{line_no}: top-level var/code reads os.Getenv(\"DATABASE_URL\") outside of function")
 
+    # 2. Check each function individually
     for i, match in enumerate(matches):
         start_pos = match.start()
         func_name = match.group(2)
@@ -242,11 +264,15 @@ def check_go_content_for_unguarded_db_url(rel_path: str, content: str) -> list[s
                 or "TestAdminDatabaseURL" in func_body
             )
             if not has_guard_in_func:
-                # Find line number
-                line_no = content[:start_pos].count("\n") + 1
-                violations.append(
-                    f"{rel_path}:{line_no}: function {func_name} reads os.Getenv(\"DATABASE_URL\") without calling ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL"
-                )
+                # Find line number within function
+                func_lines_before = content[:start_pos].count("\n")
+                for line_idx, line in enumerate(func_body.splitlines(), start=1):
+                    if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
+                        line_no = func_lines_before + line_idx
+                        violations.append(
+                            f"{rel_path}:{line_no}: function {func_name} reads os.Getenv(\"DATABASE_URL\") without calling ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL"
+                        )
+                        break
 
     return violations
 

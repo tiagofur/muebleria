@@ -143,6 +143,8 @@ func TestGuardDoesNotLeakPassword(t *testing.T) {
 		"postgres://admin:" + secretPassword + "@localhost:5445/muebles?sslmode=disable",
 		"postgres://admin:" + secretPassword + "@localhost:5432/granete_dev",
 		"postgres://admin:" + secretPassword + "@localhost:5432/postgres",
+		"postgres://admin:" + secretPassword + "@localhost:5432/granete_test%zz",
+		"postgres://admin:" + secretPassword + "@[::1]:namedport/granete_test",
 	}
 
 	for _, dsn := range rejectedDSNs {
@@ -151,10 +153,23 @@ func TestGuardDoesNotLeakPassword(t *testing.T) {
 			t.Fatalf("expected error for DSN %s", dsn)
 		}
 		if strings.Contains(err.Error(), secretPassword) {
-			t.Errorf("error leaked password: %q contains %q", err.Error(), secretPassword)
+			t.Errorf("ValidateTestDatabaseURL leaked password for DSN %q: %q contains %q", dsn, err.Error(), secretPassword)
 		}
 		if strings.Contains(err.Error(), "admin:") {
-			t.Errorf("error leaked userinfo: %q", err.Error())
+			t.Errorf("ValidateTestDatabaseURL leaked userinfo for DSN %q: %q", dsn, err.Error())
+		}
+
+		if !strings.HasSuffix(dsn, "/postgres") {
+			adminErr := storage.ValidateTestAdminDatabaseURL(dsn)
+			if adminErr == nil {
+				t.Fatalf("expected error for admin DSN %s", dsn)
+			}
+			if strings.Contains(adminErr.Error(), secretPassword) {
+				t.Errorf("ValidateTestAdminDatabaseURL leaked password for DSN %q: %q contains %q", dsn, adminErr.Error(), secretPassword)
+			}
+			if strings.Contains(adminErr.Error(), "admin:") {
+				t.Errorf("ValidateTestAdminDatabaseURL leaked userinfo for DSN %q: %q", dsn, adminErr.Error())
+			}
 		}
 	}
 }

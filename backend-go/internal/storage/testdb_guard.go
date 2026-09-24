@@ -65,7 +65,9 @@ func parseAndValidateCommon(rawURL string) (*url.URL, string, error) {
 
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: invalid database URL (%v)", ErrTestDBGuardRejected, err)
+		// url.Parse errors include the raw URL which may leak credentials (e.g. parse "postgres://user:pass@...").
+		// Redact raw URL details to prevent credential leaks on malformed input.
+		return nil, "", fmt.Errorf("%w: invalid database URL (%s)", ErrTestDBGuardRejected, SanitizeDatabaseURL(rawURL))
 	}
 
 	dbName := strings.TrimPrefix(u.Path, "/")
@@ -190,7 +192,7 @@ func TestAdminDatabaseURL(t testingT) string {
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		t.Fatalf("TestAdminDatabaseURL parse error: %v", err)
+		t.Fatalf("TestAdminDatabaseURL parse error: invalid database URL (%s)", SanitizeDatabaseURL(raw))
 	}
 	u.Path = "/postgres"
 	adminURL := u.String()
