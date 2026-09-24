@@ -66,6 +66,48 @@ class PtxDiagnosticContractTest(unittest.TestCase):
         self.assertIn('python3 scripts/ptx-diagnostic-launcher.py scripts/organization-browser-gate.sh', workflow)
         self.assertNotIn('git show 24b014906e4fdd0963d4017df4865fc6527d9bca:scripts/organization-browser-gate.sh', workflow)
 
+    def test_preclick_snapshot_and_native_signal_are_independent_of_handler(self):
+        panel = (ROOT / 'packages/ui/src/production/ProductionOrderOptimizationPanel.tsx').read_text()
+        spec = (ROOT / 'tests/organization/engineering-state.spec.ts').read_text()
+        self.assertIn('data-ptx-diagnostic-state', panel)
+        self.assertIn('__PTX_DIAG_SELECTION__', spec)
+        self.assertIn("Page.downloadWillBegin", spec)
+        self.assertIn("Page.enable", spec)
+        self.assertNotIn('setDownloadBehavior', spec)
+
+    def test_missing_trace_and_events_still_yield_safe_failure_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / 'raw'
+            raw.mkdir()
+            (raw / 'launcher.log').write_text('Running 32 tests using 1 worker\n')
+            safe = root / 'safe'
+            sanitize_module.summarize_failure(raw, safe, 1, 'candidate')
+            sanitize_module.sanitize(raw, safe, 1, 'candidate')
+            context = (safe / 'sanitized-failure-context.txt').read_text()
+            self.assertIn('events=missing', context)
+            self.assertIn('trace=missing', context)
+            self.assertNotIn('Authorization', context)
+            with self.assertRaisesRegex(ValueError, 'missing expected PTX evidence'):
+                sanitize_module.sanitize(raw, root / 'false_success', 0, 'candidate')
+
+    def test_failure_context_does_not_echo_raw_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / 'raw'
+            raw.mkdir()
+            (raw / 'launcher.log').write_text(
+                'Running 32 tests using 1 worker\n'
+                '✘ engineering-state.spec.ts:308 raw Authorization: Bearer forbidden\n'
+                'Timed out 20000ms exceeded\n'
+            )
+            safe = root / 'safe'
+            sanitize_module.summarize_failure(raw, safe, 1, 'candidate')
+            context = (safe / 'sanitized-failure-context.txt').read_text()
+            self.assertIn('failed_spec=engineering-state.spec.ts', context)
+            self.assertIn('failure_codes=timeout', context)
+            self.assertNotIn('Bearer', context)
+
 
 if __name__ == '__main__':
     unittest.main()

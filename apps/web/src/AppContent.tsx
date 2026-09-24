@@ -827,6 +827,23 @@ export function AppContent({
     machineOutputResolved,
     machineOutputScopeKey,
   ]);
+  useEffect(() => {
+    if (import.meta.env.VITE_PTX_DIAGNOSTIC !== '1') return;
+    const selection = 'selection' in cuttingOutputSelectionState
+      ? cuttingOutputSelectionState.selection
+      : null;
+    (window as typeof window & { __PTX_DIAG_SELECTION__?: object }).__PTX_DIAG_SELECTION__ = {
+      status: cuttingOutputSelectionState.status,
+      machineProfileId: selection?.machineProfileId ?? null,
+      machineProfileRevisionId: selection?.machineProfileRevisionId ?? null,
+      compatibilityProfileId: selection?.outputCompatibilityProfileId ?? null,
+      compatibilityProfileRevisionId: selection?.outputCompatibilityProfileRevisionId ?? null,
+      compatibilityProfileDigest: selection?.outputCompatibilityProfileDigest ?? null,
+      postprocessorAdapterId: selection?.postprocessorAdapterId ?? null,
+      postprocessorAdapterVersion: selection?.postprocessorAdapterVersion ?? null,
+      postprocessorImplementationDigest: selection?.postprocessorImplementationDigest ?? null,
+    };
+  }, [cuttingOutputSelectionState]);
   // Optimización: display summary of the #591 cutting target. Everything is
   // derived from the authoritative resolver + catalog — the panel only
   // presents it and never infers compatibility.

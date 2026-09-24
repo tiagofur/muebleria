@@ -466,3 +466,44 @@ be uploaded, and a sanitizer failure withholds diagnostic evidence.
 D1a diagnostic work-unit commit: `27ef22ea721ccac0ac258bc5018297c30c27b167`
 (`test(ci): add temporary PTX prefix diagnostic lab`). This is not a PR
 delivery and has no review, Ubuntu runtime result, or issue-closure authority.
+
+D1a reopened after independent read-only review of exact HEAD
+`2169f9cdc26579b0b70ce9344b2bcc0454061f65`: pre-click evidence must
+include plan/selection and actual disabled reason even if the handler never
+runs; handler errors need a safe cause code; a passive Chromium download
+signal should be attempted without changing download policy; and missing
+trace/events must not erase all sanitized failure context. One consolidated
+diagnostic-only correction is authorized. DB-free RED: the new pre-click/CDP
+contract check failed, and the missing-artifact context check errored because
+the summarizer did not exist. No database or browser suite ran for RED.
+
+Consolidated correction GREEN: before the PTX click, the test reads the
+panel's diagnostic-only DOM snapshot (CutPlan ID/version/frozen state,
+resolved output and exact disabled reasons), the shell's selected
+machine/profile/postprocessor tuple, and server engineering status/version.
+Those snapshots do not depend on the click handler running. Handler exceptions
+now report a fixed phase/cause code and allowlisted error kind, never the raw
+message. A Chromium page CDP session subscribes to `Page.downloadWillBegin`
+after `Page.enable`; it does not call `setDownloadBehavior`. A DB-free synthetic
+Blob download observed the native Page event and Playwright download event
+once each after enabling the Page domain; without that enable call, the native
+event count was zero. Absence on another runner is still inconclusive.
+Playwright documents CDP sessions/events at
+https://playwright.dev/docs/api/class-cdpsession and Chromium documents the
+Page event at https://chromedevtools.github.io/devtools-protocol/tot/Page/.
+The sanitizer now emits only fixed failure codes, a known failed-spec name,
+artifact-presence flags, and an allowlisted last stage when raw PTX events or
+trace are missing. Raw error text never uploads. A successful prefix without
+events/trace still fails closed; a sensitive trace/event fails the privacy
+screen. The runner always attempts to upload the safe failure context even
+when trace screening fails.
+
+Correction checks: DB-free RED was observed in two new contract cases; GREEN
+6/6 diagnostic contract cases, 44 existing CI tests (one skipped), `pnpm
+typecheck`, Python compile, `bash -n`, YAML parse (10 jobs), and `git diff
+--check` passed. The synthetic unreachable-loopback Playwright `--list`
+still selected exactly 32 tests in 8 files ending at the PTX case. The six
+frontend/test probe files apply cleanly over exact base `6184b4d2`; the
+base's launcher receives only artifact-copy/browser diagnostic hooks. No
+database connection, Ubuntu execution, PR change, or product delivery was
+claimed. Fresh independent review is pending on the corrected exact HEAD.

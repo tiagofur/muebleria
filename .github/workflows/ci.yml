@@ -47,6 +47,7 @@ jobs:
             candidate) ;;
             base)
               git diff --binary 24b014906e4fdd0963d4017df4865fc6527d9bca..HEAD -- \
+                apps/web/src/AppContent.tsx \
                 apps/web/src/exportCutPlanPtx.ts \
                 apps/web/src/exportOptimizer.ts \
                 apps/web/src/exports/useExportHandlers.ts \
@@ -119,6 +120,17 @@ jobs:
           result=$?
           printf '%s\n' "${result}" > "${RUNNER_TEMP}/ptx-diagnostic/launcher-exit"
           exit 0
+      - name: Preserve allowlisted failure context without raw errors
+        if: always()
+        env:
+          PTX_TARGET: ${{ inputs.ptx_target }}
+        run: |
+          result="$(cat "${RUNNER_TEMP}/ptx-diagnostic/launcher-exit" 2>/dev/null || printf '125')"
+          python3 scripts/ptx-diagnostic-sanitize.py \
+            --raw "${RUNNER_TEMP}/ptx-diagnostic/raw" \
+            --output "${RUNNER_TEMP}/ptx-diagnostic/safe" \
+            --status "${result}" \
+            --target "${PTX_TARGET}" --context-only
       - name: Privacy-screen PTX artifacts
         id: sanitize
         env:
@@ -134,7 +146,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ptx-runner-metadata
-          path: ${{ runner.temp }}/ptx-diagnostic/safe/runner-metadata.txt
+          path: |
+            ${{ runner.temp }}/ptx-diagnostic/safe/runner-metadata.txt
+            ${{ runner.temp }}/ptx-diagnostic/safe/sanitized-failure-context.txt
           if-no-files-found: ignore
           retention-days: 3
       - name: Upload privacy-screened PTX evidence
@@ -147,6 +161,7 @@ jobs:
             ${{ runner.temp }}/ptx-diagnostic/safe/ptx-trace-sanitized.zip
             ${{ runner.temp }}/ptx-diagnostic/safe/ptx-screenshot.png
             ${{ runner.temp }}/ptx-diagnostic/safe/sanitized-log.txt
+            ${{ runner.temp }}/ptx-diagnostic/safe/sanitized-failure-context.txt
           if-no-files-found: error
           retention-days: 3
       - name: Preserve prefix outcome

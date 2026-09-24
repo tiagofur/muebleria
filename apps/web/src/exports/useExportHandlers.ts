@@ -57,6 +57,7 @@ import {
 import { generateSelectedCuttingOutput } from '@granete/excel';
 import { runExport, type ExportDelivery } from './runExport';
 import {
+  CuttingOutputUnavailableError,
   runWithCuttingOutputAuthority,
   type CuttingOutputSelectionState,
 } from './cuttingOutputAuthority';
@@ -500,6 +501,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
       const mark = (stage: string, extra: Record<string, unknown> = {}) => {
         if (diagnostic) console.info('__PTX_DIAG__ ' + JSON.stringify({ stage, ...extra }));
       };
+      let diagnosticPhase = 'configuration';
       mark('app-handler-entry', {
         projectId: cutPlan.projectId,
         cutPlanId: cutPlan.id,
@@ -530,6 +532,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
           cuttingOutputSelectionState,
           {
             selected: async (selection) => {
+              diagnosticPhase = 'generation';
               mark('generation-start', { route: 'configured', adapterId: selection.postprocessorAdapterId });
               const bundles = await generateSelectedCuttingOutput(
                 cutPlan,
@@ -538,6 +541,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
                 manufacturingLabels ? { manufacturingLabels } : undefined,
               );
               mark('generation-end', { route: 'configured', bundleCount: bundles.length });
+              diagnosticPhase = 'delivery';
               return downloadCuttingArtifactBundles(
                 bundles,
                 cutPlan.projectName || cutPlan.projectId,
@@ -546,6 +550,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
               );
             },
             legacy: () => {
+              diagnosticPhase = 'legacy-generation-or-delivery';
               mark('legacy-route-start');
               return downloadCutPlanPtx(cutPlan, {
                 projectName: cutPlan.projectName,
@@ -555,6 +560,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             },
           },
         );
+        diagnosticPhase = 'toast';
         mark('delivery-return', { kind: result.kind, fileCount: result.filesCount, fileName: result.fileName });
         const kindLabel = result.kind.toUpperCase();
         toast({
@@ -564,7 +570,20 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             : `✓ ${kindLabel} generado`,
         });
       } catch (err) {
-        mark('handler-error', { errorName: err instanceof Error ? err.name : typeof err });
+        mark('handler-error', {
+          causeCode: err instanceof CuttingOutputUnavailableError
+            ? `selection_${err.status}`
+            : `${diagnosticPhase}_exception`,
+          errorKind: err instanceof CuttingOutputUnavailableError
+            ? 'CuttingOutputUnavailableError'
+            : err instanceof TypeError
+              ? 'TypeError'
+              : err instanceof RangeError
+                ? 'RangeError'
+                : err instanceof Error
+                  ? 'Error'
+                  : 'NonError',
+        });
         toast({
           type: 'error',
           message:

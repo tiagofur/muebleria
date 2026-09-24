@@ -1207,6 +1207,32 @@ export function ProductionOrderOptimizationPanel({
                       (activeCuttingOutputTarget != null && !activeCuttingOutputTarget.ready)
                     }
                     data-testid="prod-opt-export-ptx"
+                    data-ptx-diagnostic-state={
+                      typeof window !== 'undefined' &&
+                      (window as typeof window & { __PTX_DIAGNOSTIC__?: boolean }).__PTX_DIAGNOSTIC__
+                        ? JSON.stringify({
+                            projectId: project.id,
+                            cutPlanId: currentCutPlan?.id ?? null,
+                            cutPlanVersion: currentCutPlan?.version ?? null,
+                            cutPlanFrozen: currentCutPlan?.isFrozen ?? null,
+                            releaseId: currentCutPlan?.releaseBase?.releaseId ?? null,
+                            outputStatus: activeCuttingOutputTarget?.status ?? 'legacy',
+                            outputReady: activeCuttingOutputTarget?.ready ?? true,
+                            outputProfile: activeCuttingOutputTarget?.profileLabel ?? null,
+                            outputFormat: activeCuttingOutputTarget?.formatLabel ?? 'PTX',
+                            disabledReasons: [
+                              exportBusy ? 'export_busy' : null,
+                              !currentCutPlan ? 'plan_missing' : null,
+                              !onExportCutPlanPtx ? 'callback_missing' : null,
+                              exportsStale ? 'plan_stale' : null,
+                              ptxMode === 'by-material' && planMaterials.length === 0 ? 'materials_missing' : null,
+                              activeCuttingOutputTarget != null && !activeCuttingOutputTarget.ready
+                                ? activeCuttingOutputTarget.blockerMessage
+                                : null,
+                            ].filter(Boolean),
+                          })
+                        : undefined
+                    }
                     title={
                       activeCuttingOutputTarget != null && !activeCuttingOutputTarget.ready
                         ? 'La salida configurada está bloqueada: revisá el motivo arriba.'

@@ -1,4 +1,4 @@
-import { expect, test, type Download, type Page } from '@playwright/test';
+import { expect, test, type CDPSession, type Download, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
@@ -326,7 +326,9 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
             record('frontend-marker-invalid');
           }
         } else if (message.type() === 'error') {
-          record('console-error', { locationPath: new URL(message.location().url || page.url()).pathname });
+          let locationPath = 'unavailable';
+          try { locationPath = new URL(message.location().url || page.url()).pathname; } catch { /* no URL content recorded */ }
+          record('console-error', { locationPath });
         }
       });
       page.on('pageerror', (error) => record('page-error', { name: error.name }));
@@ -357,6 +359,27 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
       record('download', { fileName: download.suggestedFilename(), count: downloads.length });
     };
     page.on('download', capture);
+    let cdpSession: CDPSession | undefined;
+    let cdpNativeCount = 0;
+    if (diagnostic) {
+      try {
+        cdpSession = await page.context().newCDPSession(page);
+        cdpSession.on('Page.downloadWillBegin', (event: { suggestedFilename?: string; url?: string }) => {
+          cdpNativeCount += 1;
+          record('cdp-page-download-will-begin', {
+            fileName: event.suggestedFilename ?? null,
+            urlScheme: event.url?.split(':', 1)[0] ?? null,
+            count: cdpNativeCount,
+          });
+        });
+        // Page.enable subscribes to page-domain events; it does not change
+        // Chromium's download policy or Playwright's acceptance behavior.
+        await cdpSession.send('Page.enable');
+        record('cdp-page-events-enabled');
+      } catch {
+        record('cdp-page-events-unavailable');
+      }
+    }
     if (diagnostic) await page.context().tracing.start({ screenshots: true, snapshots: true, sources: false });
     try {
       await page.getByTestId('prod-opt-export-pdf-manual').click();
@@ -367,13 +390,29 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
           disabled: (button as HTMLButtonElement).disabled,
           reason: button.getAttribute('title'),
           label: button.textContent?.trim() ?? null,
+          panelSnapshot: button.getAttribute('data-ptx-diagnostic-state'),
         }));
+        const selectionSnapshot = await page.evaluate(() =>
+          (window as typeof window & { __PTX_DIAG_SELECTION__?: object }).__PTX_DIAG_SELECTION__ ?? null,
+        );
+        let panelSnapshot: Record<string, unknown> | null = null;
+        try {
+          panelSnapshot = control.panelSnapshot
+            ? JSON.parse(control.panelSnapshot) as Record<string, unknown>
+            : null;
+        } catch {
+          record('panel-snapshot-unreadable');
+        }
         record('before-ptx-click', {
           projectId: seeded.projectId,
           releaseId: seeded.releaseId,
           engineeringStatus: state['status'],
           engineeringVersion: state['version'],
-          ...control,
+          disabled: control.disabled,
+          reason: control.reason,
+          label: control.label,
+          panelSnapshot,
+          selectionSnapshot,
         });
       }
       record('ptx-click-start');
@@ -389,7 +428,7 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
       record('ptx-download-assertion-passed');
     } finally {
       if (diagnostic) {
-        record('capture-finally', { downloadCount: downloads.length });
+        record('capture-finally', { downloadCount: downloads.length, cdpNativeCount });
         try {
           await page.screenshot({ path: test.info().outputPath('ptx-screenshot.png') });
           record('screenshot-saved');
@@ -403,6 +442,7 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
           record('trace-unavailable');
         }
         await writeFile(test.info().outputPath('ptx-events.json'), JSON.stringify(events, null, 2));
+        try { await cdpSession?.detach(); } catch { /* target may already be closed */ }
       }
       page.off('download', capture);
     }
