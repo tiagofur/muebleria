@@ -192,8 +192,9 @@ func TestUnsafe(t *testing.T) {
         violations_mixed = check_go_content_for_unguarded_db_url("foo_test.go", mixed_content)
         self.assertTrue(len(violations_mixed) > 0, "scanner must detect unsafe function even if file has safe function")
 
-        # 5. Top-level variable reading DATABASE_URL => MUST FAIL
-        toplevel_var_content = """package foo_test
+        # 5. Top-level variable reading DATABASE_URL before first, between functions, and after last => MUST FAIL
+        # 5a. Before first function
+        toplevel_before_content = """package foo_test
 import (
     "os"
     "testing"
@@ -204,8 +205,51 @@ func TestFoo(t *testing.T) {
     _ = unsafeDSN
 }
 """
-        violations_toplevel = check_go_content_for_unguarded_db_url("foo_test.go", toplevel_var_content)
-        self.assertTrue(len(violations_toplevel) > 0, "scanner must detect top-level var reading os.Getenv(DATABASE_URL)")
+        violations_before = check_go_content_for_unguarded_db_url("foo_test.go", toplevel_before_content)
+        self.assertTrue(len(violations_before) > 0, "scanner must detect top-level var before first function")
+
+        # 5b. Between functions (the exact case reported in review 4)
+        toplevel_between_content = """package foo_test
+import (
+    "os"
+    "testing"
+    "github.com/tiagofur/muebles-backend/internal/storage"
+    "github.com/jackc/pgx/v5/pgxpool"
+)
+func TestSafe(t *testing.T) {
+    u := os.Getenv("DATABASE_URL")
+    if err := storage.ValidateTestDatabaseURL(u); err != nil {
+        t.Fatal(err)
+    }
+}
+
+var unsafeDSN = os.Getenv("DATABASE_URL")
+
+func TestUnsafe(t *testing.T) {
+    pool, _ := pgxpool.New(ctx, unsafeDSN)
+}
+"""
+        violations_between = check_go_content_for_unguarded_db_url("foo_test.go", toplevel_between_content)
+        self.assertTrue(len(violations_between) > 0, "scanner must detect top-level var between functions even when previous function is guarded")
+
+        # 5c. After last function
+        toplevel_after_content = """package foo_test
+import (
+    "os"
+    "testing"
+    "github.com/tiagofur/muebles-backend/internal/storage"
+)
+func TestSafe(t *testing.T) {
+    u := os.Getenv("DATABASE_URL")
+    if err := storage.ValidateTestDatabaseURL(u); err != nil {
+        t.Fatal(err)
+    }
+}
+
+var residualDSN = os.Getenv("DATABASE_URL")
+"""
+        violations_after = check_go_content_for_unguarded_db_url("foo_test.go", toplevel_after_content)
+        self.assertTrue(len(violations_after) > 0, "scanner must detect top-level var after last function")
 
         # 6. testdb_guard_test.go itself does not trigger false positives
         guard_test_path = ROOT / "backend-go/internal/storage/testdb_guard_test.go"
@@ -217,6 +261,66 @@ func TestFoo(t *testing.T) {
             self.assertEqual(violations_guard, [], "testdb_guard_test.go must not be flagged")
 
 
+def find_function_spans(content: str) -> list[tuple[str, int, int]]:
+    """Return a list of (func_name, start_char_idx, end_char_idx) for top-level Go functions."""
+    func_sig_pattern = re.compile(r'^[ \t]*func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\s*\([^)]*\)[^{]*\{', re.MULTILINE)
+    spans = []
+    for match in func_sig_pattern.finditer(content):
+        func_name = match.group(1)
+        open_brace_idx = match.end() - 1
+        # Find matching closing brace
+        depth = 0
+        in_string = False
+        in_raw_string = False
+        in_line_comment = False
+        in_block_comment = False
+        i = open_brace_idx
+        end_idx = -1
+
+        while i < len(content):
+            c = content[i]
+            # Handle comments and strings
+            if in_line_comment:
+                if c == '\n':
+                    in_line_comment = False
+            elif in_block_comment:
+                if c == '*' and i + 1 < len(content) and content[i + 1] == '/':
+                    in_block_comment = False
+                    i += 1
+            elif in_raw_string:
+                if c == '`':
+                    in_raw_string = False
+            elif in_string:
+                if c == '\\':
+                    i += 1  # Skip escaped char
+                elif c == '"':
+                    in_string = False
+            else:
+                if c == '/' and i + 1 < len(content):
+                    if content[i + 1] == '/':
+                        in_line_comment = True
+                        i += 1
+                    elif content[i + 1] == '*':
+                        in_block_comment = True
+                        i += 1
+                elif c == '"':
+                    in_string = True
+                elif c == '`':
+                    in_raw_string = True
+                elif c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end_idx = i + 1
+                        break
+            i += 1
+
+        if end_idx != -1:
+            spans.append((func_name, match.start(), end_idx))
+    return spans
+
+
 def check_go_content_for_unguarded_db_url(rel_path: str, content: str) -> list[str]:
     # Exclude files that define the guards or test their negative rejections
     if rel_path in (
@@ -225,38 +329,36 @@ def check_go_content_for_unguarded_db_url(rel_path: str, content: str) -> list[s
     ):
         return []
 
-    # Any access to DATABASE_URL outside of a function (e.g. global/top-level var) is strictly forbidden.
+    # Any access to DATABASE_URL outside of a function (e.g. global/top-level var before,
+    # between, or after functions) is strictly forbidden.
     # Furthermore, any function reading os.Getenv("DATABASE_URL") MUST invoke ValidateTestDatabaseURL,
     # ValidateTestAdminDatabaseURL, TestDatabaseURL, or TestAdminDatabaseURL within that same function.
     violations = []
-    # Pattern to find function start: func ... (
-    func_pattern = re.compile(r'(func\s+(?:\([^)]+\)\s+)?([A-Za-z0-9_]+)\s*\([^)]*\)[^{]*\{)', re.MULTILINE)
-    
-    matches = list(func_pattern.finditer(content))
-    
-    # 1. Check top-level content before the first function, between functions, and after the last function
-    if not matches:
-        # Whole file is top-level (no functions)
-        for line_no, line in enumerate(content.splitlines(), start=1):
-            if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
-                violations.append(f"{rel_path}:{line_no}: top-level code reads os.Getenv(\"DATABASE_URL\") outside of guarded function")
-    else:
-        # Check before first function
-        top_before = content[:matches[0].start()]
-        if 'os.Getenv("DATABASE_URL")' in top_before or "os.Getenv('DATABASE_URL')" in top_before:
-            for line_no, line in enumerate(top_before.splitlines(), start=1):
-                if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
-                    violations.append(f"{rel_path}:{line_no}: top-level var/code reads os.Getenv(\"DATABASE_URL\") outside of function")
 
-    # 2. Check each function individually
-    for i, match in enumerate(matches):
-        start_pos = match.start()
-        func_name = match.group(2)
-        end_pos = matches[i + 1].start() if i + 1 < len(matches) else len(content)
-        func_body = content[start_pos:end_pos]
+    # Find exact function spans using brace balancing
+    spans = find_function_spans(content)
 
-        if 'os.Getenv("DATABASE_URL")' in func_body or "os.Getenv('DATABASE_URL')" in func_body:
-            # Check if this specific function invokes a guard
+    # Find all occurrences of os.Getenv("DATABASE_URL") or os.Getenv('DATABASE_URL')
+    db_url_pattern = re.compile(r'os\.Getenv\(\s*["\']DATABASE_URL["\']\s*\)')
+
+    for match in db_url_pattern.finditer(content):
+        match_start = match.start()
+        line_no = content[:match_start].count("\n") + 1
+
+        # Check if match_start is inside any function span
+        enclosing_func = None
+        for func_name, f_start, f_end in spans:
+            if f_start <= match_start < f_end:
+                enclosing_func = (func_name, f_start, f_end)
+                break
+
+        if enclosing_func is None:
+            violations.append(
+                f"{rel_path}:{line_no}: top-level code reads os.Getenv(\"DATABASE_URL\") outside of function"
+            )
+        else:
+            func_name, f_start, f_end = enclosing_func
+            func_body = content[f_start:f_end]
             has_guard_in_func = (
                 "ValidateTestDatabaseURL" in func_body
                 or "ValidateTestAdminDatabaseURL" in func_body
@@ -264,15 +366,9 @@ def check_go_content_for_unguarded_db_url(rel_path: str, content: str) -> list[s
                 or "TestAdminDatabaseURL" in func_body
             )
             if not has_guard_in_func:
-                # Find line number within function
-                func_lines_before = content[:start_pos].count("\n")
-                for line_idx, line in enumerate(func_body.splitlines(), start=1):
-                    if 'os.Getenv("DATABASE_URL")' in line or "os.Getenv('DATABASE_URL')" in line:
-                        line_no = func_lines_before + line_idx
-                        violations.append(
-                            f"{rel_path}:{line_no}: function {func_name} reads os.Getenv(\"DATABASE_URL\") without calling ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL"
-                        )
-                        break
+                violations.append(
+                    f"{rel_path}:{line_no}: function {func_name} reads os.Getenv(\"DATABASE_URL\") without calling ValidateTestDatabaseURL or ValidateTestAdminDatabaseURL"
+                )
 
     return violations
 
