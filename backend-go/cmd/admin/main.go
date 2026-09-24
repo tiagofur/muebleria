@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,6 +29,7 @@ import (
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -85,7 +87,9 @@ func usage() {
   admin clean-demo-data [--apply] [--org <slug>]   (borra el catálogo demo del seed)
 
 Environment:
-  DATABASE_URL    Postgres DSN (defaults to local dev).
+  MIGRATION_DATABASE_URL  Required explicit Postgres URL for every admin command.
+                          No DATABASE_URL or local database fallback.
+                          With GRANETE_TEST_DATABASE=1, only isolated test targets are allowed.
   ADMIN_PASSWORD  If set, used instead of the interactive prompt.
   MEDIA_DIR       Catalog image directory (defaults to ~/.muebles-media).
 
@@ -337,16 +341,54 @@ func runResetPassword(args []string) {
 	log.Printf("Password updated for %s", *email)
 }
 
-func openStore() (*storage.PostgresStore, func(), error) {
-	// The CLI needs DATABASE_URL but does not need JWT_SECRET. Load the DSN
-	// directly from the environment to avoid forcing JWT_SECRET to be set.
+func explicitAdminDatabaseURL() (string, error) {
 	dsn := os.Getenv("MIGRATION_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5445/muebles?sslmode=disable"
+	if strings.TrimSpace(dsn) == "" {
+		return "", errors.New("MIGRATION_DATABASE_URL is required; no implicit admin database target is available")
 	}
-	store, err := storage.NewPostgresStore(dsn)
+
+	// pgx accepts DSN forms with implicit host/database defaults. Admin commands
+	// must instead name the target in a complete URL before opening any pool.
+	u, err := url.Parse(dsn)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Hostname() == "" || strings.TrimSpace(strings.TrimPrefix(u.Path, "/")) == "" {
+		return "", errors.New("MIGRATION_DATABASE_URL must be an explicit postgres URL with host and database")
+	}
+	// libpq-style query options can override the URL's visible target. Keep
+	// host, port and database authority in one place so the guard checks the
+	// same destination that pgx will use.
+	for key := range u.Query() {
+		switch strings.ToLower(key) {
+		case "host", "hostaddr", "port", "dbname", "database", "service", "servicefile":
+			return "", errors.New("MIGRATION_DATABASE_URL must not override its host or database in query parameters")
+		}
+	}
+	if _, err := pgxpool.ParseConfig(dsn); err != nil {
+		return "", errors.New("MIGRATION_DATABASE_URL is not a valid postgres connection URL")
+	}
+	if os.Getenv("GRANETE_TEST_DATABASE") == "1" {
+		if err := storage.ValidateTestAdminDatabaseURL(dsn); err != nil {
+			return "", errors.New("MIGRATION_DATABASE_URL was rejected by the test database isolation guard")
+		}
+	}
+	return dsn, nil
+}
+
+// The optional connector is a DB-free test seam for the actual openStore
+// boundary. Production always uses NewPostgresStore after URL validation.
+func openStore(connectors ...func(string) (*storage.PostgresStore, error)) (*storage.PostgresStore, func(), error) {
+	dsn, err := explicitAdminDatabaseURL()
 	if err != nil {
 		return nil, nil, err
+	}
+	connect := storage.NewPostgresStore
+	if len(connectors) > 0 {
+		connect = connectors[0]
+	}
+	store, err := connect(dsn)
+	if err != nil {
+		// A driver error may contain the URL or credentials. Do not propagate it
+		// into CLI stderr; the caller can inspect its own protected DB logs.
+		return nil, nil, errors.New("admin database connection failed for MIGRATION_DATABASE_URL")
 	}
 	return store, func() { store.Close() }, nil
 }

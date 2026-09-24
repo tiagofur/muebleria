@@ -132,6 +132,45 @@ func TestValidateTestAdminDatabaseURL(t *testing.T) {
 	}
 }
 
+func TestTestDBValidatorsRejectAmbiguousTargets(t *testing.T) {
+	t.Setenv("GRANETE_TEST_DATABASE", "1")
+	t.Setenv("ORGANIZATION_TEST_ISOLATED", "")
+	t.Setenv("GRANETE_ENV", "")
+	t.Setenv("APP_ENV", "")
+	t.Setenv("NODE_ENV", "")
+	const secret = "synthetic-password-not-for-logs"
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"database override", "postgres://admin:" + secret + "@127.0.0.1:65432/granete_test?dbname=muebles"},
+		{"host override", "postgres://admin:" + secret + "@127.0.0.1:65432/granete_test?host=another-host"},
+		{"port override", "postgres://admin:" + secret + "@127.0.0.1:65432/granete_test?port=5445"},
+		{"service override", "postgres://admin:" + secret + "@127.0.0.1:65432/granete_test?service=other-target"},
+		{"missing explicit host", "postgres:///granete_test"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, validator := range []struct {
+				name string
+				fn   func(string) error
+			}{
+				{"writable", storage.ValidateTestDatabaseURL},
+				{"admin", storage.ValidateTestAdminDatabaseURL},
+			} {
+				err := validator.fn(tc.url)
+				if err == nil {
+					t.Errorf("%s validator accepted ambiguous target", validator.name)
+					continue
+				}
+				if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "postgres://") {
+					t.Errorf("%s validator leaked credentials", validator.name)
+				}
+			}
+		})
+	}
+}
+
 func TestGuardDoesNotLeakPassword(t *testing.T) {
 	origTestFlag := os.Getenv("GRANETE_TEST_DATABASE")
 	defer os.Setenv("GRANETE_TEST_DATABASE", origTestFlag)
@@ -195,4 +234,3 @@ func TestTestDatabaseURL_Helper(t *testing.T) {
 		t.Fatalf("unexpected admin url: %s", adminURL)
 	}
 }
-
