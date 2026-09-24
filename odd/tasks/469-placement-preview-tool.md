@@ -250,6 +250,68 @@ Base: origin/main @ b739338d (includes #838)
 Branch: feat/469-local-library-placement
 Status: IMPLEMENTED_PENDING_REVIEW
 
+### P1 TestUp evidence correction — center preview and center commit
+
+Objective: make the existing real-host TestUp smoke prove one fresh InputPoint
+at one viewport coordinate: preview at center → click at center → fresh
+re-pick/commit at that same center.
+
+Authorized scope: `TC_PlacementPreviewSmoke.rb` test evidence only. Add the
+shared `click_view_center(tool)` helper and replace every immediate
+`move_to_view_center(tool)` followed by an origin `(0, 0)` confirmation that
+semantically confirms that preview, including
+`test_local_library_preview_commit_at_non_origin_and_undo`.
+
+Exclusions: no product code (`FurniturePlacementTool`,
+`PlacementSnapEngine`, controller, identity, `ManagedFurniture`, builder,
+dialog routing); no repeat placement, polygon-aware footprint, #784, #506,
+or real-host execution.
+
+Delivery strategy: single PR; forecast under 400 authored lines.
+TDD: strict TDD enabled by repository instruction. TestUp real-host execution
+is unavailable in this session, so static/lint RED/GREEN evidence must be
+reported honestly and V2 remains NOT_RUN.
+
+Tasks:
+
+- [x] T1 (route: delegated; trigger: preparation/write): mapped all immediate
+  center-preview/origin-click pairs, correct only same-pick confirmations,
+  and preserved deliberately distinct coordinate clicks. Replaced nine origin
+  confirmations (including the double-click replay) with the shared center
+  helper; no `onLButtonDown(0, 0, 0, ...)` remains in this smoke.
+- [x] T2 (route: delegated; trigger: verification): recorded static TestUp/lint,
+  full rake verification, affected-gate selection/execution, diff/readback,
+  and the work-unit commit (SHA recorded below after creation).
+
+Acceptance: local smoke still aims at approximately 1500/800/0 mm and now
+confirms at the viewport center so `onLButtonDown` fresh re-picks that exact
+point before asserting commit and undo.
+
+Observed correction evidence (2026-09-24):
+
+- RED: a temporary static TestUp-shape assertion run against
+  `HEAD:TC_PlacementPreviewSmoke.rb` failed because the baseline lacked
+  `click_view_center`; it also retained origin confirmations.
+- GREEN: the same assertion passed against the worktree: it finds the helper
+  calling `onLButtonDown(0, view.vpwidth / 2, view.vpheight / 2, view)` and
+  finds no origin confirmation call. The local smoke keeps its
+  `aim_mm = [1500.0, 800.0, 0.0]` positive assertions and undo.
+- REFACTOR/V0: `ruby -c TC_PlacementPreviewSmoke.rb`, full
+  `bundle exec rake syntax`, focused RuboCop, and `git diff --check` passed.
+- V1: with `PATH=/opt/homebrew/opt/ruby@3.2/bin:$PATH`,
+  `bundle exec rake verify` passed: RuboCop 229 files, 0 offenses; 1126
+  unit runs / 7374 assertions; 6 boundary runs / 3359 assertions; deterministic
+  RBZ SHA-256 `81e4499518fa531302a456b4c11248d2c538d0b3aedcae77315e5758c459b934`.
+- A first command using the rbenv Ruby was blocked by a native-extension
+  `libruby.3.2.dylib` mismatch; using the matching Homebrew Ruby 3.2.11 made
+  the suite pass. This is environment evidence, not a product failure.
+- Factory selector: `python3 scripts/verify_affected.py --base origin/main
+  --plan` selected all gates because existing global/tooling/unknown worktree
+  inputs are present. Its budgeted execution was BLOCKED before gates by the
+  required isolated `DATABASE_URL` for selected Go/PostgreSQL proofs; no DB
+  configuration was changed.
+- V2 real host/TestUp: NOT_RUN — no SketchUp host was started or claimed.
+
 Product gap (issue #469 comment 3, confirmed manually): Biblioteca local
 "Insertar en Modelo" still materializes at origin and hands off to the
 generic Move tool. This increment routes the local/disconnected catalog lane

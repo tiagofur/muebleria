@@ -112,9 +112,8 @@ module Granete
         # --- Rehearsal 2: click commits once, same identity, one undo op.
         tool2 = reactivate_preview(placer, extents, commits)
         move_to_view_center(tool2)
-        view = model.active_view
-        tool2.onLButtonDown(0, 0, 0, view)
-        tool2.onLButtonDown(0, 0, 0, view) # double click: one gesture only
+        click_view_center(tool2)
+        click_view_center(tool2) # double click: one gesture only
 
         assert_equal 1, commits.length, 'a double click must commit exactly once'
         assert commits.first['ok'], commits.first.inspect
@@ -201,7 +200,7 @@ module Granete
 
         # --- Exact gap through the VCB path: 40mm off the wall.
         assert_equal true, tool.onUserText('40', model.active_view)
-        tool.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool)
         assert_equal 1, commits.length
         assert commits.first['ok'], commits.first.inspect
         root = Connection::ProjectFurniture::ManagedFurniture
@@ -231,7 +230,7 @@ module Granete
         assert_equal FI_1, side[:furniture_instance_id]
 
         assert_equal true, tool2.onUserText('5', model.active_view)
-        tool2.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool2)
         assert_equal 1, commits2.length
         assert commits2.first['ok'], commits2.first.inspect
         placed2 = Connection::ProjectFurniture::ManagedFurniture
@@ -303,7 +302,7 @@ module Granete
         assert_in_delta n[1], tool.active_snap[:front_dir_mm][1], 1e-6
 
         assert_equal true, tool.onUserText('40', model.active_view)
-        tool.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool)
         assert_equal 1, commits.length
         assert commits.first['ok'], commits.first.inspect
         root = Connection::ProjectFurniture::ManagedFurniture
@@ -326,7 +325,7 @@ module Granete
         move_to_view_center(tool_b)
         assert tool_b.active_snap, 'the reversed 30° wall still snaps (eye resolves the room side)'
         assert_equal true, tool_b.onUserText('40', model.active_view)
-        tool_b.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool_b)
         assert_equal 1, commits_b.length
         root_b = Connection::ProjectFurniture::ManagedFurniture
                  .locate(model, Metadata::Store.new(model), FI_1)['entity']
@@ -367,7 +366,7 @@ module Granete
         assert_equal FI_1, side[:furniture_instance_id]
 
         assert_equal true, tool_c.onUserText('5', model.active_view)
-        tool_c.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool_c)
         assert_equal 1, commits_c.length
         assert commits_c.first['ok'], commits_c.first.inspect
         placed2 = Connection::ProjectFurniture::ManagedFurniture
@@ -403,7 +402,7 @@ module Granete
         kinds_d = tool_d.active_snap[:components].map { |c| c[:kind] }.sort
         assert_equal %i[face floor], kinds_d, 'wall + floor compose through the real tool'
 
-        tool_d.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool_d)
         assert_equal 1, commits_d.length
         assert commits_d.first['ok'], commits_d.first.inspect
         placed_d = Connection::ProjectFurniture::ManagedFurniture
@@ -479,7 +478,7 @@ module Granete
         controller.handle_begin_catalog_placement_preview(dialog, JSON.generate(payload))
         tool = controller.instance_variable_get(:@active_placement_preview)['tool']
         move_to_view_center(tool)
-        tool.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool)
 
         assert dialog.scripts.any? { |s| s.include?('placed_via_preview') },
                'the local commit answers the library insert channel'
@@ -691,6 +690,16 @@ module Granete
       def move_to_view_center(tool)
         view = model.active_view
         tool.onMouseMove(0, view.vpwidth / 2, view.vpheight / 2, view)
+      end
+
+      # The CONFIRMING click must land on the SAME viewport point the
+      # preview picked: FurniturePlacementTool#onLButtonDown re-picks
+      # fresh at the click's own coordinates, so a (0,0) click would
+      # re-aim at the top-left corner instead of confirming the centered
+      # pick (review P1 — preview and commit must address one point).
+      def click_view_center(tool)
+        view = model.active_view
+        tool.onLButtonDown(0, view.vpwidth / 2, view.vpheight / 2, view)
       end
 
       def granete_definition_count
