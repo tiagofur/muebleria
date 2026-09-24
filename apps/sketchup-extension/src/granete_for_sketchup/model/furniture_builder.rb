@@ -131,10 +131,27 @@ module Granete
         DEFAULT_THICKNESS_MM = 18.0
         PART_DEFINITION_PREFIX = 'Granete · Parte · '
 
+        # The generic furniture box as [width, height, depth] mm — the ONE
+        # authority shared by the renderer, the #469 local-lane preview
+        # extents and the persisted placement envelope, so the preview box
+        # and the committed generic composition can never drift apart.
+        def self.generic_dimensions(parameters)
+          [
+            (parameters['widthMm'] || parameters['lengthMm'] || 600.0).to_f,
+            (parameters['heightMm'] || 720.0).to_f,
+            (parameters['depthMm'] || 590.0).to_f
+          ]
+        end
+
+        # Generic-box extents in the placement-engine convention
+        # (X=width, Y=depth, Z=height, origin at the box minimum).
+        def self.generic_extents(parameters)
+          width_mm, height_mm, depth_mm = generic_dimensions(parameters)
+          { x: width_mm, y: depth_mm, z: height_mm, origin_mm: [0.0, 0.0, 0.0] }
+        end
+
         def render_generic_parametric_layout(model, furniture_definition, instance_id, _definition, parameters)
-          width_mm = (parameters['widthMm'] || parameters['lengthMm'] || 600.0).to_f
-          height_mm = (parameters['heightMm'] || 720.0).to_f
-          depth_mm = (parameters['depthMm'] || 590.0).to_f
+          width_mm, height_mm, depth_mm = GenericAuthoringRenderer.generic_dimensions(parameters)
           thickness_mm = DEFAULT_THICKNESS_MM
           count = 2
 
@@ -193,9 +210,11 @@ module Granete
       # geometry. Material choices are merged as role-keyed authoring intent;
       # only Granete's NativeLayout may supply their physical consequences.
       module FurnitureIntent
-        private
-
-        def normalize_parameters(definition, raw_parameters)
+        # Single normalization authority shared by the commit (insert/update)
+        # and the #469 local-lane preview preparation — the normalized map is
+        # what the generic renderer consumes, so the preview box is derived
+        # from exactly the values the commit will use.
+        def self.normalize_parameters(definition, raw_parameters)
           (definition['parameters'] || []).each_with_object({}) do |parameter, params|
             name = parameter['name']
             if raw_parameters.key?(name)
@@ -204,6 +223,12 @@ module Granete
               params[name] = parameter['defaultValue']
             end
           end
+        end
+
+        private
+
+        def normalize_parameters(definition, raw_parameters)
+          FurnitureIntent.normalize_parameters(definition, raw_parameters)
         end
 
         # R3: material_choices semantics at this boundary:
@@ -229,6 +254,17 @@ module Granete
           existing = existing_meta&.dig('intent', 'materialChoices')
           existing = {} unless existing.is_a?(Hash)
           merged_choices != existing
+        end
+
+        # Layout-less local inserts still persist their GENERIC box — the
+        # same shared authority as the #469 local-lane preview extents — so a
+        # placed local furniture is a valid side-snap target later without
+        # inventing any server identity.
+        def generic_placement_envelope(parameters)
+          ext = GenericAuthoringRenderer.generic_extents(parameters || {})
+          origin = ext[:origin_mm]
+          { 'min_mm' => origin.dup,
+            'max_mm' => [origin[0] + ext[:x], origin[1] + ext[:y], origin[2] + ext[:z]] }
         end
 
         # #469 increment 3 — the placement envelope this commit persists:
@@ -723,7 +759,15 @@ module Granete
           @texture_cache = texture_cache
         end
 
-        def insert_furniture(model, definition, raw_parameters = {}, resolved_layout: nil, material_choices: nil)
+        # Local catalog insertion (#469 increment 4): `transformation` is
+        # the ACCEPTED placement-tool transform — the root is created
+        # TOP-LEVEL (managed roots must never land inside an open edit
+        # context) directly at its final pose inside the ONE undoable
+        # operation, and `prepare` stays false (the click IS the placement;
+        # no Move handoff). Legacy callers without a transformation keep the
+        # historical origin + Move behavior as the compat fallback.
+        def insert_furniture(model, definition, raw_parameters = {}, resolved_layout: nil, material_choices: nil,
+                             transformation: nil, prepare: true)
           parameters = normalize_parameters(definition, raw_parameters)
           instance_id = generate_instance_id
 
@@ -731,27 +775,37 @@ module Granete
           prep_err = insertion_preflight_error
           return { 'success' => false, 'error' => prep_err } if prep_err
 
+          envelope = placement_envelope(resolved_layout) || generic_placement_envelope(parameters)
           model.start_operation("Insertar Mueble #{definition['name']}", true)
           begin
             furniture_definition = create_furniture_definition(model, definition, instance_id)
             # Transformation.new IS the identity transform on the real host
             # (there is no Transformation.identity constructor).
-            furniture = model.active_entities.add_instance(furniture_definition,
-                                                           Geom::Transformation.new)
+            host_transform = transformation || Geom::Transformation.new
+            container = transformation ? top_level_entities(model) : model.active_entities
+            furniture = container.add_instance(furniture_definition, host_transform)
             furniture.name = "#{definition['name']} (#{instance_id})"
             counts = render_layout(model, furniture_definition, instance_id, definition, parameters,
                                    resolved_layout)
             MetadataWriter.write_furniture(@metadata_store, furniture, instance_id, definition, parameters,
                                            material_choices: material_choices,
-                                           placement_envelope: placement_envelope(resolved_layout))
+                                           placement_envelope: envelope)
             model.commit_operation
           rescue StandardError => e
             model.abort_operation
             return { 'success' => false, 'error' => e.message }
           end
 
-          prepare_placement(model, furniture)
+          prepare_placement(model, furniture) if prepare
           build_result(instance_id, definition, parameters, counts)
+        end
+
+        # Managed furniture roots are TOP-LEVEL (#469 + native entity model):
+        # the preview-commit insert goes to the model root regardless of any
+        # open editing context, exactly like the Project lanes.
+        def top_level_entities(model)
+          # rubocop:disable-next SketchupSuggestions/ModelEntities
+          model.entities
         end
 
         # Rebuilds the furniture INSIDE its existing isolated host definition:
