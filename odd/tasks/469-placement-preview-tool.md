@@ -105,6 +105,107 @@ it lands, wall/face snapping is not "complete".
 - UX polish from real-host usability (#506).
 
 
+## Increment 3 — arbitrary-angle planar snapping (generalize quarter grid)
+
+Base: origin/main @ 0e179d39 (includes #836 via merge 0e179d39)
+Branch: feat/469-arbitrary-angle-snaps
+Status: IMPLEMENTED_PENDING_REVIEW
+
+Scope (this increment): generalize the #836 snap model from world-axis +
+quarter-turn to VECTOR planar constraints so any yaw in the XY plane works:
+vertical wall faces with arbitrary horizontal normals (back-face alignment,
+room side still resolved from the CAMERA EYE, never `Face#normal`, invariant
+to `reverse!`); managed furniture with arbitrary yaw around Z snapped
+side-to-side using the target's ORIENTED LOCAL FRAME (rigid transform +
+local definition extents — the world AABB `entity.bounds` is explicitly
+NOT a side authority for rotated furniture); exact mm gap applied ALONG
+the snap normal vector (not a world-axis coordinate); wall+floor
+composition at any angle; click-time revalidation against the FRESH frame
+(rotated/moved/erased targets never commit stale). The committed transform
+stays a rigid top-level placement: orthonormal basis +Z vertical,
+determinant +1, no scale/mirror, part geometry untouched. Free-mode manual
+rotation (←/→) REMAINS quarter-turn (spec §11). Excluded (spec §16):
+repeat placement, #784, multi-select, disconnected Library lane, tilted
+furniture, sloped floors, arbitrary 3D surfaces, CNC/materials/PTX/UI
+redesign.
+
+### Design decisions pinned by tests
+
+- Engine candidates are now `plane_point_mm` + unit `normal_mm` +
+  `tangent_mm` + `front_dir_mm` + `anchor_snapped_mm` — no axis/sign/
+  rotation_quarters. A candidate's snapped anchor is
+  `cursor + normal·(s − d)` where `d = (cursor−p)·normal` and `s` is the
+  local-axis distance from the aligned face to the anchor measured INTO
+  the box; displacement is `|s − d|`. No vector is ever rounded to its
+  nearest world axis (negative proof against axis-rounding regression).
+- Composition slots are orientation-relative, not world-axis: with the
+  winning front f (first front-bearing candidate in the stable rank
+  order), a horizontal candidate constrains the FRONT axis (normal ∥ ±f)
+  or the RIGHT axis (normal ∥ ±right(f)); per-slot best composes (a wall
+  + perpendicular side corner at any angle), conflicting orientations
+  drop (never averaged). The floor keeps its own vertical slot and never
+  reorients.
+- Solution exposes `front_dir_mm` (+ `constrains_rotation`) instead of a
+  quarter turn; the tool builds the rigid basis directly:
+  `x = [fy, −fx, 0]`, `y = f`, `z = [0,0,1]` (unit, orthogonal,
+  determinant +1 by construction — asserted in tests).
+- Target descriptors are oriented frames
+  `{origin_world_mm, front_dir_mm, right_dir_mm, local_min_mm,
+  local_max_mm}` built from the entity's REAL rigid transform (world
+  origin + horizontal unit x/y axes, right-handed, zaxis ≈ +Z) and the
+  LOCAL definition bounds (the materialized resolved box — placement
+  preview authority only). Tilted, scaled, mirrored or non-rigid frames
+  fail closed (no candidate), replacing #836's off-quarter-grid
+  rejection.
+- Finite side rectangles are measured in the ORIENTED frame: cursor
+  projected onto (normal, tangent=front, Z) with clamped interval
+  distances against the LOCAL extents spans — never world-X/Y spans.
+- The VCB gap offsets the anchor along the primary candidate's normal
+  vector (`anchor += normal·gap_mm`); perpendicular wall↔back and
+  side↔side distances are exact at 30°/37.5°/45°/17°/123° (tested).
+- Cursor-loop budget unchanged: one provider snapshot per gesture, one
+  revalidation at click (the oriented frame is built inside those two
+  calls only); no requests per mouse move.
+
+### Observed evidence (this candidate)
+
+- `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle; env pin
+  per memory): RuboCop 226 files 0 offenses; 1086 unit runs / 7116
+  assertions, 0 failures; 6 boundary runs / 3323 assertions; RBZ verified
+  readback, sha256
+  `af202ca870a4625840c1154c1e12b8e6296be46a922259b608927a901cf456ea`.
+- Engine suite 34 runs (+9): walls at 30°/37.5°/45°/23° (back on the
+  rotated plane, eye-side orientation, reversed-wall identical placement,
+  exact perpendicular gap 40mm along the normal — with the explicit
+  negative that no world-axis coordinate equals it), neighbor sides at
+  17/30/37.5/45/123° (fronts parallel, oriented plane x·right=600 exact),
+  gap 5mm perpendicular to a 37° run, the world-AABB negative-proof
+  fixture (rotated 45°: oriented side plane ≠ AABB face — the snap uses
+  the oriented one), finite rectangle along the ORIENTED run axis,
+  tilted/mirrored frames fail closed, wall+rotated-side corner
+  composition at 30°, wall+floor at 45°, horizontal-unit front invariant.
+- Tool suite 46 runs (+5): wall 30° back-face plane + reversed-wall
+  transform equality; arbitrary-yaw basis is unit/orthogonal/+Z vertical
+  with determinant +1; rotated neighbor 30° side-to-side with exact 5mm
+  along the oriented normal + rigidity; stale 30°→35° rotation committed
+  with the FRESH frame; axis-aligned suite preserved on the new contract.
+- Controller suite 32 runs (provider rewritten): rotated 45° root yields
+  the oriented descriptor (world origin from the transform, unit
+  front/right, LOCAL extents); exclusions now unmanaged/duplicated/
+  erased/tilted/scaled/mirrored; snapped Project lane + catalog parity
+  + no-requests scan preserved.
+- TestUp `TC_PlacementPreviewSmoke` extended with
+  `test_arbitrary_angle_wall_neighbor_composition_and_undo` (A wall 30°
+  + 40mm VCB gap with camera-fixed room side, B same wall reversed →
+  identical placement, C managed neighbor rotated 30° → FI_2 side-to-side
+  5mm, D engine wall+floor composition from REAL faces, E cancel zero
+  residue) and the provider/orientation assertions updated to the frame
+  contract: NOT_RUN this session — no host available; owner-coordinated
+  like R1-R4.
+- Wall+floor composition remains engine-level composition exactly as in
+  increment 2 (the tool passes the single picked host face per event;
+  multi-face collection is not part of this increment).
+
 ## Scope separation from parallel work (coordination registry)
 
 The repository's per-issue ODD artifact is the coordination mechanism (the
