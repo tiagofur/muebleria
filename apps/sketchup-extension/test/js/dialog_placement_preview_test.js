@@ -101,7 +101,7 @@ function buildSandbox(withPreviewCallbacks) {
     setInterval: () => 0,
     clearInterval: () => {},
     document: documentMock,
-    crypto: { randomUUID: () => 'key-1' },
+    crypto: { randomUUID: (() => { let seq = 0; return () => `key-${++seq}`; })() },
     window: { addEventListener: () => {}, sketchup: sketchupMock }
   };
   sandbox.__registry = registry;
@@ -129,6 +129,16 @@ function assert(condition, message) {
 assert.equal = (actual, expected, message) => {
   if (actual !== expected) {
     throw new Error((message || 'assert.equal') + ` — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+};
+assert.deepEqual = (actual, expected, message) => {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error((message || 'assert.deepEqual') + ` — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+};
+assert.notEqual = (actual, expected, message) => {
+  if (actual === expected) {
+    throw new Error((message || 'assert.notEqual') + ` — both were ${JSON.stringify(actual)}`);
   }
 };
 assert.ok = (condition, message) => {
@@ -347,16 +357,27 @@ tests.push(() => {
   assert.equal(btnInsert.disabled, false, 'cancel re-arms insert');
 
   // The local commit flows through onInsertionResult with placed_via_preview:
-  // success copy WITHOUT the legacy Move-tool hint.
+  // success copy WITHOUT the legacy Move-tool hint, and repeat placement
+  // re-begins the same preset (held entry point) until Esc.
   btnInsert.click();
   sandbox.window.GraneteDialog.onPlacementPreviewStarted({ ok: true, definitionId: 'def-local' });
+  const beginsBeforeCommit = sandbox.__bridge
+    .filter((c) => c.action === 'begin_catalog_placement_preview').length;
   sandbox.window.GraneteDialog.onInsertionResult(
     { success: true, name: 'Bajo Local', placed_via_preview: true, component_count: 5 });
-  assert.equal(btnInsert.disabled, false, 'commit re-arms insert');
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_catalog_placement_preview').length,
+    beginsBeforeCommit + 1,
+    'the local commit re-begins the same preset for repeat placement');
+  assert.equal(btnInsert.disabled, true, 'the entry point stays held while repeating');
   const toast = el(sandbox, 'toast-message').textContent;
   assert.ok(/Bajo Local insertado/.test(toast), 'success copy shown');
   assert.equal(/movelo a su lugar/.test(toast), false,
     'the preview-lane success must not advertise a Move handoff');
+
+  // Esc ends the repeat loop and re-arms the entry point.
+  sandbox.window.GraneteDialog.onPlacementPreviewCancelled(
+    { ok: true, definitionId: 'def-local', reason: 'escape' });
+  assert.equal(btnInsert.disabled, false, 'Esc re-arms insert');
 });
 
 tests.push(() => {
@@ -374,6 +395,84 @@ tests.push(() => {
   sandbox.window.GraneteDialog.onInsertionResult({ success: true, name: 'Bajo Local' });
   assert.ok(/movelo a su lugar/.test(el(sandbox, 'toast-message').textContent),
     'the legacy lane still explains the real Move handoff');
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'insert_furniture').length, 1,
+    'legacy success never auto-repeats');
+});
+
+tests.push(() => {
+  // #469 repeat placement (connected): a converged catalog commit re-begins
+  // the SAME preset preview with a FRESH idempotency key — every click
+  // mints its own FurnitureInstance; Esc ends the loop.
+  const sandbox = runDialog(true);
+  sandbox.window.GraneteDialog.onModelBindingStatus({
+    state: 'connected',
+    binding: { projectId: 'p1', designId: 'd1', baseRevisionId: 'r1' }
+  });
+  sandbox.window.GraneteDialog.setCatalog([
+    { furniture_definition_id: 'def-1', name: 'Base 600', category: 'kitchen_base',
+      parameters: [{ name: 'widthMm', defaultValue: 600 }] }
+  ]);
+  el(sandbox, 'library-cards-grid').children[0].click();
+  el(sandbox, 'btn-insert').click();
+  sandbox.window.GraneteDialog.onPlacementPreviewStarted({ ok: true, definitionId: 'def-1' });
+  sandbox.window.GraneteDialog.onCreateProjectFurnitureResult(
+    { ok: true, code: 'placed', instanceId: 'fi-1' });
+
+  const begins = sandbox.__bridge.filter((c) => c.action === 'begin_catalog_placement_preview');
+  assert.equal(begins.length, 2, 'the converged commit re-begins the same preset');
+  assert.equal(begins[1].payload.definitionId, 'def-1', 'same definition');
+  assert.deepEqual(begins[1].payload.parameters, begins[0].payload.parameters,
+    'same configured parameters');
+  assert.notEqual(begins[1].payload.idempotencyKey, begins[0].payload.idempotencyKey,
+    'each placement gesture carries a FRESH idempotency key');
+  assert.equal(el(sandbox, 'btn-insert').disabled, true, 'the entry point stays held while repeating');
+
+  // The repeated preview announces "colocar otro"; Esc terminates.
+  sandbox.window.GraneteDialog.onPlacementPreviewStarted({ ok: true, definitionId: 'def-1' });
+  assert.ok(/colocar otro/.test(el(sandbox, 'toast-message').textContent),
+    'the repeat preview explains click-for-another / Esc-to-finish');
+  sandbox.window.GraneteDialog.onPlacementPreviewCancelled(
+    { ok: true, definitionId: 'def-1', reason: 'escape' });
+  assert.equal(el(sandbox, 'btn-insert').disabled, false, 'Esc re-arms the entry point');
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_catalog_placement_preview').length, 2,
+    'cancel ends the repeat loop — no further auto-begin');
+});
+
+tests.push(() => {
+  // #469 repeat placement (local/disconnected): the placed_via_preview
+  // commit re-begins the same preset; pending_position (an incomplete
+  // placement) must NOT repeat.
+  const sandbox = runDialog(true);
+  sandbox.window.GraneteDialog.setCatalog([
+    { furniture_definition_id: 'def-local', name: 'Bajo Local', category: 'kitchen_base',
+      parameters: [{ name: 'widthMm', defaultValue: 600 }] }
+  ]);
+  el(sandbox, 'library-cards-grid').children[0].click();
+  el(sandbox, 'btn-insert').click();
+  sandbox.window.GraneteDialog.onPlacementPreviewStarted({ ok: true, definitionId: 'def-local' });
+  sandbox.window.GraneteDialog.onInsertionResult(
+    { success: true, name: 'Bajo Local', placed_via_preview: true });
+
+  const begins = sandbox.__bridge.filter((c) => c.action === 'begin_catalog_placement_preview');
+  assert.equal(begins.length, 2, 'the local commit re-begins the same preset');
+  assert.equal(begins[1].payload.definitionId, 'def-local');
+  assert.equal(el(sandbox, 'btn-insert').disabled, true);
+
+  // A begin failure (e.g. busy/model change) answers honestly and stops repeating.
+  sandbox.window.GraneteDialog.onPlacementPreviewStarted(
+    { ok: false, code: 'preview_busy', definitionId: 'def-local' });
+  assert.equal(el(sandbox, 'btn-insert').disabled, false, 'a failed re-begin re-arms honestly');
+
+  // pending_position on the connected lane is an INCOMPLETE placement: no repeat.
+  sandbox.window.GraneteDialog.onModelBindingStatus({
+    state: 'connected',
+    binding: { projectId: 'p1', designId: 'd1', baseRevisionId: 'r1' }
+  });
+  sandbox.window.GraneteDialog.onPlacementPreviewStarted({ ok: true, definitionId: 'def-local' });
+  sandbox.window.GraneteDialog.onCreateProjectFurnitureResult(
+    { ok: true, code: 'pending_position', instanceId: 'fi-x' });
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_catalog_placement_preview').length, 2,
+    'pending_position must not auto-repeat');
 });
 
 const results = [];
@@ -388,7 +487,9 @@ const names = [
   'connected library insert uses shared preview and re-arms on cancel',
   'legacy connected create fallback without preview callbacks',
   'disconnected library insert uses shared preview without legacy insert',
-  'legacy origin-first insert fallback keeps its Move hint'
+  'legacy origin-first insert fallback keeps its Move hint',
+  'connected repeat placement re-begins with a fresh key until Esc',
+  'local repeat placement re-begins; pending_position never repeats'
 ];
 tests.forEach((fn, index) => {
   try {

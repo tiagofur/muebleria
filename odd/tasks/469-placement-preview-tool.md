@@ -440,6 +440,64 @@ CNC/PTX, Inspector redesign, library versioning, real-host install.
   global); the actual surface is `apps/sketchup-extension` only — no
   backend/TS/contract files changed; CI re-validates the rest on the PR.
 
+## Increment 5 — repeat placement (stacked on increment 4)
+
+Base: feat/469-local-library-placement @ ee3806fe (PR #840 — DEPENDS on it)
+Branch: feat/469-repeat-placement
+Status: IMPLEMENTED_PENDING_REVIEW
+
+Scope: rapid placement of the SAME Library preset without reopening the
+catalog — configure once → click → the same preset previews again →
+click → … → Esc ends. Repeat is catalog-lane ONLY (connected + local):
+Proyecto → Colocar of an existing FurnitureInstance keeps its single
+placement (the unit already has identity). Per #469: connected repeat
+mints a NEW FurnitureInstance per click with its own idempotency key
+(retry within a gesture keeps that gesture's key); local repeat creates
+a new instanceRef per click.
+
+### Design decisions
+
+- JS-DRIVEN re-begin: after a converged catalog commit the dialog calls
+  `begin_catalog_placement_preview` again with the SAME payload and a
+  FRESH idempotency key. Every placement stays ONE COMPLETE FRESH
+  gesture through the same entry point — new session, new preparation,
+  new guards; zero new Ruby mutation paths. The bridge round trip
+  guarantees the previous tool's call stack (including
+  restore_selection_tool) already unwound before the new tool is
+  selected — no timer tricks.
+- Incomplete placements never repeat: `pending_position` (converge
+  pending) and `created_pending` answers keep the existing one-shot
+  behavior; commit failures and failed re-begins re-arm honestly and
+  stop the loop.
+- UX: each placement toasts its own success; the repeated preview
+  announces "clic para colocar otro · Esc para terminar"; the entry
+  point stays held while repeating and re-arms on Esc/cancel/failure.
+  The connected repeat stays on the Library tab (no yank to Proyecto per
+  click); the panel refreshes per placement.
+
+### Observed evidence (this candidate)
+
+- `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle): RuboCop
+  229 files 0 offenses; 1129 unit runs / 7398 assertions, 0 failures; 6
+  boundary runs / 3359 assertions; RBZ deterministic readback, sha256
+  `611984f00bf6039f5f76fd6c9ecc768d6912c705a71b01a46d04c3a6710a3e57`.
+- `placement_preview_controller_test.rb` +1: connected repeat mints TWO
+  creates with keys [idem-r1, idem-r2] and TWO working-copy PUTs; FI_1
+  and FI_2 each exist exactly once.
+- `local_catalog_placement_preview_test.rb` +1: local repeat creates a
+  DISTINCT instanceRef at its own accepted transform (2200/300/0 mm),
+  same preset intent, zero transport requests.
+- `dialog_placement_preview_test.js` 13 tests under node: connected
+  repeat re-begins with the same definition/parameters and a DIFFERENT
+  key, held entry point, "colocar otro" copy, Esc ends (no further
+  auto-begin); local repeat via `placed_via_preview`; a failed re-begin
+  re-arms; `pending_position` never repeats; legacy origin-first
+  success never auto-repeats; the increment-4 disconnected test updated
+  to the repeat semantics (commit re-begins + held button + Esc re-arm).
+- TestUp local smoke extended: a second full gesture places another
+  distinct local unit at its own aim; double undo clears both — NOT_RUN
+  this session (no host available).
+
 
 
 The repository's per-issue ODD artifact is the coordination mechanism (the

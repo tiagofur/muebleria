@@ -4351,14 +4351,18 @@
               }
               if (result.placed_via_preview) {
                 // #469: the click already placed the furniture at its final
-                // position — no Move handoff exists to advertise.
+                // position — no Move handoff exists to advertise. Repeat
+                // placement: the same preset previews again for the next
+                // click (each one its own fresh local unit); Esc ends it.
                 showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail + ".");
+                beginRepeatCatalogPreview();
               } else {
                 // Legacy origin-first fallback: the Move handoff is real.
                 showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail +
                   ". Quedó seleccionado: movelo a su lugar (tecla M).");
               }
             } else {
+              repeatPreviewActive = false;
               showToast("error", "Error: " + parameterIssueMessage(result, "Fallo en la inserción"));
             }
           },
@@ -5302,6 +5306,14 @@
         });
 
         var catalogCreateIntentKey = null;
+        // #469 repeat placement: the last catalog intent (definition +
+        // parameters + material choices) that entered the preview flow.
+        // After a successful catalog placement the SAME preset re-begins
+        // the shared preview — each click is a FULL fresh gesture (new
+        // session, new preparation, new guards) with a FRESH idempotency
+        // key; Esc ends the loop.
+        var lastCatalogPlacementPayload = null;
+        var repeatPreviewActive = false;
 
         function getOrCreateCatalogIntentKey() {
           if (!catalogCreateIntentKey) {
@@ -5321,9 +5333,32 @@
           return "idem-" + Date.now() + "-" + Math.random().toString(36).substring(2, 11);
         }
 
+        // #469 repeat placement — re-begins the shared preview for the SAME
+        // catalog preset after a successful placement. Every placement stays
+        // one complete fresh gesture through the same entry point: the
+        // bridge round trip guarantees the previous tool already unwound,
+        // and a FRESH idempotency key mints a distinct identity per click
+        // (retry within one gesture keeps that gesture's key). Returns
+        // false when repeat is not possible (no callback / no payload) —
+        // the caller then keeps the normal one-shot behavior.
+        function beginRepeatCatalogPreview() {
+          if (!lastCatalogPlacementPayload) return false;
+          if (!window.sketchup || !window.sketchup.begin_catalog_placement_preview) return false;
+
+          repeatPreviewActive = true;
+          btnInsert.disabled = true;
+          btnInsert.innerHTML = icon("clock") + "<span>Vista previa en el modelo…</span>";
+          clearCatalogIntentKey();
+          var payload = Object.assign({}, lastCatalogPlacementPayload);
+          payload.idempotencyKey = getOrCreateCatalogIntentKey();
+          window.sketchup.begin_catalog_placement_preview(JSON.stringify(payload));
+          return true;
+        }
+
         btnInsert.addEventListener("click", function () {
           if (!activeLibDef) return;
           btnInsert.disabled = true;
+          repeatPreviewActive = false; // a manual begin is never a repeat
 
           var isConnected = modelBindingState.status && modelBindingState.status.state === "connected";
 
@@ -5342,6 +5377,7 @@
             // only at the commit click — never while browsing or previewing.
             btnInsert.innerHTML = icon("clock") + "<span>Vista previa en el modelo…</span>";
             payload.idempotencyKey = getOrCreateCatalogIntentKey();
+            lastCatalogPlacementPayload = payload;
             window.sketchup.begin_catalog_placement_preview(JSON.stringify(payload));
           } else if (isConnected && window.sketchup && window.sketchup.create_project_furniture) {
             // Legacy compat fallback (older host / degraded runtime).
@@ -6606,9 +6642,12 @@
         function handlePlacementPreviewStarted(result) {
           result = result || {};
           if (result.ok) {
-            showToast("info", "Vista previa activa: hacé clic en el modelo para colocar · Esc para cancelar.");
+            showToast("info", repeatPreviewActive
+              ? "Vista previa activa: hacé clic para colocar otro · Esc para terminar."
+              : "Vista previa activa: hacé clic en el modelo para colocar · Esc para cancelar.");
             return;
           }
+          repeatPreviewActive = false;
           var key = result.instanceId || result.definitionId;
           var button = pfPlacing[key];
           delete pfPlacing[key];
@@ -6632,6 +6671,7 @@
         // #469 — Esc / tool switch: zero residue, the unit stays pending.
         function handlePlacementPreviewCancelled(result) {
           result = result || {};
+          repeatPreviewActive = false;
           var key = result.instanceId || result.definitionId;
           var button = pfPlacing[key];
           delete pfPlacing[key];
@@ -6786,6 +6826,13 @@
             clearCatalogIntentKey();
             if (result.code === "pending_position") {
               showToast("info", "✓ Mueble agregado al proyecto: ubicalo con la herramienta Mover y confirmá su posición final en la pestaña Proyecto.");
+            } else if (beginRepeatCatalogPreview()) {
+              // #469 repeat placement: the same preset previews again —
+              // each further click mints its own FurnitureInstance. Stay on
+              // the library for the loop; Esc ends it.
+              showToast("success", "✓ Mueble creado y agregado al proyecto.");
+              requestProjectFurniture();
+              return;
             } else {
               showToast("success", "✓ Mueble creado y agregado al proyecto.");
             }
@@ -6797,6 +6844,7 @@
             switchTab("project");
             requestProjectFurniture();
           } else {
+            repeatPreviewActive = false;
             showToast("error", pfPlaceFailureMessage(result));
           }
         }

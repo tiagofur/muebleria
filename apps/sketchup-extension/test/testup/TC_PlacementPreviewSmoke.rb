@@ -503,11 +503,29 @@ module Granete
         assert_equal [750.0, 590.0, 720.0], envelope['max_mm'].map(&:to_f),
                      'the persisted envelope is the SAME generic box the preview showed'
 
-        # --- Undo removes the complete unit.
+        # --- #469 repeat placement: a second FULL gesture through the same
+        # entry point places ANOTHER distinct local unit at its own pose.
+        controller.handle_begin_catalog_placement_preview(dialog, JSON.generate(payload))
+        tool = controller.instance_variable_get(:@active_placement_preview)['tool']
+        aim2_mm = [2600.0, 900.0, 0.0]
+        aim_camera_at_mm(aim2_mm, [aim2_mm[0] - 3000.0, aim2_mm[1] - 3000.0, 2500.0])
+        move_to_view_center(tool)
+        tool.onLButtonDown(0, 0, 0, model.active_view)
+
+        roots = model.entities.grep(Sketchup::ComponentInstance)
+                     .select { |e| Metadata::Store.new(model).read(e).is_a?(Hash) }
+        assert_equal 2, roots.length, 'repeat placement adds a second unit'
+        refs = roots.map { |r| Metadata::Store.new(model).read(r)['identity']['instanceRef'] }
+        assert_equal refs.uniq.length, 2, 'each click is its own local unit'
+        second_anchor = roots.last.transformation.origin.to_a.map { |v| v * mm }
+        assert_in_delta aim2_mm[0], second_anchor[0], 5.0, 'the repeat lands at ITS OWN aim'
+
+        # --- Undo removes the complete units (repeat included).
         Sketchup.undo
-        remaining_roots = model.entities.grep(Sketchup::ComponentInstance)
-                               .select { |e| Metadata::Store.new(model).read(e).is_a?(Hash) }
-        assert_empty remaining_roots, 'undo removes the whole local unit'
+        Sketchup.undo
+        remaining_after_undo = model.entities.grep(Sketchup::ComponentInstance)
+                                    .select { |e| Metadata::Store.new(model).read(e).is_a?(Hash) }
+        assert_empty remaining_after_undo, 'undo removes the whole local units'
       ensure
         model.select_tool(nil)
       end

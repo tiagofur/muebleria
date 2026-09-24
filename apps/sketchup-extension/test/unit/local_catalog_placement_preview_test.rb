@@ -469,6 +469,33 @@ class LocalCatalogPlacementPreviewTest < Minitest::Test
     assert_empty index[:by_id], 'no local root is promoted to server identity'
   end
 
+  # #469 repeat placement (local lane): the second FULL gesture through
+  # the same entry point creates a DISTINCT local unit — new instanceRef,
+  # its own accepted transform, still zero server side effects.
+  def test_repeat_second_gesture_creates_distinct_local_units
+    begin_local_preview('parameters' => { 'widthMm' => 750 })
+    click(active_tool)
+    first = @model.entities.instances.first
+    first_ref = MS.new(@model).read(first)['identity']['instanceRef']
+
+    begin_local_preview('parameters' => { 'widthMm' => 750 })
+    Sketchup::InputPoint.next_position_mm = [2200.0, 300.0, 0.0]
+    active_tool.onMouseMove(0, 50, 50, @model.active_view)
+    active_tool.onLButtonDown(0, 50, 50, @model.active_view)
+
+    assert_equal 2, @model.entities.instances.length
+    second = @model.entities.instances.last
+    second_meta = MS.new(@model).read(second)
+    refute_equal first_ref, second_meta['identity']['instanceRef'],
+                 'each click is its own local unit — repeat never reuses identity'
+    assert_nil second_meta['identity']['furnitureInstanceId']
+    assert_equal 750, second_meta['intent']['parameters']['widthMm'], 'same preset, same intent'
+    assert_in_delta 2200.0 / 25.4, second.transformation.origin.x, 1e-6,
+                    'the second unit lands at ITS OWN accepted transform'
+    assert_empty @transport.requests
+    assert_nil active_preview_session
+  end
+
   # A local root and a server root coexist: both are targets, each under
   # its own identity stream.
   def test_provider_merges_server_and_local_targets
