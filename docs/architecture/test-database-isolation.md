@@ -67,7 +67,9 @@ las URL heredadas del operador. El runner relee los dos usuarios y las dos
 organizaciones sintéticas en la base descartable y destruye backend, contenedor
 y directorio temporal mediante `trap`. Compila el backend antes de lanzarlo y
 ejecuta directamente el binario: así el PID controlado por el `trap` es el del
-servidor, no el padre de un proceso `go run` que podría dejarlo vivo.
+servidor, no el padre de un proceso `go run` que podría dejarlo vivo. El servidor
+y Playwright reciben el mismo `MEDIA_DIR` descartable; no se hereda el valor
+ambiental.
 
 ### Pilot Readiness y suites throwaway
 

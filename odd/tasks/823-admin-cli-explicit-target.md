@@ -281,3 +281,39 @@ recovery source of truth.
   (129 additions, 17 deletions). The branch has 719 authored additions plus
   deletions across its three commits before this task-only evidence update;
   the human-approved `size:exception` applies to the cohesive T2 PR.
+
+## T2 draft-PR CI correction
+
+- Draft PR #839 exact-head CI run `35963706603` (candidate
+  `99f76c32c3bba66be7847bd049025e23fc0d1cfe`, merge base
+  `6184b4d2d36c5c73e3fbcabde2c2785e5335e565`) passed the other substantive
+  jobs but failed the real-browser job and its dependent aggregate gate: the
+  artifact-health case required `MEDIA_DIR`, and a separate engineering-state
+  case observed no `.ptx` download within 20 seconds. This is not an
+  exact-head PASS.
+- Root cause of the deterministic artifact-health failure: `env -i` correctly
+  removed ambient values, but `GATE_BROWSER_ENV` omitted the disposable
+  `MEDIA_DIR` already supplied to the server. The DB-free double now poisons
+  ambient `MEDIA_DIR` and checks that the actual launcher supplies the same
+  gate-owned media directory to server and Playwright. RED: Playwright had
+  `None`; GREEN: both match, without inheriting the ambient value.
+- PTX attribution remains uncertain, not silently fixed by the media change.
+  The failed CI log showed the `.ptx` event-count timeout, with no corresponding
+  export HTTP failure. A single `--grep` invocation omitted the serial
+  prerequisite and therefore was not valid state proof. The complete
+  `engineering-state.spec.ts` passed 4/4 in a new disposable gate. A bounded
+  run of the related `engineering-cutting-demand.spec.ts`,
+  `engineering-state.spec.ts`, and `project-designs.spec.ts` together passed
+  12/12, including PTX download and the previously failing artifact case.
+  No PTX product code or test expectation was changed; full-suite recurrence
+  remains for exact-head CI to decide.
+- V0/V1: `bash -n`, `git diff --check`, and 44 Python CI tests with opt-in
+  real-Go preflight passed. `verify_affected.py --base origin/main --plan`
+  remained read-only and selected the browser gate plus broader existing
+  checks; these checks need the leader's new exact-head CI run. V2 used only
+  fresh loopback-bound, tmpfs PostgreSQL gates with synthetic identities and
+  confirmed `granete_gate` readback; no persistent database was accessed.
+- Scope/rollback: only the browser child environment, its real-launcher
+  regression, this task evidence, and the canonical isolation paragraph.
+  Delivery remains `Refs #823` / `Delivery: partial` for the independent
+  direct-Playwright/API-to-DB attestation gap and unproven full #823 DoD.

@@ -65,6 +65,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "    record = {'command': command,\n"
                 + "        'runtime': target('DATABASE_URL'), 'migration': target('MIGRATION_DATABASE_URL'),\n"
                 + "        'fixture': target('ORGANIZATION_TEST_DATABASE_URL'),\n"
+                + "        'media_dir': os.environ.get('MEDIA_DIR'),\n"
                 + "        'isolated': os.environ.get('ORGANIZATION_TEST_ISOLATED'),\n"
                 + "        'testdb': os.environ.get('GRANETE_TEST_DATABASE'),\n"
                 + "        'pg_keys': sorted(key for key in os.environ if key.startswith('PG'))}\n"
@@ -103,6 +104,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "PGPORT": "5445",
                 "PGSERVICE": "habitual",
                 "PGPASSWORD": "ambient-secret",
+                "MEDIA_DIR": "ambient-media-dir-must-not-reach-children",
             })
             gate = Path(os.environ.get("ORGANIZATION_GATE_TEST_SCRIPT", DEFAULT_GATE))
             command = ["bash", str(gate), "tests/organization/prequote-design.spec.ts"]
@@ -160,6 +162,10 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             self.assertEqual(record['pg_keys'], [], record['command'])
         browser = [r for r in records if r['command'].startswith('pnpm ')]
         self.assertEqual(browser[0]['fixture'], migration)
+        server = next(r for r in records if r['command'].startswith('server '))
+        self.assertTrue(server['media_dir'].endswith('/media'))
+        self.assertIn('/granete-organization-gate.', server['media_dir'])
+        self.assertEqual(browser[0]['media_dir'], server['media_dir'])
 
     def test_admin_failure_reaps_only_the_gate_server(self):
         unrelated = subprocess.Popen(['sleep', '30'])
