@@ -18,7 +18,8 @@ DEFAULT_GATE = ROOT / "scripts/organization-browser-gate.sh"
 
 class BrowserPreparationLauncherTest(unittest.TestCase):
     def run_gate_with_doubles(self, preflight_exit, *, real_preflight=False, poison=None,
-                              fail_admin=False, cancel_after_server=False):
+                              fail_admin=False, cancel_after_server=False,
+                              browser_variant='isolated'):
         with tempfile.TemporaryDirectory(prefix="browser-preparation-double-") as tmp:
             tmpdir = Path(tmp)
             capture = tmpdir / "children.jsonl"
@@ -69,7 +70,12 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "        'media_dir': os.environ.get('MEDIA_DIR'),\n"
                 + "        'isolated': os.environ.get('ORGANIZATION_TEST_ISOLATED'),\n"
                 + "        'testdb': os.environ.get('GRANETE_TEST_DATABASE'),\n"
-                + "        'pg_keys': sorted(key for key in os.environ if key.startswith('PG'))}\n"
+                + "        'pg_keys': sorted(key for key in os.environ if key.startswith('PG')),\n"
+                + "        'ambient_inert': 'GRANETE_DIAGNOSTIC_INERT_MARKER' in os.environ,\n"
+                + "        'ci_metadata': os.environ.get('CI') == 'true' and os.environ.get('GITHUB_ACTIONS') == 'true',\n"
+                + "        'dangerous_keys': sorted(key for key in os.environ if key in\n"
+                + "            ('GITHUB_TOKEN', 'ACTIONS_RUNTIME_TOKEN', 'POSTGRES_PASSWORD',\n"
+                + "             'OTHER_DATABASE_URL', 'AWS_SECRET_ACCESS_KEY'))}\n"
                 + "    with capture.open('a') as stream: stream.write(json.dumps(record) + '\\n')\n"
                 + "    if name == 'go' and args[:2] == ['run', './cmd/testdb-preflight']:\n"
                 + "        if real_preflight:\n"
@@ -106,6 +112,16 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 "PGSERVICE": "habitual",
                 "PGPASSWORD": "ambient-secret",
                 "MEDIA_DIR": "ambient-media-dir-must-not-reach-children",
+                "GRANETE_DIAGNOSTIC_INERT_MARKER": "synthetic-inert",
+                "CI": "true",
+                "GITHUB_ACTIONS": "true",
+                "GITHUB_TOKEN": "synthetic-secret",
+                "ACTIONS_RUNTIME_TOKEN": "synthetic-secret",
+                "POSTGRES_PASSWORD": "synthetic-secret",
+                "OTHER_DATABASE_URL": "postgres://synthetic:secret@127.0.0.1:5445/muebles",
+                "AWS_SECRET_ACCESS_KEY": "synthetic-secret",
+                "PTX_DIAGNOSTIC_BROWSER_ENV": browser_variant,
+                "PTX_DIAGNOSTIC_DIR": str(tmpdir / 'diagnostic'),
             })
             gate = Path(os.environ.get("ORGANIZATION_GATE_TEST_SCRIPT", DEFAULT_GATE))
             command = ["bash", str(gate), "tests/organization/prequote-design.spec.ts"]
@@ -181,6 +197,33 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         finally:
             unrelated.terminate()
             unrelated.wait(timeout=5)
+
+    def test_browser_inherited_safe_variant_changes_only_browser_environment(self):
+        for variant, browser_inherits in (('isolated', False), ('inherited-safe', True)):
+            with self.subTest(variant=variant):
+                result, records, survivor = self.run_gate_with_doubles(0, browser_variant=variant)
+                self.assertEqual(result.returncode, 0, result.stderr[-800:])
+                self.assertFalse(survivor)
+                self.assertEqual(len(records), 8, (result.stderr[-800:], records))
+                browser = next(r for r in records if r['command'].startswith('pnpm '))
+                self.assertEqual(browser['ambient_inert'], browser_inherits)
+                self.assertEqual(browser['ci_metadata'], browser_inherits)
+                self.assertEqual(browser['pg_keys'], [])
+                self.assertEqual(browser['dangerous_keys'], [])
+                self.assertEqual(browser['runtime'], ['127.0.0.1', 56321, '/granete_gate', 'granete_app'])
+                self.assertEqual(browser['migration'], ['127.0.0.1', 56321, '/granete_gate', 'postgres'])
+                self.assertEqual(browser['fixture'], browser['migration'])
+                self.assertRegex(browser['identity_digest'], r'^[0-9a-f]{64}$')
+                for child in (r for r in records if r is not browser):
+                    self.assertFalse(child['ambient_inert'], child['command'])
+                    self.assertFalse(child['ci_metadata'], child['command'])
+                    self.assertEqual(child['pg_keys'], [], child['command'])
+                    self.assertEqual(child['dangerous_keys'], [], child['command'])
+
+    def test_unknown_browser_variant_stops_before_writable_children(self):
+        result, records, _ = self.run_gate_with_doubles(0, browser_variant='unknown')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(records, [])
 
     def test_cancellation_reaps_the_server_without_running_admin(self):
         result, records, survivor = self.run_gate_with_doubles(0, cancel_after_server=True)

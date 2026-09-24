@@ -9,6 +9,12 @@ on:
         default: candidate
         type: choice
         options: [candidate, base]
+      ptx_browser_env:
+        description: 'Candidate Playwright/Vite child environment A/B only'
+        required: true
+        default: isolated
+        type: choice
+        options: [isolated, inherited-safe]
   push:
     branches: [main, master]
   pull_request:
@@ -39,10 +45,16 @@ jobs:
       - name: Verify exact laboratory branch and prepare exact-base comparator
         env:
           PTX_TARGET: ${{ inputs.ptx_target }}
+          PTX_DIAGNOSTIC_BROWSER_ENV: ${{ inputs.ptx_browser_env }}
         run: |
           set -euo pipefail
           test "${GITHUB_REF}" = 'refs/heads/codex/839-ptx-diagnostic'
           git merge-base --is-ancestor 24b014906e4fdd0963d4017df4865fc6527d9bca HEAD
+          case "${PTX_DIAGNOSTIC_BROWSER_ENV}" in
+            isolated) ;;
+            inherited-safe) test "${PTX_TARGET}" = candidate ;;
+            *) exit 2 ;;
+          esac
           case "${PTX_TARGET}" in
             candidate) ;;
             base)
@@ -78,6 +90,7 @@ jobs:
       - name: Record technical runner metadata only
         env:
           PTX_TARGET: ${{ inputs.ptx_target }}
+          PTX_DIAGNOSTIC_BROWSER_ENV: ${{ inputs.ptx_browser_env }}
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/ptx-diagnostic/safe" "${RUNNER_TEMP}/ptx-diagnostic/raw"
@@ -88,7 +101,7 @@ jobs:
             cat /etc/os-release
             printf 'architecture=%s\n' "$(uname -m)"
             printf 'runner_image_os=%s\nrunner_image_version=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
-            printf 'target=%s\nsource_sha=%s\ndiagnostic_branch_sha=%s\n' "${PTX_TARGET}" "$(git rev-parse HEAD)" "${GITHUB_SHA}"
+            printf 'target=%s\nsource_sha=%s\ndiagnostic_branch_sha=%s\nbrowser_env_variant=%s\n' "${PTX_TARGET}" "$(git rev-parse HEAD)" "${GITHUB_SHA}" "${PTX_DIAGNOSTIC_BROWSER_ENV}"
             node --version
             go version
             pnpm --version
@@ -104,6 +117,7 @@ jobs:
         id: prefix
         env:
           PTX_DIAGNOSTIC_DIR: ${{ runner.temp }}/ptx-diagnostic/raw
+          PTX_DIAGNOSTIC_BROWSER_ENV: ${{ inputs.ptx_browser_env }}
         run: |
           set +e
           scripts/organization-browser-gate.sh \

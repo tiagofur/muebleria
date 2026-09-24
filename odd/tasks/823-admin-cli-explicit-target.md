@@ -509,3 +509,57 @@ database connection, Ubuntu execution, PR change, or product delivery was
 claimed. Fresh independent review is pending on the corrected exact HEAD.
 The correction work-unit commit is
 `027db58670bad317781f9e73f80a06ad37166a20`.
+
+## D2 — Temporary PTX browser-environment A/B (Experiment 1 only)
+
+Human authorization dated 2026-09-24 retains this non-delivery branch and
+candidate/base pins. Controlled Ubuntu runs 36031771764 (candidate: PTX
+fails) and 36032511188 (base: 32/32 passes) observed downloads in both, but
+candidate PDF/PTX/manifest suggested filenames were `download`; base names
+retained their extensions. This is class G, not a proven `env -i` root cause.
+Do not alter #839, product export semantics, retries, timeouts, or other
+worktrees. Only a diagnostic A/B of the Playwright/Vite child is authorized;
+server and admin children retain the exact T2 isolated environment.
+
+Route: delegated direct sole writer, because the real launcher, workflow,
+probe, and DB-free child-process regressions span multiple non-trivial files.
+Strict TDD: enabled by `AGENTS.md`; safe RED then GREEN using
+`python3 -m unittest scripts.test_ci_organization_browser_preparation
+scripts.test_ptx_diagnostic_contract` with child doubles and no DB access.
+Delivery: temporary branch only, no PR. Forecast: one small diagnostic work
+unit with tests; line count is advisory, not a reason to omit a guard.
+Engram mirror remains pending if the runtime cannot disambiguate its session.
+
+- [x] **D2a — Browser-only environment A/B.** Default A uses current `env -i`;
+  explicit B starts from ambient runner variables, removes all PG/DB and
+  credential-bearing entries, then reapplies only T2-validated disposable
+  targets, markers, handshake, API bases, and media path. Reject invalid mode
+  before writable children. Check real launcher doubles prove only browser
+  differs and no ambient DB or secret reaches any child.
+- [x] **D2b — Observe DOM-to-download boundary.** Before anchor click record
+  attribute/property names and href scheme, without Blob contents or secrets;
+  retain CDP and Playwright filenames for PDF/PTX/manifest. Keep the 32-test
+  one-worker PTX prefix; no general test repair.
+- [ ] **D2c — Freeze and handoff.** Run V0/V1 DB-free checks, commit the
+  coherent diagnostic work unit, and hand exact HEAD for independent review.
+  V2 Ubuntu A/B remains `NOT_RUN` until parent dispatches reviewed commits.
+
+Rollback boundary: discard this temporary diagnostic branch; no change is
+intended for the product PR from the A/B experiment itself.
+
+D2 local evidence: DB-free RED: the real-launcher double showed B still
+dropped an inert runner key, and an invalid environment variant launched
+writers; the branch workflow/probe contract checks also failed before their
+implementation. GREEN: 15 focused Python cases (one opt-in skipped), 46 CI
+contract cases (one opt-in skipped), 25 targeted web-export Vitest cases,
+`pnpm typecheck`, `bash -n`, `shellcheck`, Ruby YAML parse (10 jobs), Python
+compile, and `git diff --check` passed. A targeted Vitest run initially caught
+the diagnostic DOM probe calling `getAttribute` on injected fake anchors; the
+probe now runs only in diagnostic mode and tolerates missing fake DOM methods.
+No database or Ubuntu browser experiment ran locally. The conservative
+`verify_affected.py --plan` selects global gates because workflow/launcher
+files changed; broad gates are intentionally `NOT_RUN` on this laboratory
+work unit. V2 Ubuntu A/B is `NOT_RUN` pending parent dispatch after review.
+The A/B canary confirms CI metadata and a harmless ambient marker reach only
+the B browser child, while backend/admin remain isolated and ambient PG,
+database, and credential-shaped keys are absent from all captured children.

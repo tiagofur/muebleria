@@ -180,8 +180,8 @@ export function downloadOptimizerXlsx(
     type: mime,
   });
   const diagnostic = import.meta.env.VITE_PTX_DIAGNOSTIC === '1';
-  const mark = (stage: string) => {
-    if (diagnostic) console.info('__PTX_DIAG__ ' + JSON.stringify({ stage, fileName, blobSize: blob.size, blobType: blob.type }));
+  const mark = (stage: string, details: Record<string, string | null> = {}) => {
+    if (diagnostic) console.info('__PTX_DIAG__ ' + JSON.stringify({ stage, fileName, blobSize: blob.size, blobType: blob.type, ...details }));
   };
   mark('blob-created');
   const url = deps.createObjectURL(blob);
@@ -193,6 +193,11 @@ export function downloadOptimizerXlsx(
   anchor.rel = 'noopener';
   deps.appendChild(anchor);
   mark('anchor-appended');
+  if (diagnostic) mark('anchor-before-click', {
+    downloadAttribute: anchor.getAttribute?.('download') ?? null,
+    downloadProperty: anchor.download,
+    hrefScheme: anchor.href?.split(':', 1)[0] ?? null,
+  });
   anchor.click();
   mark('anchor-clicked');
   deps.removeChild(anchor);

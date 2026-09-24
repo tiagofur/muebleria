@@ -30,6 +30,14 @@ fail() {
   exit 1
 }
 
+case "${PTX_DIAGNOSTIC_BROWSER_ENV:-isolated}" in
+  isolated) ;;
+  inherited-safe)
+    [ -n "${PTX_DIAGNOSTIC_DIR:-}" ] || fail "inherited-safe browser environment requires the temporary diagnostic harness"
+    ;;
+  *) fail "unknown temporary browser environment variant" ;;
+esac
+
 for command in docker go pnpm curl openssl python3; do
   command -v "${command}" >/dev/null 2>&1 || fail "${command} is required"
 done
@@ -208,7 +216,27 @@ PY
 # quote revisions) that no API can produce — the modern commands always freeze
 # a snapshot. Read-only-from-app perspective: admin DSN for fixture seeding
 # only; the verified FLOW always goes through the real API.
-GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
+if [ "${PTX_DIAGNOSTIC_BROWSER_ENV:-isolated}" = inherited-safe ]; then
+  # Diagnostic only: preserve runner/browser metadata while stripping every
+  # ambient database target and credential-shaped key before explicit T2
+  # disposable targets are reapplied below. Backend/admin stay on GATE_BASE_ENV.
+  GATE_BROWSER_PREFIX=(env)
+  while IFS= read -r key; do
+    key_upper="$(LC_ALL=C tr '[:lower:]' '[:upper:]' <<< "${key}")"
+    case "${key_upper}" in
+      PG*|*DATABASE*|DB_*|*DB_URL*|*DB_HOST*|*DB_NAME*|*DB_PORT*|*DB_USER*|*DB_PASS*|*POSTGRES*|*DSN*|*CONNECTION*|*SECRET*|*TOKEN*|*PASSWORD*|*PASSWD*|*CREDENTIAL*|*PRIVATE*KEY*|*ACCESS*KEY*|*API*KEY*|*COOKIE*|*SESSION*|*AUTH*|DOCKER_HOST|DOCKER_CONTEXT|KUBECONFIG|HTTP_PROXY|HTTPS_PROXY|ALL_PROXY)
+        GATE_BROWSER_PREFIX+=(-u "${key}") ;;
+    esac
+  done < <(compgen -e)
+else
+  GATE_BROWSER_PREFIX=(env -i)
+fi
+GATE_BROWSER_ENV=("${GATE_BROWSER_PREFIX[@]}"
+  PATH="${PATH}" HOME="${HOME:-/}" TMPDIR="${TMPDIR:-/tmp}"
+  ORGANIZATION_TEST_ISOLATED="${ORGANIZATION_TEST_ISOLATED}"
+  GRANETE_TEST_DATABASE="${GRANETE_TEST_DATABASE}"
+  DATABASE_URL="${DATABASE_URL}"
+  MIGRATION_DATABASE_URL="${MIGRATION_DATABASE_URL}"
   ORGANIZATION_TEST_DATABASE_URL="${ORGANIZATION_TEST_DATABASE_URL}"
   ORGANIZATION_GATE_DB_IDENTITY_SHA256="${GATE_DB_IDENTITY_SHA256}"
   MEDIA_DIR="${MEDIA_DIR}"

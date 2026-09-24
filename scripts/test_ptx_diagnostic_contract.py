@@ -66,6 +66,22 @@ class PtxDiagnosticContractTest(unittest.TestCase):
         self.assertIn('python3 scripts/ptx-diagnostic-launcher.py scripts/organization-browser-gate.sh', workflow)
         self.assertNotIn('git show 24b014906e4fdd0963d4017df4865fc6527d9bca:scripts/organization-browser-gate.sh', workflow)
 
+    def test_browser_environment_switch_is_branch_only_and_candidate_only(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        self.assertIn('ptx_browser_env:', workflow)
+        self.assertIn('options: [isolated, inherited-safe]', workflow)
+        self.assertIn('PTX_DIAGNOSTIC_BROWSER_ENV: ${{ inputs.ptx_browser_env }}', workflow)
+        self.assertIn('test "${PTX_TARGET}" = candidate', workflow)
+        self.assertIn('browser_env_variant=%s', workflow)
+        self.assertNotIn('env | sort', workflow)
+
+    def test_anchor_probe_precedes_real_click(self):
+        source = (ROOT / 'apps/web/src/exportOptimizer.ts').read_text()
+        self.assertIn("anchor.getAttribute?.('download')", source)
+        self.assertIn('anchor.download', source)
+        self.assertIn("anchor.href?.split(':', 1)[0]", source)
+        self.assertLess(source.index("mark('anchor-before-click'"), source.index('anchor.click();'))
+
     def test_preclick_snapshot_and_native_signal_are_independent_of_handler(self):
         panel = (ROOT / 'packages/ui/src/production/ProductionOrderOptimizationPanel.tsx').read_text()
         spec = (ROOT / 'tests/organization/engineering-state.spec.ts').read_text()
