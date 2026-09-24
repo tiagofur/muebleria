@@ -99,6 +99,22 @@ Un test automatizado no puede:
 
 `./init.sh` debe invocar este runner cuando ejecute la suite Go histórica; no debe abrir la DB persistente del desarrollador.
 
+### Destino explícito de `cmd/admin`
+
+Cada comando de `backend-go/cmd/admin` requiere una URL PostgreSQL completa en
+`MIGRATION_DATABASE_URL` (host y base de datos explícitos). No usa `DATABASE_URL`
+ni un destino local implícito cuando falta esa variable. La validación sucede
+antes de abrir la conexión y rechaza parámetros de consulta que sustituyan el
+host, puerto o nombre de base visible en la URL. Los errores del CLI no muestran
+la URL ni la contraseña.
+
+Cuando `GRANETE_TEST_DATABASE=1`, el CLI aplica además
+`ValidateTestAdminDatabaseURL`: sólo admite los destinos de prueba autorizados.
+Fuera de la preparación automatizada, una operación administrativa humana
+puede usar una URL persistente **explícita**; no se le exige un marcador de test.
+La preparación browser todavía debe demostrar que ambos DSN de sus procesos
+apuntan al contenedor descartable antes de ejecutar comandos.
+
 ## 6. Guardia fail-closed en Go
 
 El aislamiento no puede depender sólo del shell. Los helpers de integración deben validar la conexión **antes del primer write**.
