@@ -32,20 +32,7 @@ const (
 
 func multiOrgAdminDSN(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL not set; skipping multi-org migration test")
-	}
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Skipf("cannot parse DATABASE_URL: %v", err)
-	}
-	u.Path = "/postgres"
-	adminDSN := u.String()
-	if err := storage.ValidateTestAdminDatabaseURL(adminDSN); err != nil {
-		t.Fatalf("multiOrgAdminDSN rejected unsafe test database: %v", err)
-	}
-	return adminDSN
+	return storage.TestAdminDatabaseURL(t)
 }
 
 func multiOrgExec(t *testing.T, pool *pgxpool.Pool, sql string) {

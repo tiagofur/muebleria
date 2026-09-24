@@ -27,9 +27,9 @@ const (
 )
 
 type rlsFixture struct {
-	admin *pgxpool.Pool
-	app   *pgxpool.Pool
-	store *storage.PostgresStore
+	admin  *pgxpool.Pool
+	app    *pgxpool.Pool
+	store  *storage.PostgresStore
 	dbName string
 }
 
@@ -66,14 +66,16 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		t.Skipf("create test db: %v", err)
 	}
 
-	dsn := os.Getenv("DATABASE_URL")
-	u, _ := url.Parse(dsn)
-	u.Path = "/" + testDBName
-	testDSN := u.String()
-	if err := storage.ValidateTestDatabaseURL(testDSN); err != nil {
-		t.Fatalf("newRLSFixture rejected unsafe test database: %v", err)
+	migrationDSN := os.Getenv("MIGRATION_DATABASE_URL")
+	migrationURL, err := url.Parse(migrationDSN)
+	if err != nil {
+		t.Fatalf("parse MIGRATION_DATABASE_URL: %v", err)
 	}
-	dbPool, err := pgxpool.New(ctx, testDSN)
+	migrationURL.Path = "/" + testDBName
+	if err := storage.ValidateTestAdminDatabaseURL(migrationURL.String()); err != nil {
+		t.Fatalf("newRLSFixture rejected unsafe migration database: %v", err)
+	}
+	dbPool, err := pgxpool.New(ctx, migrationURL.String())
 	if err != nil {
 		t.Fatalf("connect test db: %v", err)
 	}
@@ -90,7 +92,6 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		t.Fatalf("RunMigrations: %v", err)
 	}
 
-	appRoleName := rlsAppRole
 	for _, statement := range []string{
 		`INSERT INTO organizations (id, name, slug, status) VALUES
 		 ('` + rlsOrgA + `', 'RLS A', 'rls-a', 'provisioning'),
@@ -126,17 +127,21 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		 ('80000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', NOW(), 0, 0, 0, 0, 0, 0, 1, 0, '` + rlsOrgA + `')`,
 		`INSERT INTO snapshot_prices (snapshot_id, entity_type, entity_id, cost_value, organization_id) VALUES
 		 ('80000000-0000-0000-0000-000000000001', 'material', '90000000-0000-0000-0000-000000000001', 0, '` + rlsOrgA + `')`,
-		`DROP ROLE IF EXISTS ` + appRoleName,
-		`CREATE ROLE ` + appRoleName + ` LOGIN PASSWORD 'rls-test-password'
-		 NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS IN ROLE granete_app`,
 	} {
 		if _, err := dbPool.Exec(ctx, statement); err != nil {
 			t.Fatalf("seed RLS fixture: %v\n%s", err, statement)
 		}
 	}
 
-	appURL := *u
-	appURL.User = url.UserPassword(appRoleName, "rls-test-password")
+	runtimeDSN := os.Getenv("DATABASE_URL")
+	appURL, err := url.Parse(runtimeDSN)
+	if err != nil {
+		t.Fatalf("parse DATABASE_URL: %v", err)
+	}
+	appURL.Path = "/" + testDBName
+	if err := storage.ValidateTestDatabaseURL(appURL.String()); err != nil {
+		t.Fatalf("newRLSFixture rejected unsafe runtime database: %v", err)
+	}
 	app, err := pgxpool.New(ctx, appURL.String())
 	if err != nil {
 		t.Fatalf("connect app role: %v", err)
@@ -145,13 +150,9 @@ func newRLSFixture(t *testing.T) *rlsFixture {
 		app.Close()
 		t.Fatalf("ping app role: %v", err)
 	}
-	t.Cleanup(func() {
-		app.Close()
-		_, _ = admin.Exec(context.Background(), `DROP ROLE IF EXISTS `+appRoleName)
-	})
+	t.Cleanup(func() { app.Close() })
 	return &rlsFixture{admin: dbPool, app: app, store: &storage.PostgresStore{Pool: app}, dbName: testDBName}
 }
-
 
 func setRLSActor(t *testing.T, tx pgx.Tx, organizationID, userID, supportSessionID string) {
 	t.Helper()
