@@ -857,10 +857,11 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_equal FI_2, side[:furniture_instance_id]
   end
 
-  # Negative provider proofs: unmanaged geometry, duplicated identity and
-  # erased/off-grid entities never become snap targets — resolution is by
-  # managed identity, never by component name.
-  def test_provider_excludes_unmanaged_duplicated_erased_and_off_grid_targets
+  # Negative provider proofs: unmanaged geometry, duplicated identity,
+  # erased entities and NON-RIGID frames (tilted, scaled, mirrored) never
+  # become snap targets — resolution is by managed identity, never by
+  # component name. Arbitrary YAW is valid (see the rotated-frame test).
+  def test_provider_excludes_unmanaged_duplicated_erased_and_non_rigid_targets
     unmanaged = add_managed_root('fi-unmanaged', 'Cosa suelta (fi-unmanaged)',
                                  [0.0, 0.0, 0.0], [100.0, 100.0, 100.0])
     MS.new(@model).write(unmanaged, { 'namespace' => MS::NAMESPACE,
@@ -870,19 +871,57 @@ class PlacementPreviewControllerTest < Minitest::Test
     add_managed_root('fi-dup', 'Duplicado B (fi-dup)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
     erased = add_managed_root('fi-erased', 'Borrado (fi-erased)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
     erased.define_singleton_method(:valid?) { false }
-    off_grid = add_managed_root('fi-offgrid', 'Rotado (fi-offgrid)', [0.0, 0.0, 0.0],
-                                [50.0, 50.0, 50.0])
-    off_grid.transformation = Geom::Transformation.axes(
-      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(0.7, 0.7, 0.0),
-      Geom::Vector3d.new(-0.7, 0.7, 0.0), Geom::Vector3d.new(0, 0, 1)
+    tilted = add_managed_root('fi-tilted', 'Inclinado (fi-tilted)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    tilted.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(1, 0, 0),
+      Geom::Vector3d.new(0, 0, 1), Geom::Vector3d.new(0, -1, 0)
+    )
+    scaled = add_managed_root('fi-scaled', 'Escalado (fi-scaled)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    scaled.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(1.5, 0, 0),
+      Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+    mirrored = add_managed_root('fi-mirrored', 'Espejado (fi-mirrored)', [0.0, 0.0, 0.0], [50.0, 50.0, 50.0])
+    mirrored.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(0, 0, 0), Geom::Vector3d.new(-1, 0, 0),
+      Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(0, 0, 1)
     )
     add_managed_root('fi-ok', 'Sano (fi-ok)', [0.0, 0.0, 0.0], [40.0, 40.0, 40.0])
 
     targets = @controller.send(:placement_furniture_targets_provider, @model).call
 
     assert_equal ['fi-ok'], targets.map { |t| t['furniture_instance_id'] },
-                 'only the single healthy axis-aligned managed root is a target'
+                 'only the single healthy managed root is a target'
     assert_equal 'Sano', targets.first['label'], 'display label strips the id suffix'
+  end
+
+  # #469 increment 3 — a root rotated to an arbitrary yaw IS a target: the
+  # descriptor carries the ORIENTED frame from the real rigid transform
+  # (world origin + unit front/right) plus the LOCAL definition extents —
+  # the world AABB is never part of the contract.
+  def test_provider_describes_rotated_roots_with_the_oriented_frame
+    half = Math.sqrt(2.0) / 2.0
+    rotated = add_managed_root('fi-rot45', 'Rotado 45 (fi-rot45)',
+                               [0.0, 0.0, 0.0], [600.0 / 25.4, 560.0 / 25.4, 720.0 / 25.4])
+    rotated.transformation = Geom::Transformation.axes(
+      Geom::Point3d.new(10.0 / 25.4, 20.0 / 25.4, 0), Geom::Vector3d.new(half, -half, 0),
+      Geom::Vector3d.new(half, half, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+
+    targets = @controller.send(:placement_furniture_targets_provider, @model).call
+
+    assert_equal(['fi-rot45'], targets.map { |t| t['furniture_instance_id'] })
+    target = targets.first
+    assert_in_delta 10.0, target['origin_world_mm'][0], 1e-6, 'world origin from the transform'
+    assert_in_delta 20.0, target['origin_world_mm'][1], 1e-6
+    assert_in_delta half, target['front_dir_mm'][0], 1e-6, 'unit front at 45°'
+    assert_in_delta half, target['front_dir_mm'][1], 1e-6
+    assert_in_delta half, target['right_dir_mm'][0], 1e-6, 'unit right = front × up'
+    assert_in_delta(-half, target['right_dir_mm'][1], 1e-6)
+    assert_in_delta 600.0, target['local_max_mm'][0], 1e-6, 'LOCAL extents, not world AABB'
+    assert_in_delta 560.0, target['local_max_mm'][1], 1e-6
+    assert_in_delta 720.0, target['local_max_mm'][2], 1e-6
+    assert_in_delta 0.0, target['local_min_mm'][0], 1e-6
   end
 
   # The provider scan is read-only: running it repeatedly issues no
@@ -907,17 +946,18 @@ class PlacementPreviewControllerTest < Minitest::Test
   end
 
   # Hand-crafted Granete-managed root in the stub model: identity through
-  # the metadata store (as the real builder writes), human name, world
-  # bounds in INCHES (host semantics) and an identity frame unless a
+  # the metadata store (as the real builder writes), human name and the
+  # LOCAL definition box in INCHES (host semantics — the increment 3
+  # provider derives the oriented frame from the rigid transform plus
+  # these LOCAL extents, never from the instance world AABB) unless a
   # rotated transformation is assigned afterwards by the test.
   def add_managed_root(furniture_instance_id, name, min_in, max_in)
     definition = @model.definitions.add("Granete · #{name}")
+    definition.bounds = Geom::BoundingBox.new
+    definition.bounds.min = Geom::Point3d.new(*min_in)
+    definition.bounds.max = Geom::Point3d.new(*max_in)
     instance = @model.entities.add_instance(definition, Geom::Transformation.new)
     instance.name = name
-    bounds = Geom::BoundingBox.new
-    bounds.min = Geom::Point3d.new(*min_in)
-    bounds.max = Geom::Point3d.new(*max_in)
-    instance.bounds = bounds
     MS.new(@model).write(instance, { 'namespace' => MS::NAMESPACE,
                                      'metadataVersion' => MS::METADATA_VERSION,
                                      'kind' => 'furnitureInstance',

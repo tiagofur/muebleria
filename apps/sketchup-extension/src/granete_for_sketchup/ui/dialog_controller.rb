@@ -498,6 +498,10 @@ module Granete
       # host state from project membership, exact WorkingCopy intent and the
       # active model's top-level managed roots.
       module ProjectFurnitureBridge # rubocop:disable Metrics/ModuleLength
+        # Unit-length/orthogonality tolerance for the oriented target
+        # frames (#469 increment 3): host transform axes are floats.
+        UNIT_EPSILON = 1e-6
+
         def register_project_furniture_callbacks(dialog)
           dialog.add_action_callback('get_project_furniture') { handle_get_project_furniture(dialog) }
           dialog.add_action_callback('place_furniture_instance') { |_c, p| handle_place_furniture_instance(dialog, p) }
@@ -1033,14 +1037,14 @@ module Granete
           )
         end
 
-        # #469 increment 2 — pure-data provider of Granete-managed
+        # #469 increments 2+3 — pure-data provider of Granete-managed
         # neighbors for side-to-side snapping. Targets are resolved by
         # SERVER identity through ManagedFurniture metadata — never by
         # component name/GUID — and the scan is local/read-only (no
         # request, no mutation), so it is safe inside the cursor loop.
-        # Ambiguous roots (duplicated furnitureInstanceId) and erased or
-        # non-axis-aligned entities offer no candidate: an unsafe target
-        # fails closed instead of guessing.
+        # Ambiguous roots (duplicated furnitureInstanceId) and erased,
+        # tilted, scaled or mirrored entities offer no candidate: an
+        # unsafe target fails closed instead of guessing.
         def placement_furniture_targets_provider(model)
           lambda do
             index = Connection::ProjectFurniture::ManagedFurniture.index(
@@ -1054,55 +1058,84 @@ module Granete
           end
         end
 
-        # World descriptor of one managed root for the snap engine. Host
-        # bounds are INCHES; the engine works in mm. The label comes from
-        # the entity display name (cosmetic only — identity stays the
-        # furnitureInstanceId above).
+        # Oriented-frame descriptor of one managed root for the snap
+        # engine (#469 increment 3). The frame comes from the entity's
+        # REAL rigid transform (world origin + horizontal unit right/front
+        # axes) and the LOCAL definition bounds — the materialized
+        # resolved furniture box. The world AABB (entity.bounds) is
+        # explicitly NOT the side authority: it is axis-aligned and stops
+        # being the furniture's real sides at any non-quarter yaw.
+        # Host transform axes are INCHES-direction vectors; the engine
+        # works in mm. The label comes from the entity display name
+        # (cosmetic only — identity stays the furnitureInstanceId above).
         def placement_target_descriptor(furniture_instance_id, entity)
-          return [] unless entity.respond_to?(:bounds) && entity.respond_to?(:transformation)
+          return [] unless entity.respond_to?(:transformation) && entity.respond_to?(:definition)
           return [] if entity.respond_to?(:valid?) && !entity.valid?
 
-          bounds = entity.bounds
-          return [] unless bounds.respond_to?(:min) && bounds.respond_to?(:max)
-
-          front = axis_aligned_horizontal_dir(entity.transformation.yaxis)
-          return [] unless front
+          frame = placement_target_frame(entity)
+          return [] unless frame
 
           [{
             'furniture_instance_id' => furniture_instance_id,
             'label' => placement_target_label(entity),
-            'min_mm' => bounds_mm(bounds.min),
-            'max_mm' => bounds_mm(bounds.max),
-            'front_dir' => front
+            'origin_world_mm' => frame[:origin_world_mm],
+            'front_dir_mm' => frame[:front_dir_mm],
+            'right_dir_mm' => frame[:right_dir_mm],
+            'local_min_mm' => frame[:local_min_mm],
+            'local_max_mm' => frame[:local_max_mm]
           }]
         rescue StandardError => e
           @logger.warn('placement_target_skipped', { 'error' => e.message })
           []
         end
 
-        # Host bounds corners are INCHES Point3d; the engine works in mm.
-        def bounds_mm(corner)
-          mm = 25.4
-          [(corner.x.to_f * mm), (corner.y.to_f * mm), (corner.z.to_f * mm)]
+        # The root's oriented frame, validated fail-closed: horizontal
+        # UNIT right/front (any yaw, but no tilt and no scaling — a scaled
+        # instance's axis vectors leave unit length), mutually orthogonal
+        # and right-handed (right × front = +Z: a mirrored frame is not
+        # the furniture's own frame), with zaxis ≈ +Z (no tilt). nil when
+        # any check fails — such a target offers no candidate.
+        def placement_target_frame(entity)
+          transform = entity.transformation
+          right = horizontal_unit_dir_mm(transform.xaxis)
+          front = horizontal_unit_dir_mm(transform.yaxis)
+          return nil unless right && front
+          return nil unless (right[0] * front[1]) - (right[1] * front[0]) > 1.0 - UNIT_EPSILON
+          return nil unless vertical_up_axis?(transform.zaxis)
+
+          bounds = entity.definition.bounds
+          return nil unless bounds.respond_to?(:min) && bounds.respond_to?(:max)
+
+          { origin_world_mm: point_mm(transform.origin),
+            front_dir_mm: front, right_dir_mm: right,
+            local_min_mm: point_mm(bounds.min), local_max_mm: point_mm(bounds.max) }
         end
 
-        # Horizontal ±X/±Y unit direction of the root's front (+Y local)
-        # — nil when the instance is rotated off the quarter grid, so its
-        # sides have no exact axis-aligned plane to propose.
-        def axis_aligned_horizontal_dir(vector)
+        # Host Point3d (INCHES) → mm triple for frame/descriptor data.
+        def point_mm(point)
+          mm = 25.4
+          [point.x.to_f * mm, point.y.to_f * mm, point.z.to_f * mm]
+        end
+
+        # A host axis vector as a horizontal UNIT mm direction — nil when
+        # it tilts off the XY plane or leaves unit length (scaled).
+        def horizontal_unit_dir_mm(vector)
           return nil unless vector.respond_to?(:x) && vector.respond_to?(:y) && vector.respond_to?(:z)
 
           x = vector.x.to_f
           y = vector.y.to_f
           z = vector.z.to_f
-          epsilon = 1e-6
-          on_x = ((x.abs - 1.0).abs < epsilon) && y.abs < epsilon && z.abs < epsilon
-          return [x.positive? ? 1.0 : -1.0, 0.0, 0.0] if on_x
+          return nil unless z.abs < UNIT_EPSILON
+          return nil unless (Math.sqrt((x**2) + (y**2)) - 1.0).abs < UNIT_EPSILON
 
-          on_y = x.abs < epsilon && ((y.abs - 1.0).abs < epsilon) && z.abs < epsilon
-          return [0.0, y.positive? ? 1.0 : -1.0, 0.0] if on_y
+          [x, y, 0.0]
+        end
 
-          nil
+        # zaxis must be exactly +Z: tilt or a flipped frame rejects.
+        def vertical_up_axis?(vector)
+          vector.respond_to?(:x) && vector.x.to_f.abs < UNIT_EPSILON &&
+            vector.respond_to?(:y) && vector.y.to_f.abs < UNIT_EPSILON &&
+            vector.respond_to?(:z) && ((vector.z.to_f - 1.0).abs < UNIT_EPSILON)
         end
 
         # Display label: the entity's human name without the technical id

@@ -182,9 +182,12 @@ module Granete
       # Y=depth with the front at +Y/max-depth, Z=height, origin at the
       # back-left-bottom corner). The semantic anchor names that corner of
       # the resolved extents the user "grabs"; Tab cycles it, ←/→ rotate in
-      # quarter turns about +Z through the anchor. Both affect ONLY the
-      # preview/top-level transform — never dimensions, geometry, materials
-      # or machining (#469 §5).
+      # quarter turns about +Z through the anchor (free-mode authoring
+      # control — increment 3 keeps it quarter-turn by design). Semantic
+      # snaps may instead propose an ARBITRARY yaw: the committed basis
+      # derives from the solution's unit front vector. All of these affect
+      # ONLY the preview/top-level transform — never dimensions, geometry,
+      # materials or machining (#469 §5).
       #
       # The click hands the ACCEPTED transform to the caller's canonical
       # commit command via on_commit; identity provenance stays entirely
@@ -443,12 +446,15 @@ module Granete
 
         # The accepted top-level transform: the anchor corner sits at the
         # inference point — or at the snapped position when a semantic
-        # candidate is active — and the furniture frame is rotated about +Z
-        # through that anchor (quarter turns derived from the snap target
-        # when it proposes an orientation, e.g. front away from the wall).
-        # Rigid by construction — axes() only accepts orthonormal input,
-        # and quarter turns are exact. Snap and offset NEVER scale, resize
-        # or touch productive geometry: only this exterior transform moves.
+        # candidate is active — and the furniture frame is oriented about
+        # +Z through that anchor. A snap may propose an ARBITRARY yaw
+        # (increment 3): the world front comes from the solution as a unit
+        # horizontal vector and the basis is derived from it directly —
+        # x = front × up, y = front, z = up — unit, orthogonal and
+        # determinant +1 by construction (axes() only accepts orthonormal
+        # input). Free mode keeps the exact quarter-turn basis. Snap and
+        # offset NEVER scale, resize or touch productive geometry: only
+        # this exterior transform moves.
         def current_transform
           return nil unless @has_cursor
           return nil unless defined?(::Geom::Transformation) && defined?(::Geom::Point3d) &&
@@ -458,11 +464,11 @@ module Granete
           anchor_pt = ::Geom::Point3d.new(anchor_world[0] / MM_PER_INCH,
                                           anchor_world[1] / MM_PER_INCH,
                                           anchor_world[2] / MM_PER_INCH)
-          quarters = effective_rotation_quarters
+          x_axis, y_axis, z_axis = effective_basis
           ::Geom::Transformation.axes(anchor_pt,
-                                      ::Geom::Vector3d.new(*basis_for_rotation(:x, quarters)),
-                                      ::Geom::Vector3d.new(*basis_for_rotation(:y, quarters)),
-                                      ::Geom::Vector3d.new(*basis_for_rotation(:z, quarters))) *
+                                      ::Geom::Vector3d.new(*x_axis),
+                                      ::Geom::Vector3d.new(*y_axis),
+                                      ::Geom::Vector3d.new(*z_axis)) *
             ::Geom::Transformation.translation(
               ::Geom::Vector3d.new(-anchor_local_point[0] / MM_PER_INCH,
                                    -anchor_local_point[1] / MM_PER_INCH,
@@ -500,8 +506,7 @@ module Granete
         def refresh_snap!
           @active_snap = PlacementSnapEngine.solve(
             cursor_mm: @cursor_mm, extents_mm: @extents_mm, origin_mm: @origin_mm,
-            anchor: @anchor, rotation_quarters: @rotation_quarters,
-            faces: inferenced_planes, managed_targets: managed_targets,
+            anchor: @anchor, faces: inferenced_planes, managed_targets: managed_targets,
             eye_mm: @eye_mm
           )
           update_status_text
@@ -576,11 +581,28 @@ module Granete
           end
         end
 
-        def effective_rotation_quarters
+        # The effective world basis [x, y, z] axis vectors. Under an
+        # orientation-proposing snap it derives from the solution's
+        # ARBITRARY unit front (increment 3): right = front × up keeps the
+        # frame right-handed with determinant +1 at any yaw. Free mode
+        # (and the floor, which never reorients) keeps the exact
+        # quarter-turn basis about +Z.
+        def effective_basis
           solution = @active_snap
-          return @rotation_quarters unless solution && solution[:constrains_rotation]
+          front = solution && solution[:constrains_rotation] ? solution[:front_dir_mm] : nil
+          return basis_for_rotation(@rotation_quarters) unless front
 
-          solution[:rotation_quarters]
+          [[front[1], -front[0], 0.0], [front[0], front[1], 0.0], [0.0, 0.0, 1.0]]
+        end
+
+        # Quarter-turn basis about +Z (front stays front under rotation —
+        # the frame turns with the furniture, never mirrors): returns the
+        # [x, y, z] axis vectors.
+        def basis_for_rotation(quarters = @rotation_quarters)
+          x = [1.0, 0.0, 0.0]
+          y = [0.0, 1.0, 0.0]
+          quarters.abs.times { x, y = rotate_pair(x, y) }
+          [x, y, [0.0, 0.0, 1.0]]
         end
 
         # The gap shown to the designer: the persisted offset when it
@@ -632,16 +654,6 @@ module Granete
 
           @rotation_quarters = (((@rotation_quarters + direction) % 4) + 4) % 4
           refresh_snap!
-        end
-
-        # Quarter-turn basis about +Z (front stays front under rotation —
-        # the frame turns with the furniture, never mirrors).
-        def basis_for_rotation(axis, quarters = @rotation_quarters)
-          x = [1.0, 0.0, 0.0]
-          y = [0.0, 1.0, 0.0]
-          z = [0.0, 0.0, 1.0]
-          quarters.abs.times { x, y = rotate_pair(x, y) }
-          { x: x, y: y, z: z }.fetch(axis)
         end
 
         # One +90° turn about +Z: x̂ → ŷ, ŷ → -x̂ (right-handed, no mirror).
