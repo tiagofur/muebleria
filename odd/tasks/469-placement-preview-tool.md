@@ -244,7 +244,203 @@ it lands, wall/face snapping is not "complete".
 - Instalación para pruebas del owner sobre SketchUp 2026.2 (host
   cerrado; backup del 0.1.5 previo conservado).
 
-## Scope separation from parallel work (coordination registry)
+## Increment 4 — local/disconnected Biblioteca uses the SAME Placement Tool
+
+Base: origin/main @ b739338d (includes #838)
+Branch: feat/469-local-library-placement
+Status: IMPLEMENTED_PENDING_REVIEW
+
+### P1 TestUp evidence correction — center preview and center commit
+
+Objective: make the existing real-host TestUp smoke prove one fresh InputPoint
+at one viewport coordinate: preview at center → click at center → fresh
+re-pick/commit at that same center.
+
+Authorized scope: `TC_PlacementPreviewSmoke.rb` test evidence only. Add the
+shared `click_view_center(tool)` helper and replace every immediate
+`move_to_view_center(tool)` followed by an origin `(0, 0)` confirmation that
+semantically confirms that preview, including
+`test_local_library_preview_commit_at_non_origin_and_undo`.
+
+Exclusions: no product code (`FurniturePlacementTool`,
+`PlacementSnapEngine`, controller, identity, `ManagedFurniture`, builder,
+dialog routing); no repeat placement, polygon-aware footprint, #784, #506,
+or real-host execution.
+
+Delivery strategy: single PR; forecast under 400 authored lines.
+TDD: strict TDD enabled by repository instruction. TestUp real-host execution
+is unavailable in this session, so static/lint RED/GREEN evidence must be
+reported honestly and V2 remains NOT_RUN.
+
+Tasks:
+
+- [x] T1 (route: delegated; trigger: preparation/write): mapped all immediate
+  center-preview/origin-click pairs, correct only same-pick confirmations,
+  and preserved deliberately distinct coordinate clicks. Replaced nine origin
+  confirmations (including the double-click replay) with the shared center
+  helper; no `onLButtonDown(0, 0, 0, ...)` remains in this smoke.
+- [x] T2 (route: delegated; trigger: verification): recorded static TestUp/lint,
+  full rake verification, affected-gate selection/execution, diff/readback,
+  and the work-unit commit
+  `aa23c81cb4c7716d0876a786ee16a2a863b0b08e`.
+
+Acceptance: local smoke still aims at approximately 1500/800/0 mm and now
+confirms at the viewport center so `onLButtonDown` fresh re-picks that exact
+point before asserting commit and undo.
+
+Observed correction evidence (2026-09-24):
+
+- RED: a temporary static TestUp-shape assertion run against
+  `HEAD:TC_PlacementPreviewSmoke.rb` failed because the baseline lacked
+  `click_view_center`; it also retained origin confirmations.
+- GREEN: the same assertion passed against the worktree: it finds the helper
+  calling `onLButtonDown(0, view.vpwidth / 2, view.vpheight / 2, view)` and
+  finds no origin confirmation call. The local smoke keeps its
+  `aim_mm = [1500.0, 800.0, 0.0]` positive assertions and undo.
+- REFACTOR/V0: `ruby -c TC_PlacementPreviewSmoke.rb`, full
+  `bundle exec rake syntax`, focused RuboCop, and `git diff --check` passed.
+- V1: with `PATH=/opt/homebrew/opt/ruby@3.2/bin:$PATH`,
+  `bundle exec rake verify` passed: RuboCop 229 files, 0 offenses; 1126
+  unit runs / 7374 assertions; 6 boundary runs / 3359 assertions; deterministic
+  RBZ SHA-256 `81e4499518fa531302a456b4c11248d2c538d0b3aedcae77315e5758c459b934`.
+- A first command using the rbenv Ruby was blocked by a native-extension
+  `libruby.3.2.dylib` mismatch; using the matching Homebrew Ruby 3.2.11 made
+  the suite pass. This is environment evidence, not a product failure.
+- Factory selector: `python3 scripts/verify_affected.py --base origin/main
+  --plan` selected all gates because existing global/tooling/unknown worktree
+  inputs are present. Its budgeted execution was BLOCKED before gates by the
+  required isolated `DATABASE_URL` for selected Go/PostgreSQL proofs; no DB
+  configuration was changed.
+- V2 real host/TestUp: NOT_RUN — no SketchUp host was started or claimed.
+
+Product gap (issue #469 comment 3, confirmed manually): Biblioteca local
+"Insertar en Modelo" still materializes at origin and hands off to the
+generic Move tool. This increment routes the local/disconnected catalog lane
+through the SAME `FurniturePlacementTool` + `PlacementSnapEngine`; the
+difference between connected and local exists ONLY at the commit.
+
+### Design decisions (pinned before coding)
+
+- ONE begin callback: `begin_catalog_placement_preview` serves BOTH lanes.
+  Lane selection is the MODEL BINDING (connection determines
+  identity/persistence, never the interaction): bound model → existing
+  connected preparation verbatim; unbound model → local preparation with NO
+  binding requirement and NO auth gate (nothing server-owned to protect; the
+  session still pins model + binding-nil + composition signature). A bound
+  model in a NON-connected state (stale_base…) keeps failing closed through
+  the connected lane — a project-bound model never silently receives local
+  furniture.
+- Local preparation: definition via `find_definition`, parameters normalized
+  by the SAME authority the commit uses (`FurnitureIntent.normalize_parameters`),
+  layout via the existing `resolve_layout_for` (nil offline → generic
+  authoring composition; a resolvable server layout is still used when the
+  catalog can resolve it). Extents: `PlacementPreviewExtents.from_layout`
+  when a layout exists, else `GenericAuthoringRenderer.generic_extents`
+  (shared single authority also feeding the persisted envelope). Signature:
+  `PlacementGuards.layout_signature` when a layout exists, else a
+  definition+normalized-parameters digest; recomputed at click and compared —
+  mismatch fails closed `composition_changed` before any mutation.
+- Local commit: `FurnitureBuilder#insert_furniture` extended with
+  `transformation:`/`prepare:`; the preview commit passes the accepted
+  transform and `prepare: false` (NO Move handoff — the click IS the
+  placement), inserts the root TOP-LEVEL (model.entities, same invariant as
+  the project lanes) at the accepted transform INSIDE the one undoable
+  operation, and persists `placementEnvelopeMm` (layout-derived, else the
+  generic box). Identity stays local: `instanceRef`, NO furnitureInstanceId,
+  NO POST /furniture-instances, NO working-copy PUT, no convergence.
+  Legacy `insert_furniture` callers keep origin+Move semantics (compat
+  fallback when the host lacks the preview callback).
+- Snap targets: `ManagedFurniture.index` additionally groups local roots
+  (kind furnitureInstance + instanceRef, NO furnitureInstanceId) under
+  `local_by_ref` with the same single-entry/duplicate-exclusion and
+  persisted-envelope rules; `placement_furniture_targets_provider` merges
+  both streams so placed local furniture is a side-to-side target without
+  inventing server identity. Base-plane prune already covers local roots.
+- UI: `btnInsert` prefers `begin_catalog_placement_preview` whenever the
+  callback exists (capability-driven, no `isConnected` gate); local commit
+  answers through the existing `onInsertionResult` with
+  `placed_via_preview: true` → "✓ Mueble X insertado" (the
+  "movelo a su lugar (tecla M)" copy only remains TRUE for the legacy
+  origin-first fallback). Cancel/failure re-arms the button (existing
+  catalog-lane re-arm path).
+
+### Required plan answers (AGENTS plan-before-coding)
+
+1. Entity: catalog insert → LOCAL managed furniture root at an accepted
+   top-level transform; 2. IDs: definitionId (gesture), instanceRef (local
+   commit); 3. placement transform + parameters + materialChoices are
+   authoring intent, generic/server layout is the composition, preview box is
+   view-only; 4. authority: shared tool/engine (interaction), builder
+   MetadataWriter (identity/intent), PlacementPreviewExtents (envelope),
+   server layout when resolvable; 5. reuse: no new DTOs/APIs, existing
+   contracts only; 6. no new persistent families, no Gate A dependency;
+   7. gesture-matched single commit, busy answers, frozen payload;
+   8. guards before mutation, operation abort on host error, Esc zero
+   residue; 9. undo: one "Insertar Mueble …" operation (create+transform
+   atomically); 10-11. see test matrix below; 12. TestUp smoke prepared,
+   NOT_RUN without host; 13. logs carry definition ids only; 14. none.
+
+### Scope exclusions
+
+Repeat placement, polygon-aware floor footprint, #784, multi-select,
+CNC/PTX, Inspector redesign, library versioning, real-host install.
+
+### Observed evidence (this candidate)
+
+- `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle): RuboCop
+  229 files 0 offenses; 1126 unit runs / 7374 assertions, 0 failures; 6
+  boundary runs / 3359 assertions; RBZ deterministic readback, sha256
+  `81e4499518fa531302a456b4c11248d2c538d0b3aedcae77315e5758c459b934`.
+- New `local_catalog_placement_preview_test.rb` (12 runs / 106
+  assertions, seed-stable 4242/12345/606/1/999), driven through the REAL
+  dialog callback on an UNBOUND model: zero residue before the click
+  (no roots, no definitions, zero transport requests); click commits
+  exactly one local root AT the accepted transform (1000/200/30 mm, not
+  origin) with instanceRef identity and NO furnitureInstanceId,
+  widthMm=750 + INTERIOR/FRENTES materialChoices surviving exactly,
+  generic envelope [0..750, 0..590, 0..720] (the same shared authority
+  the preview used), ONE 'Insertar Mueble' operation, no
+  selectMoveTool/selection hijack, undo removes the whole root; Esc
+  leaves zero residue and the next attempt works; catalog default drift
+  (600→800) and server-layout dims drift both fail closed
+  `composition_changed` with nothing inserted; definition disappearing
+  answers `definition_unavailable` correlated by definitionId; binding
+  the model mid-gesture fails closed `context_changed`; a double click
+  and a forged stale gesture commit nothing; the local lane with a
+  resolvable server layout takes dimensionsMm extents + layout envelope
+  (layout_signature parity); local side-to-side snap against a placed
+  LOCAL root traverses the shared provider/engine and commits at the
+  neighbor side (x=600mm); provider negatives — duplicated local refs
+  and envelopeless roots offer no candidate, `:invalid` classification
+  for bound-model reconciliation/design-sync guards is PRESERVED, and
+  server+local roots merge as separate identity streams.
+- `furniture_builder_test.rb` +1 focused proof:
+  `insert_furniture(transformation:, prepare: false)` places the root at
+  the final pose inside ONE operation with no Move handoff and persists
+  the generic envelope; the legacy origin+Move behavior stays pinned by
+  its existing test.
+- `dialog_placement_preview_test.js` 11 tests under node (was 9): the
+  DISCONNECTED btnInsert routes to `begin_catalog_placement_preview`
+  (no `insert_furniture`, no `create_project_furniture`), parameters and
+  materialChoices ride the preview payload, Esc re-arms, the commit
+  answers `onInsertionResult` with `placed_via_preview` and the success
+  copy WITHOUT the Move hint; the host without preview callbacks keeps
+  the origin-first fallback whose Move hint is then TRUE. All 17 dialog
+  JS suites green under node.
+- TestUp `TC_PlacementPreviewSmoke`:
+  `test_local_library_preview_commit_at_non_origin_and_undo` — the REAL
+  controller entry point on an unbound host model (bridge journal
+  standing in for the HtmlDialog), Esc zero residue, click at a
+  non-origin aim (1500/800/0mm) commits one local root there with the
+  configured widthMm=750/materials and the shared generic envelope, undo
+  removes it: NOT_RUN this session — no host available; owner-coordinated
+  like R1-R4.
+- `python3 -m unittest discover -s scripts -p test_ci_*.py`: 38 OK.
+- `verify_affected --plan` selects all lanes (artifact .md counts as
+  global); the actual surface is `apps/sketchup-extension` only — no
+  backend/TS/contract files changed; CI re-validates the rest on the PR.
+
+
 
 The repository's per-issue ODD artifact is the coordination mechanism (the
 global progress ledger was removed in 3a3e0547). Registration:
@@ -459,7 +655,7 @@ rehearsal spec prepared but NOT_RUN (host).
 
 ## Remaining for #469 (not this increment)
 
-- Semantic snapping (wall/face, furniture side-to-side, floor), numeric mm
-  offsets, repeat placement, anchor/rotation UX usability on the real host,
-  real-host evidence for the whole walk, disconnected Library lane
-  (`insert_furniture`) still origin-first (local-compat lane).
+- Repeat placement.
+- Polygon-aware floor footprint.
+- Final real-host evidence.
+- Polish #506.

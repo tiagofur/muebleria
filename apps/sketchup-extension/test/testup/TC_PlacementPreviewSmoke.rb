@@ -112,9 +112,8 @@ module Granete
         # --- Rehearsal 2: click commits once, same identity, one undo op.
         tool2 = reactivate_preview(placer, extents, commits)
         move_to_view_center(tool2)
-        view = model.active_view
-        tool2.onLButtonDown(0, 0, 0, view)
-        tool2.onLButtonDown(0, 0, 0, view) # double click: one gesture only
+        click_view_center(tool2)
+        click_view_center(tool2) # double click: one gesture only
 
         assert_equal 1, commits.length, 'a double click must commit exactly once'
         assert commits.first['ok'], commits.first.inspect
@@ -201,7 +200,7 @@ module Granete
 
         # --- Exact gap through the VCB path: 40mm off the wall.
         assert_equal true, tool.onUserText('40', model.active_view)
-        tool.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool)
         assert_equal 1, commits.length
         assert commits.first['ok'], commits.first.inspect
         root = Connection::ProjectFurniture::ManagedFurniture
@@ -231,7 +230,7 @@ module Granete
         assert_equal FI_1, side[:furniture_instance_id]
 
         assert_equal true, tool2.onUserText('5', model.active_view)
-        tool2.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool2)
         assert_equal 1, commits2.length
         assert commits2.first['ok'], commits2.first.inspect
         placed2 = Connection::ProjectFurniture::ManagedFurniture
@@ -303,7 +302,7 @@ module Granete
         assert_in_delta n[1], tool.active_snap[:front_dir_mm][1], 1e-6
 
         assert_equal true, tool.onUserText('40', model.active_view)
-        tool.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool)
         assert_equal 1, commits.length
         assert commits.first['ok'], commits.first.inspect
         root = Connection::ProjectFurniture::ManagedFurniture
@@ -326,7 +325,7 @@ module Granete
         move_to_view_center(tool_b)
         assert tool_b.active_snap, 'the reversed 30° wall still snaps (eye resolves the room side)'
         assert_equal true, tool_b.onUserText('40', model.active_view)
-        tool_b.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool_b)
         assert_equal 1, commits_b.length
         root_b = Connection::ProjectFurniture::ManagedFurniture
                  .locate(model, Metadata::Store.new(model), FI_1)['entity']
@@ -367,7 +366,7 @@ module Granete
         assert_equal FI_1, side[:furniture_instance_id]
 
         assert_equal true, tool_c.onUserText('5', model.active_view)
-        tool_c.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool_c)
         assert_equal 1, commits_c.length
         assert commits_c.first['ok'], commits_c.first.inspect
         placed2 = Connection::ProjectFurniture::ManagedFurniture
@@ -403,7 +402,7 @@ module Granete
         kinds_d = tool_d.active_snap[:components].map { |c| c[:kind] }.sort
         assert_equal %i[face floor], kinds_d, 'wall + floor compose through the real tool'
 
-        tool_d.onLButtonDown(0, 0, 0, model.active_view)
+        click_view_center(tool_d)
         assert_equal 1, commits_d.length
         assert commits_d.first['ok'], commits_d.first.inspect
         placed_d = Connection::ProjectFurniture::ManagedFurniture
@@ -426,6 +425,89 @@ module Granete
         assert tool_e.cancelled?
         assert_empty commits_e
         assert_equal entities_before, model.entities.count, 'cancel keeps zero residue'
+      ensure
+        model.select_tool(nil)
+      end
+
+      # #469 increment 4 — local/disconnected Biblioteca walk on the REAL
+      # host: an UNBOUND model starts the shared preview through the REAL
+      # dialog-controller entry point (begin_catalog_placement_preview),
+      # the click commits ONE local furniture (instanceRef identity, no
+      # FurnitureInstance, generic envelope) at a NON-ORIGIN transform,
+      # and Esc leaves zero residue. NOT_RUN in sessions without the
+      # owner-installed SketchUp; never simulated.
+      def test_local_library_preview_commit_at_non_origin_and_undo
+        Sketchup.file_new # the LOCAL lane runs on an UNBOUND model
+        mm = 25.4
+        model.entities.add_face(
+          [Geom::Point3d.new(-6000 / mm, -4000 / mm, 0),
+           Geom::Point3d.new(6000 / mm, -4000 / mm, 0),
+           Geom::Point3d.new(6000 / mm, 4000 / mm, 0),
+           Geom::Point3d.new(-6000 / mm, 4000 / mm, 0)]
+        )
+        aim_mm = [1500.0, 800.0, 0.0]
+        aim_camera_at_mm(aim_mm, [aim_mm[0] - 3000.0, aim_mm[1] - 3000.0, 2500.0])
+
+        catalog = LocalStaticCatalog.new
+        controller = UserInterface::DialogController.new(
+          logger: silent_logger, status_provider: StatusPayload.new,
+          catalog_provider: catalog, project_furniture_placer: build_local_placer(catalog)
+        )
+        dialog = BridgeJournalDialog.new
+        payload = { 'definitionId' => 'def-local', 'parameters' => { 'widthMm' => 750 },
+                    'materialChoices' => { 'INTERIOR' => 'mat-roble' } }
+        entities_before = model.entities.count
+        definitions_before = granete_definition_count
+
+        controller.handle_begin_catalog_placement_preview(dialog, JSON.generate(payload))
+        tool = controller.instance_variable_get(:@active_placement_preview)['tool']
+        assert tool.active?, 'the shared preview tool must be live on the unbound model'
+        assert(dialog.scripts.any? { |s| s.include?('preview_active') })
+        assert_equal entities_before, model.entities.count, 'preview creates no entities'
+        assert_equal definitions_before, granete_definition_count, 'preview creates no definitions'
+
+        # --- Esc: zero residue, honest cancel answer.
+        move_to_view_center(tool)
+        tool.onKeyDown(27, false, 0, model.active_view)
+        assert tool.cancelled?
+        assert_equal entities_before, model.entities.count, 'cancel leaves zero residue'
+        assert_equal definitions_before, granete_definition_count
+        assert(dialog.scripts.any? { |s| s.include?('preview_cancelled') })
+
+        # --- Click at a NON-ORIGIN aim: one local furniture, right there.
+        controller.handle_begin_catalog_placement_preview(dialog, JSON.generate(payload))
+        tool = controller.instance_variable_get(:@active_placement_preview)['tool']
+        move_to_view_center(tool)
+        click_view_center(tool)
+
+        assert dialog.scripts.any? { |s| s.include?('placed_via_preview') },
+               'the local commit answers the library insert channel'
+        roots = model.entities.grep(Sketchup::ComponentInstance).select do |entity|
+          Metadata::Store.new(model).read(entity).is_a?(Hash) &&
+            Metadata::Store.new(model).read(entity)['kind'] == 'furnitureInstance'
+        end
+        assert_equal 1, roots.length, 'exactly one local furniture root'
+        root = roots.first
+        anchor = root.transformation.origin.to_a.map { |v| v * mm }
+        assert_in_delta aim_mm[0], anchor[0], 5.0, 'committed at the aimed X — NOT the origin'
+        assert_in_delta aim_mm[1], anchor[1], 5.0, 'committed at the aimed Y — NOT the origin'
+        assert_in_delta 0.0, anchor[2], 5.0, 'the floor snap composes through the shared tool'
+
+        metadata = Metadata::Store.new(model).read(root)
+        assert metadata['identity']['instanceRef'], 'local identity is a local ref'
+        assert_nil metadata['identity']['furnitureInstanceId'], 'no server identity is invented'
+        assert_equal 750, metadata.dig('intent', 'parameters', 'widthMm'),
+                     'the configured parameter survives the whole gesture'
+        assert_equal 'mat-roble', metadata.dig('intent', 'materialChoices', 'INTERIOR')
+        envelope = metadata['placementEnvelopeMm']
+        assert_equal [750.0, 590.0, 720.0], envelope['max_mm'].map(&:to_f),
+                     'the persisted envelope is the SAME generic box the preview showed'
+
+        # --- Undo removes the complete unit.
+        Sketchup.undo
+        remaining_roots = model.entities.grep(Sketchup::ComponentInstance)
+                               .select { |e| Metadata::Store.new(model).read(e).is_a?(Hash) }
+        assert_empty remaining_roots, 'undo removes the whole local unit'
       ensure
         model.select_tool(nil)
       end
@@ -610,6 +692,16 @@ module Granete
         tool.onMouseMove(0, view.vpwidth / 2, view.vpheight / 2, view)
       end
 
+      # The CONFIRMING click must land on the SAME viewport point the
+      # preview picked: FurniturePlacementTool#onLButtonDown re-picks
+      # fresh at the click's own coordinates, so a (0,0) click would
+      # re-aim at the top-left corner instead of confirming the centered
+      # pick (review P1 — preview and commit must address one point).
+      def click_view_center(tool)
+        view = model.active_view
+        tool.onLButtonDown(0, view.vpwidth / 2, view.vpheight / 2, view)
+      end
+
       def granete_definition_count
         model.definitions.select { |definition| definition.name.to_s.start_with?('Granete ·') }.count
       end
@@ -743,6 +835,72 @@ module Granete
                     'base_revision_id' => REVISION_R1, 'source_type' => 'manual',
                     'updated_at' => '2026-09-23T00:00:00Z', 'items' => items })
         end
+      end
+
+      # #469 increment 4 — the DISCONNECTED local catalog: a static
+      # definition with NO layout resolution (offline generic composition).
+      class LocalStaticCatalog
+        def find_definition(id)
+          return nil unless id == 'def-local'
+
+          { 'furniture_definition_id' => 'def-local', 'code' => 'LOCAL-750', 'name' => 'Bajo Local',
+            'category' => 'kitchen_base', 'version' => '1.0.0',
+            'parameters' => [
+              { 'name' => 'widthMm', 'label' => 'Ancho', 'type' => 'number', 'defaultValue' => 600,
+                'unit' => 'mm' },
+              { 'name' => 'heightMm', 'label' => 'Alto', 'type' => 'number', 'defaultValue' => 720,
+                'unit' => 'mm' },
+              { 'name' => 'depthMm', 'label' => 'Fondo', 'type' => 'number', 'defaultValue' => 590,
+                'unit' => 'mm' }
+            ] }
+        end
+
+        def resolved_native_layout(_definition_id, _params = {}, _choices = {})
+          nil
+        end
+      end
+
+      # Minimal status payload for the controller seam (the local-lane
+      # handlers never read it beyond availability).
+      class StatusPayload
+        def call
+          { 'server_url' => nil }
+        end
+      end
+
+      # Bridge journal standing in for the HtmlDialog: the controller only
+      # needs #execute_script on this lane — every Ruby-side decision runs
+      # for real against the host.
+      class BridgeJournalDialog
+        attr_reader :scripts
+
+        def initialize
+          @scripts = []
+        end
+
+        def execute_script(script)
+          @scripts << script
+          nil
+        end
+      end
+
+      # Placer for the local smoke: unauthenticated seams are enough — the
+      # local lane never talks to the server.
+      def build_local_placer(catalog)
+        Connection::ProjectFurniture::Placer.new(
+          model_provider: -> { Sketchup.active_model },
+          binding_store_factory: ->(m) { Connection::ModelBinding::Store.new(m) },
+          model_binding_service: Connection::ModelBinding::Service.new(
+            transport: nil, auth_provider: AlwaysAuth.new, logger: silent_logger
+          ),
+          service: Connection::ProjectFurniture::Service.new(
+            transport: nil, auth_provider: AlwaysAuth.new, logger: silent_logger
+          ),
+          metadata_store_factory: ->(m) { Metadata::Store.new(m) },
+          catalog_provider: catalog,
+          furniture_builder_factory: ->(m) { Model::FurnitureBuilder.new(metadata_store: Metadata::Store.new(m)) },
+          logger: silent_logger
+        )
       end
     end
   end

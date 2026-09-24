@@ -4340,7 +4340,7 @@
 
           onInsertionResult: function (result) {
             btnInsert.disabled = false;
-            btnInsert.innerHTML = icon("plus") + "<span>Insertar en Modelo</span>";
+            updateLibraryInsertButton();
             if (result && result.success) {
               var detail = "";
               if (typeof result.component_count === "number" && result.component_count > 0) {
@@ -4349,8 +4349,15 @@
                   detail += " (" + result.hardware_count + " herraje" + (result.hardware_count === 1 ? "" : "s") + ")";
                 }
               }
-              showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail +
-                ". Quedó seleccionado: movelo a su lugar (tecla M).");
+              if (result.placed_via_preview) {
+                // #469: the click already placed the furniture at its final
+                // position — no Move handoff exists to advertise.
+                showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail + ".");
+              } else {
+                // Legacy origin-first fallback: the Move handoff is real.
+                showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail +
+                  ". Quedó seleccionado: movelo a su lugar (tecla M).");
+              }
             } else {
               showToast("error", "Error: " + parameterIssueMessage(result, "Fallo en la inserción"));
             }
@@ -5326,18 +5333,23 @@
             materialChoices: libMaterialChoices
           };
 
-          if (isConnected && window.sketchup && window.sketchup.begin_catalog_placement_preview) {
-            // #469: the SAME shared preview tool as the Project panel; the
-            // FurnitureInstance identity is minted at the commit click (#390),
-            // never while browsing or previewing.
+          if (window.sketchup && window.sketchup.begin_catalog_placement_preview) {
+            // #469: the SAME shared preview tool as the Project panel for
+            // BOTH lanes — the Ruby side picks identity provenance from the
+            // model binding (connected → #390 FurnitureInstance at commit;
+            // local/disconnected → local insert semantics). The connection
+            // never gates the placement interaction, and identity is minted
+            // only at the commit click — never while browsing or previewing.
             btnInsert.innerHTML = icon("clock") + "<span>Vista previa en el modelo…</span>";
             payload.idempotencyKey = getOrCreateCatalogIntentKey();
             window.sketchup.begin_catalog_placement_preview(JSON.stringify(payload));
           } else if (isConnected && window.sketchup && window.sketchup.create_project_furniture) {
+            // Legacy compat fallback (older host / degraded runtime).
             btnInsert.innerHTML = icon("clock") + "<span>Agregando al diseño…</span>";
             payload.idempotencyKey = getOrCreateCatalogIntentKey();
             window.sketchup.create_project_furniture(JSON.stringify(payload));
           } else if (window.sketchup && window.sketchup.insert_furniture) {
+            // Legacy compat fallback: origin-first insert + Move handoff.
             btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
             window.sketchup.insert_furniture(JSON.stringify(payload));
           } else {
@@ -6632,7 +6644,8 @@
             btnInsert.disabled = false;
             updateLibraryInsertButton();
           }
-          showToast("info", "Colocación cancelada: el mueble sigue pendiente.");
+          showToast("info", result.instanceId ? "Colocación cancelada: el mueble sigue pendiente."
+            : "Colocación cancelada: no se insertó nada en el modelo.");
         }
 
         function confirmPlacementInstance(furnitureInstanceId, button) {
