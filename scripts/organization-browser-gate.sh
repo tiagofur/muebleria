@@ -12,6 +12,12 @@ cleanup() {
     wait "${BACKEND_PID}" >/dev/null 2>&1 || true
   fi
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+  if [ -n "${PTX_DIAGNOSTIC_DIR:-}" ]; then
+    mkdir -p "${PTX_DIAGNOSTIC_DIR}"
+    find "${TMP_ROOT}/playwright-output" -type f \
+      \( -name 'ptx-events.json' -o -name 'ptx-raw-trace.zip' -o -name 'ptx-screenshot.png' \) \
+      -exec cp '{}' "${PTX_DIAGNOSTIC_DIR}/" \; 2>/dev/null || true
+  fi
   rm -rf "${TMP_ROOT}"
   unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY ADMIN_PASSWORD ORGANIZATION_TEST_DATABASE_URL
 }
@@ -215,6 +221,7 @@ GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
   ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}"
   ORGANIZATION_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
   VITE_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
+  VITE_PTX_DIAGNOSTIC=1
   ORGANIZATION_TEST_OUTPUT="${TMP_ROOT}/playwright-output")
 
 cd "${ROOT}"

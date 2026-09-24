@@ -1,4 +1,5 @@
 import { expect, test, type Download, type Page } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
 import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
@@ -306,6 +307,39 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
 
   test('descargar PDF/PTX del plan NO completa Ingeniería automáticamente', async ({ page }) => {
     test.setTimeout(180_000);
+    const diagnostic = process.env.VITE_PTX_DIAGNOSTIC === '1';
+    const startedAt = performance.now();
+    const events: Array<Record<string, unknown>> = [];
+    const record = (stage: string, extra: Record<string, unknown> = {}) => {
+      if (diagnostic) events.push({ stage, elapsedMs: Math.round(performance.now() - startedAt), ...extra });
+    };
+    if (diagnostic) {
+      await page.addInitScript(() => {
+        (window as typeof window & { __PTX_DIAGNOSTIC__?: boolean }).__PTX_DIAGNOSTIC__ = true;
+      });
+      page.on('console', (message) => {
+        if (message.text().startsWith('__PTX_DIAG__ ')) {
+          try {
+            const payload = JSON.parse(message.text().slice('__PTX_DIAG__ '.length)) as Record<string, unknown>;
+            record('frontend', payload);
+          } catch {
+            record('frontend-marker-invalid');
+          }
+        } else if (message.type() === 'error') {
+          record('console-error', { locationPath: new URL(message.location().url || page.url()).pathname });
+        }
+      });
+      page.on('pageerror', (error) => record('page-error', { name: error.name }));
+      page.on('requestfailed', (request) => record('request-failed', {
+        method: request.method(),
+        path: new URL(request.url()).pathname,
+        failure: request.failure()?.errorText.split(':')[0] ?? 'unknown',
+      }));
+      page.on('close', () => record('page-close'));
+      page.context().on('close', () => record('context-close'));
+      page.context().browser()?.on('disconnected', () => record('browser-disconnected'));
+      record('case-start', { projectId: seeded.projectId, releaseId: seeded.releaseId });
+    }
     const browserErrors = collectBrowserErrors(page, { allow: allowLoggedOutSessionProbe });
     await loginToA(page);
     await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
@@ -318,19 +352,60 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
     await expect(page.getByTestId('prod-opt-save-ok')).toBeVisible();
 
     const downloads: Download[] = [];
-    const capture = (download: Download): void => { downloads.push(download); };
+    const capture = (download: Download): void => {
+      downloads.push(download);
+      record('download', { fileName: download.suggestedFilename(), count: downloads.length });
+    };
     page.on('download', capture);
-    await page.getByTestId('prod-opt-export-pdf-manual').click();
-    await expect.poll(() => downloads.length, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
-    await page.getByTestId('prod-opt-export-ptx').click();
-    // Depending on the org's machine-output configuration (other specs in the
-    // full suite may configure it server-side), the PTX route can deliver the
-    // program plus its manifest. The claim under test is that downloads HAPPEN
-    // and never complete engineering — not the exact file count (#739 owns it).
-    await expect
-      .poll(() => downloads.filter((d) => d.suggestedFilename().endsWith('.ptx')).length, { timeout: 20_000 })
-      .toBeGreaterThanOrEqual(1);
-    page.off('download', capture);
+    if (diagnostic) await page.context().tracing.start({ screenshots: true, snapshots: true, sources: false });
+    try {
+      await page.getByTestId('prod-opt-export-pdf-manual').click();
+      await expect.poll(() => downloads.length, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+      if (diagnostic) {
+        const state = await fetchEngineeringState(seeded);
+        const control = await page.getByTestId('prod-opt-export-ptx').evaluate((button) => ({
+          disabled: (button as HTMLButtonElement).disabled,
+          reason: button.getAttribute('title'),
+          label: button.textContent?.trim() ?? null,
+        }));
+        record('before-ptx-click', {
+          projectId: seeded.projectId,
+          releaseId: seeded.releaseId,
+          engineeringStatus: state['status'],
+          engineeringVersion: state['version'],
+          ...control,
+        });
+      }
+      record('ptx-click-start');
+      await page.getByTestId('prod-opt-export-ptx').click();
+      record('ptx-click-resolved');
+      // Depending on the org's machine-output configuration (other specs in the
+      // full suite may configure it server-side), the PTX route can deliver the
+      // program plus its manifest. The claim under test is that downloads HAPPEN
+      // and never complete engineering — not the exact file count (#739 owns it).
+      await expect
+        .poll(() => downloads.filter((d) => d.suggestedFilename().endsWith('.ptx')).length, { timeout: 20_000 })
+        .toBeGreaterThanOrEqual(1);
+      record('ptx-download-assertion-passed');
+    } finally {
+      if (diagnostic) {
+        record('capture-finally', { downloadCount: downloads.length });
+        try {
+          await page.screenshot({ path: test.info().outputPath('ptx-screenshot.png') });
+          record('screenshot-saved');
+        } catch {
+          record('screenshot-unavailable');
+        }
+        try {
+          await page.context().tracing.stop({ path: test.info().outputPath('ptx-raw-trace.zip') });
+          record('trace-saved');
+        } catch {
+          record('trace-unavailable');
+        }
+        await writeFile(test.info().outputPath('ptx-events.json'), JSON.stringify(events, null, 2));
+      }
+      page.off('download', capture);
+    }
     const pdfName = downloads[0]!.suggestedFilename();
     expect(pdfName.endsWith('.pdf')).toBe(true);
     expect(downloads.some((d) => d.suggestedFilename().endsWith('.ptx'))).toBe(true);

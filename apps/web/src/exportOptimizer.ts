@@ -179,13 +179,23 @@ export function downloadOptimizerXlsx(
   const blob = new Blob([copy.buffer], {
     type: mime,
   });
+  const diagnostic = import.meta.env.VITE_PTX_DIAGNOSTIC === '1';
+  const mark = (stage: string) => {
+    if (diagnostic) console.info('__PTX_DIAG__ ' + JSON.stringify({ stage, fileName, blobSize: blob.size, blobType: blob.type }));
+  };
+  mark('blob-created');
   const url = deps.createObjectURL(blob);
+  mark('object-url-created');
   const anchor = deps.createElement('a');
+  mark('anchor-created');
   anchor.href = url;
   anchor.download = fileName;
   anchor.rel = 'noopener';
   deps.appendChild(anchor);
+  mark('anchor-appended');
   anchor.click();
+  mark('anchor-clicked');
   deps.removeChild(anchor);
   deps.revokeObjectURL(url);
+  mark('object-url-revoked');
 }

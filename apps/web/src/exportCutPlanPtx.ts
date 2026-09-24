@@ -137,7 +137,9 @@ export async function downloadCutPlanPtx(
     options?.projectName || cutPlan.projectName || cutPlan.projectId;
 
   if (mode === 'by-material') {
+    if (import.meta.env.VITE_PTX_DIAGNOSTIC === '1') console.info('__PTX_DIAG__ ' + JSON.stringify({ stage: 'generation-start', route: 'legacy-by-material' }));
     const files = generatePtxByMaterial(input);
+    if (import.meta.env.VITE_PTX_DIAGNOSTIC === '1') console.info('__PTX_DIAG__ ' + JSON.stringify({ stage: 'generation-end', route: 'legacy-by-material', fileCount: files.length }));
     if (files.length === 0) {
       // Degenerate plan: let the generator surface the exact validation
       // error — never download an empty or substitute format.
@@ -152,7 +154,9 @@ export async function downloadCutPlanPtx(
   }
 
   // Unified single PTX
+  if (import.meta.env.VITE_PTX_DIAGNOSTIC === '1') console.info('__PTX_DIAG__ ' + JSON.stringify({ stage: 'generation-start', route: 'legacy-unified' }));
   const bytes = ptxCutPlanExport(input);
+  if (import.meta.env.VITE_PTX_DIAGNOSTIC === '1') console.info('__PTX_DIAG__ ' + JSON.stringify({ stage: 'generation-end', route: 'legacy-unified', byteCount: bytes.byteLength }));
   const targetFileName = fileName || ptxFileName(displayName);
   downloadOptimizerXlsx(bytes, targetFileName, deps);
   return {

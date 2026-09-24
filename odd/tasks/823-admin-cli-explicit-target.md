@@ -409,3 +409,56 @@ independently reviewed. One PR, with the approved `size:exception`.
 - Remaining: fresh independent review on the new work-unit HEAD/base, then one
   full exact-head CI run by the leader. PR #839 remains draft and
   `Refs #823` / `Delivery: partial`; the broader #823 acceptance remains open.
+
+## D1 — Temporary #839 PTX CI laboratory (not a delivery)
+
+Human authorization dated 2026-09-24 permits one branch-only diagnostic experiment
+from exact candidate `24b014906e4fdd0963d4017df4865fc6527d9bca`, with exact
+base comparator `6184b4d2d36c5c73e3fbcabde2c2785e5335e565`. The branch is
+`codex/839-ptx-diagnostic`; it must never become a PR or modify #839, #460,
+main, persistent data, exporter semantics, auth, retries, or timeouts. It may
+publish one explicitly dispatched, single-job Ubuntu x86_64 run using the real
+disposable organization launcher, only the first 32 tests through PTX. If that
+run fails, compare the base on the same runner type with equivalent probes. If
+it passes, inspect evidence before at most one controlled prefix expansion.
+
+- [x] **D1a — Branch-only safe launcher and probes.** Add a manual CI dispatch
+  gate that skips normal CI jobs, records runner metadata, and retains only
+  privacy-screened PTX event/trace artifacts. Observe a safe RED for an unsafe
+  artifact or dispatch configuration, then GREEN with structural and focused
+  checks. Route: one bounded delegated writer for multi-file workflow, launcher,
+  browser test, and frontend diagnostic probes. Rollback: discard this
+  temporary branch; no product or PR branch changes.
+- [ ] **D1b — Candidate execution and evidence.** Parent dispatches exact
+  diagnostic branch/ref once, reads run/metadata/artifacts, and classifies the
+  last frontier without inventing a cause. V2 remains NOT_RUN until that run.
+- [ ] **D1c — Conditional comparator or expansion.** On failure, run the exact
+  base with equivalent diagnostic overlay; on clean pass, inspect artifacts
+  first and then run at most one prefix expansion with PTX last. Do not repeat
+  automatically. Current state: PENDING first-run evidence.
+
+Forecast: diagnostic-only multi-file changes may exceed the ordinary 400-line
+planning heuristic; this branch is explicitly non-delivery and receives no PR.
+Strict TDD: enabled by `AGENTS.md`; runner is the existing
+`scripts/organization-browser-gate.sh` plus DB-free artifact/workflow checks.
+RDD: disabled/unmanaged. Engram mirror remains pending if the runtime cannot
+disambiguate its registered session; this file is the recovery source.
+
+D1a local evidence (no database connection): the baseline candidate's
+`ci.yml` fails the new single-job-dispatch contract test (safe RED), while the
+diagnostic version passes all 3 DB-free contract/privacy tests. The real
+Playwright `--list` entrypoint, using a synthetic unreachable loopback DSN,
+lists exactly 32 tests in 8 files, with the PTX case last. `pnpm typecheck`,
+44 existing `test_ci_*.py` tests (one skipped), `bash -n`, Python compile,
+YAML parse, and `git diff --check` passed. A synthetic local Chromium trace
+successfully passed the fail-closed sanitizer; its network member was not
+retained. The five frontend/test probe files applied cleanly to the exact base
+in a disposable copy, and the base's own launcher remained its original code
+plus only the same diagnostic artifact-copy/browser-flag hooks. No actual PTX
+browser run or Ubuntu runner evidence has occurred yet. Candidate and base
+runtime bytes are necessarily SHA + identical diagnostic overlay; do not call
+the comparator a byte-identical uninstrumented run. The branch-only workflow
+explicitly excludes every ordinary job on manual dispatch; only the scoped
+diagnostic job is runnable. The raw log and raw trace stay on the ephemeral
+runner; only privacy-screened event/action trace/screenshot/metadata files can
+be uploaded, and a sanitizer failure withholds diagnostic evidence.

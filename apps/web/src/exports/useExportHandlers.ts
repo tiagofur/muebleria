@@ -496,12 +496,28 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
       mode?: 'unified' | 'by-material',
       manufacturingLabels?: import('@granete/domain').ManufacturingLabelProjection,
     ) => {
+      const diagnostic = import.meta.env.VITE_PTX_DIAGNOSTIC === '1';
+      const mark = (stage: string, extra: Record<string, unknown> = {}) => {
+        if (diagnostic) console.info('__PTX_DIAG__ ' + JSON.stringify({ stage, ...extra }));
+      };
+      mark('app-handler-entry', {
+        projectId: cutPlan.projectId,
+        cutPlanId: cutPlan.id,
+        cutPlanVersion: cutPlan.version,
+        releaseId: cutPlan.releaseBase?.releaseId ?? null,
+        selectionStatus: cuttingOutputSelectionState.status,
+        machineProfileId: 'selection' in cuttingOutputSelectionState ? cuttingOutputSelectionState.selection.machineProfileId : null,
+        compatibilityProfileId: 'selection' in cuttingOutputSelectionState ? cuttingOutputSelectionState.selection.outputCompatibilityProfileId : null,
+        adapterId: 'selection' in cuttingOutputSelectionState ? cuttingOutputSelectionState.selection.postprocessorAdapterId : null,
+        adapterVersion: 'selection' in cuttingOutputSelectionState ? cuttingOutputSelectionState.selection.postprocessorAdapterVersion : null,
+      });
       setExportBusy(true);
       try {
         // The explicit per-click choice from Optimización is the single source
         // of truth for bundling (unified vs per-material) — never a hidden
         // global preference.
         const selectedMode = mode ?? 'unified';
+        mark('config-resolved', { mode: selectedMode, selectionStatus: cuttingOutputSelectionState.status });
         // #591: when a machine output target is configured, normal generation
         // uses ONLY that tuple — blocked targets produce zero outputs (exact
         // reason surfaced) and never fall back to the legacy generic PTX. The
@@ -514,12 +530,14 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
           cuttingOutputSelectionState,
           {
             selected: async (selection) => {
+              mark('generation-start', { route: 'configured', adapterId: selection.postprocessorAdapterId });
               const bundles = await generateSelectedCuttingOutput(
                 cutPlan,
                 selection,
                 selectedMode,
                 manufacturingLabels ? { manufacturingLabels } : undefined,
               );
+              mark('generation-end', { route: 'configured', bundleCount: bundles.length });
               return downloadCuttingArtifactBundles(
                 bundles,
                 cutPlan.projectName || cutPlan.projectId,
@@ -527,14 +545,17 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
                 selectedMode,
               );
             },
-            legacy: () =>
-              downloadCutPlanPtx(cutPlan, {
+            legacy: () => {
+              mark('legacy-route-start');
+              return downloadCutPlanPtx(cutPlan, {
                 projectName: cutPlan.projectName,
                 projectCode: cutPlan.projectId,
                 mode: selectedMode,
-              }),
+              });
+            },
           },
         );
+        mark('delivery-return', { kind: result.kind, fileCount: result.filesCount, fileName: result.fileName });
         const kindLabel = result.kind.toUpperCase();
         toast({
           type: 'success',
@@ -543,6 +564,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
             : `✓ ${kindLabel} generado`,
         });
       } catch (err) {
+        mark('handler-error', { errorName: err instanceof Error ? err.name : typeof err });
         toast({
           type: 'error',
           message:
@@ -551,6 +573,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
               : 'Error al exportar plan de corte PTX',
         });
       } finally {
+        mark('app-handler-finally');
         setExportBusy(false);
       }
     },

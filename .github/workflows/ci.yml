@@ -2,6 +2,13 @@ name: CI
 
 on:
   workflow_dispatch:
+    inputs:
+      ptx_target:
+        description: 'Temporary #839 PTX laboratory target'
+        required: true
+        default: candidate
+        type: choice
+        options: [candidate, base]
   push:
     branches: [main, master]
   pull_request:
@@ -17,8 +24,138 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ptx-diagnostic:
+    name: Temporary #839 PTX prefix only
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/839-ptx-diagnostic' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact laboratory branch and prepare exact-base comparator
+        env:
+          PTX_TARGET: ${{ inputs.ptx_target }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = 'refs/heads/codex/839-ptx-diagnostic'
+          git merge-base --is-ancestor 24b014906e4fdd0963d4017df4865fc6527d9bca HEAD
+          case "${PTX_TARGET}" in
+            candidate) ;;
+            base)
+              git diff --binary 24b014906e4fdd0963d4017df4865fc6527d9bca..HEAD -- \
+                apps/web/src/exportCutPlanPtx.ts \
+                apps/web/src/exportOptimizer.ts \
+                apps/web/src/exports/useExportHandlers.ts \
+                packages/ui/src/production/ProductionOrderOptimizationPanel.tsx \
+                tests/organization/engineering-state.spec.ts > "${RUNNER_TEMP}/ptx-overlay.patch"
+              cp scripts/ptx-diagnostic-launcher.py "${RUNNER_TEMP}/ptx-diagnostic-launcher.py"
+              cp scripts/ptx-diagnostic-sanitize.py "${RUNNER_TEMP}/ptx-diagnostic-sanitize.py"
+              git checkout --detach 6184b4d2d36c5c73e3fbcabde2c2785e5335e565
+              git apply --check "${RUNNER_TEMP}/ptx-overlay.patch"
+              git apply "${RUNNER_TEMP}/ptx-overlay.patch"
+              cp "${RUNNER_TEMP}/ptx-diagnostic-launcher.py" scripts/
+              cp "${RUNNER_TEMP}/ptx-diagnostic-sanitize.py" scripts/
+              python3 scripts/ptx-diagnostic-launcher.py scripts/organization-browser-gate.sh
+              ;;
+            *) exit 2 ;;
+          esac
+          bash -n scripts/organization-browser-gate.sh
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Record technical runner metadata only
+        env:
+          PTX_TARGET: ${{ inputs.ptx_target }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/ptx-diagnostic/safe" "${RUNNER_TEMP}/ptx-diagnostic/raw"
+          test "$(uname -m)" = x86_64
+          docker pull postgres:16-alpine >/dev/null
+          {
+            uname -a
+            cat /etc/os-release
+            printf 'architecture=%s\n' "$(uname -m)"
+            printf 'runner_image_os=%s\nrunner_image_version=%s\n' "${ImageOS:-unknown}" "${ImageVersion:-unknown}"
+            printf 'target=%s\nsource_sha=%s\ndiagnostic_branch_sha=%s\n' "${PTX_TARGET}" "$(git rev-parse HEAD)" "${GITHUB_SHA}"
+            node --version
+            go version
+            pnpm --version
+            pnpm exec playwright --version
+            node -e "const {chromium}=require('@playwright/test'); require('node:child_process').execFileSync(chromium.executablePath(), ['--version'], {stdio:'inherit'})"
+            docker version --format 'docker_client={{.Client.Version}} docker_server={{.Server.Version}}'
+            docker image inspect postgres:16-alpine --format 'postgres_digest={{index .RepoDigests 0}}'
+            printf 'cpu_count=%s\n' "$(nproc)"
+            free -h
+            df -h .
+          } > "${RUNNER_TEMP}/ptx-diagnostic/safe/runner-metadata.txt"
+      - name: Run exact first 32 tests through PTX with real disposable launcher
+        id: prefix
+        env:
+          PTX_DIAGNOSTIC_DIR: ${{ runner.temp }}/ptx-diagnostic/raw
+        run: |
+          set +e
+          scripts/organization-browser-gate.sh \
+            tests/organization/bootstrap.spec.ts \
+            tests/organization/demo-flow-happy-path.spec.ts \
+            tests/organization/demo-golden-path.spec.ts \
+            tests/organization/design-working-materials-reconcile.spec.ts \
+            tests/organization/engineering-cutting-demand.spec.ts \
+            tests/organization/engineering-entry.spec.ts \
+            tests/organization/engineering-physical-gate.spec.ts \
+            tests/organization/engineering-state.spec.ts \
+            --grep-invert 'Completar Ingeniería → Completa final' \
+            --workers=1 > "${PTX_DIAGNOSTIC_DIR}/launcher.log" 2>&1
+          result=$?
+          printf '%s\n' "${result}" > "${RUNNER_TEMP}/ptx-diagnostic/launcher-exit"
+          exit 0
+      - name: Privacy-screen PTX artifacts
+        id: sanitize
+        env:
+          PTX_TARGET: ${{ inputs.ptx_target }}
+        run: |
+          python3 scripts/ptx-diagnostic-sanitize.py \
+            --raw "${RUNNER_TEMP}/ptx-diagnostic/raw" \
+            --output "${RUNNER_TEMP}/ptx-diagnostic/safe" \
+            --status "$(cat "${RUNNER_TEMP}/ptx-diagnostic/launcher-exit")" \
+            --target "${PTX_TARGET}"
+      - name: Upload safe technical metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ptx-runner-metadata
+          path: ${{ runner.temp }}/ptx-diagnostic/safe/runner-metadata.txt
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Upload privacy-screened PTX evidence
+        if: ${{ steps.sanitize.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ptx-diagnostic-evidence
+          path: |
+            ${{ runner.temp }}/ptx-diagnostic/safe/ptx-events.json
+            ${{ runner.temp }}/ptx-diagnostic/safe/ptx-trace-sanitized.zip
+            ${{ runner.temp }}/ptx-diagnostic/safe/ptx-screenshot.png
+            ${{ runner.temp }}/ptx-diagnostic/safe/sanitized-log.txt
+          if-no-files-found: error
+          retention-days: 3
+      - name: Preserve prefix outcome
+        if: ${{ steps.sanitize.outcome == 'success' }}
+        run: exit "$(cat "${RUNNER_TEMP}/ptx-diagnostic/launcher-exit")"
+
   impact:
     name: Select verification impact
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     outputs:
       plan: ${{ steps.impact.outputs.plan }}
@@ -36,6 +173,7 @@ jobs:
 
   validate-catalog:
     name: Validate Product Capability Catalog & Harness
+    if: ${{ github.event_name != 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +195,7 @@ jobs:
   typescript:
     name: TypeScript (Typecheck & Tests)
     needs: impact
-    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs.typescript }}
+    if: ${{ github.event_name != 'workflow_dispatch' && needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs.typescript }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +213,7 @@ jobs:
   proyectar-visual:
     name: Proyectar WebGL visual gate (#444)
     needs: impact
-    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['proyectar-visual'] }}
+    if: ${{ github.event_name != 'workflow_dispatch' && needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['proyectar-visual'] }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -103,7 +241,7 @@ jobs:
   foundation-postgres:
     name: Foundation PostgreSQL proofs
     needs: impact
-    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['foundation-postgres'] }}
+    if: ${{ github.event_name != 'workflow_dispatch' && needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['foundation-postgres'] }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -122,7 +260,7 @@ jobs:
   organization-browser:
     name: Foundation real browser proofs
     needs: impact
-    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['organization-browser'] }}
+    if: ${{ github.event_name != 'workflow_dispatch' && needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['organization-browser'] }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -146,7 +284,7 @@ jobs:
   sketchup-extension:
     name: SketchUp Extension (Ruby, ${{ matrix.os }})
     needs: impact
-    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['sketchup-extension'] }}
+    if: ${{ github.event_name != 'workflow_dispatch' && needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['sketchup-extension'] }}
     strategy:
       fail-fast: false
       matrix:
@@ -171,7 +309,7 @@ jobs:
   backend-go:
     name: Go Backend Tests
     needs: impact
-    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['backend-go'] }}
+    if: ${{ github.event_name != 'workflow_dispatch' && needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['backend-go'] }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -209,7 +347,7 @@ jobs:
     # jobs must succeed. Publication metadata remains a separate required gate.
     name: Foundation Gate A
     needs: [impact, validate-catalog, typescript, proyectar-visual, sketchup-extension, backend-go, foundation-postgres, organization-browser]
-    if: ${{ always() }}
+    if: ${{ always() && github.event_name != 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -338,6 +338,21 @@ export function ProductionOrderOptimizationPanel({
   };
 
   const handleExportPtx = () => {
+    if (typeof window !== 'undefined' && (window as typeof window & { __PTX_DIAGNOSTIC__?: boolean }).__PTX_DIAGNOSTIC__) {
+      console.info('__PTX_DIAG__ ' + JSON.stringify({
+        stage: 'panel-click-handler',
+        projectId: project.id,
+        cutPlanId: currentCutPlan?.id ?? null,
+        cutPlanVersion: currentCutPlan?.version ?? null,
+        releaseId: currentCutPlan?.releaseBase?.releaseId ?? null,
+        outputStatus: activeCuttingOutputTarget?.status ?? 'legacy',
+        outputReady: activeCuttingOutputTarget?.ready ?? true,
+        outputFormat: activeCuttingOutputTarget?.formatLabel ?? 'PTX',
+        outputProfile: activeCuttingOutputTarget?.profileLabel ?? null,
+        outputBlocker: activeCuttingOutputTarget?.blockerMessage ?? null,
+        mode: ptxMode,
+      }));
+    }
     if (!currentCutPlan) return;
     onExportCutPlanPtx?.(currentCutPlan, ptxMode, manufacturingLabels);
   };
