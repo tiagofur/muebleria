@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/tiagofur/muebles-backend/db"
@@ -92,6 +93,28 @@ func withinConnectStoreTenant(t *testing.T, store *storage.PostgresStore, actor 
 	if err := store.WithinTenantTx(ctx, actor, run); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// runConnectStoreSQL runs direct SQL as a legitimate granete_app tenant.
+// It is used only when direct PostgreSQL behavior, rather than a store command,
+// is the subject of the test.
+func runConnectStoreSQL(t *testing.T, pool *pgxpool.Pool, actor storage.TenantActor, run func(pgx.Tx) error) error {
+	t.Helper()
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `
+		SELECT set_config('app.organization_id', $1, true),
+		       set_config('app.user_id', $2, true),
+		       set_config('app.membership_id', $3, true),
+		       set_config('app.authorized_organization_ids', $1, true)`,
+		actor.OrganizationID, actor.UserID, actor.MembershipID); err != nil {
+		t.Fatal(err)
+	}
+	return run(tx)
 }
 
 func withinConnectStoreTenantValue[T any](t *testing.T, store *storage.PostgresStore, actor storage.TenantActor, run func(context.Context) (T, error)) T {

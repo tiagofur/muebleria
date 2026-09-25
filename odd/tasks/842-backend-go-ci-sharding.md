@@ -94,3 +94,56 @@ The Group B fixture will keep `connectStore` runtime-only. A separate migration 
 - Migrated the two runtime callers to explicit Initial Organization actor transactions for each create/read/list/update/deactivate command; structure and module composition each commit before subsequent reads/updates.
 - Moved the additive migration test to `migrationConnectStore`; its setup/replay assertion no longer opens runtime authority.
 - Verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestAgregados_|TestStructureAndModule_AgregadosRoundTrip)$'` — PASS (1.379s), FAIL=0, SKIP=0.
+
+## Revision-family authority classification (2026-09-25)
+The remaining revision tests are not a homogeneous runtime group. The table below is the authority contract before further edits; `A+B` means the test has normal runtime commands plus a direct invariant proof, not that either is replaced by the other.
+
+| Test | Category | Setup authority | Assertion authority | Transaction model | Expected rejection layer |
+| --- | --- | --- | --- | --- | --- |
+| `TestAgregadoRevisions_ImmutabilityGuards` | B | migration fixture, then runtime parent/revision | `granete_app`, scoped direct SQL | one tenant-scoped direct-SQL transaction per invalid UPDATE and DELETE; rollback each | immutable revision trigger, not RLS |
+| `TestAgregadoRevisions_LegacyAgregadoCompatibility` | A | migration fixture; legacy parent row is an intentional compatibility fixture | runtime `granete_app` | separate scoped direct insert, reads, append, deactivate, and expected restricted-delete transactions | FK/ON DELETE RESTRICT for the final delete |
+| `TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling` | A+B | migration fixture | runtime commands and scoped direct SQL | each parent/revision/current-pointer/snapshot command commits independently; immutable UPDATE/DELETE each rolls back independently | published-snapshot immutable trigger, not RLS |
+| `TestPublishedAssemblySnapshots_FailClosedOnCorruptData` | C then A | migration authority for the existing deliberate impossible-state corruption; runtime for normal setup and readback | runtime `granete_app` readback | each normal command has its own tenant transaction; corruption setup is isolated from runtime readback | runtime readback validation, after explicit fixture-only corruption |
+| `TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision` | A | migration fixture | runtime `granete_app` | distinct transactions for parent, R2, R3, each publish/retry, and reads | none; deduplication is scoped to a revision |
+| `TestMerivoboxPilotHistoricalPersistence_R5` | A | migration fixture | runtime `granete_app` | distinct transactions for parent, revision, snapshot persistence, and subsequent reads | none |
+| `TestAgregadoRevisions_Migration_UpDownReplay` | C | migration authority | migration authority | migration/schema replay only; no runtime assertion | migration DDL/replay errors |
+
+Deliberate cleanup omission: aggregate revisions and published assembly snapshots remain in the throwaway database because their immutable triggers prohibit DELETE. No trigger, constraint, RLS, or replication bypass is added for cleanup.
+
+### Revision Category B result — immutability layers
+- Runtime direct `UPDATE` and `DELETE` run in separate legitimate `granete_app` tenant transactions and each return `permission denied for table agregado_revisions` (`SQLSTATE 42501`). This is the production SQL privilege boundary; it is not an RLS/missing-context result.
+- Separate migration-authority transactions issue the same mutations and each return `is immutable once written`, proving the active immutable trigger is the structural invariant once SQL permission is available.
+- No migration, RLS policy, trigger, or runtime grant changed. Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestAgregadoRevisions_ImmutabilityGuards$'` — PASS (1.485s), SKIP=0.
+
+### Revision Category A progress — legacy compatibility
+- The legacy parent fixture omits `current_revision_id`, a historical shape normal commands no longer create; it is seeded with migration authority only.
+- Runtime `granete_app` then reads the legacy row, appends a revision, deactivates it, reads its history, and attempts the expected restricted physical delete in separate tenant transactions.
+- Verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestAgregadoRevisions_LegacyAgregadoCompatibility$'` — PASS (1.370s), SKIP=0.
+
+### Revision Category A progress — R3 deduplication
+- R3 uses no historical/admin fixture: parent creation, R2/R3 revision appends, each snapshot publish, retry publish, and independent readbacks all run as separate `granete_app` tenant transactions.
+- The retry is idempotent (returns the existing R3 snapshot) while R2 and R3 retain distinct snapshot identities by recipe revision.
+- Verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision$'` — PASS (1.405s), SKIP=0.
+
+### R5 Merivobox classification
+- **Fixture authority:** none beyond the existing migration bootstrap; the parent, R1/R2 recipes, current-pointer changes, resolution, freeze, and persistence are all currently producible runtime operations.
+- **Runtime authority:** `DATABASE_URL` as `granete_app`, explicit Initial Organization actor, one tenant transaction per parent creation, revision append, current-pointer update, snapshot persistence, and readback.
+- **Properties:** R1/R2 sequence and identity; current revision points to R2; frozen R1 snapshot retains its revision ID/number, payload hash, selected 500mm variant, Merivobox visual revision pins, fabricated bottom/back dimensions, and kit BOM through R2/current-pointer evolution.
+- **Cleanup:** deliberately omitted: revisions and snapshots are immutable and database teardown is authoritative.
+
+### Revision Category A result — R5 Merivobox
+- R5 has no historical fixture: parent, R1/R2 revisions, current-pointer updates, freeze/publish, and reads are runtime-producible and use distinct `granete_app` tenant transactions.
+- It preserves R1/R2 identity and sequence, R2 current pointer, R1 snapshot identity/hash, selected 500mm variant, Merivobox visual pins, fabricated board dimensions, and kit BOM after later revision evolution.
+- Focused R5: `scripts/backend-test.sh -v ./internal/storage -run '^TestMerivoboxPilotHistoricalPersistence_R5$'` — PASS (1.456s), SKIP=0.
+- Category A regression (Legacy, R3, R5): PASS, FAIL=0, SKIP=0 (1.370s).
+
+### Revision A+B result — snapshot freeze/roundtrip
+- Runtime `granete_app` tenant commands independently create the parent and R1, set current, persist/freeze S1, retry its idempotent save, append R2, set current to R2, and read S1 after those commits.
+- Frozen readback checks snapshot identity and revision number, selected 500mm variant, rigid-member visual pins, and preserved R1 payload after R2/current-pointer evolution.
+- Direct runtime snapshot UPDATE/DELETE each fail at the SQL privilege boundary (`permission denied for table published_assembly_snapshots`); separate migration-authority transactions reach the active immutable trigger (`is immutable once written`). The later runtime readback remains unchanged.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling$'` — PASS (1.671s), SKIP=0.
+
+### Revision Category C result
+- **C1 corruption:** `published_assembly_snapshots.snapshot.resolvedDimensionsMm[0]` changes from a valid 600 to `-999`. Runtime cannot create it because frozen snapshot DML is privilege- and trigger-protected. Migration authority temporarily disables only `protect_published_assembly_snapshots_immutable` to create this impossible historical fixture, immediately restores it, and never serves the runtime assertion from its pool. Runtime `granete_app` readback in a new tenant transaction returns the existing typed `readback validation failed` result. Focused PASS (1.462s), SKIP=0.
+- **C2 replay:** `TestAgregadoRevisions_Migration_UpDownReplay` now uses `multiOrgFreshMigrationDB` for apply/down/replay and schema assertions. Focused PASS (1.567s), SKIP=0.
+- Complete revisions regression (`TestAgregadoRevisions_*`, `TestPublishedAssemblySnapshots_*`, `TestMerivoboxPilotHistoricalPersistence_R5`, and design-revision snapshot pinning): PASS, FAIL=0, SKIP=0 (2.312s). The concurrent allocation test retains eight independently scoped racers.
