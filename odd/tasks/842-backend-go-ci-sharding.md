@@ -236,3 +236,8 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - `TestMaterialBoard_PersistsTextureTileMm` was an accidental fixture skip: it read whichever runtime database happened to exist and skipped when no catalog board was present. It was not environment-dependent behavior.
 - The test now creates its own minimal board through `granete_app` in a tenant transaction after migration-only bootstrap, then updates and reads it in independent tenant transactions. Fixture deletion is migration-authority teardown.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestMaterialBoard_PersistsTextureTileMm$'` — PASS, FAIL=0, SKIP=0 (Go 1.382s).
+
+## D1/D3 progress — Hardware machining fixture (2026-09-25)
+- `TestHardware_PersistsMachiningProfile` was another direct runtime-migration caller. It now follows the same migration-only bootstrap plus explicit `granete_app` actor/`WithinTenantTx` model as the other hardware persistence tests.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestHardware_PersistsMachiningProfile$'` — PASS, FAIL=0, SKIP=0 (Go 1.386s).
+- Migration-authority failures remaining from the initial diagnostic: `67 → 66`.
