@@ -59,6 +59,9 @@ class DialogLibraryViewTest < Minitest::Test
     SketchupStub.reset!
     @html_path = File.expand_path('../../src/granete_for_sketchup/resources/dialog.html', __dir__)
     @html_content = File.read(@html_path, encoding: 'UTF-8')
+    # #848: los estilos del panel viven en css/*.css.
+    css_dir = File.expand_path('../../src/granete_for_sketchup/resources/css', __dir__)
+    @css_content = Dir.children(css_dir).sort.map { |f| File.read(File.join(css_dir, f), encoding: 'UTF-8') }.join("\n")
     @logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
     @model = Sketchup.active_model
     @store = Granete::SketchUpExtension::Metadata::Store.new(@model)
@@ -115,7 +118,10 @@ class DialogLibraryViewTest < Minitest::Test
     # Sliders are gone: measures are precise mm text fields.
     refute_includes @html_content, '"range"'
     refute_includes @html_content, 'slider-row'
-    assert_includes @html_content, 'dim-input-row'
+    assert_includes @html_content, 'className = "dim-input"',
+                    'el JS crea el input mm (la clase dim-input-row murió con las filas compactas #847)'
+    assert_includes @css_content, '.param-control .dim-input',
+                    'el estilo del input mm vive en css/configurator.css (#848)'
   end
 
   def test_configurator_contract_preview_summary_and_sticky_action

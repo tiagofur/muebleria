@@ -1,0 +1,80 @@
+/* theme.css — design tokens (:root). ÚNICA fuente de verdad visual.
+   (Nombre sin "token": el guard de higiene del RBZ prohíbe esa palabra en nombres.)
+   Consumido por todos los demás css; sin dependencias. */
+      :root {
+        color-scheme: light;
+        --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        /* Códigos, referencias y medidas: tabular, del sistema (el plugin no
+           carga recursos remotos). */
+        --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+        --text-xs: 0.75rem;
+        --text-sm: 0.8125rem;
+        --text-base: 0.875rem;
+        --text-md: 1rem;
+        --text-lg: 1.125rem;
+
+        --weight-normal: 400;
+        --weight-medium: 500;
+        --weight-semibold: 600;
+        --weight-bold: 700;
+
+        --brand-50: hsl(245 100% 97%);
+        --brand-500: hsl(245 58% 51%);
+        --brand-600: hsl(245 55% 43%);
+        --brand-800: hsl(245 48% 28%);
+
+        /* Acento de marca (docs/design.md §5): navegación hacia contexto
+           relacionado — breadcrumbs y enlaces de catálogo. Nunca compite
+           con la acción primaria (brand) ni con la señal semántica. */
+        --accent-50: hsl(170 60% 96%);
+        --accent-400: hsl(170 65% 48%);
+        --accent-500: hsl(170 60% 40%);
+        --accent-600: hsl(170 55% 33%);
+
+        --surface-app: hsl(220 20% 97%);
+        --surface-card: hsl(0 0% 100%);
+        --surface-card-subtle: hsl(220 14% 96%);
+        --surface-hover: hsl(220 14% 94%);
+
+        --text-primary: hsl(230 18% 12%);
+        --text-secondary: hsl(230 12% 40%);
+        --text-muted: hsl(230 12% 45%);
+        --text-inverse: hsl(0 0% 100%);
+        --text-inverse-soft: hsl(0 0% 100% / 80%);
+
+        --border-default: hsl(220 14% 86%);
+        --border-subtle: hsl(220 14% 90%);
+        --border-focus: var(--brand-500);
+
+        /* Texto semántico: pares AA (≥4.5:1) sobre su superficie -50. */
+        --success-50: hsl(142 76% 96%);
+        --success-600: hsl(152 69% 30%);
+        --warning-50: hsl(38 100% 96%);
+        --warning-700: hsl(38 80% 32%);
+        /* Bordes/fondos derivados del tono de advertencia (no texto). */
+        --warning: hsl(38 92% 42%);
+        --danger-50: hsl(0 84% 97%);
+        --danger-600: hsl(0 74% 42%);
+        --neutral-50: hsl(220 14% 94%);
+        --neutral-700: hsl(230 12% 40%);
+
+        --space-1: 0.25rem;
+        --space-2: 0.5rem;
+        --space-3: 0.75rem;
+        --space-4: 1rem;
+        --space-5: 1.25rem;
+
+        --radius-sm: 0.375rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-focus: 0 0 0 3px hsl(245 58% 51% / 20%);
+
+        --duration-fast: 150ms;
+        --ease-out: cubic-bezier(0, 0, 0.2, 1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }

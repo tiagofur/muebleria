@@ -1,0 +1,97 @@
+/* inspector.css — Inspector contextual: breadcrumb, capabilities,
+   fieldset fail-closed, detalle técnico, herraje. Depende de: tokens.css, base.css. */
+      .context-breadcrumb {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+
+      .context-breadcrumb .crumb {
+        padding: 0.125rem 0.375rem;
+        border-radius: var(--radius-sm);
+      }
+
+      .context-breadcrumb .crumb.current {
+        color: var(--text-primary);
+        font-weight: var(--weight-semibold);
+      }
+
+      .context-breadcrumb .crumb-link {
+        color: var(--accent-600);
+        font-weight: var(--weight-medium);
+        cursor: pointer;
+      }
+
+      .context-breadcrumb .crumb-link:hover {
+        background: var(--accent-50);
+      }
+
+      .context-breadcrumb .crumb-sep {
+        color: var(--text-muted);
+        user-select: none;
+      }
+
+      .capability-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--border-default);
+      }
+
+      .capability-row:last-child {
+        border-bottom: none;
+      }
+
+      .capability-row-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+
+      .capability-row-label {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--text-primary);
+      }
+
+      .capability-reason {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        margin: 0;
+      }
+
+      /* Native fail-closed mutation switch (#476): a disabled fieldset turns
+         off every descendant control at once. */
+      .inspector-fieldset {
+        border: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .inspector-fieldset:disabled .card,
+      .inspector-fieldset:disabled .btn {
+        opacity: 0.6;
+      }
+
+      .tech-details summary {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        cursor: pointer;
+      }
+
+      .tech-details[open] summary {
+        margin-bottom: var(--space-2);
+      }
+
+      /* La línea de mutación (#498) comunica resultado, no sólo texto: el
+         color sigue la fase que granete-mutation.js ya publica en
+         data-phase — éxito, rechazo/aborto/stale y sin-conexión se leen
+         distinto sin tocar el módulo. */

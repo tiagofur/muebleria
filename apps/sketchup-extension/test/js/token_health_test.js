@@ -12,6 +12,10 @@ const assert = require('assert');
 
 const RESOURCES = path.resolve(__dirname, '../../src/granete_for_sketchup/resources');
 const SURFACES = ['dialog.html', 'material_selector.html', 'migration_review.html', 'mount_frame_preparer.html'];
+// #848: el CSS del panel vive en css/*.css — las definiciones del dialog son
+// la unión de todos los archivos de estilos; los usos, dialog + css.
+const DIALOG_CSS = ['theme.css', 'base.css', 'library.css', 'configurator.css', 'materials.css', 'inspector.css', 'project.css']
+  .map((name) => ({ name, text: fs.readFileSync(path.join(RESOURCES, 'css', name), 'utf8') }));
 
 function definedTokens(html) {
   const tokens = new Set();
@@ -45,24 +49,40 @@ function usedTokensWithoutFallback(html) {
 function run() {
   let checked = 0;
   SURFACES.forEach((surface) => {
+    const isDialog = surface === 'dialog.html';
     const html = fs.readFileSync(path.join(RESOURCES, surface), 'utf8');
+    // Definiciones: el propio archivo y — para el panel — todos los css.
     const defined = definedTokens(html);
-    const used = usedTokensWithoutFallback(html);
-    used.forEach((sample, token) => {
+    if (isDialog) {
+      DIALOG_CSS.forEach((f) => {
+        const extra = definedTokens(f.text);
+        extra.forEach((t) => defined.add(t));
+      });
+    }
+    // Usos: el propio archivo y — para el panel — todos los css.
+    const uses = usedTokensWithoutFallback(html);
+    if (isDialog) {
+      DIALOG_CSS.forEach((f) => {
+        usedTokensWithoutFallback(f.text).forEach((sample, token) => {
+          if (!uses.has(token)) uses.set(token, `css/${f.name} ${sample}`);
+        });
+      });
+    }
+    uses.forEach((sample, token) => {
       checked += 1;
       assert(defined.has(token),
-        `${surface}: var(${token}) no está definido en el archivo (ni lleva fallback).\n  ${sample}`);
+        `${surface}: var(${token}) no está definido (ni lleva fallback).\n  ${sample}`);
     });
   });
 
   // Regression anchors for the tokens the 2026-09 review found dead.
-  const dialog = fs.readFileSync(path.join(RESOURCES, 'dialog.html'), 'utf8');
-  const dialogTokens = definedTokens(dialog);
+  const allDialogCss = DIALOG_CSS.map((f) => f.text).join('\n');
+  const dialogTokens = definedTokens(allDialogCss);
   ['--warning', '--border-subtle', '--font-mono'].forEach((token) => {
-    assert(dialogTokens.has(token), `dialog.html debe definir ${token} (señal de estado viva)`);
+    assert(dialogTokens.has(token), `el CSS del panel debe definir ${token} (señal de estado viva)`);
     checked += 1;
   });
-  assert(/\.btn-sm\s*\{/.test(dialog), 'dialog.html debe definir .btn-sm (se usa en el flujo de vinculación)');
+  assert(/\.btn-sm\s*\{/.test(allDialogCss), 'el CSS del panel debe definir .btn-sm (se usa en el flujo de vinculación)');
   checked += 1;
 
   return checked;
