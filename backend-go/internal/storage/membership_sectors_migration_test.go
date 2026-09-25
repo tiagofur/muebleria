@@ -12,7 +12,7 @@ import (
 )
 
 func TestListOrgTeamProjectsActivityAndMembershipSessionState(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 97)
 	ctx := context.Background()
 	const (
@@ -64,7 +64,7 @@ func TestListOrgTeamProjectsActivityAndMembershipSessionState(t *testing.T) {
 }
 
 func TestMembershipSectorsMigration_BackfillsExactMembershipAndRLS(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 96)
 	ctx := context.Background()
 	const org = "b4000000-0000-0000-0000-000000000001"
@@ -102,7 +102,7 @@ func TestMembershipSectorsMigration_BackfillsExactMembershipAndRLS(t *testing.T)
 }
 
 func TestMembershipSectorsMigration_AbortsNonFactoryLegacyBackfill(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 96)
 	ctx := context.Background()
 	const org = "b4000000-0000-0000-0000-000000000010"

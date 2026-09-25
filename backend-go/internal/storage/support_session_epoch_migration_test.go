@@ -27,7 +27,7 @@ func supportSessionEpochMigrationSQL(t *testing.T, suffix string) string {
 
 func seedSupportSessionEpochFixture(t *testing.T) (*storage.PostgresStore, string) {
 	t.Helper()
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 	tx, err := pool.Begin(ctx)

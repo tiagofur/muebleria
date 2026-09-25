@@ -469,7 +469,7 @@ func TestTenantRLS_CriticalCustomerPlanUsesTenantIndex(t *testing.T) {
 }
 
 func TestTenantRLS_DownMigrationIsScopedAndComplete(t *testing.T) {
-	admin := multiOrgFreshDB(t)
+	admin := multiOrgFreshMigrationDB(t)
 	ctx := context.Background()
 	identityApplyThrough(t, admin, 94)
 	if _, err := admin.Exec(ctx, `

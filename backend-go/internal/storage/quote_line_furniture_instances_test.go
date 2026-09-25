@@ -59,11 +59,11 @@ func quoteLineFurnitureMigrationSQL(t *testing.T) string {
 func TestQuoteLineFurniture_MigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 112)
 	assertQuoteLineFurnitureSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 111)
 	if _, err := upgrade.Exec(ctx, quoteLineFurnitureMigrationSQL(t)); err != nil {
 		t.Fatalf("upgrade apply 000112: %v", err)

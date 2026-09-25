@@ -19,11 +19,11 @@ const directoryUser = "20000000-0000-0000-0000-00000000000d"
 
 func TestAuthSessionDirectoryMigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 107)
 	assertSessionDirectoryFunctions(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 106)
 	sql, err := os.ReadFile("../../db/migration/000107_auth_session_directory.up.sql")
 	if err != nil {

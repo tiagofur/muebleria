@@ -29,7 +29,7 @@ func membershipSectorCompatibilityMigrationSQL(t *testing.T, suffix string) stri
 }
 
 func TestMembershipSectorCompatibilityMigration_FreshSchemaInstallsEveryGate(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 98)
 	ctx := context.Background()
 
@@ -57,7 +57,7 @@ func TestMembershipSectorCompatibilityMigration_FreshSchemaInstallsEveryGate(t *
 }
 
 func TestMembershipSectorCompatibilityMigration_UpgradeRejectsInvalidExistingAssignments(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 97)
 	ctx := context.Background()
 	const (
@@ -93,7 +93,7 @@ func TestMembershipSectorCompatibilityMigration_UpgradeRejectsInvalidExistingAss
 }
 
 func TestMembershipSectorCompatibilityMigration_ValidUpgradeAndDown(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 97)
 	ctx := context.Background()
 	const (

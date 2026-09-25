@@ -76,7 +76,7 @@ func waitForOrganizationLockWait(t *testing.T, admin *pgxpool.Pool, applicationN
 }
 
 func TestOrganizationLifecycleMigration_BackfillsCanonicalStatusAndEntitlements(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 
@@ -115,7 +115,7 @@ func TestOrganizationLifecycleMigration_BackfillsCanonicalStatusAndEntitlements(
 }
 
 func TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 99)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `
@@ -140,7 +140,7 @@ func TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture(t *te
 }
 
 func TestOrganizationLifecycleStorage_TransitionsEpochAndReadiness(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 	store := &storage.PostgresStore{Pool: pool}
@@ -254,7 +254,7 @@ func TestOrganizationOffboardingPreviewCountsExecutableProductionAndInstallation
 }
 
 func TestOrganizationLifecycleMigration_DownFailsClosedAfterLifecycleFact(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `UPDATE organizations SET credential_version=2 WHERE id=$1`, multiOrgInitialOrgID); err != nil {
@@ -269,7 +269,7 @@ func TestOrganizationLifecycleMigration_DownFailsClosedAfterLifecycleFact(t *tes
 }
 
 func TestOrganizationLifecycleMigration_RollbackAndReapplyWithoutFacts(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 	for _, step := range []struct {

@@ -37,7 +37,7 @@ func TestMachineOutputProfileDigestMigrationFreshAndUpgrade(t *testing.T) {
 	const orgID = "00000000-0000-0000-0000-000000000692"
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 132)
 	var nullable string
 	if err := fresh.QueryRow(ctx, `
@@ -47,7 +47,7 @@ func TestMachineOutputProfileDigestMigrationFreshAndUpgrade(t *testing.T) {
 		t.Fatalf("fresh digest column nullable=%q err=%v", nullable, err)
 	}
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 131)
 	if _, err := upgrade.Exec(ctx, `
 		INSERT INTO organizations (id, name, slug, type)

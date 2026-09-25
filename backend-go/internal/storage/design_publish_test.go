@@ -30,11 +30,11 @@ func designPublishMigrationSQL(t *testing.T) string {
 func TestDesignPublish_MigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 114)
 	assertDesignPublishSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 113)
 	if _, err := upgrade.Exec(ctx, designPublishMigrationSQL(t)); err != nil {
 		t.Fatalf("upgrade apply 00114: %v", err)
@@ -58,7 +58,7 @@ func assertDesignPublishSchema(t *testing.T, pool *pgxpool.Pool) {
 
 func TestDesignPublish_SchemaAndRLSInventory(t *testing.T) {
 	ctx := context.Background()
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 114)
 
 	for _, table := range []string{"design_publish_sessions", "design_publish_artifacts", "design_revision_artifacts"} {

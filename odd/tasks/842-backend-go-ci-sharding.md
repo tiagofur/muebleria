@@ -44,5 +44,10 @@ The focused API suite is green. Pilot Readiness is now green with a migration po
 - Hardware Assets migration fresh/upgrade now uses `multiOrgFreshMigrationDB`. Focused guards, the Hardware Assets migration/RLS/tenant group, and handler-level walkthrough pass. No policy or runtime role changed.
 - Storage migration/schema audit found the shared `multiOrgFreshDB` family used by both migration-evolution tests (including `identityApplyThrough`) and runtime fixtures (`hwAssetNewStore`, `multiOrg_isolation_test`, and direct `RunMigrations` helpers). The former must migrate to `multiOrgFreshMigrationDB`; the latter must retain a separate runtime pool after admin setup. This classification prevents a blanket admin conversion.
 
+## Migration-suite classification follow-up (2026-09-24)
+- Reclassified every direct `identityApplyThrough` caller as migration/schema authority and routed its fresh/upgrade database through `multiOrgFreshMigrationDB` (27 test files). These tests assert schema, ledger, grants, inventory, fresh/upgrade/down evolution; they do not constitute runtime/RLS behavior proof.
+- Representative migration tests covering Auth Devices/MFA/Refresh/Sessions, Design Publish/Designs, and tenant-RLS down migration all pass under migration authority.
+- An early diagnostic storage run was stopped after it surfaced remaining false-green fixtures: `skipIfNoDB`, `connectStore`, and several direct `RunMigrations` helpers still attempt bootstrap as `granete_app`, yielding `permission denied for schema public` and SKIP/FAIL. This run is not a baseline. Runtime behavior tests using those helpers must migrate with a separate migration pool and then assert with the runtime pool inside tenant transactions.
+
 ## Next step
-Complete the classified migration-fixture and runtime-fixture authority separation, run the full storage suite, and obtain the required green baseline before starting AST discovery.
+Separate setup from runtime pools in `skipIfNoDB`, `connectStore`, and the remaining direct-migration runtime fixtures; then run the full storage suite without new skips before starting AST discovery.

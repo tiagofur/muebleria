@@ -920,11 +920,11 @@ func assertProductionReleaseSchema(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestProductionRelease_MigrationFreshAndUpgrade(t *testing.T) {
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 119)
 	assertProductionReleaseSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 117)
 	if _, err := upgrade.Exec(context.Background(), readMigration(t, "000118_design_revision_approval.up.sql")); err != nil {
 		t.Fatalf("upgrade apply 00118: %v", err)

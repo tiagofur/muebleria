@@ -29,11 +29,11 @@ func designMigrationSQL(t *testing.T) string {
 func TestDesigns_MigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 113)
 	assertDesignSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 112)
 	if _, err := upgrade.Exec(ctx, designMigrationSQL(t)); err != nil {
 		t.Fatalf("upgrade apply 00113: %v", err)

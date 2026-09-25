@@ -24,11 +24,11 @@ func authRefreshMigrationSQL(t *testing.T, suffix string) string {
 }
 
 func TestAuthRefresh_MigrationFreshAndUpgrade(t *testing.T) {
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 106)
 	assertAuthRefreshSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 105)
 	if _, err := upgrade.Exec(context.Background(), authRefreshMigrationSQL(t, "up")); err != nil {
 		t.Fatalf("upgrade apply 000106: %v", err)

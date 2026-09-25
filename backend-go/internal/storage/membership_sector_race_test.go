@@ -257,7 +257,7 @@ func assertFinalOrganizationSectorCompatibility(t *testing.T, pool *pgxpool.Pool
 }
 
 func TestMembershipSectorRaceLockingMigration_DownRestoresPreviousGate(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 99)
 	ctx := context.Background()
 	down, err := osReadMigration("../../db/migration/000099_membership_sector_race_locking.down.sql")

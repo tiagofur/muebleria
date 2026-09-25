@@ -16,7 +16,7 @@ import (
 
 func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 	t.Run("fresh schema has an empty authoritative definition list", func(t *testing.T) {
-		pool := multiOrgFreshDB(t)
+		pool := multiOrgFreshMigrationDB(t)
 		identityApplyThrough(t, pool, 103)
 
 		var defaultValue string
@@ -38,7 +38,7 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 	})
 
 	t.Run("upgrade preserves an existing legacy module", func(t *testing.T) {
-		pool := multiOrgFreshDB(t)
+		pool := multiOrgFreshMigrationDB(t)
 		identityApplyThrough(t, pool, 102)
 		ctx := context.Background()
 		const moduleID = "f1970000-0000-0000-0000-000000000001"
@@ -66,7 +66,7 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 }
 
 func TestModuleParameterDefinitionsMigrationDownRemovesColumn(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 103)
 	downSQL, err := os.ReadFile("../../db/migration/000103_module_parameter_definitions.down.sql")
 	if err != nil {
@@ -97,7 +97,7 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pool := multiOrgFreshDB(t)
+			pool := multiOrgFreshMigrationDB(t)
 			// Applied through CURRENT (000135, #670-B): the typed-definition
 			// rejection is schema-version-independent and the catalog read now
 			// includes current_revision_id on agregados.
@@ -148,7 +148,7 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 }
 
 func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 103)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
@@ -243,7 +243,7 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 
 	for index, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			pool := multiOrgFreshDB(t)
+			pool := multiOrgFreshMigrationDB(t)
 			identityApplyThrough(t, pool, 103)
 			store := &storage.PostgresStore{Pool: pool}
 			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)

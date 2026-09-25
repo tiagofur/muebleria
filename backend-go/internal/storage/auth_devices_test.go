@@ -74,11 +74,11 @@ func assertDevicesPolicies(t *testing.T, pool *pgxpool.Pool) {
 func TestAuthDevices_MigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 108)
 	assertDevicesPolicies(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 107)
 	if _, err := upgrade.Exec(ctx, devicesMigrationSQL(t, "up")); err != nil {
 		t.Fatalf("upgrade apply 000108: %v", err)
@@ -114,12 +114,12 @@ func TestAuthDevices_Migration120Reconciliation(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Fresh database through 120 (idempotency proof)
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 120)
 	assertDevicesPolicies(t, fresh)
 
 	// 2. Legacy pre-3a0854cf upgrade: simulate the original migration 108
-	legacy := multiOrgFreshDB(t)
+	legacy := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, legacy, 107)
 
 	legacySQL := `

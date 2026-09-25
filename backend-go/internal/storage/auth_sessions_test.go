@@ -32,11 +32,11 @@ func authSessionsMigrationSQL(t *testing.T, suffix string) string {
 func TestAuthSessions_MigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 105)
 	assertAuthSessionsRegistry(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 104)
 	if _, err := upgrade.Exec(ctx, authSessionsMigrationSQL(t, "up")); err != nil {
 		t.Fatalf("upgrade apply 000105: %v", err)
