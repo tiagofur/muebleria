@@ -16,7 +16,7 @@ At `origin/main@a609a1d1c47b436a81e431b89b1a7cd276c2b2f0`, the backend and Sketc
 
 ## Tasks
 - [x] T1 — Verify ownership and map the smallest React surface for authoritative CommercialProjection. Route: delegated; trigger: preparation and expected multi-file change. Evidence: PR #702 delivered backend/SketchUp only; `getDesignCommercialProjection` has no React runtime caller. #642 authorizes remaining commercial consumers. Engram mirror: pending (Engram rejected writes because multiple active runtime sessions match the project directory).
-- [ ] T2 — Add authoritative React projection states and focused browser proof, if #677 scope explicitly authorizes the React surface; otherwise stop and report the correct owner gap. Route: delegated; trigger: 2+ non-trivial files. Evidence: pending.
+- [ ] T2 — Add authoritative React projection states and focused browser proof, under #642, using the generated API; preserve all authority and add focused browser proof. Route: delegated; trigger: 2+ non-trivial files. Evidence: pending.
 
 ## Next step
 T2 delegated writer: add a read-only, authority-preserving projection panel in `ProjectDesignsScreen` with focused unit and Chromium+Go+throwaway-PostgreSQL proof. TDD: strict; run observed RED, GREEN, REFACTOR. No source write has occurred.
