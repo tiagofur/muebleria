@@ -118,6 +118,23 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'dim-input-row'
   end
 
+  def test_configurator_contract_preview_summary_and_sticky_action
+    # El configurador nunca opera a ciegas: preview del mueble, una fila
+    # compacta por parámetro y cotas vivas junto a la acción primaria.
+    assert_includes @html_content, 'id="library-selected-preview"'
+    assert_includes @html_content, 'function renderConfiguratorPreview('
+    assert_includes @html_content, 'id="configurator-actionbar"'
+    assert_includes @html_content, 'id="library-summary-dims"'
+    assert_includes @html_content, 'id="library-summary-parts"'
+    assert_includes @html_content, 'Medidas y Opciones'
+    # Una línea por parámetro: etiqueta a la izquierda, control a la derecha.
+    assert_includes @html_content, 'param-control'
+    # Los botones "Catálogo" por rol murieron: la fila es el control y el
+    # chevron comunica la navegación.
+    refute_includes @html_content, 'btn-picker-open'
+    assert_includes @html_content, 'material-chevron'
+  end
+
   def test_dialog_html_contains_svg_placeholder_fallback
     assert_includes @html_content, 'function createFurniturePlaceholderSvg('
     assert_includes @html_content, 'furniture-card-svg'
