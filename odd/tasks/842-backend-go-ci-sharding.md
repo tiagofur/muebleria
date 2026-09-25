@@ -336,3 +336,10 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - Direct SQL proof/readbacks use separately scoped `granete_app` transactions (`runConnectStoreSQL`) rather than an unscoped pool connection. The raw FK insert now supplies the same organization tuple required by active RLS, so it reaches and proves the FK without weakening RLS.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestProjectInlineCustomer_'` — 9 PASS, FAIL=0, SKIP=0 (Go 9.287s; runner wall 15.4s).
 - Migration-authority failures remaining from the initial diagnostic: `26 → 17`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
+
+## D1 progress — inline customer update runtime split (2026-09-25)
+- Classification: the ten `TestProjectInlineUpdate_*` callers are mixed **C** coverage. `runtimeIsolationSetup` retains migrations and the fixture-only two-organization project/customer shape under `MIGRATION_DATABASE_URL`; it closes bootstrap before every product command uses the disposable `DATABASE_URL` pool as `granete_app` with an explicit active actor.
+- Every read, update, retry, expected error, and postcondition now uses an independent `WithinTenantTx`. Direct FK and concurrency-winner SQL uses a separately scoped runtime transaction with the same tenant GUCs; expected errors roll back before the next assertion transaction. The concurrent loser uses the tracing runtime pool with its valid actor, while the locked winner commits in its own legitimate runtime transaction.
+- Preserved contracts: raw `projects_customer_id_fkey` proof, server-owned customer identity, base-version conflict, rollback/no-orphan behavior, retry convergence, one-winner concurrency, lifecycle and metadata winner protection, cross-organization neutral not-found, and existing-customer update behavior.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestProjectInlineUpdate_'` — 10 PASS, FAIL=0, SKIP=0 (Go 9.325s; runner wall 14.8s).
+- Migration-authority failures remaining from the initial diagnostic: `17 → 7`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
