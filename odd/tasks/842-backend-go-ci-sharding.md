@@ -288,3 +288,9 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - The new transfer-only fixture is deliberately separate from legacy `isolationSetup`, which still has unrelated callers. Atomic transfer, version conflicts, single concurrency winner, audit insertion, and audit-failure rollback assertions are unchanged.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestTransferOrganizationAdmin_(IsAtomicVersionedAndAudited|ConcurrentReplayHasSingleWinner|AuditFailureRollsBackBothMemberships)$'` — 3 PASS, FAIL=0, SKIP=0 (Go 3.157s; runner wall 8.3s).
 - Migration-authority failures remaining from the initial diagnostic: `46 → 43`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
+
+## D1 progress — membership sectors and roles authority split (2026-09-25)
+- Classification: migrations, both organization/membership fixture worlds, role/type preconditions, and the temporary sector-audit rejection trigger are structural fixtures under `MIGRATION_DATABASE_URL`. `ChangeMembershipSectors` and `UpdateMembershipRolesByOrg` execute under `DATABASE_URL` as `granete_app` with legitimate actors and independent tenant transactions; audit-rollback readback is a new runtime transaction.
+- The sector/role fixture is deliberately separate from the transfer fixture and legacy `isolationSetup`. It preserves live role/type/scope validation, version conflict, expected cross-tenant denial, audit rollback, and residual-sector compatibility denial.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestChangeMembershipSectors_(ValidatesLiveRolesTypeVersionAndScope|AuditFailureRollsBack)|TestUpdateMembershipRolesRejectsResidualIncompatibleSectors)$'` — 3 PASS, FAIL=0, SKIP=0 (Go 3.066s; runner wall 7.9s).
+- Migration-authority failures remaining from the initial diagnostic: `43 → 40`. No production code, policy, RLS rule, trigger, constraint, or grant changed.

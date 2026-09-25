@@ -13,11 +13,13 @@ import (
 )
 
 const (
-	commandAdminUser       = "f1000000-0000-0000-0000-000000000001"
-	commandAdminMembership = "f2000000-0000-0000-0000-000000000001"
-	commandReplacementUser = "f1000000-0000-0000-0000-000000000002"
-	commandReplacement     = "f2000000-0000-0000-0000-000000000002"
-	transferCommandOrgID   = "f3000000-0000-0000-0000-000000000001"
+	commandAdminUser        = "f1000000-0000-0000-0000-000000000001"
+	commandAdminMembership  = "f2000000-0000-0000-0000-000000000001"
+	commandReplacementUser  = "f1000000-0000-0000-0000-000000000002"
+	commandReplacement      = "f2000000-0000-0000-0000-000000000002"
+	transferCommandOrgID    = "f3000000-0000-0000-0000-000000000001"
+	sectorCommandOrgID      = "f4000000-0000-0000-0000-000000000001"
+	sectorCommandOrgAMember = "f2000000-0000-0000-0000-000000000003"
 )
 
 type transferAdminRuntimeFixture struct {
@@ -95,6 +97,93 @@ func installRejectTransferAuditTrigger(t *testing.T, pool *pgxpool.Pool) {
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS reject_transfer_command_audit ON security_audit_events; DROP FUNCTION IF EXISTS reject_transfer_command_audit()`)
+	})
+}
+
+type sectorCommandRuntimeFixture struct {
+	store         *storage.PostgresStore
+	migrationPool *pgxpool.Pool
+	orgA          string
+	organization  string
+	actorA        storage.TenantActor
+	actor         storage.TenantActor
+}
+
+// sectorCommandRuntimeSetup keeps sector/role runtime coverage independent
+// from both the transfer fixture and legacy isolationSetup callers.
+func sectorCommandRuntimeSetup(t *testing.T) sectorCommandRuntimeFixture {
+	t.Helper()
+	ctx := context.Background()
+	migrationPool := multiOrgFreshMigrationDB(t)
+	migrationStore := &storage.PostgresStore{Pool: migrationPool}
+	if err := migrationStore.RunMigrations(ctx); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	for _, statement := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Sector Team', 'sector-team', 'provisioning')`, []any{sectorCommandOrgID}},
+		{`INSERT INTO users (id,email,normalized_email,password_hash,name,account_status) VALUES
+			($1,'command-admin@example.test','command-admin@example.test','x','Command Admin','active'),
+			($2,'command-replacement@example.test','command-replacement@example.test','x','Command Replacement','active')`, []any{commandAdminUser, commandReplacementUser}},
+		{`INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at) VALUES
+			($1,$2,$3,'{admin,gerente_ventas}','active',NOW()),
+			($4,$5,$3,'{admin,gerente_ventas}','active',NOW()),
+			($6,$5,$7,'{ingeniero}','active',NOW())`, []any{sectorCommandOrgAMember, multiOrgInitialOrgID, commandAdminUser, commandAdminMembership, sectorCommandOrgID, commandReplacement, commandReplacementUser}},
+		{`UPDATE organizations SET status='active', status_reason=NULL WHERE id IN ($1, $2)`, []any{multiOrgInitialOrgID, sectorCommandOrgID}},
+	} {
+		if _, err := migrationPool.Exec(ctx, statement.query, statement.args...); err != nil {
+			t.Fatalf("seed sector command fixture: %v", err)
+		}
+	}
+	runtimePool, err := pgxpool.New(ctx, storage.TestDatabaseURLForDB(t, migrationPool.Config().ConnConfig.Database))
+	if err != nil {
+		t.Fatalf("open runtime pool: %v", err)
+	}
+	t.Cleanup(runtimePool.Close)
+	return sectorCommandRuntimeFixture{
+		store:         &storage.PostgresStore{Pool: runtimePool},
+		migrationPool: migrationPool,
+		orgA:          multiOrgInitialOrgID,
+		organization:  sectorCommandOrgID,
+		actorA: storage.TenantActor{
+			OrganizationID: multiOrgInitialOrgID, UserID: commandAdminUser, MembershipID: sectorCommandOrgAMember,
+		},
+		actor: storage.TenantActor{
+			OrganizationID: sectorCommandOrgID, UserID: commandAdminUser, MembershipID: commandAdminMembership,
+		},
+	}
+}
+
+func sectorCommandContext(fixture sectorCommandRuntimeFixture) context.Context {
+	return storage.WithTenantActorCtx(scoped(context.Background(), fixture.organization), fixture.actor)
+}
+
+func sectorCommandRuntimeRead(t *testing.T, fixture sectorCommandRuntimeFixture, run func(pgx.Tx) error) {
+	t.Helper()
+	if err := runConnectStoreSQL(t, fixture.store.Pool, fixture.actor, run); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func installRejectSectorAuditTrigger(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION reject_sector_command_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF NEW.event_type = 'membership_sectors_changed' THEN
+				RAISE EXCEPTION 'required audit unavailable';
+			END IF;
+			RETURN NEW;
+		END $$;
+		CREATE TRIGGER reject_sector_command_audit BEFORE INSERT ON security_audit_events
+		FOR EACH ROW EXECUTE FUNCTION reject_sector_command_audit()`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS reject_sector_command_audit ON security_audit_events; DROP FUNCTION IF EXISTS reject_sector_command_audit()`)
 	})
 }
 
@@ -230,14 +319,14 @@ func TestTransferOrganizationAdmin_AuditFailureRollsBackBothMemberships(t *testi
 }
 
 func TestChangeMembershipSectors_ValidatesLiveRolesTypeVersionAndScope(t *testing.T) {
-	store, orgA, orgID := isolationSetup(t)
-	seedCommandAdministrators(t, store, orgID)
+	fixture := sectorCommandRuntimeSetup(t)
+	store, orgA, orgID := fixture.store, fixture.orgA, fixture.organization
 	ctx := context.Background()
-	if _, err := store.Pool.Exec(ctx, `UPDATE memberships SET roles='{produccion}' WHERE id=$1`, commandReplacement); err != nil {
+	if _, err := fixture.migrationPool.Exec(ctx, `UPDATE memberships SET roles='{produccion}' WHERE id=$1`, commandReplacement); err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := store.ChangeMembershipSectors(scoped(ctx, orgID), storage.ChangeMembershipSectorsCommand{
+	result, err := store.ChangeMembershipSectors(sectorCommandContext(fixture), storage.ChangeMembershipSectorsCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
 		ExpectedMembershipVersion: 1, Sectors: []domain.ProductionSector{domain.SectorCutting, domain.SectorAssembly, domain.SectorCutting},
 		Reason: "floor assignment", RequestID: "request-sector-1",
@@ -249,31 +338,31 @@ func TestChangeMembershipSectors_ValidatesLiveRolesTypeVersionAndScope(t *testin
 		t.Fatalf("unexpected sector result: %#v", result)
 	}
 
-	_, err = store.ChangeMembershipSectors(scoped(ctx, orgID), storage.ChangeMembershipSectorsCommand{
+	_, err = store.ChangeMembershipSectors(sectorCommandContext(fixture), storage.ChangeMembershipSectorsCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
 		ExpectedMembershipVersion: 1, Sectors: []domain.ProductionSector{domain.SectorShipping},
 	})
 	if !errors.Is(err, storage.ErrVersionConflict) {
 		t.Fatalf("stale sector error=%v", err)
 	}
-	_, err = store.ChangeMembershipSectors(scoped(ctx, orgA), storage.ChangeMembershipSectorsCommand{
+	_, err = store.ChangeMembershipSectors(storage.WithTenantActorCtx(scoped(ctx, orgA), fixture.actorA), storage.ChangeMembershipSectorsCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
 		ExpectedMembershipVersion: 2, Sectors: []domain.ProductionSector{domain.SectorShipping},
 	})
 	if !errors.Is(err, storage.ErrMembershipNotFound) {
 		t.Fatalf("cross-tenant sector error=%v", err)
 	}
-	result, err = store.ChangeMembershipSectors(scoped(ctx, orgID), storage.ChangeMembershipSectorsCommand{
+	result, err = store.ChangeMembershipSectors(sectorCommandContext(fixture), storage.ChangeMembershipSectorsCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
 		ExpectedMembershipVersion: 2, Sectors: []domain.ProductionSector{}, Reason: "clear before type change",
 	})
 	if err != nil || result.Member.Version != 3 {
 		t.Fatalf("clear sectors before type change result=%#v err=%v", result, err)
 	}
-	if _, err := store.Pool.Exec(ctx, `UPDATE organizations SET type='store' WHERE id=$1`, orgID); err != nil {
+	if _, err := fixture.migrationPool.Exec(ctx, `UPDATE organizations SET type='store' WHERE id=$1`, orgID); err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.ChangeMembershipSectors(scoped(ctx, orgID), storage.ChangeMembershipSectorsCommand{
+	_, err = store.ChangeMembershipSectors(sectorCommandContext(fixture), storage.ChangeMembershipSectorsCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
 		ExpectedMembershipVersion: 3, Sectors: []domain.ProductionSector{domain.SectorShipping},
 	})
@@ -283,15 +372,15 @@ func TestChangeMembershipSectors_ValidatesLiveRolesTypeVersionAndScope(t *testin
 }
 
 func TestChangeMembershipSectors_AuditFailureRollsBack(t *testing.T) {
-	store, _, orgID := isolationSetup(t)
-	seedCommandAdministrators(t, store, orgID)
+	fixture := sectorCommandRuntimeSetup(t)
+	store, orgID := fixture.store, fixture.organization
 	ctx := context.Background()
-	if _, err := store.Pool.Exec(ctx, `UPDATE memberships SET roles='{produccion}' WHERE id=$1`, commandReplacement); err != nil {
+	if _, err := fixture.migrationPool.Exec(ctx, `UPDATE memberships SET roles='{produccion}' WHERE id=$1`, commandReplacement); err != nil {
 		t.Fatal(err)
 	}
-	installRejectTeamAuditTrigger(t, store)
+	installRejectSectorAuditTrigger(t, fixture.migrationPool)
 
-	_, err := store.ChangeMembershipSectors(scoped(ctx, orgID), storage.ChangeMembershipSectorsCommand{
+	_, err := store.ChangeMembershipSectors(sectorCommandContext(fixture), storage.ChangeMembershipSectorsCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser, MembershipID: commandReplacement,
 		ExpectedMembershipVersion: 1, Sectors: []domain.ProductionSector{domain.SectorCutting},
 	})
@@ -300,22 +389,22 @@ func TestChangeMembershipSectors_AuditFailureRollsBack(t *testing.T) {
 	}
 	var sectors int
 	var version int64
-	if err := store.Pool.QueryRow(ctx, `SELECT count(*) FROM membership_sectors WHERE membership_id=$1`, commandReplacement).Scan(&sectors); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Pool.QueryRow(ctx, `SELECT version FROM memberships WHERE id=$1`, commandReplacement).Scan(&version); err != nil {
-		t.Fatal(err)
-	}
+	sectorCommandRuntimeRead(t, fixture, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM membership_sectors WHERE membership_id=$1`, commandReplacement).Scan(&sectors); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT version FROM memberships WHERE id=$1`, commandReplacement).Scan(&version)
+	})
 	if sectors != 0 || version != 1 {
 		t.Fatalf("audit failure leaked mutation sectors=%d version=%d", sectors, version)
 	}
 }
 
 func TestUpdateMembershipRolesRejectsResidualIncompatibleSectors(t *testing.T) {
-	store, _, orgID := isolationSetup(t)
-	seedCommandAdministrators(t, store, orgID)
-	ctx := scoped(context.Background(), orgID)
-	if _, err := store.Pool.Exec(context.Background(), `UPDATE memberships SET roles='{produccion}' WHERE id=$1`, commandReplacement); err != nil {
+	fixture := sectorCommandRuntimeSetup(t)
+	store, orgID := fixture.store, fixture.organization
+	ctx := sectorCommandContext(fixture)
+	if _, err := fixture.migrationPool.Exec(context.Background(), `UPDATE memberships SET roles='{produccion}' WHERE id=$1`, commandReplacement); err != nil {
 		t.Fatal(err)
 	}
 	result, err := store.ChangeMembershipSectors(ctx, storage.ChangeMembershipSectorsCommand{
@@ -325,7 +414,7 @@ func TestUpdateMembershipRolesRejectsResidualIncompatibleSectors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = store.WithinTenantTx(ctx, storage.TenantActor{OrganizationID: orgID, UserID: commandAdminUser}, func(txCtx context.Context) error {
+	err = store.WithinTenantTx(ctx, fixture.actor, func(txCtx context.Context) error {
 		_, updateErr := store.UpdateMembershipRolesByOrg(txCtx, orgID, commandReplacement, []domain.UserRole{domain.RoleIngeniero}, result.Member.Version)
 		return updateErr
 	})
