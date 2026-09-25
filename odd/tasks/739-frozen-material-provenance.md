@@ -50,7 +50,7 @@ No persistent database access, automatic merge, issue closure, or force push.
 - [x] T1 — Restore stable release-material grouping and explicit current aliases;
   prove missing-code honesty, unchanged physical demand, legacy compatibility,
   and Engineering wiring with domain/UI and real browser regressions.
-  Route: delegated writer. Work-unit commit: pending creation after verified checks.
+  Route: delegated writer. Work-unit commit: `0937ef8455c098a560c72116842f1100315065a2`.
 
 ## Verification
 
@@ -126,5 +126,9 @@ Raw traces stay disabled (no credentials captured into trace files).
 Engram mirror: topic `odd/739-frozen-material-provenance/tasks`, observation 1676.
 MCP mutation is unavailable due multiple runtime sessions; independent CLI save
 with explicit project is supported and used without inventing runtime identity.
-Next: record work-unit commit, clean preflight, then fresh exact-head review and
-parent-controlled partial PR publication. No push, PR, merge, or issue closure by writer.
+Work-unit commit `0937ef8455c098a560c72116842f1100315065a2` contains behavior, regressions, and this artifact.
+Clean preflight after that commit: `PREFLIGHT_OK_NOT_VERIFIED`, dirty=false, no errors.
+Final authored diff: 376 additions plus deletions across 8 files; no generated files.
+RDD remains disabled/unmanaged. Independent review and exact-head CI remain pending.
+Next: fresh exact-head review and parent-controlled partial PR publication.
+No push, PR, merge, or issue closure by writer.
