@@ -793,6 +793,39 @@ class PlacementPreviewControllerTest < Minitest::Test
     assert_nil active_preview_session
   end
 
+  # #469 repeat placement (connected catalog): each click is a FULL fresh
+  # gesture — its own idempotency key and its OWN FurnitureInstance; the
+  # working copy converges both units and no identity is ever reused.
+  def test_catalog_repeat_placement_mints_distinct_identities_per_click
+    stub_create_instance
+    @dialog.callbacks.fetch('begin_catalog_placement_preview').call(
+      nil, JSON.generate('definitionId' => DEFINITION_ID, 'parameters' => {},
+                         'materialChoices' => {}, 'idempotencyKey' => 'idem-r1')
+    )
+    click(active_tool)
+
+    # The server mints the SECOND unit under a different id.
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201, instance_body(FI_2))
+    @dialog.callbacks.fetch('begin_catalog_placement_preview').call(
+      nil, JSON.generate('definitionId' => DEFINITION_ID, 'parameters' => {},
+                         'materialChoices' => {}, 'idempotencyKey' => 'idem-r2')
+    )
+    click(active_tool)
+
+    creates = @transport.requests_for('POST', %r{/furniture-instances})
+    assert_equal 2, creates.length
+    assert_equal %w[idem-r1 idem-r2], creates.map { |r| r['headers']['Idempotency-Key'] },
+                 'each placement gesture carries its OWN key — repeat never reuses identity'
+    assert_equal 2, @transport.requests_for('PUT', %r{/working-copy}).length
+
+    [FI_1, FI_2].each do |fi_id|
+      located = PF::ManagedFurniture.locate(@model, MS.new(@model), fi_id)
+      assert located['entity'], "#{fi_id} placed"
+      assert_equal 1, located['duplicates'], "#{fi_id} exactly one physical unit"
+    end
+    assert_nil active_preview_session
+  end
+
   def test_catalog_composition_change_between_preview_and_click_fails_closed
     stub_create_instance
     @dialog.callbacks.fetch('begin_catalog_placement_preview').call(

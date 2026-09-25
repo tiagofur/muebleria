@@ -440,6 +440,64 @@ CNC/PTX, Inspector redesign, library versioning, real-host install.
   global); the actual surface is `apps/sketchup-extension` only — no
   backend/TS/contract files changed; CI re-validates the rest on the PR.
 
+## Increment 5 — repeat placement
+
+Base: origin/main @ f1db9dbb (PR #840 merged)
+Branch: feat/469-repeat-placement
+Status: IMPLEMENTED_PENDING_REVIEW
+
+Scope: rapid placement of the SAME Library preset without reopening the
+catalog — configure once → click → the same preset previews again →
+click → … → Esc ends. Repeat is catalog-lane ONLY (connected + local):
+Proyecto → Colocar of an existing FurnitureInstance keeps its single
+placement (the unit already has identity). Per #469: connected repeat
+mints a NEW FurnitureInstance per click with its own idempotency key
+(retry within a gesture keeps that gesture's key); local repeat creates
+a new instanceRef per click.
+
+### Design decisions
+
+- JS-DRIVEN re-begin: after a converged catalog commit the dialog calls
+  `begin_catalog_placement_preview` again with the SAME payload and a
+  FRESH idempotency key. Every placement stays ONE COMPLETE FRESH
+  gesture through the same entry point — new session, new preparation,
+  new guards; zero new Ruby mutation paths. The bridge round trip
+  guarantees the previous tool's call stack (including
+  restore_selection_tool) already unwound before the new tool is
+  selected — no timer tricks.
+- Incomplete placements never repeat: `pending_position` (converge
+  pending) and `created_pending` answers keep the existing one-shot
+  behavior; commit failures and failed re-begins re-arm honestly and
+  stop the loop.
+- UX: each placement toasts its own success; the repeated preview
+  announces "clic para colocar otro · Esc para terminar"; the entry
+  point stays held while repeating and re-arms on Esc/cancel/failure.
+  The connected repeat stays on the Library tab (no yank to Proyecto per
+  click); the panel refreshes per placement.
+
+### Observed evidence (this candidate)
+
+- `bundle exec rake verify` (homebrew ruby 3.2 + vendor bundle): RuboCop
+  229 files 0 offenses; 1129 unit runs / 7398 assertions, 0 failures; 6
+  boundary runs / 3359 assertions; RBZ deterministic readback, sha256
+  `611984f00bf6039f5f76fd6c9ecc768d6912c705a71b01a46d04c3a6710a3e57`.
+- `placement_preview_controller_test.rb` +1: connected repeat mints TWO
+  creates with keys [idem-r1, idem-r2] and TWO working-copy PUTs; FI_1
+  and FI_2 each exist exactly once.
+- `local_catalog_placement_preview_test.rb` +1: local repeat creates a
+  DISTINCT instanceRef at its own accepted transform (2200/300/0 mm),
+  same preset intent, zero transport requests.
+- `dialog_placement_preview_test.js` 13 tests under node: connected
+  repeat re-begins with the same definition/parameters and a DIFFERENT
+  key, held entry point, "colocar otro" copy, Esc ends (no further
+  auto-begin); local repeat via `placed_via_preview`; a failed re-begin
+  re-arms; `pending_position` never repeats; legacy origin-first
+  success never auto-repeats; the increment-4 disconnected test updated
+  to the repeat semantics (commit re-begins + held button + Esc re-arm).
+- TestUp local smoke extended: a second full gesture places another
+  distinct local unit at its own aim; double undo clears both — NOT_RUN
+  this session (no host available).
+
 
 
 The repository's per-issue ODD artifact is the coordination mechanism (the
@@ -655,7 +713,76 @@ rehearsal spec prepared but NOT_RUN (host).
 
 ## Remaining for #469 (not this increment)
 
-- Repeat placement.
 - Polygon-aware floor footprint.
 - Final real-host evidence.
 - Polish #506.
+
+## 2026-09-24 maintenance — rebase #841 after #840 merge
+
+Status: IN_PROGRESS (authorized, bounded correction; no product scope).
+
+Objective: rebase `feat/469-repeat-placement` onto current `origin/main` after
+#840 merged, preserving #840's TestUp center-click evidence and the existing
+#841 repeat-placement behavior. The smoke must commit a center preview using a
+fresh re-pick at that same center coordinate, including both repeat gestures.
+
+Route: delegated direct. Mapping and writer triggers apply: this maintenance
+reconciles the existing PR, its merged prerequisite, the TestUp smoke, ODD
+evidence, factory gates, and PR metadata. This worktree remains the sole
+writer.
+
+Scope: only `TC_PlacementPreviewSmoke.rb`, this ODD artifact, and PR #841
+metadata. Exclusions: no changes to `FurniturePlacementTool`,
+`PlacementSnapEngine`, controllers, identity semantics, managed furniture,
+builders, dialog routing, polygon-aware footprint, #784, or #506. A real
+product failure stops this maintenance rather than expanding it.
+
+TDD: strict, enabled by repository instruction. Before the source edit, run a
+static source-shape RED check that rejects an origin `(0, 0)` click immediately
+after `move_to_view_center`; after the repair, rerun it GREEN, then perform
+only the scoped refactor/readback. Planned checks: Ruby syntax/static smoke
+shape, `bundle exec rake verify`, `python3 scripts/verify_affected.py --base
+origin/main --plan`, selected factory gates, diff check, exact-head CI and
+Publication. TestUp real host remains NOT_RUN unless SketchUp is actually run.
+
+### Observed maintenance evidence (before frozen commit)
+
+- Rebased the existing PR branch on `origin/main`
+  `f02cbac91c1e159c248890a415ab56b2cc04c456` (#840 merged); retained its
+  `click_view_center` helper and all prior center-click repairs. No product
+  source changed.
+- RED: the static TestUp source-shape check reported one origin confirmation
+  after a center preview at `[512, 513]` (the second local repeat gesture).
+  GREEN: after replacing it with `click_view_center(tool)`, Ruby syntax passed
+  and the same check reported no origin-click confirmations after any
+  `move_to_view_center`; the local smoke still aims at approximately
+  `1500 / 800 / 0 mm`, commits at that center re-pick, and undoes both local
+  units.
+- `PATH="$HOME/.rbenv/shims:$PATH" bundle exec rake verify`: PASS — RuboCop
+  229 files, 0 offenses; 1129 runs / 7398 assertions; boundary 6 runs / 3359
+  assertions; deterministic RBZ sha256
+  `611984f00bf6039f5f76fd6c9ecc768d6912c705a71b01a46d04c3a6710a3e57`.
+- `python3 scripts/verify_affected.py --base origin/main --plan`: selected
+  all lanes because the ODD artifact is global. OpenAPI drift PASS; factory
+  efficiency 17 PASS; factory workflow contract 13 PASS; CI isolation suite
+  37/38 with its one base/environment failure (`backend-test.sh` reports
+  Docker unavailable before the test can assert its intended concurrency
+  rejection). `pnpm typecheck` and `pnpm test` completed their selected
+  workspace checks; `go test -p 1 -timeout=30m -v ./...` completed with its
+  database-dependent cases SKIPPED because `DATABASE_URL` was absent.
+- Visual Playwright and Foundation Gate A were launched once as selected;
+  the captured runner output ended before their terminal summaries, so they
+  are not claimed PASS here. TestUp real host remains NOT_RUN (no installed
+  SketchUp execution in this maintenance).
+- `origin/main` advanced again during verification to
+  `f1db9dbb167eb5b4942ef4c9c8e976315e7ced83` (#839). The branch was rebased
+  again onto that exact base without conflicts; the static center-click check
+  and full `bundle exec rake verify` were rerun successfully on the rebased
+  candidate. Its final commit identity is reported only after the frozen
+  work-unit commit is created.
+
+Next: freeze the focused correction, publish the existing PR branch, update
+the PR body to remove the obsolete #840 dependency warning, then use exact-head
+CI/Publication as the remote evidence. Delivery remains `Refs #469` /
+`Delivery: partial`; remaining #469 scope is polygon-aware floor footprint,
+real-host evidence, and #506 polish as recorded above.
