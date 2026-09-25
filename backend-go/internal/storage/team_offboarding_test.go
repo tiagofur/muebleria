@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -14,17 +15,12 @@ const (
 )
 
 func TestMembershipResponsibilityInventory_IsTenantScopedAndClassifiesWork(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
-	seedOffboardingTarget(t, store, orgB)
-	seedOffboardingResponsibilities(t, store, orgA, orgB)
-
-	inventory, err := store.GetMembershipResponsibilityInventory(scoped(ctx, orgB), offboardingTargetMembership)
+	fixture := offboardingInventoryRuntimeSetup(t)
+	inventory, err := fixture.inventory(fixture.actorB, offboardingTargetMembership)
 	if err != nil {
 		t.Fatalf("GetMembershipResponsibilityInventory: %v", err)
 	}
-	if inventory.OrganizationID != orgB || inventory.MembershipID != offboardingTargetMembership || inventory.UserID != offboardingTargetUser {
+	if inventory.OrganizationID != fixture.orgB || inventory.MembershipID != offboardingTargetMembership || inventory.UserID != offboardingTargetUser {
 		t.Fatalf("unexpected target identity: %#v", inventory)
 	}
 	if inventory.CustomerOwnershipCount != 1 || inventory.SalesProjectOwnershipCount != 1 || inventory.EngineerAssignmentCount != 1 || inventory.OpenWarrantyAssignmentCount != 1 || inventory.ActiveProductionClaimCount != 1 {
@@ -39,42 +35,97 @@ func TestMembershipResponsibilityInventory_IsTenantScopedAndClassifiesWork(t *te
 }
 
 func TestMembershipResponsibilityInventory_HidesForeignAndMissingMemberships(t *testing.T) {
-	store, _, orgB := isolationSetup(t)
+	fixture := offboardingInventoryRuntimeSetup(t)
 	ctx := context.Background()
-	seedOffboardingTarget(t, store, orgB)
 
-	_, err := store.GetMembershipResponsibilityInventory(scoped(ctx, storage.InitialOrganizationID), offboardingTargetMembership)
+	_, err := fixture.inventory(fixture.actorA, offboardingTargetMembership)
 	if !errors.Is(err, storage.ErrMembershipNotFound) {
 		t.Fatalf("foreign membership error = %v, want ErrMembershipNotFound", err)
 	}
 
-	_, err = store.GetMembershipResponsibilityInventory(scoped(ctx, orgB), "e2000000-0000-0000-0000-000000000099")
+	_, err = fixture.inventory(fixture.actorB, "e2000000-0000-0000-0000-000000000099")
 	if !errors.Is(err, storage.ErrMembershipNotFound) {
 		t.Fatalf("missing membership error = %v, want ErrMembershipNotFound", err)
 	}
 
-	_, err = store.GetMembershipResponsibilityInventory(ctx, offboardingTargetMembership)
+	_, err = fixture.store.GetMembershipResponsibilityInventory(ctx, offboardingTargetMembership)
 	if !errors.Is(err, storage.ErrNoOrgScope) {
 		t.Fatalf("unscoped error = %v, want ErrNoOrgScope", err)
 	}
 }
 
-func seedOffboardingTarget(t *testing.T, store *storage.PostgresStore, orgID string) {
+type offboardingInventoryRuntimeFixture struct {
+	store  *storage.PostgresStore
+	orgB   string
+	actorA storage.TenantActor
+	actorB storage.TenantActor
+}
+
+// offboardingInventoryRuntimeSetup prepares the historical work inventory with
+// migration authority, then exposes it only through the real runtime role.
+func offboardingInventoryRuntimeSetup(t *testing.T) offboardingInventoryRuntimeFixture {
 	t.Helper()
 	ctx := context.Background()
-	if _, err := store.Pool.Exec(ctx, `
-		INSERT INTO users (id, email, normalized_email, password_hash, name, account_status)
-		VALUES ($1, 'offboarding-target@example.test', 'offboarding-target@example.test', 'x', 'Target', 'active')`, offboardingTargetUser); err != nil {
-		t.Fatalf("insert target user: %v", err)
+	migrationPool := multiOrgFreshMigrationDB(t)
+	migrationStore := &storage.PostgresStore{Pool: migrationPool}
+	if err := migrationStore.RunMigrations(ctx); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
 	}
-	if _, err := store.Pool.Exec(ctx, `
-		INSERT INTO memberships (id, organization_id, user_id, roles, status, joined_at)
-		VALUES ($1, $2, $3, '{vendedor}', 'active', NOW())`, offboardingTargetMembership, orgID, offboardingTargetUser); err != nil {
-		t.Fatalf("insert target membership: %v", err)
+
+	const (
+		orgB         = "aaaaaaaa-0000-0000-0000-00000000000b"
+		actorUserA   = "e1000000-0000-0000-0000-00000000000a"
+		actorUserB   = "e1000000-0000-0000-0000-00000000000b"
+		actorMemberA = "e2000000-0000-0000-0000-00000000000a"
+		actorMemberB = "e2000000-0000-0000-0000-00000000000b"
+	)
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Offboarding Beta', 'offboarding-beta', 'provisioning')`, []any{orgB}},
+		{`INSERT INTO workshop_settings (organization_id, default_currency) VALUES ($1, 'BRL')`, []any{orgB}},
+		{`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status) VALUES
+			($1, 'offboarding-actor-a@example.test', 'offboarding-actor-a@example.test', 'x', 'Actor A', 'active'),
+			($2, 'offboarding-actor-b@example.test', 'offboarding-actor-b@example.test', 'x', 'Actor B', 'active'),
+			($3, 'offboarding-target@example.test', 'offboarding-target@example.test', 'x', 'Target', 'active')`, []any{actorUserA, actorUserB, offboardingTargetUser}},
+		{`INSERT INTO memberships (id, organization_id, user_id, roles, status, joined_at) VALUES
+			($1, $2, $3, '{admin}', 'active', NOW()),
+			($4, $5, $6, '{admin}', 'active', NOW()),
+			($7, $5, $8, '{vendedor}', 'active', NOW())`, []any{actorMemberA, multiOrgInitialOrgID, actorUserA, actorMemberB, orgB, actorUserB, offboardingTargetMembership, offboardingTargetUser}},
+		{`UPDATE organizations SET status='active', status_reason=NULL WHERE id IN ($1, $2)`, []any{multiOrgInitialOrgID, orgB}},
+	}
+	for _, statement := range statements {
+		if _, err := migrationPool.Exec(ctx, statement.query, statement.args...); err != nil {
+			t.Fatalf("seed offboarding inventory fixture: %v", err)
+		}
+	}
+	seedOffboardingResponsibilities(t, migrationPool, multiOrgInitialOrgID, orgB)
+
+	runtimePool, err := pgxpool.New(ctx, storage.TestDatabaseURLForDB(t, migrationPool.Config().ConnConfig.Database))
+	if err != nil {
+		t.Fatalf("open runtime pool: %v", err)
+	}
+	t.Cleanup(runtimePool.Close)
+	return offboardingInventoryRuntimeFixture{
+		store:  &storage.PostgresStore{Pool: runtimePool},
+		orgB:   orgB,
+		actorA: storage.TenantActor{OrganizationID: multiOrgInitialOrgID, UserID: actorUserA, MembershipID: actorMemberA},
+		actorB: storage.TenantActor{OrganizationID: orgB, UserID: actorUserB, MembershipID: actorMemberB},
 	}
 }
 
-func seedOffboardingResponsibilities(t *testing.T, store *storage.PostgresStore, orgA, orgB string) {
+func (f offboardingInventoryRuntimeFixture) inventory(actor storage.TenantActor, membershipID string) (*storage.MembershipResponsibilityInventory, error) {
+	var inventory *storage.MembershipResponsibilityInventory
+	err := f.store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		var err error
+		inventory, err = f.store.GetMembershipResponsibilityInventory(txCtx, membershipID)
+		return err
+	})
+	return inventory, err
+}
+
+func seedOffboardingResponsibilities(t *testing.T, pool *pgxpool.Pool, orgA, orgB string) {
 	t.Helper()
 	ctx := context.Background()
 	const (
@@ -95,7 +146,7 @@ func seedOffboardingResponsibilities(t *testing.T, store *storage.PostgresStore,
 		{`UPDATE projects SET owner_user_id=$1, assigned_engineer_id=$1 WHERE id='c2000000-0000-0000-0000-00000000000a' AND organization_id=$2`, []any{offboardingTargetUser, orgA}},
 	}
 	for _, statement := range statements {
-		if _, err := store.Pool.Exec(ctx, statement.query, statement.args...); err != nil {
+		if _, err := pool.Exec(ctx, statement.query, statement.args...); err != nil {
 			t.Fatalf("seed responsibility: %v", err)
 		}
 	}
