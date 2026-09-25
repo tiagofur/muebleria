@@ -236,6 +236,17 @@ function runTests() {
   dialog.onCreateProjectFurnitureResult({ ok: false, code: 'created_pending' });
   check(el(sandbox, 'toast-message').className === 'toast warning', 'partial creation surfaces a warning toast');
 
+  // --- consecuencia invertida: el delete (reversible) cierra con su red de
+  //     seguridad; el error nombra la causa en vez de dejar el panel mudo ---
+  dialog.onDeleteResult({ ok: true });
+  check(el(sandbox, 'toast-message').className === 'toast success' &&
+        el(sandbox, 'toast-message').textContent.indexOf('Ctrl+Z') !== -1,
+    'delete success closes the gesture naming the Undo safety net');
+  dialog.onDeleteResult({ ok: false, reason: 'el mueble no se encontró en el modelo' });
+  check(el(sandbox, 'toast-message').className === 'toast error' &&
+        el(sandbox, 'toast-message').textContent.indexOf('no se encontró') !== -1,
+    'delete failure explains the cause');
+
   // --- binding states stay visually distinguishable ---
   dialog.onModelBindingStatus({ state: 'stale_base' });
   check(el(sandbox, 'model-binding-badge').className.includes('conflict'),

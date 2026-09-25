@@ -3659,6 +3659,7 @@ module Granete
           instance_id = payload['instanceId'] || payload[:instanceId]
 
           deleted = false
+          failure_reason = nil
           target = find_target_furniture_entity(instance_id)
           if target && active_model
             store = @metadata_store_factory.call(active_model)
@@ -3670,16 +3671,24 @@ module Granete
               deleted = true
               @logger.info('furniture_deleted', instance_id: instance_id || meta.dig('identity', 'instanceRef'))
             else
+              failure_reason = 'la entidad no tiene metadatos de Granete'
               @logger.warn('furniture_delete_rejected_no_metadata', target_class: target.class.name)
             end
           else
+            failure_reason = 'el mueble no se encontró en el modelo'
             @logger.warn('furniture_delete_target_not_found', instance_id: instance_id)
           end
 
+          # Cierre honesto del gesto (peak-end): el panel necesita saber si la
+          # eliminación ocurrió para confirmar con la red de seguridad (Undo)
+          # o explicar por qué no — un panel en blanco no es feedback.
+          execute_bridge(dialog, 'onDeleteResult',
+                         { 'ok' => deleted, 'instanceId' => instance_id, 'reason' => failure_reason })
           execute_bridge(dialog, 'onSelectionChange', nil)
           refresh_after_local_delete(dialog) if deleted
         rescue StandardError => e
           @logger.error('furniture_delete_failed', error: e)
+          execute_bridge(dialog, 'onDeleteResult', { 'ok' => false, 'reason' => e.message })
           execute_bridge(dialog, 'onSelectionChange', nil)
         end
 

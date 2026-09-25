@@ -1710,6 +1710,24 @@
         margin-bottom: var(--space-2);
       }
 
+      /* La línea de mutación (#498) comunica resultado, no sólo texto: el
+         color sigue la fase que granete-mutation.js ya publica en
+         data-phase — éxito, rechazo/aborto/stale y sin-conexión se leen
+         distinto sin tocar el módulo. */
+      .mutation-status[data-phase="committed"] {
+        color: var(--success-600);
+      }
+
+      .mutation-status[data-phase="rejected"],
+      .mutation-status[data-phase="aborted"],
+      .mutation-status[data-phase="stale"] {
+        color: var(--danger-600);
+      }
+
+      .mutation-status[data-phase="unavailable"] {
+        color: var(--warning-700);
+      }
+
       footer {
         padding: var(--space-3);
         text-align: center;
@@ -2485,7 +2503,7 @@
 
           <!-- #498 shared runtime status: honest mutation/degraded feedback so
                the user never faces an infinite spinner. Never claims ready. -->
-          <div id="mutation-status" class="card subhead" hidden
+          <div id="mutation-status" class="card subhead mutation-status" hidden
                style="margin: 0 0 var(--space-3) 0; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); text-align: center; font-style: normal;"
                role="status" aria-live="polite"></div>
         </section>
@@ -3022,7 +3040,10 @@
         });
 
         document.addEventListener("keydown", function (e) {
-          if (e.key === "Escape") closeAccountPopover();
+          if (e.key === "Escape") {
+            closeAccountPopover();
+            resetPublishConfirm();
+          }
         });
 
         document.addEventListener("click", function (event) {
@@ -4306,7 +4327,7 @@
                 }
               }, 5000);
             } else {
-              showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar vinculación"));
+              showToast("error", (result && result.error) || "No se pudo iniciar la vinculación.");
             }
           },
 
@@ -4354,7 +4375,7 @@
                 window.sketchup.get_model_binding();
               }
             } else {
-              showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar sesión"));
+              showToast("error", (result && result.error) || "No se pudo iniciar sesión.");
             }
           },
 
@@ -4384,6 +4405,19 @@
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receiveQuote(result);
           },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
+          onDeleteResult: function (result) {
+            result = result || {};
+            if (result.ok) {
+              // Peak-end honest: la eliminación ES reversible (una operación
+              // de Undo) — el cierre nombra la red de seguridad en vez de
+              // dejar el panel en blanco.
+              showToast("success", "✓ Mueble eliminado. Deshacé con Ctrl+Z (\u2318Z) si fue un error.");
+            } else {
+              showToast("error", result.reason
+                ? "No se pudo eliminar el mueble: " + result.reason + "."
+                : "No se pudo eliminar el mueble.");
+            }
+          },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
           onPublishResult: function (result) { handlePublishResult(result); },
           onDesignValidationProgress: function (payload) { renderDesignValidationProgress(payload); },
@@ -4481,7 +4515,7 @@
               }
             } else {
               repeatPreviewActive = false;
-              showToast("error", "Error: " + parameterIssueMessage(result, "Fallo en la inserción"));
+              showToast("error", parameterIssueMessage(result, "No se pudo insertar el mueble."));
             }
           },
 
@@ -4499,7 +4533,7 @@
                 selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
               }
             } else {
-              showToast("error", "Error: " + parameterIssueMessage(result, "Fallo al actualizar"));
+              showToast("error", parameterIssueMessage(result, "No se pudo actualizar el mueble."));
               // Rollback in-memory inspector state to last confirmed values from selectedContext
               if (selectedContext && inspectorDef) {
                 inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedContext.parameters || {});
@@ -5584,6 +5618,8 @@
             var deletePayload = { instanceId: selectedContext.furnitureInstanceRef };
             window.sketchup.delete_selected_furniture(JSON.stringify(deletePayload));
           } else {
+            // Fallback sin host: mismo cierre honesto que el camino Ruby.
+            window.GraneteDialog.onDeleteResult({ ok: true });
             window.GraneteDialog.onSelectionChange(null);
           }
         });
@@ -5602,7 +5638,7 @@
           btnApplyHwOffset.addEventListener("click", function () {
             if (!selectedContext || selectedContext.kind !== "hardware") return;
             if (selectedContext.placementKind === "derived") {
-              alert("Los herrajes derivados no admiten edición manual.");
+              showToast("warning", "Los herrajes derivados se calculan por regla de ingeniería; no admiten edición manual.");
               return;
             }
             var val = parseFloat(hwOffsetInput.value);
@@ -5617,7 +5653,7 @@
           btnReplaceHw.addEventListener("click", function () {
             if (!selectedContext || selectedContext.kind !== "hardware") return;
             if (selectedContext.placementKind === "derived") {
-              alert("Los herrajes derivados no admiten sustitución manual.");
+              showToast("warning", "Los herrajes derivados no admiten sustitución manual.");
               return;
             }
             var targetId = hwReplacementSelect.value;
@@ -5644,13 +5680,13 @@
           if (!selectedContext || selectedContext.kind !== "part") return;
           var translation = partPositionFromInputs();
           if (!translation && operation !== "remove") {
-            alert("Ingresá la posición en milímetros (X, Y y Z) del componente.");
+            showToast("error", "Ingresá la posición en milímetros (X, Y y Z) del componente.");
             return;
           }
           var result = window.GraneteMutation.submitComponentMutation(operation, translation, selectedContext);
           if (result === "busy") return;
           if (result === "unavailable") {
-            alert("Esta acción requiere la conexión con el servidor autoritativo de Granete.");
+            showToast("error", "Esta acción requiere la conexión con el servidor autoritativo de Granete.");
           }
         }
 
@@ -5665,7 +5701,7 @@
             if (!selectedContext || selectedContext.kind !== "part") return;
             var result = window.GraneteMutation.startComponentViewportMove(selectedContext);
             if (result === "unavailable") {
-              alert("El gesto de viewport no está disponible para esta selección.");
+              showToast("error", "El gesto de viewport no está disponible para esta selección.");
             }
           });
         }
@@ -5858,6 +5894,29 @@
         };
         var publishInFlight = false;
         var lastPublishOutcome = null;
+        // Consecuencia invertida (revisión UX 2026-09): publicar crea una
+        // revisión INMUTABLE del diseño; el delete (reversible con Undo) ya
+        // pedía confirmación y esto no. La acción irreversible ahora también
+        // se arma: primer clic explica, segundo confirma, 6 s de ventana.
+        var publishArmed = false;
+        var publishArmTimer = null;
+
+        function publishIdleLabel() {
+          return lastPublishOutcome && !lastPublishOutcome.ok
+            ? "Reintentar publicación"
+            : "Publicar diseño";
+        }
+
+        function resetPublishConfirm() {
+          publishArmed = false;
+          if (publishArmTimer) {
+            clearTimeout(publishArmTimer);
+            publishArmTimer = null;
+          }
+          if (bindingPublishBtn && !publishInFlight) {
+            bindingPublishBtn.textContent = publishIdleLabel();
+          }
+        }
 
         function canPublish(status) {
           var caps = status.capabilities || {};
@@ -5901,6 +5960,9 @@
 
         function renderPublishAvailability(status) {
           if (!bindingPublishBtn || !bindingPublishProgress) return;
+          // Cualquier empuje de estado re-evalúa el botón desde cero: la
+          // confirmación armada no sobrevive a un cambio de contexto.
+          resetPublishConfirm();
           var idle = !publishInFlight && lastPublishOutcome === null;
           var preflightBlocked = window.GranetePreflightReview &&
             window.GranetePreflightReview.publishBlocked();
@@ -5958,6 +6020,7 @@
 
         function handlePublishResult(result) {
           publishInFlight = false;
+          resetPublishConfirm();
           result = result || { ok: false, code: "error", reason: "resultado desconocido" };
           lastPublishOutcome = result;
           if (result.ok) {
@@ -6395,6 +6458,16 @@
         if (bindingPublishBtn) {
           bindingPublishBtn.addEventListener("click", function () {
             if (publishInFlight) return;
+            if (!publishArmed) {
+              publishArmed = true;
+              bindingPublishBtn.textContent = "¿Publicar revisión inmutable?";
+              bindingPublishProgress.style.display = "block";
+              bindingPublishProgress.textContent =
+                "Se creará una nueva revisión inmutable del diseño. Segundo clic para confirmar.";
+              publishArmTimer = setTimeout(resetPublishConfirm, 6000);
+              return;
+            }
+            resetPublishConfirm();
             // #731 PR2: the click STARTS the automatic orchestration — a
             // pending/blocked gate is no longer a client-side wall. Ruby
             // converges what is safe, validates the whole design, re-checks

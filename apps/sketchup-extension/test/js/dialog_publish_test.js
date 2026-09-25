@@ -68,7 +68,10 @@ function buildSandbox() {
 
   const sandbox = {
     console,
-    setTimeout: (fn) => { fn(); return 0; },
+    // Timers must NOT fire synchronously: the publish confirmation arms with
+    // a 6s reset window — a firing mock would disarm before the assertion
+    // runs (same contract as dialog_ux_states_test.js).
+    setTimeout: () => 0,
     clearTimeout: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
@@ -255,17 +258,37 @@ function runTests() {
     assert.ok(progress.textContent.indexOf('No se pudo confirmar el estado de fabricación') >= 0);
   });
 
-  // #731 PR2: a pending gate no longer swallows the click — the click
-  // STARTS the Ruby orchestration (auto-convergence + batch validation).
-  test('a blocked gate still starts the orchestration on click', (sandbox) => {
+  // #731 PR2: a pending gate no longer swallows the click — the CONFIRMED
+  // click STARTS the Ruby orchestration (auto-convergence + batch
+  // validation). Publicar crea una revisión inmutable: el primer clic arma
+  // (explica la consecuencia), el segundo confirma.
+  test('first click arms the immutable-revision confirmation', (sandbox) => {
     pushGate(sandbox, { allowed: false, total: 2, verified: 1, pending: 1 });
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const baseline = sandbox.__bridge.length;
     el(sandbox, 'btn-binding-publish').click();
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
+    assert.equal(publishCalls.length, 0, 'the first click only arms; nothing reaches Ruby');
+    const btn = el(sandbox, 'btn-binding-publish');
+    assert.equal(btn.textContent, '¿Publicar revisión inmutable?',
+      'the armed button names the consequence');
+    const progress = el(sandbox, 'binding-publish-progress');
+    assert.ok(visible(progress));
+    assert.ok(progress.textContent.indexOf('revisión inmutable') >= 0,
+      'the arm hint explains what the second click creates');
+  });
+
+  test('a blocked gate still starts the orchestration on confirm', (sandbox) => {
+    pushGate(sandbox, { allowed: false, total: 2, verified: 1, pending: 1 });
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const baseline = sandbox.__bridge.length;
+    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-binding-publish').click();
+    const publishCalls = sandbox.__bridge.slice(baseline)
+      .filter((c) => c.action === 'publish_design_revision');
     assert.equal(publishCalls.length, 1,
-      'the click reaches Ruby; the fresh gate there decides');
+      'the confirmed click reaches Ruby; the fresh gate there decides');
     // Close the cycle like Ruby does, so later tests start idle.
     sandbox.window.GraneteDialog.onPublishResult({
       ok: false, code: 'preflight_incomplete', reason: 'faltan verificar 2 de 2 muebles del diseño'
@@ -276,6 +299,7 @@ function runTests() {
     pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const baseline = sandbox.__bridge.length;
+    el(sandbox, 'btn-binding-publish').click();
     el(sandbox, 'btn-binding-publish').click();
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
