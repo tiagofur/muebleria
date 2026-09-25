@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -15,7 +17,86 @@ const (
 	commandAdminMembership = "f2000000-0000-0000-0000-000000000001"
 	commandReplacementUser = "f1000000-0000-0000-0000-000000000002"
 	commandReplacement     = "f2000000-0000-0000-0000-000000000002"
+	transferCommandOrgID   = "f3000000-0000-0000-0000-000000000001"
 )
+
+type transferAdminRuntimeFixture struct {
+	store         *storage.PostgresStore
+	migrationPool *pgxpool.Pool
+	organization  string
+	actor         storage.TenantActor
+}
+
+// transferAdminRuntimeSetup is intentionally independent from isolationSetup:
+// it keeps migration/bootstrap authority out of the runtime team-command proof.
+func transferAdminRuntimeSetup(t *testing.T) transferAdminRuntimeFixture {
+	t.Helper()
+	ctx := context.Background()
+	migrationPool := multiOrgFreshMigrationDB(t)
+	migrationStore := &storage.PostgresStore{Pool: migrationPool}
+	if err := migrationStore.RunMigrations(ctx); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	for _, statement := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Transfer Team', 'transfer-team', 'provisioning')`, []any{transferCommandOrgID}},
+		{`INSERT INTO users (id,email,normalized_email,password_hash,name,account_status) VALUES
+			($1,'command-admin@example.test','command-admin@example.test','x','Command Admin','active'),
+			($2,'command-replacement@example.test','command-replacement@example.test','x','Command Replacement','active')`, []any{commandAdminUser, commandReplacementUser}},
+		{`INSERT INTO memberships (id,organization_id,user_id,roles,status,joined_at) VALUES
+			($1,$2,$3,'{admin,gerente_ventas}','active',NOW()),
+			($4,$2,$5,'{ingeniero}','active',NOW())`, []any{commandAdminMembership, transferCommandOrgID, commandAdminUser, commandReplacement, commandReplacementUser}},
+		{`UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, []any{transferCommandOrgID}},
+	} {
+		if _, err := migrationPool.Exec(ctx, statement.query, statement.args...); err != nil {
+			t.Fatalf("seed transfer command fixture: %v", err)
+		}
+	}
+	runtimePool, err := pgxpool.New(ctx, storage.TestDatabaseURLForDB(t, migrationPool.Config().ConnConfig.Database))
+	if err != nil {
+		t.Fatalf("open runtime pool: %v", err)
+	}
+	t.Cleanup(runtimePool.Close)
+	return transferAdminRuntimeFixture{
+		store:         &storage.PostgresStore{Pool: runtimePool},
+		migrationPool: migrationPool,
+		organization:  transferCommandOrgID,
+		actor: storage.TenantActor{
+			OrganizationID: transferCommandOrgID,
+			UserID:         commandAdminUser,
+			MembershipID:   commandAdminMembership,
+		},
+	}
+}
+
+func transferAdminRuntimeRead(t *testing.T, fixture transferAdminRuntimeFixture, run func(pgx.Tx) error) {
+	t.Helper()
+	if err := runConnectStoreSQL(t, fixture.store.Pool, fixture.actor, run); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func installRejectTransferAuditTrigger(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `
+		CREATE OR REPLACE FUNCTION reject_transfer_command_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN
+			IF NEW.event_type = 'organization_admin_transferred' THEN
+				RAISE EXCEPTION 'required audit unavailable';
+			END IF;
+			RETURN NEW;
+		END $$;
+		CREATE TRIGGER reject_transfer_command_audit BEFORE INSERT ON security_audit_events
+		FOR EACH ROW EXECUTE FUNCTION reject_transfer_command_audit()`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DROP TRIGGER IF EXISTS reject_transfer_command_audit ON security_audit_events; DROP FUNCTION IF EXISTS reject_transfer_command_audit()`)
+	})
+}
 
 func seedCommandAdministrators(t *testing.T, store *storage.PostgresStore, organizationID string) {
 	t.Helper()
@@ -46,9 +127,9 @@ func seedCommandAdministrators(t *testing.T, store *storage.PostgresStore, organ
 }
 
 func TestTransferOrganizationAdmin_IsAtomicVersionedAndAudited(t *testing.T) {
-	store, _, orgID := isolationSetup(t)
-	seedCommandAdministrators(t, store, orgID)
-	ctx := scoped(context.Background(), orgID)
+	fixture := transferAdminRuntimeSetup(t)
+	store, orgID := fixture.store, fixture.organization
+	ctx := storage.WithTenantActorCtx(scoped(context.Background(), orgID), fixture.actor)
 
 	result, err := store.TransferOrganizationAdmin(ctx, storage.TransferOrganizationAdminCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser,
@@ -63,11 +144,14 @@ func TestTransferOrganizationAdmin_IsAtomicVersionedAndAudited(t *testing.T) {
 		t.Fatalf("unexpected transfer result: %#v", result)
 	}
 	var admins, audits int
-	if err := store.Pool.QueryRow(context.Background(), `SELECT active_admin_count FROM organization_team_state WHERE organization_id=$1`, orgID).Scan(&admins); err != nil || admins != 1 {
-		t.Fatalf("admin count=%d err=%v", admins, err)
-	}
-	if err := store.Pool.QueryRow(context.Background(), `SELECT count(*) FROM security_audit_events WHERE organization_id=$1 AND event_type='organization_admin_transferred' AND details->>'request_id'='request-transfer-1'`, orgID).Scan(&audits); err != nil || audits != 1 {
-		t.Fatalf("audit count=%d err=%v", audits, err)
+	transferAdminRuntimeRead(t, fixture, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(context.Background(), `SELECT active_admin_count FROM organization_team_state WHERE organization_id=$1`, orgID).Scan(&admins); err != nil {
+			return err
+		}
+		return tx.QueryRow(context.Background(), `SELECT count(*) FROM security_audit_events WHERE organization_id=$1 AND event_type='organization_admin_transferred' AND details->>'request_id'='request-transfer-1'`, orgID).Scan(&audits)
+	})
+	if admins != 1 || audits != 1 {
+		t.Fatalf("admin count=%d audit count=%d", admins, audits)
 	}
 
 	_, err = store.TransferOrganizationAdmin(ctx, storage.TransferOrganizationAdminCommand{
@@ -81,9 +165,9 @@ func TestTransferOrganizationAdmin_IsAtomicVersionedAndAudited(t *testing.T) {
 }
 
 func TestTransferOrganizationAdmin_ConcurrentReplayHasSingleWinner(t *testing.T) {
-	store, _, orgID := isolationSetup(t)
-	seedCommandAdministrators(t, store, orgID)
-	ctx := scoped(context.Background(), orgID)
+	fixture := transferAdminRuntimeSetup(t)
+	store, orgID := fixture.store, fixture.organization
+	ctx := storage.WithTenantActorCtx(scoped(context.Background(), orgID), fixture.actor)
 	command := storage.TransferOrganizationAdminCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser,
 		SourceMembershipID: commandAdminMembership, TargetMembershipID: commandReplacement,
@@ -121,10 +205,10 @@ func TestTransferOrganizationAdmin_ConcurrentReplayHasSingleWinner(t *testing.T)
 }
 
 func TestTransferOrganizationAdmin_AuditFailureRollsBackBothMemberships(t *testing.T) {
-	store, _, orgID := isolationSetup(t)
-	seedCommandAdministrators(t, store, orgID)
-	installRejectTeamAuditTrigger(t, store)
-	_, err := store.TransferOrganizationAdmin(scoped(context.Background(), orgID), storage.TransferOrganizationAdminCommand{
+	fixture := transferAdminRuntimeSetup(t)
+	store, orgID := fixture.store, fixture.organization
+	installRejectTransferAuditTrigger(t, fixture.migrationPool)
+	_, err := store.TransferOrganizationAdmin(storage.WithTenantActorCtx(scoped(context.Background(), orgID), fixture.actor), storage.TransferOrganizationAdminCommand{
 		OrganizationID: orgID, ActorUserID: commandAdminUser,
 		SourceMembershipID: commandAdminMembership, TargetMembershipID: commandReplacement,
 		ExpectedSourceVersion: 1, ExpectedTargetVersion: 1, DemoteSource: true, Reason: "rollback",
@@ -134,12 +218,12 @@ func TestTransferOrganizationAdmin_AuditFailureRollsBackBothMemberships(t *testi
 	}
 	var sourceRoles, targetRoles []domain.UserRole
 	var sourceVersion, targetVersion int64
-	if err := store.Pool.QueryRow(context.Background(), `SELECT roles,version FROM memberships WHERE id=$1`, commandAdminMembership).Scan(&sourceRoles, &sourceVersion); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Pool.QueryRow(context.Background(), `SELECT roles,version FROM memberships WHERE id=$1`, commandReplacement).Scan(&targetRoles, &targetVersion); err != nil {
-		t.Fatal(err)
-	}
+	transferAdminRuntimeRead(t, fixture, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(context.Background(), `SELECT roles,version FROM memberships WHERE id=$1`, commandAdminMembership).Scan(&sourceRoles, &sourceVersion); err != nil {
+			return err
+		}
+		return tx.QueryRow(context.Background(), `SELECT roles,version FROM memberships WHERE id=$1`, commandReplacement).Scan(&targetRoles, &targetVersion)
+	})
 	if !containsTestRole(sourceRoles, domain.RoleAdmin) || containsTestRole(targetRoles, domain.RoleAdmin) || sourceVersion != 1 || targetVersion != 1 {
 		t.Fatalf("audit failure leaked transfer source=%v/%d target=%v/%d", sourceRoles, sourceVersion, targetRoles, targetVersion)
 	}

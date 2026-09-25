@@ -282,3 +282,9 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - Corrected model: the disposable schema, seed catalog, and active fixture actor are prepared with `MIGRATION_DATABASE_URL`; the seeded catalog lookup, module creation, and post-commit catalog readback each use `DATABASE_URL` as `granete_app` in an independent `WithinTenantTx` for that actor.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestHardwareLineQuantityDoublePrecision$'` — PASS, FAIL=0, SKIP=0 (Go 1.05s; runner wall 5.4s).
 - Migration-authority failures remaining from the initial diagnostic: `47 → 46`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
+
+## D1 progress — TransferOrganizationAdmin authority split (2026-09-25)
+- Classification: migrations, disposable organization/users/memberships, and the temporary audit-rejection trigger are structural fixtures under `MIGRATION_DATABASE_URL`. The transfer commands (including concurrent replay and expected audit failure) execute through `DATABASE_URL` as `granete_app`; each command opens its production `WithinTenantTx` with the legitimate admin actor. Post-commit state/audit readbacks use separate runtime tenant transactions.
+- The new transfer-only fixture is deliberately separate from legacy `isolationSetup`, which still has unrelated callers. Atomic transfer, version conflicts, single concurrency winner, audit insertion, and audit-failure rollback assertions are unchanged.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestTransferOrganizationAdmin_(IsAtomicVersionedAndAudited|ConcurrentReplayHasSingleWinner|AuditFailureRollsBackBothMemberships)$'` — 3 PASS, FAIL=0, SKIP=0 (Go 3.157s; runner wall 8.3s).
+- Migration-authority failures remaining from the initial diagnostic: `46 → 43`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
