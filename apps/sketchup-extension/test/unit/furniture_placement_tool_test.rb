@@ -1186,4 +1186,113 @@ class FurniturePlacementToolTest < Minitest::Test
     board.define_singleton_method(:length_mm) { size[2] }
     board
   end
+
+  # ------------------------------------------------------------------
+  # Typed yaw (VCB) + right-click menu — power-user native affordances
+  # (UX review 2026-09). Grammar pinned here: "45°"/"-90 deg" is ALWAYS a
+  # yaw; a bare number is a yaw ONLY in free mode; with an active snap a
+  # bare number keeps meaning the exact gap in mm.
+  # ------------------------------------------------------------------
+
+  def test_typed_bare_yaw_in_free_mode_rotates_the_basis
+    placement_tool, = tool([[1000.0, 2000.0, 30.0]])
+    placement_tool.activate
+    move_cursor(placement_tool)
+
+    assert placement_tool.onUserText('45', @view)
+    assert_equal 45.0, placement_tool.yaw_degrees
+
+    transform = placement_tool.current_transform
+    cos45 = Math.cos(45 * Math::PI / 180.0)
+    sin45 = Math.sin(45 * Math::PI / 180.0)
+    assert_in_delta 1000.0 + (EXTENTS[:x] * cos45), point_mm(transform, EXTENTS[:x], 0, 0)[0], 1e-6
+    assert_in_delta 2000.0 + (EXTENTS[:x] * sin45), point_mm(transform, EXTENTS[:x], 0, 0)[1], 1e-6
+    # The anchor corner itself never moves: rotation is about the anchor.
+    assert_equal [1000.0, 2000.0, 30.0], point_mm(transform, 0, 0, 0)
+  end
+
+  def test_typed_yaw_accepts_explicit_suffix_and_wraps_negative
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    placement_tool.activate
+    move_cursor(placement_tool)
+
+    assert placement_tool.onUserText('-90°', @view)
+    assert_equal 270.0, placement_tool.yaw_degrees
+    assert placement_tool.onUserText('30 deg', @view)
+    assert_equal 30.0, placement_tool.yaw_degrees
+  end
+
+  def test_typed_yaw_matches_one_quarter_turn_at_90_degrees
+    placement_tool, = tool([[500.0, 500.0, 0.0]])
+    placement_tool.activate
+    move_cursor(placement_tool)
+    placement_tool.onUserText('90', @view)
+    typed = placement_tool.current_transform
+
+    placement_tool2, = tool([[500.0, 500.0, 0.0]])
+    placement_tool2.activate
+    placement_tool2.onMouseMove(0, 10, 10, @view)
+    placement_tool2.onKeyDown(39, 1, 0, @view) # → right arrow quarter turn
+    arrowed = placement_tool2.current_transform
+
+    assert_equal rounded_cells(arrowed), rounded_cells(typed),
+                 'typed 90° must reproduce exactly one arrow-key quarter turn'
+  end
+
+  def test_arrows_add_quarter_turns_on_top_of_a_typed_yaw
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    placement_tool.activate
+    move_cursor(placement_tool)
+    placement_tool.onUserText('45', @view)
+    placement_tool.onKeyDown(39, 1, 0, @view) # right arrow: +90 on the yaw
+
+    assert_equal 135.0, placement_tool.yaw_degrees
+    assert_equal 0, placement_tool.rotation_quarters
+  end
+
+  def test_bare_number_with_floor_snap_stays_a_gap_not_a_yaw
+    floor = [{ point_mm: [0.0, 0.0, 0.0], normal_mm: [0.0, 0.0, 1.0] }]
+    placement_tool, = tool([[1000.0, 2000.0, 30.0]], base_planes: -> { floor })
+    placement_tool.activate
+    move_cursor(placement_tool)
+    refute_nil placement_tool.active_snap, 'floor plane must produce a snap'
+
+    assert placement_tool.onUserText('5', @view)
+    assert_nil placement_tool.yaw_degrees, 'a bare number over a snap is the gap in mm'
+
+    # An EXPLICIT angle still rotates: the floor never locks orientation.
+    assert placement_tool.onUserText('45°', @view)
+    assert_equal 45.0, placement_tool.yaw_degrees
+  end
+
+  def test_invalid_vcb_text_never_guesses
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    placement_tool.activate
+    move_cursor(placement_tool)
+
+    assert placement_tool.onUserText('hola', @view)
+    assert_nil placement_tool.yaw_degrees
+    assert_equal 0, placement_tool.rotation_quarters
+  end
+
+  def test_context_menu_lists_native_gestures_and_acts_on_them
+    placement_tool, = tool([[0.0, 0.0, 0.0]])
+    placement_tool.activate
+    move_cursor(placement_tool)
+
+    items = placement_tool.getContextMenuItems
+    assert_includes items, Tool::CONTEXT_MENU_ROTATE_LEFT
+    assert_includes items, Tool::CONTEXT_MENU_ROTATE_RIGHT
+    assert_includes items, Tool::CONTEXT_MENU_CYCLE_ANCHOR
+    assert_includes items, Tool::CONTEXT_MENU_CANCEL
+    assert_includes items, '---', 'separator groups the destructive exit'
+
+    placement_tool.onContextMenu(Tool::CONTEXT_MENU_ROTATE_RIGHT)
+    assert_equal 1, placement_tool.rotation_quarters
+    placement_tool.onContextMenu(Tool::CONTEXT_MENU_CYCLE_ANCHOR)
+    assert_equal :back_right_bottom, placement_tool.anchor
+    placement_tool.onContextMenu(Tool::CONTEXT_MENU_CANCEL)
+    assert placement_tool.cancelled?
+    assert_equal [:escape], @cancels
+  end
 end
