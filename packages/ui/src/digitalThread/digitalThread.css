@@ -1774,7 +1774,7 @@
 }
 
 
-/* #642 — read-only server-authoritative commercial estimate. */
+/* Read-only server-authoritative commercial estimate (Issue 642). */
 .pd-commercial-projection {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
