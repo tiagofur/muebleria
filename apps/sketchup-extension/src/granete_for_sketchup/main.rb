@@ -3,7 +3,7 @@
 require 'sketchup'
 
 module Granete
-  module SketchUpExtension
+  module SketchUpExtension # rubocop:disable Metrics/ModuleLength -- bootstrap manifest de requires, sin lógica
     support_path = __dir__.dup
     support_path.force_encoding('UTF-8')
 
@@ -95,6 +95,22 @@ module Granete
         ui/mount_frame_host_preview
         ui/mount_frame_preparer_controller
         ui/component_authoring_bridge
+        ui/bridges/active_model_metadata_store
+        ui/bridges/session_bridge
+        ui/bridges/model_binding_bridge
+        ui/bridges/commercial_projection_bridge
+        ui/bridges/commercial_bootstrap_bridge
+        ui/bridges/project_furniture_bridge
+        ui/bridges/host_mutation_bridge
+        ui/bridges/furniture_bridge
+        ui/bridges/option_selector_bridge
+        ui/bridges/inspector_bridge
+        ui/bridges/app_model_observer
+        ui/bridges/observer_bridge
+        ui/bridges/manufacturing_inspection_bridge
+        ui/bridges/preflight_review_bridge
+        ui/bridges/migration_bridge
+        ui/bridges/hardware_mount_bridge
         ui/dialog_controller
         lifecycle
         application
