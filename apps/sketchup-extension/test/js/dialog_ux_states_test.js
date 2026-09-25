@@ -247,6 +247,30 @@ function runTests() {
   check(el(sandbox, 'model-binding-badge').className.includes('invalid'),
     'archived design renders as blocked');
 
+  // --- cuenta y conexión: la sesión vive en el popover del pill, no en una pestaña ---
+  check(!html.includes('id="pane-status"') && !html.includes('data-tab="status"'),
+    'Estado dejó de ser una pestaña del panel');
+  check(html.includes('id="account-popover"') && html.includes('aria-controls="account-popover"'),
+    'la cuenta vive en un popover anclado al pill del header');
+  check(!html.includes('id="btn-pf-go-status"'),
+    'Proyecto ya no expulsa al usuario hacia una pestaña de sesión');
+  dialog.setCatalog({ source: 'unauthenticated', definitions: [] });
+  check(el(sandbox, 'library-empty-title').textContent.includes('Sesión requerida'),
+    'sin sesión la biblioteca lo dice con un CTA');
+  el(sandbox, 'btn-library-empty-action').onclick();
+  check(visible(el(sandbox, 'account-popover')), 'el CTA de sesión abre el popover de cuenta');
+  check(el(sandbox, 'connection-pill').getAttribute('aria-expanded') === 'true',
+    'el pill anuncia el popover abierto');
+  el(sandbox, 'connection-pill').click();
+  check(!visible(el(sandbox, 'account-popover')), 'clic en el pill cierra el popover');
+  check(el(sandbox, 'connection-pill').getAttribute('aria-expanded') === 'false',
+    'el pill anuncia el popover cerrado');
+  dialog.setStatus({ state: 'logged_in', user: { name: 'A', email: 'a@b' }, server_url: 'https://x' });
+  check(el(sandbox, 'connection-pill').className.includes('connection-pill-btn'),
+    'setStatus conserva la clase de botón del pill (no lo rompe en <div>)');
+  check(visible(el(sandbox, 'session-card')) && !visible(el(sandbox, 'login-card')),
+    'con sesión el popover muestra la sesión y oculta la vinculación');
+
   return passed;
 }
 

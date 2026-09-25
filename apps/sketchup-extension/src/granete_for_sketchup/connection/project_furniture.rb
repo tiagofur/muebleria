@@ -206,7 +206,7 @@ module Granete
             state = ModelBinding::State.derive(stored: binding, validation: validation)
             return nil if state == 'connected'
 
-            remediation = state == 'stale_base' ? 'actualizá la base de trabajo en la pestaña Estado' : nil
+            remediation = state == 'stale_base' ? 'actualizá la base de trabajo en la tarjeta Modelo / Diseño' : nil
             { 'ok' => false, 'code' => state,
               'reason' => remediation || 'el enlace del modelo no permite editar este diseño' }
           rescue ModelBinding::Service::Error => e

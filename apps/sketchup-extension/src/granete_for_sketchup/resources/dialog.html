@@ -150,6 +150,46 @@
         font-size: var(--text-xs);
       }
 
+      /* Cuenta y conexión viven en un popover anclado al pill del header:
+         la sesión ya no compite por una pestaña entera del panel. */
+      .brand-pill-wrap {
+        position: relative;
+      }
+
+      .connection-pill-btn {
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: border-color var(--duration-fast);
+      }
+
+      .connection-pill-btn:hover {
+        border-color: hsl(0 0% 100% / 35%);
+      }
+
+      .connection-pill-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px hsl(0 0% 100% / 35%);
+      }
+
+      .account-popover {
+        position: absolute;
+        top: calc(100% + var(--space-2));
+        right: 0;
+        width: min(26rem, calc(100vw - var(--space-4)));
+        max-height: calc(100vh - 7rem);
+        overflow-y: auto;
+        background: var(--surface-app);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 16px 32px -8px rgb(15 23 42 / 25%), 0 4px 8px -4px rgb(15 23 42 / 15%);
+        padding: var(--space-3);
+        z-index: 900;
+      }
+
+      .account-popover .card {
+        margin-bottom: var(--space-3);
+      }
+
       .tabs-nav {
         display: flex;
         background: var(--surface-card);
@@ -1689,7 +1729,67 @@
             <span>para SketchUp</span>
           </div>
         </div>
-        <div id="connection-pill" class="status-badge pending">Comprobando…</div>
+        <div class="brand-pill-wrap">
+          <button id="connection-pill" class="status-badge pending connection-pill-btn" type="button"
+                  aria-expanded="false" aria-haspopup="dialog" aria-controls="account-popover">Comprobando…</button>
+
+          <!-- Cuenta y conexión: la sesión, la vinculación del dispositivo y
+               el cierre del panel viven acá, no en una pestaña. -->
+          <div id="account-popover" class="account-popover" role="dialog" aria-label="Cuenta y conexión con Granete" style="display: none;">
+            <div class="card">
+              <div class="card-title">Conexión con Granete</div>
+              <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1); margin-top: var(--space-2);">Comprobando…</h2>
+              <p id="connection-detail" class="subhead" style="margin-bottom: var(--space-3);">Validando extensión y adaptadores locales.</p>
+              <p class="subhead" style="margin-bottom: 0;">
+                <strong>Cómo funciona:</strong> diseñás el mueble en SketchUp; Granete calcula las piezas y valida que se pueda fabricar.
+              </p>
+            </div>
+
+            <div class="card" id="login-card">
+              <div class="card-title">Vincular Dispositivo</div>
+              <p class="subhead" id="login-instructions" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
+                Ingresá la dirección de tu servidor Granete para vincular este equipo.
+              </p>
+              <div id="login-form-area">
+                <label class="login-label" for="login-server">Servidor Granete</label>
+                <input id="login-server" class="login-field" type="text" autocomplete="off" placeholder="https://granete.taller.com/api">
+                <button id="btn-login" class="btn btn-primary">Generar código</button>
+              </div>
+              <div id="enroll-code-area" style="display: none; text-align: center;">
+                <p style="font-size: var(--text-sm); margin-bottom: var(--space-2);">Ingresá este código en <strong>Taller &gt; Dispositivos</strong>:</p>
+                <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-2);">
+                  <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: var(--font-mono);">--</div>
+                  <button id="btn-copy-enroll-code" class="btn btn-secondary btn-sm" title="Copiar código al portapapeles" style="padding: 6px 12px; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 4px;">
+                    <span id="copy-enroll-code-icon"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+                    <span id="copy-enroll-code-text">Copiar</span>
+                  </button>
+                </div>
+                <div id="enroll-countdown-area" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-2);">
+                  Expira en <strong id="enroll-countdown-display" style="color: var(--text-primary, #1e293b);">--:--</strong>
+                </div>
+                <p id="enroll-status-text" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación en la web...</p>
+                <div style="display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-2);">
+                  <button id="btn-open-web-devices" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span>Abrir Dispositivos en la web</span>
+                  </button>
+                  <button id="btn-cancel-enroll" class="btn btn-secondary btn-sm">Cancelar</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" id="session-card" style="display: none;">
+              <div class="card-title">Sesión del Taller</div>
+              <div class="kv-row"><span class="k">Usuario</span><span class="v" id="session-user-name">--</span></div>
+              <div class="kv-row"><span class="k">Email</span><span class="v" id="session-user-email">--</span></div>
+              <div class="kv-row"><span class="k">Servidor</span><span class="v" id="session-server">--</span></div>
+              <div class="kv-row"><span class="k">Licencia</span><span class="v" id="session-license">--</span></div>
+              <button id="btn-logout" class="btn btn-secondary" style="margin-top: var(--space-2);">Cerrar sesión</button>
+            </div>
+
+            <button id="btn-close" class="btn btn-secondary btn-sm" style="width: 100%;">Cerrar panel</button>
+          </div>
+        </div>
       </header>
 
       <nav class="tabs-nav" role="tablist">
@@ -1704,10 +1804,6 @@
         <button id="tab-btn-inspector" class="tab-button" role="tab" aria-selected="false" data-tab="inspector">
           <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           <span>Inspector</span>
-        </button>
-        <button id="tab-btn-status" class="tab-button" role="tab" aria-selected="false" data-tab="status">
-          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Estado</span>
         </button>
       </nav>
 
@@ -1888,8 +1984,89 @@
              from the Catalog/Library: units that ALREADY EXIST as physical
              project furniture, with state reconciled against the exact design
              working copy and this file's managed roots. The panel never edits
-             business identity. -->
+             business identity. La tarjeta Modelo / Diseño (#388) encabeza la
+             pestaña: conexión, publicación y presupuesto del diseño comparten
+             una sola superficie. -->
         <section id="pane-project" class="tab-pane" role="tabpanel">
+          <!-- #388: model ↔ Project/Design binding. State, exact context and
+               explicit actions; the panel never edits business identity. -->
+          <div class="card" id="model-binding-card">
+            <div class="card-title">Modelo / Diseño</div>
+            <div id="model-binding-state-area">
+              <span id="model-binding-badge" class="status-badge pending">Sin conectar</span>
+              <p id="model-binding-detail" class="subhead" style="margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
+            </div>
+            <div id="model-binding-info" style="display: none; margin-top: var(--space-2);">
+              <div class="kv-row"><span class="k">Taller</span><span class="v" id="binding-org-name">--</span></div>
+              <div class="kv-row"><span class="k">Cliente</span><span class="v" id="binding-customer-name">--</span></div>
+              <div class="kv-row"><span class="k">Proyecto</span><span class="v" id="binding-project-name">--</span></div>
+              <div class="kv-row"><span class="k">Diseño</span><span class="v" id="binding-design-name">--</span></div>
+              <div class="kv-row"><span class="k">Base</span><span class="v" id="binding-base-revision">--</span></div>
+            </div>
+            <!-- #499 Slice 3: one-time pairing code — the normal
+                 Web→SketchUp path. The manual selector below stays as the
+                 reviewed fallback. -->
+            <div id="pairing-entry" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle);">
+              <label for="pairing-code-input" class="subhead" style="display:block; margin: 0 0 var(--space-1) 0; font-size: var(--text-xs);">Conectar con código</label>
+              <div style="display: flex; gap: var(--space-1);">
+                <input id="pairing-code-input" type="text" inputmode="latin" autocomplete="off" spellcheck="false"
+                       placeholder="Código de la web"
+                       style="flex:1 1 auto; min-width: 0; font-family: var(--font-mono, monospace); text-transform: uppercase; letter-spacing: 0.08em;"
+                       aria-describedby="pairing-message" />
+                <button id="btn-pairing-connect" class="btn btn-primary" style="flex: 0 0 auto; width: auto; white-space: nowrap;">Conectar</button>
+              </div>
+              <p id="pairing-message" class="subhead" role="status" aria-live="polite"
+                 style="display: none; margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
+            </div>
+            <div id="model-binding-actions" style="margin-top: var(--space-2);">
+              <button id="btn-bootstrap-project" class="btn btn-secondary" style="width: 100%;">Nuevo proyecto</button>
+              <button id="btn-binding-connect" class="btn btn-secondary" style="width: 100%;">Conectar modelo (manual)</button>
+              <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar conexión</button>
+              <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
+              <!-- #392 / DT-8: staged revision publication. Visible only when
+                   the server granted can_publish_revision and the base is
+                   current; the backend stays the authority either way.
+                   #731 PR2: Publicar diseño es la orquestación de cierre
+                   (auto-sync recuperable → validación del diseño → gate →
+                   publish); Validar diseño ejecuta el mismo batch sin
+                   publicar. Las excepciones se muestran sólo para lo que
+                   requiere atención. -->
+              <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
+              <button id="btn-design-validate" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar diseño</button>
+              <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
+              <div id="binding-publish-exceptions" style="display: none; margin-top: var(--space-2);"></div>
+            </div>
+            <form id="project-bootstrap-form" style="display: none; margin-top: var(--space-2);" aria-busy="false">
+              <label class="login-label" for="bootstrap-project-name">Proyecto</label>
+              <input id="bootstrap-project-name" class="login-field" maxlength="200" required autocomplete="off">
+              <label class="login-label" for="bootstrap-design-name" style="margin-top: var(--space-2);">Diseño</label>
+              <input id="bootstrap-design-name" class="login-field" maxlength="200" required value="Diseño principal" autocomplete="off">
+              <fieldset style="border: 0; padding: 0; margin: var(--space-2) 0;">
+                <legend class="login-label">Cliente</legend>
+                <label><input type="radio" name="bootstrap-customer-mode" value="existing" checked> Existente</label>
+                <label style="margin-left: var(--space-2);"><input type="radio" name="bootstrap-customer-mode" value="new"> Nuevo</label>
+              </fieldset>
+              <select id="bootstrap-customer-select" class="login-field" style="width: 100%;" aria-label="Cliente existente"></select>
+              <input id="bootstrap-customer-name" class="login-field" maxlength="200" autocomplete="off" placeholder="Nombre del cliente" aria-label="Nombre del cliente nuevo" style="display: none;">
+              <button id="btn-bootstrap-submit" type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Crear y conectar</button>
+              <button id="btn-bootstrap-cancel" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+              <p id="bootstrap-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-2);"></p>
+            </form>
+            <div id="model-binding-picker" style="display: none; margin-top: var(--space-2);">
+              <label class="login-label" for="binding-project-select">Proyecto</label>
+              <select id="binding-project-select" class="login-field" style="width: 100%;"></select>
+              <label class="login-label" for="binding-design-select" style="margin-top: var(--space-2);">Diseño</label>
+              <select id="binding-design-select" class="login-field" style="width: 100%;"></select>
+              <button id="btn-binding-confirm" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Conectar</button>
+              <button id="btn-binding-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+            </div>
+            <div id="model-binding-rebind-review" style="display: none; margin-top: var(--space-2);">
+              <p class="subhead" style="font-size: var(--text-xs);">Este modelo ya está conectado a otro diseño. El enlace actual se conserva hasta que el nuevo diseño valide correctamente.</p>
+              <button id="btn-binding-rebind-confirm" class="btn btn-primary" style="width: 100%;">Confirmar cambio de diseño</button>
+              <button id="btn-binding-rebind-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+            </div>
+          </div>
+
           <div id="pf-save-awareness" class="card" role="status" aria-live="polite" style="display: none; margin-bottom: var(--space-3); border-color: var(--warning);">
             <strong>Guardá este archivo SketchUp</strong>
             <p class="subhead" style="margin: var(--space-1) 0 0; font-size: var(--text-xs);">Hay cambios sincronizados con Granete que todavía no se guardaron en este archivo.</p>
@@ -1905,7 +2082,7 @@
               </div>
               <span id="design-sync-badge" class="status-badge valid">Sincronizado</span>
             </div>
-            <button id="btn-design-sync" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Sincronizar diseño</button>
+              <button id="btn-design-sync" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-2);">Sincronizar diseño</button>
           </div>
           <div id="commercial-projection-card" class="card" style="display: none; margin-bottom: var(--space-3);" aria-live="polite">
             <div class="library-header-row">
@@ -1924,7 +2101,7 @@
               <div id="commercial-projection-delta-row" class="kv-row" style="display: none;"><span class="k">Diferencia</span><span class="v" id="commercial-projection-delta">--</span></div>
             </div>
             <button id="btn-commercial-projection-refresh" class="btn btn-secondary" style="width: auto; margin-top: var(--space-2);">Actualizar presupuesto</button>
-            <button id="btn-initial-quote" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Emitir cotización</button>
+            <button id="btn-initial-quote" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-2);" disabled>Emitir cotización</button>
             <p id="initial-quote-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-1);"></p>
             <button id="btn-open-in-granete" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-1);">Abrir en Granete</button>
           </div>
@@ -1933,10 +2110,9 @@
             <div id="pf-unbound-state" class="card empty-state" style="display: none;">
               <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
               <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Modelo sin conectar</h2>
-              <p style="margin-bottom: var(--space-2); font-size: var(--text-sm);">
-                Conectá este modelo al proyecto y diseño de Granete para ver y colocar sus muebles.
+              <p style="margin-bottom: 0; font-size: var(--text-sm);">
+                Conectá este modelo con el código de la web en la tarjeta Modelo / Diseño de arriba para ver y colocar los muebles del proyecto.
               </p>
-              <button id="btn-pf-go-status" class="btn btn-secondary" style="width: auto; margin: var(--space-2) auto 0;">Ir a la pestaña Estado</button>
             </div>
 
             <div id="pf-loading-state" class="card empty-state" style="display: none;">
@@ -2227,7 +2403,7 @@
               <div class="card-title" style="margin: 0;">Revisión de fabricación</div>
               <span id="preflight-review-badge" class="status-badge pending">Pendiente</span>
             </div>
-            <button id="btn-preflight-run" type="button" class="btn btn-primary" style="margin-top: var(--space-2); width: 100%;">
+            <button id="btn-preflight-run" type="button" class="btn btn-secondary" style="margin-top: var(--space-2); width: 100%;">
               <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               <span>Verificar fabricación</span>
             </button>
@@ -2296,7 +2472,7 @@
                   <p id="manufacturing-detail-conflict-message" style="margin: var(--space-1) 0; font-size: var(--text-xs);"></p>
                   <p id="manufacturing-detail-conflict-remediation" style="margin: 0; font-size: var(--text-xs); color: var(--text-secondary); font-style: italic;"></p>
                 </div>
-                <button id="btn-manufacturing-goto-source" type="button" class="btn btn-primary" style="width: 100%;">
+                <button id="btn-manufacturing-goto-source" type="button" class="btn btn-secondary" style="width: 100%;">
                   <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
                   <span>Ir al origen</span>
                 </button>
@@ -2314,140 +2490,6 @@
                role="status" aria-live="polite"></div>
         </section>
 
-        <!-- Tab 4: Status -->
-        <section id="pane-status" class="tab-pane" role="tabpanel">
-          <div class="card">
-            <div class="card-title">Conexión con Granete</div>
-            <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1); margin-top: var(--space-2);">Comprobando…</h2>
-            <p id="connection-detail" class="subhead" style="margin-bottom: var(--space-3);">Validando extensión y adaptadores locales.</p>
-            <p class="subhead" style="margin-bottom: 0;">
-              <strong>Cómo funciona:</strong> diseñás el mueble en SketchUp; Granete calcula las piezas y valida que se pueda fabricar.
-            </p>
-          </div>
-
-          <div class="card" id="login-card">
-            <div class="card-title">Vincular Dispositivo</div>
-            <p class="subhead" id="login-instructions" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
-              Ingresá la dirección de tu servidor Granete para vincular este equipo.
-            </p>
-            <div id="login-form-area">
-              <label class="login-label" for="login-server">Servidor Granete</label>
-              <input id="login-server" class="login-field" type="text" autocomplete="off" placeholder="https://granete.taller.com/api">
-              <button id="btn-login" class="btn btn-primary">Generar código</button>
-            </div>
-            <div id="enroll-code-area" style="display: none; text-align: center;">
-              <p style="font-size: var(--text-sm); margin-bottom: var(--space-2);">Ingresá este código en <strong>Taller &gt; Dispositivos</strong>:</p>
-              <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-2);">
-                <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: var(--font-mono);">--</div>
-                <button id="btn-copy-enroll-code" class="btn btn-secondary" title="Copiar código al portapapeles" style="padding: 6px 12px; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 4px;">
-                  <span id="copy-enroll-code-icon"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
-                  <span id="copy-enroll-code-text">Copiar</span>
-                </button>
-              </div>
-              <div id="enroll-countdown-area" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-2);">
-                Expira en <strong id="enroll-countdown-display" style="color: var(--text-primary, #1e293b);">--:--</strong>
-              </div>
-              <p id="enroll-status-text" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación en la web...</p>
-              <div style="display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-2);">
-                <button id="btn-open-web-devices" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;">
-                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                  <span>Abrir Dispositivos en la web</span>
-                </button>
-                <button id="btn-cancel-enroll" class="btn btn-secondary btn-sm">Cancelar</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card" id="session-card" style="display: none;">
-            <div class="card-title">Sesión del Taller</div>
-            <div class="kv-row"><span class="k">Usuario</span><span class="v" id="session-user-name">--</span></div>
-            <div class="kv-row"><span class="k">Email</span><span class="v" id="session-user-email">--</span></div>
-            <div class="kv-row"><span class="k">Servidor</span><span class="v" id="session-server">--</span></div>
-            <div class="kv-row"><span class="k">Licencia</span><span class="v" id="session-license">--</span></div>
-            <button id="btn-logout" class="btn btn-secondary" style="margin-top: var(--space-2);">Cerrar sesión</button>
-          </div>
-
-          <!-- #388: model ↔ Project/Design binding. State, exact context and
-               explicit actions; the panel never edits business identity. -->
-          <div class="card" id="model-binding-card">
-            <div class="card-title">Modelo / Diseño</div>
-            <div id="model-binding-state-area">
-              <span id="model-binding-badge" class="status-badge pending">Sin conectar</span>
-              <p id="model-binding-detail" class="subhead" style="margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
-            </div>
-            <div id="model-binding-info" style="display: none; margin-top: var(--space-2);">
-              <div class="kv-row"><span class="k">Taller</span><span class="v" id="binding-org-name">--</span></div>
-              <div class="kv-row"><span class="k">Cliente</span><span class="v" id="binding-customer-name">--</span></div>
-              <div class="kv-row"><span class="k">Proyecto</span><span class="v" id="binding-project-name">--</span></div>
-              <div class="kv-row"><span class="k">Diseño</span><span class="v" id="binding-design-name">--</span></div>
-              <div class="kv-row"><span class="k">Base</span><span class="v" id="binding-base-revision">--</span></div>
-            </div>
-            <!-- #499 Slice 3: one-time pairing code — the normal
-                 Web→SketchUp path. The manual selector below stays as the
-                 reviewed fallback. -->
-            <div id="pairing-entry" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle);">
-              <label for="pairing-code-input" class="subhead" style="display:block; margin: 0 0 var(--space-1) 0; font-size: var(--text-xs);">Conectar con código</label>
-              <div style="display: flex; gap: var(--space-1);">
-                <input id="pairing-code-input" type="text" inputmode="latin" autocomplete="off" spellcheck="false"
-                       placeholder="Código de la web"
-                       style="flex:1 1 auto; min-width: 0; font-family: var(--font-mono, monospace); text-transform: uppercase; letter-spacing: 0.08em;"
-                       aria-describedby="pairing-message" />
-                <button id="btn-pairing-connect" class="btn btn-primary" style="flex: 0 0 auto; width: auto; white-space: nowrap;">Conectar</button>
-              </div>
-              <p id="pairing-message" class="subhead" role="status" aria-live="polite"
-                 style="display: none; margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
-            </div>
-            <div id="model-binding-actions" style="margin-top: var(--space-2);">
-              <button id="btn-bootstrap-project" class="btn btn-secondary" style="width: 100%;">Nuevo proyecto</button>
-              <button id="btn-binding-connect" class="btn btn-secondary" style="width: 100%;">Conectar modelo (manual)</button>
-              <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar conexión</button>
-              <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
-              <!-- #392 / DT-8: staged revision publication. Visible only when
-                   the server granted can_publish_revision and the base is
-                   current; the backend stays the authority either way.
-                   #731 PR2: Publicar diseño es la orquestación de cierre
-                   (auto-sync recuperable → validación del diseño → gate →
-                   publish); Validar diseño ejecuta el mismo batch sin
-                   publicar. Las excepciones se muestran sólo para lo que
-                   requiere atención. -->
-              <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
-              <button id="btn-design-validate" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar diseño</button>
-              <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
-              <div id="binding-publish-exceptions" style="display: none; margin-top: var(--space-2);"></div>
-            </div>
-            <form id="project-bootstrap-form" style="display: none; margin-top: var(--space-2);" aria-busy="false">
-              <label class="login-label" for="bootstrap-project-name">Proyecto</label>
-              <input id="bootstrap-project-name" class="login-field" maxlength="200" required autocomplete="off">
-              <label class="login-label" for="bootstrap-design-name" style="margin-top: var(--space-2);">Diseño</label>
-              <input id="bootstrap-design-name" class="login-field" maxlength="200" required value="Diseño principal" autocomplete="off">
-              <fieldset style="border: 0; padding: 0; margin: var(--space-2) 0;">
-                <legend class="login-label">Cliente</legend>
-                <label><input type="radio" name="bootstrap-customer-mode" value="existing" checked> Existente</label>
-                <label style="margin-left: var(--space-2);"><input type="radio" name="bootstrap-customer-mode" value="new"> Nuevo</label>
-              </fieldset>
-              <select id="bootstrap-customer-select" class="login-field" style="width: 100%;" aria-label="Cliente existente"></select>
-              <input id="bootstrap-customer-name" class="login-field" maxlength="200" autocomplete="off" placeholder="Nombre del cliente" aria-label="Nombre del cliente nuevo" style="display: none;">
-              <button id="btn-bootstrap-submit" type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Crear y conectar</button>
-              <button id="btn-bootstrap-cancel" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
-              <p id="bootstrap-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-2);"></p>
-            </form>
-            <div id="model-binding-picker" style="display: none; margin-top: var(--space-2);">
-              <label class="login-label" for="binding-project-select">Proyecto</label>
-              <select id="binding-project-select" class="login-field" style="width: 100%;"></select>
-              <label class="login-label" for="binding-design-select" style="margin-top: var(--space-2);">Diseño</label>
-              <select id="binding-design-select" class="login-field" style="width: 100%;"></select>
-              <button id="btn-binding-confirm" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Conectar</button>
-              <button id="btn-binding-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
-            </div>
-            <div id="model-binding-rebind-review" style="display: none; margin-top: var(--space-2);">
-              <p class="subhead" style="font-size: var(--text-xs);">Este modelo ya está conectado a otro diseño. El enlace actual se conserva hasta que el nuevo diseño valide correctamente.</p>
-              <button id="btn-binding-rebind-confirm" class="btn btn-primary" style="width: 100%;">Confirmar cambio de diseño</button>
-              <button id="btn-binding-rebind-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
-            </div>
-          </div>
-
-          <button id="btn-close" class="btn btn-secondary">Cerrar panel</button>
-        </section>
       </main>
 
       <!-- Visual Material Option Selector Modal (Slice B - Miller Columns) -->
@@ -2927,7 +2969,7 @@
           if (tabId === "project" && lastPfState === null) requestProjectFurniture();
         }
 
-        var tabOrder = ["library", "project", "inspector", "status"];
+        var tabOrder = ["library", "project", "inspector"];
 
         document.querySelectorAll(".tab-button").forEach(function (btn) {
           btn.setAttribute("aria-selected", btn.classList.contains("active") ? "true" : "false");
@@ -2946,6 +2988,52 @@
           switchTab(tabOrder[next]);
           document.querySelector(".tab-button.active").focus();
         });
+
+        // ------------------------------------------------------------------
+        // Cuenta y conexión (#IA 2026-09): la sesión ya no es una pestaña —
+        // vive en un popover anclado al pill del header. Esc y clic afuera
+        // lo cierran; el foco vuelve al pill.
+        // ------------------------------------------------------------------
+        var accountPopover = document.getElementById("account-popover");
+        var accountLastFocus = null;
+
+        function openAccountPopover() {
+          if (accountPopover.style.display === "block") return;
+          accountLastFocus = document.activeElement || null;
+          accountPopover.style.display = "block";
+          connectionPill.setAttribute("aria-expanded", "true");
+        }
+
+        function closeAccountPopover() {
+          if (accountPopover.style.display === "none") return;
+          accountPopover.style.display = "none";
+          connectionPill.setAttribute("aria-expanded", "false");
+          if (accountLastFocus && accountLastFocus.focus) accountLastFocus.focus();
+          accountLastFocus = null;
+        }
+
+        connectionPill.addEventListener("click", function () {
+          if (accountPopover.style.display === "none") {
+            openAccountPopover();
+            loginServer.focus();
+          } else {
+            closeAccountPopover();
+          }
+        });
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") closeAccountPopover();
+        });
+
+        document.addEventListener("click", function (event) {
+          if (accountPopover.style.display === "none") return;
+          var node = event.target;
+          while (node) {
+            if (node === accountPopover || node === connectionPill) return;
+            node = node.parentNode;
+          }
+          closeAccountPopover();
+        }, true);
 
         // -------------------------------------------------------------
         // Modular Library Rendering Functions
@@ -3750,17 +3838,17 @@
             } else if (source === "unauthenticated") {
               libEmptyIcon.innerHTML = icon("key", 28);
               libEmptyTitle.textContent = "Sesión requerida";
-              libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller en la pestaña Estado para cargar la biblioteca de muebles.";
+              libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca de muebles.";
               btnEmptyAction.textContent = "Ir a Iniciar Sesión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { switchTab("status"); };
+              btnEmptyAction.onclick = function () { openAccountPopover(); loginServer.focus(); };
             } else if (source === "error") {
               libEmptyIcon.innerHTML = icon("warning", 28);
               libEmptyTitle.textContent = "Error de conexión";
               libEmptyMsg.textContent = "No se pudo conectar con el servidor Granete. Verificá tu conexión y estado del servidor.";
-              btnEmptyAction.textContent = "Revisar Estado";
+              btnEmptyAction.textContent = "Revisar conexión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { switchTab("status"); };
+              btnEmptyAction.onclick = function () { openAccountPopover(); loginServer.focus(); };
             } else {
               libEmptyIcon.innerHTML = icon("box", 28);
               libEmptyTitle.textContent = "El taller todavía no tiene muebles";
@@ -4125,13 +4213,13 @@
             var state = status.state || "disabled";
             if (state === "logged_in") {
               connectionPill.textContent = "Conectado";
-              connectionPill.className = "status-badge valid";
+              connectionPill.className = "status-badge valid connection-pill-btn";
             } else if (state === "configured") {
               connectionPill.textContent = "Configurado";
-              connectionPill.className = "status-badge pending";
+              connectionPill.className = "status-badge pending connection-pill-btn";
             } else {
               connectionPill.textContent = "Sin sesión";
-              connectionPill.className = "status-badge invalid";
+              connectionPill.className = "status-badge invalid connection-pill-btn";
             }
 
             var loggedIn = state === "logged_in";
@@ -4547,10 +4635,10 @@
               : "El taller todavía no tiene muebles. Creá muebles en Granete y volvé a abrir la biblioteca.";
           }
           if (source === "unauthenticated") {
-            return "Iniciá sesión con tu cuenta del taller en la pestaña Estado para cargar la biblioteca.";
+            return "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca.";
           }
           if (source === "error") {
-            return "No se pudo conectar con Granete. Revisá el servidor en la pestaña Estado e iniciá sesión de nuevo.";
+            return "No se pudo conectar con Granete. Revisá el servidor desde tu cuenta (pill superior derecha) e iniciá sesión de nuevo.";
           }
           return "Catálogo local (modo desarrollo)";
         }
@@ -5674,7 +5762,7 @@
           design_archived: { badge: "Diseño archivado", cls: "invalid", detail: "El diseño fue archivado en Granete: no se puede editar ni publicar desde este modelo." },
           invalid: { badge: "Enlace inválido", cls: "invalid", detail: "El enlace guardado no corresponde a un proyecto o diseño accesible. Conectá nuevamente." },
           incompatible: { badge: "Versión incompatible", cls: "invalid", detail: "El servidor usa una versión del contrato de enlace que esta extensión no entiende. Actualizá la extensión." },
-          unauthenticated: { badge: "Sin sesión", cls: "invalid", detail: "Iniciá sesión con tu cuenta del taller arriba para validar el enlace del modelo." },
+          unauthenticated: { badge: "Sin sesión", cls: "invalid", detail: "Iniciá sesión con tu cuenta del taller (pill superior derecha) para validar el enlace del modelo." },
           unauthorized: { badge: "Sin permiso", cls: "invalid", detail: "No tenés permiso para el proyecto o diseño enlazado." },
           unreachable: { badge: "Servidor no disponible", cls: "pending", detail: "No se pudo contactar al servidor. El enlace guardado se conserva; probá de nuevo." }
         };
@@ -5981,7 +6069,7 @@
 
           var selectBtn = document.createElement("button");
           selectBtn.type = "button";
-          selectBtn.className = "btn btn-primary";
+          selectBtn.className = "btn btn-secondary";
           selectBtn.textContent = "Seleccionar";
           selectBtn.addEventListener("click", function () {
             if (window.sketchup && window.sketchup.select_project_furniture && exception.furnitureInstanceId) {
@@ -6351,7 +6439,6 @@
         var pfPlacedTitle = document.getElementById("pf-placed-title");
         var pfPlacedList = document.getElementById("pf-placed-list");
         var btnPfRefresh = document.getElementById("btn-pf-refresh");
-        var btnPfGoStatus = document.getElementById("btn-pf-go-status");
         var btnPfRetry = document.getElementById("btn-pf-retry");
         var pfSaveAwareness = document.getElementById("pf-save-awareness");
         var designSyncCard = document.getElementById("design-sync-card");
@@ -6361,10 +6448,10 @@
         var designSyncBusy = false;
 
         var PF_ERROR_COPY = {
-          unauthenticated: "Iniciá sesión con tu cuenta del taller en la pestaña Estado.",
+          unauthenticated: "Iniciá sesión con tu cuenta del taller (pill superior derecha).",
           unauthorized: "No tenés permiso para el proyecto o diseño enlazado.",
           unreachable: "No se pudo contactar al servidor. Probá de nuevo.",
-          stale_base: "El diseño avanzó en el servidor: actualizá la base de trabajo en la pestaña Estado.",
+          stale_base: "El diseño avanzó en el servidor: actualizá la base de trabajo en la tarjeta Modelo / Diseño.",
           design_archived: "El diseño fue archivado en Granete y no puede editarse desde este modelo.",
           bad_contract: "El servidor respondió datos que esta extensión no entiende. Actualizá la extensión.",
           error: "No se pudieron cargar los muebles del proyecto."
@@ -6607,7 +6694,7 @@
               actionsGroup.style.gap = "6px";
 
               var btnConfirm = document.createElement("button");
-              btnConfirm.className = "btn btn-primary";
+              btnConfirm.className = "btn btn-secondary";
               btnConfirm.style.width = "auto";
               btnConfirm.textContent = pfConfirming[row.id] ? "Sincronizando…" : "Reintentar sincronización";
               btnConfirm.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id];
@@ -6625,7 +6712,7 @@
               card.appendChild(actionsGroup);
           } else if (row.reconciliationState === "unplaced") {
               var action = document.createElement("button");
-              action.className = "btn btn-primary";
+              action.className = "btn btn-secondary";
               action.style.width = "auto";
               action.textContent = pfPlacing[row.id] ? "Colocando…" : "Colocar";
               action.disabled = !!pfPlacing[row.id];
@@ -6633,7 +6720,7 @@
               card.appendChild(action);
           } else if (row.reconciliationState === "missing_local") {
             var restore = document.createElement("button");
-            restore.className = "btn btn-primary";
+            restore.className = "btn btn-secondary";
             restore.style.width = "auto";
             restore.textContent = pfRestoring[row.id] ? "Restaurando…" : "Restaurar en este archivo";
             restore.disabled = !!pfRestoring[row.id];
@@ -6891,7 +6978,7 @@
           switch (result.code) {
             case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colocálo desde la pestaña Proyecto.";
             case "unbound": return "Conectá el modelo al proyecto primero.";
-            case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en Estado.";
+            case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en la tarjeta Modelo / Diseño.";
             case "not_found": return "El mueble no pertenece al proyecto conectado.";
             case "terminal": return "El mueble fue eliminado del proyecto.";
             case "duplicate_detected": return "Hay copias duplicadas del mismo mueble en el modelo; resolvé los duplicados antes.";
@@ -6928,7 +7015,6 @@
           setTimeout(function () { btnPfRefresh.disabled = false; }, 500);
         });
         btnPfRetry.addEventListener("click", requestProjectFurniture);
-        btnPfGoStatus.addEventListener("click", function () { switchTab("status"); });
         btnDesignSync.addEventListener("click", synchronizeDesign);
         // No pre-render: the panel loads when the tab first becomes visible
         // (all state cards start hidden in the markup).
