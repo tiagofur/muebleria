@@ -49,5 +49,10 @@ The focused API suite is green. Pilot Readiness is now green with a migration po
 - Representative migration tests covering Auth Devices/MFA/Refresh/Sessions, Design Publish/Designs, and tenant-RLS down migration all pass under migration authority.
 - An early diagnostic storage run was stopped after it surfaced remaining false-green fixtures: `skipIfNoDB`, `connectStore`, and several direct `RunMigrations` helpers still attempt bootstrap as `granete_app`, yielding `permission denied for schema public` and SKIP/FAIL. This run is not a baseline. Runtime behavior tests using those helpers must migrate with a separate migration pool and then assert with the runtime pool inside tenant transactions.
 
+## Runtime-fixture discovery (2026-09-24)
+- Added `TestMigrationDatabaseURLForRuntimeDatabase`, which retains the disposable database selected by `DATABASE_URL` but takes its credentials only from `MIGRATION_DATABASE_URL`; its guard test passes.
+- A focused trial confirmed the next distinction: moving only migrations of `skipIfNoDB` to admin exposes a second fixture defect—its subsequent direct writes as `granete_app` use `WithOrgCtx` but omit `WithinTenantTx`, so RLS correctly rejects them. This is not a product/RLS bug and must be fixed by routing each runtime scenario through the production tenant transaction boundary, not by setting session-wide context or using admin.
+- `connectStore` callers which explicitly re-run migrations similarly need a separate migration pool for those assertions. The incomplete trial was reverted, so no new skip/failure is committed.
+
 ## Next step
-Separate setup from runtime pools in `skipIfNoDB`, `connectStore`, and the remaining direct-migration runtime fixtures; then run the full storage suite without new skips before starting AST discovery.
+Separate setup from runtime pools in `skipIfNoDB`, `connectStore`, and the remaining direct-migration runtime fixtures; add tenant-transaction fixture wrappers for their runtime operations; then run the full storage suite without new skips before starting AST discovery.

@@ -214,6 +214,21 @@ func TestDatabaseURLForDB(t testingT, databaseName string) string {
 	return runtimeURL
 }
 
+// TestMigrationDatabaseURLForRuntimeDatabase preserves the database selected by
+// DATABASE_URL while taking credentials exclusively from MIGRATION_DATABASE_URL.
+// It is the fixture boundary for admin setup of the same runtime test database.
+func TestMigrationDatabaseURLForRuntimeDatabase(t testingT) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	runtimeURL := TestDatabaseURL(t)
+	u, err := url.Parse(runtimeURL)
+	if err != nil {
+		t.Fatalf("TestMigrationDatabaseURLForRuntimeDatabase parse error: invalid database URL (%s)", SanitizeDatabaseURL(runtimeURL))
+	}
+	return TestMigrationDatabaseURL(t, strings.TrimPrefix(u.Path, "/"))
+}
+
 // TestAdminDatabaseURL returns the dedicated migration/admin URL from
 // MIGRATION_DATABASE_URL, routing it to /postgres for maintenance operations.
 // Runtime DATABASE_URL credentials are never elevated for fixture setup.
