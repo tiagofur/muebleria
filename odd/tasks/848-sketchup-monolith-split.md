@@ -33,13 +33,12 @@ risk-ascending (each phase independently green and PR-able):
 - Strategy: **stacked-to-main**. Each child is a focused review slice that
   ultimately lands on `main`; there is no final integrator branch. The parent
   maps local commits to the eventual parent/child PR bases before publication.
-- C2 is the Ruby preview/workflow extraction slice. Its local commit must stay
-  separate from C3/JS and will not be pushed, reviewed, or published here.
+- C2 was the Ruby preview/workflow extraction slice; its historical evidence is retained below. Current tolerance ownership is C3 `Host::PlacementEnvironment`.
 
 ## Evidence per phase (filled as commits land)
 
 - Phase A: commit, verify tally, RBZ sha, token_health scope.
-- Phase C / C2: **in progress — delegated direct recovery**. The inherited
+- Phase C / C2: **historical completed extraction before C3 and #851 merge**. The inherited
   multi-file extraction moves the design workflow and placement-preview portions
   of `ProjectFurnitureBridge` into their existing bridge files, then wires the
   composition root and test helper. Route: delegated direct, triggered by the
@@ -58,13 +57,13 @@ risk-ascending (each phase independently green and PR-able):
   `Gemfile.lock`. The first full `bundle exec rake verify` supplied the required
   RED for the inherited extraction: moving the placement methods left
   `UNIT_EPSILON` in `ProjectFurnitureBridge`, causing 8 failures and 18 errors.
-  C2 restored that unchanged tolerance constant in `PlacementPreviewBridge`.
+  C2 restored the tolerance after extraction; C3 later moved its current ownership to `Host::PlacementEnvironment`.
   The rerun passed: RuboCop 249 files / 0 offenses; Ruby unit suite 1132 runs,
   7438 assertions, 0 failures/errors/skips; contract suite 6 runs, 4007
   assertions, 0 failures/errors/skips; RBZ sha256
   `e3b4647cef47cf8b2abe7a6cfceede792fa92ced1389f311e339413fea5c35f4`.
   C2 acceptance: `PlacementPreviewBridge` owns preview lifecycle, anchors/snap,
-  commit/cancel and `UNIT_EPSILON`; `ProjectFurnitureBridge` owns the project
+  and commit/cancel; current `UNIT_EPSILON` ownership is `Host::PlacementEnvironment`; `ProjectFurnitureBridge` owns the project
   panel and FurnitureInstance operations; `DesignWorkflowBridge` owns
   publish/validate orchestration. `DialogController` explicitly composes their
   callback registration. Context reduction is concrete: the source project
@@ -86,6 +85,15 @@ risk-ascending (each phase independently green and PR-able):
   local parent/child slice branches exist. No remote state was read or inferred;
   the parent must choose the eventual PR bases before publication.
 - Phase B: commits per module, verify tally, harness loading order.
+
+## C3 — Placement environment extraction
+
+Completed from `main@d13e0c41fad7a6dcf389f83b04d8a1b95a773658`: refactor-only extraction of host geometry discovery. `PlacementPreviewBridge` extraction boundary was 932→631 lines; final documentation-only cleanup leaves it at 628 lines; `Host::PlacementEnvironment` is 324 total lines including its 11-line contract header (313 move-only implementation lines) and owns `UNIT_EPSILON`, base planes, snap targets, frames, envelopes, and geometry helpers. It exposes only the two providers; lifecycle/wiring remains in the bridge.
+
+- [x] C3.1 RED: missing environment constant.
+- [x] C3.2 GREEN: move-only boundary and API ownership tests.
+- [x] C3.3 Ruby 3.2.11: focused 43/264; RuboCop 250/0; units 1134/7441; contracts 6/4043; RBZ `f1ad870ed0fbcc4125cbf5f4ca71a955a3f851a9d358e9427039427752ab6e69`; diff-check and affected plan pass.
+- [x] C3.4 One work unit committed; final amendment handoff records its hash. V2 host smoke NOT_RUN.
 
 ## Limitations and remaining scope
 
