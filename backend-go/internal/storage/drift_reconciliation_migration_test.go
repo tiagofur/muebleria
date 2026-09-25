@@ -54,7 +54,7 @@ func applyUpToReconciliations(t *testing.T, pool *pgxpool.Pool) {
 // security_audit_insert policy: platform commands that must write
 // organization audit rows fail RLS and roll back with 500.
 func TestSecurityAuditInsertPolicyReconciliation(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	ctx := context.Background()
 	applyUpToReconciliations(t, pool)
 
@@ -95,7 +95,7 @@ func TestSecurityAuditInsertPolicyReconciliation(t *testing.T) {
 // working-copy tables and the quote-revision immutability backstops: creating
 // a design fails with 500 and quote revision immutability is unenforced.
 func TestDigitalThreadDriftReconciliation(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	ctx := context.Background()
 	applyUpToReconciliations(t, pool)
 
@@ -167,7 +167,7 @@ func TestDigitalThreadDriftReconciliation(t *testing.T) {
 // provenance column: issuing a SketchUp pairing grant fails with 500 because
 // the INSERT references created_by_session_id, which does not exist.
 func TestDesignPairingGrantDriftReconciliation(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	ctx := context.Background()
 	applyUpToReconciliations(t, pool)
 
@@ -215,7 +215,7 @@ func TestDesignPairingGrantDriftReconciliation(t *testing.T) {
 // (000113) left design_revision_items.definition_version as text and the
 // design_revisions source_type check without 'manual'.
 func TestIdentityRegistryDriftReconciliation(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	ctx := context.Background()
 	applyUpToReconciliations(t, pool)
 

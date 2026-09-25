@@ -158,7 +158,7 @@ func multiOrgSeedLegacyRows(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	multiOrgApplyLegacySchema(t, pool)
 	multiOrgSeedLegacyRows(t, pool)
 
@@ -240,7 +240,7 @@ func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {
 }
 
 func TestMultiOrg_PerOrgCodesAndSettings(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	multiOrgApplyLegacySchema(t, pool)
 	multiOrgSeedLegacyRows(t, pool)
 
@@ -296,7 +296,7 @@ func TestMultiOrg_PerOrgCodesAndSettings(t *testing.T) {
 }
 
 func TestMultiOrg_DownMigrationsRollBack(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	multiOrgApplyLegacySchema(t, pool)
 	multiOrgSeedLegacyRows(t, pool)
 
@@ -392,7 +392,7 @@ func TestMultiOrg_DownMigrationsRollBack(t *testing.T) {
 }
 
 func TestMultiOrg_FreshDatabaseGetsInitialOrg(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := context.Background()
 	if err := store.RunMigrations(ctx); err != nil {
