@@ -300,3 +300,25 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - The dedicated offboard fixture is isolated from `isolationSetup` and from the legacy offboarding helper callers. Reassignment, credential revocation, blocker and changed-impact conflict, audit insertion, and audit-failure rollback behavior remain covered.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestOffboardMember_(ReassignsAllResponsibilitiesAndRevokesCredentials|RejectsBlockersAndChangedImpact|AuditFailureRollsBackReassignmentsAndStatus)$'` — 3 PASS, FAIL=0, SKIP=0 (Go 3.146s; runner wall 8.0s).
 - Migration-authority failures remaining from the initial diagnostic: `40 → 37`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
+
+## D1 remaining authority inventory (2026-09-25)
+- Remaining diagnostic count: **37**. `isolationSetup` remains intentionally unchanged: its **35** callers mix structural bootstrap (migrations, organizations, users, memberships, and catalog fixture rows) with product behavior, so every group below is classification **C** — migration bootstrap must finish under `MIGRATION_DATABASE_URL`, then commands and observable assertions must use `DATABASE_URL` as `granete_app` with explicit actors and independent `WithinTenantTx` calls.
+
+| Root/setup | Domain family (callers) | Operation protected | Current authority | Required authority | Class |
+| --- | --- | --- | --- | --- | --- |
+| `isolationSetup` | project ownership (1) | sales/manufacturing ownership boundary | runtime pool migrates and seeds, then direct context | structural setup → migration; ownership command/read → runtime tenant actor | C |
+| `isolationSetup` | multi-org isolation families (9) | catalog/project/user tenant isolation | runtime pool migrates and seeds, then direct context | structural setup → migration; product isolation reads/writes → runtime tenant actor | C |
+| `isolationSetup` | team offboarding legacy cases (2) | deactivation/read-after-deactivation | runtime pool migrates and seeds, then direct context | structural setup → migration; lifecycle commands/readbacks → runtime actors in separate txs | C |
+| `isolationSetup` | project dates (1) | project date persistence | runtime pool migrates and seeds, then direct context | structural setup → migration; update/readback → runtime tenant actor | C |
+| `isolationSetup` | inline customer update (10) | project/customer mutation, conflicts and rollback | runtime pool migrates and seeds, then direct context | structural setup → migration; commands/errors/readbacks → runtime tenant actor | C |
+| `isolationSetup` | project bootstrap (3) | project creation/bootstrap behavior | runtime pool migrates and seeds, then direct context | structural setup → migration; bootstrap commands/readbacks → runtime tenant actor | C |
+| `isolationSetup` | inline customer behavior (9) | create/update/isolation customer behavior | runtime pool migrates and seeds, then direct context | structural setup → migration; commands/errors/readbacks → runtime tenant actor | C |
+| `newMembershipSectorRaceFixture` | membership-sector race locking (2) | direct concurrent SQL proof of active compatibility triggers/constraints | runtime pool migrates and executes structural DML | migrations and all deliberately concurrent direct SQL → migration authority; no runtime product assertion | A |
+
+- Count reconciliation: `1 + 9 + 2 + 1 + 10 + 3 + 9 = 35` mixed `isolationSetup` callers; plus `2` structural membership-sector race callers; total `37`. This is an inventory only: no global helper conversion is authorized.
+
+## D1 progress — membership-sector race structural proof (2026-09-25)
+- Classification: both callers of `newMembershipSectorRaceFixture` prove serialization between deliberately concurrent direct SQL mutations and the active compatibility constraints. This is structural **A** coverage, not a runtime product command; migrations, fixture rows, concurrent transactions, advisory-lock observation, and final direct-SQL readback correctly execute under `MIGRATION_DATABASE_URL`.
+- The fixture now opens `multiOrgFreshMigrationDB` before `RunMigrations`; no `granete_app` runtime pool participates. The existing `23514` constraint assertions (`membership_sector_compatibility` and `membership_sector_set_compatibility`) and the final compatible-state checks remain unchanged. Triggers and constraints remain active; no trigger/session bypass, policy, grant, or production behavior changed.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestMembershipSectorCompatibility_(RoleChangeAndSectorInsertSerialize|OrganizationTypeAndSectorInsertSerialize)$'` — 2 PASS, FAIL=0, SKIP=0 (Go 3.824s; runner wall 7.7s).
+- Migration-authority failures remaining from the initial diagnostic: `37 → 35`.

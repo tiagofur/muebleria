@@ -23,7 +23,7 @@ const (
 
 func newMembershipSectorRaceFixture(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := context.Background()
 	if err := store.RunMigrations(ctx); err != nil {
