@@ -140,10 +140,13 @@ class WiringTest(unittest.TestCase):
     def test_ci_keeps_critical_guards_and_same_check_names(self):
         text = (ROOT / ".github/workflows/ci.yml").read_text()
         for fragment in ("if: ${{ always() }}", "name: Foundation Gate A", "name: Go Backend Tests",
-                         "go test -p 1 -timeout=30m -v ./...", "DATABASE_URL:",
+                         "storage-shard-plan:", "storage-shards:", "backend-go-other:",
+                         "scripts/backend-test-storage-shard.sh 4", "scripts/backend-test.sh -timeout=30m -v",
                          "os: [ubuntu-latest, macos-latest, windows-latest]", "fetch-depth: 0",
                          "scripts/ci_result.py", "toJSON(needs)", "contents: read"):
             self.assertIn(fragment, text)
+        self.assertNotIn("DATABASE_URL: postgres://postgres", text)
+        self.assertNotIn("go test -p 1 -timeout=30m -v ./...", text)
         self.assertNotIn("continue-on-error", text)
         self.assertNotIn("pull_request_target", text)
         self.assertEqual(len(re.findall(r"^\s+- run: pnpm typecheck$", text, re.M)), 1)

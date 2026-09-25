@@ -17,6 +17,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/granete-backend-test.XXXXXX")"
 CONTAINER=""
+RUN_STARTED_SECONDS="$(date +%s)"
 
 cleanup() {
   if [ -n "${CONTAINER}" ]; then
@@ -83,6 +84,10 @@ if [ -z "${POSTGRES_READY}" ]; then
   fail "PostgreSQL did not become ready"
 fi
 
+POSTGRES_READY_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+POSTGRES_SETUP_SECONDS="$(( $(date +%s) - RUN_STARTED_SECONDS ))"
+printf '[backend-test] postgres-ready=%s postgres-setup-duration=%ss\n' "${POSTGRES_READY_AT}" "${POSTGRES_SETUP_SECONDS}" >&2
+
 MIGRATION_DATABASE_URL="postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_test?sslmode=disable"
 APP_DATABASE_URL="postgres://granete_app:${APP_DATABASE_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/granete_test?sslmode=disable"
 # Runtime tests must use the real unprivileged application role. Migration setup
@@ -146,9 +151,18 @@ GO_ARGS=()
 [ "${HAS_P}" -eq 0 ] && GO_ARGS+=("-p" "1")
 [ "${HAS_PARALLEL}" -eq 0 ] && GO_ARGS+=("-parallel" "1")
 
+TEST_STARTED_SECONDS="$(date +%s)"
+set +e
 if [ $# -gt 0 ]; then
   go test "${GO_ARGS[@]}" "$@"
+  TEST_STATUS=$?
 else
   go test "${GO_ARGS[@]}" -timeout=30m ./...
+  TEST_STATUS=$?
 fi
-
+set -e
+TEST_ELAPSED_SECONDS="$(( $(date +%s) - TEST_STARTED_SECONDS ))"
+TOTAL_ELAPSED_SECONDS="$(( $(date +%s) - RUN_STARTED_SECONDS ))"
+printf '[backend-test] test-duration=%ss total-duration=%ss finished=%s\n' \
+  "${TEST_ELAPSED_SECONDS}" "${TOTAL_ELAPSED_SECONDS}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&2
+exit "${TEST_STATUS}"
