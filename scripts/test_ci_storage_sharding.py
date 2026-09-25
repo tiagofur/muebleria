@@ -23,16 +23,16 @@ AGGREGATE = load_module("ci_backend_go_result", ROOT / "scripts/ci_backend_go_re
 
 
 class StorageShardPlanTest(unittest.TestCase):
-    def test_accepts_exact_four_way_partition(self):
-        PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], ["TestB"], ["TestC"], ["TestD"]], 4)
+    def test_accepts_exact_three_way_partition(self):
+        PLAN.verify(["TestA", "TestB", "TestC"], [["TestA"], ["TestB"], ["TestC"]], 3)
 
     def test_rejects_duplicate_and_missing_root(self):
         with self.assertRaisesRegex(ValueError, "invalid shard coverage"):
-            PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], ["TestA"], ["TestC"], ["TestD"]], 4)
+            PLAN.verify(["TestA", "TestB", "TestC"], [["TestA"], ["TestA"], ["TestC"]], 3)
 
     def test_rejects_empty_shard(self):
         with self.assertRaisesRegex(ValueError, "zero tests"):
-            PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], [], ["TestC"], ["TestD"]], 4)
+            PLAN.verify(["TestA", "TestB", "TestC"], [["TestA"], [], ["TestC"]], 3)
 
 
 class BackendAggregateTest(unittest.TestCase):
@@ -66,7 +66,7 @@ class WorkflowTopologyTest(unittest.TestCase):
         text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         for fragment in (
             "storage-shard-plan:", "storage-shards:", "backend-go-other:", "backend-go:",
-            "shard: [1, 2, 3, 4]", "scripts/backend-test-storage-shard.sh 4",
+            "shard: [1, 2, 3]", "scripts/backend-test-storage-shard.sh 3",
             "verify_storage_shard_plan.py", "ci_backend_go_result.py",
             "grep -Fvx 'github.com/tiagofur/muebles-backend/internal/storage'",
         ):

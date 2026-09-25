@@ -141,7 +141,7 @@ class WiringTest(unittest.TestCase):
         text = (ROOT / ".github/workflows/ci.yml").read_text()
         for fragment in ("if: ${{ always() }}", "name: Foundation Gate A", "name: Go Backend Tests",
                          "storage-shard-plan:", "storage-shards:", "backend-go-other:",
-                         "scripts/backend-test-storage-shard.sh 4", "scripts/backend-test.sh -timeout=30m -v",
+                         "scripts/backend-test-storage-shard.sh 3", "scripts/backend-test.sh -timeout=30m -v",
                          "os: [ubuntu-latest, macos-latest, windows-latest]", "fetch-depth: 0",
                          "scripts/ci_result.py", "toJSON(needs)", "contents: read"):
             self.assertIn(fragment, text)

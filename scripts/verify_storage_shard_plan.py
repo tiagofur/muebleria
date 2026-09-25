@@ -24,8 +24,8 @@ def read_roots(path: Path) -> list[str]:
 def verify(all_roots: list[str], shard_roots: list[list[str]], expected_count: int) -> None:
     if len(all_roots) != expected_count:
         raise ValueError(f"AST cardinality is {len(all_roots)}, expected {expected_count}")
-    if len(shard_roots) != 4:
-        raise ValueError(f"expected exactly 4 shards, got {len(shard_roots)}")
+    if len(shard_roots) < 1:
+        raise ValueError("expected at least one shard")
     if any(not roots for roots in shard_roots):
         raise ValueError("a storage shard has zero tests")
 
@@ -63,7 +63,7 @@ def main() -> int:
     print(
         "PASS: storage shard plan "
         f"AST roots={len(all_roots)} union=complete intersections=empty "
-        f"cardinality=exact shards=4 counts={counts}"
+        f"cardinality=exact shards={len(shard_roots)} counts={counts}"
     )
     return 0
 
