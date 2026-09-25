@@ -126,10 +126,15 @@ function runDialog() {
   const html = fs.readFileSync(htmlPath, 'utf-8');
   const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
   assert(scriptMatch, 'dialog.html must carry its script');
+  // #848: los estilos del panel viven en css/*.css — los checks estáticos de
+  // presentación se evalúan sobre markup + css concatenados.
+  const cssDir = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/css');
+  const css = fs.readdirSync(cssDir).filter((f) => f.endsWith('.css'))
+    .map((f) => fs.readFileSync(path.join(cssDir, f), 'utf-8')).join('\n');
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
   vm.runInContext(scriptMatch[1], sandbox);
-  return { sandbox, html };
+  return { sandbox, html, htmlCss: html + '\n' + css };
 }
 
 function el(sandbox, id) {
@@ -168,7 +173,7 @@ function furnitureContext(overrides) {
 }
 
 function runTests() {
-  const { sandbox, html } = runDialog();
+  const { sandbox, html, htmlCss } = runDialog();
   const dialog = sandbox.window.GraneteDialog;
   assert(dialog && typeof dialog.onSelectionChange === 'function', 'GraneteDialog bridge must exist');
   let passed = 0;
@@ -178,15 +183,15 @@ function runTests() {
   check(html.includes('Nada seleccionado') &&
         html.includes('para ver sus propiedades y acciones'),
     'no-selection state names the state and the next action');
-  check(html.includes('skeleton-card') && html.includes('skeleton-line') && html.includes('skeleton-square'),
+  check(htmlCss.includes('skeleton-card') && htmlCss.includes('skeleton-line') && htmlCss.includes('skeleton-square'),
     'loading states ship skeleton placeholders');
-  check(html.includes('.toast.info') && html.includes('.toast.warning'),
+  check(htmlCss.includes('.toast.info') && htmlCss.includes('.toast.warning'),
     'info and warning toasts have visible styles');
-  check(html.includes('.status-badge.success') && html.includes('.status-badge.error'),
+  check(htmlCss.includes('.status-badge.success') && htmlCss.includes('.status-badge.error'),
     'success and error status badges have styles');
   check(html.includes('id="btn-library-retry"'), 'library error state has a retry button');
   check(html.includes('id="inspector-kind-badge"'), 'inspector names the selected entity type');
-  check(!html.includes('#ef4444') && !html.includes('#b91c1c') && !html.includes('#d97706'),
+  check(!htmlCss.includes('#ef4444') && !htmlCss.includes('#b91c1c') && !htmlCss.includes('#d97706'),
     'status colors come from tokens, not hardcoded hex');
 
   // --- no-selection: empty state is the visible inspector surface ---
