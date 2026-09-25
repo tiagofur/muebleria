@@ -271,3 +271,8 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - Classification: `TestCleanDemoData` proves the administrative clean-demo/seed reconciliation workflow. Its migrations, seed/re-seed, deliberate referenced-data fixture, direct SQL counts, and `CleanDemoData` deletes are all structural/admin behavior. Production invokes this only through `cmd/admin`'s explicit `MIGRATION_DATABASE_URL`, so it has no runtime `granete_app` command/assertion to preserve.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestCleanDemoData$'` — PASS, FAIL=0, SKIP=0 (Go 1.828s).
 - Migration-authority failures remaining from the initial diagnostic: `50 → 49`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
+
+## D1 progress — catalog clone runtime boundary (2026-09-25)
+- Classification: the source/destination catalog shapes and raw FK/JSONB mapping checks are structural fixtures under migration authority. Both `CloneCatalog` operations (successful clone, non-empty-destination rejection, and unresolvable-binding rollback) now run under `DATABASE_URL` as `granete_app` in their own `WithinTenantTx` with an explicit platform actor authorized for both organizations. Source and destination `GetFullCatalog` readbacks are separate runtime tenant transactions with valid memberships.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestCloneCatalog_RemapsFKsAndJSONB|TestCloneCatalog_RollsBackWhenParameterBindingTargetCannotBeRemapped)$'` — 2 PASS, FAIL=0, SKIP=0 (Go 2.446s).
+- Migration-authority failures remaining from the initial diagnostic: `49 → 47`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
