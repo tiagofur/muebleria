@@ -3,7 +3,6 @@ package storage_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -18,29 +17,94 @@ import (
 // These are integration tests against an isolated test Postgres (DATABASE_URL).
 // They skip gracefully when DATABASE_URL is not set.
 
+const (
+	connectStoreFixtureUser       = "93000000-0000-0000-0000-000000000001"
+	connectStoreFixtureMembership = "94000000-0000-0000-0000-000000000001"
+)
+
+var connectStoreInitialActor = storage.TenantActor{
+	OrganizationID: storage.InitialOrganizationID,
+	UserID:         connectStoreFixtureUser,
+	MembershipID:   connectStoreFixtureMembership,
+}
+
+// connectStore opens only the unprivileged runtime pool. It must never perform
+// schema setup, DDL, grants, or administrative seeding.
 func connectStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 	t.Helper()
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping live storage integration test")
-	}
-	if err := storage.ValidateTestDatabaseURL(url); err != nil {
-		t.Fatalf("connectStore rejected unsafe test database: %v", err)
-	}
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := pgxpool.New(context.Background(), storage.TestDatabaseURL(t))
 	if err != nil {
-		t.Skipf("no db: %v", err)
+		t.Skipf("no runtime db: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	store := &storage.PostgresStore{Pool: pool}
-	// Ensure the schema is current (idempotent) so the tests do not depend on
-	// run order or on a server having started before the suite. Mirrors what
-	// happens automatically on server start.
-	if err := store.RunMigrations(ctx); err != nil {
-		t.Skipf("run migrations: %v", err)
+	return &storage.PostgresStore{Pool: pool}, pool
+}
+
+func migrationConnectStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
+	t.Helper()
+	migrationStore, err := storage.NewPostgresStore(storage.TestMigrationDatabaseURLForRuntimeDatabase(t))
+	if err != nil {
+		t.Skipf("no migration db: %v", err)
 	}
-	return store, pool
+	t.Cleanup(migrationStore.Close)
+	return migrationStore, migrationStore.Pool
+}
+
+// migratedConnectStore prepares the disposable runtime database with migration
+// authority, seeds the explicit active fixture actor, then opens connectStore.
+func migratedConnectStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
+	t.Helper()
+	migrationStore, _ := migrationConnectStore(t)
+	if err := migrationStore.RunMigrations(context.Background()); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	seedTx, err := migrationStore.Pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin fixture identity seed: %v", err)
+	}
+	defer seedTx.Rollback(context.Background())
+	if _, err := seedTx.Exec(context.Background(), `
+		INSERT INTO users (id, email, password_hash, name, account_status, normalized_email)
+		VALUES ($1, 'connect-store-fixture@example.test', 'x', 'Connect store fixture', 'active', 'connect-store-fixture@example.test')
+		ON CONFLICT (id) DO NOTHING`, connectStoreFixtureUser); err != nil {
+		t.Fatalf("seed fixture user: %v", err)
+	}
+	if _, err := seedTx.Exec(context.Background(), `
+		INSERT INTO memberships (id, organization_id, user_id, roles)
+		VALUES ($1, $2, $3, ARRAY['admin']::text[])
+		ON CONFLICT (user_id, organization_id) DO NOTHING`,
+		connectStoreFixtureMembership, storage.InitialOrganizationID, connectStoreFixtureUser); err != nil {
+		t.Fatalf("seed fixture membership: %v", err)
+	}
+	if _, err := seedTx.Exec(context.Background(), `
+		UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, storage.InitialOrganizationID); err != nil {
+		t.Fatalf("activate fixture organization: %v", err)
+	}
+	if err := seedTx.Commit(context.Background()); err != nil {
+		t.Fatalf("commit fixture identity seed: %v", err)
+	}
+	return connectStore(t)
+}
+
+func withinConnectStoreTenant(t *testing.T, store *storage.PostgresStore, actor storage.TenantActor, run func(context.Context) error) {
+	t.Helper()
+	ctx := storage.WithOrgCtx(context.Background(), actor.OrganizationID)
+	if err := store.WithinTenantTx(ctx, actor, run); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func cleanupConnectStoreFixture(t *testing.T, query string, args ...any) {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), storage.TestMigrationDatabaseURLForRuntimeDatabase(t))
+	if err != nil {
+		t.Errorf("open migration cleanup pool: %v", err)
+		return
+	}
+	defer pool.Close()
+	if _, err := pool.Exec(context.Background(), query, args...); err != nil {
+		t.Errorf("fixture cleanup: %v", err)
+	}
 }
 
 // uniqueID mints a test-only id/code suffix so parallel/ repeatable runs never
@@ -54,8 +118,8 @@ func fptr(v float64) *float64 { return &v }
 // Server-start path applies the new migration; applying the embedded SQL a
 // second time directly must be safe (IF NOT EXISTS guards) — spec #4150.
 func TestAmbientMaterials_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	store, pool := migrationConnectStore(t)
+	ctx := context.Background()
 
 	if err := store.RunMigrations(ctx); err != nil {
 		t.Fatalf("RunMigrations: %v", err)
@@ -92,41 +156,31 @@ func TestAmbientMaterials_MigrationIsAdditiveAndReRunSafe(t *testing.T) {
 }
 
 func TestAmbientMaterials_CRUDRoundTrip(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 	id := uniqueID("amb-crud")
 	code := uniqueID("FLR")
-	t.Cleanup(func() { _, _ = pool.Exec(ctx, `DELETE FROM ambient_materials WHERE id = $1`, id) })
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM ambient_materials WHERE id = $1`, id) })
 
-	in := &domain.AmbientMaterial{
-		ID: id, Code: code, Name: "Roble", Active: true,
-		SurfaceType:       domain.AmbientSurfaceFloor,
-		PreviewColor:      "#8b5a2b",
-		PreviewTextureURL: "/api/media/oak.webp",
-	}
-	if err := store.CreateAmbientMaterial(ctx, in); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	in := &domain.AmbientMaterial{ID: id, Code: code, Name: "Roble", Active: true, SurfaceType: domain.AmbientSurfaceFloor, PreviewColor: "#8b5a2b", PreviewTextureURL: "/api/media/oak.webp"}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateAmbientMaterial(txCtx, in) })
 
-	got, err := store.GetAmbientMaterialByID(ctx, id)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got.Code != code || got.Name != "Roble" || got.SurfaceType != domain.AmbientSurfaceFloor {
+	var got *domain.AmbientMaterial
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		got, err = store.GetAmbientMaterialByID(txCtx, id)
+		return err
+	})
+	if got.Code != code || got.Name != "Roble" || got.SurfaceType != domain.AmbientSurfaceFloor || got.PreviewColor != "#8b5a2b" || got.PreviewTextureURL != "/api/media/oak.webp" || !got.Active {
 		t.Fatalf("get round-trip mismatch: %#v", got)
 	}
-	if got.PreviewColor != "#8b5a2b" || got.PreviewTextureURL != "/api/media/oak.webp" {
-		t.Fatalf("preview fields not persisted: %#v", got)
-	}
-	if !got.Active {
-		t.Error("expected Active=true after create")
-	}
 
-	list, err := store.ListAmbientMaterials(ctx)
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
+	var list []domain.AmbientMaterial
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		list, err = store.ListAmbientMaterials(txCtx)
+		return err
+	})
 	if !containsID(list, id) {
 		t.Fatalf("list does not contain created row")
 	}
@@ -134,99 +188,83 @@ func TestAmbientMaterials_CRUDRoundTrip(t *testing.T) {
 	upd := *got
 	upd.Name = "Roble Premium"
 	upd.PreviewTextureURL = ""
-	if err := store.UpdateAmbientMaterial(ctx, id, &upd); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-	again, err := store.GetAmbientMaterialByID(ctx, id)
-	if err != nil {
-		t.Fatalf("get after update: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAmbientMaterial(txCtx, id, &upd) })
+	var again *domain.AmbientMaterial
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		again, err = store.GetAmbientMaterialByID(txCtx, id)
+		return err
+	})
 	if again.Name != "Roble Premium" || again.PreviewTextureURL != "" {
 		t.Fatalf("update not persisted: %#v", again)
 	}
 
-	if err := store.DeactivateAmbientMaterial(ctx, id); err != nil {
-		t.Fatalf("deactivate: %v", err)
-	}
-	deact, err := store.GetAmbientMaterialByID(ctx, id)
-	if err != nil {
-		t.Fatalf("get after deactivate: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAmbientMaterial(txCtx, id) })
+	var deact *domain.AmbientMaterial
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		deact, err = store.GetAmbientMaterialByID(txCtx, id)
+		return err
+	})
 	if deact.Active {
 		t.Error("expected Active=false after deactivate")
 	}
 }
 
-// The core nullable-PBR requirement: NULL (unset) must round-trip distinct
-// from 0. previewRoughness===0 is a real value, not "unset" (spec #4150).
 func TestAmbientMaterials_NullablePBR_NullVsZero(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 	id := uniqueID("amb-pbr")
-	t.Cleanup(func() { _, _ = pool.Exec(ctx, `DELETE FROM ambient_materials WHERE id = $1`, id) })
-
-	// Create with roughness UNSET (nil) and metalness = 0.5.
-	in := &domain.AmbientMaterial{
-		ID: id, Code: uniqueID("PBR"), Name: "PBR", Active: true,
-		SurfaceType:      domain.AmbientSurfaceFloor,
-		PreviewMetalness: fptr(0.5),
-	}
-	if err := store.CreateAmbientMaterial(ctx, in); err != nil {
-		t.Fatalf("create: %v", err)
-	}
-	got, err := store.GetAmbientMaterialByID(ctx, id)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM ambient_materials WHERE id = $1`, id) })
+	in := &domain.AmbientMaterial{ID: id, Code: uniqueID("PBR"), Name: "PBR", Active: true, SurfaceType: domain.AmbientSurfaceFloor, PreviewMetalness: fptr(0.5)}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateAmbientMaterial(txCtx, in) })
+	var got *domain.AmbientMaterial
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		got, err = store.GetAmbientMaterialByID(txCtx, id)
+		return err
+	})
 	if got.PreviewRoughness != nil {
 		t.Fatalf("unset roughness must stay nil, got %v", *got.PreviewRoughness)
 	}
 	if got.PreviewMetalness == nil || *got.PreviewMetalness != 0.5 {
 		t.Fatalf("metalness=0.5 not preserved: %#v", got.PreviewMetalness)
 	}
-
-	// Update roughness to exactly 0 — must come back as a non-nil *0.
 	upd := *got
 	upd.PreviewRoughness = fptr(0)
-	if err := store.UpdateAmbientMaterial(ctx, id, &upd); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-	zero, err := store.GetAmbientMaterialByID(ctx, id)
-	if err != nil {
-		t.Fatalf("get after zero update: %v", err)
-	}
-	if zero.PreviewRoughness == nil {
-		t.Fatal("roughness=0 must NOT be NULL — it is a real value distinct from unset")
-	}
-	if *zero.PreviewRoughness != 0 {
-		t.Fatalf("roughness = %v, want 0", *zero.PreviewRoughness)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAmbientMaterial(txCtx, id, &upd) })
+	var zero *domain.AmbientMaterial
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		zero, err = store.GetAmbientMaterialByID(txCtx, id)
+		return err
+	})
+	if zero.PreviewRoughness == nil || *zero.PreviewRoughness != 0 {
+		t.Fatalf("roughness = %v, want non-nil 0", zero.PreviewRoughness)
 	}
 }
 
 func TestAmbientMaterials_UniqueCodeConstraint(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 	code := uniqueID("UNIQ")
 	id1 := uniqueID("amb-uniq-1")
 	id2 := uniqueID("amb-uniq-2")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM ambient_materials WHERE id IN ($1, $2)`, id1, id2)
-	})
-
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM ambient_materials WHERE id IN ($1, $2)`, id1, id2) })
 	mk := func(id string) *domain.AmbientMaterial {
 		return &domain.AmbientMaterial{ID: id, Code: code, Name: "Dup", Active: true, SurfaceType: domain.AmbientSurfaceWall}
 	}
-	if err := store.CreateAmbientMaterial(ctx, mk(id1)); err != nil {
-		t.Fatalf("first create: %v", err)
-	}
-	err := store.CreateAmbientMaterial(ctx, mk(id2))
-	if err == nil {
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateAmbientMaterial(txCtx, mk(id1)) })
+	duplicateErr := store.WithinTenantTx(
+		storage.WithOrgCtx(context.Background(), actor.OrganizationID),
+		actor,
+		func(txCtx context.Context) error { return store.CreateAmbientMaterial(txCtx, mk(id2)) },
+	)
+	if duplicateErr == nil {
 		t.Fatal("expected duplicate-key error on repeated code, got nil")
 	}
-	if !strings.Contains(err.Error(), "duplicate key") && !strings.Contains(err.Error(), "unique constraint") {
-		t.Fatalf("error must mention duplicate/unique constraint, got: %v", err)
+	if !strings.Contains(duplicateErr.Error(), "duplicate key") && !strings.Contains(duplicateErr.Error(), "unique constraint") {
+		t.Fatalf("error must mention duplicate/unique constraint, got: %v", duplicateErr)
 	}
 }
 

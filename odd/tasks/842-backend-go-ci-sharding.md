@@ -70,3 +70,22 @@ Refactor the audited runtime-helper groups one at a time: explicit migration set
 - `TestConsistentCatalogTx_SourceView` creates its support table and grant with migration authority; the runtime remains unprivileged and continues to prove its multi-connection consistency behavior.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestStructureRevisionBumpAndSnapshot|TestStructureRevisionPinRoundTrip|TestConsistentCatalogTx_SourceView|TestConsistentCatalogTx_BorrowedIsolation|TestConsistentCatalogTx_CleanupAndOwnership|TestConsistentCatalogTx_ClosedBorrowedTransaction)$'` — PASS (1.491s), no skips.
 - Classification: the initial failures were fixture authority defects (multi-statement parameterized seed and schema creation through `granete_app`), not a runtime/RLS product defect. The runtime has not received migration/admin privileges.
+
+## Group B `connectStore` classification (2026-09-25)
+`rg 'connectStore(t)'` identifies 19 call sites in six files; the previously reported total of 20 includes the `connectStore` definition itself. The operational inventory is therefore 17 positive runtime callers plus two migration-additivity callers that must move entirely to migration authority rather than be treated as runtime behavior.
+
+| Family | File | Calls | Organization / actor | Runtime boundary / special intent |
+| --- | --- | ---: | --- | --- |
+| Ambient catalog | `ambient_test.go` | 3 runtime + 1 migration | `InitialOrganizationID`; active explicit fixture membership | CRUD, nullable persistence, uniqueness; create/read/update/deactivate are separate commands. Migration replay is admin-only. |
+| Agregados catalog | `agregados_test.go` | 2 runtime + 1 migration | `InitialOrganizationID`; active explicit fixture membership | CRUD and structure/module composition; separate commands. Migration replay is admin-only. |
+| Agregado revisions | `agregado_revisions_test.go` | 8 runtime | `InitialOrganizationID`; active explicit fixture membership | append/history, immutability, legacy compatibility, snapshot persistence and idempotency. One allocation test is concurrent and requires one tenant transaction per racer; dedicated `newRLSFixture` tests in the file are not `connectStore` callers and remain untouched. |
+| Project persistence | `engineering_log_test.go`, `project_item_custom_dims_test.go` | 2 runtime | `InitialOrganizationID`; active explicit fixture membership | project engineering log and custom dimensions, with each persisted command/read in its own tenant transaction. |
+| Machine output | `machine_output_selections_test.go` | 2 runtime | org A uses an explicit active fixture actor; RLS isolation additionally uses org B / a deliberately unprivileged role | version conflict requests must remain separate; the cross-tenant direct-SQL negative assertion remains separately scoped and must not be wrapped as org A. |
+
+The Group B fixture will keep `connectStore` runtime-only. A separate migration setup helper will run migrations and seed the explicit active test actor before opening the `DATABASE_URL` pool. No caller may use runtime authority for schema, DDL, grants, or administrative seed data.
+
+### Group B family result — Ambient catalog
+- Replaced the mixed `connectStore` setup with explicit migration-only setup (`migrationConnectStore`) and runtime-only `connectStore`; `migratedConnectStore` composes them only for runtime families, seeds a real active membership under migration authority, then opens the unprivileged runtime pool.
+- Migrated the three runtime tests to one `WithinTenantTx` per create/read/list/update/deactivate request. Cleanup is migration-authority fixture teardown. The duplicate-key assertion returns the expected database error from its own transaction instead of attempting to commit an aborted transaction.
+- `TestAmbientMaterials_MigrationIsAdditiveAndReRunSafe` now runs entirely on migration authority; it is not runtime/RLS coverage.
+- Verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestAmbientMaterials_'` — PASS (1.357s), FAIL=0, SKIP=0.
