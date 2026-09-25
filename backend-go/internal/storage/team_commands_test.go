@@ -30,8 +30,8 @@ type transferAdminRuntimeFixture struct {
 	actor         storage.TenantActor
 }
 
-// transferAdminRuntimeSetup is intentionally independent from isolationSetup:
-// it keeps migration/bootstrap authority out of the runtime team-command proof.
+// transferAdminRuntimeSetup keeps migration/bootstrap authority out of the
+// runtime team-command proof.
 func transferAdminRuntimeSetup(t *testing.T) transferAdminRuntimeFixture {
 	t.Helper()
 	ctx := context.Background()
@@ -111,7 +111,7 @@ type sectorCommandRuntimeFixture struct {
 }
 
 // sectorCommandRuntimeSetup keeps sector/role runtime coverage independent
-// from both the transfer fixture and legacy isolationSetup callers.
+// from the transfer fixture.
 func sectorCommandRuntimeSetup(t *testing.T) sectorCommandRuntimeFixture {
 	t.Helper()
 	ctx := context.Background()

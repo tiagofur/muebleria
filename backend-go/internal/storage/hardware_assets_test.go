@@ -27,16 +27,6 @@ func hwAssetSHA(seed string) string {
 	return "sha256-" + out[:64]
 }
 
-func hwAssetNewStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
-	t.Helper()
-	pool := multiOrgFreshDB(t)
-	store := &storage.PostgresStore{Pool: pool}
-	if err := store.RunMigrations(context.Background()); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
-	return store, pool
-}
-
 // hwAssetWorld is the standard #667 fixture: the designs fixture (org A/B,
 // shared project, module fiModuleA on RELEASE-BODY) plus one org-A hardware
 // carrying a visible placement on the structure's panel, so publishing the

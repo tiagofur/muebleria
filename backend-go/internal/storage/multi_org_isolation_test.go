@@ -16,46 +16,6 @@ import (
 // error used for missing rows — never a distinct code that would confirm
 // existence (ADR-0004 "tenant_id is not authorization").
 
-func isolationSetup(t *testing.T) (*storage.PostgresStore, string, string) {
-	t.Helper()
-	pool := multiOrgFreshDB(t)
-	store := &storage.PostgresStore{Pool: pool}
-	ctx := context.Background()
-	if err := store.RunMigrations(ctx); err != nil {
-		t.Fatalf("RunMigrations: %v", err)
-	}
-
-	// Organization B alongside the backfilled initial organization.
-	const orgB = "aaaaaaaa-0000-0000-0000-00000000000b"
-	if _, err := pool.Exec(ctx,
-		`INSERT INTO organizations (id, name, slug, status) VALUES ($1, 'Taller Beta', 'taller-beta', 'provisioning')`, orgB); err != nil {
-		t.Fatalf("create org B: %v", err)
-	}
-	if _, err := pool.Exec(ctx,
-		`INSERT INTO workshop_settings (organization_id, default_currency) VALUES ($1, 'BRL')`, orgB); err != nil {
-		t.Fatalf("workshop settings org B: %v", err)
-	}
-
-	seed := []string{
-		// Org A (initial): one customer, one project, one board. The org is
-		// explicit — 000088 dropped the transitional DEFAULT so unscoped
-		// writes fail loudly.
-		`INSERT INTO customers (id, name, organization_id) VALUES ('c1000000-0000-0000-0000-00000000000a', 'Cliente Alfa', '` + multiOrgInitialOrgID + `')`,
-		`INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('c2000000-0000-0000-0000-00000000000a', 'Obra Alfa', 'c1000000-0000-0000-0000-00000000000a', 'draft', '` + multiOrgInitialOrgID + `')`,
-		`INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, board_price, organization_id) VALUES ('c3000000-0000-0000-0000-00000000000a', 'TAB-ALFA', 'Tablero Alfa', 1830, 2440, 18, 1000, '` + multiOrgInitialOrgID + `')`,
-		// Org B: its own rows (same shape, different world).
-		`INSERT INTO customers (id, name, organization_id) VALUES ('c1000000-0000-0000-0000-00000000000b', 'Cliente Beta', '` + orgB + `')`,
-		`INSERT INTO projects (id, name, customer_id, status, organization_id) VALUES ('c2000000-0000-0000-0000-00000000000b', 'Obra Beta', 'c1000000-0000-0000-0000-00000000000b', 'draft', '` + orgB + `')`,
-		`INSERT INTO material_boards (id, code, name, width_mm, length_mm, thickness_mm, board_price, organization_id) VALUES ('c3000000-0000-0000-0000-00000000000b', 'TAB-BETA', 'Tablero Beta', 1830, 2440, 18, 1000, '` + orgB + `')`,
-	}
-	for _, s := range seed {
-		if _, err := pool.Exec(ctx, s); err != nil {
-			t.Fatalf("seed: %v (sql=%s)", err, s[:60])
-		}
-	}
-	return store, multiOrgInitialOrgID, orgB
-}
-
 func scoped(ctx context.Context, org string) context.Context {
 	return storage.WithOrgCtx(ctx, org)
 }
@@ -77,10 +37,9 @@ type isolationRuntimeFixture struct {
 	platformActor storage.TenantActor
 }
 
-// runtimeIsolationSetup deliberately keeps this seven-test runtime slice
-// separate from isolationSetup's remaining legacy callers. Migrations and
-// fixture-only rows are installed with migration authority; every product
-// command below opens a real granete_app tenant transaction.
+// runtimeIsolationSetup installs migrations and fixture-only rows with
+// migration authority; every product command below opens a real granete_app
+// tenant transaction.
 func runtimeIsolationSetup(t *testing.T) isolationRuntimeFixture {
 	t.Helper()
 	migrationPool := multiOrgFreshMigrationDB(t)

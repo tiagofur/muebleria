@@ -22,7 +22,7 @@ import (
 // with an explicit conflict instead of orphaning customers.
 
 const (
-	// Seeded by isolationSetup: org A draft project + its customer.
+	// Seeded by runtimeIsolationSetup: org A draft project + its customer.
 	inlineUpdateProjectID = "c2000000-0000-0000-0000-00000000000a"
 	inlineUpdateBaseCust  = "c1000000-0000-0000-0000-00000000000a"
 )
