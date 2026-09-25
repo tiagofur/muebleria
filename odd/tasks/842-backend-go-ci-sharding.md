@@ -54,5 +54,12 @@ The focused API suite is green. Pilot Readiness is now green with a migration po
 - A focused trial confirmed the next distinction: moving only migrations of `skipIfNoDB` to admin exposes a second fixture defect—its subsequent direct writes as `granete_app` use `WithOrgCtx` but omit `WithinTenantTx`, so RLS correctly rejects them. This is not a product/RLS bug and must be fixed by routing each runtime scenario through the production tenant transaction boundary, not by setting session-wide context or using admin.
 - `connectStore` callers which explicitly re-run migrations similarly need a separate migration pool for those assertions. The incomplete trial was reverted, so no new skip/failure is committed.
 
+## Runtime-fixture audit (2026-09-24)
+- Audited 48 `WithOrgCtx` references across 22 storage test files. They split into: already-explicit positive/negative tenant-boundary proofs; migration/schema metadata; and legacy runtime helpers whose callers mistakenly treated context metadata as PostgreSQL RLS authority.
+- `skipIfNoDB` has two Structure Revision callers and four transaction-consistency callers; all are runtime behavior tests, so migration setup and each runtime command need separate boundaries.
+- `connectStore` has 20 direct callers across Ambient, Agregados, Agregado Revisions, Engineering Log, Project Item Custom Dims, and Machine Output tests. It is a mixed fixture today: it must no longer migrate through its runtime pool, and each caller must be classified before adding per-command tenant transactions.
+- `mustPool` has two F116 callers and follows the same mixed-fixture pattern.
+- Direct negative missing-context and cross-tenant RLS tests already use purpose-built `rlsFixture`/tenant-boundary helpers and must remain unwrapped.
+
 ## Next step
-Separate setup from runtime pools in `skipIfNoDB`, `connectStore`, and the remaining direct-migration runtime fixtures; add tenant-transaction fixture wrappers for their runtime operations; then run the full storage suite without new skips before starting AST discovery.
+Refactor the audited runtime-helper groups one at a time: explicit migration setup, runtime pool, legitimate actor/membership, and one `WithinTenantTx` per production-equivalent command. Preserve intentional unscoped negative-RLS tests, then run the grouped focused checks before the full storage suite.
