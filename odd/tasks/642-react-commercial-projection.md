@@ -23,3 +23,6 @@ Fresh reviewer `/root/projection_verify` inspected `5609323806b3219e8a34521702c1
 
 ## Next step
 Open a PR only on explicit user request, then run one exact-HEAD CI and independent review under ordinary repository policy.
+
+## Remote CI correction
+Remote TypeScript CI on `27f7d5fac1ad8b4972747e88bd31b3e045b1c3ec` failed only because the CSS token guard interpreted the source comment `#642` as a hard-coded hex value. Commit `9325338940c92518282038022fa69349ed4513db` reworded that comment without changing behavior. A fresh reviewer then ran `pnpm test`: PASS, 176 files / 1,985 tests, including the former guard. Remote CI remains the exact-head authority.
