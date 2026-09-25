@@ -181,30 +181,31 @@ jobs:
         with:
           go-version: '1.25.x'
           cache-dependency-path: backend-go/go.sum
-      - name: Prove AST discovery covers exactly three non-empty storage shards
+      - name: Prove AST discovery covers exactly four non-empty storage shards
         working-directory: backend-go
         run: |
           mkdir -p ../.ci-storage-shards
           go run ./cmd/testshard discover -package ./internal/storage -format names > ../.ci-storage-shards/all-roots
-          for shard in 1 2 3; do
-            go run ./cmd/testshard shard -package ./internal/storage -count 3 -index "$shard" -strategy lpt \
+          for shard in 1 2 3 4; do
+            go run ./cmd/testshard shard -package ./internal/storage -count 4 -index "$shard" -strategy lpt \
               -timings testdata/storage-before-81a7896.timings -format names > "../.ci-storage-shards/shard-$shard-roots"
           done
           python3 ../scripts/verify_storage_shard_plan.py --expected-count 509 \
             --all ../.ci-storage-shards/all-roots \
             --shard ../.ci-storage-shards/shard-1-roots \
             --shard ../.ci-storage-shards/shard-2-roots \
-            --shard ../.ci-storage-shards/shard-3-roots
+            --shard ../.ci-storage-shards/shard-3-roots \
+            --shard ../.ci-storage-shards/shard-4-roots
 
   storage-shards:
-    name: Storage shard ${{ matrix.shard }}/3
+    name: Storage shard ${{ matrix.shard }}/4
     needs: [impact, storage-shard-plan]
     if: ${{ needs.impact.result == 'success' && needs.storage-shard-plan.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['backend-go'] }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -215,9 +216,9 @@ jobs:
           cache-dependency-path: backend-go/go.sum
       - name: Record storage shard start
         run: |
-          printf 'storage shard %s/3 started=%s\n' "${{ matrix.shard }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
+          printf 'storage shard %s/4 started=%s\n' "${{ matrix.shard }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Run isolated AST-selected storage shard
-        run: scripts/backend-test-storage-shard.sh 3 "${{ matrix.shard }}" lpt backend-go/testdata/storage-before-81a7896.timings
+        run: scripts/backend-test-storage-shard.sh 4 "${{ matrix.shard }}" lpt backend-go/testdata/storage-before-81a7896.timings
 
   backend-go-other:
     name: Go Backend Tests (excluding storage)

@@ -422,3 +422,8 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 
 ## P5 temporary three-shard benchmark (2026-09-25)
 - The four-shard candidate is temporarily changed to a three-shard matrix solely for the authorized like-for-like GitHub Actions benchmark. The plan loop, matrix, job labels, and canonical shard-wrapper argument all receive `count=3`; the non-storage backend job remains the exact `go list` complement, so `internal/storage` is still executed exactly once across the AST-verified union. The partition verifier derives its displayed shard count from supplied selections so the same fail-closed union/intersection/cardinality/zero-shard proof applies to this three-way trial.
+
+## P5 final storage shard selection (2026-09-25)
+- Authorized like-for-like GitHub Actions comparison selected **four** storage shards. The storage-only runner/job critical path was **283s/296s** for 4 shards versus **332s/342s** for 3 shards (runner/job); four shards improve the measured job critical path by 46s while increasing runner consumption from approximately **960** to **1068 runner-minutes**.
+- The CI workflow is restored to the four-way plan/matrix/wrapper count: AST discovery remains the membership authority, the plan still proves 509 roots with complete union, empty pairwise intersections, exact cardinality, and no empty shard, while historical timings only drive LPT balance.
+- Unrelated `internal/api` and Pilot failures from these comparison runs are explicitly excluded from this storage shard selection. They are not fixed or treated as a storage result in this scope. This selection does not claim a complete backend green gate; the push only triggers the exact final configuration for later observation.
