@@ -58,6 +58,25 @@ function edgeCell(row: ProductionCutRow): ReactNode {
   );
 }
 
+function materialLabel(row: ProductionCutRow): ReactNode {
+  const identity = row.releaseMaterialIdentity;
+  if (!identity) return row.materialName;
+  return (
+    <>
+      <span data-testid="release-material-primary">
+        {identity.frozenCode
+          ? `Código congelado: ${identity.frozenCode}`
+          : `Material de liberación · ID: ${identity.materialId}`}
+      </span>
+      {row.materialName ? (
+        <span className="prod-modulos__code-sub">
+          Nombre actual del catálogo: {row.materialName}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 type GroupTotals = {
   readonly lines: number;
   readonly units: number;
@@ -126,6 +145,8 @@ export function ProductionOrderDespiecePanel({
       const hay = [
         r.description,
         r.materialName,
+        r.releaseMaterialIdentity?.materialId,
+        r.releaseMaterialIdentity?.frozenCode,
         r.moduleCode,
         r.partCode,
         r.partName,
@@ -145,7 +166,9 @@ export function ProductionOrderDespiecePanel({
     for (const row of filtered) {
       const key =
         groupBy === 'material'
-          ? row.materialName || 'Sin material'
+          ? row.releaseMaterialIdentity
+            ? `release:${row.releaseMaterialIdentity.materialId}`
+            : `catalog:${row.materialName || 'Sin material'}`
           : row.moduleCode || 'Sin módulo';
       const arr = map.get(key) ?? [];
       arr.push(row);
@@ -153,7 +176,11 @@ export function ProductionOrderDespiecePanel({
     }
     return [...map.entries()]
       .sort(([a], [b]) => a.localeCompare(b, 'es'))
-      .map(([key, rows]) => ({ key, label: key, rows }));
+      .map(([key, rows]) => ({
+        key,
+        label: groupBy === 'material' ? materialLabel(rows[0]!) || 'Sin material' : key,
+        rows,
+      }));
   }, [filtered, groupBy]);
 
   if (cutRows === null) {
@@ -280,7 +307,7 @@ export function ProductionOrderDespiecePanel({
                       <td>
                         {row.thicknessMm ? `${row.thicknessMm} mm` : <span className="prod-modulos__muted">—</span>}
                       </td>
-                      <td>{row.materialName}</td>
+                      <td>{materialLabel(row)}</td>
                       <td>{edgeCell(row)}</td>
                       <td aria-label={row.grain === 1 ? 'con veta' : 'sin veta'}>
                         {grainLabel(row)}

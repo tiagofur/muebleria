@@ -209,6 +209,12 @@ export function releaseCutRowsFromDemand(
       ),
       materialName: material.name,
       materialCode,
+      releaseMaterialIdentity: {
+        materialId: entry.piece.materialId,
+        ...(entry.piece.frozenMaterialCode?.trim()
+          ? { frozenCode: entry.piece.frozenMaterialCode.trim() }
+          : {}),
+      },
       grain: entry.piece.grain,
       L1: entry.piece.l1,
       L2: entry.piece.l2,

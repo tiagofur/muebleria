@@ -1694,6 +1694,12 @@ export interface ProductionCutRow {
   readonly labelRef?: string;
   /** Material identity for workshop lists (cut row stays name-compatible). */
   readonly materialCode?: string;
+  /** Frozen release provenance; absent on ordinary live cut rows. */
+  readonly releaseMaterialIdentity?: {
+    readonly materialId: string;
+    /** Only a code present in the release, never a current-catalog fallback. */
+    readonly frozenCode?: string;
+  };
   /** Board thickness in mm from the resolved part. */
   readonly thicknessMm?: number;
   /**

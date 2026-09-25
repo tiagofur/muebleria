@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises';
 import { expect, test, type Download, type Page } from '@playwright/test';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { allowLoggedOutSessionProbe, collectBrowserErrors } from './support/browserErrors';
@@ -265,14 +266,15 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
     await browserErrors.assertEmpty('engineering pending journey');
   });
 
-  test('Iniciar Ingeniería → En proceso durable que sobrevive recarga', async ({ page }) => {
+  test('Iniciar Ingeniería → En proceso durable que sobrevive recarga', async ({ page }, testInfo) => {
     test.setTimeout(120_000);
     const browserErrors = collectBrowserErrors(page, {
       allow: (message, resourceUrl) =>
         allowLoggedOutSessionProbe(message, resourceUrl) || allowAbortedWorkspaceRefresh(message),
     });
     await loginToA(page);
-    await page.goto(`/engineering/${PROJECT_ID}?release=${seeded.releaseId}`);
+    await page.goto('/engineering');
+    await page.getByTestId('eng-project-' + PROJECT_ID).getByRole('button').click();
 
     await page.getByTestId('eng-start-engineering').click();
     await expect(page.getByTestId('eng-entry-status')).toContainText('En proceso');
@@ -294,6 +296,68 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
     const card = page.getByTestId('eng-project-' + PROJECT_ID);
     await expect(card).toBeVisible();
     await expect(card).toContainText('En proceso');
+
+    // #739: real frozen P1 readback remains identical after a live catalog rename.
+    await card.getByRole('button').click();
+    await page.getByTestId('eng-tab-despiece').click();
+    const client = new GraneteApiClient(seeded.apiBase);
+    const repository = new APIWorkspaceRepository(seeded.apiBase, { getAccessToken: () => seeded.token });
+    const beforeDemand = await client.getProjectProductionReleaseCuttingDemand(seeded.token, PROJECT_ID, seeded.releaseId);
+    const panel = page.getByTestId('prod-hub-despiece');
+    await expect(panel.getByRole('row')).toHaveCount(3);
+    const readDisplay = async () => ({
+      groups: await panel.locator('section').evaluateAll((groups) => groups.map((group) => ({
+        // Stable key and primary label, deliberately excluding the current alias.
+        key: group.querySelector('[data-testid^="prod-despiece-totals-"]')?.getAttribute('data-testid'),
+        primary: group.querySelector('h3 [data-testid="release-material-primary"]')?.textContent,
+        rows: Array.from(group.querySelectorAll('tbody tr')).map((row) =>
+          Array.from(row.querySelectorAll('td')).filter((_, index) => index !== 4).map((cell) => cell.textContent),
+        ),
+      }))),
+      materialCells: await panel.locator('tbody tr td:nth-child(5)').allTextContents(),
+      headings: await panel.getByRole('heading').allTextContents(),
+    });
+    const beforeDisplay = await readDisplay();
+    await page.screenshot({ path: testInfo.outputPath('despiece-before.png'), fullPage: true, animations: 'disabled' });
+    const catalog = await repository.getCatalog();
+    const renamed = 'Nombre nuevo de catálogo 739';
+    await repository.saveCatalog({
+      ...catalog,
+      materials: catalog.materials.map((material) => material.id === STATE_MAT
+        ? { ...material, name: renamed } : material),
+    });
+    expect((await repository.getCatalog()).materials.find((material) => material.id === STATE_MAT)?.name).toBe(renamed);
+    await page.reload();
+    await page.getByTestId('eng-tab-despiece').click();
+    await expect(panel.getByRole('row')).toHaveCount(3);
+    await expect(panel).toContainText(renamed);
+    const afterDemand = await client.getProjectProductionReleaseCuttingDemand(seeded.token, PROJECT_ID, seeded.releaseId);
+    const afterDisplay = await readDisplay();
+    await writeFile(testInfo.outputPath('material-provenance.json'), JSON.stringify({
+      beforeDemand, afterDemand, beforeDisplay, afterDisplay,
+    }, null, 2));
+    await page.screenshot({ path: testInfo.outputPath('despiece-after.png'), fullPage: true, animations: 'disabled' });
+    expect(afterDemand).toEqual(beforeDemand);
+    expect(afterDisplay.groups).toEqual(beforeDisplay.groups);
+    expect(afterDisplay.groups).toHaveLength(1);
+    expect(afterDisplay.groups[0]?.primary).toBe(`Código congelado: ${STATE_MAT_CODE}`);
+    expect(afterDisplay.groups[0]?.rows).toHaveLength(2);
+    expect(afterDisplay.materialCells.every((cell) => cell.includes(`Código congelado: ${STATE_MAT_CODE}`)
+      && cell.includes(`Nombre actual del catálogo: ${renamed}`))).toBe(true);
+    expect(afterDisplay.headings[0]).toContain(`Nombre actual del catálogo: ${renamed}`);
+    await expect(page.getByTestId('eng-release-prep-notice')).toContainText('contenido congelado de la liberación');
+    for (const width of [390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(panel.getByRole('heading')).toBeVisible();
+      const bounds = await panel.getByRole('heading').boundingBox();
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      await page.screenshot({ path: testInfo.outputPath(`despiece-${width}.png`), fullPage: true, animations: 'disabled' });
+      if (width === 390) {
+        const materialCell = panel.locator('tbody tr td:nth-child(5)').first();
+        await materialCell.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath('despiece-390-material.png'), animations: 'disabled' });
+      }
+    }
 
     // Starting changed ONLY the engineering fact: no acceptance, no produced
     // stamp, no materials release, no physical executions.

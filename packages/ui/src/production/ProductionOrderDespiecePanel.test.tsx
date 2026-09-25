@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, afterEach } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ProductionCutRow } from '@granete/domain';
 import { ProductionOrderDespiecePanel } from './ProductionOrderDespiecePanel';
@@ -161,5 +161,61 @@ describe('ProductionOrderDespiecePanel tablist contract (F109)', () => {
     expect(mod.getAttribute('aria-selected')).toBe('true');
     expect(document.activeElement).toBe(mod);
     expect(document.getElementById('prod-despiece-panel-module')).toBeTruthy();
+  });
+});
+
+
+describe('release material provenance (#739)', () => {
+  const rows = mockCutRows.map((row) => ({
+    ...row,
+    materialName: 'Nombre original',
+    releaseMaterialIdentity: { materialId: 'mat-frozen', frozenCode: 'FROZEN-001' },
+  }));
+
+  it('preserves the group and physical cells on rename; qualifies current names in heading and cells', () => {
+    const { rerender } = render(<ProductionOrderDespiecePanel cutRows={rows} />);
+    const heading = screen.getByRole('heading', { name: /Código congelado: FROZEN-001/ });
+    const group = heading.closest('section');
+    const physicalCells = () => screen.getAllByRole('row').slice(1).map((row) =>
+      within(row).getAllByRole('cell').filter((_, index) => index !== 4).map((cell) => cell.textContent),
+    );
+    const before = physicalCells();
+    expect(within(heading).getByText('Nombre actual del catálogo: Nombre original')).toBeTruthy();
+    rerender(<ProductionOrderDespiecePanel cutRows={rows.map((row) => ({ ...row, materialName: 'Nombre nuevo' }))} />);
+    expect(screen.getByRole('heading', { name: /Código congelado: FROZEN-001/ }).closest('section')).toBe(group);
+    expect(physicalCells()).toEqual(before);
+    expect(screen.getAllByText('Nombre actual del catálogo: Nombre nuevo')).toHaveLength(3);
+    expect(screen.queryByText('Nombre nuevo', { exact: true })).toBeNull();
+  });
+
+  it('does not merge different material IDs with identical frozen codes and current names', () => {
+    render(<ProductionOrderDespiecePanel cutRows={rows.map((row, index) => ({
+      ...row, releaseMaterialIdentity: { materialId: `mat-${index}`, frozenCode: 'FROZEN-001' },
+    }))} />);
+    expect(screen.getAllByTestId('prod-despiece-table')).toHaveLength(2);
+    expect(screen.getAllByRole('heading', { name: /Código congelado: FROZEN-001/ })).toHaveLength(2);
+  });
+
+  it('shows a stable release ID without claiming the legacy catalog fallback code is frozen', () => {
+    render(<ProductionOrderDespiecePanel cutRows={[{
+      ...rows[0]!, materialCode: 'LIVE-ONLY', releaseMaterialIdentity: { materialId: 'mat-legacy' },
+    }]} />);
+    expect(screen.getAllByText('Material de liberación · ID: mat-legacy')).toHaveLength(2);
+    expect(screen.queryByText(/Código congelado|LIVE-ONLY/)).toBeNull();
+    expect(screen.getAllByText('Nombre actual del catálogo: Nombre original')).toHaveLength(2);
+  });
+
+  it.each(['FROZEN-001', 'mat-frozen', 'Nombre original'])('searches release identity and current alias: %s', async (query) => {
+    render(<ProductionOrderDespiecePanel cutRows={rows} />);
+    await userEvent.setup().type(screen.getByRole('searchbox'), query);
+    expect(screen.getByTestId('prod-despiece-count').textContent).toBe('2 líneas');
+  });
+
+  it('keeps ordinary rows name-based and separate from namespaced release identities', () => {
+    render(<ProductionOrderDespiecePanel cutRows={[
+      rows[0]!, { ...mockCutRows[1]!, materialName: 'release:mat-frozen' },
+    ]} />);
+    expect(screen.getAllByTestId('prod-despiece-table')).toHaveLength(2);
+    expect(screen.getAllByText('release:mat-frozen')).toHaveLength(2);
   });
 });
