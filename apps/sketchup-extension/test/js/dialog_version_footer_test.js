@@ -69,14 +69,14 @@ assert(scriptMatch, 'dialog.html must carry its script');
 vm.createContext(sandbox);
 vm.runInContext(scriptMatch[1], sandbox);
 
-sandbox.window.GraneteDialog.setPluginVersion({ version: '0.1.6-test' });
+sandbox.window.GraneteDialog.setPluginVersion({ version: '0.1.11-test' });
 const footer = registry['granete-version-footer'];
 assert(footer, 'setPluginVersion resolves the footer element');
-assert.strictEqual(footer.textContent, 'Granete for SketchUp · v0.1.6-test',
+assert.strictEqual(footer.textContent, 'Granete para SketchUp · v0.1.11-test',
   'the footer shows the version the EXTENSION pushed, not a page constant');
 
 sandbox.window.GraneteDialog.setPluginVersion({});
-assert.strictEqual(footer.textContent, 'Granete for SketchUp · v0.1.6-test',
+assert.strictEqual(footer.textContent, 'Granete para SketchUp · v0.1.11-test',
   'a payload without version leaves the footer untouched (never renders "undefined")');
 
 console.log('dialog_version_footer_test: 3 assertions OK');

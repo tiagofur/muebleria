@@ -750,7 +750,13 @@
         <span id="active-category-label">Todas las opciones</span>
       </div>
       <div id="swatch-grid" class="swatch-grid" role="listbox" aria-label="Materiales elegibles">
-        <!-- Swatch Cards generated dynamically -->
+        <!-- Placeholder pre-init: entre la apertura del diálogo y el payload
+             de Ruby la grilla no debe verse rota; el primer render reemplaza
+             este nodo. -->
+        <div class="empty-state">
+          <div class="empty-title">Preparando el catálogo…</div>
+          <div class="empty-hint">Cargando los acabados del taller.</div>
+        </div>
       </div>
     </div>
 
@@ -758,7 +764,7 @@
     <div class="inspector-pane">
       <div id="inspector-preview" class="inspector-preview-box"></div>
       <div class="inspector-details">
-        <div id="inspector-name" class="inspector-title">Selecciona un material</div>
+        <div id="inspector-name" class="inspector-title">Seleccioná un material</div>
 
         <div class="detail-grid">
           <div class="detail-item">
@@ -787,7 +793,7 @@
           <span class="scope-title">Alcance de la Selección</span>
           <label class="scope-option">
             <input type="radio" name="scope-choice" value="furniture" checked>
-            <span>Aplicar a este mueble</span>
+            <span id="scope-furniture-label">Aplicar a este mueble</span>
           </label>
           <label class="scope-option">
             <input type="radio" name="scope-choice" value="project">
@@ -950,6 +956,15 @@
       // Update header
       const roleBadge = document.getElementById('role-badge');
       if (roleBadge) roleBadge.textContent = state.roleName;
+
+      // Alcance honesto por contexto: en el configurador todavía no existe
+      // el mueble — la elección acompaña a la próxima inserción.
+      const scopeFurnitureLabel = document.getElementById('scope-furniture-label');
+      if (scopeFurnitureLabel) {
+        scopeFurnitureLabel.textContent = state.context === 'configurator'
+          ? 'Aplicar a esta configuración'
+          : 'Aplicar a este mueble';
+      }
 
       // Check if categories exist
       const mainLayout = document.getElementById('main-layout');

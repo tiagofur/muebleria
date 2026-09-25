@@ -146,7 +146,20 @@ module Granete
         KEYS_LEFT = [37, 28].freeze
         KEYS_RIGHT = [39, 29].freeze
 
-        attr_reader :anchor, :rotation_quarters, :active_snap
+        # Right-click menu (host protocol): the designer's muscle memory in
+        # SketchUp — rotation, anchor cycling and cancel without the panel.
+        CONTEXT_MENU_ROTATE_LEFT = 'Rotar 90° a la izquierda'
+        CONTEXT_MENU_ROTATE_RIGHT = 'Rotar 90° a la derecha'
+        CONTEXT_MENU_CYCLE_ANCHOR = 'Cambiar ancla (Tab)'
+        CONTEXT_MENU_CANCEL = 'Cancelar colocación (Esc)'
+
+        # VCB angle tokens: "45°"/"45 deg" is ALWAYS a yaw; a bare number is
+        # a yaw only in free mode (with an active snap a bare number keeps
+        # meaning the exact gap in mm).
+        YAW_EXPLICIT_RE = /\A\s*(-?\d+(?:[.,]\d+)?)\s*(?:°|º|deg)\s*\z/i
+        YAW_BARE_RE = /\A\s*(-?\d+(?:[.,]\d+)?)\s*\z/
+
+        attr_reader :anchor, :rotation_quarters, :active_snap, :yaw_degrees
 
         # extents_mm: furniture-local box extents {x: width, y: depth,
         # z: height} in millimetres, derived from the authoritative resolved
@@ -176,6 +189,9 @@ module Granete
           @origin_mm = origin_mm.map(&:to_f)
           @anchor = anchor.to_sym
           @rotation_quarters = 0
+          # Free-mode arbitrary yaw (degrees) typed into the VCB. nil keeps
+          # the quarter-turn authoring mode (increment 3 contract).
+          @yaw_degrees = nil
           @on_commit = on_commit
           @on_cancel = on_cancel
           @logger = logger
@@ -321,22 +337,37 @@ module Granete
         end
 
         # SketchUp tool protocol: the user typed into the VCB/measurements
-        # box. With an active snap the value is the EXACT gap in mm for the
-        # primary constraint (wall / furniture side / floor). This is the
-        # host-native input path — the tool never steals raw keyboard
-        # events. Without an active snap there is no reference to offset,
-        # and the input is answered with an actionable hint, never a guess.
+        # box. Input grammar, priority order:
+        # 1. "45°"/"45 deg" — ALWAYS an explicit yaw (any mode without an
+        #    orientation-locking snap);
+        # 2. with an active snap, a bare number stays the EXACT gap in mm
+        #    for the primary constraint (wall / furniture side / floor);
+        # 3. free mode, bare number — arbitrary yaw in degrees (the power
+        #    user's "45" that quarter turns could never express).
+        # The tool never steals raw keyboard events; invalid input is
+        # answered with an actionable hint, never a guess.
         # rubocop:disable-next Naming/PredicateMethod -- host Tool protocol name
         def onUserText(text, _view)
           return false unless active?
 
-          gap_mm = PlacementSnapEngine.parse_gap_mm(text.to_s)
+          raw = text.to_s
+          explicit = YAW_EXPLICIT_RE.match(raw)
+          bare = explicit.nil? ? YAW_BARE_RE.match(raw) : nil
+          if explicit || (bare && @active_snap.nil?)
+            match = explicit || bare
+            apply_typed_yaw!(Float(match[1].tr(',', '.')))
+            return true
+          end
+
+          gap_mm = PlacementSnapEngine.parse_gap_mm(raw)
           if @active_snap.nil?
-            write_status_text('Sin snap activo: acércate a pared, piso o mueble para fijar una holgura exacta.')
+            write_status_text('Sin snap activo: acércate a pared, piso o mueble para fijar una holgura, ' \
+                              'o escribí un ángulo (p. ej. 45) para rotar.')
             return true
           end
           if gap_mm.nil?
-            write_status_text('Valor no válido: escribe la holgura en mm (p. ej. 5 o 5mm).')
+            write_status_text('Valor no válido: escribe la holgura en mm (p. ej. 5 o 5mm) ' \
+                              'o un ángulo con ° (p. ej. 45°).')
             return true
           end
 
@@ -347,10 +378,53 @@ module Granete
           true
         end
 
+        # Applies an explicit yaw about +Z. An orientation-locking snap
+        # (wall / furniture side) keeps priority and answers with the same
+        # honest hint the arrow keys get.
+        def apply_typed_yaw!(degrees)
+          if @active_snap && @active_snap[:constrains_rotation]
+            write_status_text('Rotación fijada por el snap: aléjate de pared o mueble para rotar libremente.')
+            return
+          end
+
+          @yaw_degrees = ((degrees % 360.0) + 360.0) % 360.0
+          @rotation_quarters = 0
+          refresh_snap!
+          update_status_text
+          invalidate_view
+        end
+
         # SketchUp also routes Esc through onCancel (tool protocol).
         def onCancel(_reason, view)
           cancel!(:escape)
           view&.invalidate if view.respond_to?(:invalidate)
+        end
+
+        # Right-click menu (host Tool protocol). SketchUp builds the
+        # context menu of an active Tool through #getMenu(menu): the tool
+        # adds items to the Sketchup::Menu it receives. Items map 1:1 to
+        # existing gestures — the menu adds no capability, only native
+        # reachability.
+        # rubocop:disable-next Naming/MethodName -- host Tool protocol name
+        def getMenu(menu)
+          menu.add_item(CONTEXT_MENU_ROTATE_LEFT) { onContextMenu(CONTEXT_MENU_ROTATE_LEFT) }
+          menu.add_item(CONTEXT_MENU_ROTATE_RIGHT) { onContextMenu(CONTEXT_MENU_ROTATE_RIGHT) }
+          menu.add_item(CONTEXT_MENU_CYCLE_ANCHOR) { onContextMenu(CONTEXT_MENU_CYCLE_ANCHOR) }
+          menu.add_separator
+          menu.add_item(CONTEXT_MENU_CANCEL) { onContextMenu(CONTEXT_MENU_CANCEL) }
+          menu
+        end
+
+        # Shared dispatcher: host menu blocks (and tests) route through
+        # here so each gesture keeps exactly one implementation.
+        def onContextMenu(title)
+          case title
+          when CONTEXT_MENU_ROTATE_LEFT then rotate!(-1)
+          when CONTEXT_MENU_ROTATE_RIGHT then rotate!(1)
+          when CONTEXT_MENU_CYCLE_ANCHOR then cycle_anchor!
+          when CONTEXT_MENU_CANCEL then cancel!(:escape)
+          end
+          invalidate_view
         end
 
         # Controller-facing cancellation (e.g. the dialog closing with a
@@ -558,15 +632,27 @@ module Granete
         # The effective world basis [x, y, z] axis vectors. Under an
         # orientation-proposing snap it derives from the solution's
         # ARBITRARY unit front (increment 3): right = front × up keeps the
-        # frame right-handed with determinant +1 at any yaw. Free mode
-        # (and the floor, which never reorients) keeps the exact
-        # quarter-turn basis about +Z.
+        # frame right-handed with determinant +1 at any yaw. A TYPED yaw
+        # (free mode / floor) takes precedence over quarter turns; free
+        # mode without a typed yaw keeps the exact quarter-turn basis
+        # about +Z.
         def effective_basis
           solution = @active_snap
           front = solution && solution[:constrains_rotation] ? solution[:front_dir_mm] : nil
+          return basis_for_yaw(@yaw_degrees) if !front && @yaw_degrees
           return basis_for_rotation(@rotation_quarters) unless front
 
           [[front[1], -front[0], 0.0], [front[0], front[1], 0.0], [0.0, 0.0, 1.0]]
+        end
+
+        # Arbitrary-yaw basis about +Z. θ=90° reproduces exactly one quarter
+        # turn (x̂→ŷ, ŷ→−x̂) — typed yaw generalizes the arrow-key gesture,
+        # never diverges from it.
+        def basis_for_yaw(degrees)
+          rad = degrees * Math::PI / 180.0
+          cos = Math.cos(rad)
+          sin = Math.sin(rad)
+          [[cos, sin, 0.0], [-sin, cos, 0.0], [0.0, 0.0, 1.0]]
         end
 
         # Quarter-turn basis about +Z (front stays front under rotation —
@@ -619,14 +705,19 @@ module Granete
         # Rotation is a free-mode/floor authoring control. While an
         # orientation-proposing snap (wall / furniture side) is active, the
         # target already fixes the front and the arrows are answered with
-        # an explicit hint instead of silently fighting the snap.
+        # an explicit hint instead of silently fighting the snap. With a
+        # typed yaw active, arrows keep working by 90° increments on it.
         def rotate!(direction)
           if @active_snap && @active_snap[:constrains_rotation]
             write_status_text('Rotación fijada por el snap: aléjate de pared o mueble para rotar libremente.')
             return
           end
 
-          @rotation_quarters = (((@rotation_quarters + direction) % 4) + 4) % 4
+          if @yaw_degrees
+            @yaw_degrees = (((@yaw_degrees + (90 * direction)) % 360.0) + 360.0) % 360.0
+          else
+            @rotation_quarters = (((@rotation_quarters + direction) % 4) + 4) % 4
+          end
           refresh_snap!
         end
 
@@ -706,9 +797,11 @@ module Granete
               'Esc para cancelar'
             )
           else
+            rotation_note = @yaw_degrees ? "Rotación: #{format('%.0f', @yaw_degrees)}° · " : ''
             write_status_text(
               "Colocar #{@label}: clic para confirmar · Esc para cancelar · " \
-              "←/→ rotar · Tab ancla (#{ANCHOR_LABELS[@anchor]}) · " \
+              "#{rotation_note}←/→ rotar · Tab ancla (#{ANCHOR_LABELS[@anchor]}) · " \
+              'escribí un ángulo (p. ej. 45) para rotar a medida · ' \
               'acércate a pared, piso o mueble para encajar'
             )
           end

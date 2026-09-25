@@ -261,9 +261,9 @@
       gap: 4px;
     }
 
-    .tag-x { background: hsl(355 78% 95%); color: hsl(355 78% 45%); }
-    .tag-y { background: hsl(175 60% 92%); color: hsl(175 60% 30%); }
-    .tag-z { background: hsl(207 90% 94%); color: hsl(207 90% 40%); }
+    .tag-x { background: hsl(355 78% 95%); color: hsl(355 78% 37%); }
+    .tag-y { background: hsl(175 60% 92%); color: hsl(175 60% 26%); }
+    .tag-z { background: hsl(207 90% 94%); color: hsl(207 90% 31%); }
 
     .tolerance-banner {
       padding: var(--space-2) var(--space-3);
@@ -394,7 +394,9 @@
     <div class="subtitle" id="asset-subtitle">Definí el marco de montaje (MountFrame) seleccionando los puntos de referencia en la vista 3D.</div>
     <div class="meta-row">
       <span class="badge badge-brand" id="revision-badge">R1</span>
-      <span class="badge" id="sha-badge">SHA: ...</span>
+      <!-- Diagnóstico, no producto: el SHA aparece sólo cuando llega el
+           asset real (y completo en el tooltip). -->
+      <span class="badge hidden" id="sha-badge">SHA: ...</span>
       <span class="badge" id="source-units-badge">Unidad: mm</span>
     </div>
   </div>
@@ -553,6 +555,7 @@
           var shortSha = state.sha256.substring(0, 10) + '...';
           el('sha-badge').textContent = 'SHA: ' + shortSha;
           el('sha-badge').title = state.sha256;
+          el('sha-badge').classList.remove('hidden');
         }
 
         var btnModeMidpoint = el('mode-midpoint');

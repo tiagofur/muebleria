@@ -8,42 +8,57 @@
       :root {
         color-scheme: light;
         --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        /* Códigos, referencias y medidas: tabular, del sistema (el plugin no
+           carga recursos remotos). */
+        --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
         --text-xs: 0.75rem;
         --text-sm: 0.8125rem;
         --text-base: 0.875rem;
         --text-md: 1rem;
         --text-lg: 1.125rem;
-        
+
         --weight-normal: 400;
         --weight-medium: 500;
         --weight-semibold: 600;
         --weight-bold: 700;
-        
+
         --brand-50: hsl(245 100% 97%);
         --brand-500: hsl(245 58% 51%);
         --brand-600: hsl(245 55% 43%);
         --brand-800: hsl(245 48% 28%);
-        
+
+        /* Acento de marca (docs/design.md §5): navegación hacia contexto
+           relacionado — breadcrumbs y enlaces de catálogo. Nunca compite
+           con la acción primaria (brand) ni con la señal semántica. */
+        --accent-50: hsl(170 60% 96%);
+        --accent-400: hsl(170 65% 48%);
+        --accent-500: hsl(170 60% 40%);
+        --accent-600: hsl(170 55% 33%);
+
         --surface-app: hsl(220 20% 97%);
         --surface-card: hsl(0 0% 100%);
         --surface-card-subtle: hsl(220 14% 96%);
         --surface-hover: hsl(220 14% 94%);
-        
+
         --text-primary: hsl(230 18% 12%);
         --text-secondary: hsl(230 12% 40%);
         --text-muted: hsl(230 12% 45%);
         --text-inverse: hsl(0 0% 100%);
         --text-inverse-soft: hsl(0 0% 100% / 80%);
-        
+
         --border-default: hsl(220 14% 86%);
+        --border-subtle: hsl(220 14% 90%);
         --border-focus: var(--brand-500);
-        
+
+        /* Texto semántico: pares AA (≥4.5:1) sobre su superficie -50. */
         --success-50: hsl(142 76% 96%);
-        --success-600: hsl(142 70% 36%);
+        --success-600: hsl(152 69% 30%);
         --warning-50: hsl(38 100% 96%);
         --warning-700: hsl(38 80% 32%);
+        /* Bordes/fondos derivados del tono de advertencia (no texto). */
+        --warning: hsl(38 92% 42%);
         --danger-50: hsl(0 84% 97%);
-        --danger-600: hsl(0 72% 51%);
+        --danger-600: hsl(0 74% 42%);
         --neutral-50: hsl(220 14% 94%);
         --neutral-700: hsl(230 12% 40%);
         
@@ -135,6 +150,46 @@
         font-size: var(--text-xs);
       }
 
+      /* Cuenta y conexión viven en un popover anclado al pill del header:
+         la sesión ya no compite por una pestaña entera del panel. */
+      .brand-pill-wrap {
+        position: relative;
+      }
+
+      .connection-pill-btn {
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: border-color var(--duration-fast);
+      }
+
+      .connection-pill-btn:hover {
+        border-color: hsl(0 0% 100% / 35%);
+      }
+
+      .connection-pill-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px hsl(0 0% 100% / 35%);
+      }
+
+      .account-popover {
+        position: absolute;
+        top: calc(100% + var(--space-2));
+        right: 0;
+        width: min(26rem, calc(100vw - var(--space-4)));
+        max-height: calc(100vh - 7rem);
+        overflow-y: auto;
+        background: var(--surface-app);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 16px 32px -8px rgb(15 23 42 / 25%), 0 4px 8px -4px rgb(15 23 42 / 15%);
+        padding: var(--space-3);
+        z-index: 900;
+      }
+
+      .account-popover .card {
+        margin-bottom: var(--space-3);
+      }
+
       .tabs-nav {
         display: flex;
         background: var(--surface-card);
@@ -171,7 +226,7 @@
       main {
         flex: 1;
         padding: var(--space-4);
-        max-width: 32rem;
+        max-width: 40rem;
         margin: 0 auto;
         width: 100%;
       }
@@ -426,7 +481,7 @@
       .furniture-card-code {
         font-size: var(--text-xs);
         color: var(--text-secondary);
-        font-family: monospace;
+        font-family: var(--font-mono);
         user-select: text;
       }
 
@@ -454,20 +509,174 @@
         color: var(--brand-600);
       }
 
-      .param-group {
-        margin-bottom: var(--space-3);
+      /* Configurador: fila producto con preview + identidad, descripción
+         acotada y barra de acción pegada al borde inferior del panel. */
+      .configurator-header {
+        display: flex;
+        gap: var(--space-3);
+        align-items: flex-start;
       }
 
-      .param-label-row {
+      .configurator-preview {
+        flex: 0 0 auto;
+        width: 76px;
+        height: 76px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-default);
+        background: var(--surface-card-subtle);
+        overflow: hidden;
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        margin-bottom: var(--space-1);
+        justify-content: center;
+      }
+
+      .configurator-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .configurator-preview svg {
+        color: var(--text-muted);
+      }
+
+      .configurator-header-info {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .configurator-title-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+
+      .configurator-desc {
+        margin: var(--space-2) 0 0 0;
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* Dock de acción: cotas vivas + acción primaria siempre visible.
+         Compartido por configurador e inspector (mismo patrón, mismo job). */
+      .action-dock {
+        position: sticky;
+        bottom: var(--space-2);
+        z-index: 40;
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        background: var(--surface-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: var(--space-2) var(--space-3);
+        margin-top: var(--space-3);
+        box-shadow: 0 8px 16px -6px rgb(15 23 42 / 0.18), 0 2px 4px -2px rgb(15 23 42 / 0.1);
+      }
+
+      .action-dock .btn {
+        width: auto;
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
+      /* Confirmación deliberada de publicación: la acción confirmatoria es
+         un control distinto al botón original, no un segundo clic. */
+      .publish-confirm-actions {
+        display: flex;
+        gap: var(--space-2);
+      }
+
+      .publish-confirm-actions .btn {
+        flex: 1 1 0;
+      }
+
+      .actionbar-summary {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+      }
+
+      .actionbar-dims {
+        font-family: var(--font-mono);
+        font-variant-numeric: tabular-nums;
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--text-primary);
+      }
+
+      .actionbar-parts {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+      }
+
+      .presets-block {
+        margin-top: var(--space-2);
+      }
+
+      .presets-block-label {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        margin: 0 0 var(--space-1) 0;
+      }
+
+      .btn-registered-measures {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        margin-top: var(--space-2);
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--brand-600);
+        font-size: var(--text-xs);
+        font-weight: var(--weight-medium);
+        cursor: pointer;
+        width: auto;
+      }
+
+      .btn-registered-measures:hover {
+        text-decoration: underline;
+      }
+
+      /* Fila de parámetro compacta: etiqueta a la izquierda, control a la
+         derecha, una línea por parámetro (§2.2 densidad con aire). */
+      .param-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2) var(--space-3);
+        min-height: 3.25rem;
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+
+      .param-group:last-child {
+        border-bottom: none;
       }
 
       .param-label {
+        flex: 1 1 auto;
+        min-width: 0;
         font-size: var(--text-sm);
         font-weight: var(--weight-medium);
+      }
+
+      .param-control {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--space-2);
       }
 
       .param-value-badge {
@@ -486,19 +695,28 @@
         gap: var(--space-2);
       }
 
-      .dim-input {
-        flex: 1;
+      .param-control .dim-input {
+        width: 6.5rem;
         text-align: right;
         font-variant-numeric: tabular-nums;
       }
 
-      .param-text-input { width: 100%; }
+      .param-control .param-text-input {
+        width: 12rem;
+        max-width: 100%;
+      }
+
+      .param-group select {
+        width: auto;
+        min-width: 7.5rem;
+        max-width: 60%;
+        font-size: var(--text-sm);
+      }
 
       .param-boolean-row {
         display: flex;
         align-items: center;
         gap: var(--space-2);
-        min-height: 2.75rem;
       }
 
       .param-checkbox {
@@ -508,8 +726,8 @@
       }
 
       .param-hint {
-        display: block;
-        margin-top: var(--space-1);
+        flex-basis: 100%;
+        margin: 0;
         color: var(--text-muted);
         font-size: var(--text-xs);
       }
@@ -527,8 +745,8 @@
       }
 
       .stepper button {
-        width: 2rem;
-        height: 2rem;
+        width: 1.75rem;
+        height: 1.75rem;
         padding: 0;
         display: flex;
         align-items: center;
@@ -645,24 +863,16 @@
         align-items: center;
       }
 
-      .btn-picker-open {
-        font-size: var(--text-xs);
-        font-weight: var(--weight-medium);
-        color: var(--brand-600);
-        background: var(--brand-50);
-        border: 1px solid hsl(245 58% 51% / 25%);
-        padding: 0.125rem 0.5rem;
-        border-radius: var(--radius-sm);
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        transition: all var(--duration-fast);
+      /* Affordance del rol de material: la fila completa es el control;
+         el chevron comunica navegación al catálogo. */
+      .material-chevron {
+        margin-left: auto;
+        color: var(--text-muted);
+        flex-shrink: 0;
       }
 
-      .btn-picker-open:hover {
-        background: hsl(245 100% 94%);
-        border-color: var(--brand-500);
+      .material-selected-preview:hover .material-chevron {
+        color: var(--brand-600);
       }
 
       .material-select-control {
@@ -824,12 +1034,12 @@
         cursor: pointer;
         padding: 0.125rem 0.375rem;
         border-radius: var(--radius-sm);
-        color: var(--brand-600);
+        color: var(--accent-600);
         font-weight: var(--weight-medium);
       }
 
       .selector-breadcrumb-item:hover {
-        background: var(--brand-50);
+        background: var(--accent-50);
       }
 
       .selector-breadcrumb-item.active {
@@ -890,7 +1100,7 @@
       .selector-column-list {
         list-style: none;
         margin: 0;
-        padding: 0;
+        padding: var(--space-1) 0;
         overflow-y: auto;
         flex: 1;
       }
@@ -1262,12 +1472,19 @@
       .btn-danger {
         background: var(--danger-50);
         color: var(--danger-600);
-        border-color: hsl(0 72% 51% / 30%);
+        border-color: hsl(0 74% 42% / 30%);
         margin-top: var(--space-2);
       }
 
       .btn-danger:hover {
         background: hsl(0 84% 94%);
+      }
+
+      /* Compact inline action (enrollment footer, popover rows). */
+      .btn-sm {
+        padding: var(--space-1) var(--space-2);
+        font-size: var(--text-xs);
+        width: auto;
       }
 
       /* Visible keyboard focus (§4.8 / §3.6.1): every interactive control
@@ -1277,7 +1494,6 @@
       .preset-chip:focus-visible,
       .search-clear-btn:focus-visible,
       .btn-back:focus-visible,
-      .btn-picker-open:focus-visible,
       .crumb-link:focus-visible,
       .tech-details summary:focus-visible,
       .manufacturing-feature:focus-visible,
@@ -1331,14 +1547,14 @@
         display: flex;
         background: var(--success-50);
         color: var(--success-600);
-        border: 1px solid hsl(142 70% 36% / 20%);
+        border: 1px solid hsl(152 69% 30% / 20%);
       }
 
       .toast.error {
         display: flex;
         background: var(--danger-50);
         color: var(--danger-600);
-        border: 1px solid hsl(0 72% 51% / 20%);
+        border: 1px solid hsl(0 74% 42% / 20%);
       }
 
       /* info/warning toasts carry real feedback (pending placements, partial
@@ -1434,7 +1650,7 @@
       }
 
       .pf-unit-ref {
-        font-family: monospace;
+        font-family: var(--font-mono);
         font-size: var(--text-xs);
         color: var(--text-muted);
         margin-top: 2px;
@@ -1577,13 +1793,13 @@
       }
 
       .context-breadcrumb .crumb-link {
-        color: var(--brand-600);
+        color: var(--accent-600);
         font-weight: var(--weight-medium);
         cursor: pointer;
       }
 
       .context-breadcrumb .crumb-link:hover {
-        background: var(--brand-50);
+        background: var(--accent-50);
       }
 
       .context-breadcrumb .crumb-sep {
@@ -1648,6 +1864,24 @@
         margin-bottom: var(--space-2);
       }
 
+      /* La línea de mutación (#498) comunica resultado, no sólo texto: el
+         color sigue la fase que granete-mutation.js ya publica en
+         data-phase — éxito, rechazo/aborto/stale y sin-conexión se leen
+         distinto sin tocar el módulo. */
+      .mutation-status[data-phase="committed"] {
+        color: var(--success-600);
+      }
+
+      .mutation-status[data-phase="rejected"],
+      .mutation-status[data-phase="aborted"],
+      .mutation-status[data-phase="stale"] {
+        color: var(--danger-600);
+      }
+
+      .mutation-status[data-phase="unavailable"] {
+        color: var(--warning-700);
+      }
+
       footer {
         padding: var(--space-3);
         text-align: center;
@@ -1667,7 +1901,67 @@
             <span>para SketchUp</span>
           </div>
         </div>
-        <div id="connection-pill" class="status-badge pending">Comprobando…</div>
+        <div class="brand-pill-wrap">
+          <button id="connection-pill" class="status-badge pending connection-pill-btn" type="button"
+                  aria-expanded="false" aria-haspopup="dialog" aria-controls="account-popover">Comprobando…</button>
+
+          <!-- Cuenta y conexión: la sesión, la vinculación del dispositivo y
+               el cierre del panel viven acá, no en una pestaña. -->
+          <div id="account-popover" class="account-popover" role="dialog" aria-label="Cuenta y conexión con Granete" style="display: none;">
+            <div class="card">
+              <div class="card-title">Conexión con Granete</div>
+              <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1); margin-top: var(--space-2);">Comprobando…</h2>
+              <p id="connection-detail" class="subhead" style="margin-bottom: var(--space-3);">Validando extensión y adaptadores locales.</p>
+              <p class="subhead" style="margin-bottom: 0;">
+                <strong>Cómo funciona:</strong> diseñás el mueble en SketchUp; Granete calcula las piezas y valida que se pueda fabricar.
+              </p>
+            </div>
+
+            <div class="card" id="login-card">
+              <div class="card-title">Vincular Dispositivo</div>
+              <p class="subhead" id="login-instructions" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
+                Ingresá la dirección de tu servidor Granete para vincular este equipo.
+              </p>
+              <div id="login-form-area">
+                <label class="login-label" for="login-server">Servidor Granete</label>
+                <input id="login-server" class="login-field" type="text" autocomplete="off" placeholder="https://granete.taller.com/api">
+                <button id="btn-login" class="btn btn-primary">Generar código</button>
+              </div>
+              <div id="enroll-code-area" style="display: none; text-align: center;">
+                <p style="font-size: var(--text-sm); margin-bottom: var(--space-2);">Ingresá este código en <strong>Taller &gt; Dispositivos</strong>:</p>
+                <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-2);">
+                  <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: var(--font-mono);">--</div>
+                  <button id="btn-copy-enroll-code" class="btn btn-secondary btn-sm" title="Copiar código al portapapeles" style="padding: 6px 12px; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 4px;">
+                    <span id="copy-enroll-code-icon"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+                    <span id="copy-enroll-code-text">Copiar</span>
+                  </button>
+                </div>
+                <div id="enroll-countdown-area" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-2);">
+                  Expira en <strong id="enroll-countdown-display" style="color: var(--text-primary, #1e293b);">--:--</strong>
+                </div>
+                <p id="enroll-status-text" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación en la web...</p>
+                <div style="display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-2);">
+                  <button id="btn-open-web-devices" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;">
+                    <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span>Abrir Dispositivos en la web</span>
+                  </button>
+                  <button id="btn-cancel-enroll" class="btn btn-secondary btn-sm">Cancelar</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" id="session-card" style="display: none;">
+              <div class="card-title">Sesión del Taller</div>
+              <div class="kv-row"><span class="k">Usuario</span><span class="v" id="session-user-name">--</span></div>
+              <div class="kv-row"><span class="k">Email</span><span class="v" id="session-user-email">--</span></div>
+              <div class="kv-row"><span class="k">Servidor</span><span class="v" id="session-server">--</span></div>
+              <div class="kv-row"><span class="k">Licencia</span><span class="v" id="session-license">--</span></div>
+              <button id="btn-logout" class="btn btn-secondary" style="margin-top: var(--space-2);">Cerrar sesión</button>
+            </div>
+
+            <button id="btn-close" class="btn btn-secondary btn-sm" style="width: 100%;">Cerrar panel</button>
+          </div>
+        </div>
       </header>
 
       <nav class="tabs-nav" role="tablist">
@@ -1682,10 +1976,6 @@
         <button id="tab-btn-inspector" class="tab-button" role="tab" aria-selected="false" data-tab="inspector">
           <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           <span>Inspector</span>
-        </button>
-        <button id="tab-btn-status" class="tab-button" role="tab" aria-selected="false" data-tab="status">
-          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Estado</span>
         </button>
       </nav>
 
@@ -1815,50 +2105,47 @@
             </button>
 
             <div class="card" id="library-selected-header">
-              <div class="card-header-row">
-                <div>
-                  <h2 id="library-selected-name" style="font-size: var(--text-md); margin: 0;">--</h2>
-                  <span id="library-selected-code" style="font-size: var(--text-xs); color: var(--text-muted);">--</span>
+              <div class="configurator-header">
+                <div id="library-selected-preview" class="configurator-preview" aria-hidden="true"></div>
+                <div class="configurator-header-info">
+                  <div class="configurator-title-row">
+                    <h2 id="library-selected-name" style="font-size: var(--text-md); margin: 0; min-width: 0;">--</h2>
+                    <span id="library-selected-category-badge" class="status-badge valid">Base</span>
+                  </div>
+                  <span id="library-selected-code" style="font-size: var(--text-xs); color: var(--text-muted); font-family: var(--font-mono);">--</span>
+                  <p id="library-furniture-desc" class="configurator-desc"></p>
                 </div>
-                <span id="library-selected-category-badge" class="status-badge valid">Base</span>
               </div>
-              <p id="library-furniture-desc" class="subhead" style="margin-top: var(--space-2); margin-bottom: 0;"></p>
-            </div>
-
-            <div class="card" id="library-presets-card" style="display: none;">
-              <div class="card-title">Modelos del Taller</div>
-              <div id="library-presets-container" class="presets-row"></div>
             </div>
 
             <div class="card" id="library-params-card">
-              <div class="card-title">Parámetros de Autoría</div>
-              <button id="btn-registered-measures" type="button" class="btn btn-secondary" style="display: none; margin-top: var(--space-2);"></button>
-              <div id="library-params-container" style="margin-top: var(--space-2);"></div>
-
-              <div class="summary-box">
-                <div class="summary-item">
-                  <strong id="library-summary-dims">-- × -- × --</strong>
-                  <span>Cotas (mm)</span>
-                </div>
-                <div class="summary-item">
-                  <strong id="library-summary-parts">--</strong>
-                  <span>Piezas estimadas</span>
-                </div>
+              <div class="card-title">Medidas y Opciones</div>
+              <div id="library-presets-card" class="presets-block" style="display: none;">
+                <p class="presets-block-label">Modelos del taller (aplican medidas y opciones)</p>
+                <div id="library-presets-container" class="presets-row" style="margin-top: 0;"></div>
               </div>
+              <button id="btn-registered-measures" type="button" class="btn-registered-measures" style="display: none;"></button>
+              <div id="library-params-container"></div>
             </div>
 
             <div class="card" id="library-materials-card" style="display: none;">
               <div class="card-title">Materiales del Taller</div>
               <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0 0;">
-                Tableros por rol; el color elegido se aplica al insertar.
+                Elegí el acabado de cada rol; se aplica al insertar.
               </p>
               <div id="library-materials-container" style="margin-top: var(--space-2);"></div>
             </div>
 
-            <button id="btn-insert" class="btn btn-primary">
-              <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Insertar en Modelo</span>
-            </button>
+            <div id="configurator-actionbar" class="action-dock">
+              <div class="actionbar-summary">
+                <span id="library-summary-dims" class="actionbar-dims">-- × -- × --</span>
+                <span id="library-summary-parts" class="actionbar-parts">--</span>
+              </div>
+              <button id="btn-insert" class="btn btn-primary">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Insertar en Modelo</span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -1866,8 +2153,99 @@
              from the Catalog/Library: units that ALREADY EXIST as physical
              project furniture, with state reconciled against the exact design
              working copy and this file's managed roots. The panel never edits
-             business identity. -->
+             business identity. La tarjeta Modelo / Diseño (#388) encabeza la
+             pestaña: conexión, publicación y presupuesto del diseño comparten
+             una sola superficie. -->
         <section id="pane-project" class="tab-pane" role="tabpanel">
+          <!-- #388: model ↔ Project/Design binding. State, exact context and
+               explicit actions; the panel never edits business identity. -->
+          <div class="card" id="model-binding-card">
+            <div class="card-title">Modelo / Diseño</div>
+            <div id="model-binding-state-area">
+              <span id="model-binding-badge" class="status-badge pending">Sin conectar</span>
+              <p id="model-binding-detail" class="subhead" style="margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
+            </div>
+            <div id="model-binding-info" style="display: none; margin-top: var(--space-2);">
+              <div class="kv-row"><span class="k">Taller</span><span class="v" id="binding-org-name">--</span></div>
+              <div class="kv-row"><span class="k">Cliente</span><span class="v" id="binding-customer-name">--</span></div>
+              <div class="kv-row"><span class="k">Proyecto</span><span class="v" id="binding-project-name">--</span></div>
+              <div class="kv-row"><span class="k">Diseño</span><span class="v" id="binding-design-name">--</span></div>
+              <div class="kv-row"><span class="k">Base</span><span class="v" id="binding-base-revision">--</span></div>
+            </div>
+            <!-- #499 Slice 3: one-time pairing code — the normal
+                 Web→SketchUp path. The manual selector below stays as the
+                 reviewed fallback. -->
+            <div id="pairing-entry" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle);">
+              <label for="pairing-code-input" class="subhead" style="display:block; margin: 0 0 var(--space-1) 0; font-size: var(--text-xs);">Conectar con código</label>
+              <div style="display: flex; gap: var(--space-1);">
+                <input id="pairing-code-input" type="text" inputmode="latin" autocomplete="off" spellcheck="false"
+                       placeholder="Código de la web"
+                       style="flex:1 1 auto; min-width: 0; font-family: var(--font-mono, monospace); text-transform: uppercase; letter-spacing: 0.08em;"
+                       aria-describedby="pairing-message" />
+                <button id="btn-pairing-connect" class="btn btn-primary" style="flex: 0 0 auto; width: auto; white-space: nowrap;">Conectar</button>
+              </div>
+              <p id="pairing-message" class="subhead" role="status" aria-live="polite"
+                 style="display: none; margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
+            </div>
+            <div id="model-binding-actions" style="margin-top: var(--space-2);">
+              <button id="btn-bootstrap-project" class="btn btn-secondary" style="width: 100%;">Nuevo proyecto</button>
+              <button id="btn-binding-connect" class="btn btn-secondary" style="width: 100%;">Conectar modelo (manual)</button>
+              <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar conexión</button>
+              <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
+              <!-- #392 / DT-8: staged revision publication. Visible only when
+                   the server granted can_publish_revision and the base is
+                   current; the backend stays the authority either way.
+                   #731 PR2: Publicar diseño es la orquestación de cierre
+                   (auto-sync recuperable → validación del diseño → gate →
+                   publish); Validar diseño ejecuta el mismo batch sin
+                   publicar. Las excepciones se muestran sólo para lo que
+                   requiere atención. -->
+              <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
+              <!-- Confirmación deliberada (review #847): el botón original
+                   sólo arma; publicar exige una acción DISTINTA, así un
+                   doble clic físico nunca atraviesa la frontera. -->
+              <div id="binding-publish-confirm" class="publish-confirm" style="display: none; margin-top: var(--space-1);">
+                <p class="subhead" style="margin: 0 0 var(--space-2) 0; font-size: var(--text-xs);">Se creará una nueva revisión inmutable del diseño.</p>
+                <div class="publish-confirm-actions">
+                  <button id="btn-publish-cancel" type="button" class="btn btn-secondary">Cancelar</button>
+                  <button id="btn-publish-confirm" type="button" class="btn btn-primary">Publicar revisión</button>
+                </div>
+              </div>
+              <button id="btn-design-validate" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar diseño</button>
+              <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
+              <div id="binding-publish-exceptions" style="display: none; margin-top: var(--space-2);"></div>
+            </div>
+            <form id="project-bootstrap-form" style="display: none; margin-top: var(--space-2);" aria-busy="false">
+              <label class="login-label" for="bootstrap-project-name">Proyecto</label>
+              <input id="bootstrap-project-name" class="login-field" maxlength="200" required autocomplete="off">
+              <label class="login-label" for="bootstrap-design-name" style="margin-top: var(--space-2);">Diseño</label>
+              <input id="bootstrap-design-name" class="login-field" maxlength="200" required value="Diseño principal" autocomplete="off">
+              <fieldset style="border: 0; padding: 0; margin: var(--space-2) 0;">
+                <legend class="login-label">Cliente</legend>
+                <label><input type="radio" name="bootstrap-customer-mode" value="existing" checked> Existente</label>
+                <label style="margin-left: var(--space-2);"><input type="radio" name="bootstrap-customer-mode" value="new"> Nuevo</label>
+              </fieldset>
+              <select id="bootstrap-customer-select" class="login-field" style="width: 100%;" aria-label="Cliente existente"></select>
+              <input id="bootstrap-customer-name" class="login-field" maxlength="200" autocomplete="off" placeholder="Nombre del cliente" aria-label="Nombre del cliente nuevo" style="display: none;">
+              <button id="btn-bootstrap-submit" type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Crear y conectar</button>
+              <button id="btn-bootstrap-cancel" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+              <p id="bootstrap-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-2);"></p>
+            </form>
+            <div id="model-binding-picker" style="display: none; margin-top: var(--space-2);">
+              <label class="login-label" for="binding-project-select">Proyecto</label>
+              <select id="binding-project-select" class="login-field" style="width: 100%;"></select>
+              <label class="login-label" for="binding-design-select" style="margin-top: var(--space-2);">Diseño</label>
+              <select id="binding-design-select" class="login-field" style="width: 100%;"></select>
+              <button id="btn-binding-confirm" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Conectar</button>
+              <button id="btn-binding-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+            </div>
+            <div id="model-binding-rebind-review" style="display: none; margin-top: var(--space-2);">
+              <p class="subhead" style="font-size: var(--text-xs);">Este modelo ya está conectado a otro diseño. El enlace actual se conserva hasta que el nuevo diseño valide correctamente.</p>
+              <button id="btn-binding-rebind-confirm" class="btn btn-primary" style="width: 100%;">Confirmar cambio de diseño</button>
+              <button id="btn-binding-rebind-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
+            </div>
+          </div>
+
           <div id="pf-save-awareness" class="card" role="status" aria-live="polite" style="display: none; margin-bottom: var(--space-3); border-color: var(--warning);">
             <strong>Guardá este archivo SketchUp</strong>
             <p class="subhead" style="margin: var(--space-1) 0 0; font-size: var(--text-xs);">Hay cambios sincronizados con Granete que todavía no se guardaron en este archivo.</p>
@@ -1883,7 +2261,7 @@
               </div>
               <span id="design-sync-badge" class="status-badge valid">Sincronizado</span>
             </div>
-            <button id="btn-design-sync" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Sincronizar diseño</button>
+              <button id="btn-design-sync" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-2);">Sincronizar diseño</button>
           </div>
           <div id="commercial-projection-card" class="card" style="display: none; margin-bottom: var(--space-3);" aria-live="polite">
             <div class="library-header-row">
@@ -1902,7 +2280,7 @@
               <div id="commercial-projection-delta-row" class="kv-row" style="display: none;"><span class="k">Diferencia</span><span class="v" id="commercial-projection-delta">--</span></div>
             </div>
             <button id="btn-commercial-projection-refresh" class="btn btn-secondary" style="width: auto; margin-top: var(--space-2);">Actualizar presupuesto</button>
-            <button id="btn-initial-quote" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Emitir cotización</button>
+            <button id="btn-initial-quote" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-2);" disabled>Emitir cotización</button>
             <p id="initial-quote-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-1);"></p>
             <button id="btn-open-in-granete" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-1);">Abrir en Granete</button>
           </div>
@@ -1911,10 +2289,9 @@
             <div id="pf-unbound-state" class="card empty-state" style="display: none;">
               <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
               <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Modelo sin conectar</h2>
-              <p style="margin-bottom: var(--space-2); font-size: var(--text-sm);">
-                Conectá este modelo al proyecto y diseño de Granete para ver y colocar sus muebles.
+              <p style="margin-bottom: 0; font-size: var(--text-sm);">
+                Conectá este modelo con el código de la web en la tarjeta Modelo / Diseño de arriba para ver y colocar los muebles del proyecto.
               </p>
-              <button id="btn-pf-go-status" class="btn btn-secondary" style="width: auto; margin: var(--space-2) auto 0;">Ir a la pestaña Estado</button>
             </div>
 
             <div id="pf-loading-state" class="card empty-state" style="display: none;">
@@ -2025,19 +2402,8 @@
                  capability denial, the whole fieldset disables at once. -->
             <fieldset id="inspector-edit-fieldset" class="inspector-fieldset">
               <div class="card" id="inspector-params-card">
-                <div class="card-title">Parámetros del Mueble</div>
+                <div class="card-title">Medidas y Opciones</div>
                 <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
-
-                <div class="summary-box">
-                  <div class="summary-item">
-                    <strong id="inspector-summary-dims">-- × -- × --</strong>
-                    <span>Cotas (mm)</span>
-                  </div>
-                  <div class="summary-item">
-                    <strong id="inspector-summary-parts">--</strong>
-                    <span>Piezas estimadas</span>
-                  </div>
-                </div>
               </div>
 
               <div class="card" id="inspector-materials-card" style="display: none;">
@@ -2045,10 +2411,18 @@
                 <div id="inspector-materials-container" style="margin-top: var(--space-2);"></div>
               </div>
 
-              <button id="btn-update" class="btn btn-primary">
-                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                <span>Actualizar Mueble</span>
-              </button>
+              <!-- Dock dentro del fieldset: la mutación sigue sometida al
+                   switch fail-closed nativo de #476. -->
+              <div id="inspector-actionbar" class="action-dock">
+                <div class="actionbar-summary">
+                  <span id="inspector-summary-dims" class="actionbar-dims">-- × -- × --</span>
+                  <span id="inspector-summary-parts" class="actionbar-parts">--</span>
+                </div>
+                <button id="btn-update" class="btn btn-primary">
+                  <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  <span>Actualizar Mueble</span>
+                </button>
+              </div>
             </fieldset>
 
             <!-- Delete stays OUTSIDE the mutation fieldset: losing
@@ -2081,7 +2455,7 @@
             <p id="child-owner-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs);"></p>
 
             <!-- Hardware Drilling Conflict Banner (#468 §24) -->
-            <div id="hw-conflict-banner" class="card" style="display: none; border-left: 4px solid var(--danger-600); background: var(--surface-card); margin-bottom: var(--space-3);">
+            <div id="hw-conflict-banner" class="card" style="display: none; border: 1px solid hsl(0 74% 42% / 35%); background: var(--danger-50); margin-bottom: var(--space-3);">
               <div class="card-header-row">
                 <strong style="color: var(--danger-600); font-size: var(--text-sm);">Conflicto de perforación</strong>
                 <span class="status-badge error">Bloqueado</span>
@@ -2205,7 +2579,7 @@
               <div class="card-title" style="margin: 0;">Revisión de fabricación</div>
               <span id="preflight-review-badge" class="status-badge pending">Pendiente</span>
             </div>
-            <button id="btn-preflight-run" type="button" class="btn btn-primary" style="margin-top: var(--space-2); width: 100%;">
+            <button id="btn-preflight-run" type="button" class="btn btn-secondary" style="margin-top: var(--space-2); width: 100%;">
               <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               <span>Verificar fabricación</span>
             </button>
@@ -2269,12 +2643,12 @@
                   <dt>Origen</dt><dd id="manufacturing-detail-source-kind">--</dd>
                   <dt>ID origen</dt><dd id="manufacturing-detail-source-id">--</dd>
                 </dl>
-                <div id="manufacturing-detail-conflict" style="display: none; border-left: 4px solid var(--danger-600); padding-left: var(--space-2); margin-bottom: var(--space-2);">
+                <div id="manufacturing-detail-conflict" style="display: none; border: 1px solid hsl(0 74% 42% / 35%); border-radius: var(--radius-sm); background: var(--danger-50); padding: var(--space-2); margin-bottom: var(--space-2);">
                   <strong style="color: var(--danger-600); font-size: var(--text-xs);">Conflicto de perforación</strong>
                   <p id="manufacturing-detail-conflict-message" style="margin: var(--space-1) 0; font-size: var(--text-xs);"></p>
                   <p id="manufacturing-detail-conflict-remediation" style="margin: 0; font-size: var(--text-xs); color: var(--text-secondary); font-style: italic;"></p>
                 </div>
-                <button id="btn-manufacturing-goto-source" type="button" class="btn btn-primary" style="width: 100%;">
+                <button id="btn-manufacturing-goto-source" type="button" class="btn btn-secondary" style="width: 100%;">
                   <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
                   <span>Ir al origen</span>
                 </button>
@@ -2287,145 +2661,11 @@
 
           <!-- #498 shared runtime status: honest mutation/degraded feedback so
                the user never faces an infinite spinner. Never claims ready. -->
-          <div id="mutation-status" class="card subhead" hidden
+          <div id="mutation-status" class="card subhead mutation-status" hidden
                style="margin: 0 0 var(--space-3) 0; padding: var(--space-2) var(--space-3); font-size: var(--text-xs); text-align: center; font-style: normal;"
                role="status" aria-live="polite"></div>
         </section>
 
-        <!-- Tab 4: Status -->
-        <section id="pane-status" class="tab-pane" role="tabpanel">
-          <div class="card">
-            <div class="card-title">Conexión con Granete</div>
-            <h2 id="connection-heading" style="font-size: var(--text-md); margin-bottom: var(--space-1); margin-top: var(--space-2);">Comprobando…</h2>
-            <p id="connection-detail" class="subhead" style="margin-bottom: var(--space-3);">Validando extensión y adaptadores locales.</p>
-            <p class="subhead" style="margin-bottom: 0;">
-              <strong>Cómo funciona:</strong> diseñás el mueble en SketchUp; Granete calcula las piezas y valida que se pueda fabricar.
-            </p>
-          </div>
-
-          <div class="card" id="login-card">
-            <div class="card-title">Vincular Dispositivo</div>
-            <p class="subhead" id="login-instructions" style="margin-bottom: var(--space-2); margin-top: var(--space-1);">
-              Ingresá la dirección de tu servidor Granete para vincular este equipo.
-            </p>
-            <div id="login-form-area">
-              <label class="login-label" for="login-server">Servidor Granete</label>
-              <input id="login-server" class="login-field" type="text" autocomplete="off" placeholder="https://granete.taller.com/api">
-              <button id="btn-login" class="btn btn-primary">Generar código</button>
-            </div>
-            <div id="enroll-code-area" style="display: none; text-align: center;">
-              <p style="font-size: var(--text-sm); margin-bottom: var(--space-2);">Ingresá este código en <strong>Taller &gt; Dispositivos</strong>:</p>
-              <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-2);">
-                <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: monospace;">--</div>
-                <button id="btn-copy-enroll-code" class="btn btn-secondary" title="Copiar código al portapapeles" style="padding: 6px 12px; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 4px;">
-                  <span id="copy-enroll-code-icon"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
-                  <span id="copy-enroll-code-text">Copiar</span>
-                </button>
-              </div>
-              <div id="enroll-countdown-area" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-2);">
-                Expira en <strong id="enroll-countdown-display" style="color: var(--text-primary, #1e293b);">--:--</strong>
-              </div>
-              <p id="enroll-status-text" style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-3);">Esperando aprobación en la web...</p>
-              <div style="display: flex; gap: var(--space-2); justify-content: center; margin-top: var(--space-2);">
-                <button id="btn-open-web-devices" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 4px;">
-                  <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                  <span>Abrir Dispositivos en la web</span>
-                </button>
-                <button id="btn-cancel-enroll" class="btn btn-secondary btn-sm">Cancelar</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="card" id="session-card" style="display: none;">
-            <div class="card-title">Sesión del Taller</div>
-            <div class="kv-row"><span class="k">Usuario</span><span class="v" id="session-user-name">--</span></div>
-            <div class="kv-row"><span class="k">Email</span><span class="v" id="session-user-email">--</span></div>
-            <div class="kv-row"><span class="k">Servidor</span><span class="v" id="session-server">--</span></div>
-            <div class="kv-row"><span class="k">Licencia</span><span class="v" id="session-license">--</span></div>
-            <button id="btn-logout" class="btn btn-secondary" style="margin-top: var(--space-2);">Cerrar sesión</button>
-          </div>
-
-          <!-- #388: model ↔ Project/Design binding. State, exact context and
-               explicit actions; the panel never edits business identity. -->
-          <div class="card" id="model-binding-card">
-            <div class="card-title">Modelo / Diseño</div>
-            <div id="model-binding-state-area">
-              <span id="model-binding-badge" class="status-badge pending">Sin conectar</span>
-              <p id="model-binding-detail" class="subhead" style="margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
-            </div>
-            <div id="model-binding-info" style="display: none; margin-top: var(--space-2);">
-              <div class="kv-row"><span class="k">Taller</span><span class="v" id="binding-org-name">--</span></div>
-              <div class="kv-row"><span class="k">Cliente</span><span class="v" id="binding-customer-name">--</span></div>
-              <div class="kv-row"><span class="k">Proyecto</span><span class="v" id="binding-project-name">--</span></div>
-              <div class="kv-row"><span class="k">Diseño</span><span class="v" id="binding-design-name">--</span></div>
-              <div class="kv-row"><span class="k">Base</span><span class="v" id="binding-base-revision">--</span></div>
-            </div>
-            <!-- #499 Slice 3: one-time pairing code — the normal
-                 Web→SketchUp path. The manual selector below stays as the
-                 reviewed fallback. -->
-            <div id="pairing-entry" style="margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border-subtle);">
-              <label for="pairing-code-input" class="subhead" style="display:block; margin: 0 0 var(--space-1) 0; font-size: var(--text-xs);">Conectar con código</label>
-              <div style="display: flex; gap: var(--space-1);">
-                <input id="pairing-code-input" type="text" inputmode="latin" autocomplete="off" spellcheck="false"
-                       placeholder="Código de la web"
-                       style="flex:1 1 auto; min-width: 0; font-family: var(--font-mono, monospace); text-transform: uppercase; letter-spacing: 0.08em;"
-                       aria-describedby="pairing-message" />
-                <button id="btn-pairing-connect" class="btn btn-primary" style="flex: 0 0 auto; width: auto; white-space: nowrap;">Conectar</button>
-              </div>
-              <p id="pairing-message" class="subhead" role="status" aria-live="polite"
-                 style="display: none; margin: var(--space-1) 0 0 0; font-size: var(--text-xs);"></p>
-            </div>
-            <div id="model-binding-actions" style="margin-top: var(--space-2);">
-              <button id="btn-bootstrap-project" class="btn btn-secondary" style="width: 100%;">Nuevo proyecto</button>
-              <button id="btn-binding-connect" class="btn btn-secondary" style="width: 100%;">Conectar modelo (manual)</button>
-              <button id="btn-binding-refresh" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar conexión</button>
-              <button id="btn-binding-adopt" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Actualizar base de trabajo</button>
-              <!-- #392 / DT-8: staged revision publication. Visible only when
-                   the server granted can_publish_revision and the base is
-                   current; the backend stays the authority either way.
-                   #731 PR2: Publicar diseño es la orquestación de cierre
-                   (auto-sync recuperable → validación del diseño → gate →
-                   publish); Validar diseño ejecuta el mismo batch sin
-                   publicar. Las excepciones se muestran sólo para lo que
-                   requiere atención. -->
-              <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
-              <button id="btn-design-validate" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar diseño</button>
-              <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
-              <div id="binding-publish-exceptions" style="display: none; margin-top: var(--space-2);"></div>
-            </div>
-            <form id="project-bootstrap-form" style="display: none; margin-top: var(--space-2);" aria-busy="false">
-              <label class="login-label" for="bootstrap-project-name">Proyecto</label>
-              <input id="bootstrap-project-name" class="login-field" maxlength="200" required autocomplete="off">
-              <label class="login-label" for="bootstrap-design-name" style="margin-top: var(--space-2);">Diseño</label>
-              <input id="bootstrap-design-name" class="login-field" maxlength="200" required value="Diseño principal" autocomplete="off">
-              <fieldset style="border: 0; padding: 0; margin: var(--space-2) 0;">
-                <legend class="login-label">Cliente</legend>
-                <label><input type="radio" name="bootstrap-customer-mode" value="existing" checked> Existente</label>
-                <label style="margin-left: var(--space-2);"><input type="radio" name="bootstrap-customer-mode" value="new"> Nuevo</label>
-              </fieldset>
-              <select id="bootstrap-customer-select" class="login-field" style="width: 100%;" aria-label="Cliente existente"></select>
-              <input id="bootstrap-customer-name" class="login-field" maxlength="200" autocomplete="off" placeholder="Nombre del cliente" aria-label="Nombre del cliente nuevo" style="display: none;">
-              <button id="btn-bootstrap-submit" type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">Crear y conectar</button>
-              <button id="btn-bootstrap-cancel" type="button" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
-              <p id="bootstrap-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-2);"></p>
-            </form>
-            <div id="model-binding-picker" style="display: none; margin-top: var(--space-2);">
-              <label class="login-label" for="binding-project-select">Proyecto</label>
-              <select id="binding-project-select" class="login-field" style="width: 100%;"></select>
-              <label class="login-label" for="binding-design-select" style="margin-top: var(--space-2);">Diseño</label>
-              <select id="binding-design-select" class="login-field" style="width: 100%;"></select>
-              <button id="btn-binding-confirm" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);" disabled>Conectar</button>
-              <button id="btn-binding-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
-            </div>
-            <div id="model-binding-rebind-review" style="display: none; margin-top: var(--space-2);">
-              <p class="subhead" style="font-size: var(--text-xs);">Este modelo ya está conectado a otro diseño. El enlace actual se conserva hasta que el nuevo diseño valide correctamente.</p>
-              <button id="btn-binding-rebind-confirm" class="btn btn-primary" style="width: 100%;">Confirmar cambio de diseño</button>
-              <button id="btn-binding-rebind-cancel" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-1);">Cancelar</button>
-            </div>
-          </div>
-
-          <button id="btn-close" class="btn btn-secondary">Cerrar panel</button>
-        </section>
       </main>
 
       <!-- Visual Material Option Selector Modal (Slice B - Miller Columns) -->
@@ -2434,7 +2674,7 @@
           <!-- Header -->
           <header class="selector-modal-header">
             <div class="selector-modal-title-group">
-              <h2 id="selector-modal-title" class="selector-modal-title">Seleccionar Material</h2>
+              <h2 id="selector-modal-title" class="selector-modal-title">Catálogo de Acabados</h2>
               <span id="selector-modal-role-badge" class="selector-modal-role-badge">Rol: --</span>
             </div>
             <button id="btn-selector-modal-close" class="selector-modal-close-btn" type="button" aria-label="Cerrar modal">✕</button>
@@ -2516,12 +2756,14 @@
                   </div>
                 </div>
 
-                <!-- Scope of Application -->
+                <!-- Scope of Application — mismo copy que el diálogo nativo
+                     (material_selector.html); la etiqueta de mueble es
+                     honesta por contexto: antes de insertar no hay mueble. -->
                 <div class="selector-scope-group">
-                  <div class="selector-scope-label">Alcance de aplicación:</div>
+                  <div class="selector-scope-label">Alcance de la Selección:</div>
                   <label class="selector-scope-option">
                     <input type="radio" name="selector-scope" value="furniture" checked />
-                    <span>Aplicar a este mueble</span>
+                    <span id="selector-scope-furniture-label">Aplicar a este mueble</span>
                   </label>
                   <label class="selector-scope-option">
                     <input type="radio" name="selector-scope" value="project" />
@@ -2535,12 +2777,12 @@
           <!-- Footer -->
           <footer class="selector-modal-footer">
             <button id="btn-selector-cancel" class="btn btn-secondary" type="button">Cancelar (Esc)</button>
-            <button id="btn-selector-apply" class="btn btn-primary" type="button" disabled>Aplicar Selección (↵)</button>
+            <button id="btn-selector-apply" class="btn btn-primary" type="button" disabled>Aplicar Acabado (↵)</button>
           </footer>
         </div>
       </div>
 
-      <footer id="granete-version-footer">Granete for SketchUp</footer>
+      <footer id="granete-version-footer">Granete para SketchUp</footer>
     </div>
 
     <script>
@@ -2764,7 +3006,8 @@
           grain: '<line x1="4" y1="20" x2="20" y2="4"/><line x1="4" y1="14" x2="14" y2="4"/><line x1="10" y1="20" x2="20" y2="10"/>',
           book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
           copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-          check: '<polyline points="20 6 9 17 4 12"/>'
+          check: '<polyline points="20 6 9 17 4 12"/>',
+          "chevron-right": '<polyline points="9 18 15 12 9 6"/>'
         };
 
         function icon(name, size) {
@@ -2905,7 +3148,7 @@
           if (tabId === "project" && lastPfState === null) requestProjectFurniture();
         }
 
-        var tabOrder = ["library", "project", "inspector", "status"];
+        var tabOrder = ["library", "project", "inspector"];
 
         document.querySelectorAll(".tab-button").forEach(function (btn) {
           btn.setAttribute("aria-selected", btn.classList.contains("active") ? "true" : "false");
@@ -2925,6 +3168,64 @@
           document.querySelector(".tab-button.active").focus();
         });
 
+        // ------------------------------------------------------------------
+        // Cuenta y conexión (#IA 2026-09): la sesión ya no es una pestaña —
+        // vive en un popover anclado al pill del header. Esc y clic afuera
+        // lo cierran; el foco vuelve al pill.
+        // ------------------------------------------------------------------
+        var accountPopover = document.getElementById("account-popover");
+        var accountCloseBtn = document.getElementById("btn-close");
+
+        // Foco contextual (review #847): sin sesión el camino principal es
+        // el servidor; con sesión, la acción útil visible (cerrar sesión).
+        // Nunca se enfoca un control display:none.
+        function accountFocusTarget() {
+          if (loginCard && loginCard.style.display !== "none") return loginServer;
+          var logout = document.getElementById("btn-logout");
+          if (logout && logout.style.display !== "none") return logout;
+          return accountCloseBtn || connectionPill;
+        }
+
+        function openAccountPopover() {
+          if (accountPopover.style.display === "block") return;
+          accountPopover.style.display = "block";
+          connectionPill.setAttribute("aria-expanded", "true");
+          var target = accountFocusTarget();
+          if (target && target.focus) target.focus();
+        }
+
+        function closeAccountPopover() {
+          if (accountPopover.style.display === "none") return;
+          accountPopover.style.display = "none";
+          connectionPill.setAttribute("aria-expanded", "false");
+          if (connectionPill.focus) connectionPill.focus();
+        }
+
+        connectionPill.addEventListener("click", function () {
+          if (accountPopover.style.display === "none") {
+            openAccountPopover();
+          } else {
+            closeAccountPopover();
+          }
+        });
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            closeAccountPopover();
+            resetPublishConfirm();
+          }
+        });
+
+        document.addEventListener("click", function (event) {
+          if (accountPopover.style.display === "none") return;
+          var node = event.target;
+          while (node) {
+            if (node === accountPopover || node === connectionPill) return;
+            node = node.parentNode;
+          }
+          closeAccountPopover();
+        }, true);
+
         // -------------------------------------------------------------
         // Modular Library Rendering Functions
         // -------------------------------------------------------------
@@ -2943,9 +3244,11 @@
           libConfiguratorView.style.display = "block";
 
           libSelectedName.textContent = def.name || "Mueble";
-          libSelectedCode.textContent = def.code ? "Código: " + def.code : "";
+          libSelectedCode.textContent = def.code || "";
           libSelectedCategoryBadge.textContent = formatCategoryLabel(def.category);
           libDesc.textContent = def.description || "";
+          libDesc.title = def.description || "";
+          renderConfiguratorPreview(def);
 
           libParams = getDefaultParams(def);
           libMaterialChoices = defaultMaterialChoices(def);
@@ -2963,6 +3266,39 @@
 
           updateLibrarySummary();
           updateLibraryInsertButton();
+        }
+
+        // Preview del mueble en el encabezado del configurador: la misma
+        // maquinaria de media de las tarjetas (grant re-mintable + fallback
+        // isométrico) para que nunca haya una configuración a ciegas.
+        function renderConfiguratorPreview(def) {
+          var host = document.getElementById("library-selected-preview");
+          if (!host) return;
+          host.innerHTML = "";
+
+          var rawUrl = def.imageUrl || def.thumbnailUrl || def.previewUrl;
+          var mediaName = mediaFilenameFromPath(rawUrl);
+          var imageUrl = resolveMediaUrl(rawUrl);
+
+          if (imageUrl) {
+            var img = document.createElement("img");
+            img.alt = def.name || "";
+            if (mediaName) {
+              img.setAttribute("data-media-name", mediaName);
+              img.onerror = function () {
+                host.innerHTML = createFurniturePlaceholderSvg();
+                requestMediaRefresh(mediaName);
+              };
+            } else {
+              img.onerror = function () {
+                host.innerHTML = createFurniturePlaceholderSvg();
+              };
+            }
+            img.src = imageUrl;
+            host.appendChild(img);
+          } else {
+            host.innerHTML = createFurniturePlaceholderSvg();
+          }
         }
 
         function updateLibraryInsertButton() {
@@ -3099,14 +3435,6 @@
             title.className = "material-role-title";
             title.textContent = r.label || r.role;
             header.appendChild(title);
-
-            var openBtn = document.createElement("button");
-            openBtn.type = "button";
-            openBtn.className = "btn-picker-open";
-            openBtn.innerHTML = icon("search", 12) + "<span>Catálogo</span>";
-            openBtn.title = "Explorar catálogo de acabados";
-            header.appendChild(openBtn);
-
             block.appendChild(header);
 
             // Selected Preview (interactive card)
@@ -3136,6 +3464,13 @@
             info.appendChild(metaSpan);
 
             preview.appendChild(info);
+
+            // La fila es el control; el chevron comunica que abre el catálogo.
+            var chevron = document.createElement("span");
+            chevron.className = "material-chevron";
+            chevron.innerHTML = icon("chevron-right", 16);
+            preview.appendChild(chevron);
+
             block.appendChild(preview);
 
             function triggerVisualPicker() {
@@ -3157,12 +3492,11 @@
                   nameSpan.textContent = newMat ? newMat.name : "Material";
                   updateMaterialMeta(metaSpan, newMat);
                   onChange(r.role, newId, scope);
-                });
+                }, ctx.context);
               }
             }
 
             preview.addEventListener("click", triggerVisualPicker);
-            openBtn.addEventListener("click", triggerVisualPicker);
             preview.addEventListener("keydown", function (e) {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
@@ -3208,6 +3542,7 @@
         var selectorSpecTexture = document.getElementById("selector-spec-texture");
 
         var selectorCtx = null;
+        var selectorLastFocus = null;
 
         function findMaterialCategoryById(id) {
           if (!id) return null;
@@ -3252,7 +3587,7 @@
           return count;
         }
 
-        function openMaterialSelector(roleEntry, initialSelectedId, onApply) {
+        function openMaterialSelector(roleEntry, initialSelectedId, onApply, contextKind) {
           selectorCtx = {
             roleEntry: roleEntry,
             selectedCandidateId: initialSelectedId || null,
@@ -3274,6 +3609,14 @@
           }
 
           selectorRoleBadge.textContent = "Rol: " + (roleEntry.label || roleEntry.role);
+          // Alcance honesto por contexto: en el configurador todavía no hay
+          // mueble — la elección acompaña a la próxima inserción.
+          var scopeFurnitureLabel = document.getElementById("selector-scope-furniture-label");
+          if (scopeFurnitureLabel) {
+            scopeFurnitureLabel.textContent = contextKind === "inspector"
+              ? "Aplicar a este mueble"
+              : "Aplicar a esta configuración";
+          }
           selectorSearchInput.value = "";
           selectorSearchClear.style.display = "none";
 
@@ -3281,6 +3624,7 @@
           renderSelectorGrid();
           updateSelectorDetail();
 
+          selectorLastFocus = document.activeElement || null;
           selectorModal.style.display = "flex";
           selectorSearchInput.focus();
         }
@@ -3288,6 +3632,9 @@
         function closeMaterialSelector() {
           selectorModal.style.display = "none";
           selectorCtx = null;
+          // El modal es un diálogo: el foco vuelve a quien lo abrió.
+          if (selectorLastFocus && selectorLastFocus.focus) selectorLastFocus.focus();
+          selectorLastFocus = null;
         }
 
         function renderSelectorNavigation() {
@@ -3655,7 +4002,7 @@
           selectorSearchInput.focus();
         });
 
-        // Global Esc / Enter inside modal
+        // Global Esc / Enter / Tab inside modal
         document.addEventListener("keydown", function (e) {
           if (selectorModal.style.display !== "none") {
             if (e.key === "Escape") {
@@ -3664,6 +4011,23 @@
             } else if (e.key === "Enter" && !selectorApplyBtn.disabled && document.activeElement !== selectorSearchInput) {
               e.preventDefault();
               applySelectorChoice();
+            } else if (e.key === "Tab") {
+              // Focus trap: con el backdrop abierto, Tab se queda dentro del
+              // diálogo (primero/último controlable con wrap) — nunca escapa
+              // al panel de atrás.
+              var focusables = selectorModal.querySelectorAll(
+                'button, input, select, [tabindex="0"]');
+              if (focusables.length === 0) return;
+              var first = focusables[0];
+              var last = focusables[focusables.length - 1];
+              var active = document.activeElement;
+              if (e.shiftKey && (active === first || active === selectorModal)) {
+                e.preventDefault();
+                last.focus();
+              } else if (!e.shiftKey && active === last) {
+                e.preventDefault();
+                first.focus();
+              }
             }
           }
         });
@@ -3704,6 +4068,10 @@
           libEmptyState.style.display = stateType === "empty" ? "block" : "none";
           libNoResultsState.style.display = stateType === "no-results" ? "block" : "none";
           libCardsGrid.style.display = stateType === "grid" ? "grid" : "none";
+          // Una sola voz de carga: con los skeletons visibles, el badge de
+          // conteo y los selects de categoría vacíos no compiten por atención.
+          libCountBadge.style.display = stateType === "loading" ? "none" : "";
+          if (stateType === "loading") libCategoriesContainer.style.display = "none";
 
           // Recoverability: only the remote-error empty state offers an
           // explicit retry of the read-only catalog fetch.
@@ -3724,17 +4092,17 @@
             } else if (source === "unauthenticated") {
               libEmptyIcon.innerHTML = icon("key", 28);
               libEmptyTitle.textContent = "Sesión requerida";
-              libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller en la pestaña Estado para cargar la biblioteca de muebles.";
+              libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca de muebles.";
               btnEmptyAction.textContent = "Ir a Iniciar Sesión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { switchTab("status"); };
+              btnEmptyAction.onclick = function () { openAccountPopover(); };
             } else if (source === "error") {
               libEmptyIcon.innerHTML = icon("warning", 28);
               libEmptyTitle.textContent = "Error de conexión";
               libEmptyMsg.textContent = "No se pudo conectar con el servidor Granete. Verificá tu conexión y estado del servidor.";
-              btnEmptyAction.textContent = "Revisar Estado";
+              btnEmptyAction.textContent = "Revisar conexión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { switchTab("status"); };
+              btnEmptyAction.onclick = function () { openAccountPopover(); };
             } else {
               libEmptyIcon.innerHTML = icon("box", 28);
               libEmptyTitle.textContent = "El taller todavía no tiene muebles";
@@ -3964,10 +4332,14 @@
               preview.appendChild(placeholder);
             }
 
-            if (def.category) {
+            if (def.categoryId || def.category) {
               var catBadge = document.createElement("span");
               catBadge.className = "furniture-card-badge";
-              catBadge.textContent = formatCategoryLabel(def.category);
+              // El árbol del taller es la fuente; CATEGORY_LABELS sólo
+              // cubre catálogos legacy sin categorías.
+              catBadge.textContent =
+                (def.categoryId && categoryNodeById[def.categoryId] && categoryNodeById[def.categoryId].name) ||
+                formatCategoryLabel(def.category);
               preview.appendChild(catBadge);
             }
 
@@ -4076,7 +4448,7 @@
           setPluginVersion: function (payload) {
             var footer = document.getElementById("granete-version-footer");
             if (footer && payload && payload.version) {
-              footer.textContent = "Granete for SketchUp \u00b7 v" + String(payload.version);
+              footer.textContent = "Granete para SketchUp \u00b7 v" + String(payload.version);
             }
           },
 
@@ -4095,13 +4467,13 @@
             var state = status.state || "disabled";
             if (state === "logged_in") {
               connectionPill.textContent = "Conectado";
-              connectionPill.className = "status-badge valid";
+              connectionPill.className = "status-badge valid connection-pill-btn";
             } else if (state === "configured") {
               connectionPill.textContent = "Configurado";
-              connectionPill.className = "status-badge pending";
+              connectionPill.className = "status-badge pending connection-pill-btn";
             } else {
               connectionPill.textContent = "Sin sesión";
-              connectionPill.className = "status-badge invalid";
+              connectionPill.className = "status-badge invalid connection-pill-btn";
             }
 
             var loggedIn = state === "logged_in";
@@ -4188,7 +4560,7 @@
                 }
               }, 5000);
             } else {
-              showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar vinculación"));
+              showToast("error", (result && result.error) || "No se pudo iniciar la vinculación.");
             }
           },
 
@@ -4236,7 +4608,7 @@
                 window.sketchup.get_model_binding();
               }
             } else {
-              showToast("error", "Error: " + ((result && result.error) || "No se pudo iniciar sesión"));
+              showToast("error", (result && result.error) || "No se pudo iniciar sesión.");
             }
           },
 
@@ -4266,6 +4638,19 @@
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receiveQuote(result);
           },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
+          onDeleteResult: function (result) {
+            result = result || {};
+            if (result.ok) {
+              // Peak-end honest: la eliminación ES reversible (una operación
+              // de Undo) — el cierre nombra la red de seguridad en vez de
+              // dejar el panel en blanco.
+              showToast("success", "✓ Mueble eliminado. Deshacé con Ctrl+Z (\u2318Z) si fue un error.");
+            } else {
+              showToast("error", result.reason
+                ? "No se pudo eliminar el mueble: " + result.reason + "."
+                : "No se pudo eliminar el mueble.");
+            }
+          },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
           onPublishResult: function (result) { handlePublishResult(result); },
           onDesignValidationProgress: function (payload) { renderDesignValidationProgress(payload); },
@@ -4363,7 +4748,7 @@
               }
             } else {
               repeatPreviewActive = false;
-              showToast("error", "Error: " + parameterIssueMessage(result, "Fallo en la inserción"));
+              showToast("error", parameterIssueMessage(result, "No se pudo insertar el mueble."));
             }
           },
 
@@ -4381,7 +4766,7 @@
                 selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
               }
             } else {
-              showToast("error", "Error: " + parameterIssueMessage(result, "Fallo al actualizar"));
+              showToast("error", parameterIssueMessage(result, "No se pudo actualizar el mueble."));
               // Rollback in-memory inspector state to last confirmed values from selectedContext
               if (selectedContext && inspectorDef) {
                 inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedContext.parameters || {});
@@ -4417,11 +4802,19 @@
             // the library while browsing the catalog. Unmanaged geometry does
             // not pull focus either; only managed contexts do.
             var managed = selectedContext && ["furniture", "aggregate", "part", "hardware"].indexOf(selectedContext.kind) !== -1;
-            var activeTabBtn = document.querySelector(".tab-btn.active");
+            var activeTabBtn = document.querySelector(".tab-button.active");
             var currentTabId = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "library";
             if (managed && (currentTabId === "inspector" || !activeLibDef)) {
               switchTab("inspector");
             }
+          },
+
+          // "Granete: editar en el panel" (menú contextual de una selección
+          // gestionada): Ruby selecciona la entidad Y pide el Inspector —
+          // aunque el configurador siga abierto (activeLibDef), el usuario
+          // no puede quedarse mirando Biblioteca.
+          activateInspectorTab: function () {
+            switchTab("inspector");
           },
 
           onMaterialChoiceApplied: function (payload) {
@@ -4517,10 +4910,10 @@
               : "El taller todavía no tiene muebles. Creá muebles en Granete y volvé a abrir la biblioteca.";
           }
           if (source === "unauthenticated") {
-            return "Iniciá sesión con tu cuenta del taller en la pestaña Estado para cargar la biblioteca.";
+            return "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca.";
           }
           if (source === "error") {
-            return "No se pudo conectar con Granete. Revisá el servidor en la pestaña Estado e iniciá sesión de nuevo.";
+            return "No se pudo conectar con Granete. Revisá el servidor desde tu cuenta (pill superior derecha) e iniciá sesión de nuevo.";
           }
           return "Catálogo local (modo desarrollo)";
         }
@@ -4606,28 +4999,22 @@
             var group = document.createElement("div");
             group.className = "param-group";
 
-            var labelRow = document.createElement("div");
-            labelRow.className = "param-label-row";
-
+            var controlId = "param-" + String(p.name).replace(/[^a-zA-Z0-9_-]/g, "-") + "-" + container.id;
             var label = document.createElement("label");
             label.className = "param-label";
             label.textContent = p.label;
-            var controlId = "param-" + String(p.name).replace(/[^a-zA-Z0-9_-]/g, "-") + "-" + container.id;
-            label.setAttribute("for", controlId);
-            labelRow.appendChild(label);
 
-            var badge = document.createElement("span");
-            badge.className = "param-value-badge";
-            badge.textContent = val + (p.unit === "mm" ? " mm" : "");
-            labelRow.appendChild(badge);
-            group.appendChild(labelRow);
+            // El control a la derecha de la etiqueta; el valor vive en el
+            // control mismo (input/stepper/select) — sin badges duplicados.
+            var control = document.createElement("div");
+            control.className = "param-control";
 
             if (p.type === "number" && p.unit === "mm") {
               // Measures are plain text fields (precise mm entry); the
               // registered defaults are one click away via the
               // "medidas registradas" button in the configurator.
-              var dimRow = document.createElement("div");
-              dimRow.className = "dim-input-row";
+              label.setAttribute("for", controlId);
+              group.appendChild(label);
 
               var dimInput = document.createElement("input");
               dimInput.id = controlId;
@@ -4650,21 +5037,19 @@
                 if (p.min !== undefined && v < p.min) v = p.min;
                 if (p.max !== undefined && v > p.max) v = p.max;
                 dimInput.value = v;
-                badge.textContent = v + " mm";
                 onChange(p.name, v, p.unit);
               });
 
-              dimRow.appendChild(dimInput);
-              dimRow.appendChild(dimUnit);
-              group.appendChild(dimRow);
+              control.appendChild(dimInput);
+              control.appendChild(dimUnit);
             } else if (p.type === "number" && p.min !== undefined && p.max !== undefined) {
-              var stepper = document.createElement("div");
-              stepper.className = "stepper";
+              group.appendChild(label);
 
               var btnMinus = document.createElement("button");
               btnMinus.className = "btn btn-secondary";
               btnMinus.type = "button";
               btnMinus.textContent = "−";
+              btnMinus.setAttribute("aria-label", "Disminuir " + p.label);
 
               var valDisplay = document.createElement("span");
               valDisplay.className = "stepper-value";
@@ -4674,13 +5059,13 @@
               btnPlus.className = "btn btn-secondary";
               btnPlus.type = "button";
               btnPlus.textContent = "+";
+              btnPlus.setAttribute("aria-label", "Aumentar " + p.label);
 
               btnMinus.addEventListener("click", function () {
                 var cur = Number(currentValues[p.name] !== undefined ? currentValues[p.name] : p.defaultValue);
                 if (cur > p.min) {
                   cur -= (p.step || 1);
                   valDisplay.textContent = cur;
-                  badge.textContent = cur;
                   onChange(p.name, cur, p.unit);
                 }
               });
@@ -4690,16 +5075,20 @@
                 if (cur < p.max) {
                   cur += (p.step || 1);
                   valDisplay.textContent = cur;
-                  badge.textContent = cur;
                   onChange(p.name, cur, p.unit);
                 }
               });
 
+              var stepper = document.createElement("div");
+              stepper.className = "stepper";
               stepper.appendChild(btnMinus);
               stepper.appendChild(valDisplay);
               stepper.appendChild(btnPlus);
-              group.appendChild(stepper);
+              control.appendChild(stepper);
             } else if (p.type === "enum" && p.options) {
+              label.setAttribute("for", controlId);
+              group.appendChild(label);
+
               var select = document.createElement("select");
               select.id = controlId;
               select.setAttribute("aria-required", p.required ? "true" : "false");
@@ -4711,13 +5100,17 @@
                 select.appendChild(opt);
               });
               select.addEventListener("change", function () {
-                badge.textContent = select.value;
                 onChange(p.name, select.value);
               });
-              group.appendChild(select);
+              control.appendChild(select);
             } else if (p.type === "boolean") {
-              var booleanRow = document.createElement("div");
-              booleanRow.className = "param-boolean-row";
+              label.setAttribute("for", controlId);
+              group.appendChild(label);
+
+              var valueBadge = document.createElement("span");
+              valueBadge.className = "param-value-badge";
+              valueBadge.textContent = val === true ? "Sí" : "No";
+
               var checkbox = document.createElement("input");
               checkbox.id = controlId;
               checkbox.type = "checkbox";
@@ -4725,14 +5118,15 @@
               checkbox.checked = val === true;
               checkbox.setAttribute("aria-label", p.label);
               checkbox.addEventListener("change", function () {
-                var nextValue = checkbox.checked === true;
-                badge.textContent = nextValue ? "Sí" : "No";
-                onChange(p.name, nextValue);
+                valueBadge.textContent = checkbox.checked ? "Sí" : "No";
+                onChange(p.name, checkbox.checked === true);
               });
-              badge.textContent = checkbox.checked ? "Sí" : "No";
-              booleanRow.appendChild(checkbox);
-              group.appendChild(booleanRow);
+              control.appendChild(checkbox);
+              control.appendChild(valueBadge);
             } else if (p.type === "string") {
+              label.setAttribute("for", controlId);
+              group.appendChild(label);
+
               var textInput = document.createElement("input");
               textInput.id = controlId;
               textInput.type = "text";
@@ -4742,20 +5136,20 @@
               if (p.maxLength !== undefined) textInput.maxLength = p.maxLength;
               textInput.setAttribute("aria-required", p.required ? "true" : "false");
               textInput.addEventListener("change", function () {
-                badge.textContent = textInput.value === "" ? "Vacío" : textInput.value;
                 onChange(p.name, textInput.value);
               });
-              badge.textContent = textInput.value === "" ? "Vacío" : textInput.value;
-              group.appendChild(textInput);
-              if (p.maxLength !== undefined) {
-                var stringHint = document.createElement("small");
-                stringHint.className = "param-hint";
-                stringHint.textContent = "Máximo " + p.maxLength + " caracteres" + (p.required ? " · obligatorio" : "");
-                group.appendChild(stringHint);
-              }
+              control.appendChild(textInput);
             }
 
+            group.appendChild(control);
             container.appendChild(group);
+
+            if (p.type === "string" && p.maxLength !== undefined) {
+              var stringHint = document.createElement("small");
+              stringHint.className = "param-hint";
+              stringHint.textContent = "Máximo " + p.maxLength + " caracteres" + (p.required ? " · obligatorio" : "");
+              group.appendChild(stringHint);
+            }
           });
         }
 
@@ -4778,24 +5172,47 @@
           return parameter ? message + ": " + parameter : message;
         }
 
-        // Estimated piece count of a definition. Server-resolved catalogs carry
-        // the real composition (estimatedPartCount/estimatedHardwareCount from
-        // the module's structure); the static fallback keeps the old heuristic.
-        function estimatedPartsLabel(def) {
-          if (def && typeof def.estimatedPartCount === "number") {
+        // Honest piece count for the dock (review #847): never present a
+        // local estimate as if it were the resolved BOM. Precedence:
+        // (A) a server-resolved count for the CURRENT configuration would
+        //     win — no such field reaches the dialog today, so none is
+        //     consumed here; the backend stays the authority.
+        // (B) otherwise an explicit "Aprox." — the definition's
+        //     estimatedPartCount while the counting params sit at their
+        //     defaults, else the pre-existing heuristic fed with the
+        //     CURRENT values (not the defaults).
+        // (C) when nothing can be estimated honestly: defer to resolve.
+        function estimatedPartsLabel(def, currentValues) {
+          var values = currentValues || {};
+          var params = def && def.parameters ? def.parameters : [];
+          var countingParams = params.filter(function (p) {
+            return p.name === "shelfCount" || p.name === "doorCount";
+          });
+
+          var countingAtDefaults = countingParams.every(function (p) {
+            var current = values[p.name];
+            return current === undefined || current === null ||
+              Number(current) === Number(p.defaultValue);
+          });
+
+          if (def && typeof def.estimatedPartCount === "number" &&
+              (countingParams.length === 0 || countingAtDefaults)) {
             var parts = def.estimatedPartCount;
             var hw = typeof def.estimatedHardwareCount === "number" ? def.estimatedHardwareCount : 0;
-            return parts + " pieza" + (parts === 1 ? "" : "s") + (hw > 0 ? " + " + hw + " herraje" + (hw === 1 ? "" : "s") : "");
+            return "Aprox. " + parts + " pieza" + (parts === 1 ? "" : "s") +
+              (hw > 0 ? " + " + hw + " herraje" + (hw === 1 ? "" : "s") : "");
           }
-          var params = def && def.parameters ? def.parameters : [];
-          var counts = { shelfCount: 0, doorCount: 0 };
-          params.forEach(function (p) {
-            if (p.name === "shelfCount" || p.name === "doorCount") {
-              counts[p.name] = Number(p.defaultValue) || 0;
-            }
-          });
-          var guess = 2 + counts.shelfCount + counts.doorCount;
-          return guess + " piezas";
+
+          if (countingParams.length > 0) {
+            var guess = 2;
+            countingParams.forEach(function (p) {
+              var current = values[p.name];
+              guess += Number(current !== undefined && current !== null ? current : p.defaultValue) || 0;
+            });
+            return "Aprox. " + guess + " piezas";
+          }
+
+          return "Piezas: se calculan al resolver";
         }
 
         function updateLibrarySummary() {
@@ -4803,7 +5220,7 @@
           var h = libParams.heightMm || 720;
           var d = libParams.depthMm || 590;
           libSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-          libSummaryParts.textContent = estimatedPartsLabel(activeLibDef);
+          libSummaryParts.textContent = estimatedPartsLabel(activeLibDef, libParams);
         }
 
         function updateInspectorSummary() {
@@ -4811,7 +5228,7 @@
           var h = inspectorParams.heightMm || 720;
           var d = inspectorParams.depthMm || 590;
           inspectorSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-          inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef);
+          inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef, inspectorParams);
         }
 
         // ------------------------------------------------------------------
@@ -5077,8 +5494,16 @@
                   var opt = document.createElement("option");
                   opt.value = candidate.id;
                   var isComp = currentDef && candidate.category === currentDef.category;
-                  opt.textContent = candidate.name + (isComp ? " [Compatible]" : " [Incompatible]");
-                  if (candidate.id === context.hardwareDefinitionId || candidate.code === context.hardwareDefinitionId) {
+                  var isCurrent = candidate.id === context.hardwareDefinitionId || candidate.code === context.hardwareDefinitionId;
+                  if (!isComp && !isCurrent) {
+                    // No se puede elegir un herraje de otra familia: queda
+                    // visible para no esconder el catálogo, pero deshabilitado.
+                    opt.disabled = true;
+                    opt.textContent = candidate.name + " (incompatible)";
+                  } else {
+                    opt.textContent = candidate.name;
+                  }
+                  if (isCurrent) {
                     opt.selected = true;
                   }
                   hwReplacementSelect.appendChild(opt);
@@ -5458,6 +5883,8 @@
             var deletePayload = { instanceId: selectedContext.furnitureInstanceRef };
             window.sketchup.delete_selected_furniture(JSON.stringify(deletePayload));
           } else {
+            // Fallback sin host: mismo cierre honesto que el camino Ruby.
+            window.GraneteDialog.onDeleteResult({ ok: true });
             window.GraneteDialog.onSelectionChange(null);
           }
         });
@@ -5476,7 +5903,7 @@
           btnApplyHwOffset.addEventListener("click", function () {
             if (!selectedContext || selectedContext.kind !== "hardware") return;
             if (selectedContext.placementKind === "derived") {
-              alert("Los herrajes derivados no admiten edición manual.");
+              showToast("warning", "Los herrajes derivados se calculan por regla de ingeniería; no admiten edición manual.");
               return;
             }
             var val = parseFloat(hwOffsetInput.value);
@@ -5491,7 +5918,7 @@
           btnReplaceHw.addEventListener("click", function () {
             if (!selectedContext || selectedContext.kind !== "hardware") return;
             if (selectedContext.placementKind === "derived") {
-              alert("Los herrajes derivados no admiten sustitución manual.");
+              showToast("warning", "Los herrajes derivados no admiten sustitución manual.");
               return;
             }
             var targetId = hwReplacementSelect.value;
@@ -5518,13 +5945,13 @@
           if (!selectedContext || selectedContext.kind !== "part") return;
           var translation = partPositionFromInputs();
           if (!translation && operation !== "remove") {
-            alert("Ingresá la posición en milímetros (X, Y y Z) del componente.");
+            showToast("error", "Ingresá la posición en milímetros (X, Y y Z) del componente.");
             return;
           }
           var result = window.GraneteMutation.submitComponentMutation(operation, translation, selectedContext);
           if (result === "busy") return;
           if (result === "unavailable") {
-            alert("Esta acción requiere la conexión con el servidor autoritativo de Granete.");
+            showToast("error", "Esta acción requiere la conexión con el servidor autoritativo de Granete.");
           }
         }
 
@@ -5539,7 +5966,7 @@
             if (!selectedContext || selectedContext.kind !== "part") return;
             var result = window.GraneteMutation.startComponentViewportMove(selectedContext);
             if (result === "unavailable") {
-              alert("El gesto de viewport no está disponible para esta selección.");
+              showToast("error", "El gesto de viewport no está disponible para esta selección.");
             }
           });
         }
@@ -5636,7 +6063,7 @@
           design_archived: { badge: "Diseño archivado", cls: "invalid", detail: "El diseño fue archivado en Granete: no se puede editar ni publicar desde este modelo." },
           invalid: { badge: "Enlace inválido", cls: "invalid", detail: "El enlace guardado no corresponde a un proyecto o diseño accesible. Conectá nuevamente." },
           incompatible: { badge: "Versión incompatible", cls: "invalid", detail: "El servidor usa una versión del contrato de enlace que esta extensión no entiende. Actualizá la extensión." },
-          unauthenticated: { badge: "Sin sesión", cls: "invalid", detail: "Iniciá sesión con tu cuenta del taller arriba para validar el enlace del modelo." },
+          unauthenticated: { badge: "Sin sesión", cls: "invalid", detail: "Iniciá sesión con tu cuenta del taller (pill superior derecha) para validar el enlace del modelo." },
           unauthorized: { badge: "Sin permiso", cls: "invalid", detail: "No tenés permiso para el proyecto o diseño enlazado." },
           unreachable: { badge: "Servidor no disponible", cls: "pending", detail: "No se pudo contactar al servidor. El enlace guardado se conserva; probá de nuevo." }
         };
@@ -5732,6 +6159,67 @@
         };
         var publishInFlight = false;
         var lastPublishOutcome = null;
+        // Consecuencia invertida (revisión UX 2026-09 + review #847):
+        // publicar crea una revisión INMUTABLE del diseño. El botón original
+        // sólo ARMA la confirmación; publicar exige una acción deliberada
+        // DISTINTA ("Publicar revisión"), así un doble clic físico nunca
+        // atraviesa la frontera. El timeout de 6 s es un colchón, no la
+        // defensa: la defensa es la acción separada.
+        var publishArmed = false;
+        var publishArmTimer = null;
+        var bindingPublishConfirmRow = document.getElementById("binding-publish-confirm");
+        var btnPublishConfirm = document.getElementById("btn-publish-confirm");
+        var btnPublishCancel = document.getElementById("btn-publish-cancel");
+
+        function publishIdleLabel() {
+          return lastPublishOutcome && !lastPublishOutcome.ok
+            ? "Reintentar publicación"
+            : "Publicar diseño";
+        }
+
+        function resetPublishConfirm() {
+          publishArmed = false;
+          if (publishArmTimer) {
+            clearTimeout(publishArmTimer);
+            publishArmTimer = null;
+          }
+          if (bindingPublishConfirmRow) bindingPublishConfirmRow.style.display = "none";
+          if (bindingPublishBtn && !publishInFlight) {
+            bindingPublishBtn.style.display =
+              modelBindingState.status && canPublish(modelBindingState.status) ? "block" : "none";
+            bindingPublishBtn.textContent = publishIdleLabel();
+          }
+        }
+
+        function armPublishConfirm() {
+          publishArmed = true;
+          if (bindingPublishBtn) bindingPublishBtn.style.display = "none";
+          if (bindingPublishConfirmRow) bindingPublishConfirmRow.style.display = "block";
+          if (bindingPublishProgress) {
+            bindingPublishProgress.style.display = "block";
+            bindingPublishProgress.textContent =
+              "Confirmá la acción para crear la nueva revisión inmutable del diseño.";
+          }
+          if (btnPublishConfirm && btnPublishConfirm.focus) btnPublishConfirm.focus();
+          if (publishArmTimer) clearTimeout(publishArmTimer);
+          publishArmTimer = setTimeout(resetPublishConfirm, 6000);
+        }
+
+        function startPublishOrchestration() {
+          resetPublishConfirm();
+          // #731 PR2: the click STARTS the automatic orchestration — a
+          // pending/blocked gate is no longer a client-side wall. Ruby
+          // converges what is safe, validates the whole design, re-checks
+          // the gate fail-closed and only then publishes (or returns the
+          // exceptions-only projection).
+          lastPublishOutcome = null;
+          renderPublishProgress({ step: "validating" });
+          if (window.sketchup && window.sketchup.publish_design_revision) {
+            window.sketchup.publish_design_revision();
+          } else {
+            handlePublishResult({ ok: false, code: "unavailable", reason: "publicación no disponible" });
+          }
+        }
 
         function canPublish(status) {
           var caps = status.capabilities || {};
@@ -5775,6 +6263,9 @@
 
         function renderPublishAvailability(status) {
           if (!bindingPublishBtn || !bindingPublishProgress) return;
+          // Cualquier empuje de estado re-evalúa el botón desde cero: la
+          // confirmación armada no sobrevive a un cambio de contexto.
+          resetPublishConfirm();
           var idle = !publishInFlight && lastPublishOutcome === null;
           var preflightBlocked = window.GranetePreflightReview &&
             window.GranetePreflightReview.publishBlocked();
@@ -5832,6 +6323,7 @@
 
         function handlePublishResult(result) {
           publishInFlight = false;
+          resetPublishConfirm();
           result = result || { ok: false, code: "error", reason: "resultado desconocido" };
           lastPublishOutcome = result;
           if (result.ok) {
@@ -5943,7 +6435,7 @@
 
           var selectBtn = document.createElement("button");
           selectBtn.type = "button";
-          selectBtn.className = "btn btn-primary";
+          selectBtn.className = "btn btn-secondary";
           selectBtn.textContent = "Seleccionar";
           selectBtn.addEventListener("click", function () {
             if (window.sketchup && window.sketchup.select_project_furniture && exception.furnitureInstanceId) {
@@ -6269,18 +6761,20 @@
         if (bindingPublishBtn) {
           bindingPublishBtn.addEventListener("click", function () {
             if (publishInFlight) return;
-            // #731 PR2: the click STARTS the automatic orchestration — a
-            // pending/blocked gate is no longer a client-side wall. Ruby
-            // converges what is safe, validates the whole design, re-checks
-            // the gate fail-closed and only then publishes (or returns the
-            // exceptions-only projection).
-            lastPublishOutcome = null;
-            renderPublishProgress({ step: "validating" });
-            if (window.sketchup && window.sketchup.publish_design_revision) {
-              window.sketchup.publish_design_revision();
-            } else {
-              handlePublishResult({ ok: false, code: "unavailable", reason: "publicación no disponible" });
-            }
+            // Sólo arma: publicar exige la acción confirmatoria separada.
+            armPublishConfirm();
+          });
+        }
+        if (btnPublishCancel) {
+          btnPublishCancel.addEventListener("click", function () {
+            resetPublishConfirm();
+            if (bindingPublishBtn && bindingPublishBtn.focus) bindingPublishBtn.focus();
+          });
+        }
+        if (btnPublishConfirm) {
+          btnPublishConfirm.addEventListener("click", function () {
+            if (publishInFlight || !publishArmed) return;
+            startPublishOrchestration();
           });
         }
         if (designValidateBtn) {
@@ -6313,7 +6807,6 @@
         var pfPlacedTitle = document.getElementById("pf-placed-title");
         var pfPlacedList = document.getElementById("pf-placed-list");
         var btnPfRefresh = document.getElementById("btn-pf-refresh");
-        var btnPfGoStatus = document.getElementById("btn-pf-go-status");
         var btnPfRetry = document.getElementById("btn-pf-retry");
         var pfSaveAwareness = document.getElementById("pf-save-awareness");
         var designSyncCard = document.getElementById("design-sync-card");
@@ -6323,10 +6816,10 @@
         var designSyncBusy = false;
 
         var PF_ERROR_COPY = {
-          unauthenticated: "Iniciá sesión con tu cuenta del taller en la pestaña Estado.",
+          unauthenticated: "Iniciá sesión con tu cuenta del taller (pill superior derecha).",
           unauthorized: "No tenés permiso para el proyecto o diseño enlazado.",
           unreachable: "No se pudo contactar al servidor. Probá de nuevo.",
-          stale_base: "El diseño avanzó en el servidor: actualizá la base de trabajo en la pestaña Estado.",
+          stale_base: "El diseño avanzó en el servidor: actualizá la base de trabajo en la tarjeta Modelo / Diseño.",
           design_archived: "El diseño fue archivado en Granete y no puede editarse desde este modelo.",
           bad_contract: "El servidor respondió datos que esta extensión no entiende. Actualizá la extensión.",
           error: "No se pudieron cargar los muebles del proyecto."
@@ -6569,7 +7062,7 @@
               actionsGroup.style.gap = "6px";
 
               var btnConfirm = document.createElement("button");
-              btnConfirm.className = "btn btn-primary";
+              btnConfirm.className = "btn btn-secondary";
               btnConfirm.style.width = "auto";
               btnConfirm.textContent = pfConfirming[row.id] ? "Sincronizando…" : "Reintentar sincronización";
               btnConfirm.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id];
@@ -6587,7 +7080,7 @@
               card.appendChild(actionsGroup);
           } else if (row.reconciliationState === "unplaced") {
               var action = document.createElement("button");
-              action.className = "btn btn-primary";
+              action.className = "btn btn-secondary";
               action.style.width = "auto";
               action.textContent = pfPlacing[row.id] ? "Colocando…" : "Colocar";
               action.disabled = !!pfPlacing[row.id];
@@ -6595,7 +7088,7 @@
               card.appendChild(action);
           } else if (row.reconciliationState === "missing_local") {
             var restore = document.createElement("button");
-            restore.className = "btn btn-primary";
+            restore.className = "btn btn-secondary";
             restore.style.width = "auto";
             restore.textContent = pfRestoring[row.id] ? "Restaurando…" : "Restaurar en este archivo";
             restore.disabled = !!pfRestoring[row.id];
@@ -6851,9 +7344,9 @@
 
         function pfPlaceFailureMessage(result) {
           switch (result.code) {
-            case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colocalo desde la pestaña Proyecto.";
+            case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colocálo desde la pestaña Proyecto.";
             case "unbound": return "Conectá el modelo al proyecto primero.";
-            case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en Estado.";
+            case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en la tarjeta Modelo / Diseño.";
             case "not_found": return "El mueble no pertenece al proyecto conectado.";
             case "terminal": return "El mueble fue eliminado del proyecto.";
             case "duplicate_detected": return "Hay copias duplicadas del mismo mueble en el modelo; resolvé los duplicados antes.";
@@ -6890,7 +7383,6 @@
           setTimeout(function () { btnPfRefresh.disabled = false; }, 500);
         });
         btnPfRetry.addEventListener("click", requestProjectFurniture);
-        btnPfGoStatus.addEventListener("click", function () { switchTab("status"); });
         btnDesignSync.addEventListener("click", synchronizeDesign);
         // No pre-render: the panel loads when the tab first becomes visible
         // (all state cards start hidden in the markup).
@@ -6932,13 +7424,9 @@
             var setCopiedUI = function () {
               if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("check", 14);
               if (copyEnrollCodeText) copyEnrollCodeText.textContent = "¡Copiado!";
-              btnCopyEnrollCode.classList.remove("btn-secondary");
-              btnCopyEnrollCode.classList.add("btn-primary");
               setTimeout(function () {
                 if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("copy", 14);
                 if (copyEnrollCodeText) copyEnrollCodeText.textContent = "Copiar";
-                btnCopyEnrollCode.classList.remove("btn-primary");
-                btnCopyEnrollCode.classList.add("btn-secondary");
               }, 2000);
               showToast("success", "Código " + code + " copiado al portapapeles.");
             };

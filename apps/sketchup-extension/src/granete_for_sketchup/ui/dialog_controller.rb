@@ -2825,7 +2825,7 @@ module Granete
       module InspectorBridge
         FURNITURE_KINDS = %w[furnitureInstance bootstrapIntent].freeze
 
-        def handle_select_furniture(raw_payload = nil)
+        def handle_select_furniture(dialog, raw_payload = nil)
           payload = parse_payload(raw_payload)
           # The breadcrumb locates the host by its LOCAL ref — never by the
           # future server business ID (#384), which nothing owns yet.
@@ -2835,6 +2835,10 @@ module Granete
 
           if model && target && furniture_metadata?(model, target)
             select_entity(model, target)
+            # Review #847: selecting alone can leave the panel in Biblioteca
+            # (activeLibDef preserves the configurator). The explicit intent
+            # of "editar en el panel" carries its own tab activation.
+            execute_bridge(dialog, 'activateInspectorTab', {})
             @logger.info('inspector_select_furniture', instance_ref: instance_ref)
           else
             @logger.warn('inspector_select_furniture_rejected',
@@ -3562,7 +3566,7 @@ module Granete
           dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
-          dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
+          dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(dialog, p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
           register_auth_callbacks(dialog)
@@ -3573,6 +3577,44 @@ module Granete
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.
           dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
+          register_selection_context_menu
+        end
+
+        # Native reachability for the designer's right click (UX review
+        # 2026-09): when the current selection resolves to a MANAGED
+        # furniture, Granete adds its panel actions to the host context
+        # menu. The items reuse the existing seams — select pushes the
+        # SelectionContext (the panel opens the Inspector), delete rides
+        # the same honest handle_delete with its onDeleteResult close.
+        # Selection-only resolution: no geometry, no metadata write here.
+        def register_selection_context_menu
+          return unless defined?(::UI) && ::UI.respond_to?(:add_context_menu_handler)
+          return if @selection_context_menu_registered
+
+          @selection_context_menu_registered = true
+          ::UI.add_context_menu_handler do |menu|
+            dialog = @dialog
+            next unless dialog&.visible?
+
+            context = begin
+              selection = (@observed_model || active_model)&.selection
+              @selection_observer.resolve(selection&.first, selection: selection)
+            rescue StandardError
+              nil
+            end
+            next unless context && context.kind == 'furniture' && context.furniture_instance_ref
+
+            menu.add_separator
+            menu.add_item('Granete: editar en el panel') do
+              handle_select_furniture(dialog, JSON.generate('furnitureInstanceRef' => context.furniture_instance_ref))
+            end
+            delete_cap = context.capabilities.to_h['canDelete']
+            if delete_cap && delete_cap['supported']
+              menu.add_item('Granete: eliminar mueble') do
+                handle_delete(dialog, JSON.generate('instanceId' => context.furniture_instance_ref))
+              end
+            end
+          end
         end
 
         # #467/#498 authoring channels: the versioned mutation bridge plus
@@ -3651,36 +3693,47 @@ module Granete
         end
 
         def handle_delete(dialog, raw_payload = nil)
-          payload = if raw_payload.is_a?(String) && !raw_payload.strip.empty?
-                      JSON.parse(raw_payload)
-                    else
-                      raw_payload || {}
-                    end
+          payload = parse_payload(raw_payload)
           instance_id = payload['instanceId'] || payload[:instanceId]
 
           deleted = false
+          failure_reason = nil
           target = find_target_furniture_entity(instance_id)
           if target && active_model
-            store = @metadata_store_factory.call(active_model)
-            meta = store.read(target)
-            if meta && meta['identity']
-              active_model.start_operation('Eliminar Mueble', true)
-              active_model.active_entities.erase_entities([target])
-              active_model.commit_operation
-              deleted = true
-              @logger.info('furniture_deleted', instance_id: instance_id || meta.dig('identity', 'instanceRef'))
-            else
-              @logger.warn('furniture_delete_rejected_no_metadata', target_class: target.class.name)
-            end
+            deleted, failure_reason = erase_furniture_target!(target, instance_id)
           else
+            failure_reason = 'el mueble no se encontró en el modelo'
             @logger.warn('furniture_delete_target_not_found', instance_id: instance_id)
           end
 
+          # Cierre honesto del gesto (peak-end): el panel necesita saber si la
+          # eliminación ocurrió para confirmar con la red de seguridad (Undo)
+          # o explicar por qué no — un panel en blanco no es feedback.
+          execute_bridge(dialog, 'onDeleteResult',
+                         { 'ok' => deleted, 'instanceId' => instance_id, 'reason' => failure_reason })
           execute_bridge(dialog, 'onSelectionChange', nil)
           refresh_after_local_delete(dialog) if deleted
         rescue StandardError => e
           @logger.error('furniture_delete_failed', error: e)
+          execute_bridge(dialog, 'onDeleteResult', { 'ok' => false, 'reason' => e.message })
           execute_bridge(dialog, 'onSelectionChange', nil)
+        end
+
+        # One undoable SketchUp operation erasing a managed furniture with
+        # Granete metadata. Returns [deleted, failure_reason].
+        def erase_furniture_target!(target, instance_id)
+          store = @metadata_store_factory.call(active_model)
+          meta = store.read(target)
+          return [false, 'la entidad no tiene metadatos de Granete'] unless meta && meta['identity']
+
+          active_model.start_operation('Eliminar Mueble', true)
+          active_model.active_entities.erase_entities([target])
+          active_model.commit_operation
+          @logger.info('furniture_deleted', instance_id: instance_id || meta.dig('identity', 'instanceRef'))
+          [true, nil]
+        rescue StandardError => e
+          @logger.warn('furniture_delete_rejected_no_metadata', target_class: target.class.name, error: e)
+          [false, 'la entidad no tiene metadatos de Granete']
         end
 
         def notify_commercial_projection_local_delete(dialog)

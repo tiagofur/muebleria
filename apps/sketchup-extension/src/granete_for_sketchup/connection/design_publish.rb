@@ -526,7 +526,7 @@ module Granete
             unless result['ok']
               return failure('base_advance_failed',
                              'la revisión se publicó pero el modelo no pudo actualizar su base; ' \
-                             'usá Actualizar base de trabajo en la pestaña Estado')
+                             'usá Actualizar base de trabajo en la tarjeta Modelo / Diseño')
             end
 
             status = result['status'] || {}

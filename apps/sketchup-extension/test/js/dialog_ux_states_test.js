@@ -236,6 +236,17 @@ function runTests() {
   dialog.onCreateProjectFurnitureResult({ ok: false, code: 'created_pending' });
   check(el(sandbox, 'toast-message').className === 'toast warning', 'partial creation surfaces a warning toast');
 
+  // --- consecuencia invertida: el delete (reversible) cierra con su red de
+  //     seguridad; el error nombra la causa en vez de dejar el panel mudo ---
+  dialog.onDeleteResult({ ok: true });
+  check(el(sandbox, 'toast-message').className === 'toast success' &&
+        el(sandbox, 'toast-message').textContent.indexOf('Ctrl+Z') !== -1,
+    'delete success closes the gesture naming the Undo safety net');
+  dialog.onDeleteResult({ ok: false, reason: 'el mueble no se encontró en el modelo' });
+  check(el(sandbox, 'toast-message').className === 'toast error' &&
+        el(sandbox, 'toast-message').textContent.indexOf('no se encontró') !== -1,
+    'delete failure explains the cause');
+
   // --- binding states stay visually distinguishable ---
   dialog.onModelBindingStatus({ state: 'stale_base' });
   check(el(sandbox, 'model-binding-badge').className.includes('conflict'),
@@ -246,6 +257,60 @@ function runTests() {
   dialog.onModelBindingStatus({ state: 'design_archived' });
   check(el(sandbox, 'model-binding-badge').className.includes('invalid'),
     'archived design renders as blocked');
+
+  // --- cuenta y conexión: la sesión vive en el popover del pill, no en una pestaña ---
+  check(!html.includes('id="pane-status"') && !html.includes('data-tab="status"'),
+    'Estado dejó de ser una pestaña del panel');
+  check(html.includes('id="account-popover"') && html.includes('aria-controls="account-popover"'),
+    'la cuenta vive en un popover anclado al pill del header');
+  check(!html.includes('id="btn-pf-go-status"'),
+    'Proyecto ya no expulsa al usuario hacia una pestaña de sesión');
+  dialog.setCatalog({ source: 'unauthenticated', definitions: [] });
+  check(el(sandbox, 'library-empty-title').textContent.includes('Sesión requerida'),
+    'sin sesión la biblioteca lo dice con un CTA');
+  el(sandbox, 'btn-library-empty-action').onclick();
+  check(visible(el(sandbox, 'account-popover')), 'el CTA de sesión abre el popover de cuenta');
+  check(el(sandbox, 'connection-pill').getAttribute('aria-expanded') === 'true',
+    'el pill anuncia el popover abierto');
+  el(sandbox, 'connection-pill').click();
+  check(!visible(el(sandbox, 'account-popover')), 'clic en el pill cierra el popover');
+  check(el(sandbox, 'connection-pill').getAttribute('aria-expanded') === 'false',
+    'el pill anuncia el popover cerrado');
+  dialog.setStatus({ state: 'logged_in', user: { name: 'A', email: 'a@b' }, server_url: 'https://x' });
+  check(el(sandbox, 'connection-pill').className.includes('connection-pill-btn'),
+    'setStatus conserva la clase de botón del pill (no lo rompe en <div>)');
+  check(visible(el(sandbox, 'session-card')) && !visible(el(sandbox, 'login-card')),
+    'con sesión el popover muestra la sesión y oculta la vinculación');
+
+  // --- foco contextual del popover (review #847): nunca un control oculto ---
+  const focusLog = [];
+  ['login-server', 'btn-logout', 'connection-pill', 'btn-close'].forEach((id) => {
+    el(sandbox, id).focus = () => focusLog.push(id);
+  });
+  focusLog.length = 0;
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'btn-logout',
+    'con sesión el popover enfoca la acción visible (Cerrar sesión), no el input oculto');
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'connection-pill',
+    'al cerrar el foco vuelve al pill');
+
+  dialog.setStatus({ state: 'configured', server_url: 'https://x' });
+  focusLog.length = 0;
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'login-server',
+    'sin sesión el popover enfoca el servidor (login-card visible)');
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'connection-pill',
+    'el retorno del foco al pill también aplica sin sesión');
+
+  // --- selector de pestañas real (review #847): .tab-btn no existe ---
+  check(html.includes('querySelector(".tab-button.active")'),
+    'la selección consultada usa la clase real .tab-button.active');
+  check(!html.includes('.tab-btn.active'),
+    'ninguna consulta usa la clase inexistente .tab-btn');
+  check(html.includes('activateInspectorTab'),
+    'el puente activateInspectorTab lleva "editar en el panel" al Inspector');
 
   return passed;
 }

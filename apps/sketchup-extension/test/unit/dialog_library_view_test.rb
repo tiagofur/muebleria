@@ -118,6 +118,35 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'dim-input-row'
   end
 
+  def test_configurator_contract_preview_summary_and_sticky_action
+    # El configurador nunca opera a ciegas: preview del mueble, una fila
+    # compacta por parámetro y cotas vivas junto a la acción primaria.
+    assert_includes @html_content, 'id="library-selected-preview"'
+    assert_includes @html_content, 'function renderConfiguratorPreview('
+    assert_includes @html_content, 'id="configurator-actionbar"'
+    assert_includes @html_content, 'id="library-summary-dims"'
+    assert_includes @html_content, 'id="library-summary-parts"'
+    assert_includes @html_content, 'Medidas y Opciones'
+    # Una línea por parámetro: etiqueta a la izquierda, control a la derecha.
+    assert_includes @html_content, 'param-control'
+    # Los botones "Catálogo" por rol murieron: la fila es el control y el
+    # chevron comunica la navegación.
+    refute_includes @html_content, 'btn-picker-open'
+    assert_includes @html_content, 'material-chevron'
+    # El inspector comparte el patrón: dock con cotas junto a la acción
+    # primaria, DENTRO del fieldset fail-closed (#476), y delete fuera.
+    assert_includes @html_content, 'id="inspector-actionbar"'
+    assert_includes @html_content, 'class="action-dock"'
+    assert_includes @html_content, 'id="inspector-summary-dims"'
+    # btn-update dentro del fieldset del inspector; btn-delete después de cerrarlo.
+    fieldset_open = @html_content.index('id="inspector-edit-fieldset"')
+    fieldset_close = @html_content.index('</fieldset>', fieldset_open)
+    update_pos = @html_content.index('id="btn-update"', fieldset_open)
+    delete_pos = @html_content.index('id="btn-delete"', fieldset_open)
+    assert update_pos < fieldset_close, 'btn-update pertenece al fieldset de mutación'
+    assert fieldset_close < delete_pos, 'btn-delete queda fuera del fieldset (boundary de capability)'
+  end
+
   def test_dialog_html_contains_svg_placeholder_fallback
     assert_includes @html_content, 'function createFurniturePlaceholderSvg('
     assert_includes @html_content, 'furniture-card-svg'
@@ -214,14 +243,20 @@ class DialogLibraryViewTest < Minitest::Test
   end
 
   def test_pieces_summary_prefers_the_server_estimated_composition
-    # The "piezas" summary must come from the definition's real composition
-    # (estimatedPartCount/estimatedHardwareCount resolved server-side) and only
-    # fall back to the 2+shelfCount+doorCount heuristic for static catalogs.
+    # Review #847: the dock count stays honest — the definition's server-side
+    # estimate (estimatedPartCount/estimatedHardwareCount) only applies while
+    # the counting params sit at their defaults, the heuristic reads the
+    # CURRENT values, every local number is labeled "Aprox." and nothing is
+    # invented when no estimate exists ("se calculan al resolver").
     assert_includes @html_content, 'function estimatedPartsLabel('
     assert_includes @html_content, 'estimatedPartCount'
     assert_includes @html_content, 'estimatedHardwareCount'
-    assert_includes @html_content, 'libSummaryParts.textContent = estimatedPartsLabel(activeLibDef);'
-    assert_includes @html_content, 'inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef);'
+    assert_includes @html_content,
+                    'libSummaryParts.textContent = estimatedPartsLabel(activeLibDef, libParams);'
+    assert_includes @html_content,
+                    'inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef, inspectorParams);'
+    assert_includes @html_content, '"Aprox. "'
+    assert_includes @html_content, 'Piezas: se calculan al resolver'
   end
 
   def test_insertion_result_reports_resolved_component_counts
