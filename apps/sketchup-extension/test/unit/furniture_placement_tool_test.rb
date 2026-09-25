@@ -1275,23 +1275,71 @@ class FurniturePlacementToolTest < Minitest::Test
     assert_equal 0, placement_tool.rotation_quarters
   end
 
-  def test_context_menu_lists_native_gestures_and_acts_on_them
+  # Host-faithful menu double: records the exact Sketchup::Menu surface a
+  # real host offers (add_item(title) { block } / add_separator), in order.
+  class RecordingMenu
+    attr_reader :entries
+
+    def initialize
+      @entries = []
+    end
+
+    def add_item(title, &block)
+      @entries << { type: :item, title: title, block: block }
+      @entries.length
+    end
+
+    def add_separator
+      @entries << { type: :separator }
+    end
+
+    def item_titles
+      @entries.select { |e| e[:type] == :item }.map { |e| e[:title] }
+    end
+
+    def invoke(title)
+      entry = @entries.find { |e| e[:type] == :item && e[:title] == title }
+      raise "no menu item #{title.inspect}" unless entry
+
+      entry[:block].call
+    end
+  end
+
+  # Review #847 P1: the host entry point is the REAL Tool protocol
+  # (#getMenu(menu) receiving a Sketchup::Menu), not a bespoke API. The
+  # signature and the menu shape are asserted against a menu double that
+  # mirrors the host surface; nothing here invents a callback.
+  def test_context_menu_uses_the_real_get_menu_tool_protocol
     placement_tool, = tool([[0.0, 0.0, 0.0]])
     placement_tool.activate
     move_cursor(placement_tool)
 
-    items = placement_tool.getContextMenuItems
-    assert_includes items, Tool::CONTEXT_MENU_ROTATE_LEFT
-    assert_includes items, Tool::CONTEXT_MENU_ROTATE_RIGHT
-    assert_includes items, Tool::CONTEXT_MENU_CYCLE_ANCHOR
-    assert_includes items, Tool::CONTEXT_MENU_CANCEL
-    assert_includes items, '---', 'separator groups the destructive exit'
+    assert_equal 1, placement_tool.method(:getMenu).arity,
+                 'SketchUp calls getMenu(menu) with exactly the menu'
 
-    placement_tool.onContextMenu(Tool::CONTEXT_MENU_ROTATE_RIGHT)
+    menu = RecordingMenu.new
+    result = placement_tool.getMenu(menu)
+    assert_same menu, result, 'getMenu returns the host menu it populated'
+
+    assert_equal [
+      Tool::CONTEXT_MENU_ROTATE_LEFT,
+      Tool::CONTEXT_MENU_ROTATE_RIGHT,
+      Tool::CONTEXT_MENU_CYCLE_ANCHOR,
+      Tool::CONTEXT_MENU_CANCEL
+    ], menu.item_titles
+
+    separator_index = menu.entries.index { |e| e[:type] == :separator }
+    cancel_index = menu.entries.index { |e| e[:title] == Tool::CONTEXT_MENU_CANCEL }
+    anchor_index = menu.entries.index { |e| e[:title] == Tool::CONTEXT_MENU_CYCLE_ANCHOR }
+    assert separator_index, 'the menu carries a separator'
+    assert(anchor_index < separator_index && separator_index < cancel_index,
+           'the separator groups the destructive exit below the gestures')
+
+    menu.invoke(Tool::CONTEXT_MENU_ROTATE_RIGHT)
     assert_equal 1, placement_tool.rotation_quarters
-    placement_tool.onContextMenu(Tool::CONTEXT_MENU_CYCLE_ANCHOR)
+    menu.invoke(Tool::CONTEXT_MENU_CYCLE_ANCHOR)
     assert_equal :back_right_bottom, placement_tool.anchor
-    placement_tool.onContextMenu(Tool::CONTEXT_MENU_CANCEL)
+    menu.invoke(Tool::CONTEXT_MENU_CANCEL)
     assert placement_tool.cancelled?
     assert_equal [:escape], @cancels
   end

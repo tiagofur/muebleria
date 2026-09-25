@@ -586,6 +586,17 @@
         white-space: nowrap;
       }
 
+      /* Confirmación deliberada de publicación: la acción confirmatoria es
+         un control distinto al botón original, no un segundo clic. */
+      .publish-confirm-actions {
+        display: flex;
+        gap: var(--space-2);
+      }
+
+      .publish-confirm-actions .btn {
+        flex: 1 1 0;
+      }
+
       .actionbar-summary {
         flex: 1 1 auto;
         min-width: 0;
@@ -2190,6 +2201,16 @@
                    publicar. Las excepciones se muestran sólo para lo que
                    requiere atención. -->
               <button id="btn-binding-publish" class="btn btn-primary" style="width: 100%; display: none; margin-top: var(--space-1);" disabled>Publicar diseño</button>
+              <!-- Confirmación deliberada (review #847): el botón original
+                   sólo arma; publicar exige una acción DISTINTA, así un
+                   doble clic físico nunca atraviesa la frontera. -->
+              <div id="binding-publish-confirm" class="publish-confirm" style="display: none; margin-top: var(--space-1);">
+                <p class="subhead" style="margin: 0 0 var(--space-2) 0; font-size: var(--text-xs);">Se creará una nueva revisión inmutable del diseño.</p>
+                <div class="publish-confirm-actions">
+                  <button id="btn-publish-cancel" type="button" class="btn btn-secondary">Cancelar</button>
+                  <button id="btn-publish-confirm" type="button" class="btn btn-primary">Publicar revisión</button>
+                </div>
+              </div>
               <button id="btn-design-validate" class="btn btn-secondary" style="width: 100%; display: none; margin-top: var(--space-1);">Validar diseño</button>
               <p id="binding-publish-progress" class="subhead" style="display: none; margin: var(--space-2) 0 0 0; font-size: var(--text-xs);"></p>
               <div id="binding-publish-exceptions" style="display: none; margin-top: var(--space-2);"></div>
@@ -3153,27 +3174,36 @@
         // lo cierran; el foco vuelve al pill.
         // ------------------------------------------------------------------
         var accountPopover = document.getElementById("account-popover");
-        var accountLastFocus = null;
+        var accountCloseBtn = document.getElementById("btn-close");
+
+        // Foco contextual (review #847): sin sesión el camino principal es
+        // el servidor; con sesión, la acción útil visible (cerrar sesión).
+        // Nunca se enfoca un control display:none.
+        function accountFocusTarget() {
+          if (loginCard && loginCard.style.display !== "none") return loginServer;
+          var logout = document.getElementById("btn-logout");
+          if (logout && logout.style.display !== "none") return logout;
+          return accountCloseBtn || connectionPill;
+        }
 
         function openAccountPopover() {
           if (accountPopover.style.display === "block") return;
-          accountLastFocus = document.activeElement || null;
           accountPopover.style.display = "block";
           connectionPill.setAttribute("aria-expanded", "true");
+          var target = accountFocusTarget();
+          if (target && target.focus) target.focus();
         }
 
         function closeAccountPopover() {
           if (accountPopover.style.display === "none") return;
           accountPopover.style.display = "none";
           connectionPill.setAttribute("aria-expanded", "false");
-          if (accountLastFocus && accountLastFocus.focus) accountLastFocus.focus();
-          accountLastFocus = null;
+          if (connectionPill.focus) connectionPill.focus();
         }
 
         connectionPill.addEventListener("click", function () {
           if (accountPopover.style.display === "none") {
             openAccountPopover();
-            loginServer.focus();
           } else {
             closeAccountPopover();
           }
@@ -4065,14 +4095,14 @@
               libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca de muebles.";
               btnEmptyAction.textContent = "Ir a Iniciar Sesión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { openAccountPopover(); loginServer.focus(); };
+              btnEmptyAction.onclick = function () { openAccountPopover(); };
             } else if (source === "error") {
               libEmptyIcon.innerHTML = icon("warning", 28);
               libEmptyTitle.textContent = "Error de conexión";
               libEmptyMsg.textContent = "No se pudo conectar con el servidor Granete. Verificá tu conexión y estado del servidor.";
               btnEmptyAction.textContent = "Revisar conexión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { openAccountPopover(); loginServer.focus(); };
+              btnEmptyAction.onclick = function () { openAccountPopover(); };
             } else {
               libEmptyIcon.innerHTML = icon("box", 28);
               libEmptyTitle.textContent = "El taller todavía no tiene muebles";
@@ -4772,11 +4802,19 @@
             // the library while browsing the catalog. Unmanaged geometry does
             // not pull focus either; only managed contexts do.
             var managed = selectedContext && ["furniture", "aggregate", "part", "hardware"].indexOf(selectedContext.kind) !== -1;
-            var activeTabBtn = document.querySelector(".tab-btn.active");
+            var activeTabBtn = document.querySelector(".tab-button.active");
             var currentTabId = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "library";
             if (managed && (currentTabId === "inspector" || !activeLibDef)) {
               switchTab("inspector");
             }
+          },
+
+          // "Granete: editar en el panel" (menú contextual de una selección
+          // gestionada): Ruby selecciona la entidad Y pide el Inspector —
+          // aunque el configurador siga abierto (activeLibDef), el usuario
+          // no puede quedarse mirando Biblioteca.
+          activateInspectorTab: function () {
+            switchTab("inspector");
           },
 
           onMaterialChoiceApplied: function (payload) {
@@ -5134,24 +5172,47 @@
           return parameter ? message + ": " + parameter : message;
         }
 
-        // Estimated piece count of a definition. Server-resolved catalogs carry
-        // the real composition (estimatedPartCount/estimatedHardwareCount from
-        // the module's structure); the static fallback keeps the old heuristic.
-        function estimatedPartsLabel(def) {
-          if (def && typeof def.estimatedPartCount === "number") {
+        // Honest piece count for the dock (review #847): never present a
+        // local estimate as if it were the resolved BOM. Precedence:
+        // (A) a server-resolved count for the CURRENT configuration would
+        //     win — no such field reaches the dialog today, so none is
+        //     consumed here; the backend stays the authority.
+        // (B) otherwise an explicit "Aprox." — the definition's
+        //     estimatedPartCount while the counting params sit at their
+        //     defaults, else the pre-existing heuristic fed with the
+        //     CURRENT values (not the defaults).
+        // (C) when nothing can be estimated honestly: defer to resolve.
+        function estimatedPartsLabel(def, currentValues) {
+          var values = currentValues || {};
+          var params = def && def.parameters ? def.parameters : [];
+          var countingParams = params.filter(function (p) {
+            return p.name === "shelfCount" || p.name === "doorCount";
+          });
+
+          var countingAtDefaults = countingParams.every(function (p) {
+            var current = values[p.name];
+            return current === undefined || current === null ||
+              Number(current) === Number(p.defaultValue);
+          });
+
+          if (def && typeof def.estimatedPartCount === "number" &&
+              (countingParams.length === 0 || countingAtDefaults)) {
             var parts = def.estimatedPartCount;
             var hw = typeof def.estimatedHardwareCount === "number" ? def.estimatedHardwareCount : 0;
-            return parts + " pieza" + (parts === 1 ? "" : "s") + (hw > 0 ? " + " + hw + " herraje" + (hw === 1 ? "" : "s") : "");
+            return "Aprox. " + parts + " pieza" + (parts === 1 ? "" : "s") +
+              (hw > 0 ? " + " + hw + " herraje" + (hw === 1 ? "" : "s") : "");
           }
-          var params = def && def.parameters ? def.parameters : [];
-          var counts = { shelfCount: 0, doorCount: 0 };
-          params.forEach(function (p) {
-            if (p.name === "shelfCount" || p.name === "doorCount") {
-              counts[p.name] = Number(p.defaultValue) || 0;
-            }
-          });
-          var guess = 2 + counts.shelfCount + counts.doorCount;
-          return guess + " piezas";
+
+          if (countingParams.length > 0) {
+            var guess = 2;
+            countingParams.forEach(function (p) {
+              var current = values[p.name];
+              guess += Number(current !== undefined && current !== null ? current : p.defaultValue) || 0;
+            });
+            return "Aprox. " + guess + " piezas";
+          }
+
+          return "Piezas: se calculan al resolver";
         }
 
         function updateLibrarySummary() {
@@ -5159,7 +5220,7 @@
           var h = libParams.heightMm || 720;
           var d = libParams.depthMm || 590;
           libSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-          libSummaryParts.textContent = estimatedPartsLabel(activeLibDef);
+          libSummaryParts.textContent = estimatedPartsLabel(activeLibDef, libParams);
         }
 
         function updateInspectorSummary() {
@@ -5167,7 +5228,7 @@
           var h = inspectorParams.heightMm || 720;
           var d = inspectorParams.depthMm || 590;
           inspectorSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-          inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef);
+          inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef, inspectorParams);
         }
 
         // ------------------------------------------------------------------
@@ -6098,12 +6159,17 @@
         };
         var publishInFlight = false;
         var lastPublishOutcome = null;
-        // Consecuencia invertida (revisión UX 2026-09): publicar crea una
-        // revisión INMUTABLE del diseño; el delete (reversible con Undo) ya
-        // pedía confirmación y esto no. La acción irreversible ahora también
-        // se arma: primer clic explica, segundo confirma, 6 s de ventana.
+        // Consecuencia invertida (revisión UX 2026-09 + review #847):
+        // publicar crea una revisión INMUTABLE del diseño. El botón original
+        // sólo ARMA la confirmación; publicar exige una acción deliberada
+        // DISTINTA ("Publicar revisión"), así un doble clic físico nunca
+        // atraviesa la frontera. El timeout de 6 s es un colchón, no la
+        // defensa: la defensa es la acción separada.
         var publishArmed = false;
         var publishArmTimer = null;
+        var bindingPublishConfirmRow = document.getElementById("binding-publish-confirm");
+        var btnPublishConfirm = document.getElementById("btn-publish-confirm");
+        var btnPublishCancel = document.getElementById("btn-publish-cancel");
 
         function publishIdleLabel() {
           return lastPublishOutcome && !lastPublishOutcome.ok
@@ -6117,8 +6183,41 @@
             clearTimeout(publishArmTimer);
             publishArmTimer = null;
           }
+          if (bindingPublishConfirmRow) bindingPublishConfirmRow.style.display = "none";
           if (bindingPublishBtn && !publishInFlight) {
+            bindingPublishBtn.style.display =
+              modelBindingState.status && canPublish(modelBindingState.status) ? "block" : "none";
             bindingPublishBtn.textContent = publishIdleLabel();
+          }
+        }
+
+        function armPublishConfirm() {
+          publishArmed = true;
+          if (bindingPublishBtn) bindingPublishBtn.style.display = "none";
+          if (bindingPublishConfirmRow) bindingPublishConfirmRow.style.display = "block";
+          if (bindingPublishProgress) {
+            bindingPublishProgress.style.display = "block";
+            bindingPublishProgress.textContent =
+              "Confirmá la acción para crear la nueva revisión inmutable del diseño.";
+          }
+          if (btnPublishConfirm && btnPublishConfirm.focus) btnPublishConfirm.focus();
+          if (publishArmTimer) clearTimeout(publishArmTimer);
+          publishArmTimer = setTimeout(resetPublishConfirm, 6000);
+        }
+
+        function startPublishOrchestration() {
+          resetPublishConfirm();
+          // #731 PR2: the click STARTS the automatic orchestration — a
+          // pending/blocked gate is no longer a client-side wall. Ruby
+          // converges what is safe, validates the whole design, re-checks
+          // the gate fail-closed and only then publishes (or returns the
+          // exceptions-only projection).
+          lastPublishOutcome = null;
+          renderPublishProgress({ step: "validating" });
+          if (window.sketchup && window.sketchup.publish_design_revision) {
+            window.sketchup.publish_design_revision();
+          } else {
+            handlePublishResult({ ok: false, code: "unavailable", reason: "publicación no disponible" });
           }
         }
 
@@ -6662,28 +6761,20 @@
         if (bindingPublishBtn) {
           bindingPublishBtn.addEventListener("click", function () {
             if (publishInFlight) return;
-            if (!publishArmed) {
-              publishArmed = true;
-              bindingPublishBtn.textContent = "¿Publicar revisión inmutable?";
-              bindingPublishProgress.style.display = "block";
-              bindingPublishProgress.textContent =
-                "Se creará una nueva revisión inmutable del diseño. Segundo clic para confirmar.";
-              publishArmTimer = setTimeout(resetPublishConfirm, 6000);
-              return;
-            }
+            // Sólo arma: publicar exige la acción confirmatoria separada.
+            armPublishConfirm();
+          });
+        }
+        if (btnPublishCancel) {
+          btnPublishCancel.addEventListener("click", function () {
             resetPublishConfirm();
-            // #731 PR2: the click STARTS the automatic orchestration — a
-            // pending/blocked gate is no longer a client-side wall. Ruby
-            // converges what is safe, validates the whole design, re-checks
-            // the gate fail-closed and only then publishes (or returns the
-            // exceptions-only projection).
-            lastPublishOutcome = null;
-            renderPublishProgress({ step: "validating" });
-            if (window.sketchup && window.sketchup.publish_design_revision) {
-              window.sketchup.publish_design_revision();
-            } else {
-              handlePublishResult({ ok: false, code: "unavailable", reason: "publicación no disponible" });
-            }
+            if (bindingPublishBtn && bindingPublishBtn.focus) bindingPublishBtn.focus();
+          });
+        }
+        if (btnPublishConfirm) {
+          btnPublishConfirm.addEventListener("click", function () {
+            if (publishInFlight || !publishArmed) return;
+            startPublishOrchestration();
           });
         }
         if (designValidateBtn) {

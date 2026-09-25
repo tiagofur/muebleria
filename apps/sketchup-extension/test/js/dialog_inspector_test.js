@@ -448,6 +448,59 @@ function runTests() {
   dialog.onSelectionChange(null);
   check(visible(el(sandbox, 'inspector-empty-state')), 'cleared selection returns to empty state');
 
+  // --- review #847: managed selection reaches the Inspector, and the
+  // explicit "editar en el panel" intent wins even with the configurator
+  // (activeLibDef) still open. Class-aware tab probe: the real panel marks
+  // the active tab with .tab-button.active — the selector under test. ---
+  const tabs = {
+    library: sandbox.document.getElementById('tab-btn-library'),
+    project: sandbox.document.getElementById('tab-btn-project'),
+    inspector: sandbox.document.getElementById('tab-btn-inspector')
+  };
+  tabs.library.setAttribute('data-tab', 'library');
+  tabs.project.setAttribute('data-tab', 'project');
+  tabs.inspector.setAttribute('data-tab', 'inspector');
+  tabs.library.classList.add('active');
+  const originalQuerySelector = sandbox.document.querySelector;
+  const originalQuerySelectorAll = sandbox.document.querySelectorAll;
+  sandbox.document.querySelector = (sel) => {
+    if (sel === '.tab-button.active') {
+      return Object.values(tabs).find((t) => t.classList.contains('active')) || null;
+    }
+    const byDataTab = sel && sel.match(/^\.tab-button\[data-tab='(.+)'\]$/);
+    if (byDataTab) return tabs[byDataTab[1]] || null;
+    return originalQuerySelector(sel);
+  };
+  sandbox.document.querySelectorAll = (sel) => {
+    if (sel === '.tab-button') return Object.values(tabs);
+    return originalQuerySelectorAll(sel);
+  };
+
+  // Without activeLibDef a managed selection lands on the Inspector.
+  dialog.onSelectionChange(furnitureContext());
+  check(el(sandbox, 'pane-inspector').classList.contains('active'),
+    'una selección gestionada activa el Inspector (selector .tab-button.active funcional)');
+
+  // Back to the library with the configurator open (activeLibDef set).
+  dialog.setCatalog({ definitions: [DEFINITION], presets: [], categories: [], materials: [], source: 'workshop' });
+  const grid = el(sandbox, 'library-cards-grid');
+  assert(grid.children.length > 0, 'la tarjeta del catálogo se renderizó');
+  grid.children[0].click(); // opens the configurator: activeLibDef != null
+  el(sandbox, 'pane-inspector').classList.remove('active');
+  tabs.library.classList.add('active');
+  tabs.inspector.classList.remove('active');
+  dialog.onSelectionChange(furnitureContext({ furnitureInstanceRef: 'ref-2' }));
+  check(!el(sandbox, 'pane-inspector').classList.contains('active'),
+    'la selección NO expulsa al usuario del configurador abierto (contexto preservado)');
+  check(el(sandbox, 'library-configurator-view').style.display !== 'none',
+    'el configurador sigue visible tras la selección externa');
+
+  // The explicit bridge Ruby pushes for "Granete: editar en el panel".
+  dialog.activateInspectorTab();
+  check(el(sandbox, 'pane-inspector').classList.contains('active') &&
+        tabs.inspector.classList.contains('active') && !tabs.library.classList.contains('active'),
+    'activateInspectorTab lleva al Inspector aunque el configurador siga abierto');
+
   return { success: true, testsPassed: passed };
 }
 

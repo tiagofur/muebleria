@@ -243,14 +243,20 @@ class DialogLibraryViewTest < Minitest::Test
   end
 
   def test_pieces_summary_prefers_the_server_estimated_composition
-    # The "piezas" summary must come from the definition's real composition
-    # (estimatedPartCount/estimatedHardwareCount resolved server-side) and only
-    # fall back to the 2+shelfCount+doorCount heuristic for static catalogs.
+    # Review #847: the dock count stays honest — the definition's server-side
+    # estimate (estimatedPartCount/estimatedHardwareCount) only applies while
+    # the counting params sit at their defaults, the heuristic reads the
+    # CURRENT values, every local number is labeled "Aprox." and nothing is
+    # invented when no estimate exists ("se calculan al resolver").
     assert_includes @html_content, 'function estimatedPartsLabel('
     assert_includes @html_content, 'estimatedPartCount'
     assert_includes @html_content, 'estimatedHardwareCount'
-    assert_includes @html_content, 'libSummaryParts.textContent = estimatedPartsLabel(activeLibDef);'
-    assert_includes @html_content, 'inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef);'
+    assert_includes @html_content,
+                    'libSummaryParts.textContent = estimatedPartsLabel(activeLibDef, libParams);'
+    assert_includes @html_content,
+                    'inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef, inspectorParams);'
+    assert_includes @html_content, '"Aprox. "'
+    assert_includes @html_content, 'Piezas: se calculan al resolver'
   end
 
   def test_insertion_result_reports_resolved_component_counts

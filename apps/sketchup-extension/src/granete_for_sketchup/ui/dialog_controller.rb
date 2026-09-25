@@ -2825,7 +2825,7 @@ module Granete
       module InspectorBridge
         FURNITURE_KINDS = %w[furnitureInstance bootstrapIntent].freeze
 
-        def handle_select_furniture(raw_payload = nil)
+        def handle_select_furniture(dialog, raw_payload = nil)
           payload = parse_payload(raw_payload)
           # The breadcrumb locates the host by its LOCAL ref — never by the
           # future server business ID (#384), which nothing owns yet.
@@ -2835,6 +2835,10 @@ module Granete
 
           if model && target && furniture_metadata?(model, target)
             select_entity(model, target)
+            # Review #847: selecting alone can leave the panel in Biblioteca
+            # (activeLibDef preserves the configurator). The explicit intent
+            # of "editar en el panel" carries its own tab activation.
+            execute_bridge(dialog, 'activateInspectorTab', {})
             @logger.info('inspector_select_furniture', instance_ref: instance_ref)
           else
             @logger.warn('inspector_select_furniture_rejected',
@@ -3562,7 +3566,7 @@ module Granete
           dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
-          dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(p) }
+          dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(dialog, p) }
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
           register_auth_callbacks(dialog)
@@ -3602,7 +3606,7 @@ module Granete
 
             menu.add_separator
             menu.add_item('Granete: editar en el panel') do
-              handle_select_furniture(JSON.generate('furnitureInstanceRef' => context.furniture_instance_ref))
+              handle_select_furniture(dialog, JSON.generate('furnitureInstanceRef' => context.furniture_instance_ref))
             end
             delete_cap = context.capabilities.to_h['canDelete']
             if delete_cap && delete_cap['supported']

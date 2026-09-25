@@ -282,6 +282,36 @@ function runTests() {
   check(visible(el(sandbox, 'session-card')) && !visible(el(sandbox, 'login-card')),
     'con sesión el popover muestra la sesión y oculta la vinculación');
 
+  // --- foco contextual del popover (review #847): nunca un control oculto ---
+  const focusLog = [];
+  ['login-server', 'btn-logout', 'connection-pill', 'btn-close'].forEach((id) => {
+    el(sandbox, id).focus = () => focusLog.push(id);
+  });
+  focusLog.length = 0;
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'btn-logout',
+    'con sesión el popover enfoca la acción visible (Cerrar sesión), no el input oculto');
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'connection-pill',
+    'al cerrar el foco vuelve al pill');
+
+  dialog.setStatus({ state: 'configured', server_url: 'https://x' });
+  focusLog.length = 0;
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'login-server',
+    'sin sesión el popover enfoca el servidor (login-card visible)');
+  el(sandbox, 'connection-pill').click();
+  check(focusLog[focusLog.length - 1] === 'connection-pill',
+    'el retorno del foco al pill también aplica sin sesión');
+
+  // --- selector de pestañas real (review #847): .tab-btn no existe ---
+  check(html.includes('querySelector(".tab-button.active")'),
+    'la selección consultada usa la clase real .tab-button.active');
+  check(!html.includes('.tab-btn.active'),
+    'ninguna consulta usa la clase inexistente .tab-btn');
+  check(html.includes('activateInspectorTab'),
+    'el puente activateInspectorTab lleva "editar en el panel" al Inspector');
+
   return passed;
 }
 

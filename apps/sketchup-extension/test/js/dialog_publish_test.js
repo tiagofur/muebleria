@@ -258,11 +258,11 @@ function runTests() {
     assert.ok(progress.textContent.indexOf('No se pudo confirmar el estado de fabricación') >= 0);
   });
 
-  // #731 PR2: a pending gate no longer swallows the click — the CONFIRMED
-  // click STARTS the Ruby orchestration (auto-convergence + batch
-  // validation). Publicar crea una revisión inmutable: el primer clic arma
-  // (explica la consecuencia), el segundo confirma.
-  test('first click arms the immutable-revision confirmation', (sandbox) => {
+  // Review #847 P1: Publicar crea una revisión inmutable. El botón original
+  // SÓLO arma una confirmación separada (Cancelar / Publicar revisión);
+  // publicar exige esa acción deliberada distinta, así un doble clic físico
+  // sobre el botón original jamás atraviesa la frontera.
+  test('first click arms a separate confirmation row, not a second-click trap', (sandbox) => {
     pushGate(sandbox, { allowed: false, total: 2, verified: 1, pending: 1 });
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const baseline = sandbox.__bridge.length;
@@ -270,13 +270,53 @@ function runTests() {
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
     assert.equal(publishCalls.length, 0, 'the first click only arms; nothing reaches Ruby');
-    const btn = el(sandbox, 'btn-binding-publish');
-    assert.equal(btn.textContent, '¿Publicar revisión inmutable?',
-      'the armed button names the consequence');
+    const row = el(sandbox, 'binding-publish-confirm');
+    assert.ok(visible(row), 'the armed state reveals the confirmation row');
+    assert.ok(!visible(el(sandbox, 'btn-binding-publish')),
+      'the original button hides while armed — the confirm action is distinct');
     const progress = el(sandbox, 'binding-publish-progress');
     assert.ok(visible(progress));
     assert.ok(progress.textContent.indexOf('revisión inmutable') >= 0,
-      'the arm hint explains what the second click creates');
+      'the arm hint explains what confirming creates');
+  });
+
+  test('an immediate double click on Publicar diseño never publishes', (sandbox) => {
+    pushGate(sandbox);
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    const baseline = sandbox.__bridge.length;
+    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-binding-publish').click();
+    const publishCalls = sandbox.__bridge.slice(baseline)
+      .filter((c) => c.action === 'publish_design_revision');
+    assert.equal(publishCalls.length, 0,
+      're-clicking the original button re-arms at most; only the separate confirm action publishes');
+    assert.ok(visible(el(sandbox, 'binding-publish-confirm')));
+  });
+
+  test('explicit confirm publishes exactly once; cancel disarms without publishing', (sandbox) => {
+    pushGate(sandbox);
+    sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
+    let baseline = sandbox.__bridge.length;
+    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-publish-confirm').click();
+    let publishCalls = sandbox.__bridge.slice(baseline)
+      .filter((c) => c.action === 'publish_design_revision');
+    assert.equal(publishCalls.length, 1,
+      'arm + explicit confirm reaches Ruby exactly once');
+    // Close the cycle like Ruby does, so later tests start idle.
+    sandbox.window.GraneteDialog.onPublishResult({ ok: true, revisionNumber: 8, baseRevisionId: 'r8' });
+
+    baseline = sandbox.__bridge.length;
+    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-publish-cancel').click();
+    publishCalls = sandbox.__bridge.slice(baseline)
+      .filter((c) => c.action === 'publish_design_revision');
+    assert.equal(publishCalls.length, 0, 'cancel disarms; nothing reaches Ruby');
+    assert.ok(!visible(el(sandbox, 'binding-publish-confirm')),
+      'the confirmation row closes on cancel');
+    assert.ok(visible(el(sandbox, 'btn-binding-publish')),
+      'the original button returns after cancel');
   });
 
   test('a blocked gate still starts the orchestration on confirm', (sandbox) => {
@@ -284,11 +324,11 @@ function runTests() {
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const baseline = sandbox.__bridge.length;
     el(sandbox, 'btn-binding-publish').click();
-    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-publish-confirm').click();
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
     assert.equal(publishCalls.length, 1,
-      'the confirmed click reaches Ruby; the fresh gate there decides');
+      'the confirmed action reaches Ruby; the fresh gate there decides');
     // Close the cycle like Ruby does, so later tests start idle.
     sandbox.window.GraneteDialog.onPublishResult({
       ok: false, code: 'preflight_incomplete', reason: 'faltan verificar 2 de 2 muebles del diseño'
@@ -300,7 +340,7 @@ function runTests() {
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     const baseline = sandbox.__bridge.length;
     el(sandbox, 'btn-binding-publish').click();
-    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-publish-confirm').click();
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
     assert.equal(publishCalls.length, 1);
@@ -328,6 +368,7 @@ function runTests() {
     pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-publish-confirm').click();
     sandbox.window.GraneteDialog.onPublishResult({ ok: true, revisionNumber: 8, baseRevisionId: 'r8' });
 
     const progress = el(sandbox, 'binding-publish-progress');
@@ -343,6 +384,7 @@ function runTests() {
     pushGate(sandbox);
     sandbox.window.GraneteDialog.onModelBindingStatus(status('connected'));
     el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-publish-confirm').click();
     sandbox.window.GraneteDialog.onPublishResult({
       ok: false, code: 'duplicate_furniture_identity', reason: 'FI-001'
     });
@@ -361,7 +403,8 @@ function runTests() {
     // own baseline instead of filtering the whole log.
     const baseline = sandbox.__bridge.length;
     el(sandbox, 'btn-binding-publish').click();
-    el(sandbox, 'btn-binding-publish').click();
+    el(sandbox, 'btn-publish-confirm').click();
+    el(sandbox, 'btn-publish-confirm').click();
     const publishCalls = sandbox.__bridge.slice(baseline)
       .filter((c) => c.action === 'publish_design_revision');
     assert.equal(publishCalls.length, 1, 'a publish in flight must not re-enter');

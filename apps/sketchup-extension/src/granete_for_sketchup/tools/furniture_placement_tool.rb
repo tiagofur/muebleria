@@ -400,19 +400,23 @@ module Granete
           view&.invalidate if view.respond_to?(:invalidate)
         end
 
-        # Right-click menu (host protocol). Items map 1:1 to existing
-        # gestures — the menu adds no capability, only native reachability.
+        # Right-click menu (host Tool protocol). SketchUp builds the
+        # context menu of an active Tool through #getMenu(menu): the tool
+        # adds items to the Sketchup::Menu it receives. Items map 1:1 to
+        # existing gestures — the menu adds no capability, only native
+        # reachability.
         # rubocop:disable-next Naming/MethodName -- host Tool protocol name
-        def getContextMenuItems
-          [
-            CONTEXT_MENU_ROTATE_LEFT,
-            CONTEXT_MENU_ROTATE_RIGHT,
-            CONTEXT_MENU_CYCLE_ANCHOR,
-            '---',
-            CONTEXT_MENU_CANCEL
-          ]
+        def getMenu(menu)
+          menu.add_item(CONTEXT_MENU_ROTATE_LEFT) { onContextMenu(CONTEXT_MENU_ROTATE_LEFT) }
+          menu.add_item(CONTEXT_MENU_ROTATE_RIGHT) { onContextMenu(CONTEXT_MENU_ROTATE_RIGHT) }
+          menu.add_item(CONTEXT_MENU_CYCLE_ANCHOR) { onContextMenu(CONTEXT_MENU_CYCLE_ANCHOR) }
+          menu.add_separator
+          menu.add_item(CONTEXT_MENU_CANCEL) { onContextMenu(CONTEXT_MENU_CANCEL) }
+          menu
         end
 
+        # Shared dispatcher: host menu blocks (and tests) route through
+        # here so each gesture keeps exactly one implementation.
         def onContextMenu(title)
           case title
           when CONTEXT_MENU_ROTATE_LEFT then rotate!(-1)
