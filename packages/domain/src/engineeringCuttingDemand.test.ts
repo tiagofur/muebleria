@@ -200,6 +200,51 @@ describe('releaseCutRowsFromDemand (#739)', () => {
     expect(front1?.moduleCode).toBe('MOD-BAJO-600');
   });
 
+  it('keeps frozen material identity and physical rows unchanged when the catalog is renamed', () => {
+    const original = demandFixture();
+    const demand = {
+      ...original,
+      units: original.units.map((unit) => ({
+        ...unit,
+        pieces: unit.pieces.map((piece) => ({ ...piece, frozenMaterialCode: ' FROZEN-001 ' })),
+      })),
+    };
+    const snapshot = JSON.stringify(demand);
+    const catalog = catalogFixture();
+    const before = releaseCutRowsFromDemand(demand, catalog);
+    const after = releaseCutRowsFromDemand(demand, {
+      ...catalog,
+      materials: catalog.materials.map((m) => ({ ...m, name: 'Nombre nuevo', code: 'LIVE-NEW' })),
+    });
+    expect(after.map((row) => row.releaseMaterialIdentity)).toEqual([
+      { materialId: 'mat-1', frozenCode: 'FROZEN-001' },
+      { materialId: 'mat-2', frozenCode: 'FROZEN-001' },
+      { materialId: 'mat-1', frozenCode: 'FROZEN-001' },
+    ]);
+    expect(after.map(({ materialName, ...row }) => row)).toEqual(
+      before.map(({ materialName, ...row }) => row),
+    );
+    expect(after.every((row) => row.materialCode === 'FROZEN-001')).toBe(true);
+    expect(after.every((row) => row.materialName === 'Nombre nuevo')).toBe(true);
+    expect(JSON.stringify(demand)).toBe(snapshot);
+  });
+
+  it.each([undefined, null, '', '   '])('never marks a live fallback code as frozen (%s)', (code) => {
+    const original = demandFixture();
+    const demand = {
+      ...original,
+      units: original.units.map((unit) => ({
+        ...unit,
+        pieces: unit.pieces.map((piece) => ({ ...piece, frozenMaterialCode: code })),
+      })),
+    };
+    const rows = releaseCutRowsFromDemand(demand, catalogFixture());
+    expect(rows[0]?.releaseMaterialIdentity).toEqual({ materialId: 'mat-1' });
+    expect(rows[0]?.materialCode).toBe('CODE-mat-1');
+    expect(rows[0]?.lengthMm).toBe(650);
+    expect(rows[1]?.quantity).toBe(2);
+  });
+
   it('fails closed when a frozen material is no longer in the catalog (no default sheet format)', () => {
     const catalog = catalogFixture();
     const broken = { ...catalog, materials: catalog.materials.filter((m) => m.id !== 'mat-2') };

@@ -118,6 +118,32 @@ describe('EngineeringWorkspace — #739 demanda congelada', () => {
     expect(screen.queryByTestId('eng-live-view-notice')).toBeNull();
   });
 
+  it('passes release material provenance through Despiece when the current catalog alias changes', () => {
+    const view = (materialName: string) => (
+      <EngineeringWorkspace
+        {...baseProps()}
+        releaseContext={readyContext}
+        releaseCuttingDemand={{
+          status: 'ready',
+          base: demandBase,
+          rows: [{
+            ...frozenRow,
+            materialName,
+            releaseMaterialIdentity: { materialId: 'mat-1', frozenCode: 'FROZEN-001' },
+          }],
+        }}
+      />
+    );
+    const { rerender } = render(view('Nombre original'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Despiece' }));
+    expect(screen.getByRole('heading', { name: /Código congelado: FROZEN-001/ })).toBeDefined();
+    rerender(view('Nombre nuevo'));
+    expect(screen.getByRole('heading', { name: /Código congelado: FROZEN-001/ })).toBeDefined();
+    expect(screen.getAllByText('Nombre actual del catálogo: Nombre nuevo')).toHaveLength(2);
+    expect(screen.getByText('650×720')).toBeDefined();
+    expect(screen.queryByText(/proyecto vivo/)).toBeNull();
+  });
+
   it('optimización recibe el pin de liberación y el plan guardado para esa liberación', () => {
     const saveSpy = vi.fn();
     render(
