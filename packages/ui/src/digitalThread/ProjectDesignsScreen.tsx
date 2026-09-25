@@ -5,6 +5,7 @@ import {
   Box,
   Calendar,
   CheckCircle2,
+  CircleDollarSign,
   ChevronRight,
   Copy,
   Download,
@@ -23,6 +24,7 @@ import {
 import {
   GraneteApiClient,
   GraneteApiError,
+  type CommercialProjection,
   type CreateDesignRequest,
   type Design,
   type DesignArtifactGrant,
@@ -81,6 +83,7 @@ export interface ProjectDesignsQueryKeys {
   readonly root: QueryKey;
   readonly designs: QueryKey;
   readonly designWorkingCopy: (designId: string) => QueryKey;
+  readonly commercialProjection: (designId: string) => QueryKey;
   readonly designMaterialProvenance: (designId: string) => QueryKey;
   readonly designRevisions: (designId: string) => QueryKey;
   readonly designRevisionDetail: (designId: string, revisionId: string) => QueryKey;
@@ -98,6 +101,7 @@ export function projectDesignsQueryKeys(
     root,
     designs: [...root, 'designs'],
     designWorkingCopy: (designId: string) => [...root, 'designs', designId, 'working-copy'],
+    commercialProjection: (designId: string) => [...root, 'designs', designId, 'commercial-projection'],
     designMaterialProvenance: (designId: string) => [
       ...root,
       'designs',
@@ -177,6 +181,105 @@ function formatWhen(iso: string | null | undefined): string {
  * non-404 failure renders an explicit, actionable message instead of
  * collapsing into an empty list/hidden banner.
  */
+function formatProjectionMoney(value: number | null | undefined, currency: string): string {
+  if (value === null || value === undefined) return '—';
+  try {
+    return new Intl.NumberFormat('es-MX', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
+function projectionReferenceStatus(status: NonNullable<CommercialProjection['reference']>['status']): string {
+  return status === 'accepted' ? 'aceptada' : status === 'published' ? 'publicada' : status === 'draft' ? 'borrador' : status;
+}
+
+function CommercialProjectionPanel({
+  projection,
+  isLoading,
+  error,
+  onRetry,
+}: {
+  readonly projection: CommercialProjection | undefined;
+  readonly isLoading: boolean;
+  readonly error: unknown | null;
+  readonly onRetry: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <section className="pd-commercial-projection pd-commercial-projection--loading" data-testid="commercial-projection-loading" aria-labelledby="commercial-projection-title">
+        <div className="pd-commercial-projection__heading">
+          <CircleDollarSign size={18} strokeWidth={1.5} />
+          <h3 id="commercial-projection-title">Proyección comercial</h3>
+        </div>
+        <p role="status">Consultando el estimado autorizado del diseño…</p>
+      </section>
+    );
+  }
+
+  if (error || !projection) {
+    return (
+      <section className="pd-commercial-projection pd-commercial-projection--error" data-testid="commercial-projection-error" aria-labelledby="commercial-projection-title" role="alert">
+        <div className="pd-commercial-projection__heading">
+          <TriangleAlert size={18} strokeWidth={1.5} />
+          <h3 id="commercial-projection-title">No se pudo consultar la proyección comercial</h3>
+        </div>
+        <p>{error ? describeRequestFailure(error) : 'La proyección comercial no está disponible.'}</p>
+        <button type="button" className="btn btn-sm btn-secondary" data-testid="retry-commercial-projection-btn" onClick={onRetry}>
+          Reintentar
+        </button>
+      </section>
+    );
+  }
+
+  const saleTotal = projection.saleAmountsWithheld ? null : projection.amounts?.saleTotal;
+  const reference = projection.reference;
+  const comparison = projection.comparison;
+  const isIncomplete = projection.status === 'incomplete';
+
+  return (
+    <section className="pd-commercial-projection" data-testid="commercial-projection-panel" aria-labelledby="commercial-projection-title">
+      <div className="pd-commercial-projection__heading">
+        <CircleDollarSign size={18} strokeWidth={1.5} />
+        <div>
+          <h3 id="commercial-projection-title">Proyección comercial</h3>
+          <p>{isIncomplete ? 'Estimado incompleto del diseño' : 'Estimado actual del diseño'}</p>
+        </div>
+      </div>
+      <div className="pd-commercial-projection__summary">
+        <span className="pd-commercial-projection__label">Venta estimada</span>
+        <strong className="pd-commercial-projection__amount">{formatProjectionMoney(saleTotal, projection.currency)}</strong>
+        <span className="pd-commercial-projection__meta">{projection.itemCount} {projection.itemCount === 1 ? 'mueble' : 'muebles'} · Calculado por el servidor {formatWhen(projection.calculatedAt)}</span>
+      </div>
+      {isIncomplete && projection.issues.length > 0 && (
+        <p className="pd-commercial-projection__notice">Faltan datos para completar este estimado: {projection.issues.join(' · ')}</p>
+      )}
+      {projection.saleAmountsWithheld && <p className="pd-commercial-projection__notice">El importe de venta no está disponible para tu rol.</p>}
+      {projection.costsWithheld && <p className="pd-commercial-projection__notice">Costos no disponibles para tu rol.</p>}
+      {reference ? (
+        <p className="pd-commercial-projection__reference">
+          Referencia de cotización disponible: R{reference.revisionNumber} {projectionReferenceStatus(reference.status)}
+          {reference.saleTotal !== null && reference.saleTotal !== undefined ? ` · ${formatProjectionMoney(reference.saleTotal, reference.currency ?? projection.currency)}` : ' · importe no disponible'}
+        </p>
+      ) : (
+        <p className="pd-commercial-projection__reference">Sin referencia de cotización para comparar.</p>
+      )}
+      {comparison && saleTotal !== null ? (
+        <p className="pd-commercial-projection__comparison">
+          Diferencia contra referencia: {comparison.absoluteDelta >= 0 ? '+' : ''}{formatProjectionMoney(comparison.absoluteDelta, projection.currency)}
+          {comparison.percentageDelta !== null ? ` (${comparison.percentageDelta >= 0 ? '+' : ''}${comparison.percentageDelta.toFixed(1)}%)` : ''}
+        </p>
+      ) : null}
+      <p className="pd-commercial-projection__authority">Estimación informativa; no crea ni modifica una cotización, revisión o liberación.</p>
+    </section>
+  );
+}
+
 function describeRequestFailure(err: unknown): string {
   if (err instanceof GraneteApiError) {
     if (err.status === 401) {
@@ -370,6 +473,15 @@ export function ProjectDesignsScreen({
     },
     enabled: activeDesignId !== null,
   });
+  const commercialProjectionQuery = useQuery({
+    queryKey: activeDesignId
+      ? queryKeys.commercialProjection(activeDesignId)
+      : ['project-designs', 'commercial-projection', 'none'],
+    queryFn: ({ signal }) =>
+      api.getDesignCommercialProjection(token, projectId, activeDesignId as string, signal),
+    enabled: activeDesignId !== null,
+  });
+
   const workingCopy = workingCopyQuery.data ?? null;
   // #641: only a successful 404 is honest absence; any other failure of the
   // working-copy request is a visible, actionable error (never a hidden banner).
@@ -971,6 +1083,13 @@ export function ProjectDesignsScreen({
                   </div>
                 </div>
               ) : null}
+
+              <CommercialProjectionPanel
+                projection={commercialProjectionQuery.data}
+                isLoading={commercialProjectionQuery.isLoading}
+                error={commercialProjectionQuery.isError ? commercialProjectionQuery.error : null}
+                onRetry={() => void commercialProjectionQuery.refetch()}
+              />
 
               {/* #658 — Materiales pendientes del borrador: presentación del
                   read model #638 + command canónico de reconciliación. Se

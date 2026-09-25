@@ -1772,3 +1772,36 @@
     margin-left: 0;
   }
 }
+
+
+/* Read-only server-authoritative commercial estimate (Issue 642). */
+.pd-commercial-projection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3, 12px) var(--space-5, 20px);
+  margin: 0 0 var(--space-3, 12px);
+  padding: var(--space-4, 16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 4px);
+  background: var(--surface-card);
+}
+
+.pd-commercial-projection__heading { display: flex; align-items: flex-start; gap: var(--space-2, 8px); }
+.pd-commercial-projection__heading svg { color: var(--text-brand); flex: 0 0 auto; margin-top: 2px; }
+.pd-commercial-projection__heading h3, .pd-commercial-projection__heading p, .pd-commercial-projection p { margin: 0; }
+.pd-commercial-projection__heading h3 { color: var(--text-primary); font-size: var(--text-md); }
+.pd-commercial-projection__heading p, .pd-commercial-projection__meta, .pd-commercial-projection__reference, .pd-commercial-projection__authority { color: var(--text-secondary); font-size: var(--text-sm); }
+.pd-commercial-projection__summary { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1, 4px); text-align: right; }
+.pd-commercial-projection__label { color: var(--text-secondary); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.pd-commercial-projection__amount { color: var(--text-primary); font-size: var(--text-xl); font-variant-numeric: tabular-nums; }
+.pd-commercial-projection__notice, .pd-commercial-projection__reference, .pd-commercial-projection__comparison, .pd-commercial-projection__authority { grid-column: 1 / -1; }
+.pd-commercial-projection__notice { color: var(--warning-700); }
+.pd-commercial-projection__comparison { color: var(--text-primary); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.pd-commercial-projection--loading, .pd-commercial-projection--error { grid-template-columns: 1fr; }
+.pd-commercial-projection--error { background: var(--danger-50); }
+.pd-commercial-projection--error .pd-commercial-projection__heading svg { color: var(--danger); }
+
+@media (max-width: 600px) {
+  .pd-commercial-projection { grid-template-columns: 1fr; }
+  .pd-commercial-projection__summary { align-items: flex-start; text-align: left; }
+}

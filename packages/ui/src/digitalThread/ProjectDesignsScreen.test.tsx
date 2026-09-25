@@ -11,6 +11,7 @@ import type {
   DesignRevisionArtifact,
   DesignWorkingCopy,
   DesignWorkingCopyMaterialProvenance,
+  CommercialProjection,
   ProductionRelease,
 } from '@granete/storage';
 import {
@@ -203,6 +204,38 @@ const mockRevision3: DesignRevision = {
   ],
 };
 
+const mockCommercialProjection: CommercialProjection = {
+  schema: 'granete.commercial-projection.v1',
+  status: 'current',
+  projectId: PROJECT_ID,
+  designId: DESIGN_1_ID,
+  workingVersion: '2026-09-04T09:00:00Z',
+  workingFingerprint: 'sha256-' + 'a'.repeat(64),
+  catalogFingerprint: 'sha256-' + 'b'.repeat(64),
+  projectionFingerprint: 'sha256-' + 'c'.repeat(64),
+  pricingAuthority: 'calc-project-breakdown',
+  calculatedAt: '2026-09-04T09:05:00Z',
+  currency: 'MXN',
+  itemCount: 1,
+  amounts: {
+    materialsCost: 100,
+    edgeTotal: 10,
+    hardwareTotal: 25,
+    directCost: 135,
+    laborModular: 35,
+    laborFixedCost: 10,
+    marginFactor: 1.5,
+    saleTotal: 270,
+  },
+  costsWithheld: true,
+  saleAmountsWithheld: false,
+  reference: { quoteRevisionId: '44444444-0000-4000-8000-000000000099', revisionNumber: 4, status: 'accepted', currency: 'MXN', saleTotal: 250 },
+  acceptedReference: { quoteRevisionId: '44444444-0000-4000-8000-000000000099', revisionNumber: 4, status: 'accepted', currency: 'MXN', saleTotal: 250 },
+  latestPublishedReference: { quoteRevisionId: '44444444-0000-4000-8000-000000000099', revisionNumber: 4, status: 'accepted', currency: 'MXN', saleTotal: 250 },
+  comparison: { absoluteDelta: 20, percentageDelta: 8 },
+  issues: [],
+};
+
 const mockReleases: ProductionRelease[] = [
   {
     id: '99999999-0000-4000-8000-000000000001',
@@ -246,6 +279,9 @@ interface FetchMockOptions {
   // #658 working-copy material provenance (default: honest empty — no candidates)
   materialProvenanceByDesign?: Record<string, DesignWorkingCopyMaterialProvenance>;
   materialProvenanceFail?: boolean;
+  commercialProjectionByDesign?: Record<string, CommercialProjection>;
+  commercialProjectionFail?: boolean;
+  commercialProjectionPending?: boolean;
 }
 
 function setupFetchMock(options: FetchMockOptions = {}) {
@@ -349,6 +385,25 @@ function setupFetchMock(options: FetchMockOptions = {}) {
         });
       }
       return json(rev);
+    }
+
+    // 3c. Authoritative commercial projection: GET /projects/:id/designs/:id/commercial-projection
+    const projectionMatch = path.match(/^\/projects\/([^/]+)\/designs\/([^/]+)\/commercial-projection$/);
+    if (projectionMatch && method === 'GET') {
+      const [, pId, dId] = projectionMatch;
+      if (pId !== PROJECT_ID) return new Response('Not Found', { status: 404 });
+      if (options.commercialProjectionPending) return new Promise(() => {});
+      if (options.commercialProjectionFail) {
+        return new Response(JSON.stringify({ code: 'INTERNAL', message: 'projection failed' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      const projection = options.commercialProjectionByDesign?.[dId!] ?? {
+        ...mockCommercialProjection,
+        designId: dId!,
+      };
+      return json(projection);
     }
 
     // 4. Working copy: GET /designs/:id/working-copy
@@ -598,6 +653,22 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
       designId: DESIGN_2_ID,
       revisionId: null,
     });
+  });
+
+  it('#642 presents the server projection with its quote baseline and withheld costs without local calculation', async () => {
+    const fetchMock = setupFetchMock();
+    renderScreen();
+
+    const panel = await screen.findByTestId('commercial-projection-panel');
+    expect(panel).toHaveTextContent('Estimado actual del diseño');
+    expect(panel).toHaveTextContent('$270.00');
+    expect(panel).toHaveTextContent('Referencia de cotización disponible: R4 aceptada');
+    expect(panel).toHaveTextContent('Costos no disponibles para tu rol');
+    expect(panel).toHaveTextContent('Diferencia contra referencia: +$20.00 (+8.0%)');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(`/projects/${PROJECT_ID}/designs/${DESIGN_1_ID}/commercial-projection`),
+      expect.objectContaining({ method: 'GET' }),
+    );
   });
 
   it('displays immutable revision lineage track (R1 → R2 → R3) with status and author', async () => {
