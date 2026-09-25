@@ -3,13 +3,10 @@ package storage_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
-	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // Integration: requires isolated test Postgres. Verifies the F080 part_finishes JSONB
@@ -18,45 +15,31 @@ import (
 //   - a body/base/grip map round-trips exactly;
 //   - updating to nil clears the overrides.
 func TestHardware_PersistsPartFinishes(t *testing.T) {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping live storage integration test")
-	}
-	if err := storage.ValidateTestDatabaseURL(url); err != nil {
-		t.Fatalf("TestHardware_PersistsPartFinishes rejected unsafe test database: %v", err)
-	}
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-	pool, err := pgxpool.New(ctx, url)
-	if err != nil {
-		t.Skipf("no db: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	store := &storage.PostgresStore{Pool: pool}
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	// Case 1: create without part finishes → nil (NULL column).
 	legacy := newHardwarePartFinishesTestRow()
 	legacy.PreviewShape = strPtr("bar-pull")
-	if err := store.CreateHardware(ctx, legacy); err != nil {
-		t.Fatalf("create (legacy): %v", err)
-	}
-	registerHardwarePartFinishesCleanup(t, ctx, store, legacy.ID)
-	got, err := store.GetHardwareByID(ctx, legacy.ID)
-	if err != nil {
-		t.Fatalf("get (legacy): %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateHardware(txCtx, legacy)
+	})
+	registerHardwarePartFinishesCleanup(t, legacy.ID)
+	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
+		return store.GetHardwareByID(txCtx, legacy.ID)
+	})
 	if got.PartFinishes != nil {
 		t.Fatalf("legacy row should have no part finishes, got %v", got.PartFinishes)
 	}
 
 	// Case 2: per-part overrides round-trip.
 	legacy.PartFinishes = map[string]string{"grip": "gold", "base": "black-matte"}
-	if err := store.UpdateHardware(ctx, legacy.ID, legacy); err != nil {
-		t.Fatalf("update (part finishes): %v", err)
-	}
-	got, err = store.GetHardwareByID(ctx, legacy.ID)
-	if err != nil {
-		t.Fatalf("get (part finishes): %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.UpdateHardware(txCtx, legacy.ID, legacy)
+	})
+	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
+		return store.GetHardwareByID(txCtx, legacy.ID)
+	})
 	if got.PartFinishes["grip"] != "gold" || got.PartFinishes["base"] != "black-matte" {
 		t.Fatalf("part finishes did not round-trip: %v", got.PartFinishes)
 	}
@@ -66,13 +49,12 @@ func TestHardware_PersistsPartFinishes(t *testing.T) {
 
 	// Case 3: clearing back to nil removes the overrides.
 	legacy.PartFinishes = nil
-	if err := store.UpdateHardware(ctx, legacy.ID, legacy); err != nil {
-		t.Fatalf("update (clear): %v", err)
-	}
-	got, err = store.GetHardwareByID(ctx, legacy.ID)
-	if err != nil {
-		t.Fatalf("get (clear): %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.UpdateHardware(txCtx, legacy.ID, legacy)
+	})
+	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
+		return store.GetHardwareByID(txCtx, legacy.ID)
+	})
 	if got.PartFinishes != nil {
 		t.Fatalf("cleared row should have no part finishes, got %v", got.PartFinishes)
 	}
@@ -88,8 +70,8 @@ func newHardwarePartFinishesTestRow() *domain.Hardware {
 	}
 }
 
-func registerHardwarePartFinishesCleanup(t *testing.T, ctx context.Context, store *storage.PostgresStore, id string) {
+func registerHardwarePartFinishesCleanup(t *testing.T, id string) {
 	t.Cleanup(func() {
-		_, _ = store.Pool.Exec(ctx, `DELETE FROM hardwares WHERE id = $1`, id)
+		cleanupConnectStoreFixture(t, `DELETE FROM hardwares WHERE id = $1`, id)
 	})
 }

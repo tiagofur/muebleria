@@ -220,3 +220,8 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - Corrected callers: four multi-org replay tests in `multi_org_migration_test.go`, four reconciliation replay tests in `drift_reconciliation_migration_test.go`, and `TestMigrations_NoBusinessData` now use `multiOrgFreshMigrationDB`. That helper preserves the identical disposable database name while taking credentials only from `MIGRATION_DATABASE_URL`.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestMultiOrg_(BackfillFromLegacySchema|PerOrgCodesAndSettings|DownMigrationsRollBack|FreshDatabaseGetsInitialOrg)|Test(SecurityAuditInsertPolicyReconciliation|DigitalThreadDriftReconciliation|DesignPairingGrantDriftReconciliation|IdentityRegistryDriftReconciliation)|TestMigrations_NoBusinessData)$'` — PASS, FAIL=0, SKIP=0 (Go 8.580s).
 - Migration-authority failures remaining from the initial diagnostic: `76 → 67` pending the next causal families. No runtime assertion was moved to migration authority.
+
+## D3 result — Hardware persistence false greens (2026-09-25)
+- `TestHardware_PersistsPartFinishes` and `TestHardware_PersistsPreviewGeometry` no longer rely on `WithOrgCtx` alone. Each uses migration-only bootstrap, the explicit active runtime actor, and separate `WithinTenantTx` calls for every create, read, and update.
+- Cleanup is migration-authority fixture teardown; runtime readback remains `granete_app`. Existing nullable-preview, zero-metalness, part-finish, ownership, and persistence assertions remain intact.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestHardware_PersistsPartFinishes|TestHardware_PersistsPreviewGeometry)$'` — PASS, FAIL=0, SKIP=0 (Go 1.393s).
