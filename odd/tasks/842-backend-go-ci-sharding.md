@@ -63,3 +63,10 @@ The focused API suite is green. Pilot Readiness is now green with a migration po
 
 ## Next step
 Refactor the audited runtime-helper groups one at a time: explicit migration setup, runtime pool, legitimate actor/membership, and one `WithinTenantTx` per production-equivalent command. Preserve intentional unscoped negative-RLS tests, then run the grouped focused checks before the full storage suite.
+
+## Group A runtime fixture correction (2026-09-24)
+- Migrated the six positive `skipIfNoDB` callers (two Structure Revision and four tenant-transaction consistency tests) to a split fixture: migrations plus identity/bootstrap seed use `TestMigrationDatabaseURLForRuntimeDatabase`, while assertions open a new `DATABASE_URL` runtime store as `granete_app`.
+- The fixture uses a real active Initial Organization membership for an explicit actor. Structure catalog commands now run one `WithinTenantTx` per production-equivalent operation rather than keeping an entire test in a single transaction.
+- `TestConsistentCatalogTx_SourceView` creates its support table and grant with migration authority; the runtime remains unprivileged and continues to prove its multi-connection consistency behavior.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestStructureRevisionBumpAndSnapshot|TestStructureRevisionPinRoundTrip|TestConsistentCatalogTx_SourceView|TestConsistentCatalogTx_BorrowedIsolation|TestConsistentCatalogTx_CleanupAndOwnership|TestConsistentCatalogTx_ClosedBorrowedTransaction)$'` — PASS (1.491s), no skips.
+- Classification: the initial failures were fixture authority defects (multi-statement parameterized seed and schema creation through `granete_app`), not a runtime/RLS product defect. The runtime has not received migration/admin privileges.

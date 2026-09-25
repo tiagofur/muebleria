@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -17,29 +16,72 @@ import (
 //
 //	scripts/backend-test.sh -run TestStructureRevision -v
 //
-// skipIfNoDB aplica las migraciones embebidas, así que también corren contra
-// una base fresca (CI) sin requerir un server-start previo.
+// newMigratedRuntimeStore applies schema setup through migration authority,
+// then opens a distinct runtime store for RLS assertions.
 
-func skipIfNoDB(t *testing.T) *PostgresStore {
+const (
+	storageRuntimeFixtureUser       = "91000000-0000-0000-0000-000000000001"
+	storageRuntimeFixtureMembership = "92000000-0000-0000-0000-000000000001"
+)
+
+func newMigratedRuntimeStore(t *testing.T) *PostgresStore {
 	t.Helper()
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping live storage integration test")
-	}
-	if err := ValidateTestDatabaseURL(url); err != nil {
-		t.Fatalf("skipIfNoDB rejected unsafe test database: %v", err)
-	}
-	store, err := NewPostgresStore(url)
+	runtimeURL := TestDatabaseURL(t)
+	migrationStore, err := NewPostgresStore(TestMigrationDatabaseURLForRuntimeDatabase(t))
 	if err != nil {
-		t.Skipf("database not reachable: %v", err)
+		t.Skipf("migration database not reachable: %v", err)
 	}
-	t.Cleanup(store.Close)
-	// Base fresca (CI): aplicar las migraciones embebidas para que las tablas
-	// bajo test existan sin depender de un server-start previo.
-	if err := store.RunMigrations(context.Background()); err != nil {
-		t.Skipf("run migrations: %v", err)
+	if err := migrationStore.RunMigrations(context.Background()); err != nil {
+		migrationStore.Close()
+		t.Fatalf("run migrations: %v", err)
 	}
-	return store
+	seedTx, err := migrationStore.Pool.Begin(context.Background())
+	if err != nil {
+		migrationStore.Close()
+		t.Fatalf("begin runtime fixture identity seed: %v", err)
+	}
+	defer seedTx.Rollback(context.Background())
+	if _, err := seedTx.Exec(context.Background(), `
+		INSERT INTO users (id, email, password_hash, name, account_status, normalized_email)
+		VALUES ($1, 'storage-runtime-fixture@example.test', 'x', 'Storage runtime fixture', 'active', 'storage-runtime-fixture@example.test')
+		ON CONFLICT (id) DO NOTHING`, storageRuntimeFixtureUser); err != nil {
+		migrationStore.Close()
+		t.Fatalf("seed runtime fixture user: %v", err)
+	}
+	if _, err := seedTx.Exec(context.Background(), `
+		INSERT INTO memberships (id, organization_id, user_id, roles)
+		VALUES ($1, $2, $3, ARRAY['admin']::text[])
+		ON CONFLICT (user_id, organization_id) DO NOTHING`,
+		storageRuntimeFixtureMembership, InitialOrganizationID, storageRuntimeFixtureUser); err != nil {
+		migrationStore.Close()
+		t.Fatalf("seed runtime fixture membership: %v", err)
+	}
+	if _, err := seedTx.Exec(context.Background(), `
+		UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, InitialOrganizationID); err != nil {
+		migrationStore.Close()
+		t.Fatalf("activate runtime fixture organization: %v", err)
+	}
+	if err := seedTx.Commit(context.Background()); err != nil {
+		migrationStore.Close()
+		t.Fatalf("commit runtime fixture identity seed: %v", err)
+	}
+	migrationStore.Close()
+	runtimeStore, err := NewPostgresStore(runtimeURL)
+	if err != nil {
+		t.Skipf("runtime database not reachable: %v", err)
+	}
+	t.Cleanup(runtimeStore.Close)
+	return runtimeStore
+}
+
+// withinInitialOrganization runs one production-equivalent catalog command.
+// The catalog commands under these tests are organization-scoped but do not
+// carry a user-owned audit field, so their legitimate actor is org-only.
+func withinInitialOrganization(t *testing.T, store *PostgresStore, run func(context.Context) error) {
+	t.Helper()
+	if err := store.WithinTenantTx(context.Background(), TenantActor{OrganizationID: InitialOrganizationID, UserID: storageRuntimeFixtureUser, MembershipID: storageRuntimeFixtureMembership}, run); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // uniqueStructureCode returns a code unlikely to collide with seeded data or
@@ -51,9 +93,7 @@ func uniqueStructureCode(prefix string) string {
 // TestStructureRevisionBumpAndSnapshot verifies UpdateStructure bumps revision
 // and persists an immutable snapshot in structure_revisions (#108 Slice 2).
 func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
-	store := skipIfNoDB(t)
-	ctx := WithOrgCtx(context.Background(), InitialOrganizationID)
-
+	store := newMigratedRuntimeStore(t)
 	// Real component so the structure_components FK is satisfied.
 	comp := &domain.Component{
 		Code: "CMP-BUMP-" + time.Now().Format("20060102-150405.000000"),
@@ -61,10 +101,10 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 		GeometryKind: "rectangular_board", LengthMm: 720, WidthMm: 560, ThicknessMm: 18,
 		OptionRoles: []string{"INTERIOR"}, Active: true,
 	}
-	if err := store.CreateComponent(ctx, comp); err != nil {
-		t.Fatalf("CreateComponent: %v", err)
-	}
-	t.Cleanup(func() { _ = store.DeleteComponent(ctx, comp.ID) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateComponent(txCtx, comp) })
+	t.Cleanup(func() {
+		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteComponent(txCtx, comp.ID) })
+	})
 
 	// Fresh structure (rev defaults to 1 at the DB level).
 	st := &domain.Structure{
@@ -74,16 +114,18 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 		Components: []domain.ComponentInstance{{ComponentID: comp.ID, Quantity: 1}},
 		Presets:    []domain.DimensionPreset{{ID: "", Name: "Std", WidthMm: 600, HeightMm: 720, DepthMm: 560}},
 	}
-	if err := store.CreateStructure(ctx, st); err != nil {
-		t.Fatalf("CreateStructure: %v", err)
-	}
-	t.Cleanup(func() { _ = store.DeleteStructure(ctx, st.ID) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateStructure(txCtx, st) })
+	t.Cleanup(func() {
+		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteStructure(txCtx, st.ID) })
+	})
 
 	// Sanity: revision 1 after create.
-	loaded, err := store.GetStructureByID(ctx, st.ID)
-	if err != nil {
-		t.Fatalf("GetStructureByID (initial): %v", err)
-	}
+	var loaded *domain.Structure
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		var err error
+		loaded, err = store.GetStructureByID(txCtx, st.ID)
+		return err
+	})
 	if loaded.Revision != 1 {
 		t.Fatalf("initial revision: got %d want 1", loaded.Revision)
 	}
@@ -91,17 +133,16 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 	// Edit 1: bump components to qty 3. UpdateStructure must snapshot rev 1 and
 	// advance the structure to rev 2.
 	st.Components = []domain.ComponentInstance{{ComponentID: comp.ID, Quantity: 3}}
-	if err := store.UpdateStructure(ctx, st.ID, st); err != nil {
-		t.Fatalf("UpdateStructure (1st edit): %v", err)
-	}
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, st.ID, st) })
 	if st.Revision != 2 {
 		t.Errorf("in-memory revision after 1st edit: got %d want 2", st.Revision)
 	}
 
-	loaded, err = store.GetStructureByID(ctx, st.ID)
-	if err != nil {
-		t.Fatalf("GetStructureByID (after edit): %v", err)
-	}
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		var err error
+		loaded, err = store.GetStructureByID(txCtx, st.ID)
+		return err
+	})
 	if loaded.Revision != 2 {
 		t.Errorf("db revision after 1st edit: got %d want 2", loaded.Revision)
 	}
@@ -118,13 +159,12 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 
 	// Edit 2: bump to qty 5 → rev 3, history now has 2 entries (newest-first).
 	st.Components = []domain.ComponentInstance{{ComponentID: comp.ID, Quantity: 5}}
-	if err := store.UpdateStructure(ctx, st.ID, st); err != nil {
-		t.Fatalf("UpdateStructure (2nd edit): %v", err)
-	}
-	loaded, err = store.GetStructureByID(ctx, st.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, st.ID, st) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		var err error
+		loaded, err = store.GetStructureByID(txCtx, st.ID)
+		return err
+	})
 	if loaded.Revision != 3 {
 		t.Errorf("db revision after 2nd edit: got %d want 3", loaded.Revision)
 	}
@@ -147,20 +187,13 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 // column round-trips through storage (#108 Slice 2). It exercises the read path
 // (loadProjectItems via GetProjectByID) and the write path (UpdateProject).
 func TestStructureRevisionPinRoundTrip(t *testing.T) {
-	store := skipIfNoDB(t)
-	ctx := WithOrgCtx(context.Background(), InitialOrganizationID)
-
+	store := newMigratedRuntimeStore(t)
 	// Real customer + module to satisfy FKs.
 	customer := &domain.Customer{
 		Name:   "Pin Test Customer " + time.Now().Format("150405.000000"),
 		Active: true,
 	}
-	if err := store.CreateCustomer(ctx, customer); err != nil {
-		t.Fatalf("CreateCustomer: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = store.Pool.Exec(ctx, `DELETE FROM customers WHERE id = $1`, customer.ID)
-	})
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateCustomer(txCtx, customer) })
 
 	mod := &domain.Module{
 		Code: "MOD-PIN-" + time.Now().Format("20060102-150405.000000"),
@@ -168,10 +201,10 @@ func TestStructureRevisionPinRoundTrip(t *testing.T) {
 		BoardParts:    []domain.BoardPart{},
 		HardwareLines: []domain.HardwareLine{},
 	}
-	if err := store.CreateModule(ctx, mod); err != nil {
-		t.Fatalf("CreateModule: %v", err)
-	}
-	t.Cleanup(func() { _ = store.DeleteModule(ctx, mod.ID) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateModule(txCtx, mod) })
+	t.Cleanup(func() {
+		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteModule(txCtx, mod.ID) })
+	})
 
 	pin1 := 1
 	pin3 := 3
@@ -188,15 +221,17 @@ func TestStructureRevisionPinRoundTrip(t *testing.T) {
 				OptionChoices: map[string]string{}},
 		},
 	}
-	if err := store.CreateProject(ctx, project); err != nil {
-		t.Fatalf("CreateProject: %v", err)
-	}
-	t.Cleanup(func() { _ = store.DeleteProject(ctx, project.ID) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateProject(txCtx, project) })
+	t.Cleanup(func() {
+		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteProject(txCtx, project.ID) })
+	})
 
-	loaded, err := store.GetProjectByID(ctx, project.ID)
-	if err != nil {
-		t.Fatalf("GetProjectByID: %v", err)
-	}
+	var loaded *domain.Project
+	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+		var err error
+		loaded, err = store.GetProjectByID(txCtx, project.ID)
+		return err
+	})
 	if len(loaded.Items) != 3 {
 		t.Fatalf("items: got %d want 3", len(loaded.Items))
 	}
