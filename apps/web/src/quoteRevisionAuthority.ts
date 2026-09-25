@@ -1,9 +1,11 @@
+import { useEffect, useRef } from 'react';
 import { useQuery, type QueryKey } from '@tanstack/react-query';
 import {
-  GraneteApiClient,
   type QuoteCommercialSnapshot,
   type QuoteRevisionDetail,
 } from '@granete/storage';
+import { getCredential } from './webAuthRuntime';
+import { createWebGeneratedApiClient } from './webGeneratedApiClient';
 
 export type QuoteRevisionAuthority =
   | { readonly kind: 'idle' | 'loading' }
@@ -63,10 +65,17 @@ export function useQuoteRevisionAuthority(args: {
   readonly projectId: string | null;
   readonly queryKey: QueryKey;
 }): QuoteRevisionsQuery {
+  // Keep the intent from the render that received this token. A normal access
+  // rotation does not change authUserSeq, so later renders may retain the old
+  // token while the runtime has a newer one for the same identity.
+  const intent = useRef({ token: args.token, credential: getCredential() });
+  if (intent.current.token !== args.token) {
+    intent.current = { token: args.token, credential: getCredential() };
+  }
   const query = useQuery({
     queryKey: args.queryKey,
     queryFn: ({ signal }) =>
-      new GraneteApiClient(args.baseUrl).listProjectQuoteRevisions(
+      createWebGeneratedApiClient(args.baseUrl, args.token as string, intent.current.credential).listProjectQuoteRevisions(
         args.token as string,
         args.projectId as string,
         signal,
@@ -74,6 +83,17 @@ export function useQuoteRevisionAuthority(args: {
     enabled: Boolean(args.token && args.projectId),
     retry: false,
   });
+  // Test-only browser seam: invokes the mounted authority query's real
+  // React Query refetch without adding a visible workflow or exposing credentials.
+  useEffect(() => {
+    const target = window as Window & {
+      __graneteBrowserTestSeam?: boolean;
+      __graneteRefetchQuoteRevisionsForTest?: () => Promise<unknown>;
+    };
+    if (target.__graneteBrowserTestSeam !== true) return;
+    target.__graneteRefetchQuoteRevisionsForTest = () => query.refetch();
+    return () => { delete target.__graneteRefetchQuoteRevisionsForTest; };
+  }, [query.refetch]);
   const retry = () => void query.refetch();
   const revisions: ReadonlyArray<QuoteRevisionDetail> = query.data ?? [];
 
