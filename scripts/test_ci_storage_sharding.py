@@ -66,7 +66,7 @@ class WorkflowTopologyTest(unittest.TestCase):
         text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         for fragment in (
             "storage-shard-plan:", "storage-shards:", "backend-go-other:", "backend-go:",
-            "shard: [1, 2, 3, 4]", "scripts/backend-test-storage-shard.sh 4",
+            "shard: [1, 2, 3]", "scripts/backend-test-storage-shard.sh 3",
             "verify_storage_shard_plan.py", "ci_backend_go_result.py",
             "grep -Fvx 'github.com/tiagofur/muebles-backend/internal/storage'",
         ):
