@@ -261,3 +261,8 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - Reused the already-committed seven-test `runtimeIsolationSetup` without changing it: migrations and only structural identity/catalog fixtures remain under `MIGRATION_DATABASE_URL`; no admin authority is used for module creation or catalog assertions.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestGetFullCatalogParameterDefinitionsStayTenantScoped$'` — PASS, FAIL=0, SKIP=0 (Go 1.426s).
 - Migration-authority failures remaining from the initial diagnostic: `55 → 54`. No production code, policy, RLS rule, trigger, constraint, or grant changed.
+
+## D1 progress — seed composition authority split (2026-09-25)
+- Classification: the three SeedUpgrade tests are structural seed/upgrade proofs: migrations, deliberate partial/custom catalog shapes, SeedCatalog replay, and exact code/id/composition SQL assertions all use migration authority. `TestSeedDemoProjectResolvesRealBom` additionally protects observable runtime behavior, so its seed composition/schema check remains migration-authority while its seeded-project read and catalog read run as `granete_app` with an active actor in separate `WithinTenantTx` calls before the pure engine BOM assertion.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestSeedDemoProjectResolvesRealBom|TestSeedUpgradeConvertsFlatGab|TestSeedUpgradeResolvesExistingCodesWithDifferentIDs|TestSeedUpgradeDoesNotOverwriteCustomGabComposition)$'` — 4 PASS, FAIL=0, SKIP=0 (Go 4.399s).
+- Migration-authority failures remaining from the initial diagnostic: `54 → 50`. No production code, policy, RLS rule, trigger, constraint, or grant changed.

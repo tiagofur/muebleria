@@ -4,10 +4,56 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
+
+const (
+	seedCompositionUser       = "b5000000-0000-0000-0000-000000000001"
+	seedCompositionMembership = "b5000000-0000-0000-0000-000000000002"
+)
+
+func seedCompositionMigrationStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
+	t.Helper()
+	pool := multiOrgFreshMigrationDB(t)
+	store := &storage.PostgresStore{Pool: pool}
+	if err := store.RunMigrations(context.Background()); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	return store, pool
+}
+
+func seedCompositionRuntimeStore(t *testing.T, migrationPool *pgxpool.Pool) (*storage.PostgresStore, storage.TenantActor) {
+	t.Helper()
+	ctx := context.Background()
+	actor := storage.TenantActor{
+		OrganizationID: multiOrgInitialOrgID,
+		UserID:         seedCompositionUser,
+		MembershipID:   seedCompositionMembership,
+	}
+	for _, statement := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status)
+			VALUES ($1, 'seed-composition@example.test', 'seed-composition@example.test', 'x', 'Seed composition', 'active')`, []any{actor.UserID}},
+		{`INSERT INTO memberships (id, organization_id, user_id, roles, status, joined_at)
+			VALUES ($1, $2, $3, '{admin}', 'active', NOW())`, []any{actor.MembershipID, actor.OrganizationID, actor.UserID}},
+		{`UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, []any{actor.OrganizationID}},
+	} {
+		if _, err := migrationPool.Exec(ctx, statement.query, statement.args...); err != nil {
+			t.Fatalf("seed runtime actor: %v", err)
+		}
+	}
+	runtimePool, err := pgxpool.New(ctx, storage.TestDatabaseURLForDB(t, migrationPool.Config().ConnConfig.Database))
+	if err != nil {
+		t.Fatalf("open runtime pool: %v", err)
+	}
+	t.Cleanup(runtimePool.Close)
+	return &storage.PostgresStore{Pool: runtimePool}, actor
+}
 
 // Pre-demo audit P0-2d: the seed's MOD-GAB-01 was created flat (no
 // structure_id, no module_components) while the TS engine only resolves
@@ -15,11 +61,7 @@ import (
 // priced hardware only. This pins the seed composition AND the resolved BOM
 // so the gap cannot reopen silently.
 func TestSeedDemoProjectResolvesRealBom(t *testing.T) {
-	pool := multiOrgFreshDB(t)
-	store := &storage.PostgresStore{Pool: pool}
-	if err := store.RunMigrations(context.Background()); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
+	store, pool := seedCompositionMigrationStore(t)
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	if err := store.SeedCatalog(ctx); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -34,15 +76,24 @@ func TestSeedDemoProjectResolvesRealBom(t *testing.T) {
 	if structID == nil || *structID == "" {
 		t.Fatal("MOD-GAB-01 sigue flat: structure_id es NULL — el despiece de la Demo plantilla resolvería vacío")
 	}
+	runtimeStore, actor := seedCompositionRuntimeStore(t, pool)
 
 	// The Demo plantilla project must resolve a non-empty BOM through the
 	// engine (≥1 board part, no error) — the exact path /calculate uses.
-	project, err := store.GetProjectByID(ctx, "a0000009-0000-0000-0000-000000000001")
-	if err != nil {
+	var project *domain.Project
+	if err := runtimeStore.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		var err error
+		project, err = runtimeStore.GetProjectByID(txCtx, "a0000009-0000-0000-0000-000000000001")
+		return err
+	}); err != nil {
 		t.Fatalf("get seed project: %v", err)
 	}
-	catalog, err := store.GetFullCatalog(ctx)
-	if err != nil {
+	var catalog domain.Catalog
+	if err := runtimeStore.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		var err error
+		catalog, err = runtimeStore.GetFullCatalog(txCtx)
+		return err
+	}); err != nil {
 		t.Fatalf("get full catalog: %v", err)
 	}
 	item := project.Items[0]
@@ -71,11 +122,7 @@ func TestSeedDemoProjectResolvesRealBom(t *testing.T) {
 // Upgrades must convert an existing flat MOD-GAB-01 too: SeedCatalog on an
 // already-seeded database goes through ensurePlinthCatalog, not the full tx.
 func TestSeedUpgradeConvertsFlatGab(t *testing.T) {
-	pool := multiOrgFreshDB(t)
-	store := &storage.PostgresStore{Pool: pool}
-	if err := store.RunMigrations(context.Background()); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
+	store, pool := seedCompositionMigrationStore(t)
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 
 	// Simulate a pre-fix database: full seed, then flatten MOD-GAB-01 back.
@@ -113,11 +160,7 @@ func TestSeedUpgradeConvertsFlatGab(t *testing.T) {
 }
 
 func TestSeedUpgradeResolvesExistingCodesWithDifferentIDs(t *testing.T) {
-	pool := multiOrgFreshDB(t)
-	store := &storage.PostgresStore{Pool: pool}
-	if err := store.RunMigrations(context.Background()); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
+	store, pool := seedCompositionMigrationStore(t)
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	if err := store.SeedCatalog(ctx); err != nil {
 		t.Fatalf("seed: %v", err)
@@ -169,11 +212,7 @@ func TestSeedUpgradeResolvesExistingCodesWithDifferentIDs(t *testing.T) {
 }
 
 func TestSeedUpgradeDoesNotOverwriteCustomGabComposition(t *testing.T) {
-	pool := multiOrgFreshDB(t)
-	store := &storage.PostgresStore{Pool: pool}
-	if err := store.RunMigrations(context.Background()); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
+	store, pool := seedCompositionMigrationStore(t)
 	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
 	if err := store.SeedCatalog(ctx); err != nil {
 		t.Fatalf("seed: %v", err)
