@@ -225,3 +225,9 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - `TestHardware_PersistsPartFinishes` and `TestHardware_PersistsPreviewGeometry` no longer rely on `WithOrgCtx` alone. Each uses migration-only bootstrap, the explicit active runtime actor, and separate `WithinTenantTx` calls for every create, read, and update.
 - Cleanup is migration-authority fixture teardown; runtime readback remains `granete_app`. Existing nullable-preview, zero-metalness, part-finish, ownership, and persistence assertions remain intact.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestHardware_PersistsPartFinishes|TestHardware_PersistsPreviewGeometry)$'` — PASS, FAIL=0, SKIP=0 (Go 1.393s).
+
+## D2/D4 result — legacy runtime role and role assertions (2026-09-25)
+- Full reference audit found `granete_app_test` only as the legacy RLS test-role constant, explicit per-test DSN overrides/password, and explanatory comments. It was not a production authority.
+- The canonical runtime DSN already authenticates as `granete_app`; the test-only override to `granete_app_test` plus `rls-test-password` was obsolete. RLS fixture and named-pool assertions now use that canonical runtime DSN without credential mutation.
+- The expected-role checks now prove `current_user=granete_app`, including the no-bypass/no-ownership assertion. No production role, credential, grant, RLS policy, trigger, or constraint changed.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestAgregadoFamily_TenantBoundary_F1E_PooledConnectionReuse|TestCreateInitialDesignQuoteRevision_(RejectsTerminalStatusCommittedWhileWaitingForLock|RemoveWinsWhileQuoteWaitsForInstanceLock)|TestSupportSessionStartAndOrganizationSuspendSerializeOnOrganizationLock|TestIdentityLifecycleRLS_RuntimeRoleHasNoBypassOwnershipOrExcessGrants|TestTenantRLS_PoolReuseRollbackRoleAndInventoryReadiness)$'` — PASS, FAIL=0, SKIP=0 (Go 6.778s).

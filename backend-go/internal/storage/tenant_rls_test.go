@@ -23,7 +23,7 @@ const (
 	rlsOrgC    = "10000000-0000-0000-0000-00000000000c"
 	rlsUserA   = "20000000-0000-0000-0000-00000000000a"
 	rlsUserB   = "20000000-0000-0000-0000-00000000000b"
-	rlsAppRole = "granete_app_test"
+	rlsAppRole = "granete_app"
 )
 
 type rlsFixture struct {

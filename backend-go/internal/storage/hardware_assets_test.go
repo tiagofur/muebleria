@@ -20,7 +20,7 @@ import (
 // #667 / M1: versioned hardware 3D assets — upload lifecycle, exact binding,
 // validation evidence and DesignRevision publish pins. Every behavior test
 // below runs against real PostgreSQL (never mocks): the RLS/direct-SQL
-// claims run under the real granete_app_test runtime role.
+// claims run under the real granete_app runtime role.
 
 func hwAssetSHA(seed string) string {
 	out := strings.Repeat(seed, 32)

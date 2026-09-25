@@ -42,8 +42,6 @@ func newNamedRuntimeOrganizationStore(t *testing.T, fx *rlsFixture, applicationN
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConnConfig.User = rlsAppRole
-	config.ConnConfig.Password = "rls-test-password"
 	config.ConnConfig.RuntimeParams["application_name"] = applicationName
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
