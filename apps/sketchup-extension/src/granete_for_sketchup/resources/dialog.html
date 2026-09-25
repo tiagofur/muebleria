@@ -8,42 +8,57 @@
       :root {
         color-scheme: light;
         --font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        /* Códigos, referencias y medidas: tabular, del sistema (el plugin no
+           carga recursos remotos). */
+        --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
         --text-xs: 0.75rem;
         --text-sm: 0.8125rem;
         --text-base: 0.875rem;
         --text-md: 1rem;
         --text-lg: 1.125rem;
-        
+
         --weight-normal: 400;
         --weight-medium: 500;
         --weight-semibold: 600;
         --weight-bold: 700;
-        
+
         --brand-50: hsl(245 100% 97%);
         --brand-500: hsl(245 58% 51%);
         --brand-600: hsl(245 55% 43%);
         --brand-800: hsl(245 48% 28%);
-        
+
+        /* Acento de marca (docs/design.md §5): navegación hacia contexto
+           relacionado — breadcrumbs y enlaces de catálogo. Nunca compite
+           con la acción primaria (brand) ni con la señal semántica. */
+        --accent-50: hsl(170 60% 96%);
+        --accent-400: hsl(170 65% 48%);
+        --accent-500: hsl(170 60% 40%);
+        --accent-600: hsl(170 55% 33%);
+
         --surface-app: hsl(220 20% 97%);
         --surface-card: hsl(0 0% 100%);
         --surface-card-subtle: hsl(220 14% 96%);
         --surface-hover: hsl(220 14% 94%);
-        
+
         --text-primary: hsl(230 18% 12%);
         --text-secondary: hsl(230 12% 40%);
         --text-muted: hsl(230 12% 45%);
         --text-inverse: hsl(0 0% 100%);
         --text-inverse-soft: hsl(0 0% 100% / 80%);
-        
+
         --border-default: hsl(220 14% 86%);
+        --border-subtle: hsl(220 14% 90%);
         --border-focus: var(--brand-500);
-        
+
+        /* Texto semántico: pares AA (≥4.5:1) sobre su superficie -50. */
         --success-50: hsl(142 76% 96%);
-        --success-600: hsl(142 70% 36%);
+        --success-600: hsl(152 69% 30%);
         --warning-50: hsl(38 100% 96%);
         --warning-700: hsl(38 80% 32%);
+        /* Bordes/fondos derivados del tono de advertencia (no texto). */
+        --warning: hsl(38 92% 42%);
         --danger-50: hsl(0 84% 97%);
-        --danger-600: hsl(0 72% 51%);
+        --danger-600: hsl(0 74% 42%);
         --neutral-50: hsl(220 14% 94%);
         --neutral-700: hsl(230 12% 40%);
         
@@ -171,7 +186,7 @@
       main {
         flex: 1;
         padding: var(--space-4);
-        max-width: 32rem;
+        max-width: 40rem;
         margin: 0 auto;
         width: 100%;
       }
@@ -426,7 +441,7 @@
       .furniture-card-code {
         font-size: var(--text-xs);
         color: var(--text-secondary);
-        font-family: monospace;
+        font-family: var(--font-mono);
         user-select: text;
       }
 
@@ -824,12 +839,12 @@
         cursor: pointer;
         padding: 0.125rem 0.375rem;
         border-radius: var(--radius-sm);
-        color: var(--brand-600);
+        color: var(--accent-600);
         font-weight: var(--weight-medium);
       }
 
       .selector-breadcrumb-item:hover {
-        background: var(--brand-50);
+        background: var(--accent-50);
       }
 
       .selector-breadcrumb-item.active {
@@ -890,7 +905,7 @@
       .selector-column-list {
         list-style: none;
         margin: 0;
-        padding: 0;
+        padding: var(--space-1) 0;
         overflow-y: auto;
         flex: 1;
       }
@@ -1262,12 +1277,19 @@
       .btn-danger {
         background: var(--danger-50);
         color: var(--danger-600);
-        border-color: hsl(0 72% 51% / 30%);
+        border-color: hsl(0 74% 42% / 30%);
         margin-top: var(--space-2);
       }
 
       .btn-danger:hover {
         background: hsl(0 84% 94%);
+      }
+
+      /* Compact inline action (enrollment footer, popover rows). */
+      .btn-sm {
+        padding: var(--space-1) var(--space-2);
+        font-size: var(--text-xs);
+        width: auto;
       }
 
       /* Visible keyboard focus (§4.8 / §3.6.1): every interactive control
@@ -1331,14 +1353,14 @@
         display: flex;
         background: var(--success-50);
         color: var(--success-600);
-        border: 1px solid hsl(142 70% 36% / 20%);
+        border: 1px solid hsl(152 69% 30% / 20%);
       }
 
       .toast.error {
         display: flex;
         background: var(--danger-50);
         color: var(--danger-600);
-        border: 1px solid hsl(0 72% 51% / 20%);
+        border: 1px solid hsl(0 74% 42% / 20%);
       }
 
       /* info/warning toasts carry real feedback (pending placements, partial
@@ -1434,7 +1456,7 @@
       }
 
       .pf-unit-ref {
-        font-family: monospace;
+        font-family: var(--font-mono);
         font-size: var(--text-xs);
         color: var(--text-muted);
         margin-top: 2px;
@@ -1577,13 +1599,13 @@
       }
 
       .context-breadcrumb .crumb-link {
-        color: var(--brand-600);
+        color: var(--accent-600);
         font-weight: var(--weight-medium);
         cursor: pointer;
       }
 
       .context-breadcrumb .crumb-link:hover {
-        background: var(--brand-50);
+        background: var(--accent-50);
       }
 
       .context-breadcrumb .crumb-sep {
@@ -2081,7 +2103,7 @@
             <p id="child-owner-note" class="subhead" style="display: none; margin-bottom: var(--space-3); font-size: var(--text-xs);"></p>
 
             <!-- Hardware Drilling Conflict Banner (#468 §24) -->
-            <div id="hw-conflict-banner" class="card" style="display: none; border-left: 4px solid var(--danger-600); background: var(--surface-card); margin-bottom: var(--space-3);">
+            <div id="hw-conflict-banner" class="card" style="display: none; border: 1px solid hsl(0 74% 42% / 35%); background: var(--danger-50); margin-bottom: var(--space-3);">
               <div class="card-header-row">
                 <strong style="color: var(--danger-600); font-size: var(--text-sm);">Conflicto de perforación</strong>
                 <span class="status-badge error">Bloqueado</span>
@@ -2269,7 +2291,7 @@
                   <dt>Origen</dt><dd id="manufacturing-detail-source-kind">--</dd>
                   <dt>ID origen</dt><dd id="manufacturing-detail-source-id">--</dd>
                 </dl>
-                <div id="manufacturing-detail-conflict" style="display: none; border-left: 4px solid var(--danger-600); padding-left: var(--space-2); margin-bottom: var(--space-2);">
+                <div id="manufacturing-detail-conflict" style="display: none; border: 1px solid hsl(0 74% 42% / 35%); border-radius: var(--radius-sm); background: var(--danger-50); padding: var(--space-2); margin-bottom: var(--space-2);">
                   <strong style="color: var(--danger-600); font-size: var(--text-xs);">Conflicto de perforación</strong>
                   <p id="manufacturing-detail-conflict-message" style="margin: var(--space-1) 0; font-size: var(--text-xs);"></p>
                   <p id="manufacturing-detail-conflict-remediation" style="margin: 0; font-size: var(--text-xs); color: var(--text-secondary); font-style: italic;"></p>
@@ -2316,7 +2338,7 @@
             <div id="enroll-code-area" style="display: none; text-align: center;">
               <p style="font-size: var(--text-sm); margin-bottom: var(--space-2);">Ingresá este código en <strong>Taller &gt; Dispositivos</strong>:</p>
               <div style="display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-bottom: var(--space-2);">
-                <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: monospace;">--</div>
+                <div id="enroll-code-display" style="font-size: 2.2rem; font-weight: bold; letter-spacing: 0.25em; color: var(--brand-600); font-family: var(--font-mono);">--</div>
                 <button id="btn-copy-enroll-code" class="btn btn-secondary" title="Copiar código al portapapeles" style="padding: 6px 12px; font-size: var(--text-xs); display: inline-flex; align-items: center; gap: 4px;">
                   <span id="copy-enroll-code-icon"><svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
                   <span id="copy-enroll-code-text">Copiar</span>
@@ -2540,7 +2562,7 @@
         </div>
       </div>
 
-      <footer id="granete-version-footer">Granete for SketchUp</footer>
+      <footer id="granete-version-footer">Granete para SketchUp</footer>
     </div>
 
     <script>
@@ -3704,6 +3726,10 @@
           libEmptyState.style.display = stateType === "empty" ? "block" : "none";
           libNoResultsState.style.display = stateType === "no-results" ? "block" : "none";
           libCardsGrid.style.display = stateType === "grid" ? "grid" : "none";
+          // Una sola voz de carga: con los skeletons visibles, el badge de
+          // conteo y los selects de categoría vacíos no compiten por atención.
+          libCountBadge.style.display = stateType === "loading" ? "none" : "";
+          if (stateType === "loading") libCategoriesContainer.style.display = "none";
 
           // Recoverability: only the remote-error empty state offers an
           // explicit retry of the read-only catalog fetch.
@@ -3964,10 +3990,14 @@
               preview.appendChild(placeholder);
             }
 
-            if (def.category) {
+            if (def.categoryId || def.category) {
               var catBadge = document.createElement("span");
               catBadge.className = "furniture-card-badge";
-              catBadge.textContent = formatCategoryLabel(def.category);
+              // El árbol del taller es la fuente; CATEGORY_LABELS sólo
+              // cubre catálogos legacy sin categorías.
+              catBadge.textContent =
+                (def.categoryId && categoryNodeById[def.categoryId] && categoryNodeById[def.categoryId].name) ||
+                formatCategoryLabel(def.category);
               preview.appendChild(catBadge);
             }
 
@@ -4076,7 +4106,7 @@
           setPluginVersion: function (payload) {
             var footer = document.getElementById("granete-version-footer");
             if (footer && payload && payload.version) {
-              footer.textContent = "Granete for SketchUp \u00b7 v" + String(payload.version);
+              footer.textContent = "Granete para SketchUp \u00b7 v" + String(payload.version);
             }
           },
 
@@ -5077,8 +5107,16 @@
                   var opt = document.createElement("option");
                   opt.value = candidate.id;
                   var isComp = currentDef && candidate.category === currentDef.category;
-                  opt.textContent = candidate.name + (isComp ? " [Compatible]" : " [Incompatible]");
-                  if (candidate.id === context.hardwareDefinitionId || candidate.code === context.hardwareDefinitionId) {
+                  var isCurrent = candidate.id === context.hardwareDefinitionId || candidate.code === context.hardwareDefinitionId;
+                  if (!isComp && !isCurrent) {
+                    // No se puede elegir un herraje de otra familia: queda
+                    // visible para no esconder el catálogo, pero deshabilitado.
+                    opt.disabled = true;
+                    opt.textContent = candidate.name + " (incompatible)";
+                  } else {
+                    opt.textContent = candidate.name;
+                  }
+                  if (isCurrent) {
                     opt.selected = true;
                   }
                   hwReplacementSelect.appendChild(opt);
@@ -6851,7 +6889,7 @@
 
         function pfPlaceFailureMessage(result) {
           switch (result.code) {
-            case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colocalo desde la pestaña Proyecto.";
+            case "created_pending": return result.reason || "El mueble se creó en el proyecto pero falló la colocación local; colocálo desde la pestaña Proyecto.";
             case "unbound": return "Conectá el modelo al proyecto primero.";
             case "stale_base": return "El diseño avanzó en el servidor: actualizá la base de trabajo en Estado.";
             case "not_found": return "El mueble no pertenece al proyecto conectado.";
@@ -6932,13 +6970,9 @@
             var setCopiedUI = function () {
               if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("check", 14);
               if (copyEnrollCodeText) copyEnrollCodeText.textContent = "¡Copiado!";
-              btnCopyEnrollCode.classList.remove("btn-secondary");
-              btnCopyEnrollCode.classList.add("btn-primary");
               setTimeout(function () {
                 if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("copy", 14);
                 if (copyEnrollCodeText) copyEnrollCodeText.textContent = "Copiar";
-                btnCopyEnrollCode.classList.remove("btn-primary");
-                btnCopyEnrollCode.classList.add("btn-secondary");
               }, 2000);
               showToast("success", "Código " + code + " copiado al portapapeles.");
             };
