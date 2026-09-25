@@ -1,10 +1,10 @@
 package api
 
 import (
-	"encoding/binary"
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -385,19 +385,7 @@ func TestHardwarePut_ExistingBindingToRetiredAssetPreserved(t *testing.T) {
 
 func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL not set; skipping live hardware assets integration test")
-	}
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Skipf("bad DATABASE_URL: %v", err)
-	}
-	u.Path = "/postgres"
-	adminDSN := u.String()
-	if err := storage.ValidateTestAdminDatabaseURL(adminDSN); err != nil {
-		t.Fatalf("hwAssetE2EStore rejected unsafe admin database: %v", err)
-	}
+	adminDSN := storage.TestAdminDatabaseURL(t)
 	dbName := "hwassets_api_e2e_" + fmt.Sprint(time.Now().UnixNano()%1000000)
 	admin, err := pgxpool.New(context.Background(), adminDSN)
 	if err != nil {
@@ -411,27 +399,23 @@ func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 		admin.Close()
 		t.Skipf("create throwaway db: %v", err)
 	}
-	u.Path = "/" + dbName
-	testDSN := u.String()
-	if err := storage.ValidateTestDatabaseURL(testDSN); err != nil {
-		t.Fatalf("hwAssetE2EStore rejected unsafe test database: %v", err)
-	}
-	pool, err := pgxpool.New(context.Background(), testDSN)
+	migrationDSN := storage.TestMigrationDatabaseURL(t, dbName)
+	migrationPool, err := pgxpool.New(context.Background(), migrationDSN)
 	if err != nil {
-		t.Fatalf("connect e2e db: %v", err)
+		t.Fatalf("connect migration db: %v", err)
 	}
 	t.Cleanup(func() {
-		pool.Close()
+		migrationPool.Close()
 		_, _ = admin.Exec(context.Background(), fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, dbName))
 		admin.Close()
 	})
-	store := &storage.PostgresStore{Pool: pool}
+	migrationStore := &storage.PostgresStore{Pool: migrationPool}
 	// Migration 00094 hits a rare PostgreSQL catalog race ("tuple
 	// concurrently updated") on freshly created databases; one retry clears
 	// it (idempotent runner: applied versions are skipped).
 	var migErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		migErr = store.RunMigrations(context.Background())
+		migErr = migrationStore.RunMigrations(context.Background())
 		if migErr == nil || !strings.Contains(migErr.Error(), "tuple concurrently updated") {
 			break
 		}
@@ -440,19 +424,84 @@ func hwAssetE2EStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
 	if migErr != nil {
 		t.Fatalf("migrations: %v", migErr)
 	}
-	// A real actor row: durable audit requires a UUID actor.
-	if _, err := pool.Exec(context.Background(), `
+	// Fixture bootstrap stays on migration authority. The runtime actor has an
+	// active membership in both organizations so the handler-level test can
+	// install the same revalidated tenant actor as AuthMiddleware.
+	if _, err := migrationPool.Exec(context.Background(), `
 		INSERT INTO users (id, email, password_hash, name, account_status, normalized_email)
 		VALUES ('21000000-0000-0000-0000-0000000000e2', 'asset-e2e@test.local', 'x', 'Asset E2E', 'active', 'asset-e2e@test.local')
-		ON CONFLICT (id) DO NOTHING`); err != nil {
-		t.Fatalf("seed e2e user: %v", err)
+		ON CONFLICT (id) DO NOTHING;
+		INSERT INTO organizations (id, name, slug, type)
+		VALUES ('22000000-0000-0000-0000-0000000000e2', 'Foreign asset E2E', 'foreign-asset-e2e', 'factory')
+		ON CONFLICT (id) DO NOTHING;
+		INSERT INTO memberships (id, organization_id, user_id, roles)
+		VALUES
+			('23000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-000000000001', '21000000-0000-0000-0000-0000000000e2', ARRAY['admin']),
+			('24000000-0000-0000-0000-0000000000e2', '22000000-0000-0000-0000-0000000000e2', '21000000-0000-0000-0000-0000000000e2', ARRAY['admin'])
+		ON CONFLICT (user_id, organization_id) DO NOTHING`); err != nil {
+		t.Fatalf("seed e2e identity fixture: %v", err)
 	}
-	return store, pool
+	runtimeURL, err := url.Parse(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("parse DATABASE_URL: %v", err)
+	}
+	runtimeURL.Path = "/" + dbName
+	if err := storage.ValidateTestDatabaseURL(runtimeURL.String()); err != nil {
+		t.Fatalf("hwAssetE2EStore rejected unsafe runtime database: %v", err)
+	}
+	runtimePool, err := pgxpool.New(context.Background(), runtimeURL.String())
+	if err != nil {
+		t.Fatalf("connect runtime db: %v", err)
+	}
+	t.Cleanup(runtimePool.Close)
+	return &storage.PostgresStore{Pool: runtimePool}, migrationPool
 }
 
 // hwAssetE2EActor is the seeded UUID actor of the throwaway DB: durable
 // audit requires a real user id (never a test label).
-const hwAssetE2EActor = "21000000-0000-0000-0000-0000000000e2"
+const (
+	hwAssetE2EActor             = "21000000-0000-0000-0000-0000000000e2"
+	hwAssetE2EInitialMembership = "23000000-0000-0000-0000-0000000000e2"
+	hwAssetE2EForeignOrg        = "22000000-0000-0000-0000-0000000000e2"
+	hwAssetE2EForeignMembership = "24000000-0000-0000-0000-0000000000e2"
+)
+
+func hwAssetE2EActorFor(organizationID, membershipID string) storage.TenantActor {
+	return storage.TenantActor{OrganizationID: organizationID, UserID: hwAssetE2EActor, MembershipID: membershipID}
+}
+
+func runHardwareAssetE2E(t *testing.T, store *storage.PostgresStore, actor storage.TenantActor, req *http.Request, handle func(http.ResponseWriter, *http.Request)) *httptest.ResponseRecorder {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	if err := store.WithinTenantTx(req.Context(), actor, func(ctx context.Context) error {
+		handle(rr, req.WithContext(ctx))
+		return nil
+	}); err != nil {
+		t.Fatalf("run hardware asset request as runtime actor: %v", err)
+	}
+	return rr
+}
+
+func hwAssetE2EMultipart(t *testing.T, srv *Server, store *storage.PostgresStore, sessionID, representation, filename string, content []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/hardware-assets/uploads/"+sessionID+"/bytes/"+representation, &buf), hwAssetE2EActor, string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.SetPathValue("sessionId", sessionID)
+	req.SetPathValue("representation", representation)
+	return runHardwareAssetE2E(t, store, hwAssetE2EActorFor(storage.InitialOrganizationID, hwAssetE2EInitialMembership), req, srv.HandleHardwareAssetUploadBytes)
+}
 
 // Handler-level walkthrough (NOT the router E2E — the router/auth/idempotency
 // proof lives in hardware_assets_router_test.go): iniciar carga, recibir
@@ -479,8 +528,7 @@ func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 	req := e2eReq(http.MethodPost, "/api/hardware-assets/uploads",
 		`{"representation":"skp","display_name":"Tirador e2e","provenance":"Proveedor","license":"Interna",
 		  "origin":{"source_units":"mm","up_axis":"z","anchor_offset_mm":{"x_mm":10,"y_mm":0,"z_mm":12}}}`)
-	rr := httptest.NewRecorder()
-	srv.HandleHardwareAssetUploadStart(rr, req)
+	rr := runHardwareAssetE2E(t, store, hwAssetE2EActorFor(storage.InitialOrganizationID, hwAssetE2EInitialMembership), req, srv.HandleHardwareAssetUploadStart)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("start = %d %s", rr.Code, rr.Body.String())
 	}
@@ -492,10 +540,21 @@ func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &session); err != nil {
 		t.Fatal(err)
 	}
+	var rowOrganizationID, rowCreatedBy, rowStatus string
+	if err := pool.QueryRow(context.Background(), `
+		SELECT organization_id, created_by, status
+		FROM hardware_asset_upload_sessions
+		WHERE id = $1
+	`, session.ID).Scan(&rowOrganizationID, &rowCreatedBy, &rowStatus); err != nil {
+		t.Fatalf("admin diagnostic lookup of upload session: %v", err)
+	}
+	if rowOrganizationID != storage.InitialOrganizationID || rowCreatedBy != hwAssetE2EActor || rowStatus != "prepared" {
+		t.Fatalf("unexpected persisted tenant row: org=%s actor=%s status=%s", rowOrganizationID, rowCreatedBy, rowStatus)
+	}
 
 	// 2. Bytes (real file, server-side digest).
 	content := []byte(strings.Repeat("skp-e2e-bytes-", 200))
-	rr = hwAssetMultipart(t, srv, session.ID, "skp", "handle.skp", string(domain.RoleAdmin), content)
+	rr = hwAssetE2EMultipart(t, srv, store, session.ID, "skp", "handle.skp", content)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("bytes = %d %s", rr.Code, rr.Body.String())
 	}
@@ -503,8 +562,7 @@ func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 	// 3. Finalize (disk verification + immutable revision).
 	req = e2eReq(http.MethodPost, "/api/hardware-assets/uploads/"+session.ID+":finalize", "")
 	req.SetPathValue("sessionId", session.ID)
-	rr = httptest.NewRecorder()
-	srv.HandleHardwareAssetUploadFinalize(rr, req)
+	rr = runHardwareAssetE2E(t, store, hwAssetE2EActorFor(storage.InitialOrganizationID, hwAssetE2EInitialMembership), req, srv.HandleHardwareAssetUploadFinalize)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("finalize = %d %s", rr.Code, rr.Body.String())
 	}
@@ -537,8 +595,7 @@ func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 	// 4. Consult.
 	req = e2eReq(http.MethodGet, "/api/hardware-assets/uploads/"+session.ID, "")
 	req.SetPathValue("sessionId", session.ID)
-	rr = httptest.NewRecorder()
-	srv.HandleHardwareAssetUploadGet(rr, req)
+	rr = runHardwareAssetE2E(t, store, hwAssetE2EActorFor(storage.InitialOrganizationID, hwAssetE2EInitialMembership), req, srv.HandleHardwareAssetUploadGet)
 	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), `"finalized_asset_id"`) {
 		t.Fatalf("consult = %d %s", rr.Code, rr.Body.String())
 	}
@@ -548,8 +605,7 @@ func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 		"/api/hardware-assets/"+asset.ID+"/revisions/"+asset.Revisions[0].ID+":authorize", "")
 	req.SetPathValue("assetId", asset.ID)
 	req.SetPathValue("revisionId", asset.Revisions[0].ID)
-	rr = httptest.NewRecorder()
-	srv.HandleHardwareAssetRevisionAuthorize(rr, req)
+	rr = runHardwareAssetE2E(t, store, hwAssetE2EActorFor(storage.InitialOrganizationID, hwAssetE2EInitialMembership), req, srv.HandleHardwareAssetRevisionAuthorize)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("authorize = %d %s", rr.Code, rr.Body.String())
 	}
@@ -567,6 +623,25 @@ func TestHardwareAssets_HandlerLevelByteWalkthrough(t *testing.T) {
 	srv.hardwareAssetFileGetAuth(http.HandlerFunc(srv.HandleHardwareAssetFileGet)).ServeHTTP(rr, getReq)
 	if rr.Code != http.StatusOK || !bytes.Equal(rr.Body.Bytes(), content) {
 		t.Fatalf("byte readback = %d (%d bytes, want %d)", rr.Code, rr.Body.Len(), len(content))
+	}
+
+	// The same authenticated user under a revalidated membership in organization B
+	// cannot observe organization A's session. RLS intentionally reports absence.
+	req = e2eReq(http.MethodGet, "/api/hardware-assets/uploads/"+session.ID, "")
+	req.SetPathValue("sessionId", session.ID)
+	rr = runHardwareAssetE2E(t, store, hwAssetE2EActorFor(hwAssetE2EForeignOrg, hwAssetE2EForeignMembership), req, srv.HandleHardwareAssetUploadGet)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("foreign organization lookup = %d %s, want 404", rr.Code, rr.Body.String())
+	}
+
+	// Omitting the production tenant-transaction boundary leaves RLS context
+	// unset and therefore cannot grant visibility.
+	req = e2eReq(http.MethodGet, "/api/hardware-assets/uploads/"+session.ID, "")
+	req.SetPathValue("sessionId", session.ID)
+	rr = httptest.NewRecorder()
+	srv.HandleHardwareAssetUploadGet(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("lookup without tenant context = %d %s, want 404", rr.Code, rr.Body.String())
 	}
 
 	// Cleanup rows (throwaway DB dropped in t.Cleanup anyway; explicit for clarity).

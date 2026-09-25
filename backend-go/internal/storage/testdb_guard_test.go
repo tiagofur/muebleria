@@ -275,3 +275,18 @@ func TestTestAdminDatabaseURL_UsesOnlyMigrationAuthority(t *testing.T) {
 	t.Setenv("MIGRATION_DATABASE_URL", "postgres://postgres:admin-secret@localhost:5432/muebles")
 	testAdminURLFailure(t, "rejected unsafe database", func() { storage.TestAdminDatabaseURL(guardT{}) })
 }
+
+func TestTestMigrationDatabaseURL_UsesOnlyMigrationAuthority(t *testing.T) {
+	t.Setenv("GRANETE_TEST_DATABASE", "1")
+	t.Setenv("DATABASE_URL", "postgres://granete_app:runtime-secret@localhost:5432/granete_test")
+	t.Setenv("MIGRATION_DATABASE_URL", "")
+	testAdminURLFailure(t, "skip", func() { storage.TestMigrationDatabaseURL(guardT{}, "granete_test_migration") })
+
+	t.Setenv("MIGRATION_DATABASE_URL", "postgres://postgres:admin-secret@localhost:5432/postgres")
+	migrationURL := storage.TestMigrationDatabaseURL(t, "granete_test_migration")
+	if !strings.Contains(migrationURL, "postgres://postgres:admin-secret@localhost:5432/granete_test_migration") {
+		t.Fatalf("unexpected migration URL: %s", migrationURL)
+	}
+
+	testAdminURLFailure(t, "rejected unsafe database", func() { storage.TestMigrationDatabaseURL(guardT{}, "muebles") })
+}

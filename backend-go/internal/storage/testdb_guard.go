@@ -220,6 +220,29 @@ func TestAdminDatabaseURL(t testingT) string {
 	return adminURL
 }
 
+// TestMigrationDatabaseURL returns the dedicated migration authority retargeted
+// to one allowed test database. It preserves the admin credentials from
+// MIGRATION_DATABASE_URL and never derives them from DATABASE_URL.
+func TestMigrationDatabaseURL(t testingT, databaseName string) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	raw := os.Getenv("MIGRATION_DATABASE_URL")
+	if strings.TrimSpace(raw) == "" {
+		t.Skip("MIGRATION_DATABASE_URL not set; skipping live test database suite")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("TestMigrationDatabaseURL parse error: invalid database URL (%s)", SanitizeDatabaseURL(raw))
+	}
+	u.Path = "/" + strings.TrimSpace(databaseName)
+	migrationURL := u.String()
+	if err := ValidateTestAdminDatabaseURL(migrationURL); err != nil {
+		t.Fatalf("TestMigrationDatabaseURL rejected unsafe database: %v", err)
+	}
+	return migrationURL
+}
+
 type testingT interface {
 	Helper()
 	Skip(args ...any)
