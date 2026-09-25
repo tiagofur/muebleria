@@ -13,7 +13,7 @@ import (
 // códigos: si el seed agrega un código y clean_demo.go no, la base no queda
 // vacía y SeedCatalog se salta el seed completo → el test explota.
 func TestCleanDemoData(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	store := &storage.PostgresStore{Pool: pool}
 	if err := store.RunMigrations(context.Background()); err != nil {
 		t.Fatalf("run migrations: %v", err)
