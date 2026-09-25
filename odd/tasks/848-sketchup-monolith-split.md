@@ -28,10 +28,63 @@ risk-ascending (each phase independently green and PR-able):
   `window.GraneteUI` namespace; harnesses updated to load extracted files
   per phase.
 
+## Delivery
+
+- Strategy: **stacked-to-main**. Each child is a focused review slice that
+  ultimately lands on `main`; there is no final integrator branch. The parent
+  maps local commits to the eventual parent/child PR bases before publication.
+- C2 is the Ruby preview/workflow extraction slice. Its local commit must stay
+  separate from C3/JS and will not be pushed, reviewed, or published here.
+
 ## Evidence per phase (filled as commits land)
 
 - Phase A: commit, verify tally, RBZ sha, token_health scope.
-- Phase C: commit, verify tally, rubocop clean (no new ClassLength disables).
+- Phase C / C2: **in progress — delegated direct recovery**. The inherited
+  multi-file extraction moves the design workflow and placement-preview portions
+  of `ProjectFurnitureBridge` into their existing bridge files, then wires the
+  composition root and test helper. Route: delegated direct, triggered by the
+  inherited extraction spanning six Ruby/harness files. Strict TDD is enabled;
+  this recovery begins from an inherited dirty pure move, so no fabricated RED
+  applies. Any net-new corrective behavior requires an observed focused RED;
+  inherited behavior is validated with the existing suite. Required checks:
+  `rake verify` and `python3 scripts/verify_affected.py --base origin/main --plan`.
+  V2 real SketchUp smoke is NOT_RUN. Recovery readback found all 92 original
+  bridge methods exactly once across the three modules (no omissions or new
+  methods); Ruby syntax and whitespace checks pass. The host-default Ruby
+  `4.0.6` cannot install locked `commonmarker-0.23.12`,
+  but the checked-in Ruby `3.2.11` runtime is available through
+  `~/.rbenv/shims`. `PATH="$HOME/.rbenv/shims:$PATH" BUNDLE_FROZEN=true
+  bundle install` completed with 61 locked gems and did not alter `Gemfile` or
+  `Gemfile.lock`. The first full `bundle exec rake verify` supplied the required
+  RED for the inherited extraction: moving the placement methods left
+  `UNIT_EPSILON` in `ProjectFurnitureBridge`, causing 8 failures and 18 errors.
+  C2 restored that unchanged tolerance constant in `PlacementPreviewBridge`.
+  The rerun passed: RuboCop 249 files / 0 offenses; Ruby unit suite 1132 runs,
+  7438 assertions, 0 failures/errors/skips; contract suite 6 runs, 4007
+  assertions, 0 failures/errors/skips; RBZ sha256
+  `e3b4647cef47cf8b2abe7a6cfceede792fa92ced1389f311e339413fea5c35f4`.
+  C2 acceptance: `PlacementPreviewBridge` owns preview lifecycle, anchors/snap,
+  commit/cancel and `UNIT_EPSILON`; `ProjectFurnitureBridge` owns the project
+  panel and FurnitureInstance operations; `DesignWorkflowBridge` owns
+  publish/validate orchestration. `DialogController` explicitly composes their
+  callback registration. Context reduction is concrete: the source project
+  bridge fell from 1,644 to about 311 lines; preview and workflow now occupy
+  about 932 and 440 lines. Approximate C2 source accounting is MOVE-ONLY
+  2,700 touched lines (1,350 removed + about 1,350 relocated), WIRING about 30
+  lines (requires/includes/callback composition), and BEHAVIOR-CORRECTION about
+  15 lines (the moved tolerance plus direct regression coverage). The focused
+  placement suite passed (42 runs, 263 assertions), and final verification on
+  Ruby 3.2.11 passed: RuboCop 249 files / 0 offenses; Ruby unit suite 1134
+  runs, 7442 assertions, 0 failures/errors/skips; contract suite 6 runs, 4007
+  assertions, 0 failures/errors/skips; RBZ sha256
+  `159c04dc9d22fd3402bf08bf5d39aa8e6dcabbd75e4f9e286d9e6789fd11788e`.
+  `git diff --check` and `verify_affected --plan` pass; manifests remain
+  unchanged. Delivery is `stacked-to-main`, not an integrator branch: C2 is a
+  focused child review slice that can ultimately land on `main`. Local topology
+  is ambiguous for that PR mapping: the only feature branch contains the prior
+  Phase A and C1 commits above local `main`/`origin/main` at `5a368f40`, and no
+  local parent/child slice branches exist. No remote state was read or inferred;
+  the parent must choose the eventual PR bases before publication.
 - Phase B: commits per module, verify tally, harness loading order.
 
 ## Limitations and remaining scope

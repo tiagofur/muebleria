@@ -279,6 +279,17 @@ class PlacementPreviewControllerTest < Minitest::Test
     end
   end
 
+  # #848 C2 regression: the placement bridge owns the tolerance its oriented
+  # target/base-plane helpers use. Moving only the methods leaves this direct
+  # module dependency behind and fails the preview paths at runtime.
+  def test_extracted_preview_bridge_owns_its_tolerance
+    bridge = Granete::SketchUpExtension::UserInterface::PlacementPreviewBridge
+    project_bridge = Granete::SketchUpExtension::UserInterface::ProjectFurnitureBridge
+
+    assert_equal 1e-6, bridge.const_get(:UNIT_EPSILON, false)
+    refute project_bridge.const_defined?(:UNIT_EPSILON, false)
+  end
+
   def setup
     SketchupStub.reset!
     Sketchup::InputPoint.next_position_mm = nil

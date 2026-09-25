@@ -13,6 +13,8 @@ module Granete
         include CommercialProjectionBridge
         include CommercialBootstrapBridge
         include ProjectFurnitureBridge
+        include PlacementPreviewBridge
+        include DesignWorkflowBridge
         include FurnitureBridge
         include HostMutationBridge
         include ComponentAuthoringBridge
@@ -244,6 +246,8 @@ module Granete
           register_commercial_projection_callbacks(dialog) if @commercial_projection_service
           register_commercial_bootstrap_callbacks(dialog) if @project_bootstrap && @initial_quote
           register_project_furniture_callbacks(dialog)
+          register_placement_preview_callbacks(dialog)
+          register_design_workflow_callbacks(dialog)
           # #460 SEC-3: webviews re-mint expired media grants on demand; the
           # session credential itself never crosses into the dialog.
           dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }

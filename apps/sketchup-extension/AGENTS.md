@@ -2,6 +2,25 @@
 
 This file is the scoped entry point for any agent modifying `apps/sketchup-extension/`.
 
+## Mapa rápido de bridges
+
+Empieza por la fila que describe la interacción; `DialogController` sólo compone
+los bridges y no debe recuperar lógica de cada dueño.
+
+| Interacción | Dueño / no dueño | Empieza aquí | Prueba focal |
+| --- | --- | --- | --- |
+| Placement preview | `ui/bridges/placement_preview_bridge.rb`: ciclo begin/commit/cancel, anchors, snap, base planes y su tolerancia geométrica. No crea identidad comercial ni calcula fabricación. | `ui/bridges/placement_preview_bridge.rb`; `ui/dialog_controller.rb`; `tools/furniture_placement_tool.rb`; `connection/project_furniture.rb` | `test/unit/placement_preview_controller_test.rb` |
+| Project Furniture | `ui/bridges/project_furniture_bridge.rb`: panel por `FurnitureInstance`, colocar/crear/restaurar/seleccionar e inventario. No es dueño del preview ni de publicar/validar diseño. | `ui/bridges/project_furniture_bridge.rb`; `ui/dialog_controller.rb`; `connection/project_furniture.rb`; `test/unit/project_furniture_test.rb` | `test/unit/project_furniture_test.rb` |
+| Design workflow | `ui/bridges/design_workflow_bridge.rb`: publicar/validar diseño, batch, gate y proyección de excepciones. No realiza mutación de placement. | `ui/bridges/design_workflow_bridge.rb`; `host/design_preflight_batch.rb`; `connection/design_publish.rb`; `test/unit/dialog_publish_workflow_test.rb` | `test/unit/dialog_publish_workflow_test.rb` |
+| Design Sync | No es un bridge C2 separado: `handle_synchronize_design` permanece con Project Furniture porque sincroniza el frontier de unidades del proyecto. | `ui/bridges/project_furniture_bridge.rb`; `connection/design_sync.rb`; `ui/dialog_controller.rb`; `test/unit/project_furniture_test.rb` | `test/unit/project_furniture_test.rb` |
+
+**Runtime y evidencia.** Usa Ruby `3.2.11` con
+`PATH="$HOME/.rbenv/shims:$PATH"`; ejecuta una prueba focal y después
+`bundle exec rake verify`. `git diff --check` y
+`python3 scripts/verify_affected.py --base origin/main --plan` completan la
+evidencia local. El smoke real en SketchUp macOS/Windows sigue siendo evidencia
+V2: nunca lo sustituyas con estas pruebas ni lo declares ejecutado sin host.
+
 ## Mandatory reading
 
 Before implementation, read:
