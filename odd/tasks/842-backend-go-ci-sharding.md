@@ -231,3 +231,8 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - The canonical runtime DSN already authenticates as `granete_app`; the test-only override to `granete_app_test` plus `rls-test-password` was obsolete. RLS fixture and named-pool assertions now use that canonical runtime DSN without credential mutation.
 - The expected-role checks now prove `current_user=granete_app`, including the no-bypass/no-ownership assertion. No production role, credential, grant, RLS policy, trigger, or constraint changed.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestAgregadoFamily_TenantBoundary_F1E_PooledConnectionReuse|TestCreateInitialDesignQuoteRevision_(RejectsTerminalStatusCommittedWhileWaitingForLock|RemoveWinsWhileQuoteWaitsForInstanceLock)|TestSupportSessionStartAndOrganizationSuspendSerializeOnOrganizationLock|TestIdentityLifecycleRLS_RuntimeRoleHasNoBypassOwnershipOrExcessGrants|TestTenantRLS_PoolReuseRollbackRoleAndInventoryReadiness)$'` — PASS, FAIL=0, SKIP=0 (Go 6.778s).
+
+## D5 result — MaterialBoard fixture skip (2026-09-25)
+- `TestMaterialBoard_PersistsTextureTileMm` was an accidental fixture skip: it read whichever runtime database happened to exist and skipped when no catalog board was present. It was not environment-dependent behavior.
+- The test now creates its own minimal board through `granete_app` in a tenant transaction after migration-only bootstrap, then updates and reads it in independent tenant transactions. Fixture deletion is migration-authority teardown.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestMaterialBoard_PersistsTextureTileMm$'` — PASS, FAIL=0, SKIP=0 (Go 1.382s).
