@@ -89,3 +89,8 @@ The Group B fixture will keep `connectStore` runtime-only. A separate migration 
 - Migrated the three runtime tests to one `WithinTenantTx` per create/read/list/update/deactivate request. Cleanup is migration-authority fixture teardown. The duplicate-key assertion returns the expected database error from its own transaction instead of attempting to commit an aborted transaction.
 - `TestAmbientMaterials_MigrationIsAdditiveAndReRunSafe` now runs entirely on migration authority; it is not runtime/RLS coverage.
 - Verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestAmbientMaterials_'` — PASS (1.357s), FAIL=0, SKIP=0.
+
+### Group B family result — Agregados catalog
+- Migrated the two runtime callers to explicit Initial Organization actor transactions for each create/read/list/update/deactivate command; structure and module composition each commit before subsequent reads/updates.
+- Moved the additive migration test to `migrationConnectStore`; its setup/replay assertion no longer opens runtime authority.
+- Verification: `scripts/backend-test.sh -v ./internal/storage -run '^(TestAgregados_|TestStructureAndModule_AgregadosRoundTrip)$'` — PASS (1.379s), FAIL=0, SKIP=0.

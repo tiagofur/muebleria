@@ -94,6 +94,17 @@ func withinConnectStoreTenant(t *testing.T, store *storage.PostgresStore, actor 
 	}
 }
 
+func withinConnectStoreTenantValue[T any](t *testing.T, store *storage.PostgresStore, actor storage.TenantActor, run func(context.Context) (T, error)) T {
+	t.Helper()
+	var value T
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		var err error
+		value, err = run(txCtx)
+		return err
+	})
+	return value
+}
+
 func cleanupConnectStoreFixture(t *testing.T, query string, args ...any) {
 	t.Helper()
 	pool, err := pgxpool.New(context.Background(), storage.TestMigrationDatabaseURLForRuntimeDatabase(t))
