@@ -183,3 +183,25 @@ Machine Output had two direct `connectStore` test callers before this migration.
 - Migration-only callers: Ambient additive replay 1; Aggregates additive replay 1; Revisions Up/Down replay 1 — **3 total**. They perform schema/replay assertions only.
 - Therefore all real Group B test callers are classified as migration-only or runtime, and remaining unmigrated runtime callers = **0**.
 - Complete Group B regression (Ambient, Aggregates, Revisions, Projects, Machine Output): 25 tests, PASS, FAIL=0, SKIP=0; Go runner 6.954s, observed command wall-clock 11.0s.
+
+## Group B count reconciliation (2026-09-25)
+The final count of **17 runtime + 3 migration-only** is correct. The earlier expected `17 + 2` omitted the already-scoped revision replay test.
+
+- Runtime callers (17): Ambient — `TestAmbientMaterials_CRUDRoundTrip`, `TestAmbientMaterials_NullablePBR_NullVsZero`, `TestAmbientMaterials_UniqueCodeConstraint` (`ambient_test.go`); Aggregates — `TestAgregados_CRUDRoundTrip`, `TestStructureAndModule_AgregadosRoundTrip` (`agregados_test.go`); Revisions — `TestAgregadoRevisions_AppendOnlySequenceAndHistoricalRetrieval`, `TestAgregadoRevisions_ImmutabilityGuards`, `TestAgregadoRevisions_ConcurrentAllocationAndUniqueness`, `TestAgregadoRevisions_TenantIsolationRLS`, `TestAgregadoRevisions_LegacyAgregadoCompatibility`, `TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling`, `TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision`, `TestMerivoboxPilotHistoricalPersistence_R5` (`agregado_revisions_test.go`); Projects — `TestProject_EngineeringLogRoundTrip`, `TestProjectItem_CustomDimsRoundTrip`; Machine Output — `TestMachineOutputSelections_VersionConflictAndList`, `TestMachineOutputSelections_RLSTenantIsolation`.
+- Migration-only callers (3): `TestAmbientMaterials_MigrationIsAdditiveAndReRunSafe` (`ambient_test.go`), `TestAgregados_MigrationIsAdditiveAndReRunSafe` (`agregados_test.go`), and the omitted third: `TestAgregadoRevisions_Migration_UpDownReplay` (`agregado_revisions_test.go`). The third applies/down-replays migrations and asserts schema behavior; it has no product/runtime assertion, so it correctly remains migration-only.
+- `connectStore` and `migratedConnectStore` are helper definitions. The sole textual `connectStore(t)` is the internal return in `migratedConnectStore`, not an independent test caller.
+
+## Group C `mustPool` inventory (2026-09-25, pre-migration)
+| Test | File | Property | Current authority | Correct authority | Classification / boundaries |
+| --- | --- | --- | --- | --- | --- |
+| `TestEdgeBand_FractionalThicknessRoundTrip` | `backend-go/internal/storage/catalog_f116_test.go` | Tenant-owned EdgeBand fractional thickness values (0, 0.5, 0.8, 2) persist and read back exactly. | `mustPool` opens `DATABASE_URL`, then runs migrations on that runtime pool; commands use `WithOrgCtx` only. | Migration authority for migrations and active fixture actor; `granete_app` + explicit actor + `WithinTenantTx` for each create/read. | Positive runtime; RLS yes; no cross-tenant, concurrency, schema assertion, or expected DB error. |
+| `TestAgregado_HardDeleteWithUseGuard` | `backend-go/internal/storage/catalog_f116_test.go` | Tenant-owned agregado cannot be deleted while referenced by a module JSONB payload; after removing the reference it hard-deletes and is absent. | `mustPool` opens `DATABASE_URL`, runs migrations there, uses `WithOrgCtx` only, and issues direct module SQL plus cleanup on runtime pool. | Migration authority for migrations and fixture identity only; `granete_app` + explicit actor + independent tenant transactions for create, direct module fixture SQL, expected in-use delete/rollback, reference removal, successful delete, and absent readback. | Positive plus expected domain error; RLS yes; no cross-tenant, concurrency, or migration/schema assertion. Direct SQL is runtime fixture setup, not a trigger/schema proof. |
+
+`mustPool` is a helper, not a caller. Both callers are runtime/product tests, so neither may use migration authority for their assertions. The first test's table is RLS-scoped (`organization_id`); the second includes direct runtime SQL and an expected error that must return from its own transaction.
+
+### Group C result
+- Removed the `mustPool` helper: migration execution no longer occurs through `DATABASE_URL` / `granete_app`.
+- `TestEdgeBand_FractionalThicknessRoundTrip` now uses migration bootstrap plus the explicit active runtime actor, with a separate `WithinTenantTx` for each create and read. Focused: PASS, SKIP=0 (test 0.83s; runner wall 1.294s).
+- `TestAgregado_HardDeleteWithUseGuard` now uses migration bootstrap plus runtime tenant transactions for aggregate creation, module fixture creation, in-use delete error, module removal, hard delete, and absence readback. Focused: PASS, SKIP=0 (test 0.81s; runner wall 1.244s).
+- Group C combined: 2 tests, PASS, FAIL=0, SKIP=0 (tests 0.82s and 0.04s; runner wall 1.286s).
+- The old tests returned `PASS` with both tests skipped after runtime migration failed with `SQLSTATE 42501`; this was an accidental fixture/database skip, now eliminated.
