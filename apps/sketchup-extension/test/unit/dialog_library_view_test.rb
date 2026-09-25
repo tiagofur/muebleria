@@ -133,6 +133,18 @@ class DialogLibraryViewTest < Minitest::Test
     # chevron comunica la navegación.
     refute_includes @html_content, 'btn-picker-open'
     assert_includes @html_content, 'material-chevron'
+    # El inspector comparte el patrón: dock con cotas junto a la acción
+    # primaria, DENTRO del fieldset fail-closed (#476), y delete fuera.
+    assert_includes @html_content, 'id="inspector-actionbar"'
+    assert_includes @html_content, 'class="action-dock"'
+    assert_includes @html_content, 'id="inspector-summary-dims"'
+    # btn-update dentro del fieldset del inspector; btn-delete después de cerrarlo.
+    fieldset_open = @html_content.index('id="inspector-edit-fieldset"')
+    fieldset_close = @html_content.index('</fieldset>', fieldset_open)
+    update_pos = @html_content.index('id="btn-update"', fieldset_open)
+    delete_pos = @html_content.index('id="btn-delete"', fieldset_open)
+    assert update_pos < fieldset_close, 'btn-update pertenece al fieldset de mutación'
+    assert fieldset_close < delete_pos, 'btn-delete queda fuera del fieldset (boundary de capability)'
   end
 
   def test_dialog_html_contains_svg_placeholder_fallback

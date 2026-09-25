@@ -563,8 +563,9 @@
         overflow: hidden;
       }
 
-      /* Dock de acción: cotas vivas + acción primaria siempre visible. */
-      .configurator-actionbar {
+      /* Dock de acción: cotas vivas + acción primaria siempre visible.
+         Compartido por configurador e inspector (mismo patrón, mismo job). */
+      .action-dock {
         position: sticky;
         bottom: var(--space-2);
         z-index: 40;
@@ -579,7 +580,7 @@
         box-shadow: 0 8px 16px -6px rgb(15 23 42 / 0.18), 0 2px 4px -2px rgb(15 23 42 / 0.1);
       }
 
-      .configurator-actionbar .btn {
+      .action-dock .btn {
         width: auto;
         flex: 0 0 auto;
         white-space: nowrap;
@@ -2124,7 +2125,7 @@
               <div id="library-materials-container" style="margin-top: var(--space-2);"></div>
             </div>
 
-            <div id="configurator-actionbar" class="configurator-actionbar">
+            <div id="configurator-actionbar" class="action-dock">
               <div class="actionbar-summary">
                 <span id="library-summary-dims" class="actionbar-dims">-- × -- × --</span>
                 <span id="library-summary-parts" class="actionbar-parts">--</span>
@@ -2380,19 +2381,8 @@
                  capability denial, the whole fieldset disables at once. -->
             <fieldset id="inspector-edit-fieldset" class="inspector-fieldset">
               <div class="card" id="inspector-params-card">
-                <div class="card-title">Parámetros del Mueble</div>
+                <div class="card-title">Medidas y Opciones</div>
                 <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
-
-                <div class="summary-box">
-                  <div class="summary-item">
-                    <strong id="inspector-summary-dims">-- × -- × --</strong>
-                    <span>Cotas (mm)</span>
-                  </div>
-                  <div class="summary-item">
-                    <strong id="inspector-summary-parts">--</strong>
-                    <span>Piezas estimadas</span>
-                  </div>
-                </div>
               </div>
 
               <div class="card" id="inspector-materials-card" style="display: none;">
@@ -2400,10 +2390,18 @@
                 <div id="inspector-materials-container" style="margin-top: var(--space-2);"></div>
               </div>
 
-              <button id="btn-update" class="btn btn-primary">
-                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                <span>Actualizar Mueble</span>
-              </button>
+              <!-- Dock dentro del fieldset: la mutación sigue sometida al
+                   switch fail-closed nativo de #476. -->
+              <div id="inspector-actionbar" class="action-dock">
+                <div class="actionbar-summary">
+                  <span id="inspector-summary-dims" class="actionbar-dims">-- × -- × --</span>
+                  <span id="inspector-summary-parts" class="actionbar-parts">--</span>
+                </div>
+                <button id="btn-update" class="btn btn-primary">
+                  <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  <span>Actualizar Mueble</span>
+                </button>
+              </div>
             </fieldset>
 
             <!-- Delete stays OUTSIDE the mutation fieldset: losing
