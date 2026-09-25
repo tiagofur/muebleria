@@ -100,9 +100,9 @@ outside the repository under the post-844 rehearsal artifact directory.
   390/768/1280; headings remain within viewport. Mobile retains the existing
   horizontally scrollable table; a scrolled Material-cell capture verifies access.
   Screenshot animations are disabled to avoid capturing the existing sidebar mid-transition.
-- Legacy missing/blank snapshot codes show the exact stable release ID; live code
+- Legacy missing/blank snapshot codes show the exact stable release material ID; live code
   is never called frozen. Ordinary rows keep name-based presentation/grouping.
-  Distinct release IDs remain separate even with identical codes/current names.
+  Distinct material IDs remain separate even with identical codes/current names.
 - Read-only consumer inventory: ShellView maps rows into EngineeringWorkspace,
   which passes them unchanged to Despiece and optimization. The optimizer keeps
   originalRow internally but projects explicit physical fields into placements;
@@ -128,7 +128,10 @@ MCP mutation is unavailable due multiple runtime sessions; independent CLI save
 with explicit project is supported and used without inventing runtime identity.
 Work-unit commit `0937ef8455c098a560c72116842f1100315065a2` contains behavior, regressions, and this artifact.
 Clean preflight after that commit: `PREFLIGHT_OK_NOT_VERIFIED`, dirty=false, no errors.
-Final authored diff: 376 additions plus deletions across 8 files; no generated files.
-RDD remains disabled/unmanaged. Independent review and exact-head CI remain pending.
+Final authored diff: 379 additions plus deletions across 8 files; no generated files.
+Parent native assessment of base → `564355a3c60ff7629b5b9292dc43e85e762e22b7`:
+medium risk, 376 authored lines, `review_due=false`, reason `under_budget`.
+This assessment is not approval. RDD remains disabled/unmanaged;
+independent review and exact-head CI remain pending.
 Next: fresh exact-head review and parent-controlled partial PR publication.
 No push, PR, merge, or issue closure by writer.
