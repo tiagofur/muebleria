@@ -3,7 +3,6 @@ package storage_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,9 +48,10 @@ func firstLine(sql string) string {
 	return sql
 }
 
-// multiOrgFreshDB drops+creates a throwaway database and returns a pool to
-// it plus a closer that must run before the drop cleanup.
-func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
+// multiOrgFreshDBWithAuthority creates a throwaway database with the dedicated
+// admin connection, then opens it with precisely one validated authority. The
+// caller selects migration or runtime deliberately; credentials never cross.
+func multiOrgFreshDBWithAuthority(t *testing.T, databaseURL func(*testing.T, string) string) *pgxpool.Pool {
 	t.Helper()
 	adminDSN := multiOrgAdminDSN(t)
 	admin, err := pgxpool.New(context.Background(), adminDSN)
@@ -67,14 +67,7 @@ func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
 		t.Skipf("create test db: %v", err)
 	}
 
-	dsn := os.Getenv("DATABASE_URL")
-	u, _ := url.Parse(dsn)
-	u.Path = "/" + testDBName
-	testDSN := u.String()
-	if err := storage.ValidateTestDatabaseURL(testDSN); err != nil {
-		t.Fatalf("multiOrgFreshDB rejected unsafe test database: %v", err)
-	}
-	pool, err := pgxpool.New(ctx, testDSN)
+	pool, err := pgxpool.New(ctx, databaseURL(t, testDBName))
 	if err != nil {
 		t.Fatalf("connect test db: %v", err)
 	}
@@ -86,6 +79,20 @@ func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
 		admin.Close()
 	})
 	return pool
+}
+
+// multiOrgFreshDB is for runtime behavior tests.
+func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	return multiOrgFreshDBWithAuthority(t, func(t *testing.T, databaseName string) string { return storage.TestDatabaseURLForDB(t, databaseName) })
+}
+
+// multiOrgFreshMigrationDB is for schema and migration evolution tests.
+func multiOrgFreshMigrationDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	return multiOrgFreshDBWithAuthority(t, func(t *testing.T, databaseName string) string {
+		return storage.TestMigrationDatabaseURL(t, databaseName)
+	})
 }
 
 // multiOrgApplyLegacySchema applies every embedded migration up to version 79

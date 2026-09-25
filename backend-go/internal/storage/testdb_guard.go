@@ -194,6 +194,26 @@ func TestDatabaseURL(t testingT) string {
 	return raw
 }
 
+// TestDatabaseURLForDB returns the runtime authority from DATABASE_URL retargeted
+// to one allowed disposable database. It never derives runtime credentials from
+// MIGRATION_DATABASE_URL.
+func TestDatabaseURLForDB(t testingT, databaseName string) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	raw := TestDatabaseURL(t)
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("TestDatabaseURLForDB parse error: invalid database URL (%s)", SanitizeDatabaseURL(raw))
+	}
+	u.Path = "/" + strings.TrimSpace(databaseName)
+	runtimeURL := u.String()
+	if err := ValidateTestDatabaseURL(runtimeURL); err != nil {
+		t.Fatalf("TestDatabaseURLForDB rejected unsafe database: %v", err)
+	}
+	return runtimeURL
+}
+
 // TestAdminDatabaseURL returns the dedicated migration/admin URL from
 // MIGRATION_DATABASE_URL, routing it to /postgres for maintenance operations.
 // Runtime DATABASE_URL credentials are never elevated for fixture setup.

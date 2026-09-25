@@ -830,11 +830,11 @@ func mustResolveModuleLayout(t *testing.T, w *hwAssetWorld) string {
 // Migración: fresh apply through 000131 y upgrade 000130 → 000131 dejan el
 // mismo esquema, inventario RLS, grants e inmutabilidad.
 func TestHardwareAssets_MigrationFreshAndUpgrade(t *testing.T) {
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 131)
 	assertHardwareAssetsSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 130)
 	contents, err := os.ReadFile("../../db/migration/000131_hardware_3d_assets.up.sql")
 	if err != nil {

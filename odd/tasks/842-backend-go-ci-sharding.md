@@ -38,5 +38,11 @@ The focused API suite is green. Pilot Readiness is now green with a migration po
 - `TestMigrationDatabaseURL` now exposes a fail-closed, migration-authority-only way to retarget setup to a permitted disposable database. Its guard proof confirms it never derives admin authority from `DATABASE_URL`.
 - Verification: walkthrough PASS; migration-URL guard PASS; storage Hardware Assets RLS tests passed except `TestHardwareAssets_MigrationFreshAndUpgrade`, which still tries to create its migration ledger with `granete_app` and fails `permission denied for schema public`. This is the next fixture-authority correction, not justification to elevate the runtime role.
 
+## Migration-fixture follow-up (2026-09-24)
+- `TestHardwareAssets_MigrationFreshAndUpgrade` was a schema-evolution test but opened its fresh and upgrade databases with `multiOrgFreshDB`, whose pool derives from `DATABASE_URL`; `identityApplyThrough` consequently failed creating `schema_migrations` as `granete_app`.
+- Added explicit derivation helpers: `TestDatabaseURLForDB` is runtime-only and `TestMigrationDatabaseURL` is migration-only; both retarget only an allowed disposable database and validate the result. `multiOrgFreshDBWithAuthority` centralizes create/drop plus selected authority, with named runtime (`multiOrgFreshDB`) and migration (`multiOrgFreshMigrationDB`) entry points.
+- Hardware Assets migration fresh/upgrade now uses `multiOrgFreshMigrationDB`. Focused guards, the Hardware Assets migration/RLS/tenant group, and handler-level walkthrough pass. No policy or runtime role changed.
+- Storage migration/schema audit found the shared `multiOrgFreshDB` family used by both migration-evolution tests (including `identityApplyThrough`) and runtime fixtures (`hwAssetNewStore`, `multiOrg_isolation_test`, and direct `RunMigrations` helpers). The former must migrate to `multiOrgFreshMigrationDB`; the latter must retain a separate runtime pool after admin setup. This classification prevents a blanket admin conversion.
+
 ## Next step
-Correct remaining fixture authority boundaries (starting with the Hardware Assets migration fresh/upgrade fixture) and obtain the required green baseline before starting AST discovery.
+Complete the classified migration-fixture and runtime-fixture authority separation, run the full storage suite, and obtain the required green baseline before starting AST discovery.
