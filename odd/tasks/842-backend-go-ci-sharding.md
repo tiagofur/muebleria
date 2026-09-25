@@ -147,3 +147,18 @@ Deliberate cleanup omission: aggregate revisions and published assembly snapshot
 - **C1 corruption:** `published_assembly_snapshots.snapshot.resolvedDimensionsMm[0]` changes from a valid 600 to `-999`. Runtime cannot create it because frozen snapshot DML is privilege- and trigger-protected. Migration authority temporarily disables only `protect_published_assembly_snapshots_immutable` to create this impossible historical fixture, immediately restores it, and never serves the runtime assertion from its pool. Runtime `granete_app` readback in a new tenant transaction returns the existing typed `readback validation failed` result. Focused PASS (1.462s), SKIP=0.
 - **C2 replay:** `TestAgregadoRevisions_Migration_UpDownReplay` now uses `multiOrgFreshMigrationDB` for apply/down/replay and schema assertions. Focused PASS (1.567s), SKIP=0.
 - Complete revisions regression (`TestAgregadoRevisions_*`, `TestPublishedAssemblySnapshots_*`, `TestMerivoboxPilotHistoricalPersistence_R5`, and design-revision snapshot pinning): PASS, FAIL=0, SKIP=0 (2.312s). The concurrent allocation test retains eight independently scoped racers.
+
+## Project persistence `connectStore` inventory (2026-09-25)
+| Test | `connectStore` role | Intent | Current authority | Required authority/boundaries | Special case |
+| --- | --- | --- | --- | --- | --- |
+| `TestProject_EngineeringLogRoundTrip` | runtime positive | customer → project create/read → engineering-log update/read → clear/read | runtime pool but `WithOrgCtx` only | migration bootstrap plus explicit active fixture actor; separate tenant transactions for customer/create/read/update/read/clear/read | no migration/schema, cross-tenant, or concurrency branch |
+| `TestProjectItem_CustomDimsRoundTrip` | runtime positive | customer/module/project-item custom dimensions create/read/update/read/clear/read | runtime pool but `WithOrgCtx` only | migration bootstrap plus explicit active fixture actor; separate tenant transactions for customer/module/project create/read/update/read/clear/read | no migration/schema, cross-tenant, or concurrency branch |
+
+Both project callers are runtime-positive (2/2); neither is a migration/schema test nor an intentional negative/cross-tenant test. The remaining direct runtime callers after Projects are the two Machine Output tests. `rg 'connectStore(t)'` currently also finds the internal `migratedConnectStore → connectStore` runtime-pool construction, which is not an independent test caller.
+
+### Project persistence result
+- Both callers now use migration-only bootstrap through `migratedConnectStore`, then `DATABASE_URL` as `granete_app` with the explicit active Initial Organization actor. Every runtime command and observation runs in its own `WithinTenantTx`; neither test uses migration/admin authority for a runtime assertion.
+- `TestProject_EngineeringLogRoundTrip`: PASS, SKIP=0 (test 1.12s; focused runner wall 1.701s).
+- `TestProjectItem_CustomDimsRoundTrip`: PASS, SKIP=0 (test 1.00s; focused runner wall 1.512s).
+- Combined Project regression: `scripts/backend-test.sh -v ./internal/storage -run '^(TestProject_EngineeringLogRoundTrip|TestProjectItem_CustomDimsRoundTrip)$'` — PASS, FAIL=0, SKIP=0 (runner wall 1.608s; tests 1.11s and 0.05s).
+- Inventory after Projects: 2/2 Project runtime callers migrated. Two Machine Output runtime callers remain; the helper-internal `migratedConnectStore → connectStore` construction is excluded from the test-caller count.

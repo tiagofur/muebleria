@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
-	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // sameJSON — JSONB normalizes key order/spacing, so compare semantically.
@@ -43,70 +42,27 @@ func uuidv4(t *testing.T) string {
 }
 
 func TestProject_EngineeringLogRoundTrip(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-
-	id := uuidv4(t)
-	customerID := uuidv4(t)
-	customer := &domain.Customer{
-		ID:     customerID,
-		Name:   "Ingeniería Log S.A.",
-		Email:  "eng@example.com",
-		Active: true,
-	}
-	if err := store.CreateCustomer(ctx, customer); err != nil {
-		t.Fatalf("CreateCustomer: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = store.DeleteProject(ctx, id)
-		_, _ = pool.Exec(ctx, `DELETE FROM customers WHERE id = $1`, customerID)
-	})
-
-	created := &domain.Project{
-		ID:           id,
-		Name:         "Cocina Ingeniería",
-		CustomerID:   customer.ID,
-		Currency:     "MXN",
-		MarginFactor: 1.35,
-		Status:       domain.StatusAccepted,
-	}
-
-	// 1. Create WITHOUT log → read back nil.
-	if err := store.CreateProject(ctx, created); err != nil {
-		t.Fatalf("CreateProject: %v", err)
-	}
-	got, err := store.GetProjectByID(ctx, id)
-	if err != nil {
-		t.Fatalf("GetProjectByID: %v", err)
-	}
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	id, customerID := uuidv4(t), uuidv4(t)
+	customer := &domain.Customer{ID: customerID, Name: "Ingeniería Log S.A.", Email: "eng@example.com", Active: true}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateCustomer(txCtx, customer) })
+	created := &domain.Project{ID: id, Name: "Cocina Ingeniería", CustomerID: customer.ID, Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusAccepted}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateProject(txCtx, created) })
+	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Project, error) { return store.GetProjectByID(txCtx, id) })
 	if got.EngineeringLog != nil {
 		t.Fatalf("expected no engineering log on create, got %s", got.EngineeringLog)
 	}
-
-	// 2. Update WITH log → read back the same bytes.
 	log := []byte(`{"started_by":"u1","started_at":"2026-08-17T10:00:00Z","generated_by":"u2","generated_at":"2026-08-17T11:00:00Z","sent_to_production_by":"u2","sent_to_production_at":"2026-08-17T12:00:00Z","revision":2}`)
 	got.EngineeringLog = log
-	if err := store.UpdateProject(ctx, id, got); err != nil {
-		t.Fatalf("UpdateProject with log: %v", err)
-	}
-
-	after, err := store.GetProjectByID(ctx, id)
-	if err != nil {
-		t.Fatalf("GetProjectByID after update: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateProject(txCtx, id, got) })
+	after := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Project, error) { return store.GetProjectByID(txCtx, id) })
 	if !sameJSON(t, after.EngineeringLog, log) {
 		t.Fatalf("engineering log round-trip mismatch:\n got %s\nwant %s", after.EngineeringLog, log)
 	}
-
-	// 3. Update with nil log → column cleared (engineering reset).
 	after.EngineeringLog = nil
-	if err := store.UpdateProject(ctx, id, after); err != nil {
-		t.Fatalf("UpdateProject clearing log: %v", err)
-	}
-	cleared, err := store.GetProjectByID(ctx, id)
-	if err != nil {
-		t.Fatalf("GetProjectByID after clear: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateProject(txCtx, id, after) })
+	cleared := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Project, error) { return store.GetProjectByID(txCtx, id) })
 	if cleared.EngineeringLog != nil {
 		t.Fatalf("expected log cleared, got %s", cleared.EngineeringLog)
 	}
