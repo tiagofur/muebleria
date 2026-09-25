@@ -117,24 +117,44 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 }
 
 func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-	for _, row := range []struct{ org, id, code, defaultValue string }{{orgA, "f1970000-0000-0000-0000-00000000000a", "PARAM-A", "alpha"}, {orgB, "f1970000-0000-0000-0000-00000000000b", "PARAM-B", "beta"}} {
-		raw := `[{"name":"label","label":"Label","type":"string","defaultValue":"` + row.defaultValue + `","required":false,"category":"metadata","maxLength":80}]`
-		if _, err := store.Pool.Exec(ctx, `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES ($1,$2,$3,$3,$4::jsonb)`, row.id, row.org, row.code, raw); err != nil {
-			t.Fatal(err)
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+	tests := []struct {
+		organization string
+		actor        storage.TenantActor
+		id           string
+		code         string
+		want         string
+		notWant      string
+	}{
+		{fixture.orgA, fixture.actorA, "f1970000-0000-0000-0000-00000000000a", "PARAM-A", "alpha", "beta"},
+		{fixture.orgB, fixture.actorB, "f1970000-0000-0000-0000-00000000000b", "PARAM-B", "beta", "alpha"},
+	}
+	for _, tt := range tests {
+		maxLength := 80
+		module := &domain.Module{
+			ID: tt.id, Code: tt.code, Name: tt.code,
+			ParameterDefinitions: []domain.FurnitureParameterDefinition{{
+				Name: "label", Label: "Label", Type: domain.FurnitureParameterTypeString,
+				DefaultValue: tt.want, Required: false, Category: domain.FurnitureParameterCategoryMetadata,
+				MaxLength: &maxLength,
+			}},
+		}
+		if err := isolationRuntimeError(fixture, tt.actor, func(txCtx context.Context) error {
+			return store.CreateModule(txCtx, module)
+		}); err != nil {
+			t.Fatalf("create module for tenant %s: %v", tt.organization, err)
 		}
 	}
-	for _, tt := range []struct{ org, want, notWant string }{{orgA, "alpha", "beta"}, {orgB, "beta", "alpha"}} {
-		catalog, err := store.GetFullCatalog(storage.WithOrgCtx(ctx, tt.org))
-		if err != nil {
-			t.Fatal(err)
-		}
+	for _, tt := range tests {
+		catalog := isolationRuntimeValue(t, fixture, tt.actor, func(txCtx context.Context) (domain.Catalog, error) {
+			return store.GetFullCatalog(txCtx)
+		})
 		found := false
 		for _, module := range catalog.Modules {
 			for _, definition := range module.ParameterDefinitions {
 				if definition.DefaultValue == tt.notWant {
-					t.Fatalf("tenant %s saw %s", tt.org, tt.notWant)
+					t.Fatalf("tenant %s saw %s", tt.organization, tt.notWant)
 				}
 				if definition.DefaultValue == tt.want {
 					found = true
@@ -142,7 +162,7 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatalf("tenant %s missing own definition", tt.org)
+			t.Fatalf("tenant %s missing own definition", tt.organization)
 		}
 	}
 }
