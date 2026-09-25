@@ -241,3 +241,10 @@ The final count of **17 runtime + 3 migration-only** is correct. The earlier exp
 - `TestHardware_PersistsMachiningProfile` was another direct runtime-migration caller. It now follows the same migration-only bootstrap plus explicit `granete_app` actor/`WithinTenantTx` model as the other hardware persistence tests.
 - Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestHardware_PersistsMachiningProfile$'` — PASS, FAIL=0, SKIP=0 (Go 1.386s).
 - Migration-authority failures remaining from the initial diagnostic: `67 → 66`.
+
+## D1 progress — Idempotency authority fixtures (2026-09-25)
+- Root: the four PostgreSQL idempotency integration tests opened `DATABASE_URL` and ran migrations with the unprivileged `granete_app` runtime role. Two organization-provisioning fixtures also reached RLS without a legitimate platform actor; this was a fixture-authority defect, not a product authorization defect.
+- Corrected model: migrations and the disposable platform-admin fixture user use `MIGRATION_DATABASE_URL`. Every idempotency command, concurrent replica request, direct runtime read, and observable assertion uses `DATABASE_URL` as `granete_app` inside an independent tenant transaction for the explicit platform actor. Fixture teardown uses migration authority only.
+- Preserved behavior: restart/replay, fingerprint conflict, multi-replica serialization, crash rollback, client-error rollback/replay, server-error atomicity, audit redaction, and sealed receipt body remain asserted. The server-error postcondition reads through a newly scoped runtime transaction rather than an unscoped pool connection.
+- Focused verification: `scripts/backend-test.sh -v ./internal/storage -run '^TestPostgres(IdempotencyRestartMultiReplicaCrashAndRetention|IdempotencyClientErrorRollsBackMutationAndReplaysAfterSQLError|IdempotencyServerErrorRollsBackFactoryOrganizationProvisioning|SensitiveIdempotencyReceiptStoresOnlySealedBody)$'` — PASS, FAIL=0, SKIP=0 (Go 1.549s; wall 8.5s).
+- Migration-authority failures remaining from the initial diagnostic: `66 → 62`.
