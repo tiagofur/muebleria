@@ -124,12 +124,26 @@ test('#831 React-first creates draft units before Q1 through normal browser acti
   await page.getByLabel(/Nombre de la alternativa/i).fill('Diseño prequote UI');
   const designResponse = page.waitForResponse((r) => r.request().method() === 'POST' &&
     new URL(r.url()).pathname === `/api/projects/${project.id}/designs`);
+  const projectionResponse = page.waitForResponse((r) => {
+    const path = new URL(r.url()).pathname;
+    return r.request().method() === 'GET' &&
+      path.startsWith(`/api/projects/${project.id}/designs/`) &&
+      path.endsWith('/commercial-projection');
+  });
   await page.getByTestId('submit-create-design').click();
   const createdDesign = await designResponse;
   expect(createdDesign.status()).toBe(201);
   const design = await createdDesign.json() as { id: string; project_id: string };
   expect(design.project_id).toBe(project.id);
   await expect(page.getByRole('tab', { name: /Diseño prequote UI/ })).toBeVisible();
+  const projection = await projectionResponse;
+  expect(projection.status()).toBe(200);
+  const projectionBody = await projection.json() as { status: 'current' | 'incomplete'; designId: string; pricingAuthority: string };
+  expect(projectionBody).toMatchObject({ designId: design.id, pricingAuthority: 'calc-project-breakdown' });
+  expect(['current', 'incomplete']).toContain(projectionBody.status);
+  await expect(page.getByTestId('commercial-projection-panel')).toBeVisible();
+  await expect(page.getByTestId('commercial-projection-panel')).toContainText('Estimación informativa; no crea ni modifica una cotización');
+  console.log(`[prequote-ui] GET commercial-projection 200 project=${project.id} design=${design.id} status=${projectionBody.status}`);
   console.log(`[prequote-ui] POST designs 201 project=${project.id} design=${design.id}`);
 
   const after = await appRoleRead(project.id, project.organization_id);
