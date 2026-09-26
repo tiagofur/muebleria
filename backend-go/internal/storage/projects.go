@@ -74,11 +74,10 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 					}
 				}
 			}
-			// Drop empty override bag (only zero-value fields).
-			if ov.LengthFormula != "" || ov.WidthFormula != "" ||
-				ov.XFormula != "" || ov.YFormula != "" || ov.ZFormula != "" ||
-				len(ov.Edges) > 0 ||
-				ov.RotateX != nil || ov.RotateY != nil || ov.RotateZ != nil {
+			// One emptiness contract with the writer and the structures twin
+			// (#858): the bag survives when ANY persisted family is present —
+			// hardwarePlacements included.
+			if !isEmptyComponentInstanceOverrides(ov) {
 				ci.Overrides = ov
 			}
 		}
@@ -91,16 +90,14 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 }
 
 // componentInstanceOverridesJSON serializes instance overrides (edges + spatial)
-// for module_components.overrides JSONB. Returns nil when nothing to store.
-// length/width formulas live in dedicated columns on module_components.
+// for the module_components.overrides JSONB. Emptiness uses the SAME contract
+// as every other ComponentInstanceOverrides consumer (#858): a bag whose only
+// content is hardwarePlacements is not empty and must survive the round-trip.
+// length/width formulas also live in dedicated columns on module_components;
+// carrying them here too is redundant but harmless and keeps ONE definition
+// of "empty" instead of a second manual field list.
 func componentInstanceOverridesJSON(ov *domain.ComponentInstanceOverrides) []byte {
-	if ov == nil {
-		return nil
-	}
-	if len(ov.Edges) == 0 &&
-		ov.XFormula == "" && ov.YFormula == "" && ov.ZFormula == "" &&
-		ov.RotateX == nil && ov.RotateY == nil && ov.RotateZ == nil {
-		// length/width live in dedicated columns; empty bag → null
+	if isEmptyComponentInstanceOverrides(ov) {
 		return nil
 	}
 	// Marshal full overrides; omit empty string formulas via omitempty on domain tags.
