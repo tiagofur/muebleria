@@ -14,16 +14,17 @@
 // - window.GraneteUI.account.open() for the unauthenticated/error CTAs
 // - window.sketchup.get_catalog() for the explicit retry action
 // - injected bootstrap dependencies via init(): icon and
-//   createFurniturePlaceholderSvg (shared with the inline configurator),
-//   onSelectDefinition (inline configurator entry point — Library ends at
-//   the choice), getSelectedDefinitionId (highlights the definition being
-//   configured)
+//   createFurniturePlaceholderSvg (shared presentation helpers),
+//   onSelectDefinition (GraneteUI.configurator.open — Library ends at
+//   the choice), getSelectedDefinitionId (highlights the definition
+//   being configured)
 //
 // Does NOT own:
 // - furniture configuration: params, presets, material roles, insert
-//   (inline configurator, future Phase B slice)
+//   (js/granete-configurator.js, #848 C4.4)
 // - presets / materials / hardware catalogs (future slices)
-// - the browser↔configurator view transition (stays inline until C4.4)
+// - the browser↔configurator view transition (configurator module owns
+//   both directions since #848 C4.4)
 // - Inspector, Project Furniture
 (function () {
   "use strict";
@@ -595,7 +596,7 @@
       return catalog.find(function (d) { return d.furniture_definition_id === id; });
     },
 
-    // Categories are Library's domain; the inline configurator badge
+    // Categories are Library's domain; the configurator module badge
     // consumes this instead of carrying a second label table.
     formatCategoryLabel: formatCategoryLabel
   };

@@ -339,12 +339,131 @@ reads through the module API.
 
 
 
+## C4.4 — granete-configurator.js
+
+Started from `main@dbee5d203c9f11544c7b041beac470e108a11d01` (post-#856),
+branch `refactor/848-dialog-js-configurator`. The last high-coupling
+boundary before Material Roles/Inspector: the configurator touches params,
+materials and placement at once.
+**Status**: owner approved the pre-commit boundary review on 2026-09-26
+(injected shared helpers, shared #469 placement handlers staying inline,
+the bootstrap load-order movement of the initial unbound render, and both
+documented behavior quirks), then approved the code review with a
+documentation-accuracy round (onCreateProjectFurnitureResult serves the
+canonical connected preview commit too; API count 15). Published against
+main as PR #857 (`Refs #848`, `Delivery: partial`, `type:refactor`;
+exact-head readback verified: OPEN, non-draft, base main, headSha ==
+commit, MERGEABLE, issue #848 OPEN + status:approved) as one
+implementation work unit (`910fa962`) plus docs-only follow-up commits
+(publication record; documentation-accuracy corrections). Merge remains
+human. **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
+
+- **Extracted**: `resources/js/granete-configurator.js` (532 lines
+  including the agent-first header). dialog.html went 4,792 → 4,503 lines;
+  inline JS 3,845 → 3,544. Moved state: activeLibDef, libParams,
+  libMaterialChoices (configuration snapshot only), catalogPresets,
+  catalogCreateIntentKey, lastCatalogPlacementPayload, repeatPreviewActive +
+  17 configurator DOM refs + showConfiguratorView/renderConfiguratorPreview/
+  updateLibraryInsertButton/bindLibraryParamForm/registeredMeasureParams/
+  renderRegisteredMeasuresButton/renderPresetChips/updateLibrarySummary +
+  the whole btnInsert placement intent (intent key, idempotency, #469
+  repeat, legacy fallbacks) + onInsertionResult +
+  handleCreateProjectFurnitureResult (the connected catalog-lane result
+  handler — Ruby reports here from BOTH the canonical #469 preview commit
+  (PlacementPreviewBridge#handle_commit_catalog_preview) and the legacy
+  create_project_furniture fallback; classified catalog lane).
+- **Public API (15)**: init(deps), open(def), close(),
+  getActiveDefinitionId(), hasActiveDefinition() (exact `!!activeLibDef`
+  semantics — selection/material routing reads definition presence, not its
+  id), setPresets, refreshAfterCatalog, updateInsertButton,
+  rearmInsertButton, isRepeatPreviewActive, cancelRepeatPreview,
+  getIntentKey, onInsertionResult, onCreateProjectFurnitureResult,
+  applyMaterialChoice.
+- **Injected deps (15)** — single-implementation inline helpers shared with
+  the Inspector: icon, showToast, createFurniturePlaceholderSvg,
+  getDefaultParams, renderParamForm, defaultMaterialChoices,
+  renderMaterialSelectors, materialById, estimatedPartsLabel,
+  parameterIssueMessage, isModelConnected (accessor over
+  modelBindingState — Model Binding internals stay out), 
+  setProjectDefaultMaterial (write into projectDefaultMaterials — Material
+  Roles state stays out), switchTab, requestProjectFurniture,
+  pfPlaceFailureMessage (project-side effects of the legacy create
+  fallback). init fails fast listing any missing dep; no public entry
+  renders before init.
+- **Boundaries**: Library hand-off is call-time
+  (`onSelectDefinition: function (def) { window.GraneteUI.configurator.open(def); }`).
+  setCatalog delegates presets to `configurator.setPresets` (single
+  authority) and the refresh tail to `configurator.refreshAfterCatalog()`
+  (preserved quirk: a disappeared definition does NOT reset the active
+  reference). onMaterialChoiceApplied keeps its 3 branches; the
+  configurator branch delegates to `applyMaterialChoice`. The shared #469
+  handlers `handlePlacementPreviewStarted/Cancelled` stay INLINE (they
+  serve the Project lane too) and read the catalog entry point through
+  isRepeatPreviewActive/cancelRepeatPreview/rearmInsertButton.
+  onSelectionChange reads `hasActiveDefinition()`. The whole
+  browser↔configurator pane transition moved into the module
+  (showBrowserView private; `close()` = btn-back-to-library semantics).
+- **Load-order change (the one wiring movement)**: the initial
+  `renderModelBindingStatus({ state: "unbound" })` was a mid-script call in
+  the model-binding section; it now runs in the bootstrap after
+  `configurator.init` (it re-renders the insert button — no module may
+  render before init). Verified nothing between the old and new call sites
+  executes at load time (declarations/bindings only; `lastPfState` null
+  either way).
+- **Harness migration**: `test/js/support/dialog_scripts.js` loads media →
+  account → library → configurator → inline; `dialog_publish_test.js`
+  preload chain updated. Repointed (never deleted) asserts:
+  `granete_library_js_test.rb` (setCatalog orchestrator: presets delegation
+  + call-time hand-off + render now driven by the module's close()),
+  `dialog_library_view_test.rb` (measures/presets/preview/payload/category
+  label/parts dock/hardware_count moved to @configurator_js; markup asserts
+  stay on the HTML).
+- **Focused tests**: `test/js/granete_configurator_test.js` — 33 tests:
+  registration + idempotent re-execution, public API shape, init fail-fast
+  on missing deps, open/close/view transition + identity/badge, active
+  definition identity (incl. id-less definition quirk), preview with
+  signed media + onerror refresh + placeholder fallback, default params,
+  parameter edit (state + summary + intent invalidation), summary dims
+  chain, project-scoped material choice, registered measures render +
+  restore + hide, presets filtered/applied/hidden, insert label
+  connected/local, catalog placement payload + key, same-gesture retry
+  keeps key vs invalidated gesture mints fresh, #469 repeat (fresh key,
+  held button, counts in toast), legacy Move-handoff toast, failure via
+  parameterIssueMessage, cancel/re-arm, legacy connected create (pure
+  gesture → Project tab; prior preview payload → repeat loop without tab
+  hijack; created_pending; hard failure), legacy local insert (NO
+  idempotency key — original behavior), no-bridge demo timeout,
+  refreshAfterCatalog fresh-object/quirk, applyMaterialChoice, structural
+  no-material-catalog/no-duplicated-shared-helpers. Ruby side
+  `test/unit/granete_configurator_js_test.rb` (6 tests, 178 assertions):
+  harness green + symbol guards (state ownership, 15 injected deps,
+  media/library boundaries, header), load order library→configurator→
+  inline, monolith carries no configurator implementation symbol,
+  GraneteDialog wrappers stay thin delegation + presets single authority +
+  hand-off call-time only after init.
+- **Verify** (Homebrew `ruby@3.2` 3.2.11, same vendored-bundle note as
+  C4.1–C4.3; no gem or lockfile change): RuboCop 254 files / 0 offenses;
+  unit suite 1154 runs, 7853 assertions, 0 failures/errors/skips; contract
+  suite 6 runs, 4043 assertions, 0 failures; all 14 Node dialog/module
+  harnesses green; `git diff --check` clean; `verify_affected --plan` exit 0
+  (conservatively expanded by the pre-existing untracked `.codex/`,
+  `.github/hooks/`, `plugin-siguiente.md` — not part of this slice;
+  `sketchup-local-os` = `bundle exec rake verify`, green above). RBZ rebuilt
+  by `package:verify`, sha256
+  `afbceea21266b7d28e8b5c361a0ccb60bf17607443d82d1dca3d13ab56163cd5`,
+  packages granete-configurator.js.
+- **Behavior changes: 0** (target). The one ordering note: the initial
+  unbound binding render now executes after module init instead of
+  mid-script — same statements, same observable state, documented above.
+- **Real SketchUp host smoke: NOT_RUN** (same phase-level gate as
+  C4.1–C4.3).
+
+
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
   required before closing: NOT_RUN until executed.
 - No behavior change is in scope; anything discovered broken becomes its own
   issue.
-- Remaining Phase B modules after C4.3: configurator, finish-selector,
-  material-roles, inspector, model-binding, project-furniture.
-  C4.3 (library) is committed and published from
-  `refactor/848-dialog-js-library` after the owner's boundary approval;
-  merge remains human.
+- Remaining Phase B modules after C4.4: finish-selector, material-roles,
+  inspector, model-binding, project-furniture. C4.4 (configurator) passed
+  its pre-commit boundary review and its code review; PR #857 is published
+  against main awaiting human merge.

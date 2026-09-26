@@ -92,11 +92,12 @@ class GraneteLibraryJsTest < Minitest::Test
   def test_granete_dialog_set_catalog_stays_the_thin_orchestrator
     html = File.read(DIALOG_HTML, encoding: 'UTF-8')
     # Ruby keeps calling GraneteDialog.setCatalog with the same payload; the
-    # browsing slice delegates to the module, and the not-yet-extracted
-    # slices (presets/materials/hardware/media/GraneteState) stay here.
+    # browsing slice delegates to the module, presets delegate to the
+    # configurator module (#848 C4.4), and the not-yet-extracted slices
+    # (materials/hardware/media/GraneteState) stay here.
     assert_includes html, 'setCatalog: function'
     assert_includes html, 'window.GraneteUI.library.setCatalog(payload)'
-    assert_includes html, 'catalogPresets = payload.presets || [];'
+    assert_includes html, 'window.GraneteUI.configurator.setPresets(payload.presets || []);'
     assert_includes html, 'catalogMaterials = payload.materials || [];'
     assert_includes html, 'catalogHardware = payload.hardware || [];'
     assert_includes html, 'window.GraneteUI.media.setCatalogMedia(payload.media)'
@@ -107,9 +108,17 @@ class GraneteLibraryJsTest < Minitest::Test
     # External consumers migrated to explicit reads.
     assert_includes html, 'window.GraneteUI.library.findDefinitionById('
     # The bootstrap wires the shared helpers and the configurator hand-off
-    # before the first render.
+    # (call-time resolution through the configurator module, #848 C4.4)
+    # before the first render; the browser render itself is driven by the
+    # configurator's view transition (granete-configurator.js).
     assert_includes html, 'window.GraneteUI.library.init({'
-    assert_includes html, 'onSelectDefinition: showConfiguratorView'
-    assert_includes html, 'window.GraneteUI.library.render()'
+    assert_includes html, 'onSelectDefinition: function (def) {'
+    assert_includes html, 'window.GraneteUI.configurator.open(def);'
+    assert_includes html, 'window.GraneteUI.configurator.close();'
+    configurator_js = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/js/granete-configurator.js', __dir__),
+      encoding: 'UTF-8'
+    )
+    assert_includes configurator_js, 'window.GraneteUI.library.render()'
   end
 end

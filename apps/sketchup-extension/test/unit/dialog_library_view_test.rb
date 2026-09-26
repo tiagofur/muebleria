@@ -65,6 +65,12 @@ class DialogLibraryViewTest < Minitest::Test
       File.expand_path('../../src/granete_for_sketchup/resources/js/granete-library.js', __dir__),
       encoding: 'UTF-8'
     )
+    # #848 Phase B C4.4: el configurador (params/presets/preview/inserción)
+    # vive en js/granete-configurator.js; sus asserts apuntan al módulo.
+    @configurator_js = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/js/granete-configurator.js', __dir__),
+      encoding: 'UTF-8'
+    )
     # #848: los estilos del panel viven en css/*.css.
     css_dir = File.expand_path('../../src/granete_for_sketchup/resources/css', __dir__)
     @css_content = Dir.children(css_dir).sort.map { |f| File.read(File.join(css_dir, f), encoding: 'UTF-8') }.join("\n")
@@ -95,14 +101,15 @@ class DialogLibraryViewTest < Minitest::Test
   end
 
   def test_dialog_html_contains_modular_functions
-    # #848 C4.3: las funciones del browser de Biblioteca viven en el módulo;
-    # el bootstrap inline conserva la transición browser↔configurator.
+    # #848 C4.3: las funciones del browser de Biblioteca viven en el módulo.
+    # #848 C4.4: la transición browser↔configurator (open/close/refresh)
+    # vive en el módulo del configurador.
     assert_includes @library_js, 'function renderLibraryBrowser('
     assert_includes @library_js, 'function renderCategoryFilters('
     assert_includes @library_js, 'function renderFurnitureCards('
     assert_includes @library_js, 'function renderLibraryState('
-    assert_includes @html_content, 'function showLibraryView('
-    assert_includes @html_content, 'function showConfiguratorView('
+    assert_includes @configurator_js, 'function showBrowserView('
+    assert_includes @configurator_js, 'function showConfiguratorView('
   end
 
   def test_category_filter_cascades_over_the_workshop_tree
@@ -120,9 +127,10 @@ class DialogLibraryViewTest < Minitest::Test
 
   def test_measures_use_text_fields_with_registered_defaults_button
     assert_includes @html_content, 'id="btn-registered-measures"'
-    assert_includes @html_content, 'function renderRegisteredMeasuresButton('
-    assert_includes @html_content, 'function registeredMeasureParams('
-    assert_includes @html_content, 'Medidas registradas: '
+    # #848 C4.4: las medidas registradas viven en el módulo del configurador.
+    assert_includes @configurator_js, 'function renderRegisteredMeasuresButton('
+    assert_includes @configurator_js, 'function registeredMeasureParams('
+    assert_includes @configurator_js, 'Medidas registradas: '
     # Sliders are gone: measures are precise mm text fields.
     refute_includes @html_content, '"range"'
     refute_includes @html_content, 'slider-row'
@@ -136,7 +144,7 @@ class DialogLibraryViewTest < Minitest::Test
     # El configurador nunca opera a ciegas: preview del mueble, una fila
     # compacta por parámetro y cotas vivas junto a la acción primaria.
     assert_includes @html_content, 'id="library-selected-preview"'
-    assert_includes @html_content, 'function renderConfiguratorPreview('
+    assert_includes @configurator_js, 'function renderConfiguratorPreview('
     assert_includes @html_content, 'id="configurator-actionbar"'
     assert_includes @html_content, 'id="library-summary-dims"'
     assert_includes @html_content, 'id="library-summary-parts"'
@@ -172,13 +180,13 @@ class DialogLibraryViewTest < Minitest::Test
 
   def test_dialog_html_contains_category_labels_mapping
     # Las categorías son dominio de Library (#848 C4.3): el mapping vive en
-    # el módulo y el configurador consume su API pública.
+    # el módulo y el configurador (#848 C4.4) consume su API pública.
     assert_includes @library_js, 'var CATEGORY_LABELS ='
     assert_includes @library_js, '"kitchen_base": "Bases"'
     assert_includes @library_js, '"kitchen_wall": "Alacenas"'
     assert_includes @library_js, '"closet": "Torres / Closets"'
     assert_includes @library_js, '"desk": "Escritorios"'
-    assert_includes @html_content, 'window.GraneteUI.library.formatCategoryLabel('
+    assert_includes @configurator_js, 'window.GraneteUI.library.formatCategoryLabel('
   end
 
   def test_remote_catalog_provider_serves_hierarchical_categories_and_images
@@ -271,8 +279,10 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'function estimatedPartsLabel('
     assert_includes @html_content, 'estimatedPartCount'
     assert_includes @html_content, 'estimatedHardwareCount'
-    assert_includes @html_content,
-                    'libSummaryParts.textContent = estimatedPartsLabel(activeLibDef, libParams);'
+    # #848 C4.4: el dock del configurador consume el helper compartido
+    # inyectado desde el módulo; el del inspector sigue inline.
+    assert_includes @configurator_js,
+                    'libSummaryParts.textContent = deps.estimatedPartsLabel(activeLibDef, libParams);'
     assert_includes @html_content,
                     'inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef, inspectorParams);'
     assert_includes @html_content, '"Aprox. "'
@@ -280,8 +290,11 @@ class DialogLibraryViewTest < Minitest::Test
   end
 
   def test_insertion_result_reports_resolved_component_counts
+    # El inspector (inline) y el resultado de inserción del catálogo
+    # (#848 C4.4, módulo) reportan ambos los conteos resueltos.
     assert_includes @html_content, 'result.component_count'
-    assert_includes @html_content, 'result.hardware_count'
+    assert_includes @configurator_js, 'result.component_count'
+    assert_includes @configurator_js, 'result.hardware_count'
     assert_includes @html_content, 'inspectorDef = def || null;'
   end
 
@@ -292,10 +305,14 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'id="library-materials-container"'
     assert_includes @html_content, 'id="inspector-materials-card"'
     assert_includes @html_content, 'id="inspector-materials-container"'
+    # El renderer de roles y el snapshot por defecto siguen inline
+    # (helpers compartidos con el Inspector, #848 C4.4).
     assert_includes @html_content, 'function renderMaterialSelectors('
     assert_includes @html_content, 'function defaultMaterialChoices('
     assert_includes @html_content, 'catalogMaterials = payload.materials || [];'
-    assert_includes @html_content, 'materialChoices: libMaterialChoices'
+    # El payload de inserción del catálogo vive en el módulo del
+    # configurador; el del inspector sigue inline.
+    assert_includes @configurator_js, 'materialChoices: libMaterialChoices'
     assert_includes @html_content, 'materialChoices: inspectorMaterialChoices'
     assert_includes @html_content, 'Materiales del Taller'
   end
