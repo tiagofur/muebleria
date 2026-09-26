@@ -713,8 +713,12 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   legacy aliases) plus the session-local projectDefaults header
   clarification. The refinement was applied and the full battery
   revalidated green (tallies above). Committed as one implementation work
-  unit and published against main (`Refs #848`, `Delivery: partial`,
-  `type:refactor`). Merge remains human. **Real SketchUp host smoke:
+  unit (`016b211a`) and published against main as PR #860 (`Refs #848`,
+  `Delivery: partial`, `type:refactor`; exact-head readback verified:
+  OPEN, non-draft, base main, headSha == commit, MERGEABLE, issue #848
+  OPEN + status:approved). CI exact-head: PASS 18/18 incl. Publication
+  metadata, Foundation Gate A + real browser proofs and the three
+  SketchUp Ruby runners. Merge remains human. **Real SketchUp host smoke:
   NOT_RUN** (same phase-level gate).
 
 
