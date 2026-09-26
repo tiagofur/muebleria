@@ -56,6 +56,34 @@ type hwRouterEnv struct {
 	mediaDir string
 }
 
+func createHwRouterSession(t *testing.T, store *storage.PostgresStore, membershipID string, clientType domain.SessionClientType) *domain.AuthSession {
+	t.Helper()
+
+	var session *domain.AuthSession
+	err := store.WithinTenantTx(context.Background(), storage.TenantActor{
+		OrganizationID: hwRouterOrg,
+		UserID:         hwRouterUser,
+		MembershipID:   membershipID,
+	}, func(txCtx context.Context) error {
+		created, err := store.CreateAuthSession(txCtx, storage.CreateAuthSessionCommand{
+			UserID:            hwRouterUser,
+			MembershipID:      membershipID,
+			OrganizationID:    hwRouterOrg,
+			ClientType:        clientType,
+			AbsoluteExpiresAt: time.Now().Add(2 * time.Hour),
+		})
+		if err != nil {
+			return err
+		}
+		session = created
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("create %s auth session: %v", clientType, err)
+	}
+	return session
+}
+
 func newHwAssetRouterEnv(t *testing.T) *hwRouterEnv {
 	t.Helper()
 	store, pool := hwAssetE2EStore(t)
@@ -95,16 +123,7 @@ func newHwAssetRouterEnv(t *testing.T) *hwRouterEnv {
 	}
 
 	authority := mustAuthority("hw-asset-router-jwt-secret-0123456789")
-	session, err := store.CreateAuthSession(context.Background(), storage.CreateAuthSessionCommand{
-		UserID:            hwRouterUser,
-		MembershipID:      membershipID,
-		OrganizationID:    hwRouterOrg,
-		ClientType:        domain.SessionClientWeb,
-		AbsoluteExpiresAt: time.Now().Add(2 * time.Hour),
-	})
-	if err != nil {
-		t.Fatalf("create auth session: %v", err)
-	}
+	session := createHwRouterSession(t, store, membershipID, domain.SessionClientWeb)
 	tc := auth.TokenContext{
 		Roles:                         []string{"admin"},
 		OrgID:                         hwRouterOrg,
@@ -1290,16 +1309,7 @@ func TestExtensionClientHardwareAssetRevisionAuthorizeAndDownload(t *testing.T) 
 		t.Fatalf("query membership state: %v", err)
 	}
 
-	extSession, err := e.store.CreateAuthSession(context.Background(), storage.CreateAuthSessionCommand{
-		UserID:            hwRouterUser,
-		MembershipID:      membershipID,
-		OrganizationID:    hwRouterOrg,
-		ClientType:        domain.SessionClientSketchup,
-		AbsoluteExpiresAt: time.Now().Add(2 * time.Hour),
-	})
-	if err != nil {
-		t.Fatalf("create extension session: %v", err)
-	}
+	extSession := createHwRouterSession(t, e.store, membershipID, domain.SessionClientSketchup)
 	tc := auth.TokenContext{
 		Roles:                         []string{"member"},
 		OrgID:                         hwRouterOrg,
@@ -1374,7 +1384,21 @@ func TestExtensionClientHardwareAssetRevisionAuthorizeAndDownload(t *testing.T) 
 	}
 
 	// 7. Revoked extension session -> 401 Unauthorized.
-	if _, err := e.store.RevokeAuthSession(context.Background(), extSession.ID, hwRouterUser, "test revocation"); err != nil {
+	err = e.store.WithinTenantTx(context.Background(), storage.TenantActor{
+		OrganizationID: hwRouterOrg,
+		UserID:         hwRouterUser,
+		MembershipID:   membershipID,
+	}, func(txCtx context.Context) error {
+		revoked, err := e.store.RevokeAuthSession(txCtx, extSession.ID, hwRouterUser, "test revocation")
+		if err != nil {
+			return err
+		}
+		if !revoked {
+			return fmt.Errorf("extension session %s was not revoked", extSession.ID)
+		}
+		return nil
+	})
+	if err != nil {
 		t.Fatalf("revoke session: %v", err)
 	}
 	revokedRR := doExt(http.MethodPost, "/api/hardware-assets/"+assetID+"/revisions/"+revisionID+":authorize", "")
