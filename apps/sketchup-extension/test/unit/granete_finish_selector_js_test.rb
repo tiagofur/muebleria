@@ -9,12 +9,11 @@ require_relative '../test_helper'
 # window.GraneteUI.finishSelector) and guards the structural contract of
 # the extraction — the implementation lives in the external file,
 # dialog.html loads it after the configurator module and before the
-# inline bootstrap, the monolith never re-grows the modal code, the
-# material catalog/categories keep exactly one authority (inline, until
-# the Material Roles slice), the Material Roles renderer keeps the
-# Ruby-primary/local-fallback split through the module API, and the
-# bootstrap injects the five dependencies before any user-accessible
-# open. Symbol-based, not line-count-based.
+# inline bootstrap, the monolith never re-grows the modal code, and the
+# finish selector reads the material authority through the injected deps
+# (owned by window.GraneteUI.materialRoles since #848 C4.6). The
+# Ruby-primary/local-fallback split of the selector hand-off is guarded
+# by granete_material_roles_js_test.rb. Symbol-based, not line-count-based.
 class GraneteFinishSelectorJsTest < Minitest::Test
   FINISH_SELECTOR_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/granete-finish-selector.js',
                                         __dir__)
@@ -112,34 +111,28 @@ class GraneteFinishSelectorJsTest < Minitest::Test
     assert_includes html, 'name="selector-scope"'
   end
 
-  def test_material_catalog_authority_stays_single_and_material_roles_boundary_holds
+  def test_material_catalog_authority_stays_single_and_finish_selector_reads_through_the_module
     html = File.read(DIALOG_HTML, encoding: 'UTF-8')
-    # ONE catalog authority: the state vars stay inline (Material Roles
-    # slice decides their final owner) and the module reads them through
-    # the injected accessors.
-    assert_includes html, 'var catalogMaterialCategories = [];'
-    assert_includes html, 'var catalogMaterials = [];'
-    # Material Roles keeps its helpers and the renderer inline.
-    ['function materialById(', 'function optionMaterialIds(', 'function updateMaterialSwatch(',
-     'function updateMaterialMeta(', 'function renderMaterialSelectors(',
-     'function defaultMaterialChoices('].each do |symbol|
-      assert_includes html, symbol, "Material Roles helper #{symbol} must stay inline until its own slice"
+    # ONE catalog authority since #848 C4.6: the catalog state and the
+    # shared material helpers moved to window.GraneteUI.materialRoles; the
+    # monolith keeps no copy.
+    ['var catalogMaterialCategories = [];', 'var catalogMaterials = [];',
+     'var projectDefaultMaterials = {}'].each do |symbol|
+      refute_includes html, symbol, "material state #{symbol} belongs in granete-material-roles.js"
     end
-    # The Ruby-native selector remains the PRIMARY path; the local
-    # fallback now goes through the module API with the same callback.
-    assert_includes html, 'window.sketchup.open_material_selector'
-    assert_includes html, 'window.GraneteUI.finishSelector.open(r, choices[r.role], function (newId, scope) {'
-    assert_includes html, 'onChange(r.role, newId, scope);'
+    # The finish selector wiring reads the materialRoles authority — never
+    # a second inline copy.
+    assert_includes html, 'getMaterialCategories: window.GraneteUI.materialRoles.getMaterialCategories,'
   end
 
   def test_bootstrap_injects_the_dependencies_before_any_user_accessible_open
     html = File.read(DIALOG_HTML, encoding: 'UTF-8')
     assert_includes html, 'window.GraneteUI.finishSelector.init({'
-    assert_includes html, 'getMaterialCategories: function () {'
-    assert_includes html, 'return catalogMaterialCategories;'
-    assert_includes html, 'materialById: materialById,'
-    assert_includes html, 'optionMaterialIds: optionMaterialIds,'
-    assert_includes html, 'updateMaterialSwatch: updateMaterialSwatch,'
+    # The five deps come from the materialRoles authority (#848 C4.6).
+    assert_includes html, 'getMaterialCategories: window.GraneteUI.materialRoles.getMaterialCategories,'
+    assert_includes html, 'materialById: window.GraneteUI.materialRoles.materialById,'
+    assert_includes html, 'optionMaterialIds: window.GraneteUI.materialRoles.optionMaterialIds,'
+    assert_includes html, 'updateMaterialSwatch: window.GraneteUI.materialRoles.updateMaterialSwatch,'
     assert_includes html, 'icon: icon'
     wiring = html.index('window.GraneteUI.finishSelector.init({')
     dialog_ready = html.index('window.sketchup.dialog_ready()')

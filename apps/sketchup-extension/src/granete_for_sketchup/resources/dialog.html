@@ -946,22 +946,35 @@
          Columns): open/close lifecycle, category navigation, search,
          candidate grid, material detail, Apply/Cancel and the modal
          keyboard/focus lifecycle. The material catalog/categories and
-         the shared material helpers stay single-implementation in the
-         inline script (Material Roles slice decides their final owner)
-         and enter the module by explicit injection via
+         the shared material helpers live in js/granete-material-roles.js
+         (#848 C4.6) and enter the module by explicit injection via
          GraneteUI.finishSelector.init in the bootstrap — before any
          user-accessible open. The Ruby-native selector remains the
          primary path; this modal is the local fallback. -->
     <script src="js/granete-finish-selector.js"></script>
 
+    <!-- #848 Phase B C4.6: material roles module under window.GraneteUI.
+         It owns the shared material/acabados authority: the material
+         catalog (materials + categories), the project-default material
+         choices, role-compatible resolution, default choice resolution
+         and the material role rendering (swatch/meta/selector hand-off).
+         Configurator, Inspector and Finish Selector consume it through
+         the explicit API (or the bootstrap wiring below); none of them
+         keeps a second copy of the catalog state. The module never
+         renders before init, and the Ruby-native selector stays the
+         primary path with the finish-selector modal as local fallback. -->
+    <script src="js/granete-material-roles.js"></script>
+
     <script>
       (function () {
         "use strict";
 
-        var catalogMaterialCategories = [];
-        var catalogMaterials = [];
         var catalogHardware = [];
-        var projectDefaultMaterials = {};
+
+        // Material catalog, project-default material choices and the
+        // shared material-role helpers live in
+        // js/granete-material-roles.js (#848 C4.6); the bootstrap below
+        // consumes them only through window.GraneteUI.materialRoles.
 
         // Central selection state (#476): the SelectionContext payload published
         // by the Ruby resolver — one model for every kind
@@ -1157,192 +1170,11 @@
           }
         });
 
-        // -------------------------------------------------------------
-        // Material selection (board option choices by role)
-        // -------------------------------------------------------------
-
-        function materialById(id) {
-          for (var i = 0; i < catalogMaterials.length; i++) {
-            if (catalogMaterials[i].materialId === id) return catalogMaterials[i];
-          }
-          return null;
-        }
-
-        // Material options for a role: the workshop's curated list when the
-        // option group defines one, else every active material.
-        function optionMaterialIds(roleEntry) {
-          var ids = (roleEntry.optionIds || []).filter(function (id) { return !!materialById(id); });
-          if (ids.length > 0) return ids;
-          return catalogMaterials.map(function (m) { return m.materialId; });
-        }
-
-        function defaultMaterialChoices(def) {
-          var choices = {};
-          (def && def.materialRoles ? def.materialRoles : []).forEach(function (r) {
-            var ids = optionMaterialIds(r);
-            if (ids.length > 0) {
-              if (projectDefaultMaterials[r.role] && ids.indexOf(projectDefaultMaterials[r.role]) !== -1) {
-                choices[r.role] = projectDefaultMaterials[r.role];
-              } else {
-                choices[r.role] = ids[0];
-              }
-            }
-          });
-          return choices;
-        }
-
-        function materialOptionLabel(m) {
-          if (!m) return "--";
-          var label = m.name || m.code || m.materialId;
-          if (m.code && m.name) label += " (" + m.code + ")";
-          if (m.thicknessMm) label += " — " + m.thicknessMm + " mm";
-          return label;
-        }
-
-        function updateMaterialSwatch(el, mat) {
-          if (!mat) {
-            el.removeAttribute("data-media-name");
-            el.style.backgroundColor = "#e2e8f0";
-            el.style.backgroundImage = "none";
-            return;
-          }
-          var rawUrl = mat.previewTextureUrl || mat.imageUrl;
-          var mediaName = window.GraneteUI.media.filenameFromPath(rawUrl);
-          var url = window.GraneteUI.media.resolveUrl(rawUrl);
-          if (mediaName) {
-            // Tagged so a re-minted grant (updateMediaUrl) can repaint it.
-            el.setAttribute("data-media-name", mediaName);
-          } else {
-            el.removeAttribute("data-media-name");
-          }
-          if (url) {
-            el.style.backgroundImage = "url('" + url + "')";
-            el.style.backgroundColor = mat.previewColor || "#e2e8f0";
-          } else if (mat.previewColor) {
-            el.style.backgroundImage = "none";
-            el.style.backgroundColor = mat.previewColor;
-          } else {
-            el.style.backgroundImage = "none";
-            el.style.backgroundColor = "#e2e8f0";
-          }
-        }
-
-        function updateMaterialMeta(el, mat) {
-          if (!mat) {
-            el.textContent = "--";
-            return;
-          }
-          var parts = [];
-          if (mat.code) parts.push(mat.code);
-          if (mat.thicknessMm) parts.push(mat.thicknessMm + " mm");
-          if (mat.grain) parts.push("Veta");
-          if (mat.manufacturer) parts.push(mat.manufacturer);
-          el.textContent = parts.join(" · ");
-        }
-
-        function renderMaterialSelectors(card, container, def, choices, onChange, contextInfo) {
-          var roles = (def && def.materialRoles ? def.materialRoles : []).filter(function (r) {
-            return r && r.role && optionMaterialIds(r).length > 0;
-          });
-          card.style.display = roles.length > 0 ? "block" : "none";
-          container.innerHTML = "";
-
-          var isInspector = (card === inspectorMaterialsCard || def === inspectorDef);
-          var ctx = contextInfo || {
-            context: isInspector ? "inspector" : "configurator",
-            instanceId: isInspector && selectedContext ? selectedContext.furnitureInstanceRef : null,
-            definitionId: def ? (def.furnitureDefinitionId || def.furniture_definition_id) : null
-          };
-
-          roles.forEach(function (r) {
-            var availableIds = optionMaterialIds(r);
-            if (!choices[r.role] || availableIds.indexOf(choices[r.role]) === -1) {
-              choices[r.role] = availableIds[0];
-            }
-            var currentMat = materialById(choices[r.role]);
-
-            var block = document.createElement("div");
-            block.className = "material-role-block";
-
-            // Header
-            var header = document.createElement("div");
-            header.className = "material-role-header";
-            var title = document.createElement("span");
-            title.className = "material-role-title";
-            title.textContent = r.label || r.role;
-            header.appendChild(title);
-            block.appendChild(header);
-
-            // Selected Preview (interactive card)
-            var preview = document.createElement("div");
-            preview.className = "material-selected-preview";
-            preview.title = "Clic para abrir el selector de acabados";
-            preview.setAttribute("role", "button");
-            preview.setAttribute("tabindex", "0");
-            preview.setAttribute("aria-label", "Cambiar material del rol " + (r.label || r.role));
-
-            var swatch = document.createElement("div");
-            swatch.className = "material-swatch";
-            updateMaterialSwatch(swatch, currentMat);
-            preview.appendChild(swatch);
-
-            var info = document.createElement("div");
-            info.className = "material-selected-info";
-
-            var nameSpan = document.createElement("div");
-            nameSpan.className = "material-selected-name";
-            nameSpan.textContent = currentMat ? currentMat.name : "Seleccionar material";
-            info.appendChild(nameSpan);
-
-            var metaSpan = document.createElement("div");
-            metaSpan.className = "material-selected-meta";
-            updateMaterialMeta(metaSpan, currentMat);
-            info.appendChild(metaSpan);
-
-            preview.appendChild(info);
-
-            // La fila es el control; el chevron comunica que abre el catálogo.
-            var chevron = document.createElement("span");
-            chevron.className = "material-chevron";
-            chevron.innerHTML = icon("chevron-right", 16);
-            preview.appendChild(chevron);
-
-            block.appendChild(preview);
-
-            function triggerVisualPicker() {
-              if (window.sketchup && typeof window.sketchup.open_material_selector === "function") {
-                window.sketchup.open_material_selector(JSON.stringify({
-                  role: r.role,
-                  roleName: r.label || r.role,
-                  currentMaterialId: choices[r.role],
-                  context: ctx.context,
-                  instanceId: ctx.instanceId,
-                  definitionId: ctx.definitionId,
-                  allowedMaterialIds: availableIds
-                }));
-              } else if (window.GraneteUI.finishSelector) {
-                window.GraneteUI.finishSelector.open(r, choices[r.role], function (newId, scope) {
-                  choices[r.role] = newId;
-                  var newMat = materialById(newId);
-                  updateMaterialSwatch(swatch, newMat);
-                  nameSpan.textContent = newMat ? newMat.name : "Material";
-                  updateMaterialMeta(metaSpan, newMat);
-                  onChange(r.role, newId, scope);
-                }, ctx.context);
-              }
-            }
-
-            preview.addEventListener("click", triggerVisualPicker);
-            preview.addEventListener("keydown", function (e) {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                triggerVisualPicker();
-              }
-            });
-
-            container.appendChild(block);
-          });
-        }
+        // Material selection (board option choices by role) lives in
+        // js/granete-material-roles.js (#848 C4.6): catalog authority,
+        // project defaults, role resolution and role rendering. The
+        // Inspector/Configurator/onMaterialChoiceApplied paths below read
+        // and render only through window.GraneteUI.materialRoles.
 
         // Bridge exposed to Ruby
         window.GraneteDialog = {
@@ -1458,27 +1290,29 @@
 
             // #848 C4.3: GraneteUI.library owns the browsing slice
             // (definitions, categories, source, licenseBlocked) and renders
-            // the license blocker + source note. Materials and hardware
-            // still live here until their Phase B slices.
+            // the license blocker + source note. Hardware still lives here
+            // until its Phase B slice; the material slice delegates to
+            // GraneteUI.materialRoles (#848 C4.6).
             window.GraneteUI.library.setCatalog(payload);
 
             if (isArray) {
               window.GraneteUI.configurator.setPresets([]);
-              catalogMaterialCategories = [];
-              catalogMaterials = [];
+              window.GraneteUI.materialRoles.setCatalog({ materials: [], categories: [] });
               window.GraneteUI.media.setCatalogMedia(null);
             } else {
               payload = payload || {};
               window.GraneteUI.configurator.setPresets(payload.presets || []);
-              catalogMaterialCategories = payload.materialCategories || [];
-              catalogMaterials = payload.materials || [];
+              window.GraneteUI.materialRoles.setCatalog({
+                materials: payload.materials || [],
+                categories: payload.materialCategories || []
+              });
               catalogHardware = payload.hardware || [];
               window.GraneteUI.media.setCatalogMedia(payload.media);
               if (window.GraneteState) {
                 window.GraneteState.set("catalog", {
                   definitions: window.GraneteUI.library.getDefinitions(),
                   hardware: catalogHardware,
-                  materials: catalogMaterials,
+                  materials: window.GraneteUI.materialRoles.getMaterials(),
                   categories: window.GraneteUI.library.getCategories()
                 });
               }
@@ -1515,17 +1349,17 @@
               // Rollback in-memory inspector state to last confirmed values from selectedContext
               if (selectedContext && inspectorDef) {
                 inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedContext.parameters || {});
-                inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {});
+                inspectorMaterialChoices = Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {});
                 renderParamForm(inspectorParamsContainer, inspectorDef, inspectorParams, function (name, val, unit) {
                   inspectorParams[name] = val;
                   updateInspectorSummary();
                   validateInteractiveClient(inspectorDef, inspectorParams);
                 });
-                renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
+                window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
                   inspectorMaterialChoices, function (role, id, s) {
                     inspectorMaterialChoices[role] = id;
                     if (s === "project" || s === "project_default") {
-                      projectDefaultMaterials[role] = id;
+                      window.GraneteUI.materialRoles.setProjectDefaultMaterial(role, id);
                     }
                   }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
                 updateInspectorSummary();
@@ -1570,7 +1404,7 @@
             var isProjectScope = (scope === "project" || scope === "project_default");
 
             if (isProjectScope) {
-              projectDefaultMaterials[role] = materialId;
+              window.GraneteUI.materialRoles.setProjectDefaultMaterial(role, materialId);
             }
 
             var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedContext && payload.instanceId === selectedContext.furnitureInstanceRef);
@@ -1583,11 +1417,11 @@
               if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
               inspectorMaterialChoices[role] = materialId;
 
-              renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
+              window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
                 inspectorMaterialChoices, function (r, id, s) {
                   inspectorMaterialChoices[r] = id;
                   if (s === "project" || s === "project_default") {
-                    projectDefaultMaterials[r] = id;
+                    window.GraneteUI.materialRoles.setProjectDefaultMaterial(r, id);
                   }
                 }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
               updateInspectorSummary();
@@ -1604,7 +1438,7 @@
                 btnUpdate.innerHTML = icon("clock") + "<span>Actualizando…</span>";
                 window.sketchup.update_furniture(JSON.stringify(updatePayload));
               } else {
-                var mat = materialById(materialId);
+                var mat = window.GraneteUI.materialRoles.materialById(materialId);
                 var toastMsg = isProjectScope
                   ? "✓ Acabado temporal de sesión: " + (mat ? mat.name : materialId)
                   : "✓ Acabado actualizado: " + (mat ? mat.name : materialId);
@@ -1616,7 +1450,7 @@
               // js/granete-configurator.js (#848 C4.4).
               window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope);
             } else if (isProjectScope) {
-              var matProj = materialById(materialId);
+              var matProj = window.GraneteUI.materialRoles.materialById(materialId);
               showToast("success", "✓ Acabado temporal de sesión: " + (matProj ? matProj.name : materialId));
             }
           }
@@ -2060,7 +1894,7 @@
           }
 
           inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), context.parameters || {});
-          inspectorMaterialChoices = Object.assign({}, defaultMaterialChoices(def), context.materialChoices || {});
+          inspectorMaterialChoices = Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(def), context.materialChoices || {});
 
           renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
             inspectorParams[name] = val;
@@ -2068,7 +1902,7 @@
             validateInteractiveClient(def, inspectorParams);
           });
           if (canEditMaterials) {
-            renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
+            window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
               inspectorMaterialChoices, function (role, id) {
                 inspectorMaterialChoices[role] = id;
               });
@@ -3926,49 +3760,57 @@
           }
         });
 
+        // #848 C4.6: the material roles module owns the shared material
+        // authority (catalog, project defaults, role resolution and role
+        // rendering). The bootstrap injects the icon helper and the
+        // read-only Inspector context accessors (call-time) that feed the
+        // selector context payload fallback — Inspector state itself stays
+        // owned by the Inspector slice. Wired before the configurator and
+        // finish selector, which consume its API below.
+        window.GraneteUI.materialRoles.init({
+          icon: icon,
+          getInspectorMaterialsCard: function () { return inspectorMaterialsCard; },
+          getInspectorDef: function () { return inspectorDef; },
+          getSelectedContext: function () { return selectedContext; }
+        });
+
         // #848 C4.4: the configurator module owns the active definition
         // configuration, the view transition and the catalog placement
-        // intent. The shared param/material/summary helpers stay HERE
-        // (single implementation, also consumed by the Inspector) and
-        // enter the module by explicit injection; the model-connected
-        // accessor keeps modelBindingState out of the module, and the
-        // project-default write keeps projectDefaultMaterials out of it.
+        // intent. The shared param/summary helpers stay HERE (single
+        // implementation, also consumed by the Inspector) and the material
+        // helpers come from GraneteUI.materialRoles (#848 C4.6); both enter
+        // the module by explicit injection. The model-connected accessor
+        // keeps modelBindingState out of the module, and the project-default
+        // write goes through the materialRoles authority.
         window.GraneteUI.configurator.init({
           icon: icon,
           showToast: showToast,
           createFurniturePlaceholderSvg: createFurniturePlaceholderSvg,
           getDefaultParams: getDefaultParams,
           renderParamForm: renderParamForm,
-          defaultMaterialChoices: defaultMaterialChoices,
-          renderMaterialSelectors: renderMaterialSelectors,
-          materialById: materialById,
+          defaultMaterialChoices: window.GraneteUI.materialRoles.defaultMaterialChoices,
+          renderMaterialSelectors: window.GraneteUI.materialRoles.renderMaterialSelectors,
+          materialById: window.GraneteUI.materialRoles.materialById,
           estimatedPartsLabel: estimatedPartsLabel,
           parameterIssueMessage: parameterIssueMessage,
           isModelConnected: function () {
             return !!(modelBindingState.status && modelBindingState.status.state === "connected");
           },
-          setProjectDefaultMaterial: function (role, id) {
-            projectDefaultMaterials[role] = id;
-          },
+          setProjectDefaultMaterial: window.GraneteUI.materialRoles.setProjectDefaultMaterial,
           switchTab: switchTab,
           requestProjectFurniture: requestProjectFurniture,
           pfPlaceFailureMessage: pfPlaceFailureMessage
         });
 
         // #848 C4.5: the finish selector module owns the visual material
-        // picker modal (Miller Columns fallback). The catalog categories
-        // and the shared material helpers stay HERE (single authority —
-        // Material Roles slice decides their final owner) and enter the
-        // module by explicit injection before any user-accessible open.
-        // getMaterialCategories is call-time: setCatalog can reassign the
-        // catalogMaterialCategories var after this wiring.
+        // picker modal (Miller Columns fallback). Its catalog/helper deps
+        // come from the materialRoles authority (#848 C4.6) via explicit
+        // injection before any user-accessible open.
         window.GraneteUI.finishSelector.init({
-          getMaterialCategories: function () {
-            return catalogMaterialCategories;
-          },
-          materialById: materialById,
-          optionMaterialIds: optionMaterialIds,
-          updateMaterialSwatch: updateMaterialSwatch,
+          getMaterialCategories: window.GraneteUI.materialRoles.getMaterialCategories,
+          materialById: window.GraneteUI.materialRoles.materialById,
+          optionMaterialIds: window.GraneteUI.materialRoles.optionMaterialIds,
+          updateMaterialSwatch: window.GraneteUI.materialRoles.updateMaterialSwatch,
           icon: icon
         });
 
