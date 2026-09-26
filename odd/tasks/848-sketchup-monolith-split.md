@@ -459,11 +459,116 @@ human. **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
   C4.1–C4.3).
 
 
+## C4.5 — granete-finish-selector.js
+
+Started from `main@6f252d6f969687c04dbcb17dd75765c25a6a88d6` (post-#857),
+branch `refactor/848-dialog-js-finish-selector`. Extraction of the visual
+material picker modal (Slice B - Miller Columns): how the user navigates,
+searches, inspects and confirms a material inside the selector. NOT in
+scope: material roles/assignments, catalog ownership (C4.6), the
+Ruby-native selector.
+
+- **Extracted**: `resources/js/granete-finish-selector.js` (580 lines
+  including the agent-first header). dialog.html went 4,503 → 4,009 lines;
+  inline JS 3,544 → 3,037 (the whole modal block lines 1334–1856: 28 DOM
+  refs — including the pre-existing unused `selectorTitle` declaration
+  preserved verbatim —, selectorCtx/selectorLastFocus state, the four
+  category-tree helpers, open/close, breadcrumbs, Miller columns, filtered
+  candidates, grid, detail inspector, apply with scope passthrough, and
+  all modal bindings incl. the document keydown Esc/Enter/Tab-trap
+  listener). The modal MARKUP stays in dialog.html (chrome, not module
+  code).
+- **Public API (3)**: `init(deps)` (five injected deps, fail-fast listing
+  any missing one on open), `open(roleEntry, initialSelectedId, onApply,
+  contextKind)` (exact openMaterialSelector contract), `close()`. The
+  onApply callback keeps living inside selectorCtx; no render function is
+  exposed.
+- **Injected dependencies (5)**: `getMaterialCategories` (call-time
+  accessor over the inline `catalogMaterialCategories` — a catalog refresh
+  via setCatalog is picked up on the next render, asserted by the focused
+  harness), `materialById`, `optionMaterialIds`, `updateMaterialSwatch`
+  (shared with the inline material-role rendering), `icon`. The module
+  holds NO material catalog copy (structural test refutes
+  `var catalogMaterials`/`var catalogMaterialCategories` inside it).
+  `catalogMaterials` itself is never directly consumed — only via
+  materialById.
+- **Audit result**: the ONLY external consumer of the moved block was the
+  local fallback inside `renderMaterialSelectors` (triggerVisualPicker).
+  The four category helpers had zero usage outside the block. The
+  fallback now reads `window.GraneteUI.finishSelector.open(r,
+  choices[r.role], …, ctx.context)` with the identical callback body; the
+  Ruby path (`window.sketchup.open_material_selector`) stays primary and
+  untouched; `material_selector.html` (native dialog) untouched.
+- **Preserved quirks** (documented, not fixed): the candidate count copy
+  concatenates `" opción" + "es"` producing "opciónes" (pre-existing
+  spelling quirk — the harness asserts the exact string verbatim);
+  `selectorTitle` is declared and never read; the keydown listener
+  registration order relative to the inline `resetPublishConfirm`
+  Escape listener changes (module loads earlier) but both handlers are
+  independent and both still fire on every Escape, so no observable
+  change.
+- **Load order**: markup → media → account → library → configurator →
+  **finish-selector** → inline bootstrap → #498 runtime. Bindings
+  register at module load (markup exists); `finishSelector.init` runs in
+  the bootstrap right after `configurator.init`, before
+  `renderModelBindingStatus` and `dialog_ready`.
+- **Harness migration**: `test/js/support/dialog_scripts.js` loads the
+  module between configurator and inline; `dialog_publish_test.js`
+  preload chain updated. Audit of existing tests found ZERO assertions on
+  the inline modal symbols (the material_selector roundtrip tests cover
+  the NATIVE dialog; inspector/ux_states harnesses mock the Ruby bridge),
+  so nothing needed repointing — all existing harnesses stay green
+  loading the real module.
+- **Focused tests**: `test/js/granete_finish_selector_test.js` — 37 tests
+  covering registration + idempotent re-execution (single keydown
+  listener), exact public API shape, init fail-fast (full + partial),
+  open (visibility, badge, search reset, focus), close + opener focus
+  restore, configurator/inspector scope-label copy, empty catalog hides
+  columns, L1 "Todas"+roots in sortOrder, selected-material path
+  auto-expand (L1/L2/L3 + breadcrumb), progressive column clicks, subtree
+  filtering, breadcrumb navigation reset, role-allowed resolver contract,
+  search by name/code/manufacturer, clear button (reset + refocus), empty
+  role / empty search / empty category states, count singular/plural
+  (preserved quirk), card rendering (swatch, grain badge, selected check,
+  tags) through the injected renderer/icon, click select + Apply enable +
+  detail, double-click apply, full ficha técnica (path join, texture 4
+  variants, no-code/no-manufacturer fallbacks), apply closes before
+  callback with default furniture scope, project scope passthrough,
+  cancel/header-close without callback, Escape (+closed no-op), Enter
+  apply/disabled/in-search, Tab wrap, Shift+Tab wrap, middle-Tab not
+  intercepted, call-time category accessor (catalog refresh picked up).
+  Ruby side `test/unit/granete_finish_selector_js_test.rb` (6 tests, 130
+  assertions): runs the harness + symbol guards (implementation + header
+  live in the module, load order configurator→finish-selector→inline in
+  dialog.html AND dialog_scripts.js, monolith carries no modal
+  implementation symbol incl. the old `typeof openMaterialSelector`
+  fallback, single catalog authority inline, Material Roles helpers stay
+  inline, Ruby primary path + module fallback, bootstrap injects the five
+  deps before dialog_ready).
+- **Move fidelity**: normalized diff (reverse of the five mechanical
+  transformations: deps plumbing, `deps.` prefix, local `categories`
+  alias) against the removed block shows zero copy/logic differences.
+- **Verify** (Homebrew `ruby@3.2` 3.2.11, same vendored-bundle note as
+  C4.1–C4.4; no gem or lockfile change): RuboCop 255 files / 0 offenses;
+  unit suite 1160 runs, 7983 assertions, 0 failures/errors/skips;
+  contract suite 6 runs, 4043 assertions, 0 failures; every Node dialog/
+  module harness green; `git diff --check` clean; `verify_affected --plan`
+  exit 0 (`sketchup-local-os` = `bundle exec rake verify`, green above).
+  RBZ rebuilt by `package:verify`, sha256
+  `8572686e6ee42cedcd7691f19fbd30eb66cdf9e93a6ba25d587a85fe9bf4bf50`,
+  packages granete-finish-selector.js.
+- **Behavior changes: 0** (target). Documented notes: keydown
+  registration order (above) and the module's `requireDeps()` fail-fast
+  on open — new code path only reachable if init was skipped, which the
+  bootstrap now always runs.
+- **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
+- **Status**: pre-commit boundary review requested; NOT committed, NOT
+  pushed, no PR, C4.6 NOT started.
+
+
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
   required before closing: NOT_RUN until executed.
 - No behavior change is in scope; anything discovered broken becomes its own
   issue.
-- Remaining Phase B modules after C4.4: finish-selector, material-roles,
-  inspector, model-binding, project-furniture. C4.4 (configurator) passed
-  its pre-commit boundary review and its code review; PR #857 is published
-  against main awaiting human merge.
+- Remaining Phase B modules after C4.5: material-roles, inspector,
+  model-binding, project-furniture.
