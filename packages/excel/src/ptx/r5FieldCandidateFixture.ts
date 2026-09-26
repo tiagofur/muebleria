@@ -313,6 +313,13 @@ export function buildR5GateFixture(
   );
   const planWithBase: CutPlan = {
     ...plan,
+    // #787/#793 reproducibility: the optimizer's synthetic id embeds
+    // Date.now(), so every regeneration produced a different industrial
+    // artifact filename (G<hex12> hashes the plan identity) and with it a
+    // different manifest/identity/CHECKSUMS in the review field pack. The
+    // fixture pins the plan identity to its frozen release — same fixture +
+    // same r5 identity => byte-identical pack, file by file (13_final §6).
+    id: `cutplan-${demand.releaseId}`,
     releaseBase: releaseBaseFromDemand(demand),
   };
   const projection = manufacturingLabelProjectionFromDemand(demand, {
