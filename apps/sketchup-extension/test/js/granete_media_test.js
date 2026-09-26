@@ -38,21 +38,22 @@ function mockMediaNode(name, tag) {
 }
 
 // Fresh sandbox per test: recording refresh bridge, mock DOM tree, fake
-// clock. The module reads bare `sketchup`, `document` and `Date.now()` the
-// way the HtmlDialog globals behave.
+// clock. The bridge mock lives on window.sketchup — the same host contract
+// the module documents and the integrated dialog harnesses model.
 function runModule(nodeList) {
   const refreshCalls = [];
   let fakeNow = 1_000_000;
   const sandbox = {
     Date: { now: () => fakeNow },
-    sketchup: {
-      refresh_media_url: (filename) => {
-        if (sandbox.__refreshThrows) throw new Error('bridge down');
-        refreshCalls.push(filename);
-      }
-    },
     document: { querySelectorAll: () => nodeList || [] },
-    window: {}
+    window: {
+      sketchup: {
+        refresh_media_url: (filename) => {
+          if (sandbox.__refreshThrows) throw new Error('bridge down');
+          refreshCalls.push(filename);
+        }
+      }
+    }
   };
   sandbox.__advance = (ms) => { fakeNow += ms; };
   sandbox.__refreshCalls = refreshCalls;

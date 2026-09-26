@@ -152,7 +152,16 @@ order, harnesses running the real external file, zero behavior change.
   failures; `git diff --check` clean; `verify_affected --plan` passes
   (plan selects `sketchup-local-os` = `bundle exec rake verify`, green
   above). RBZ rebuilt deterministically by `package:verify`, sha256
-  `961a60ebef8748ba3ac8c4a8434831d5cdb415940eaf3915cdbe07b2537f92e6`.
+  `c390144e643c94a6ad4eeba6bbe5a82864db10a82ec72848089baf963fdd9207`
+  (supersedes the first build `961a60eb…` after the review round below).
+- **Review round (owner, pre-merge)**: contract-fidelity correction —
+  `requestRefresh` now calls `window.sketchup.refresh_media_url(filename)`
+  exactly as the module header documents (same try/catch, retry, state and
+  error semantics), and the focused harness mocks the bridge on
+  `window.sketchup` like the integrated harnesses instead of a parallel
+  sandbox global. No public API, constant, regex, state, DOM reapplication,
+  load order, dialog.html, helper or other harness touched. Behavior
+  changes: 0.
 - **CI**: exact-head run recorded in the PR. **Real SketchUp host smoke:
   NOT_RUN** (CEF loading external js before the inline script still needs
   the real host per phase-level gate).

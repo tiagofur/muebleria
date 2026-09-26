@@ -56,7 +56,7 @@
     if (last && Date.now() - last < MEDIA_REFRESH_RETRY_MS) return;
     pendingMediaRefresh[filename] = Date.now();
     try {
-      sketchup.refresh_media_url(filename);
+      window.sketchup.refresh_media_url(filename);
     } catch (e) {
       delete pendingMediaRefresh[filename];
     }
