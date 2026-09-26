@@ -929,17 +929,25 @@
          GraneteDialog.setCatalog right after dialog_ready. -->
     <script src="js/granete-library.js"></script>
 
+    <!-- #848 Phase B C4.4: configurator module under window.GraneteUI.
+         It owns the active definition configuration (params, material
+         choices snapshot, presets), the browser↔configurator view
+         transition, the configurator preview/summary and the catalog
+         placement intent (#469 preview + repeat + legacy fallbacks).
+         The shared param/material/summary helpers stay single-
+         implementation here and are injected via GraneteUI.configurator.init
+         in the bootstrap — the module must be operative (registered)
+         before the inline script wires the Library hand-off, and it
+         never renders before init. -->
+    <script src="js/granete-configurator.js"></script>
+
     <script>
       (function () {
         "use strict";
 
-        var catalogPresets = [];
         var catalogMaterialCategories = [];
         var catalogMaterials = [];
         var catalogHardware = [];
-        var activeLibDef = null;
-        var libParams = {};
-        var libMaterialChoices = {};
         var projectDefaultMaterials = {};
 
         // Central selection state (#476): the SelectionContext payload published
@@ -955,28 +963,10 @@
         var toast = document.getElementById("toast-message");
         var btnClose = document.getElementById("btn-close");
 
-        // Library view transition elements — the browser↔configurator switch
-        // still crosses two owners and stays inline until its Phase B slice;
-        // the browser itself lives in js/granete-library.js (#848 C4.3).
-        var libBrowserView = document.getElementById("library-browser-view");
-        var libConfiguratorView = document.getElementById("library-configurator-view");
-        var btnRegisteredMeasures = document.getElementById("btn-registered-measures");
-
-        // Configurator elements
-        var btnBackToLibrary = document.getElementById("btn-back-to-library");
-        var libSelectedName = document.getElementById("library-selected-name");
-        var libSelectedCode = document.getElementById("library-selected-code");
-        var libSelectedCategoryBadge = document.getElementById("library-selected-category-badge");
-        var libDesc = document.getElementById("library-furniture-desc");
-        var libPresetsCard = document.getElementById("library-presets-card");
-        var libPresetsContainer = document.getElementById("library-presets-container");
-        var libParamsCard = document.getElementById("library-params-card");
-        var libParamsContainer = document.getElementById("library-params-container");
-        var libMaterialsCard = document.getElementById("library-materials-card");
-        var libMaterialsContainer = document.getElementById("library-materials-container");
-        var libSummaryDims = document.getElementById("library-summary-dims");
-        var libSummaryParts = document.getElementById("library-summary-parts");
-        var btnInsert = document.getElementById("btn-insert");
+        // Configurator state (active definition, params, material choices
+        // snapshot, presets, catalog placement intent) and its view
+        // transition live in js/granete-configurator.js (#848 C4.4); the
+        // bootstrap below reads them only through the module API.
 
         // Model binding elements (#388)
         var bindingBadge = document.getElementById("model-binding-badge");
@@ -1153,101 +1143,6 @@
             resetPublishConfirm();
           }
         });
-
-        // -------------------------------------------------------------
-        // Modular Library Rendering Functions
-        // -------------------------------------------------------------
-
-        function showLibraryView() {
-          clearCatalogIntentKey();
-          libBrowserView.style.display = "block";
-          libConfiguratorView.style.display = "none";
-          window.GraneteUI.library.render();
-        }
-
-        function showConfiguratorView(def) {
-          clearCatalogIntentKey();
-          activeLibDef = def;
-          libBrowserView.style.display = "none";
-          libConfiguratorView.style.display = "block";
-
-          libSelectedName.textContent = def.name || "Mueble";
-          libSelectedCode.textContent = def.code || "";
-          libSelectedCategoryBadge.textContent = window.GraneteUI.library.formatCategoryLabel(def.category);
-          libDesc.textContent = def.description || "";
-          libDesc.title = def.description || "";
-          renderConfiguratorPreview(def);
-
-          libParams = getDefaultParams(def);
-          libMaterialChoices = defaultMaterialChoices(def);
-
-          bindLibraryParamForm();
-          renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
-            libMaterialChoices[role] = id;
-            clearCatalogIntentKey();
-            if (scope === "project" || scope === "project_default") {
-              projectDefaultMaterials[role] = id;
-            }
-          });
-          renderRegisteredMeasuresButton(def);
-          renderPresetChips();
-
-          updateLibrarySummary();
-          updateLibraryInsertButton();
-        }
-
-        // Preview del mueble en el encabezado del configurador: la misma
-        // maquinaria de media de las tarjetas (grant re-mintable + fallback
-        // isométrico) para que nunca haya una configuración a ciegas.
-        function renderConfiguratorPreview(def) {
-          var host = document.getElementById("library-selected-preview");
-          if (!host) return;
-          host.innerHTML = "";
-
-          var rawUrl = def.imageUrl || def.thumbnailUrl || def.previewUrl;
-          var mediaName = window.GraneteUI.media.filenameFromPath(rawUrl);
-          var imageUrl = window.GraneteUI.media.resolveUrl(rawUrl);
-
-          if (imageUrl) {
-            var img = document.createElement("img");
-            img.alt = def.name || "";
-            if (mediaName) {
-              img.setAttribute("data-media-name", mediaName);
-              img.onerror = function () {
-                host.innerHTML = createFurniturePlaceholderSvg();
-                window.GraneteUI.media.requestRefresh(mediaName);
-              };
-            } else {
-              img.onerror = function () {
-                host.innerHTML = createFurniturePlaceholderSvg();
-              };
-            }
-            img.src = imageUrl;
-            host.appendChild(img);
-          } else {
-            host.innerHTML = createFurniturePlaceholderSvg();
-          }
-        }
-
-        function updateLibraryInsertButton() {
-          if (!btnInsert) return;
-          var isConnected = modelBindingState.status && modelBindingState.status.state === "connected";
-          if (isConnected) {
-            btnInsert.innerHTML = icon("plus") + "<span>Agregar al diseño</span>";
-            btnInsert.title = "Crea un nuevo mueble en el proyecto y lo agrega a este diseño";
-          } else {
-            btnInsert.innerHTML = icon("plus") + "<span>Insertar en Modelo</span>";
-            btnInsert.title = "Inserta el mueble localmente en el modelo";
-          }
-        }
-
-        function bindLibraryParamForm() {
-          renderParamForm(libParamsContainer, activeLibDef, libParams, function (name, val, unit) {
-            libParams[name] = val;
-            clearCatalogIntentKey();
-            updateLibrarySummary();
-          });
-        }
 
         // -------------------------------------------------------------
         // Material selection (board option choices by role)
@@ -1960,37 +1855,6 @@
           }
         });
 
-        // Dimension parameters of a definition (mm measures).
-        function registeredMeasureParams(def) {
-          return (def && def.parameters ? def.parameters : []).filter(function (p) {
-            return p.type === "number" && p.unit === "mm" &&
-              (p.name === "widthMm" || p.name === "heightMm" || p.name === "depthMm" || p.name === "lengthMm");
-          });
-        }
-
-        // The button both SHOWS the measures registered on the furniture
-        // record and restores them as the current authoring values.
-        function renderRegisteredMeasuresButton(def) {
-          var dims = registeredMeasureParams(def);
-          if (!activeLibDef || dims.length === 0) {
-            btnRegisteredMeasures.style.display = "none";
-            btnRegisteredMeasures.onclick = null;
-            return;
-          }
-          var values = dims.map(function (p) { return p.defaultValue + " mm"; }).join(" × ");
-          btnRegisteredMeasures.innerHTML = icon("ruler", 14) + "<span>Medidas registradas: " + values + "</span>";
-          btnRegisteredMeasures.style.display = "flex";
-          btnRegisteredMeasures.onclick = function () {
-            registeredMeasureParams(activeLibDef).forEach(function (p) {
-              libParams[p.name] = p.defaultValue;
-            });
-            bindLibraryParamForm();
-            updateLibrarySummary();
-            showToast("success", "Medidas del registro aplicadas: " + values);
-          };
-        }
-
-
         // Bridge exposed to Ruby
         window.GraneteDialog = {
           setPluginVersion: function (payload) {
@@ -2087,8 +1951,11 @@
             }
           },
           onPlaceFurnitureResult: function (result) { handlePlaceFurnitureResult(result); },
-          onCreateProjectFurnitureResult: function (result) { handleCreateProjectFurnitureResult(result); },
-          getCatalogCreateIntentKey: function () { return catalogCreateIntentKey; },
+          // #848 C4.4: the catalog insert lane (legacy connected fallback
+          // result + intent key) lives in js/granete-configurator.js; Ruby
+          // keeps calling these wrappers with unchanged names/payloads.
+          onCreateProjectFurnitureResult: function (result) { window.GraneteUI.configurator.onCreateProjectFurnitureResult(result); },
+          getCatalogCreateIntentKey: function () { return window.GraneteUI.configurator.getIntentKey(); },
           onPlacementPreviewStarted: function (result) { handlePlacementPreviewStarted(result); },
           onPlacementPreviewCancelled: function (result) { handlePlacementPreviewCancelled(result); },
           onConfirmPlacementResult: function (result) { handleConfirmPlacementResult(result); },
@@ -2102,18 +1969,18 @@
 
             // #848 C4.3: GraneteUI.library owns the browsing slice
             // (definitions, categories, source, licenseBlocked) and renders
-            // the license blocker + source note. Presets, materials and
-            // hardware still live here until their Phase B slices.
+            // the license blocker + source note. Materials and hardware
+            // still live here until their Phase B slices.
             window.GraneteUI.library.setCatalog(payload);
 
             if (isArray) {
-              catalogPresets = [];
+              window.GraneteUI.configurator.setPresets([]);
               catalogMaterialCategories = [];
               catalogMaterials = [];
               window.GraneteUI.media.setCatalogMedia(null);
             } else {
               payload = payload || {};
-              catalogPresets = payload.presets || [];
+              window.GraneteUI.configurator.setPresets(payload.presets || []);
               catalogMaterialCategories = payload.materialCategories || [];
               catalogMaterials = payload.materials || [];
               catalogHardware = payload.hardware || [];
@@ -2128,46 +1995,17 @@
               }
             }
 
-            // If activeLibDef is set and still exists, refresh configurator view, otherwise show library browser
-            if (activeLibDef) {
-              var found = window.GraneteUI.library.findDefinitionById(activeLibDef.furniture_definition_id);
-              if (found) {
-                showConfiguratorView(found);
-              } else {
-                showLibraryView();
-              }
-            } else {
-              showLibraryView();
-            }
+            // If a definition is being configured and still exists, refresh
+            // the configurator view, otherwise show the library browser —
+            // owned by js/granete-configurator.js (#848 C4.4).
+            window.GraneteUI.configurator.refreshAfterCatalog();
           },
 
+          // #848 C4.4: the catalog insertion result (button re-arm,
+          // component counts, #469 repeat) lives in
+          // js/granete-configurator.js.
           onInsertionResult: function (result) {
-            btnInsert.disabled = false;
-            updateLibraryInsertButton();
-            if (result && result.success) {
-              var detail = "";
-              if (typeof result.component_count === "number" && result.component_count > 0) {
-                detail = " — " + result.component_count + " componente" + (result.component_count === 1 ? "" : "s");
-                if (typeof result.hardware_count === "number" && result.hardware_count > 0) {
-                  detail += " (" + result.hardware_count + " herraje" + (result.hardware_count === 1 ? "" : "s") + ")";
-                }
-              }
-              if (result.placed_via_preview) {
-                // #469: the click already placed the furniture at its final
-                // position — no Move handoff exists to advertise. Repeat
-                // placement: the same preset previews again for the next
-                // click (each one its own fresh local unit); Esc ends it.
-                showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail + ".");
-                beginRepeatCatalogPreview();
-              } else {
-                // Legacy origin-first fallback: the Move handoff is real.
-                showToast("success", "✓ Mueble " + (result.name || "") + " insertado" + detail +
-                  ". Quedó seleccionado: movelo a su lugar (tecla M).");
-              }
-            } else {
-              repeatPreviewActive = false;
-              showToast("error", parameterIssueMessage(result, "No se pudo insertar el mueble."));
-            }
+            window.GraneteUI.configurator.onInsertionResult(result);
           },
 
           onUpdateResult: function (result) {
@@ -2222,15 +2060,15 @@
             var managed = selectedContext && ["furniture", "aggregate", "part", "hardware"].indexOf(selectedContext.kind) !== -1;
             var activeTabBtn = document.querySelector(".tab-button.active");
             var currentTabId = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "library";
-            if (managed && (currentTabId === "inspector" || !activeLibDef)) {
+            if (managed && (currentTabId === "inspector" || !window.GraneteUI.configurator.hasActiveDefinition())) {
               switchTab("inspector");
             }
           },
 
           // "Granete: editar en el panel" (menú contextual de una selección
           // gestionada): Ruby selecciona la entidad Y pide el Inspector —
-          // aunque el configurador siga abierto (activeLibDef), el usuario
-          // no puede quedarse mirando Biblioteca.
+          // aunque el configurador siga abierto (definición activa), el
+          // usuario no puede quedarse mirando Biblioteca.
           activateInspectorTab: function () {
             switchTab("inspector");
           },
@@ -2247,7 +2085,7 @@
             }
 
             var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedContext && payload.instanceId === selectedContext.furnitureInstanceRef);
-            var isConfiguratorTarget = payload.context === "configurator" || (!isInspectorTarget && activeLibDef);
+            var isConfiguratorTarget = payload.context === "configurator" || (!isInspectorTarget && window.GraneteUI.configurator.hasActiveDefinition());
 
             // If the finish choice belongs to an inspected placed furniture in the model
             var materialsEditable = selectedContext && selectedContext.kind === "furniture" &&
@@ -2283,24 +2121,11 @@
                   : "✓ Acabado actualizado: " + (mat ? mat.name : materialId);
                 showToast("success", toastMsg);
               }
-            } else if (isConfiguratorTarget && activeLibDef) {
-              // If configuring a module in the library before inserting
-              if (!libMaterialChoices) libMaterialChoices = {};
-              libMaterialChoices[role] = materialId;
-
-              renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, activeLibDef, libMaterialChoices, function (r, id, s) {
-                libMaterialChoices[r] = id;
-                if (s === "project" || s === "project_default") {
-                  projectDefaultMaterials[r] = id;
-                }
-              }, { context: "configurator", definitionId: activeLibDef.furnitureDefinitionId || activeLibDef.furniture_definition_id });
-              updateLibrarySummary();
-
-              var matLib = materialById(materialId);
-              var toastLibMsg = isProjectScope
-                ? "✓ Acabado temporal de sesión: " + (matLib ? matLib.name : materialId)
-                : "✓ Acabado seleccionado: " + (matLib ? matLib.name : materialId);
-              showToast("success", toastLibMsg);
+            } else if (isConfiguratorTarget && window.GraneteUI.configurator.hasActiveDefinition()) {
+              // If configuring a module in the library before inserting —
+              // the configurator snapshot/renderer live in
+              // js/granete-configurator.js (#848 C4.4).
+              window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope);
             } else if (isProjectScope) {
               var matProj = materialById(materialId);
               showToast("success", "✓ Acabado temporal de sesión: " + (matProj ? matProj.name : materialId));
@@ -2326,32 +2151,6 @@
             p[param.name] = param.defaultValue;
           });
           return p;
-        }
-
-        function renderPresetChips() {
-          libPresetsContainer.innerHTML = "";
-          if (!activeLibDef) {
-            libPresetsCard.style.display = "none";
-            return;
-          }
-          var mine = catalogPresets.filter(function (preset) {
-            return preset.furnitureDefinitionId === activeLibDef.furniture_definition_id;
-          });
-          libPresetsCard.style.display = mine.length > 0 ? "block" : "none";
-          mine.forEach(function (preset) {
-            var chip = document.createElement("button");
-            chip.type = "button";
-            chip.className = "preset-chip";
-            chip.textContent = preset.name;
-            chip.addEventListener("click", function () {
-              libParams = Object.assign({}, getDefaultParams(activeLibDef), preset.parameters || {});
-              bindLibraryParamForm();
-              libPresetsContainer.querySelectorAll(".preset-chip").forEach(function (c) { c.classList.remove("active"); });
-              chip.classList.add("active");
-              updateLibrarySummary();
-            });
-            libPresetsContainer.appendChild(chip);
-          });
         }
 
         function validateInteractiveClient(def, currentValues) {
@@ -2598,14 +2397,6 @@
           }
 
           return "Piezas: se calculan al resolver";
-        }
-
-        function updateLibrarySummary() {
-          var w = libParams.widthMm || libParams.lengthMm || 600;
-          var h = libParams.heightMm || 720;
-          var d = libParams.depthMm || 590;
-          libSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-          libSummaryParts.textContent = estimatedPartsLabel(activeLibDef, libParams);
         }
 
         function updateInspectorSummary() {
@@ -3077,104 +2868,9 @@
         }
 
         // Search / category-filter / retry bindings live in
-        // js/granete-library.js (#848 C4.3); btn-back-to-library crosses
-        // into the configurator (resets activeLibDef) and stays here.
-
-        btnBackToLibrary.addEventListener("click", function () {
-          activeLibDef = null;
-          showLibraryView();
-        });
-
-        var catalogCreateIntentKey = null;
-        // #469 repeat placement: the last catalog intent (definition +
-        // parameters + material choices) that entered the preview flow.
-        // After a successful catalog placement the SAME preset re-begins
-        // the shared preview — each click is a FULL fresh gesture (new
-        // session, new preparation, new guards) with a FRESH idempotency
-        // key; Esc ends the loop.
-        var lastCatalogPlacementPayload = null;
-        var repeatPreviewActive = false;
-
-        function getOrCreateCatalogIntentKey() {
-          if (!catalogCreateIntentKey) {
-            catalogCreateIntentKey = generateIdempotencyKey();
-          }
-          return catalogCreateIntentKey;
-        }
-
-        function clearCatalogIntentKey() {
-          catalogCreateIntentKey = null;
-        }
-
-        function generateIdempotencyKey() {
-          if (window.crypto && window.crypto.randomUUID) {
-            return window.crypto.randomUUID();
-          }
-          return "idem-" + Date.now() + "-" + Math.random().toString(36).substring(2, 11);
-        }
-
-        // #469 repeat placement — re-begins the shared preview for the SAME
-        // catalog preset after a successful placement. Every placement stays
-        // one complete fresh gesture through the same entry point: the
-        // bridge round trip guarantees the previous tool already unwound,
-        // and a FRESH idempotency key mints a distinct identity per click
-        // (retry within one gesture keeps that gesture's key). Returns
-        // false when repeat is not possible (no callback / no payload) —
-        // the caller then keeps the normal one-shot behavior.
-        function beginRepeatCatalogPreview() {
-          if (!lastCatalogPlacementPayload) return false;
-          if (!window.sketchup || !window.sketchup.begin_catalog_placement_preview) return false;
-
-          repeatPreviewActive = true;
-          btnInsert.disabled = true;
-          btnInsert.innerHTML = icon("clock") + "<span>Vista previa en el modelo…</span>";
-          clearCatalogIntentKey();
-          var payload = Object.assign({}, lastCatalogPlacementPayload);
-          payload.idempotencyKey = getOrCreateCatalogIntentKey();
-          window.sketchup.begin_catalog_placement_preview(JSON.stringify(payload));
-          return true;
-        }
-
-        btnInsert.addEventListener("click", function () {
-          if (!activeLibDef) return;
-          btnInsert.disabled = true;
-          repeatPreviewActive = false; // a manual begin is never a repeat
-
-          var isConnected = modelBindingState.status && modelBindingState.status.state === "connected";
-
-          var payload = {
-            definitionId: activeLibDef.furniture_definition_id || activeLibDef.furnitureDefinitionId,
-            parameters: libParams,
-            materialChoices: libMaterialChoices
-          };
-
-          if (window.sketchup && window.sketchup.begin_catalog_placement_preview) {
-            // #469: the SAME shared preview tool as the Project panel for
-            // BOTH lanes — the Ruby side picks identity provenance from the
-            // model binding (connected → #390 FurnitureInstance at commit;
-            // local/disconnected → local insert semantics). The connection
-            // never gates the placement interaction, and identity is minted
-            // only at the commit click — never while browsing or previewing.
-            btnInsert.innerHTML = icon("clock") + "<span>Vista previa en el modelo…</span>";
-            payload.idempotencyKey = getOrCreateCatalogIntentKey();
-            lastCatalogPlacementPayload = payload;
-            window.sketchup.begin_catalog_placement_preview(JSON.stringify(payload));
-          } else if (isConnected && window.sketchup && window.sketchup.create_project_furniture) {
-            // Legacy compat fallback (older host / degraded runtime).
-            btnInsert.innerHTML = icon("clock") + "<span>Agregando al diseño…</span>";
-            payload.idempotencyKey = getOrCreateCatalogIntentKey();
-            window.sketchup.create_project_furniture(JSON.stringify(payload));
-          } else if (window.sketchup && window.sketchup.insert_furniture) {
-            // Legacy compat fallback: origin-first insert + Move handoff.
-            btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
-            window.sketchup.insert_furniture(JSON.stringify(payload));
-          } else {
-            btnInsert.innerHTML = icon("clock") + "<span>Insertando…</span>";
-            setTimeout(function () {
-              window.GraneteDialog.onInsertionResult({ success: true, name: activeLibDef.name });
-            }, 500);
-          }
-        });
+        // js/granete-library.js (#848 C4.3); btn-back-to-library and the
+        // whole catalog placement intent (btn-insert, idempotency key,
+        // #469 repeat) live in js/granete-configurator.js (#848 C4.4).
 
         btnUpdate.addEventListener("click", function () {
           if (!selectedContext || selectedContext.kind !== "furniture") return;
@@ -3481,7 +3177,7 @@
 
           bindingPicker.style.display = "none";
           bindingRebindReview.style.display = "none";
-          updateLibraryInsertButton();
+          window.GraneteUI.configurator.updateInsertButton();
         }
 
         // ------------------------------------------------------------------
@@ -4141,7 +3837,9 @@
             }
           });
         }
-        renderModelBindingStatus({ state: "unbound" });
+        // The initial unbound render runs in the bootstrap (after
+        // GraneteUI.configurator.init): it re-renders the insert button,
+        // and no module may render before its deps are injected (#848 C4.4).
 
         // ------------------------------------------------------------------
         // Project Furniture (#389 / DT-5). Separate source from the Catalog:
@@ -4486,16 +4184,18 @@
 
         // #469 — the shared placement tool activated (or refused host-side).
         // While the preview follows the cursor the entry point stays honest:
-        // nothing is placed until the viewport click.
+        // nothing is placed until the viewport click. Serves BOTH lanes: the
+        // Project buttons above and the catalog entry point, whose repeat
+        // state + re-arm live in js/granete-configurator.js (#848 C4.4).
         function handlePlacementPreviewStarted(result) {
           result = result || {};
           if (result.ok) {
-            showToast("info", repeatPreviewActive
+            showToast("info", window.GraneteUI.configurator.isRepeatPreviewActive()
               ? "Vista previa activa: hacé clic para colocar otro · Esc para terminar."
               : "Vista previa activa: hacé clic en el modelo para colocar · Esc para cancelar.");
             return;
           }
-          repeatPreviewActive = false;
+          window.GraneteUI.configurator.cancelRepeatPreview();
           var key = result.instanceId || result.definitionId;
           var button = pfPlacing[key];
           delete pfPlacing[key];
@@ -4505,8 +4205,7 @@
           }
           if (!result.instanceId) {
             // Catalog lane: re-arm the library insert entry point.
-            btnInsert.disabled = false;
-            updateLibraryInsertButton();
+            window.GraneteUI.configurator.rearmInsertButton();
           }
           var message = pfPlaceFailureMessage(result);
           var diagnostic = document.getElementById("pf-placement-error");
@@ -4519,7 +4218,7 @@
         // #469 — Esc / tool switch: zero residue, the unit stays pending.
         function handlePlacementPreviewCancelled(result) {
           result = result || {};
-          repeatPreviewActive = false;
+          window.GraneteUI.configurator.cancelRepeatPreview();
           var key = result.instanceId || result.definitionId;
           var button = pfPlacing[key];
           delete pfPlacing[key];
@@ -4529,8 +4228,7 @@
           }
           if (!result.instanceId) {
             // Catalog lane: re-arm the library insert entry point.
-            btnInsert.disabled = false;
-            updateLibraryInsertButton();
+            window.GraneteUI.configurator.rearmInsertButton();
           }
           showToast("info", result.instanceId ? "Colocación cancelada: el mueble sigue pendiente."
             : "Colocación cancelada: no se insertó nada en el modelo.");
@@ -4666,36 +4364,9 @@
           showToast("error", pfPlaceFailureMessage(result));
         }
 
-        function handleCreateProjectFurnitureResult(result) {
-          result = result || {};
-          btnInsert.disabled = false;
-          updateLibraryInsertButton();
-          if (result.ok) {
-            clearCatalogIntentKey();
-            if (result.code === "pending_position") {
-              showToast("info", "✓ Mueble agregado al proyecto: ubicalo con la herramienta Mover y confirmá su posición final en la pestaña Proyecto.");
-            } else if (beginRepeatCatalogPreview()) {
-              // #469 repeat placement: the same preset previews again —
-              // each further click mints its own FurnitureInstance. Stay on
-              // the library for the loop; Esc ends it.
-              showToast("success", "✓ Mueble creado y agregado al proyecto.");
-              requestProjectFurniture();
-              return;
-            } else {
-              showToast("success", "✓ Mueble creado y agregado al proyecto.");
-            }
-            switchTab("project");
-            requestProjectFurniture();
-          } else if (result.code === "created_pending") {
-            clearCatalogIntentKey();
-            showToast("warning", "El mueble fue creado en el proyecto (" + (result.instanceId || "") + ") pero falló la inserción geométrica local. Podés colocarlo desde la lista del Proyecto.");
-            switchTab("project");
-            requestProjectFurniture();
-          } else {
-            repeatPreviewActive = false;
-            showToast("error", pfPlaceFailureMessage(result));
-          }
-        }
+        // handleCreateProjectFurnitureResult — the result of the insert
+        // button's legacy connected fallback — lives in
+        // js/granete-configurator.js (#848 C4.4); GraneteDialog delegates.
 
         function pfPlaceFailureMessage(result) {
           switch (result.code) {
@@ -4750,15 +4421,49 @@
 
         // #848 C4.3: the library module owns definition browsing; the
         // bootstrap injects the shared helpers and the configurator
-        // hand-off (Library ends when the designer picks a definition)
-        // before the first render can run.
+        // hand-off (Library ends when the designer picks a definition).
+        // The hand-off resolves GraneteUI.configurator at call time — the
+        // module is registered before this script runs, but its shared
+        // helpers are only injected by configurator.init below, so the
+        // wiring must stay call-time, never a captured reference.
         window.GraneteUI.library.init({
           icon: icon,
           createFurniturePlaceholderSvg: createFurniturePlaceholderSvg,
-          onSelectDefinition: showConfiguratorView,
+          onSelectDefinition: function (def) {
+            window.GraneteUI.configurator.open(def);
+          },
           getSelectedDefinitionId: function () {
-            return activeLibDef ? activeLibDef.furniture_definition_id : null;
+            return window.GraneteUI.configurator.getActiveDefinitionId();
           }
+        });
+
+        // #848 C4.4: the configurator module owns the active definition
+        // configuration, the view transition and the catalog placement
+        // intent. The shared param/material/summary helpers stay HERE
+        // (single implementation, also consumed by the Inspector) and
+        // enter the module by explicit injection; the model-connected
+        // accessor keeps modelBindingState out of the module, and the
+        // project-default write keeps projectDefaultMaterials out of it.
+        window.GraneteUI.configurator.init({
+          icon: icon,
+          showToast: showToast,
+          createFurniturePlaceholderSvg: createFurniturePlaceholderSvg,
+          getDefaultParams: getDefaultParams,
+          renderParamForm: renderParamForm,
+          defaultMaterialChoices: defaultMaterialChoices,
+          renderMaterialSelectors: renderMaterialSelectors,
+          materialById: materialById,
+          estimatedPartsLabel: estimatedPartsLabel,
+          parameterIssueMessage: parameterIssueMessage,
+          isModelConnected: function () {
+            return !!(modelBindingState.status && modelBindingState.status.state === "connected");
+          },
+          setProjectDefaultMaterial: function (role, id) {
+            projectDefaultMaterials[role] = id;
+          },
+          switchTab: switchTab,
+          requestProjectFurniture: requestProjectFurniture,
+          pfPlaceFailureMessage: pfPlaceFailureMessage
         });
 
         btnClose.addEventListener("click", function () {
@@ -4767,8 +4472,14 @@
           }
         });
 
-        // Initialize view
-        showLibraryView();
+        // Initial binding state (was a mid-script call in the model
+        // binding section; it renders the insert button, so it must run
+        // after the configurator deps injection).
+        renderModelBindingStatus({ state: "unbound" });
+
+        // Initialize view (browser side of the pane switch, owned by the
+        // configurator module since #848 C4.4)
+        window.GraneteUI.configurator.close();
 
         if (window.sketchup && window.sketchup.dialog_ready) {
           window.sketchup.dialog_ready();
