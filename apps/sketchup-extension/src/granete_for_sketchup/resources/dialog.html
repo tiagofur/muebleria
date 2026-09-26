@@ -920,25 +920,27 @@
          helpers via GraneteUI.account.init before dialog_ready. -->
     <script src="js/granete-account.js"></script>
 
+    <!-- #848 Phase B: library browser module (furniture definition search,
+         category cascade, visual states, cards) under window.GraneteUI. It
+         owns the catalog browsing authority (definitions/categories/source/
+         licenseBlocked) — the inline bootstrap reads them through its API
+         and keeps no second copy. It must be ready BEFORE the inline
+         script: the bootstrap wires GraneteUI.library.init and Ruby pushes
+         GraneteDialog.setCatalog right after dialog_ready. -->
+    <script src="js/granete-library.js"></script>
+
     <script>
       (function () {
         "use strict";
 
-        var catalog = [];
         var catalogPresets = [];
-        var catalogCategories = [];
         var catalogMaterialCategories = [];
         var catalogMaterials = [];
         var catalogHardware = [];
-        var catalogSource = "loading";
-        var licenseBlocked = false;
         var activeLibDef = null;
         var libParams = {};
         var libMaterialChoices = {};
         var projectDefaultMaterials = {};
-
-        var searchQuery = "";
-        var selectedCategory = "ALL";
 
         // Central selection state (#476): the SelectionContext payload published
         // by the Ruby resolver — one model for every kind
@@ -953,32 +955,12 @@
         var toast = document.getElementById("toast-message");
         var btnClose = document.getElementById("btn-close");
 
-        // Library Browser elements
+        // Library view transition elements — the browser↔configurator switch
+        // still crosses two owners and stays inline until its Phase B slice;
+        // the browser itself lives in js/granete-library.js (#848 C4.3).
         var libBrowserView = document.getElementById("library-browser-view");
         var libConfiguratorView = document.getElementById("library-configurator-view");
-        var libCountBadge = document.getElementById("library-count-badge");
-        var libSearchInput = document.getElementById("library-search-input");
-        var libSearchClear = document.getElementById("library-search-clear");
-        var libCategoriesContainer = document.getElementById("library-categories-container");
-        var libCategoryL1 = document.getElementById("library-category-l1");
-        var libCategoryL2 = document.getElementById("library-category-l2");
-        var libCategoryL3 = document.getElementById("library-category-l3");
-        var libCardsGrid = document.getElementById("library-cards-grid");
-        var libLicenseBlocker = document.getElementById("library-license-blocker");
-        var libSourceNote = document.getElementById("library-source-note");
         var btnRegisteredMeasures = document.getElementById("btn-registered-measures");
-
-        // Library States
-        var libLoadingState = document.getElementById("library-loading-state");
-        var libEmptyState = document.getElementById("library-empty-state");
-        var libEmptyIcon = document.getElementById("library-empty-icon");
-        var libEmptyTitle = document.getElementById("library-empty-title");
-        var libEmptyMsg = document.getElementById("library-empty-msg");
-        var btnEmptyAction = document.getElementById("btn-library-empty-action");
-        var btnLibraryRetry = document.getElementById("btn-library-retry");
-        var libNoResultsState = document.getElementById("library-no-results-state");
-        var libNoResultsMsg = document.getElementById("library-no-results-msg");
-        var btnClearSearch = document.getElementById("btn-clear-search");
 
         // Configurator elements
         var btnBackToLibrary = document.getElementById("btn-back-to-library");
@@ -1080,22 +1062,9 @@
         var btnPartRemove = document.getElementById("btn-part-remove");
         var partAuthoringFeedback = document.getElementById("part-authoring-feedback");
 
-        // Category UI mapping dictionary
-        var CATEGORY_LABELS = {
-          "kitchen_base": "Bases",
-          "kitchen_wall": "Alacenas",
-          "closet": "Torres / Closets",
-          "desk": "Escritorios",
-          "base": "Bases",
-          "wall": "Alacenas",
-          "tall": "Torres / Despensas",
-          "drawer": "Cajoneros",
-          "drawers": "Cajoneros",
-          "cajonero": "Cajoneros",
-          "cajoneros": "Cajoneros",
-          "inferior": "Bases",
-          "superior": "Alacenas"
-        };
+        // Category UI mapping dictionary + formatCategoryLabel live in
+        // js/granete-library.js (#848 C4.3): categories are Library's
+        // domain; the configurator badge consumes its public API.
 
         // Inline SVG icon set (16px, stroke = currentColor) — replaces emoji
         // chrome so the panel keeps one iconographic vocabulary.
@@ -1122,14 +1091,6 @@
           return '<svg class="icon" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON_PATHS[name] + '</svg>';
         }
 
-        function formatCategoryLabel(catKey) {
-          if (!catKey) return "General";
-          if (CATEGORY_LABELS[catKey]) return CATEGORY_LABELS[catKey];
-          return String(catKey)
-            .replace(/[_-]+/g, " ")
-            .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
-        }
-
         function createFurniturePlaceholderSvg() {
           return '<svg class="furniture-card-svg" viewBox="0 0 80 60" width="68" height="51" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
             '<path d="M12 18 L40 6 L68 18 L40 30 Z" fill="currentColor" fill-opacity="0.08" />' +
@@ -1140,26 +1101,6 @@
             '<line x1="40" y1="30" x2="68" y2="18" />' +
             '<line x1="26" y1="36" x2="26" y2="44" stroke-width="2" />' +
             '</svg>';
-        }
-
-        function getDefinitionDefaultDims(def) {
-          var params = def.parameters || [];
-          var width = 600;
-          var height = 720;
-          var depth = 590;
-
-          for (var i = 0; i < params.length; i++) {
-            var p = params[i];
-            if (p.name === "widthMm" || p.name === "lengthMm" || p.name === "width" || p.name === "length") {
-              width = p.defaultValue !== undefined ? p.defaultValue : width;
-            } else if (p.name === "heightMm" || p.name === "height") {
-              height = p.defaultValue !== undefined ? p.defaultValue : height;
-            } else if (p.name === "depthMm" || p.name === "depth") {
-              depth = p.defaultValue !== undefined ? p.defaultValue : depth;
-            }
-          }
-
-          return width + " × " + height + " × " + depth + " mm";
         }
 
         // Tabs navigation
@@ -1221,7 +1162,7 @@
           clearCatalogIntentKey();
           libBrowserView.style.display = "block";
           libConfiguratorView.style.display = "none";
-          renderLibraryBrowser();
+          window.GraneteUI.library.render();
         }
 
         function showConfiguratorView(def) {
@@ -1232,7 +1173,7 @@
 
           libSelectedName.textContent = def.name || "Mueble";
           libSelectedCode.textContent = def.code || "";
-          libSelectedCategoryBadge.textContent = formatCategoryLabel(def.category);
+          libSelectedCategoryBadge.textContent = window.GraneteUI.library.formatCategoryLabel(def.category);
           libDesc.textContent = def.description || "";
           libDesc.title = def.description || "";
           renderConfiguratorPreview(def);
@@ -2049,386 +1990,6 @@
           };
         }
 
-        function renderLibraryState(stateType, options) {
-          options = options || {};
-          libLoadingState.style.display = stateType === "loading" ? "block" : "none";
-          libEmptyState.style.display = stateType === "empty" ? "block" : "none";
-          libNoResultsState.style.display = stateType === "no-results" ? "block" : "none";
-          libCardsGrid.style.display = stateType === "grid" ? "grid" : "none";
-          // Una sola voz de carga: con los skeletons visibles, el badge de
-          // conteo y los selects de categoría vacíos no compiten por atención.
-          libCountBadge.style.display = stateType === "loading" ? "none" : "";
-          if (stateType === "loading") libCategoriesContainer.style.display = "none";
-
-          // Recoverability: only the remote-error empty state offers an
-          // explicit retry of the read-only catalog fetch.
-          btnLibraryRetry.style.display = stateType === "empty" &&
-            (options.source || "local") === "error" && !options.blocked
-            ? "inline-flex"
-            : "none";
-
-          if (stateType === "empty") {
-            var source = options.source || "local";
-            var blocked = !!options.blocked;
-
-            if (blocked) {
-              libEmptyIcon.innerHTML = icon("lock", 28);
-              libEmptyTitle.textContent = "Licencia inactiva";
-              libEmptyMsg.textContent = "Tu cuenta no tiene una licencia activa, por lo que la biblioteca del taller no está disponible.";
-              btnEmptyAction.style.display = "none";
-            } else if (source === "unauthenticated") {
-              libEmptyIcon.innerHTML = icon("key", 28);
-              libEmptyTitle.textContent = "Sesión requerida";
-              libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca de muebles.";
-              btnEmptyAction.textContent = "Ir a Iniciar Sesión";
-              btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { window.GraneteUI.account.open(); };
-            } else if (source === "error") {
-              libEmptyIcon.innerHTML = icon("warning", 28);
-              libEmptyTitle.textContent = "Error de conexión";
-              libEmptyMsg.textContent = "No se pudo conectar con el servidor Granete. Verificá tu conexión y estado del servidor.";
-              btnEmptyAction.textContent = "Revisar conexión";
-              btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { window.GraneteUI.account.open(); };
-            } else {
-              libEmptyIcon.innerHTML = icon("box", 28);
-              libEmptyTitle.textContent = "El taller todavía no tiene muebles";
-              libEmptyMsg.textContent = "Creá muebles en la plataforma Granete para verlos e insertarlos directamente en SketchUp.";
-              btnEmptyAction.style.display = "none";
-            }
-          } else if (stateType === "no-results") {
-            var q = options.query;
-            if (q) {
-              libNoResultsMsg.textContent = 'No se encontraron muebles que coincidan con "' + q + '".';
-            } else {
-              libNoResultsMsg.textContent = "No hay muebles en la categoría seleccionada.";
-            }
-          }
-        }
-
-        // -------------------------------------------------------------
-        // Category cascade (web app library logic): the catalog carries the
-        // workshop category tree (up to 3 levels, e.g. Cocinas › Inferiores ›
-        // Puertas); filtering by a node includes its whole subtree, and
-        // "Sin categoría" buckets modules without a category.
-        // -------------------------------------------------------------
-        var categoryNodeById = {};
-        var categoryChildren = {};
-
-        function buildCategoryIndex() {
-          categoryNodeById = {};
-          categoryChildren = {};
-          catalogCategories.forEach(function (c) {
-            categoryNodeById[c.categoryId] = c;
-            var parent = c.parentId || "";
-            (categoryChildren[parent] = categoryChildren[parent] || []).push(c);
-          });
-          Object.keys(categoryChildren).forEach(function (key) {
-            categoryChildren[key].sort(function (a, b) {
-              var byOrder = (a.sortOrder || 0) - (b.sortOrder || 0);
-              if (byOrder !== 0) return byOrder;
-              return String(a.name).localeCompare(String(b.name), "es");
-            });
-          });
-        }
-
-        function subtreeCategoryIds(rootId) {
-          var ids = {};
-          var stack = [rootId];
-          while (stack.length > 0) {
-            var id = stack.pop();
-            if (ids[id]) continue;
-            ids[id] = true;
-            (categoryChildren[id] || []).forEach(function (child) {
-              stack.push(child.categoryId);
-            });
-          }
-          return ids;
-        }
-
-        function countModulesInSubtree(rootId) {
-          var ids = subtreeCategoryIds(rootId);
-          return catalog.filter(function (d) { return d.categoryId && ids[d.categoryId]; }).length;
-        }
-
-        function categoryPathIdsOf(catId) {
-          if (!catId || catId === "ALL" || catId === "UNCAT" || !categoryNodeById[catId]) return [];
-          var ids = [];
-          var current = catId;
-          while (current && categoryNodeById[current]) {
-            ids.unshift(current);
-            current = categoryNodeById[current].parentId;
-          }
-          return ids;
-        }
-
-        function appendCategoryOption(select, value, label) {
-          var opt = document.createElement("option");
-          opt.value = value;
-          opt.textContent = label;
-          select.appendChild(opt);
-        }
-
-        function fillCascadeLevel(select, parentId, selectedId, allLabel, allValue, onSelect) {
-          var children = categoryChildren[parentId] || [];
-          if (children.length === 0) {
-            select.style.display = "none";
-            select.innerHTML = "";
-            select.onchange = null;
-            return;
-          }
-          select.style.display = "block";
-          select.innerHTML = "";
-          appendCategoryOption(select, allValue, allLabel);
-          children.forEach(function (c) {
-            appendCategoryOption(select, c.categoryId, c.name + " (" + countModulesInSubtree(c.categoryId) + ")");
-          });
-          select.value = selectedId && categoryNodeById[selectedId] ? selectedId : allValue;
-          select.onchange = function () {
-            onSelect(select.value);
-          };
-        }
-
-        function renderCategoryFilters(categories, activeCategory, onSelectCategory) {
-          buildCategoryIndex();
-
-          if (catalogCategories.length === 0) {
-            // Legacy payload without a category tree (e.g. offline catalog):
-            // flat options from the definitions' category strings.
-            var distinct = {};
-            catalog.forEach(function (def) {
-              var cat = def.category || "general";
-              distinct[cat] = true;
-            });
-            var keys = Object.keys(distinct).sort();
-            if (keys.length <= 1) {
-              libCategoriesContainer.style.display = "none";
-              return;
-            }
-            libCategoriesContainer.style.display = "flex";
-            libCategoryL2.style.display = "none";
-            libCategoryL3.style.display = "none";
-            libCategoryL1.innerHTML = "";
-            appendCategoryOption(libCategoryL1, "ALL", "Todas las categorías");
-            keys.forEach(function (key) {
-              appendCategoryOption(libCategoryL1, key, formatCategoryLabel(key));
-            });
-            libCategoryL1.value = activeCategory && distinct[activeCategory] ? activeCategory : "ALL";
-            libCategoryL1.onchange = function () {
-              onSelectCategory(libCategoryL1.value);
-            };
-            return;
-          }
-
-          var roots = categoryChildren[""] || [];
-          var hasUncategorized = catalog.some(function (d) { return !d.categoryId; });
-          if (roots.length === 0 && !hasUncategorized) {
-            libCategoriesContainer.style.display = "none";
-            return;
-          }
-
-          libCategoriesContainer.style.display = "flex";
-          var pathIds = categoryPathIdsOf(activeCategory);
-          var l1Choice = pathIds[0] || null;
-
-          libCategoryL1.innerHTML = "";
-          appendCategoryOption(libCategoryL1, "ALL", "Todas las categorías");
-          if (hasUncategorized) appendCategoryOption(libCategoryL1, "UNCAT", "Sin categoría");
-          roots.forEach(function (c) {
-            appendCategoryOption(libCategoryL1, c.categoryId, c.name + " (" + countModulesInSubtree(c.categoryId) + ")");
-          });
-          libCategoryL1.value = activeCategory === "UNCAT" ? "UNCAT" : (l1Choice || "ALL");
-          libCategoryL1.onchange = function () {
-            onSelectCategory(libCategoryL1.value);
-          };
-
-          var l2Choice = pathIds[1] || null;
-          fillCascadeLevel(libCategoryL2, l1Choice || "", l2Choice, "Todas", l1Choice || "ALL", onSelectCategory);
-
-          var l3Choice = pathIds[2] || null;
-          fillCascadeLevel(libCategoryL3, l2Choice || "", l3Choice, "Todas", l2Choice || l1Choice || "ALL", onSelectCategory);
-        }
-
-        function renderFurnitureCards(definitions, container, onSelectDefinition) {
-          container.innerHTML = "";
-          if (!definitions || definitions.length === 0) return;
-
-          definitions.forEach(function (def) {
-            var card = document.createElement("div");
-            card.className = "furniture-card" + (activeLibDef && activeLibDef.furniture_definition_id === def.furniture_definition_id ? " selected" : "");
-            card.setAttribute("role", "button");
-            card.setAttribute("tabindex", "0");
-            card.setAttribute("aria-label", "Seleccionar " + def.name);
-            card.setAttribute("data-definition-id", def.furniture_definition_id);
-
-            // Preview Area
-            var preview = document.createElement("div");
-            preview.className = "furniture-card-preview";
-
-            var rawImageUrl = def.imageUrl || def.thumbnailUrl || def.previewUrl;
-            var mediaName = window.GraneteUI.media.filenameFromPath(rawImageUrl);
-            var imageUrl = window.GraneteUI.media.resolveUrl(rawImageUrl);
-            if (mediaName) {
-              // Server catalog media: the <img> always exists (tagged with its
-              // canonical filename) so a re-minted grant can repaint it; while
-              // the signed URL is pending the placeholder covers it.
-              var img = document.createElement("img");
-              img.alt = def.name;
-              img.className = "furniture-card-img";
-              img.loading = "lazy";
-              img.setAttribute("data-media-name", mediaName);
-              if (imageUrl) {
-                img.src = imageUrl;
-              } else {
-                img.style.display = "none";
-              }
-              img.onerror = function () {
-                img.style.display = "none";
-                if (img.nextElementSibling) img.nextElementSibling.style.display = "flex";
-                // #460 SEC-3: most likely an expired grant — re-mint and retry.
-                window.GraneteUI.media.requestRefresh(mediaName);
-              };
-              preview.appendChild(img);
-
-              var fallbackPlaceholder = document.createElement("div");
-              fallbackPlaceholder.className = "furniture-card-placeholder";
-              fallbackPlaceholder.style.display = imageUrl ? "none" : "flex";
-              fallbackPlaceholder.innerHTML = createFurniturePlaceholderSvg();
-              preview.appendChild(fallbackPlaceholder);
-            } else if (imageUrl) {
-              var img = document.createElement("img");
-              img.src = imageUrl;
-              img.alt = def.name;
-              img.className = "furniture-card-img";
-              img.loading = "lazy";
-              img.onerror = function () {
-                img.style.display = "none";
-                if (img.nextElementSibling) img.nextElementSibling.style.display = "flex";
-              };
-              preview.appendChild(img);
-
-              var fallbackPlaceholder = document.createElement("div");
-              fallbackPlaceholder.className = "furniture-card-placeholder";
-              fallbackPlaceholder.style.display = "none";
-              fallbackPlaceholder.innerHTML = createFurniturePlaceholderSvg();
-              preview.appendChild(fallbackPlaceholder);
-            } else {
-              var placeholder = document.createElement("div");
-              placeholder.className = "furniture-card-placeholder";
-              placeholder.innerHTML = createFurniturePlaceholderSvg();
-              preview.appendChild(placeholder);
-            }
-
-            if (def.categoryId || def.category) {
-              var catBadge = document.createElement("span");
-              catBadge.className = "furniture-card-badge";
-              // El árbol del taller es la fuente; CATEGORY_LABELS sólo
-              // cubre catálogos legacy sin categorías.
-              catBadge.textContent =
-                (def.categoryId && categoryNodeById[def.categoryId] && categoryNodeById[def.categoryId].name) ||
-                formatCategoryLabel(def.category);
-              preview.appendChild(catBadge);
-            }
-
-            card.appendChild(preview);
-
-            // Card Body
-            var body = document.createElement("div");
-            body.className = "furniture-card-body";
-
-            var title = document.createElement("h3");
-            title.className = "furniture-card-title";
-            title.textContent = def.name;
-            body.appendChild(title);
-
-            var dims = document.createElement("span");
-            dims.className = "furniture-card-dims";
-            dims.textContent = getDefinitionDefaultDims(def);
-            body.appendChild(dims);
-
-            if (def.code) {
-              var code = document.createElement("span");
-              code.className = "furniture-card-code";
-              code.textContent = def.code;
-              body.appendChild(code);
-            }
-
-            card.appendChild(body);
-
-            // Interaction events
-            card.addEventListener("click", function () {
-              onSelectDefinition(def);
-            });
-
-            card.addEventListener("keydown", function (e) {
-              if (e.key === "Enter" || e.key === " " || e.keyCode === 13 || e.keyCode === 32) {
-                e.preventDefault();
-                onSelectDefinition(def);
-              }
-            });
-
-            container.appendChild(card);
-          });
-        }
-
-        function renderLibraryBrowser() {
-          if (catalogSource === "loading" && catalog.length === 0) {
-            libCountBadge.textContent = "Cargando…";
-            renderLibraryState("loading");
-            return;
-          }
-
-          if (catalog.length === 0) {
-            libCountBadge.textContent = "0 muebles";
-            libCategoriesContainer.style.display = "none";
-            renderLibraryState("empty", { source: catalogSource, blocked: licenseBlocked });
-            return;
-          }
-
-          renderCategoryFilters(null, selectedCategory, function (newCat) {
-            selectedCategory = newCat;
-            renderLibraryBrowser();
-          });
-
-          // Filter definitions: subtree-inclusive when the catalog carries a
-          // category tree; exact string match for legacy flat catalogs.
-          var filterIds = null;
-          if (selectedCategory === "UNCAT") {
-            filterIds = "UNCAT";
-          } else if (selectedCategory && selectedCategory !== "ALL" && categoryNodeById[selectedCategory]) {
-            filterIds = subtreeCategoryIds(selectedCategory);
-          }
-
-          var query = searchQuery.trim().toLowerCase();
-          var filtered = catalog.filter(function (def) {
-            if (filterIds === "UNCAT") {
-              if (def.categoryId) return false;
-            } else if (filterIds) {
-              if (!def.categoryId || !filterIds[def.categoryId]) return false;
-            } else if (selectedCategory !== "ALL" && catalogCategories.length === 0) {
-              if ((def.category || "general") !== selectedCategory) return false;
-            }
-            if (!query) return true;
-
-            var nameMatch = (def.name || "").toLowerCase().indexOf(query) !== -1;
-            var codeMatch = (def.code || "").toLowerCase().indexOf(query) !== -1;
-            var catMatch = (def.category || "").toLowerCase().indexOf(query) !== -1;
-            var descMatch = (def.description || "").toLowerCase().indexOf(query) !== -1;
-
-            return nameMatch || codeMatch || catMatch || descMatch;
-          });
-
-          libCountBadge.textContent = filtered.length + (filtered.length === 1 ? " mueble" : " muebles");
-
-          if (filtered.length === 0) {
-            renderLibraryState("no-results", { query: searchQuery, category: selectedCategory });
-          } else {
-            renderLibraryState("grid");
-            renderFurnitureCards(filtered, libCardsGrid, function (def) {
-              showConfiguratorView(def);
-            });
-          }
-        }
 
         // Bridge exposed to Ruby
         window.GraneteDialog = {
@@ -2537,42 +2098,39 @@
           onHostSaveAwareness: function (payload) { renderHostSaveAwareness(payload); },
 
           setCatalog: function (payload) {
-            if (Object.prototype.toString.call(payload) === "[object Array]") {
-              catalog = payload || [];
+            var isArray = Object.prototype.toString.call(payload) === "[object Array]";
+
+            // #848 C4.3: GraneteUI.library owns the browsing slice
+            // (definitions, categories, source, licenseBlocked) and renders
+            // the license blocker + source note. Presets, materials and
+            // hardware still live here until their Phase B slices.
+            window.GraneteUI.library.setCatalog(payload);
+
+            if (isArray) {
               catalogPresets = [];
-              catalogCategories = [];
               catalogMaterialCategories = [];
               catalogMaterials = [];
-              catalogSource = "local";
-              licenseBlocked = false;
               window.GraneteUI.media.setCatalogMedia(null);
             } else {
               payload = payload || {};
-              catalog = payload.definitions || [];
               catalogPresets = payload.presets || [];
-              catalogCategories = payload.categories || [];
               catalogMaterialCategories = payload.materialCategories || [];
               catalogMaterials = payload.materials || [];
               catalogHardware = payload.hardware || [];
-              catalogSource = payload.source || "local";
-              licenseBlocked = !!payload.licenseBlocked;
               window.GraneteUI.media.setCatalogMedia(payload.media);
               if (window.GraneteState) {
                 window.GraneteState.set("catalog", {
-                  definitions: catalog,
+                  definitions: window.GraneteUI.library.getDefinitions(),
                   hardware: catalogHardware,
                   materials: catalogMaterials,
-                  categories: catalogCategories
+                  categories: window.GraneteUI.library.getCategories()
                 });
               }
             }
 
-            libLicenseBlocker.style.display = licenseBlocked ? "block" : "none";
-            libSourceNote.textContent = catalogSourceNote(catalogSource, licenseBlocked, catalog.length);
-
             // If activeLibDef is set and still exists, refresh configurator view, otherwise show library browser
             if (activeLibDef) {
-              var found = catalog.find(function (d) { return d.furniture_definition_id === activeLibDef.furniture_definition_id; });
+              var found = window.GraneteUI.library.findDefinitionById(activeLibDef.furniture_definition_id);
               if (found) {
                 showConfiguratorView(found);
               } else {
@@ -2760,22 +2318,6 @@
             toast.className = "toast";
             toastTimer = null;
           }, type === "error" ? 8000 : 4000);
-        }
-
-        function catalogSourceNote(source, blocked, count) {
-          if (blocked) return "Tu licencia no está activa; la biblioteca del taller quedó bloqueada.";
-          if (source === "remote") {
-            return count > 0
-              ? "Biblioteca del taller (servidor Granete) — " + count + " mueble" + (count === 1 ? "" : "s")
-              : "El taller todavía no tiene muebles. Creá muebles en Granete y volvé a abrir la biblioteca.";
-          }
-          if (source === "unauthenticated") {
-            return "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca.";
-          }
-          if (source === "error") {
-            return "No se pudo conectar con Granete. Revisá el servidor desde tu cuenta (pill superior derecha) e iniciá sesión de nuevo.";
-          }
-          return "Catálogo local (modo desarrollo)";
         }
 
         function getDefaultParams(def) {
@@ -3180,9 +2722,7 @@
         function renderFurnitureInspector(context) {
           inspectorActive.style.display = "block";
 
-          var def = context.definition || catalog.find(function (d) {
-            return d.furniture_definition_id === context.furnitureDefinitionId;
-          });
+          var def = context.definition || window.GraneteUI.library.findDefinitionById(context.furnitureDefinitionId);
           inspectorDef = def || null;
           inspectorName.textContent = (context.display && context.display.name) || (def ? def.name : "Mueble");
 
@@ -3536,37 +3076,9 @@
           });
         }
 
-        // Search event bindings
-        libSearchInput.addEventListener("input", function () {
-          searchQuery = libSearchInput.value;
-          libSearchClear.style.display = searchQuery ? "block" : "none";
-          renderLibraryBrowser();
-        });
-
-        libSearchClear.addEventListener("click", function () {
-          searchQuery = "";
-          libSearchInput.value = "";
-          libSearchClear.style.display = "none";
-          libSearchInput.focus();
-          renderLibraryBrowser();
-        });
-
-        btnClearSearch.addEventListener("click", function () {
-          searchQuery = "";
-          selectedCategory = "ALL";
-          libSearchInput.value = "";
-          libSearchClear.style.display = "none";
-          renderLibraryBrowser();
-        });
-
-        // Re-asks Ruby for the catalog; setCatalog pushes the next truthful
-        // state (error again if the server is still down), so the panel never
-        // fakes a client-side loading flip here.
-        btnLibraryRetry.addEventListener("click", function () {
-          if (window.sketchup && window.sketchup.get_catalog) {
-            window.sketchup.get_catalog();
-          }
-        });
+        // Search / category-filter / retry bindings live in
+        // js/granete-library.js (#848 C4.3); btn-back-to-library crosses
+        // into the configurator (resets activeLibDef) and stays here.
 
         btnBackToLibrary.addEventListener("click", function () {
           activeLibDef = null;
@@ -5235,6 +4747,19 @@
         // injects the shared presentation helpers before Ruby can answer
         // dialog_ready with GraneteDialog.setStatus.
         window.GraneteUI.account.init({ showToast: showToast, icon: icon });
+
+        // #848 C4.3: the library module owns definition browsing; the
+        // bootstrap injects the shared helpers and the configurator
+        // hand-off (Library ends when the designer picks a definition)
+        // before the first render can run.
+        window.GraneteUI.library.init({
+          icon: icon,
+          createFurniturePlaceholderSvg: createFurniturePlaceholderSvg,
+          onSelectDefinition: showConfiguratorView,
+          getSelectedDefinitionId: function () {
+            return activeLibDef ? activeLibDef.furniture_definition_id : null;
+          }
+        });
 
         btnClose.addEventListener("click", function () {
           if (window.sketchup && window.sketchup.close_dialog) {

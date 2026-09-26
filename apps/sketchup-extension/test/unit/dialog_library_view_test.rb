@@ -59,6 +59,12 @@ class DialogLibraryViewTest < Minitest::Test
     SketchupStub.reset!
     @html_path = File.expand_path('../../src/granete_for_sketchup/resources/dialog.html', __dir__)
     @html_content = File.read(@html_path, encoding: 'UTF-8')
+    # #848 Phase B C4.3: la implementación del browser de Biblioteca vive en
+    # js/granete-library.js — los asserts de implementación apuntan al módulo.
+    @library_js = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/js/granete-library.js', __dir__),
+      encoding: 'UTF-8'
+    )
     # #848: los estilos del panel viven en css/*.css.
     css_dir = File.expand_path('../../src/granete_for_sketchup/resources/css', __dir__)
     @css_content = Dir.children(css_dir).sort.map { |f| File.read(File.join(css_dir, f), encoding: 'UTF-8') }.join("\n")
@@ -89,12 +95,14 @@ class DialogLibraryViewTest < Minitest::Test
   end
 
   def test_dialog_html_contains_modular_functions
-    assert_includes @html_content, 'function renderLibraryBrowser('
-    assert_includes @html_content, 'function renderCategoryFilters('
-    assert_includes @html_content, 'function renderFurnitureCards('
+    # #848 C4.3: las funciones del browser de Biblioteca viven en el módulo;
+    # el bootstrap inline conserva la transición browser↔configurator.
+    assert_includes @library_js, 'function renderLibraryBrowser('
+    assert_includes @library_js, 'function renderCategoryFilters('
+    assert_includes @library_js, 'function renderFurnitureCards('
+    assert_includes @library_js, 'function renderLibraryState('
     assert_includes @html_content, 'function showLibraryView('
     assert_includes @html_content, 'function showConfiguratorView('
-    assert_includes @html_content, 'function renderLibraryState('
   end
 
   def test_category_filter_cascades_over_the_workshop_tree
@@ -102,12 +110,12 @@ class DialogLibraryViewTest < Minitest::Test
     # the catalog category tree, with subtree-inclusive filtering and a
     # "Sin categoría" bucket.
     assert_includes @html_content, '<select id="library-category-l1"'
-    assert_includes @html_content, 'Todas las categorías'
-    assert_includes @html_content, 'Sin categoría'
-    assert_includes @html_content, 'function subtreeCategoryIds('
-    assert_includes @html_content, 'function countModulesInSubtree('
-    assert_includes @html_content, 'function fillCascadeLevel('
-    assert_includes @html_content, 'catalogCategories = payload.categories'
+    assert_includes @library_js, 'Todas las categorías'
+    assert_includes @library_js, 'Sin categoría'
+    assert_includes @library_js, 'function subtreeCategoryIds('
+    assert_includes @library_js, 'function countModulesInSubtree('
+    assert_includes @library_js, 'function fillCascadeLevel('
+    assert_includes @library_js, 'catalogCategories = payload.categories'
   end
 
   def test_measures_use_text_fields_with_registered_defaults_button
@@ -154,17 +162,23 @@ class DialogLibraryViewTest < Minitest::Test
   end
 
   def test_dialog_html_contains_svg_placeholder_fallback
+    # El SVG isométrico es un helper compartido (cards + preview del
+    # configurador): sigue inline y el módulo lo recibe inyectado.
     assert_includes @html_content, 'function createFurniturePlaceholderSvg('
     assert_includes @html_content, 'furniture-card-svg'
-    assert_includes @html_content, 'furniture-card-placeholder'
+    assert_includes @library_js, 'furniture-card-placeholder'
+    assert_includes @library_js, 'createFurniturePlaceholderSvg()'
   end
 
   def test_dialog_html_contains_category_labels_mapping
-    assert_includes @html_content, 'var CATEGORY_LABELS ='
-    assert_includes @html_content, '"kitchen_base": "Bases"'
-    assert_includes @html_content, '"kitchen_wall": "Alacenas"'
-    assert_includes @html_content, '"closet": "Torres / Closets"'
-    assert_includes @html_content, '"desk": "Escritorios"'
+    # Las categorías son dominio de Library (#848 C4.3): el mapping vive en
+    # el módulo y el configurador consume su API pública.
+    assert_includes @library_js, 'var CATEGORY_LABELS ='
+    assert_includes @library_js, '"kitchen_base": "Bases"'
+    assert_includes @library_js, '"kitchen_wall": "Alacenas"'
+    assert_includes @library_js, '"closet": "Torres / Closets"'
+    assert_includes @library_js, '"desk": "Escritorios"'
+    assert_includes @html_content, 'window.GraneteUI.library.formatCategoryLabel('
   end
 
   def test_remote_catalog_provider_serves_hierarchical_categories_and_images
