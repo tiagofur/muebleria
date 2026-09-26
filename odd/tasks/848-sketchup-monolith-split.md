@@ -348,12 +348,15 @@ materials and placement at once.
 **Status**: owner approved the pre-commit boundary review on 2026-09-26
 (injected shared helpers, shared #469 placement handlers staying inline,
 the bootstrap load-order movement of the initial unbound render, and both
-documented behavior quirks). Committed as one work unit
-(`910fa962f797eca5490212b6e1cfc978d8cdfdb5`) and published against main as
-PR #857 (`Refs #848`, `Delivery: partial`, `type:refactor`; exact-head
-readback verified: OPEN, non-draft, base main, headSha == commit,
-MERGEABLE, issue #848 OPEN + status:approved). Merge remains human.
-**Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
+documented behavior quirks), then approved the code review with a
+documentation-accuracy round (onCreateProjectFurnitureResult serves the
+canonical connected preview commit too; API count 15). Published against
+main as PR #857 (`Refs #848`, `Delivery: partial`, `type:refactor`;
+exact-head readback verified: OPEN, non-draft, base main, headSha ==
+commit, MERGEABLE, issue #848 OPEN + status:approved) as one
+implementation work unit (`910fa962`) plus docs-only follow-up commits
+(publication record; documentation-accuracy corrections). Merge remains
+human. **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
 
 - **Extracted**: `resources/js/granete-configurator.js` (532 lines
   including the agent-first header). dialog.html went 4,792 → 4,503 lines;
@@ -365,9 +368,11 @@ MERGEABLE, issue #848 OPEN + status:approved). Merge remains human.
   renderRegisteredMeasuresButton/renderPresetChips/updateLibrarySummary +
   the whole btnInsert placement intent (intent key, idempotency, #469
   repeat, legacy fallbacks) + onInsertionResult +
-  handleCreateProjectFurnitureResult (exclusively the result of the insert
-  button's legacy connected fallback — classified catalog lane).
-- **Public API (16)**: init(deps), open(def), close(),
+  handleCreateProjectFurnitureResult (the connected catalog-lane result
+  handler — Ruby reports here from BOTH the canonical #469 preview commit
+  (PlacementPreviewBridge#handle_commit_catalog_preview) and the legacy
+  create_project_furniture fallback; classified catalog lane).
+- **Public API (15)**: init(deps), open(def), close(),
   getActiveDefinitionId(), hasActiveDefinition() (exact `!!activeLibDef`
   semantics — selection/material routing reads definition presence, not its
   id), setPresets, refreshAfterCatalog, updateInsertButton,
@@ -459,6 +464,6 @@ MERGEABLE, issue #848 OPEN + status:approved). Merge remains human.
 - No behavior change is in scope; anything discovered broken becomes its own
   issue.
 - Remaining Phase B modules after C4.4: finish-selector, material-roles,
-  inspector, model-binding, project-furniture. C4.4 (configurator) is
-  implemented on `refactor/848-dialog-js-configurator` awaiting the owner's
-  pre-commit boundary review; merge remains human.
+  inspector, model-binding, project-furniture. C4.4 (configurator) passed
+  its pre-commit boundary review and its code review; PR #857 is published
+  against main awaiting human merge.

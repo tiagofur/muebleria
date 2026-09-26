@@ -9,9 +9,11 @@
 //   measures/pieces summary dock
 // - registered-measures display/restore
 // - the catalog placement intent: insert button state, idempotency key,
-//   #469 preview payload + repeat loop, and the legacy connected/local
-//   insert fallbacks with their result handlers (onInsertionResult,
-//   onCreateProjectFurnitureResult)
+//   #469 preview payload + repeat loop, and the insert result handlers
+//   (onInsertionResult; onCreateProjectFurnitureResult — the connected
+//   catalog-lane result used by BOTH the canonical #469 preview commit
+//   (PlacementPreviewBridge#handle_commit_catalog_preview) and the legacy
+//   create_project_furniture fallback)
 //
 // Consumes:
 // - window.GraneteUI.library (definitions authority: findDefinitionById,
@@ -326,10 +328,13 @@
     }
   }
 
-  // Result of the insert button's legacy connected fallback
-  // (create_project_furniture — only the configurator calls it). The
-  // project-side effects (tab switch + rows reload + failure copy) are
-  // injected dependencies, not owned state.
+  // Connected catalog-lane result handler. Ruby reports here from BOTH
+  // the canonical #469 connected preview commit
+  // (PlacementPreviewBridge#handle_commit_catalog_preview) and the legacy
+  // create_project_furniture fallback — both bridge calls originate in the
+  // configurator's insert lane. The project-side effects (tab switch +
+  // rows reload + failure copy) are injected dependencies, not owned
+  // state.
   function onCreateProjectFurnitureResult(result) {
     result = result || {};
     btnInsert.disabled = false;
