@@ -183,8 +183,15 @@ export function buildRevisionLines(
  * Dataset state of the batch commercial summaries request (#642 / 2A).
  * Kept strictly separate from the per-project quoteStatus: an HTTP failure or
  * an in-flight request must never be read as `quoteStatus: 'none'`.
+ * `unavailable` (#642 / 2C round 2): the session has no remote commercial
+ * dataset at all (guest/local mode — the batch never fires). It is NOT a
+ * pending request: nothing will resolve it inside this session.
  */
-export type CommercialSummariesStatus = 'loading' | 'ready' | 'error';
+export type CommercialSummariesStatus =
+  | 'loading'
+  | 'ready'
+  | 'error'
+  | 'unavailable';
 
 /**
  * Filter value for the Cotizaciones list screen (#642 / 2A).
@@ -216,6 +223,42 @@ export interface CommercialBadgeView {
   readonly label: string;
   readonly modifier: string;
   readonly ariaLabel: string;
+}
+
+export interface CommercialCardIdentity {
+  readonly name: string;
+  readonly customer: string | null;
+}
+
+/**
+ * Card identity under commercial authority (#642).
+ *
+ * A valid frozen snapshot owns the historical name/customer; projects without
+ * a revision (`none`) or with a legacy revision keep their CURRENT project
+ * identity — the only identity the contract can assert there. While the batch
+ * dataset is not ready the customer falls back to nothing rather than guessing
+ * from stale commercial data. Shared by the Cotizaciones list and the Inicio
+ * recent cards so both surfaces resolve identity by the same rule.
+ */
+export function resolveCommercialCardIdentity(
+  project: Pick<Project, 'name'>,
+  summary: ProjectCommercialSummary | undefined,
+  summariesReady: boolean,
+  fallbackCustomer: () => string | null,
+): CommercialCardIdentity {
+  const frozen =
+    summariesReady &&
+    summary != null &&
+    !summary.isLegacy &&
+    summary.quoteStatus !== 'none';
+  return {
+    name: frozen ? summary.projectName : project.name,
+    customer: !summariesReady
+      ? null
+      : frozen && summary.customerName != null
+        ? summary.customerName
+        : fallbackCustomer(),
+  };
 }
 
 /**

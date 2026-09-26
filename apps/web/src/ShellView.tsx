@@ -320,6 +320,7 @@ import {
   type QuoteRevisionsQuery,
 } from './quoteRevisionAuthority';
 import { useProjectsCommercialSummaries } from './projectsCommercialSummaries';
+import { homeCommercialSummariesProps } from './homeCommercialSummaries';
 import {
   DEFAULT_API_BASE,
   isAdminRole,
@@ -434,7 +435,7 @@ export interface ShellViewCtx {
   readonly customers: readonly Customer[];
   readonly dashboardHomeMode: "default" | "sales" | "engineering";
   readonly dashboardOwnerBreakdown: readonly OwnerPortfolioRow[] | undefined;
-  readonly dashboardRecent: { id: string; name: string; customerLabel: string; status: ProjectStatus; updatedAt: string; salePrice: number | null; }[];
+  readonly dashboardRecent: { id: string; name: string; customerLabel: string }[];
   readonly dashboardStats: { activeProjects: number; monthlyQuotedTotal: number; modulesCount: number; activeMaterials: number; };
   readonly deleteAgregado: (id: string) => Promise<void>;
   readonly deleteAmbientCategory: (id: string) => Promise<void>;
@@ -1343,6 +1344,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         <Dashboard
           stats={dashboardStats}
           recentProjects={dashboardRecent}
+          {...homeCommercialSummariesProps(session, commercialSummaries)}
           projectsCount={projects.length}
           onOpenProject={onDashboardOpenProject}
           onNewProject={canMutateProjects ? onDashboardNewProject : undefined}

@@ -63,4 +63,43 @@ describe('#642 / 2A commercial summaries shell wiring', () => {
     expect(listSrc).not.toContain('project.items.length');
     expect(listSrc).not.toContain('project.updatedAt');
   });
+
+  it('the Inicio recent cards consume the same batch (no second dataset, no legacy truth)', () => {
+    const src = shellViewSrc();
+    // The home render receives the SAME hook dataset through the pure wiring
+    // adapter (session-aware: guest/local maps to the explicit `unavailable`
+    // state, never an endless loading).
+    expect(src).toContain('<Dashboard');
+    expect(src).toContain(
+      '{...homeCommercialSummariesProps(session, commercialSummaries)}',
+    );
+    const adapterSrc = readFileSync(
+      join(here, 'homeCommercialSummaries.ts'),
+      'utf8',
+    );
+    // The adapter never invents a second dataset or request: non-auth is
+    // `unavailable` with no summaries and no retry.
+    expect(adapterSrc).toContain("commercialSummariesStatus: 'unavailable'");
+    expect(adapterSrc).toContain('onRetryCommercialSummaries: undefined');
+    // The dashboard derivation feeds navigation identity only — commercial
+    // fields are resolved from the summaries dataset, not from Project.
+    const derivationsSrc = readFileSync(
+      join(here, 'derivations/useQuoteDerivations.ts'),
+      'utf8',
+    );
+    expect(derivationsSrc).toContain(
+      'selectRecentProjects(projects, 5).map((project) => ({',
+    );
+    expect(derivationsSrc).not.toContain('salePrice: projectEstimates');
+    const dashboardSrc = readFileSync(
+      join(here, '../../../packages/ui/src/dashboard/Dashboard.tsx'),
+      'utf8',
+    );
+    expect(dashboardSrc).toContain('resolveCommercialCardIdentity');
+    expect(dashboardSrc).toContain('CommercialStatusBadge');
+    expect(dashboardSrc).toContain("summary?.saleTotal");
+    expect(dashboardSrc).not.toContain('projectStatusBadgeClass');
+    expect(dashboardSrc).not.toContain('project.updatedAt');
+    expect(dashboardSrc).not.toContain('formatDashboardMoney(project');
+  });
 });

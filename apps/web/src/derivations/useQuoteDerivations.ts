@@ -147,10 +147,11 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
 
 
   /**
-   * Dashboard stats + recent list (F023).
-   * monthlyQuotedTotal: sum of sale prices for quoted/accepted projects whose
-   * updatedAt falls in the current calendar month (uses projectEstimates /
-   * priceSnapshot — domain engine only in shell).
+   * Dashboard stats (F023). PENDING #642 surface: monthlyQuotedTotal still
+   * sums projectEstimates (priceSnapshot / live catalog) over
+   * Project.status+updatedAt — a reliable replacement needs an event-dated
+   * read model (which revision event defines “cotizado del mes”) plus a
+   * currency aggregation policy; do NOT silently relabel the legacy metric.
    */
   const dashboardStats = useMemo(
     () => ({
@@ -162,18 +163,27 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
     [projects, projectEstimates, modules, materials],
   );
 
+  /**
+   * Recent navigation entries for the Inicio cards (#642): workspace order
+   * (selectRecentProjects) plus live fallback identity only. The commercial
+   * representation — status badge, frozen identity, exact total, activity
+   * date — is resolved by the Dashboard from the batch commercial summaries,
+   * the same server authority the Cotizaciones list consumes.
+   */
   const dashboardRecent = useMemo(() => {
     return selectRecentProjects(projects, 5).map((project) => ({
       id: project.id,
       name: project.name,
       customerLabel: resolveCustomerName(project.customerId, customers),
-      status: project.status,
-      updatedAt: project.updatedAt,
-      salePrice: projectEstimates[project.id] ?? null,
     }));
-  }, [projects, customers, projectEstimates]);
+  }, [projects, customers]);
 
-  /** F037: multi-owner portfolio table for gerente/admin only. */
+  /**
+   * F037: multi-owner portfolio table for gerente/admin only.
+   * PENDING #642 surface (with dashboardStats/countActiveProjects): still
+   * aggregates projectEstimates over Project.status — needs the same
+   * event-dated revision read model before it can follow commercial truth.
+   */
   const dashboardOwnerBreakdown = useMemo(() => {
     if (!canViewPortfolioDashboard) return undefined;
     return aggregatePortfolioByOwner(
