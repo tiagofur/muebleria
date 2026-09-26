@@ -564,12 +564,14 @@ Ruby-native selector.
 - **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
 - **Status**: pre-commit boundary review completed and approved; committed
   as one implementation work unit (`c9976ab2`) and published against main
-  as PR #859 (`Refs #848`, `Delivery: partial`, `type:refactor`; exact-head
-  readback verified: OPEN, non-draft, base main, headSha == commit,
-  MERGEABLE; Publication metadata PASS; CI exact-head PASS 18/18 incl. the
-  three SketchUp Ruby runners). Awaiting human merge. **Real SketchUp host
-  smoke: NOT_RUN** (same phase-level gate). C4.6 Material Roles:
-  NOT_STARTED.
+  as PR #859 (`Refs #848`, `Delivery: partial`, `type:refactor`). Docs-only
+  follow-ups advanced the PR HEAD after publication (publication record
+  `5a3c7ddb`, then this wording correction); the implementation commit is
+  unchanged. Publication exact-head: PASS; CI exact-head: PASS 18/18 incl.
+  the three SketchUp Ruby runners — re-verified on every pushed head;
+  readback OPEN, non-draft, base main, MERGEABLE. Awaiting human merge.
+  **Real SketchUp host smoke: NOT_RUN** (same phase-level gate). C4.6
+  Material Roles: NOT_STARTED.
 
 
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
