@@ -97,6 +97,29 @@ func TestAssignmentProvesUnionIntersectionsAndCardinality(t *testing.T) {
 	}
 }
 
+func TestAssignmentAutomaticallyIncludesNewDiscoveredRoot(t *testing.T) {
+	tests := named("TestA", "TestB", "TestC", "TestFooNew")
+	shards, err := Assign(tests, 3, StrategyLPT, map[string]time.Duration{
+		"TestA": time.Second,
+		"TestB": time.Second,
+		"TestC": time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyPartition(tests, shards); err != nil {
+		t.Fatal(err)
+	}
+	for _, shard := range shards {
+		for _, test := range shard.Tests {
+			if test.Name == "TestFooNew" {
+				return
+			}
+		}
+	}
+	t.Fatal("new discovered root was not assigned")
+}
+
 func TestAssignmentIsDeterministic(t *testing.T) {
 	tests := named("TestA", "TestB", "TestC", "TestD")
 	first, err := Assign(tests, 3, StrategyHash, nil)
@@ -225,7 +248,7 @@ func TestBuildRunRegexIsAnchoredAndEscaped(t *testing.T) {
 	}
 }
 
-func TestParseGoTestJSONRejectsZeroMissingAndUnexpectedRoots(t *testing.T) {
+func TestParseGoTestJSONRejectsZeroMissingUnexpectedAndSkippedRoots(t *testing.T) {
 	expected := named("TestA", "TestB")
 	cases := []struct {
 		name, input string
@@ -235,12 +258,34 @@ func TestParseGoTestJSONRejectsZeroMissingAndUnexpectedRoots(t *testing.T) {
 		{"zero", `{"Action":"pass","Package":"example"}\n`, true},
 		{"missing", `{"Action":"run","Test":"TestA"}\n{"Action":"pass","Test":"TestA"}\n`, true},
 		{"unexpected", `{"Action":"run","Test":"TestA"}\n{"Action":"pass","Test":"TestA"}\n{"Action":"run","Test":"TestOther"}\n{"Action":"pass","Test":"TestOther"}\n`, true},
+		{"top-level skip", `{"Action":"run","Test":"TestA"}\n{"Action":"skip","Test":"TestA"}\n`, true},
+		{"subtest skip", `{"Action":"run","Test":"TestA"}\n{"Action":"run","Test":"TestA/critical"}\n{"Action":"skip","Test":"TestA/critical"}\n{"Action":"pass","Test":"TestA"}\n`, true},
+		{"nested subtest skip", `{"Action":"run","Test":"TestA"}\n{"Action":"run","Test":"TestA/level1/level2"}\n{"Action":"skip","Test":"TestA/level1/level2"}\n{"Action":"pass","Test":"TestA"}\n`, true},
+		{"non-selected skip", `{"Action":"run","Test":"TestOther"}\n{"Action":"skip","Test":"TestOther"}\n`, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := ParseGoTestJSON(strings.NewReader(strings.ReplaceAll(tc.input, `\n`, "\n")), expected)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+}
+
+func TestParseGoTestJSONRejectsSkippedSelectedRootAndSubtests(t *testing.T) {
+	cases := []struct {
+		name, input string
+	}{
+		{"top-level", `{"Action":"run","Test":"TestA"}\n{"Action":"skip","Test":"TestA"}\n`},
+		{"subtest", `{"Action":"run","Test":"TestA"}\n{"Action":"run","Test":"TestA/critical"}\n{"Action":"skip","Test":"TestA/critical"}\n{"Action":"pass","Test":"TestA"}\n`},
+		{"nested subtest", `{"Action":"run","Test":"TestA"}\n{"Action":"run","Test":"TestA/level1/level2"}\n{"Action":"skip","Test":"TestA/level1/level2"}\n{"Action":"pass","Test":"TestA"}\n`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseGoTestJSON(strings.NewReader(strings.ReplaceAll(tc.input, `\n`, "\n")), named("TestA"))
+			if err == nil || !strings.Contains(err.Error(), "skipped") {
+				t.Fatalf("err = %v, want skipped selected root failure", err)
 			}
 		})
 	}

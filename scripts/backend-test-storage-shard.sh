@@ -30,6 +30,8 @@ RUN_REGEX="$(cat "${TMP_ROOT}/run-regex")"
 # and -parallel 1. JSON is verified afterwards against the AST-selected roots.
 "${ROOT}/scripts/backend-test.sh" -json -run "${RUN_REGEX}" ./internal/storage | tee "${TMP_ROOT}/go-test.json"
 REPORT="$(go run ./cmd/testshard verify -expected "${TMP_ROOT}/expected-roots" -json "${TMP_ROOT}/go-test.json")"
+# Successful verification proves every selected root passed and that neither it
+# nor any of its subtests skipped; only then may this summary state SKIP=0.
 EXPECTED="$(wc -l <"${TMP_ROOT}/expected-roots" | tr -d ' ')"
 EXECUTED="$(printf '%s\n' "${REPORT}" | python3 -c 'import json, sys; print(len(json.load(sys.stdin)["executed"]))')"
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

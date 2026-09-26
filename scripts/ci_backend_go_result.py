@@ -33,7 +33,7 @@ def main():
         print("FAIL: backend Go aggregate evidence is missing, failed, cancelled or stale", file=sys.stderr)
         return 1
     if selected:
-        print("PASS: storage plan, all four storage shards, and other Go packages succeeded")
+        print("PASS: storage plan, all selected storage shards, and other Go packages succeeded")
     else:
         print("PASS: backend Go was not selected by impact; skipped proofs are not test passes")
     return 0

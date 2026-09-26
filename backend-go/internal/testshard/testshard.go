@@ -374,13 +374,20 @@ func ParseGoTestJSON(reader io.Reader, expected []Test) (ExecutionReport, error)
 		if err := decoder.Decode(&event); err != nil {
 			return ExecutionReport{}, fmt.Errorf("decode go test json: %w", err)
 		}
-		if event.Test == "" || strings.Contains(event.Test, "/") || event.Action != "pass" {
+		if event.Test == "" {
 			continue
 		}
-		if _, ok := wanted[event.Test]; !ok {
+		root := strings.SplitN(event.Test, "/", 2)[0]
+		if _, ok := wanted[root]; !ok {
 			return ExecutionReport{}, fmt.Errorf("unexpected executed test %q", event.Test)
 		}
-		executed[event.Test] = struct{}{}
+		if event.Action == "skip" {
+			return ExecutionReport{}, fmt.Errorf("selected test %q skipped", event.Test)
+		}
+		if event.Test != root || event.Action != "pass" {
+			continue
+		}
+		executed[root] = struct{}{}
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		if err != nil {

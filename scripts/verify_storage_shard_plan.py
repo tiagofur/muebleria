@@ -21,9 +21,9 @@ def read_roots(path: Path) -> list[str]:
     return roots
 
 
-def verify(all_roots: list[str], shard_roots: list[list[str]], expected_count: int) -> None:
-    if len(all_roots) != expected_count:
-        raise ValueError(f"AST cardinality is {len(all_roots)}, expected {expected_count}")
+def verify(all_roots: list[str], shard_roots: list[list[str]]) -> None:
+    if not all_roots:
+        raise ValueError("AST discovery has an empty root selection")
     if len(shard_roots) < 1:
         raise ValueError("expected at least one shard")
     if any(not roots for roots in shard_roots):
@@ -49,12 +49,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--all", type=Path, required=True, help="AST-discovered roots")
     parser.add_argument("--shard", type=Path, action="append", required=True, help="one shard root list")
-    parser.add_argument("--expected-count", type=int, required=True)
     args = parser.parse_args()
     try:
         all_roots = read_roots(args.all)
         shard_roots = [read_roots(path) for path in args.shard]
-        verify(all_roots, shard_roots, args.expected_count)
+        verify(all_roots, shard_roots)
     except ValueError as error:
         print(f"FAIL: storage shard plan: {error}", file=sys.stderr)
         return 1

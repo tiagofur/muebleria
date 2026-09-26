@@ -23,16 +23,24 @@ AGGREGATE = load_module("ci_backend_go_result", ROOT / "scripts/ci_backend_go_re
 
 
 class StorageShardPlanTest(unittest.TestCase):
-    def test_accepts_exact_four_way_partition(self):
-        PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], ["TestB"], ["TestC"], ["TestD"]], 4)
+    def test_accepts_ast_discovered_new_root_without_manual_cardinality(self):
+        PLAN.verify(["TestA", "TestB", "TestC", "TestNew"], [["TestA", "TestNew"], ["TestB"], ["TestC"]])
 
     def test_rejects_duplicate_and_missing_root(self):
         with self.assertRaisesRegex(ValueError, "invalid shard coverage"):
-            PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], ["TestA"], ["TestC"], ["TestD"]], 4)
+            PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], ["TestA"], ["TestC"], ["TestD"]])
 
     def test_rejects_empty_shard(self):
         with self.assertRaisesRegex(ValueError, "zero tests"):
-            PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], [], ["TestC"], ["TestD"]], 4)
+            PLAN.verify(["TestA", "TestB", "TestC", "TestD"], [["TestA"], [], ["TestC"], ["TestD"]])
+
+    def test_rejects_zero_roots(self):
+        with self.assertRaisesRegex(ValueError, "empty root selection"):
+            PLAN.verify([], [["TestA"]])
+
+    def test_rejects_unexpected_root(self):
+        with self.assertRaisesRegex(ValueError, "unexpected=TestOther"):
+            PLAN.verify(["TestA", "TestB"], [["TestA"], ["TestB", "TestOther"]])
 
 
 class BackendAggregateTest(unittest.TestCase):
@@ -71,6 +79,7 @@ class WorkflowTopologyTest(unittest.TestCase):
             "grep -Fvx 'github.com/tiagofur/muebles-backend/internal/storage'",
         ):
             self.assertIn(fragment, text)
+        self.assertNotIn("--expected-count", text)
         self.assertNotIn("DATABASE_URL: postgres://postgres", text)
         self.assertNotIn("services:\n      postgres:", text)
         self.assertNotIn("go test -p 1 -timeout=30m -v ./...", text)
