@@ -673,7 +673,9 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	totpCounter := auth.TOTPCounter(time.Now())
+	// Fixture allocation starts at current-1 so both real step-ups below fit in
+	// the verifier's ±1 window without a period-length test sleep.
+	totpCounter := nextFreshTOTPCounter(t, auth.TOTPCounter(time.Now())-2)
 	if _, err := fx.store.EnableMFAFactor(ctx, storage.EnableMFAFactorCommand{
 		UserID:   rlsUserA,
 		FactorID: pending.ID,
@@ -683,15 +685,7 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, scope := range []string{domain.StepUpScopeSupportAccess, domain.StepUpScopePlatformAdmin} {
-		// First non-replayed counter; the ±1 acceptance window allows at most
-		// one future slot, so a second scope in the same interval waits for
-		// the next one instead of tripping replay protection.
-		next := totpCounter + 1
-		current := auth.TOTPCounter(time.Now())
-		if next > current+1 {
-			time.Sleep(time.Until(time.Unix((next-1)*int64(auth.TOTPPeriod.Seconds()), 0)) + 100*time.Millisecond)
-		}
-		totpCounter = next
+		totpCounter = nextFreshTOTPCounter(t, totpCounter)
 		if _, err := fx.store.VerifyMFAStepUp(ctx, storage.MFAStepUpCommand{
 			UserID:    rlsUserA,
 			SessionID: session.ID,

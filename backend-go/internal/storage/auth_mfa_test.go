@@ -13,6 +13,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
+	"github.com/tiagofur/muebles-backend/internal/testutil"
 )
 
 // #460 / SEC-7: MFA factors, recovery codes and step-up authority. These
@@ -150,7 +151,9 @@ func (h *mfaHarness) enroll(t *testing.T, factorIDSuffix string) (counter int64)
 		t.Fatalf("pending factor must not authorize step-up, got %v", err)
 	}
 
-	counter = auth.TOTPCounter(time.Now())
+	// Start at current-1 so this real factor still has current and current+1
+	// available for later step-ups without a fixture-induced period wait.
+	counter = nextFreshTOTPCounter(t, auth.TOTPCounter(time.Now())-2)
 	enabled, err := h.store.EnableMFAFactor(ctx, storage.EnableMFAFactorCommand{
 		UserID: h.userID, FactorID: pending.ID,
 		Code: auth.TOTPCode(raw, counter), Secrets: h.secrets,
@@ -187,16 +190,36 @@ func (h *mfaHarness) createSession(t *testing.T) *domain.AuthSession {
 	return session
 }
 
-// codeFor computes the TOTP for the first non-replayed counter at or after
-// `last`. When the ±1 window cannot satisfy it yet (a second verification in
-// the same 30s interval), the harness waits for the next interval.
+// nextFreshTOTPCounter chooses the earliest non-replayed counter from the
+// production verifier's real ±1 acceptance window. Near a rollover it waits
+// only the small guard interval, then recomputes; it never sleeps a full TOTP
+// period to paper over an exhausted fixture window.
+func nextFreshTOTPCounter(t *testing.T, last int64) int64 {
+	t.Helper()
+	const rolloverGuard = time.Second
+	for {
+		now := time.Now()
+		current := auth.TOTPCounter(now)
+		candidate, ok := testutil.LeastFreshTOTPCounter(current, last)
+		nextInterval := time.Unix((current+1)*int64(auth.TOTPPeriod.Seconds()), 0)
+		untilRollover := time.Until(nextInterval)
+		if (!ok || candidate == current-1) && untilRollover <= rolloverGuard {
+			time.Sleep(untilRollover + 10*time.Millisecond)
+			continue
+		}
+		if !ok {
+			t.Fatalf("TOTP fixture acceptance window exhausted: current=%d last=%d", current, last)
+		}
+		return candidate
+	}
+}
+
+// codeFor computes a TOTP for the earliest fresh counter accepted by the real
+// verifier. Harness callers retain the returned counter for replay proofs.
 func (h *mfaHarness) codeFor(t *testing.T, last int64) (string, int64) {
 	t.Helper()
-	next := last + 1
-	if current := auth.TOTPCounter(time.Now()); next > current+1 {
-		time.Sleep(time.Until(time.Unix((next-1)*int64(auth.TOTPPeriod.Seconds()), 0)) + 100*time.Millisecond)
-	}
-	return auth.TOTPCode(h.rawTOTP, next), next
+	counter := nextFreshTOTPCounter(t, last)
+	return auth.TOTPCode(h.rawTOTP, counter), counter
 }
 
 func TestAuthMFA_EnrollmentLifecycle(t *testing.T) {
