@@ -35,6 +35,7 @@ tocan en Phase B.
 | Problema | Empieza aquí | Prueba focal |
 | --- | --- | --- |
 | imagen/textura de catálogo no carga o signed URL expiró | `resources/js/granete-media.js` | `test/js/granete_media_test.js` (vía `test/unit/granete_media_js_test.rb`) |
+| sesión / vinculación / código / cuenta / popover | `resources/js/granete-account.js` | `test/js/granete_account_test.js` (vía `test/unit/granete_account_js_test.rb`) |
 
 Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies

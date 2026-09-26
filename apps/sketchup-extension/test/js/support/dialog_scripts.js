@@ -1,7 +1,7 @@
 'use strict';
 // #848 Phase B: dialog.html loads external JS around its inline bootstrap
-// (granete-media.js first). Harnesses execute the REAL files in dialog.html
-// load order — never a copy of their contents.
+// (granete-media.js, then granete-account.js). Harnesses execute the REAL
+// files in dialog.html load order — never a copy of their contents.
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -15,15 +15,18 @@ function dialogSources() {
   return {
     html,
     inline: inlineMatch[1],
-    media: fs.readFileSync(path.join(RESOURCES, 'js/granete-media.js'), 'utf-8')
+    media: fs.readFileSync(path.join(RESOURCES, 'js/granete-media.js'), 'utf-8'),
+    account: fs.readFileSync(path.join(RESOURCES, 'js/granete-account.js'), 'utf-8')
   };
 }
 
-// Runs the dialog scripts in dialog.html load order (granete-media.js, then
-// the inline bootstrap) inside an already-created vm context.
+// Runs the dialog scripts in dialog.html load order (granete-media.js,
+// granete-account.js, then the inline bootstrap) inside an already-created
+// vm context.
 function runDialogScripts(sandbox) {
   const sources = dialogSources();
   vm.runInContext(sources.media, sandbox, { filename: 'granete-media.js' });
+  vm.runInContext(sources.account, sandbox, { filename: 'granete-account.js' });
   vm.runInContext(sources.inline, sandbox, { filename: 'dialog-inline.js' });
 }
 

@@ -912,6 +912,14 @@
          GraneteUI.media during their own initial execution. -->
     <script src="js/granete-media.js"></script>
 
+    <!-- #848 Phase B: account & device enrollment module (connection pill,
+         login/session cards, popover interaction, enrollment lifecycle)
+         under window.GraneteUI. It must be ready BEFORE the inline script
+         finishes: Ruby answers dialog_ready with GraneteDialog.setStatus
+         immediately. The bootstrap injects the shared showToast/icon
+         helpers via GraneteUI.account.init before dialog_ready. -->
+    <script src="js/granete-account.js"></script>
+
     <script>
       (function () {
         "use strict";
@@ -943,9 +951,6 @@
 
         // DOM elements
         var toast = document.getElementById("toast-message");
-        var connectionPill = document.getElementById("connection-pill");
-        var connectionHeading = document.getElementById("connection-heading");
-        var connectionDetail = document.getElementById("connection-detail");
         var btnClose = document.getElementById("btn-close");
 
         // Library Browser elements
@@ -990,30 +995,6 @@
         var libSummaryDims = document.getElementById("library-summary-dims");
         var libSummaryParts = document.getElementById("library-summary-parts");
         var btnInsert = document.getElementById("btn-insert");
-
-        // Session elements
-        var loginCard = document.getElementById("login-card");
-        var sessionCard = document.getElementById("session-card");
-        var loginServer = document.getElementById("login-server");
-        var btnLogin = document.getElementById("btn-login");
-        var btnLogout = document.getElementById("btn-logout");
-        var loginFormArea = document.getElementById("login-form-area");
-        var enrollCodeArea = document.getElementById("enroll-code-area");
-        var enrollCodeDisplay = document.getElementById("enroll-code-display");
-        var btnCopyEnrollCode = document.getElementById("btn-copy-enroll-code");
-        var copyEnrollCodeIcon = document.getElementById("copy-enroll-code-icon");
-        var copyEnrollCodeText = document.getElementById("copy-enroll-code-text");
-        var enrollCountdownDisplay = document.getElementById("enroll-countdown-display");
-        var enrollStatusText = document.getElementById("enroll-status-text");
-        var btnOpenWebDevices = document.getElementById("btn-open-web-devices");
-        var btnCancelEnroll = document.getElementById("btn-cancel-enroll");
-        var currentEnrollmentId = null;
-        var enrollPollInterval = null;
-        var enrollCountdownInterval = null;
-        var sessionUserName = document.getElementById("session-user-name");
-        var sessionUserEmail = document.getElementById("session-user-email");
-        var sessionServer = document.getElementById("session-server");
-        var sessionLicense = document.getElementById("session-license");
 
         // Model binding elements (#388)
         var bindingBadge = document.getElementById("model-binding-badge");
@@ -1221,62 +1202,16 @@
         });
 
         // ------------------------------------------------------------------
-        // Cuenta y conexión (#IA 2026-09): la sesión ya no es una pestaña —
-        // vive en un popover anclado al pill del header. Esc y clic afuera
-        // lo cierran; el foco vuelve al pill.
+        // Cuenta y conexión (#IA 2026-09): la sesión vive en un popover
+        // anclado al pill del header — propiedad de #848 Phase B
+        // js/granete-account.js (open/close/foco, Esc y clic afuera). Este
+        // bootstrap conserva sólo su propio atajo de teclado.
         // ------------------------------------------------------------------
-        var accountPopover = document.getElementById("account-popover");
-        var accountCloseBtn = document.getElementById("btn-close");
-
-        // Foco contextual (review #847): sin sesión el camino principal es
-        // el servidor; con sesión, la acción útil visible (cerrar sesión).
-        // Nunca se enfoca un control display:none.
-        function accountFocusTarget() {
-          if (loginCard && loginCard.style.display !== "none") return loginServer;
-          var logout = document.getElementById("btn-logout");
-          if (logout && logout.style.display !== "none") return logout;
-          return accountCloseBtn || connectionPill;
-        }
-
-        function openAccountPopover() {
-          if (accountPopover.style.display === "block") return;
-          accountPopover.style.display = "block";
-          connectionPill.setAttribute("aria-expanded", "true");
-          var target = accountFocusTarget();
-          if (target && target.focus) target.focus();
-        }
-
-        function closeAccountPopover() {
-          if (accountPopover.style.display === "none") return;
-          accountPopover.style.display = "none";
-          connectionPill.setAttribute("aria-expanded", "false");
-          if (connectionPill.focus) connectionPill.focus();
-        }
-
-        connectionPill.addEventListener("click", function () {
-          if (accountPopover.style.display === "none") {
-            openAccountPopover();
-          } else {
-            closeAccountPopover();
-          }
-        });
-
         document.addEventListener("keydown", function (e) {
           if (e.key === "Escape") {
-            closeAccountPopover();
             resetPublishConfirm();
           }
         });
-
-        document.addEventListener("click", function (event) {
-          if (accountPopover.style.display === "none") return;
-          var node = event.target;
-          while (node) {
-            if (node === accountPopover || node === connectionPill) return;
-            node = node.parentNode;
-          }
-          closeAccountPopover();
-        }, true);
 
         // -------------------------------------------------------------
         // Modular Library Rendering Functions
@@ -2147,14 +2082,14 @@
               libEmptyMsg.textContent = "Iniciá sesión con tu cuenta del taller (pill superior derecha) para cargar la biblioteca de muebles.";
               btnEmptyAction.textContent = "Ir a Iniciar Sesión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { openAccountPopover(); };
+              btnEmptyAction.onclick = function () { window.GraneteUI.account.open(); };
             } else if (source === "error") {
               libEmptyIcon.innerHTML = icon("warning", 28);
               libEmptyTitle.textContent = "Error de conexión";
               libEmptyMsg.textContent = "No se pudo conectar con el servidor Granete. Verificá tu conexión y estado del servidor.";
               btnEmptyAction.textContent = "Revisar conexión";
               btnEmptyAction.style.display = "inline-flex";
-              btnEmptyAction.onclick = function () { openAccountPopover(); };
+              btnEmptyAction.onclick = function () { window.GraneteUI.account.open(); };
             } else {
               libEmptyIcon.innerHTML = icon("box", 28);
               libEmptyTitle.textContent = "El taller todavía no tiene muebles";
@@ -2509,157 +2444,32 @@
             window.GraneteUI.media.updateSignedUrl(payload.filename, payload.url);
           },
 
+          // #848 Phase B: account/session/enrollment implementation lives in
+          // js/granete-account.js (window.GraneteUI.account). Ruby keeps
+          // calling this bridge — these wrappers stay thin delegation with
+          // unchanged names and payloads.
           setStatus: function (status) {
-            status = status || {};
-            if (status.heading) connectionHeading.textContent = String(status.heading);
-            if (status.message) connectionDetail.textContent = String(status.message);
-
-            var state = status.state || "disabled";
-            if (state === "logged_in") {
-              connectionPill.textContent = "Conectado";
-              connectionPill.className = "status-badge valid connection-pill-btn";
-            } else if (state === "configured") {
-              connectionPill.textContent = "Configurado";
-              connectionPill.className = "status-badge pending connection-pill-btn";
-            } else {
-              connectionPill.textContent = "Sin sesión";
-              connectionPill.className = "status-badge invalid connection-pill-btn";
-            }
-
-            var loggedIn = state === "logged_in";
-            loginCard.style.display = loggedIn ? "none" : "block";
-            sessionCard.style.display = loggedIn ? "block" : "none";
-            if (!loginServer.value && status.server_url) loginServer.value = String(status.server_url);
-
-            if (loggedIn) {
-              var user = status.user || {};
-              sessionUserName.textContent = user.name || "--";
-              sessionUserEmail.textContent = user.email || "--";
-              sessionServer.textContent = status.server_url || "--";
-              renderSessionLicense(status.license);
-            }
+            window.GraneteUI.account.setStatus(status);
           },
 
           clearEnrollmentTimers: function () {
-            if (enrollPollInterval) {
-              clearInterval(enrollPollInterval);
-              enrollPollInterval = null;
-            }
-            if (enrollCountdownInterval) {
-              clearInterval(enrollCountdownInterval);
-              enrollCountdownInterval = null;
-            }
+            window.GraneteUI.account.clearEnrollmentTimers();
           },
 
           startEnrollCountdown: function (expiresAtStr) {
-            if (enrollCountdownInterval) clearInterval(enrollCountdownInterval);
-            if (!expiresAtStr) {
-              if (enrollCountdownDisplay) enrollCountdownDisplay.textContent = "--:--";
-              return;
-            }
-            var targetMs = new Date(expiresAtStr).getTime();
-            if (isNaN(targetMs)) {
-              if (enrollCountdownDisplay) enrollCountdownDisplay.textContent = "--:--";
-              return;
-            }
-
-            var self = this;
-            var updateTick = function () {
-              var diffMs = targetMs - Date.now();
-              if (diffMs <= 0) {
-                self.clearEnrollmentTimers();
-                if (enrollCountdownDisplay) enrollCountdownDisplay.textContent = "00:00";
-                if (enrollStatusText) {
-                  enrollStatusText.textContent = "El código expiró. Generá uno nuevo.";
-                  enrollStatusText.style.color = "var(--danger-600)";
-                }
-                return;
-              }
-              var totalSec = Math.floor(diffMs / 1000);
-              var m = Math.floor(totalSec / 60);
-              var s = totalSec % 60;
-              if (enrollCountdownDisplay) {
-                enrollCountdownDisplay.textContent = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
-              }
-            };
-
-            updateTick();
-            enrollCountdownInterval = setInterval(updateTick, 1000);
+            window.GraneteUI.account.startEnrollCountdown(expiresAtStr);
           },
 
           onEnrollResult: function (result) {
-            btnLogin.disabled = false;
-            btnLogin.textContent = "Generar código";
-            if (result && result.success) {
-              currentEnrollmentId = result.id || result.enrollment_id;
-              if (enrollCodeDisplay) enrollCodeDisplay.textContent = result.code;
-              if (enrollStatusText) {
-                enrollStatusText.textContent = "Esperando aprobación en la web...";
-                enrollStatusText.style.color = "var(--text-muted)";
-              }
-              loginFormArea.style.display = "none";
-              enrollCodeArea.style.display = "block";
-
-              this.clearEnrollmentTimers();
-              this.startEnrollCountdown(result.expires_at);
-
-              // #563: 5s polling interval aligned with backend rate limits
-              enrollPollInterval = setInterval(function() {
-                if (window.sketchup && window.sketchup.poll_enrollment && currentEnrollmentId) {
-                  window.sketchup.poll_enrollment(JSON.stringify({ enrollmentId: currentEnrollmentId }));
-                }
-              }, 5000);
-            } else {
-              showToast("error", (result && result.error) || "No se pudo iniciar la vinculación.");
-            }
+            window.GraneteUI.account.onEnrollResult(result);
           },
 
           onPollResult: function (result) {
-            if (result && result.success) {
-              if (result.status === 'rejected' || result.status === 'expired') {
-                this.clearEnrollmentTimers();
-                loginFormArea.style.display = "block";
-                enrollCodeArea.style.display = "none";
-                showToast("error", "La vinculación fue " + (result.status === 'rejected' ? 'rechazada' : 'expirada') + ".");
-              } else {
-                // Still pending: keep status normal
-                if (enrollStatusText) {
-                  enrollStatusText.textContent = "Esperando aprobación en la web...";
-                  enrollStatusText.style.color = "var(--text-muted)";
-                }
-              }
-            } else {
-              // #563: Resilient polling: if 429 or transient error, do NOT abort the enrollment flow.
-              var isRateLimited = result && (result.http_status === 429 || (result.error && result.error.indexOf('429') !== -1));
-              if (enrollStatusText) {
-                if (isRateLimited) {
-                  enrollStatusText.textContent = "Servidor ocupado, reintentando...";
-                  enrollStatusText.style.color = "var(--warning-700)";
-                } else {
-                  enrollStatusText.textContent = "Reintentando verificación...";
-                  enrollStatusText.style.color = "var(--text-muted)";
-                }
-              }
-            }
+            window.GraneteUI.account.onPollResult(result);
           },
 
           onLoginResult: function (result) {
-            if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.invalidateSession();
-            this.clearEnrollmentTimers();
-            loginFormArea.style.display = "block";
-            enrollCodeArea.style.display = "none";
-            if (result && result.success) {
-              if (result.loggedOut) {
-                showToast("success", "Sesión cerrada.");
-              } else {
-                showToast("success", "✓ Dispositivo vinculado. Biblioteca del taller cargada.");
-              }
-              if (!result.loggedOut && window.sketchup && window.sketchup.get_model_binding) {
-                window.sketchup.get_model_binding();
-              }
-            } else {
-              showToast("error", (result && result.error) || "No se pudo iniciar sesión.");
-            }
+            window.GraneteUI.account.onLoginResult(result);
           },
 
           // #388 model binding bridge — delegates to the binding section.
@@ -3000,23 +2810,6 @@
             });
             libPresetsContainer.appendChild(chip);
           });
-        }
-
-        function renderSessionLicense(license) {
-          license = license || {};
-          var plan = license.plan || "none";
-          var planLabel = plan === "pro" ? "Pro" : (plan === "trial" ? "Prueba" : "Sin licencia");
-          var status = license.status || "none";
-          if (status === "active") {
-            sessionLicense.textContent = planLabel + (license.expires_at ? " · vence " + String(license.expires_at).slice(0, 10) : "");
-            sessionLicense.style.color = "";
-          } else if (status === "expired") {
-            sessionLicense.textContent = planLabel + " · vencida";
-            sessionLicense.style.color = "var(--danger-600)";
-          } else {
-            sessionLicense.textContent = "Sin licencia activa";
-            sessionLicense.style.color = "var(--warning-700)";
-          }
         }
 
         function validateInteractiveClient(def, currentValues) {
@@ -5437,99 +5230,11 @@
         // No pre-render: the panel loads when the tab first becomes visible
         // (all state cards start hidden in the markup).
 
-        btnLogin.addEventListener("click", function () {
-          var server = loginServer.value.trim();
-          if (!server) {
-            showToast("error", "Completá el servidor.");
-            return;
-          }
-          btnLogin.disabled = true;
-          btnLogin.textContent = "Conectando…";
-          if (window.sketchup && window.sketchup.enroll) {
-            window.sketchup.enroll(JSON.stringify({ serverUrl: server, displayName: '' }));
-          } else {
-            btnLogin.disabled = false;
-            btnLogin.textContent = "Generar código";
-            showToast("error", "Vincular dispositivo no disponible fuera de SketchUp.");
-          }
-        });
-
-        btnCancelEnroll.addEventListener("click", function () {
-          if (window.GraneteDialog && window.GraneteDialog.clearEnrollmentTimers) {
-            window.GraneteDialog.clearEnrollmentTimers();
-          } else {
-            if (enrollPollInterval) clearInterval(enrollPollInterval);
-            if (enrollCountdownInterval) clearInterval(enrollCountdownInterval);
-          }
-          currentEnrollmentId = null;
-          loginFormArea.style.display = "block";
-          enrollCodeArea.style.display = "none";
-        });
-
-        if (btnCopyEnrollCode) {
-          btnCopyEnrollCode.addEventListener("click", function () {
-            var code = (enrollCodeDisplay ? enrollCodeDisplay.textContent : "").trim();
-            if (!code || code === "--") return;
-
-            var setCopiedUI = function () {
-              if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("check", 14);
-              if (copyEnrollCodeText) copyEnrollCodeText.textContent = "¡Copiado!";
-              setTimeout(function () {
-                if (copyEnrollCodeIcon) copyEnrollCodeIcon.innerHTML = icon("copy", 14);
-                if (copyEnrollCodeText) copyEnrollCodeText.textContent = "Copiar";
-              }, 2000);
-              showToast("success", "Código " + code + " copiado al portapapeles.");
-            };
-
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(code).then(setCopiedUI).catch(function () {
-                fallbackCopy(code, setCopiedUI);
-              });
-            } else {
-              fallbackCopy(code, setCopiedUI);
-            }
-          });
-        }
-
-        function fallbackCopy(text, onSuccess) {
-          try {
-            var ta = document.createElement("textarea");
-            ta.value = text;
-            ta.style.position = "fixed";
-            ta.style.opacity = "0";
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            var ok = document.execCommand("copy");
-            document.body.removeChild(ta);
-            if (ok) {
-              onSuccess();
-            } else {
-              showToast("error", "No se pudo copiar automáticamente: " + text);
-            }
-          } catch (e) {
-            showToast("error", "No se pudo copiar: " + e.message);
-          }
-        }
-
-        if (btnOpenWebDevices) {
-          btnOpenWebDevices.addEventListener("click", function () {
-            var server = (loginServer ? loginServer.value : "").trim();
-            // Derive web URL by stripping trailing slashes, stripping /api, and appending /devices
-            var webUrl = server.replace(/\/+$/, "").replace(/\/api\/?$/i, "") + "/devices";
-            if (window.sketchup && window.sketchup.open_external_url) {
-              window.sketchup.open_external_url(JSON.stringify({ url: webUrl }));
-            } else {
-              window.open(webUrl, "_blank");
-            }
-          });
-        }
-
-        btnLogout.addEventListener("click", function () {
-          if (window.sketchup && window.sketchup.logout) {
-            window.sketchup.logout();
-          }
-        });
+        // #848 Phase B: the account module (session, enrollment, popover)
+        // already registered its listeners at load time; the bootstrap now
+        // injects the shared presentation helpers before Ruby can answer
+        // dialog_ready with GraneteDialog.setStatus.
+        window.GraneteUI.account.init({ showToast: showToast, icon: icon });
 
         btnClose.addEventListener("click", function () {
           if (window.sketchup && window.sketchup.close_dialog) {
