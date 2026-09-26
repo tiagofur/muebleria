@@ -562,8 +562,14 @@ Ruby-native selector.
   on open — new code path only reachable if init was skipped, which the
   bootstrap now always runs.
 - **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
-- **Status**: pre-commit boundary review requested; NOT committed, NOT
-  pushed, no PR, C4.6 NOT started.
+- **Status**: pre-commit boundary review completed and approved; committed
+  as one implementation work unit (`c9976ab2`) and published against main
+  as PR #859 (`Refs #848`, `Delivery: partial`, `type:refactor`; exact-head
+  readback verified: OPEN, non-draft, base main, headSha == commit,
+  MERGEABLE; Publication metadata PASS; CI exact-head PASS 18/18 incl. the
+  three SketchUp Ruby runners). Awaiting human merge. **Real SketchUp host
+  smoke: NOT_RUN** (same phase-level gate). C4.6 Material Roles:
+  NOT_STARTED.
 
 
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
