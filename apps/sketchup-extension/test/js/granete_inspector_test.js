@@ -26,7 +26,9 @@ const MODULE_PATH = path.resolve(__dirname, '../../src/granete_for_sketchup/reso
 const SOURCE = fs.readFileSync(MODULE_PATH, 'utf8');
 const DIALOG_HTML = fs.readFileSync(
   path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html'), 'utf8'
-);
+// Windows checkouts materialize CRLF (no .gitattributes): normalize once so
+// the multi-line wrapper thin-delegation assertions are platform-stable.
+).replace(/\r\n/g, '\n');
 
 let testsPassed = 0;
 function test(name, fn) {
