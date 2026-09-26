@@ -184,5 +184,25 @@ class BudgetTest(unittest.TestCase):
             self.assertEqual(verify_affected.run_bounded([shutil.which("bash"), "-c", "sleep 30"], ROOT, output, 0.05), 124)
 
 
+class PilotGateAuthorityTest(unittest.TestCase):
+    def test_pilot_gate_keeps_migration_and_runtime_authorities_separate(self):
+        text = (ROOT / "scripts/pilot-gate.sh").read_text(encoding="utf-8")
+        self.assertIn('MIGRATION_DSN="postgres://postgres:', text)
+        self.assertIn('RUNTIME_DSN="postgres://granete_app:', text)
+        self.assertIn('scripts/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro', text)
+        self.assertIn('MIGRATION_DATABASE_URL="${MIGRATION_DSN}"', text)
+        self.assertIn('DATABASE_URL="${RUNTIME_DSN}"', text)
+        self.assertNotIn('DATABASE_URL="${DSN}"', text)
+
+    def test_pilot_gate_rejects_legacy_single_dsn_before_execution(self):
+        result = subprocess.run(
+            [shutil.which("bash"), str(ROOT / "scripts/pilot-gate.sh"), "--dsn", "postgres://postgres:secret@localhost:5432/muebles_pilot_readiness"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no puede separar autoridad", result.stderr)
+
 if __name__ == "__main__":
     unittest.main()
