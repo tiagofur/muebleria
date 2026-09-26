@@ -279,17 +279,6 @@ class PlacementPreviewControllerTest < Minitest::Test
     end
   end
 
-  # #848 C2 regression: the placement bridge owns the tolerance its oriented
-  # target/base-plane helpers use. Moving only the methods leaves this direct
-  # module dependency behind and fails the preview paths at runtime.
-  def test_extracted_preview_bridge_owns_its_tolerance
-    bridge = Granete::SketchUpExtension::UserInterface::PlacementPreviewBridge
-    project_bridge = Granete::SketchUpExtension::UserInterface::ProjectFurnitureBridge
-
-    assert_equal 1e-6, bridge.const_get(:UNIT_EPSILON, false)
-    refute project_bridge.const_defined?(:UNIT_EPSILON, false)
-  end
-
   def setup
     SketchupStub.reset!
     Sketchup::InputPoint.next_position_mm = nil
@@ -1411,5 +1400,21 @@ class PlacementPreviewControllerTest < Minitest::Test
       'created_at' => '2026-09-23T00:00:00Z', 'updated_at' => '2026-09-23T00:00:00Z',
       'display' => { 'name' => 'Gabinete Asimétrico 900',
                      'dimensions_mm' => { 'width' => 900, 'height' => 800, 'depth' => 500 } } }
+  end
+end
+
+class PlacementPreviewEnvironmentOwnershipTest < Minitest::Test
+  def test_placement_environment_owns_tolerance
+    environment = Granete::SketchUpExtension::Host::PlacementEnvironment
+    assert_equal 1e-6, environment.const_get(:UNIT_EPSILON, false)
+    refute Granete::SketchUpExtension::UserInterface::PlacementPreviewBridge.const_defined?(:UNIT_EPSILON, false)
+  end
+end
+
+class PlacementEnvironmentApiTest < Minitest::Test
+  def test_environment_exposes_only_provider_api
+    environment = Granete::SketchUpExtension::Host::PlacementEnvironment
+    assert_equal %i[placement_base_planes_provider placement_furniture_targets_provider],
+                 environment.public_instance_methods(false).sort
   end
 end

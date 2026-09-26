@@ -100,6 +100,7 @@ module Granete
         ui/bridges/model_binding_bridge
         ui/bridges/commercial_projection_bridge
         ui/bridges/commercial_bootstrap_bridge
+        host/placement_environment
         ui/bridges/placement_preview_bridge
         ui/bridges/design_workflow_bridge
         ui/bridges/project_furniture_bridge
