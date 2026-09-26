@@ -39,6 +39,20 @@ func setupReleaseFixture(t *testing.T) *releaseFixture {
 
 func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *releaseFixture {
 	t.Helper()
+	return setupReleaseFixtureWithOptions(t, releaseFixtureOptions{choices: choices})
+}
+
+// releaseFixtureOptions extends the canonical release fixture: quoteSnapshot
+// overrides the frozen commercial truth frozen beside Q3 (#830 fixtures freeze
+// an explicit per-unit base-mode pricing context).
+type releaseFixtureOptions struct {
+	choices       map[string]string
+	quoteSnapshot func(items []storage.CreateQuoteRevisionItemCommand) *domain.QuoteCommercialSnapshot
+}
+
+func setupReleaseFixtureWithOptions(t *testing.T, opts releaseFixtureOptions) *releaseFixture {
+	t.Helper()
+	choices := opts.choices
 	fx := setupDesignsTestFixture(t)
 	// This release fixture freezes exactly the two units below. Remove the
 	// unrelated shared RLS seed line before Design creation, which now prepares
@@ -102,11 +116,16 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 				LifecycleStatus:       "active",
 			}
 		}
-		q3, err := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
+		quoteCmd := storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Q3",
+			Status:    "published",
 			Items:     []storage.CreateQuoteRevisionItemCommand{quoteItem(out.fiA), quoteItem(out.fiB)},
-		})
+		}
+		if opts.quoteSnapshot != nil {
+			quoteCmd.CommercialSnapshot = opts.quoteSnapshot(quoteCmd.Items)
+		}
+		q3, err := createFixtureQuoteRevision(ctx, fx.store, quoteCmd)
 		if err != nil {
 			return err
 		}
