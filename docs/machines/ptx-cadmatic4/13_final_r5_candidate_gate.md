@@ -147,18 +147,27 @@ CNC explícita de fixture) por la MISMA ruta productiva. Salida local
 independiente primero (nuevo PTX vs Pattern Exchange spec vs R2201/R7301
 saneados vs manifest vs CutPlan/readback).
 
-Registro de la generación actual (recomputable con el comando del §8):
+Registro de la generación actual (recomputable con el comando del §8; dos
+generaciones consecutivas producen el pack IDÉNTICO archivo por archivo —
+#787 corrigió el `Date.now()` que el id sintético del plan arrastraba al
+filename industrial y con él a manifest/identity/CHECKSUMS):
 
 ```text
-PTX        GC238DCD30E18.ptx
+PTX        G31D7FB0D3BAF.ptx
 sha256     6e40939c406046fe91c852d6a72f35e824af91fd2b4c72dc4a2e41542764aa2a
 bytes      2284
 records    JOBS 1 · PARTS_REQ 7 · PARTS_INF 7 · PARTS_UDI 7 · BOARDS 3 ·
            MATERIALS 2 · OFFCUTS 1 · PATTERNS 3 · CUTS 15
-manifest   sha256 d09f91801a0156004c656180c7a5d5636857b4f693311b25271a60c1ebdf5e3a
-identity   sha256 7f47dfc073ab5b2d7087ccdda129369b22940e01339eb2217c4982d9c3fcc777
-checksums  sha256 40c9345120a4fa74e78e40f430a1f9485a55f69185a0cc60e49ac9a0d6fcf9b0
+manifest   sha256 a9d61bf7d97c3613fb237eae70fc21e4b0eca84e60c1de3a4ed6faf1076b3f44
+identity   sha256 a63ee1a28f28916824b28b8f5bd4d46cd6d2547df80d9af0b2ef2eb191c74552
+checksums  sha256 9b2dee1d750892cb74189edf9e7d435d5ba939796bf551d191bb45630e01461a
 ```
+
+Los bytes del PTX no cambiaron con la corrección (`6e40939c…`, 2284): el id
+del plan no entra en la serialización; sólo el filename del artefacto (y su
+cadena de hashes) era inestable. El registro previo (`GC238DCD30E18.ptx`,
+manifest `d09f9180…`, identity `7f47dfc0…`, checksums `40c93451…`) quedó
+obsoleto por ese no-determinismo y se sustituye por el estable de arriba.
 
 El README conserva el contrato #792 (`/CAD4 /RESULT /UDI /INF`, warning
 cadlink.ini, DO NOT START THE SAW / DO NOT CUT / RETURN THE .RLT, sin

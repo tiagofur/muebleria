@@ -13,7 +13,7 @@
  * serialize() executes. Field state stays NOT_MACHINE_VALIDATED.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AdapterSerializationBlocked,
   DEFAULT_CUT_PLAN_CONFIG,
@@ -686,6 +686,37 @@ describe('CADmatic 4 r5 productivo (#793) — descarga existente y manifest exac
       manufacturingLabels: projection,
     });
     expect(again[0]!.artifact.sha256).toBe(bundle!.artifact.sha256);
+  });
+
+  it('#787 reproducibilidad: dos generaciones del fixture r5 producen el MISMO filename industrial (field pack reproducible)', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-26T10:00:00Z'));
+      const first = buildR5GateFixture();
+      const [firstBundle] = await generateSelectedCuttingOutput(
+        first.plan,
+        candidateR5Selection(),
+        'unified',
+        { manufacturingLabels: first.projection },
+      );
+      vi.setSystemTime(new Date('2026-09-27T10:00:00Z'));
+      const second = buildR5GateFixture();
+      const [secondBundle] = await generateSelectedCuttingOutput(
+        second.plan,
+        candidateR5Selection(),
+        'unified',
+        { manufacturingLabels: second.projection },
+      );
+      // El filename industrial deriva de la identidad del plan; si el id del
+      // plan arrastra el reloj, cada regeneración cambia el filename y con él
+      // manifest/identity/CHECKSUMS del pack de revisión (13_final §6 exige
+      // un registro recomputable).
+      expect(second.plan.id).toBe(first.plan.id);
+      expect(secondBundle!.artifact.fileName).toBe(firstBundle!.artifact.fileName);
+      expect(secondBundle!.artifact.sha256).toBe(firstBundle!.artifact.sha256);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('by-material: un bundle por material con su subconjunto de etiquetas, sin fugas ni omisiones', async () => {
