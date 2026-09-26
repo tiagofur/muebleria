@@ -348,9 +348,12 @@ materials and placement at once.
 **Status**: owner approved the pre-commit boundary review on 2026-09-26
 (injected shared helpers, shared #469 placement handlers staying inline,
 the bootstrap load-order movement of the initial unbound render, and both
-documented behavior quirks). Committed as one work unit and published
-against main (`Refs #848`, `Delivery: partial`). **Real SketchUp host
-smoke: NOT_RUN** (same phase-level gate).
+documented behavior quirks). Committed as one work unit
+(`910fa962f797eca5490212b6e1cfc978d8cdfdb5`) and published against main as
+PR #857 (`Refs #848`, `Delivery: partial`, `type:refactor`; exact-head
+readback verified: OPEN, non-draft, base main, headSha == commit,
+MERGEABLE, issue #848 OPEN + status:approved). Merge remains human.
+**Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
 
 - **Extracted**: `resources/js/granete-configurator.js` (532 lines
   including the agent-first header). dialog.html went 4,792 → 4,503 lines;
