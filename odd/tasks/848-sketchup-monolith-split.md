@@ -247,12 +247,104 @@ authority, real external module, real-file harnesses, zero behavior change.
 - **CI**: exact-head run recorded in the PR. **Real SketchUp host smoke:
   NOT_RUN** (same phase-level gate as C4.1).
 
+## C4.3 — granete-library.js
+
+Started from `main@9d327f0976dc1ab92a771ab815490186559eda9c` (post-#854),
+branch `refactor/848-dialog-js-library`. First Phase B slice that moves a
+SHARED authority (furniture definitions): `GraneteUI.library` is now the
+single catalog browsing owner — dialog.html keeps no `catalog` copy and
+reads through the module API.
+
+- **Extracted**: `resources/js/granete-library.js` (602 lines including the
+  agent-first header). dialog.html went 5,267 → 4,792 lines; inline JS
+  4,328 → 3,845 (state vars + 12 Library DOM refs + CATEGORY_LABELS/
+  formatCategoryLabel + getDefinitionDefaultDims + catalogSourceNote +
+  renderLibraryState + the whole category cascade + renderFurnitureCards +
+  renderLibraryBrowser + the four search/clear/retry bindings moved out).
+- **Public API (7)**: `init(deps)` (injects icon,
+  createFurniturePlaceholderSvg — shared with the inline configurator —,
+  onSelectDefinition = showConfiguratorView hand-off, and
+  getSelectedDefinitionId for the card highlight), `setCatalog(payload)`
+  (array/object shapes; updates browsing state + license blocker + source
+  note; the bootstrap still drives the view transition exactly as before),
+  `render`, `getDefinitions`, `getCategories`, `findDefinitionById`,
+  `formatCategoryLabel` (categories are Library's domain; the configurator
+  badge consumes the API). **Private**: catalog, catalogCategories,
+  catalogSource, licenseBlocked, searchQuery, selectedCategory,
+  categoryNodeById/categoryChildren index, all cascade/card/state helpers.
+- **Definitions authority**: ONE owner. `GraneteDialog.setCatalog` stays the
+  Ruby-facing thin orchestrator: it delegates the browsing slice to
+  `GraneteUI.library.setCatalog(payload)`, keeps assigning the
+  not-yet-extracted slices (presets/materialCategories/materials/hardware/
+  media), and the GraneteState "catalog" projection now reads
+  `library.getDefinitions()/getCategories()`. The inline inspector fallback
+  (`context.definition || …`) migrated to `library.findDefinitionById`.
+  Preserved quirk: the array-payload branch still does NOT reset
+  catalogHardware (pre-existing, documented, not fixed — no behavior
+  change in this slice). Search/category filters survive catalog refreshes
+  (pre-existing, now asserted).
+- **Boundary with Configurator**: Library ends at the choice — cards call
+  the injected `onSelectDefinition` (= showConfiguratorView). The
+  browser↔configurator view transition (`showLibraryView`/
+  `showConfiguratorView`, btn-back-to-library resetting activeLibDef) stays
+  inline until C4.4. activeLibDef/libParams/libMaterialChoices/
+  projectDefaultMaterials/catalogPresets untouched.
+- **Boundary with Media/Account**: unchanged consumers — cards resolve via
+  `GraneteUI.media.filenameFromPath/resolveUrl/requestRefresh`; the
+  unauthenticated/error CTAs call `GraneteUI.account.open()`.
+- **Load order**: markup → media → account → library → inline bootstrap →
+  #498 runtime scripts. `library.init` runs in the bootstrap right after
+  `account.init`, before the first `showLibraryView()`/`dialog_ready`.
+- **Harness migration**: `test/js/support/dialog_scripts.js` loads media →
+  account → library → inline (the nine runDialogScripts harnesses migrated
+  automatically); `dialog_publish_test.js` adds library to its explicit
+  preload chain in dialog order. No test copied module code; no assertion
+  was deleted — `dialog_library_view_test.rb` implementation asserts now
+  point at the module file (markup/load-order asserts stay on the HTML).
+- **Focused tests**: `test/js/granete_library_test.js` — 26 tests covering
+  registration + idempotent re-execution, public API shape, loading
+  skeletons, local empty, unauthenticated CTA → account.open, error +
+  retry → `sketchup.get_catalog`, license blocker, array legacy payload,
+  L1/L2/L3 cascade, subtree-inclusive filtering, Sin categoría bucket,
+  legacy flat categories, search by name/code/description, search clear,
+  no-results (query vs category copy), clear-search resets both, count
+  badge singular/plural, cards (aria/dims/code/badge), media path +
+  SEC-3 refresh via GraneteUI.media, click + Enter → injected
+  onSelectDefinition (same object), selected-definition highlight,
+  formatCategoryLabel mapping, findDefinitionById, single definitions
+  authority (no inline `var catalog =`), filters survive refresh. Ruby
+  side `test/unit/granete_library_js_test.rb` (5 tests) runs the harness
+  and adds symbol-based structural guards: implementation + header live in
+  granete-library.js, dialog.html loads it between account and the inline
+  script, the monolith carries no library implementation symbol,
+  GraneteDialog.setCatalog keeps the delegation + GraneteState projection
+  through the module API, and the bootstrap wires init/render.
+- **Verify** (Homebrew `ruby@3.2` 3.2.11, same vendored-bundle note as
+  C4.1/C4.2; no gem or lockfile change): RuboCop 253 files / 0 offenses;
+  unit suite 1148 runs, 7667 assertions, 0 failures/errors/skips; contract
+  suite 6 runs, 4043 assertions, 0 failures; every Node harness under
+  test/js green; `git diff --check` clean; `verify_affected --plan` exit 0
+  (selection conservatively expanded by pre-existing untracked
+  `.codex/`, `.github/hooks/`, `plugin-siguiente.md` — not part of this
+  slice; `sketchup-local-os` = `bundle exec rake verify` green above). RBZ
+  rebuilt by `package:verify`, sha256
+  `aadc8fbe43cec0b55201d950963c4f41f7e27d0bf4149839fc838bd2595fe6d7`,
+  packages granete-library.js.
+- **Status**: owner approved the pre-commit boundary review on 2026-09-25
+  (single-writer definitions authority, Configurator/Inspector reading via
+  the module API, array-branch `catalogHardware` quirk explicitly
+  preserved). Committed as one work unit and published against main
+  (`Refs #848`, `Delivery: partial`). **Real SketchUp host smoke: NOT_RUN**
+  (same phase-level gate).
+
 
 
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
   required before closing: NOT_RUN until executed.
 - No behavior change is in scope; anything discovered broken becomes its own
   issue.
-- Remaining Phase B modules after C4.2: library, configurator,
-  finish-selector, material-roles, inspector, model-binding,
-  project-furniture. C4.3: NOT_STARTED.
+- Remaining Phase B modules after C4.3: configurator, finish-selector,
+  material-roles, inspector, model-binding, project-furniture.
+  C4.3 (library) is committed and published from
+  `refactor/848-dialog-js-library` after the owner's boundary approval;
+  merge remains human.
