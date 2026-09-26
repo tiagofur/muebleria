@@ -16,6 +16,9 @@ const SOURCE = fs.readFileSync(MODULE_PATH, 'utf8');
 const DIALOG_HTML = fs.readFileSync(
   path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html'), 'utf8'
 );
+const INSPECTOR_JS = fs.readFileSync(
+  path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js/granete-inspector.js'), 'utf8'
+);
 
 const FILE_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png';
 const SIGNED_A = 'https://cdn.test/grant-a?exp=1';
@@ -541,8 +544,8 @@ test('furniture definitions have exactly one authority — the module', () => {
     'dialog.html must not keep a second inline copy of the catalog');
   assert(DIALOG_HTML.includes('window.GraneteUI.library.setCatalog(payload)'),
     'GraneteDialog.setCatalog delegates the browsing slice to the module');
-  assert(DIALOG_HTML.includes('window.GraneteUI.library.findDefinitionById('),
-    'the inline inspector fallback reads through the module API');
+  assert(INSPECTOR_JS.includes('window.GraneteUI.library.findDefinitionById('),
+    'the inspector module fallback (#848 C4.7) reads through the library API');
 });
 
 test('setCatalog preserves the search and category across catalog refreshes', () => {

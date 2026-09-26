@@ -1,0 +1,883 @@
+// #848 Phase B C4.7 — real JavaScript harness for granete-inspector.js:
+// the inspector module under window.GraneteUI. Drives the ACTUAL module
+// file in a vm sandbox (mock DOM + recording collaborators) and proves the
+// module contract: registration/idempotence, exact public API, init
+// dependency contract, the selection lifecycle (null/unmanaged/furniture/
+// part/hardware/aggregate/multi), the furniture inspector capability
+// gating and working snapshots, the update payload/rollback path, the
+// material-choice routing (Inspector/Configurator/project scopes), the
+// delete arm/confirm flow, the child-kind routing delegation to
+// GraneteUI.inspectorChild (boundary-adjusted split) and the hardware
+// catalog ownership (set/get + live identity), plus the integrated
+// array-payload non-reset quirk through the real dialog chain
+// (runDialogScripts). The CHILD-focused coverage (breadcrumb, owner
+// recovery, hardware provenance/conflicts, part authoring) moved to
+// granete_inspector_child_test.js (#848 boundary adjustment); the
+// integrated dialog_inspector_test.js continues to cover the same
+// behaviors through the REAL collaborators — this harness drills the
+// module API and its boundaries directly.
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const assert = require('assert');
+const { runDialogScripts } = require('./support/dialog_scripts');
+
+const MODULE_PATH = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js/granete-inspector.js');
+const SOURCE = fs.readFileSync(MODULE_PATH, 'utf8');
+const DIALOG_HTML = fs.readFileSync(
+  path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html'), 'utf8'
+// Windows checkouts materialize CRLF (no .gitattributes): normalize once so
+// the multi-line wrapper thin-delegation assertions are platform-stable.
+).replace(/\r\n/g, '\n');
+
+let testsPassed = 0;
+function test(name, fn) {
+  fn();
+  testsPassed += 1;
+}
+
+function createMockElement(id = '', tagName = 'DIV') {
+  const classes = new Set();
+  const attributes = {};
+  const listeners = {};
+  const children = [];
+  let innerHTMLValue = '';
+  let textContentValue = '';
+
+  let classNameValue = '';
+  const el = {
+    id,
+    tagName,
+    children,
+    style: {},
+    disabled: false,
+    hidden: false,
+    type: '',
+    title: '',
+    value: '',
+    checked: false,
+    required: false,
+    maxLength: -1,
+    get className() {
+      return classNameValue;
+    },
+    set className(val) {
+      classNameValue = String(val);
+      classes.clear();
+      classNameValue.split(/\s+/).filter(Boolean).forEach((c) => classes.add(c));
+    },
+    classList: {
+      add: (c) => classes.add(c),
+      remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c)
+    },
+    getAttribute: (k) => (k in attributes ? attributes[k] : null),
+    setAttribute: (k, v) => { attributes[k] = String(v); },
+    removeAttribute: (k) => { delete attributes[k]; },
+    addEventListener: (evt, cb) => {
+      listeners[evt] = listeners[evt] || [];
+      listeners[evt].push(cb);
+    },
+    dispatchEvent: (event) => {
+      (listeners[event.type] || []).forEach((cb) => cb(event));
+      return true;
+    },
+    click: () => {
+      (listeners['click'] || []).forEach((cb) => cb({ preventDefault: () => {} }));
+    },
+    focus: () => {},
+    appendChild: (child) => {
+      children.push(child);
+      return child;
+    },
+    get innerHTML() {
+      return innerHTMLValue;
+    },
+    set innerHTML(val) {
+      innerHTMLValue = String(val);
+      children.length = 0;
+    },
+    get textContent() {
+      return textContentValue;
+    },
+    set textContent(val) {
+      textContentValue = String(val);
+    }
+  };
+  return el;
+}
+
+// Builds a sandbox holding ONLY the real inspector module: collaborators
+// (material roles, library, configurator, mutation, state, manufacturing,
+// preflight, sketchup bridge, GraneteDialog) are recording stubs so each
+// test observes the module's side of the boundary.
+function buildModuleSandbox(overrides) {
+  const registry = {};
+  const created = [];
+  const toastCalls = [];
+  const tabCalls = [];
+  const bridgeCalls = [];
+  const mutationCalls = [];
+  const childRenders = [];
+  const childHides = [];
+  const docListeners = {};
+
+  const documentMock = {
+    getElementById: (id) => (registry[id] = registry[id] || createMockElement(id)),
+    createElement: (tag) => {
+      const el = createMockElement('', tag);
+      created.push(el);
+      return el;
+    },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    addEventListener: (evt, cb) => {
+      docListeners[evt] = (docListeners[evt] || []).concat(cb);
+    }
+  };
+
+  // Default collaborator stubs (recording, inert). Per-test overrides are
+  // merged per sub-module so a test only names what it asserts on.
+  const defaultUI = {
+    library: { findDefinitionById: () => undefined },
+    materialRoles: {
+      defaultMaterialChoices: () => ({}),
+      renderMaterialSelectors: () => {},
+      materialById: () => null,
+      setProjectDefaultMaterial: () => {}
+    },
+    configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} },
+    // Recording stand-in for the CHILD module (granete-inspector-child.js):
+    // the inspector routes child kinds through this boundary and drops the
+    // child lane on every top-level re-render.
+    inspectorChild: {
+      render: (context) => childRenders.push(context),
+      hide: () => { childHides.push(1); }
+    }
+  };
+  const overridesUI = (overrides && overrides.GraneteUI) || {};
+  const graneteUI = Object.assign({}, defaultUI);
+  Object.keys(overridesUI).forEach((k) => {
+    graneteUI[k] = Object.assign({}, defaultUI[k] || {}, overridesUI[k]);
+  });
+  const windowOverrides = Object.assign({}, overrides || {});
+  delete windowOverrides.GraneteUI;
+
+  const sandbox = {
+    console,
+    setTimeout: (fn) => {
+      bridgeCalls.push({ action: '__setTimeout' });
+      return 0;
+    },
+    clearTimeout: () => {},
+    document: documentMock,
+    window: Object.assign({
+      sketchup: {
+        update_furniture: (p) => bridgeCalls.push({ action: 'update_furniture', payload: JSON.parse(p) }),
+        delete_selected_furniture: (p) => bridgeCalls.push({ action: 'delete_selected_furniture', payload: JSON.parse(p) }),
+        select_furniture: (p) => bridgeCalls.push({ action: 'select_furniture', payload: JSON.parse(p) }),
+        open_material_selector: (p) => bridgeCalls.push({ action: 'open_material_selector', payload: JSON.parse(p) })
+      },
+      GraneteDialog: {
+        onUpdateResult: (r) => bridgeCalls.push({ action: 'onUpdateResult', payload: r }),
+        onDeleteResult: (r) => bridgeCalls.push({ action: 'onDeleteResult', payload: r }),
+        onSelectionChange: (c) => bridgeCalls.push({ action: 'onSelectionChange', payload: c })
+      },
+      GraneteMutation: {
+        publishSelection: (c) => mutationCalls.push({ action: 'publishSelection', payload: c }),
+        submitUpdate: (payload, ctx) => {
+          mutationCalls.push({ action: 'submitUpdate', payload, ctx });
+          return 'submitted';
+        },
+        submitHardwarePlacementUpdate: (val, ctx) => {
+          mutationCalls.push({ action: 'submitHardwarePlacementUpdate', val, ctx });
+          return 'submitted';
+        },
+        submitHardwareSubstitution: (id, ctx) => {
+          mutationCalls.push({ action: 'submitHardwareSubstitution', id, ctx });
+          return 'submitted';
+        },
+        submitComponentMutation: (op, t, ctx) => {
+          mutationCalls.push({ action: 'submitComponentMutation', op, t, ctx });
+          return 'submitted';
+        },
+        startComponentViewportMove: (ctx) => {
+          mutationCalls.push({ action: 'startComponentViewportMove', ctx });
+          return 'submitted';
+        }
+      },
+      GraneteState: {
+        get: () => null,
+        set: () => {}
+      },
+      GraneteUI: graneteUI
+    }, windowOverrides)
+  };
+  sandbox.__registry = registry;
+  sandbox.__created = created;
+  sandbox.__bridge = bridgeCalls;
+  sandbox.__mutation = mutationCalls;
+  sandbox.__toastCalls = toastCalls;
+  sandbox.__tabCalls = tabCalls;
+  sandbox.__childRenders = childRenders;
+  sandbox.__childHides = childHides;
+  sandbox.__docListeners = docListeners;
+  return sandbox;
+}
+
+function runModule(sandbox) {
+  vm.createContext(sandbox);
+  vm.runInContext(SOURCE, sandbox, { filename: 'granete-inspector.js' });
+  return sandbox;
+}
+
+// Injects the standard recording deps (shared-helper stand-ins).
+function initDeps(sandbox, overrides) {
+  const deps = Object.assign({
+    icon: (name) => 'icon:' + name,
+    showToast: (type, msg) => sandbox.__toastCalls.push({ type, msg }),
+    switchTab: (id) => sandbox.__tabCalls.push(id),
+    getDefaultParams: (def) => {
+      const p = {};
+      ((def && def.parameters) || []).forEach((x) => { p[x.name] = x.defaultValue; });
+      return p;
+    },
+    renderParamForm: (container, def, values, onChange) => {
+      container.__lastRender = { def, values, onChange };
+    },
+    estimatedPartsLabel: () => 'Aprox. 5 piezas',
+    parameterIssueMessage: (result, fallback) => (result && result.error) || fallback,
+    // Same single implementation dialog.html injects (shared helper).
+    capabilityEnabled: (context, name) =>
+      !!(context && context.capabilities && context.capabilities[name] && context.capabilities[name].supported)
+  }, overrides || {});
+  sandbox.window.GraneteUI.inspector.init(deps);
+  return deps;
+}
+
+function el(sandbox, id) {
+  return sandbox.__registry[id];
+}
+
+function visible(elm) {
+  return elm.style.display !== 'none';
+}
+
+const DEFINITION = {
+  furniture_definition_id: 'mod-test',
+  name: 'Mueble de Prueba',
+  parameters: [{ name: 'widthMm', defaultValue: 600, type: 'number', label: 'Ancho', min: 300, max: 900, step: 10, unit: 'mm' }],
+  materialRoles: [{ role: 'BODY', label: 'Cuerpo', optionIds: ['mat-1'] }]
+};
+
+function furnitureContext(overrides) {
+  return Object.assign({
+    kind: 'furniture',
+    furnitureInstanceRef: 'ref-1',
+    furnitureDefinitionId: 'mod-test',
+    representation: 'native',
+    ownerRecovery: 'none',
+    semanticPath: ['Mueble de Prueba'],
+    display: { name: 'Mueble de Prueba' },
+    definition: DEFINITION,
+    parameters: { widthMm: 600 },
+    materialChoices: {},
+    capabilities: {
+      canEditParameters: { supported: true, reason: null },
+      canEditMaterialRoles: { supported: true, reason: null },
+      canDelete: { supported: true, reason: null },
+      canInspectManufacturing: { supported: false, reason: 'r' }
+    }
+  }, overrides);
+}
+
+// runTests -----------------------------------------------------------------
+
+let registeredApi = null;
+
+test('registration: namespace, idempotent re-execution, exact public API', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  assert(api, 'window.GraneteUI.inspector must exist');
+
+  const expectedApi = ['init', 'onSelectionChange', 'onUpdateResult', 'onDeleteResult',
+    'onMaterialChoiceApplied', 'activateInspectorTab', 'getSelectedContext',
+    'getDefinition', 'getMaterialsCard', 'setHardwareCatalog', 'getHardwareCatalog'];
+  expectedApi.forEach((k) => assert.strictEqual(typeof api[k], 'function', 'public API entry ' + k));
+
+  // Idempotent re-execution: the same object survives a second load.
+  vm.runInContext(SOURCE, sandbox, { filename: 'granete-inspector.js' });
+  assert.strictEqual(sandbox.window.GraneteUI.inspector, api, 're-execution must not rebuild the module');
+  registeredApi = api;
+});
+
+test('init dependency contract: fail-fast lists every missing shared helper', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  assert.throws(() => api.onSelectionChange(furnitureContext()),
+    /GraneteUI\.inspector\.init is required before use; missing deps: .+/,
+    'selection rendering before init must fail fast');
+  assert.strictEqual(api.getSelectedContext(), null, 'dep-free accessors stay safe before init');
+  assert.strictEqual(api.getHardwareCatalog().length, 0, 'dep-free hardware accessor stays safe before init');
+});
+
+test('selection: null renders the empty state and publishes nothing locally', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(null);
+  assert.strictEqual(api.getSelectedContext(), null);
+  assert(visible(el(sandbox, 'inspector-empty-state')), 'empty state visible');
+  assert(!visible(el(sandbox, 'inspector-active-view')), 'furniture view hidden');
+});
+
+test('selection: unmanaged shows its own view without stealing the tab', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange({ kind: 'unmanaged', ownerRecovery: 'none', display: { name: '' }, capabilities: {} });
+  assert(visible(el(sandbox, 'inspector-unmanaged-view')), 'unmanaged view visible');
+  assert(sandbox.__tabCalls.length === 0, 'unmanaged must not switch tabs');
+});
+
+test('selection: managed furniture switches to the Inspector tab when no definition is active', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: {
+        defaultMaterialChoices: () => ({}),
+        renderMaterialSelectors: () => {}
+      },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  sandbox.window.GraneteUI.inspector.onSelectionChange(furnitureContext());
+  assert.deepStrictEqual(sandbox.__tabCalls, ['inspector'], 'managed selection lands on the Inspector tab');
+});
+
+test('selection: multi-selection shows the multi note and fail-closes mutations', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ selectionCount: 3 }));
+  assert(visible(el(sandbox, 'inspector-multi-note')), 'multi note visible');
+  assert(el(sandbox, 'btn-update').disabled, 'update disabled');
+  assert(el(sandbox, 'btn-delete').disabled, 'delete disabled');
+  el(sandbox, 'btn-update').click();
+  assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'), 'no update under multi-selection');
+});
+
+test('furniture: definition direct identity, param state, summary and materials render', () => {
+  const renderCalls = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: {
+        defaultMaterialChoices: (def) => ({ BODY: 'mat-1' }),
+        renderMaterialSelectors: (card, container, def, choices, onChange, ctx) => {
+          renderCalls.push({ card, def, choices, ctx });
+        }
+      },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  assert.strictEqual(api.getDefinition(), DEFINITION, 'context.definition wins (no library fallback call)');
+  assert(visible(el(sandbox, 'inspector-active-view')), 'active view visible');
+  assert.strictEqual(el(sandbox, 'inspector-furniture-name').textContent, 'Mueble de Prueba');
+  assert.strictEqual(renderCalls.length, 1, 'material roles renders once for the inspector');
+  assert.strictEqual(renderCalls[0].card, api.getMaterialsCard(), 'renders into the inspector materials card');
+  const form = el(sandbox, 'inspector-params-container').__lastRender;
+  assert(form && form.values.widthMm === 600, 'param working snapshot prefilled from context');
+  form.onChange('widthMm', 750, 'mm');
+  assert.strictEqual(el(sandbox, 'inspector-summary-dims').textContent, '750 × 720 × 590 mm', 'summary follows the param edit');
+});
+
+test('furniture: library fallback resolves the definition when context omits it', () => {
+  let fallbackHits = 0;
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: (id) => { fallbackHits += 1; return DEFINITION; } },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ definition: undefined }));
+  assert.strictEqual(fallbackHits, 1, 'library fallback consulted');
+  assert.strictEqual(api.getDefinition(), DEFINITION);
+});
+
+test('furniture: legacy representation warning renders the migration copy', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  sandbox.window.GraneteUI.inspector.onSelectionChange(furnitureContext({
+    representation: 'legacy-group',
+    capabilities: {
+      canEditParameters: { supported: false, reason: 'Representación legacy: requerí la migración.' },
+      canEditMaterialRoles: { supported: false, reason: 'r' },
+      canDelete: { supported: true, reason: null }
+    }
+  }));
+  assert(visible(el(sandbox, 'inspector-representation-warning')), 'legacy warning visible');
+  assert(el(sandbox, 'inspector-representation-warning').textContent.includes('Migrar modelos anteriores'));
+  assert(el(sandbox, 'inspector-edit-blocker-reason').textContent.includes('legacy'), 'capability reason surfaced');
+  assert(!visible(el(sandbox, 'inspector-params-card')), 'params card hidden');
+});
+
+test('furniture: canDelete is independent of canEditParameters', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  sandbox.window.GraneteUI.inspector.onSelectionChange(furnitureContext({
+    definition: null,
+    capabilities: {
+      canEditParameters: { supported: false, reason: 'La definición ya no está disponible.' },
+      canEditMaterialRoles: { supported: false, reason: 'r' },
+      canDelete: { supported: true, reason: null }
+    }
+  }));
+  assert(el(sandbox, 'btn-delete').disabled === false, 'delete enabled while editing is denied');
+  assert(el(sandbox, 'inspector-delete-blocker').hidden === true, 'no delete blocker note while canDelete holds');
+});
+
+test('update: click payload is exact (instanceId = furnitureInstanceRef) and rides GraneteMutation', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'btn-update').click();
+  const mut = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert(mut, 'submitUpdate called');
+  assert.strictEqual(mut.payload.instanceId, 'ref-1');
+  assert.strictEqual(mut.payload.definitionId, 'mod-test');
+  assert.strictEqual(mut.payload.parameters.widthMm, 600);
+  assert.deepStrictEqual(mut.ctx, api.getSelectedContext(), 'selection context passed by reference');
+});
+
+test('update: success refreshes the working copy; failure rolls params/choices back', () => {
+  const renderCalls = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: {
+        defaultMaterialChoices: () => ({ BODY: 'mat-1' }),
+        renderMaterialSelectors: (card, container, def, choices) => {
+          renderCalls.push(Object.assign({}, choices));
+        }
+      },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox, {
+    renderParamForm: (container, def, values, onChange) => {
+      container.__lastRender = { def, values, onChange };
+    }
+  });
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ parameters: { widthMm: 700 }, materialChoices: { BODY: 'mat-2' } }));
+  // Mutate the working snapshots before the result arrives.
+  const form = el(sandbox, 'inspector-params-container').__lastRender;
+  form.onChange('widthMm', 850, 'mm');
+  api.onUpdateResult({ success: true, name: 'Mueble de Prueba', component_count: 2 });
+  assert.strictEqual(api.getSelectedContext().parameters.widthMm, 850, 'success persists the working params into the context');
+  assert.strictEqual(api.getSelectedContext().materialChoices.BODY, 'mat-2', 'success persists the working choices');
+  assert(sandbox.__toastCalls[0].msg.includes('2 componente'), 'component_count copy exact');
+
+  // Failure: unconfirmed params roll back to the last CONFIRMED values
+  // (850 — persisted into the context by the preceding success).
+  const form2 = el(sandbox, 'inspector-params-container').__lastRender;
+  form2.onChange('widthMm', 900, 'mm');
+  api.onUpdateResult({ success: false, error: 'No se pudo actualizar el mueble.' });
+  assert.strictEqual(el(sandbox, 'inspector-params-container').__lastRender.values.widthMm, 850, 'params rolled back to last confirmed');
+  assert.strictEqual(renderCalls[renderCalls.length - 1].BODY, 'mat-2', 'choices rolled back to defaults + last confirmed');
+});
+
+test('update: no-host fallback answers through GraneteDialog.onUpdateResult', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  // No runtime mutation controller AND no host update bridge: the honest
+  // 500ms demo fallback answers through the GraneteDialog wrapper.
+  delete sandbox.window.GraneteMutation;
+  sandbox.window.sketchup = {};
+  sandbox.setTimeout = (fn) => { fn(); return 0; };
+  runModule(sandbox);
+  initDeps(sandbox);
+  sandbox.window.GraneteUI.inspector.onSelectionChange(furnitureContext());
+  el(sandbox, 'btn-update').click();
+  const answered = sandbox.__bridge.filter((c) => c.action === 'onUpdateResult').pop();
+  assert(answered && answered.payload.success === true, 'no-host fallback answers success via the bridge wrapper');
+});
+
+test('materials: inspector target applies the choice, re-renders and submits the exact payload', () => {
+  const renderCalls = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: {
+        defaultMaterialChoices: () => ({}),
+        renderMaterialSelectors: (card, container, def, choices) => {
+          renderCalls.push(Object.assign({}, choices));
+        },
+        materialById: (id) => (id === 'mat-9' ? { name: 'Roble' } : null)
+      },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ materialChoices: {} }));
+  const before = sandbox.__bridge.length;
+  api.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-9', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+  const call = sandbox.__bridge.slice(before).filter((c) => c.action === 'update_furniture').pop();
+  assert(call, 'inspector branch submits update_furniture');
+  assert.strictEqual(call.payload.instanceId, 'ref-1');
+  assert.strictEqual(call.payload.materialChoices.BODY, 'mat-9');
+  assert.strictEqual(renderCalls[renderCalls.length - 1].BODY, 'mat-9', 'working snapshot updated and re-rendered');
+});
+
+test('materials: multi-selection and denied capability fail closed', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ selectionCount: 2 }));
+  let before = sandbox.__bridge.length;
+  api.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-9', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+  assert(sandbox.__bridge.slice(before).every((c) => c.action !== 'update_furniture'), 'multi-selection never mutates');
+
+  api.onSelectionChange(furnitureContext({
+    capabilities: {
+      canEditParameters: { supported: true, reason: null },
+      canEditMaterialRoles: { supported: false, reason: 'no roles' },
+      canDelete: { supported: true, reason: null }
+    }
+  }));
+  before = sandbox.__bridge.length;
+  api.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-9', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+  assert(sandbox.__bridge.slice(before).every((c) => c.action !== 'update_furniture'), 'denied capability never mutates');
+});
+
+test('materials: configurator target delegates; project scope writes project defaults', () => {
+  const applied = [];
+  const projectDefaults = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: {
+        defaultMaterialChoices: () => ({}),
+        renderMaterialSelectors: () => {},
+        materialById: (id) => ({ name: 'Roble ' + id }),
+        setProjectDefaultMaterial: (role, id) => projectDefaults.push([role, id])
+      },
+      configurator: {
+        hasActiveDefinition: () => true,
+        applyMaterialChoice: (role, id, scope) => applied.push([role, id, scope])
+      }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ furnitureInstanceRef: 'ref-other' }));
+  api.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-3', scope: 'furniture', context: 'configurator' });
+  assert.deepStrictEqual(applied, [['BODY', 'mat-3', false]], 'configurator branch delegated');
+
+  // Project scope without any target (no inspector context, configurator
+  // without an active definition): material-roles authority + honest toast.
+  sandbox.window.GraneteUI.configurator.hasActiveDefinition = () => false;
+  const before = sandbox.__toastCalls.length;
+  api.onMaterialChoiceApplied({ role: 'FRENTES', materialId: 'mat-4', scope: 'project_default' });
+  assert.deepStrictEqual(projectDefaults[0], ['FRENTES', 'mat-4'], 'project_default alias reaches the authority');
+  assert(sandbox.__toastCalls.length > before, 'project-scope toast emitted');
+  assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'), 'no instance mutation for project scope');
+});
+
+test('delete: first click arms, second confirms with the Ruby payload; timeout resets', () => {
+  const timeouts = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  sandbox.setTimeout = (fn, ms) => { timeouts.push({ fn, ms }); return 1; };
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'btn-delete').click();
+  assert.strictEqual(el(sandbox, 'btn-delete').textContent, '¿Confirmar eliminación?', 'armed copy');
+  assert.strictEqual(timeouts[0].ms, 4000, '4s arm window');
+  el(sandbox, 'btn-delete').click();
+  const call = sandbox.__bridge.filter((c) => c.action === 'delete_selected_furniture').pop();
+  assert(call && call.payload.instanceId === 'ref-1', 'Ruby delete payload exact');
+  assert.strictEqual(el(sandbox, 'btn-delete').innerHTML, 'icon:trash<span>Eliminar Mueble</span>', 'reset after confirm restores the icon+label');
+});
+
+test('delete: denied capability and multi-selection never reach the host', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({
+    capabilities: {
+      canEditParameters: { supported: true, reason: null },
+      canEditMaterialRoles: { supported: false, reason: 'r' },
+      canDelete: { supported: false, reason: 'proyecto conectado' }
+    }
+  }));
+  el(sandbox, 'btn-delete').click();
+  api.onSelectionChange(furnitureContext({ selectionCount: 3 }));
+  el(sandbox, 'btn-delete').click();
+  assert(sandbox.__bridge.every((c) => c.action !== 'delete_selected_furniture'), 'delete stays local on denials');
+});
+
+test('delete: no-host fallback closes honestly through the bridge wrappers', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    }
+  });
+  sandbox.window.sketchup = {}; // no delete_selected_furniture
+  runModule(sandbox);
+  initDeps(sandbox);
+  sandbox.window.GraneteUI.inspector.onSelectionChange(furnitureContext());
+  el(sandbox, 'btn-delete').click();
+  el(sandbox, 'btn-delete').click();
+  const actions = sandbox.__bridge.map((c) => c.action);
+  assert(actions.includes('onDeleteResult'), 'delete result answered');
+  assert(actions.includes('onSelectionChange'), 'selection cleared through the bridge');
+  const del = sandbox.__bridge.filter((c) => c.action === 'onDeleteResult').pop();
+  assert(del.payload && del.payload.ok === true, 'fallback answers ok:true');
+});
+
+test('delete: result handler toasts the Undo copy on success and the reason on failure', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onDeleteResult({ ok: true });
+  assert(sandbox.__toastCalls[0].msg.includes('Deshacé con Ctrl+Z'), 'success copy names Undo');
+  api.onDeleteResult({ ok: false, reason: 'bloqueado por X' });
+  assert(sandbox.__toastCalls[1].msg.includes('bloqueado por X'), 'error copy keeps the reason');
+});
+
+test('routing: child kinds delegate to GraneteUI.inspectorChild with the SAME context; other renders drop the lane', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  const childContext = {
+    kind: 'part', furnitureInstanceRef: 'ref-1', ownerRecovery: 'scan',
+    semanticPath: ['M', 'P'], display: { name: 'P' }, capabilities: {}
+  };
+  api.onSelectionChange(childContext);
+  assert.deepStrictEqual(sandbox.__childRenders, [childContext],
+    'child kind routed to the child module — the SAME object, no clone');
+  assert.strictEqual(sandbox.__childHides.length, 1, 'the lane is dropped before the child render');
+
+  api.onSelectionChange(furnitureContext());
+  assert.strictEqual(sandbox.__childRenders.length, 1, 'furniture kind never routes to the child module');
+  assert.strictEqual(sandbox.__childHides.length, 2, 'furniture render drops the child lane');
+
+  api.onSelectionChange(null);
+  assert.strictEqual(sandbox.__childHides.length, 3, 'cleared selection drops the child lane');
+  assert.strictEqual(sandbox.__childRenders.length, 1, 'no child render for null');
+});
+
+test('cross-runtime: selection is published to GraneteMutation by reference', () => {
+  const ctx = furnitureContext();
+  let published = null;
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false }
+    },
+    GraneteMutation: {
+      publishSelection: (c) => { published = c; },
+      submitUpdate: () => 'submitted',
+      submitHardwarePlacementUpdate: () => 'submitted',
+      submitHardwareSubstitution: () => 'submitted',
+      submitComponentMutation: () => 'submitted',
+      startComponentViewportMove: () => 'submitted'
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(ctx);
+  assert(published === ctx, 'the SAME reference is published (no clone)');
+  assert.strictEqual(api.getSelectedContext(), ctx);
+});
+
+test('cross-runtime: manufacturing card visibility obeys kind/capability without computing machining', () => {
+  const renderCalls = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} }
+    },
+    GraneteManufacturing: { render: () => renderCalls.push(1) }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  assert.strictEqual(el(sandbox, 'manufacturing-card').style.display, 'none', 'no manufacturing surface without the capability');
+  api.onSelectionChange(furnitureContext({
+    capabilities: Object.assign({}, furnitureContext().capabilities, { canInspectManufacturing: { supported: true, reason: null } })
+  }));
+  assert.strictEqual(el(sandbox, 'manufacturing-card').style.display, 'block', 'card shown for capable furniture');
+  assert.strictEqual(renderCalls.length, 2, 'GraneteManufacturing.render called per inspector render');
+});
+
+test('hardware catalog: set/get roundtrip with live identity', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  assert.strictEqual(api.getHardwareCatalog().length, 0, 'starts empty');
+  const hardware = [{ id: 'hw-1', name: 'Manija' }];
+  api.setHardwareCatalog(hardware);
+  assert.strictEqual(api.getHardwareCatalog(), hardware, 'same live reference, no copy');
+  api.setHardwareCatalog(undefined);
+  assert.strictEqual(api.getHardwareCatalog().length, 0, 'undefined normalizes to an empty catalog');
+});
+
+test('hardware catalog: integrated setCatalog object branch delegates; array branch preserves the non-reset quirk', () => {
+  const sandbox = buildModuleSandbox();
+  // The real dialog chain builds window.GraneteUI itself: drop the sandbox
+  // stubs so the modules' idempotence guards register the REAL modules.
+  delete sandbox.window.GraneteUI;
+  // The inline bootstrap needs tab probes that answer with elements and a
+  // functional GraneteState store to observe the catalog projection.
+  sandbox.document.querySelector = () => createMockElement('q', 'BUTTON');
+  const store = {};
+  sandbox.window.GraneteState = {
+    get: (k) => (k in store ? store[k] : null),
+    set: (k, v) => { store[k] = v; },
+    subscribe: () => () => {}
+  };
+  vm.createContext(sandbox);
+  runDialogScripts(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  const hardware = [{ id: 'hw-1', name: 'Manija', category: 'handles' }];
+
+  // Object payload: hardware delegates to the inspector and the GraneteState
+  // projection reads the SAME live reference.
+  sandbox.window.GraneteDialog.setCatalog({
+    definitions: [], presets: [], categories: [], materials: [], materialCategories: [], hardware: hardware
+  });
+  assert.strictEqual(api.getHardwareCatalog(), hardware, 'object branch delegates the hardware slice');
+  const projection = sandbox.window.GraneteState.get('catalog');
+  assert(projection && projection.hardware === hardware, 'GraneteState projects the same live reference');
+
+  // Array legacy payload: presets/materials/media reset — hardware does NOT
+  // (historical non-reset quirk, preserved verbatim).
+  sandbox.window.GraneteDialog.setCatalog([]);
+  assert.strictEqual(api.getHardwareCatalog(), hardware, 'array branch must not reset the hardware catalog');
+});
+
+test('structural: the monolith keeps no inspector implementation and delegates through thin wrappers', () => {
+  ['var selectedContext = null;', 'var inspectorDef = null;', 'var inspectorParams = {};',
+   'var inspectorMaterialChoices = {};', 'var catalogHardware = [];',
+   'function renderInspector(', 'function renderFurnitureInspector(', 'function renderChildInspector(',
+   'function renderPartAuthoringCard(', 'function renderBreadcrumb(', 'function renderChildFacts(',
+   'function renderCapabilityList(', 'function formatAnchorFace(',
+   'var CAPABILITY_LABELS', 'var KIND_BADGES', 'var ANCHOR_FACE_LABELS',
+   'function validateInteractiveClient(', 'function updateInspectorSummary(',
+   'function resetDeleteConfirm(', 'function submitPartMutation(',
+   'deleteArmed', 'partPositionFromInputs'].forEach((symbol) => {
+    assert(!DIALOG_HTML.includes(symbol), 'dialog.html must not carry inspector implementation: ' + symbol);
+  });
+  // The capability check returns to dialog.html as the SHARED helper
+  // (#848 boundary-adjusted split): one single implementation there,
+  // injected into BOTH Inspector modules, re-implemented in NEITHER.
+  assert(DIALOG_HTML.includes('function capabilityEnabled(context, name) {'),
+    'dialog.html carries the single shared capability helper');
+  assert.strictEqual(DIALOG_HTML.split('capabilityEnabled: capabilityEnabled').length - 1, 2,
+    'the shared capability helper is injected into both Inspector modules');
+  assert(!SOURCE.includes('function capabilityEnabled('),
+    'the inspector module must not re-implement the shared capability helper');
+  // The child surface is delegated, never regrown in the main module.
+  assert(SOURCE.includes('window.GraneteUI.inspectorChild.render(context)'),
+    'child kinds route through GraneteUI.inspectorChild.render');
+  assert(SOURCE.includes('window.GraneteUI.inspectorChild.hide();'),
+    'top-level re-renders drop the child lane through hide()');
+  // Ruby-facing wrappers stay thin delegation with unchanged names.
+  ['onSelectionChange: function (context) {\n            window.GraneteUI.inspector.onSelectionChange(context);',
+   'onUpdateResult: function (result) {\n            window.GraneteUI.inspector.onUpdateResult(result);',
+   'onDeleteResult: function (result) {\n            window.GraneteUI.inspector.onDeleteResult(result);',
+   'activateInspectorTab: function () {\n            window.GraneteUI.inspector.activateInspectorTab();',
+   'onMaterialChoiceApplied: function (payload) {\n            window.GraneteUI.inspector.onMaterialChoiceApplied(payload);'].forEach((wrapper) => {
+    assert(DIALOG_HTML.includes(wrapper), 'GraneteDialog wrapper must stay thin delegation: ' + wrapper.split('\n')[0]);
+  });
+  // The inline runtime adapters read the inspector API.
+  assert(DIALOG_HTML.includes('window.GraneteManufacturing.toggle(window.GraneteUI.inspector.getSelectedContext())'),
+    'manufacturing adapter reads the inspector selection');
+  assert(DIALOG_HTML.includes('window.GranetePreflightReview.run(window.GraneteUI.inspector.getSelectedContext())'),
+    'preflight adapter reads the inspector selection');
+});
+
+console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));

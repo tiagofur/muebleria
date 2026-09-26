@@ -34,7 +34,8 @@
 //   the selected furniture/context itself, btnUpdate or the
 //   update_furniture mutation
 // - Finish Selector modal state (this module only opens it as fallback)
-// - the hardware catalog (catalogHardware stays in the dialog bootstrap)
+// - the hardware catalog (catalogHardware lives in the inspector module
+//   since #848 C4.7)
 // - material_selector.html (the native Ruby dialog)
 (function () {
   "use strict";

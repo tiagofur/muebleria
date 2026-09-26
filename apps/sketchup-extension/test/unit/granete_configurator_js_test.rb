@@ -16,6 +16,7 @@ require_relative '../test_helper'
 class GraneteConfiguratorJsTest < Minitest::Test
   CONFIGURATOR_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/granete-configurator.js', __dir__)
   DIALOG_HTML = File.expand_path('../../src/granete_for_sketchup/resources/dialog.html', __dir__)
+  INSPECTOR_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/granete-inspector.js', __dir__)
 
   def test_real_javascript_configurator_harness_executes_and_passes
     js_test_path = File.expand_path('../js/granete_configurator_test.js', __dir__)
@@ -131,9 +132,11 @@ class GraneteConfiguratorJsTest < Minitest::Test
     assert_includes html, 'window.GraneteUI.configurator.cancelRepeatPreview()'
     assert_includes html, 'window.GraneteUI.configurator.rearmInsertButton()'
     # Selection/material routing reads the module's exact presence
-    # semantics, not a duplicated definition copy.
-    assert_includes html, 'window.GraneteUI.configurator.hasActiveDefinition()'
-    assert_includes html, 'window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope)'
+    # semantics, not a duplicated definition copy. Both reads moved into
+    # the inspector module (#848 C4.7) with the material-choice routing.
+    inspector_js = File.read(INSPECTOR_JS, encoding: 'UTF-8')
+    assert_includes inspector_js, 'window.GraneteUI.configurator.hasActiveDefinition()'
+    assert_includes inspector_js, 'window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope)'
   end
 
   def test_library_handoff_goes_through_the_configurator_api_only_after_init

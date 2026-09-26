@@ -2,8 +2,9 @@
 // #848 Phase B: dialog.html loads external JS around its inline bootstrap
 // (granete-media.js, granete-account.js, granete-library.js,
 // granete-configurator.js, granete-finish-selector.js,
-// granete-material-roles.js). Harnesses execute the REAL files in
-// dialog.html load order — never a copy of their contents.
+// granete-material-roles.js, granete-inspector-child.js,
+// granete-inspector.js). Harnesses execute the REAL files in dialog.html
+// load order — never a copy of their contents.
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -22,13 +23,16 @@ function dialogSources() {
     library: fs.readFileSync(path.join(RESOURCES, 'js/granete-library.js'), 'utf8'),
     configurator: fs.readFileSync(path.join(RESOURCES, 'js/granete-configurator.js'), 'utf8'),
     finishSelector: fs.readFileSync(path.join(RESOURCES, 'js/granete-finish-selector.js'), 'utf8'),
-    materialRoles: fs.readFileSync(path.join(RESOURCES, 'js/granete-material-roles.js'), 'utf8')
+    materialRoles: fs.readFileSync(path.join(RESOURCES, 'js/granete-material-roles.js'), 'utf8'),
+    inspectorChild: fs.readFileSync(path.join(RESOURCES, 'js/granete-inspector-child.js'), 'utf8'),
+    inspector: fs.readFileSync(path.join(RESOURCES, 'js/granete-inspector.js'), 'utf8')
   };
 }
 
 // Runs the dialog scripts in dialog.html load order (granete-media.js,
 // granete-account.js, granete-library.js, granete-configurator.js,
-// granete-finish-selector.js, granete-material-roles.js, then the inline
+// granete-finish-selector.js, granete-material-roles.js,
+// granete-inspector-child.js, granete-inspector.js, then the inline
 // bootstrap) inside an already-created vm context.
 function runDialogScripts(sandbox) {
   const sources = dialogSources();
@@ -38,6 +42,8 @@ function runDialogScripts(sandbox) {
   vm.runInContext(sources.configurator, sandbox, { filename: 'granete-configurator.js' });
   vm.runInContext(sources.finishSelector, sandbox, { filename: 'granete-finish-selector.js' });
   vm.runInContext(sources.materialRoles, sandbox, { filename: 'granete-material-roles.js' });
+  vm.runInContext(sources.inspectorChild, sandbox, { filename: 'granete-inspector-child.js' });
+  vm.runInContext(sources.inspector, sandbox, { filename: 'granete-inspector.js' });
   vm.runInContext(sources.inline, sandbox, { filename: 'dialog-inline.js' });
 }
 

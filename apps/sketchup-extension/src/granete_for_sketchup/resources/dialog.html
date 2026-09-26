@@ -965,25 +965,55 @@
          primary path with the finish-selector modal as local fallback. -->
     <script src="js/granete-material-roles.js"></script>
 
+    <!-- #848 Phase B C4.7: inspector CHILD module under window.GraneteUI.
+         It owns the CHILD Inspector surface (part/hardware/aggregate):
+         breadcrumb, origin/owner notes, facts and capability list, the
+         #467 part authoring interaction and the #468 hardware
+         placement/substitution interaction (provenance, anchor face,
+         offset, replacement, derived lock, drilling conflict). It keeps
+         NO selection copy: the Inspector routes the SAME context object
+         by reference, and the module drops it when the child view
+         leaves the lane. It loads BEFORE granete-inspector.js (which
+         resolves GraneteUI.inspectorChild at routing time; both are
+         registered before the inline bootstrap) and receives the shared
+         toast/capability helpers plus a call-time hardware catalog
+         accessor via GraneteUI.inspectorChild.init in the bootstrap. -->
+    <script src="js/granete-inspector-child.js"></script>
+
+    <!-- #848 Phase B C4.7: inspector module under window.GraneteUI. It
+         owns the Inspector working selection context (selectedContext +
+         inspectorDef/inspectorParams/inspectorMaterialChoices), the
+         top-level routing by kind and the furniture Inspector rendering,
+         the capability-driven Inspector actions (update/delete/
+         material-choice apply), the manufacturing/preflight card
+         visibility and the hardware catalog slice (single dialog-side
+         owner). The child (part/hardware/aggregate) surface is
+         delegated to js/granete-inspector-child.js. Shared param/
+         summary/toast/icon/tab/capability helpers stay single-
+         implementation here and are injected via GraneteUI.inspector.init
+         in the bootstrap; the #498 runtime modules (mutation/
+         manufacturing/preflight) are referenced only at user-action/
+         render time. The module must be registered before
+         materialRoles.init (which wires its read-only Inspector
+         accessors) and never renders before init. -->
+    <script src="js/granete-inspector.js"></script>
+
     <script>
       (function () {
         "use strict";
-
-        var catalogHardware = [];
 
         // Material catalog, project-default material choices and the
         // shared material-role helpers live in
         // js/granete-material-roles.js (#848 C4.6); the bootstrap below
         // consumes them only through window.GraneteUI.materialRoles.
 
-        // Central selection state (#476): the SelectionContext payload published
-        // by the Ruby resolver — one model for every kind
-        // (furniture/aggregate/part/hardware/unmanaged) — consumed by the
-        // inspector and downstream excellence features.
-        var selectedContext = null;
-        var inspectorDef = null;
-        var inspectorMaterialChoices = {};
-        var inspectorParams = {};
+        // Central selection state (#476) — the Inspector working copy
+        // (selectedContext + inspectorDef/inspectorParams/
+        // inspectorMaterialChoices) and the hardware catalog slice live
+        // in js/granete-inspector.js (#848 C4.7); the child part/
+        // hardware/aggregate surface lives in
+        // js/granete-inspector-child.js (no selection copy there). The
+        // bootstrap below reads them only through window.GraneteUI.
 
         // DOM elements
         var toast = document.getElementById("toast-message");
@@ -1020,63 +1050,9 @@
         var bindingRebindCancelBtn = document.getElementById("btn-binding-rebind-cancel");
         var pairingEntry = document.getElementById("pairing-entry");
 
-        // Inspector elements
-        var inspectorEmpty = document.getElementById("inspector-empty-state");
-        var inspectorActive = document.getElementById("inspector-active-view");
-        var inspectorUnmanaged = document.getElementById("inspector-unmanaged-view");
-        var inspectorChild = document.getElementById("inspector-child-view");
-        var inspectorMultiNote = document.getElementById("inspector-multi-note");
-        var inspectorName = document.getElementById("inspector-furniture-name");
-        var inspectorRepresentationWarning = document.getElementById("inspector-representation-warning");
-        var inspectorEditBlocker = document.getElementById("inspector-edit-blocker");
-        var inspectorEditBlockerReason = document.getElementById("inspector-edit-blocker-reason");
-        var inspectorParamsCard = document.getElementById("inspector-params-card");
-        var inspectorEditFieldset = document.getElementById("inspector-edit-fieldset");
-        var inspectorInteractiveBadge = document.getElementById("inspector-interactive-badge");
-        var inspectorManufacturingBadge = document.getElementById("inspector-manufacturing-badge");
-        var inspectorParamsContainer = document.getElementById("inspector-params-container");
-        var inspectorMaterialsCard = document.getElementById("inspector-materials-card");
-        var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
-        var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
-        var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
-        var childBreadcrumb = document.getElementById("child-breadcrumb");
-        var childName = document.getElementById("child-name");
-        var childKindBadge = document.getElementById("child-kind-badge");
-        var childOriginNote = document.getElementById("child-origin-note");
-        var childOwnerNote = document.getElementById("child-owner-note");
-        var childFacts = document.getElementById("child-facts");
-        var childCapabilities = document.getElementById("child-capabilities");
-        var btnGotoFurniture = document.getElementById("btn-goto-furniture");
-        var btnUpdate = document.getElementById("btn-update");
-        var btnDelete = document.getElementById("btn-delete");
-        var inspectorDeleteBlocker = document.getElementById("inspector-delete-blocker");
-
-        // Hardware placement & conflict DOM elements (#468)
-        var hwConflictBanner = document.getElementById("hw-conflict-banner");
-        var hwConflictMessage = document.getElementById("hw-conflict-message");
-        var hwConflictRemediation = document.getElementById("hw-conflict-remediation");
-        var hwPlacementCard = document.getElementById("hw-placement-card");
-        var hwDefName = document.getElementById("hw-def-name");
-        var hwProvenanceBadge = document.getElementById("hw-provenance-badge");
-        var hwFaceVal = document.getElementById("hw-face-val");
-        var hwOffsetInput = document.getElementById("hw-offset-input");
-        var btnApplyHwOffset = document.getElementById("btn-apply-hw-offset");
-        var hwDerivedLockedNote = document.getElementById("hw-derived-locked-note");
-        var hwReplacementSelect = document.getElementById("hw-replacement-select");
-        var btnReplaceHw = document.getElementById("btn-replace-hw");
-        var hwSubstitutionFeedback = document.getElementById("hw-substitution-feedback");
-
-        // Internal component authoring DOM elements (#467)
-        var partAuthoringCard = document.getElementById("part-authoring-card");
-        var partPosX = document.getElementById("part-pos-x");
-        var partPosY = document.getElementById("part-pos-y");
-        var partPosZ = document.getElementById("part-pos-z");
-        var btnApplyPartMove = document.getElementById("btn-apply-part-move");
-        var btnPartViewportMove = document.getElementById("btn-part-viewport-move");
-        var btnPartDuplicate = document.getElementById("btn-part-duplicate");
-        var btnPartAdd = document.getElementById("btn-part-add");
-        var btnPartRemove = document.getElementById("btn-part-remove");
-        var partAuthoringFeedback = document.getElementById("part-authoring-feedback");
+        // Inspector / hardware (#468) / part authoring (#467) DOM refs
+        // live in js/granete-inspector.js (#848 C4.7), which owns their
+        // render paths and button bindings.
 
         // Category UI mapping dictionary + formatCategoryLabel live in
         // js/granete-library.js (#848 C4.3): categories are Library's
@@ -1173,8 +1149,9 @@
         // Material selection (board option choices by role) lives in
         // js/granete-material-roles.js (#848 C4.6): catalog authority,
         // project defaults, role resolution and role rendering. The
-        // Inspector/Configurator/onMaterialChoiceApplied paths below read
-        // and render only through window.GraneteUI.materialRoles.
+        // Configurator module and the inspector module (#848 C4.7,
+        // via its GraneteDialog wrapper) read and render only through
+        // window.GraneteUI.materialRoles.
 
         // Bridge exposed to Ruby
         window.GraneteDialog = {
@@ -1245,17 +1222,7 @@
           },
           onModelBindingResult: function (result) { handleModelBindingResult(result); },
           onDeleteResult: function (result) {
-            result = result || {};
-            if (result.ok) {
-              // Peak-end honest: la eliminación ES reversible (una operación
-              // de Undo) — el cierre nombra la red de seguridad en vez de
-              // dejar el panel en blanco.
-              showToast("success", "✓ Mueble eliminado. Deshacé con Ctrl+Z (\u2318Z) si fue un error.");
-            } else {
-              showToast("error", result.reason
-                ? "No se pudo eliminar el mueble: " + result.reason + "."
-                : "No se pudo eliminar el mueble.");
-            }
+            window.GraneteUI.inspector.onDeleteResult(result);
           },
           onPublishProgress: function (payload) { renderPublishProgress(payload); },
           onPublishResult: function (result) { handlePublishResult(result); },
@@ -1306,12 +1273,12 @@
                 materials: payload.materials || [],
                 categories: payload.materialCategories || []
               });
-              catalogHardware = payload.hardware || [];
+              window.GraneteUI.inspector.setHardwareCatalog(payload.hardware || []);
               window.GraneteUI.media.setCatalogMedia(payload.media);
               if (window.GraneteState) {
                 window.GraneteState.set("catalog", {
                   definitions: window.GraneteUI.library.getDefinitions(),
-                  hardware: catalogHardware,
+                  hardware: window.GraneteUI.inspector.getHardwareCatalog(),
                   materials: window.GraneteUI.materialRoles.getMaterials(),
                   categories: window.GraneteUI.library.getCategories()
                 });
@@ -1331,61 +1298,16 @@
             window.GraneteUI.configurator.onInsertionResult(result);
           },
 
+          // #848 C4.7: the inspector result/selection/material-choice
+          // handlers live in js/granete-inspector.js. Ruby keeps calling
+          // these wrappers — thin delegation with unchanged names and
+          // payloads.
           onUpdateResult: function (result) {
-            btnUpdate.disabled = !capabilityEnabled(selectedContext, "canEditParameters") ||
-              (selectedContext && selectedContext.selectionCount > 1);
-            btnUpdate.innerHTML = icon("save") + "<span>Actualizar Mueble</span>";
-            if (result && result.success) {
-              var detail = typeof result.component_count === "number" && result.component_count > 0
-                ? " — " + result.component_count + " componente" + (result.component_count === 1 ? "" : "s")
-                : "";
-              showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place" + detail + ".");
-              if (selectedContext) {
-                selectedContext.parameters = Object.assign({}, inspectorParams);
-                selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
-              }
-            } else {
-              showToast("error", parameterIssueMessage(result, "No se pudo actualizar el mueble."));
-              // Rollback in-memory inspector state to last confirmed values from selectedContext
-              if (selectedContext && inspectorDef) {
-                inspectorParams = Object.assign({}, (inspectorDef ? getDefaultParams(inspectorDef) : {}), selectedContext.parameters || {});
-                inspectorMaterialChoices = Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {});
-                renderParamForm(inspectorParamsContainer, inspectorDef, inspectorParams, function (name, val, unit) {
-                  inspectorParams[name] = val;
-                  updateInspectorSummary();
-                  validateInteractiveClient(inspectorDef, inspectorParams);
-                });
-                window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
-                  inspectorMaterialChoices, function (role, id, s) {
-                    inspectorMaterialChoices[role] = id;
-                    if (s === "project" || s === "project_default") {
-                      window.GraneteUI.materialRoles.setProjectDefaultMaterial(role, id);
-                    }
-                  }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
-                updateInspectorSummary();
-              }
-            }
+            window.GraneteUI.inspector.onUpdateResult(result);
           },
 
           onSelectionChange: function (context) {
-            selectedContext = context || null;
-            // #498: the shared store owns selection truth for downstream
-            // runtime surfaces (#466–#468); the legacy variable stays as the
-            // inspector's working copy.
-            if (window.GraneteMutation) {
-              window.GraneteMutation.publishSelection(selectedContext);
-            }
-            renderInspector();
-
-            // Preserve active tab context: do not hijack the user away from
-            // the library while browsing the catalog. Unmanaged geometry does
-            // not pull focus either; only managed contexts do.
-            var managed = selectedContext && ["furniture", "aggregate", "part", "hardware"].indexOf(selectedContext.kind) !== -1;
-            var activeTabBtn = document.querySelector(".tab-button.active");
-            var currentTabId = activeTabBtn ? activeTabBtn.getAttribute("data-tab") : "library";
-            if (managed && (currentTabId === "inspector" || !window.GraneteUI.configurator.hasActiveDefinition())) {
-              switchTab("inspector");
-            }
+            window.GraneteUI.inspector.onSelectionChange(context);
           },
 
           // "Granete: editar en el panel" (menú contextual de una selección
@@ -1393,66 +1315,11 @@
           // aunque el configurador siga abierto (definición activa), el
           // usuario no puede quedarse mirando Biblioteca.
           activateInspectorTab: function () {
-            switchTab("inspector");
+            window.GraneteUI.inspector.activateInspectorTab();
           },
 
           onMaterialChoiceApplied: function (payload) {
-            if (!payload || !payload.role || !payload.materialId) return;
-            var role = payload.role;
-            var materialId = payload.materialId;
-            var scope = payload.scope || "furniture";
-            var isProjectScope = (scope === "project" || scope === "project_default");
-
-            if (isProjectScope) {
-              window.GraneteUI.materialRoles.setProjectDefaultMaterial(role, materialId);
-            }
-
-            var isInspectorTarget = payload.context === "inspector" || (payload.instanceId && selectedContext && payload.instanceId === selectedContext.furnitureInstanceRef);
-            var isConfiguratorTarget = payload.context === "configurator" || (!isInspectorTarget && window.GraneteUI.configurator.hasActiveDefinition());
-
-            // If the finish choice belongs to an inspected placed furniture in the model
-            var materialsEditable = selectedContext && selectedContext.kind === "furniture" &&
-                capabilityEnabled(selectedContext, "canEditMaterialRoles") && !(selectedContext.selectionCount > 1);
-            if (isInspectorTarget && selectedContext && selectedContext.kind === "furniture" && inspectorDef && materialsEditable && (!payload.instanceId || payload.instanceId === selectedContext.furnitureInstanceRef)) {
-              if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
-              inspectorMaterialChoices[role] = materialId;
-
-              window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
-                inspectorMaterialChoices, function (r, id, s) {
-                  inspectorMaterialChoices[r] = id;
-                  if (s === "project" || s === "project_default") {
-                    window.GraneteUI.materialRoles.setProjectDefaultMaterial(r, id);
-                  }
-                }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
-              updateInspectorSummary();
-
-              var updatePayload = {
-                instanceId: selectedContext.furnitureInstanceRef,
-                definitionId: selectedContext.furnitureDefinitionId,
-                parameters: inspectorParams,
-                materialChoices: inspectorMaterialChoices
-              };
-
-              if (window.sketchup && window.sketchup.update_furniture) {
-                btnUpdate.disabled = true;
-                btnUpdate.innerHTML = icon("clock") + "<span>Actualizando…</span>";
-                window.sketchup.update_furniture(JSON.stringify(updatePayload));
-              } else {
-                var mat = window.GraneteUI.materialRoles.materialById(materialId);
-                var toastMsg = isProjectScope
-                  ? "✓ Acabado temporal de sesión: " + (mat ? mat.name : materialId)
-                  : "✓ Acabado actualizado: " + (mat ? mat.name : materialId);
-                showToast("success", toastMsg);
-              }
-            } else if (isConfiguratorTarget && window.GraneteUI.configurator.hasActiveDefinition()) {
-              // If configuring a module in the library before inserting —
-              // the configurator snapshot/renderer live in
-              // js/granete-configurator.js (#848 C4.4).
-              window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope);
-            } else if (isProjectScope) {
-              var matProj = window.GraneteUI.materialRoles.materialById(materialId);
-              showToast("success", "✓ Acabado temporal de sesión: " + (matProj ? matProj.name : materialId));
-            }
+            window.GraneteUI.inspector.onMaterialChoiceApplied(payload);
           }
         };
 
@@ -1476,26 +1343,17 @@
           return p;
         }
 
-        function validateInteractiveClient(def, currentValues) {
-          if (!def || !def.parameters) return;
-          var valid = true;
-          for (var i = 0; i < def.parameters.length; i++) {
-            var p = def.parameters[i];
-            var v = Number(currentValues[p.name]);
-            if (p.type === "number") {
-              if (p.min !== undefined && v < p.min) valid = false;
-              if (p.max !== undefined && v > p.max) valid = false;
-            }
-          }
-
-          if (valid) {
-            inspectorInteractiveBadge.textContent = "✓ Parámetros válidos";
-            inspectorInteractiveBadge.className = "status-badge valid";
-          } else {
-            inspectorInteractiveBadge.textContent = "Parámetro fuera de rango";
-            inspectorInteractiveBadge.className = "status-badge invalid";
-          }
+        // Shared capability check (#476): legality comes exclusively
+        // from the Ruby capability set. Single implementation consumed
+        // by BOTH Inspector modules (furniture + child) via init
+        // injection (#848 C4.7 boundary-adjusted split).
+        function capabilityEnabled(context, name) {
+          return !!(context && context.capabilities && context.capabilities[name] && context.capabilities[name].supported);
         }
+
+        // Interactive validation of the Inspector param form
+        // (validateInteractiveClient) lives in js/granete-inspector.js
+        // (#848 C4.7).
 
         function renderParamForm(container, def, currentValues, onChange) {
           container.innerHTML = "";
@@ -1722,657 +1580,22 @@
           return "Piezas: se calculan al resolver";
         }
 
-        function updateInspectorSummary() {
-          var w = inspectorParams.widthMm || inspectorParams.lengthMm || 600;
-          var h = inspectorParams.heightMm || 720;
-          var d = inspectorParams.depthMm || 590;
-          inspectorSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
-          inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef, inspectorParams);
-        }
-
-        // ------------------------------------------------------------------
-        // Contextual inspector (#476): renders the canonical SelectionContext
-        // by kind. Legality comes exclusively from the Ruby capability set —
-        // the client never infers it from names, slot ids or entity types.
-        // ------------------------------------------------------------------
-
-        var CAPABILITY_LABELS = {
-          canEditParameters: "Editar parámetros",
-          canEditMaterialRoles: "Cambiar materiales",
-          canEditHighLevelHardware: "Editar herrajes del mueble",
-          canDuplicate: "Duplicar",
-          canDelete: "Eliminar",
-          canReviewPreflight: "Revisar preflight",
-          canInspectManufacturing: "Inspeccionar manufactura",
-          canMoveWithinConstraint: "Mover dentro de restricciones",
-          canAddRelated: "Agregar pieza relacionada",
-          canRemove: "Quitar",
-          canChangeJoinery: "Cambiar unión",
-          canMove: "Mover herraje",
-          canRotate: "Rotar herraje",
-          canChangeHandedness: "Cambiar mano",
-          canReplaceDefinition: "Reemplazar por compatible",
-          canInspectMachining: "Inspeccionar mecanizado"
-        };
-
-        var KIND_BADGES = {
-          part: "Pieza",
-          hardware: "Herraje",
-          aggregate: "Agregado"
-        };
-
-        function capabilityEnabled(context, name) {
-          return !!(context && context.capabilities && context.capabilities[name] && context.capabilities[name].supported);
-        }
-
-        // Display-only translation of the anchor-face enum; a missing value
-        // renders "--" instead of a fabricated face and unknown values render
-        // raw. Never touches the business payload.
-        var ANCHOR_FACE_LABELS = {
-          front: "Frontal",
-          back: "Posterior",
-          left: "Izquierda",
-          right: "Derecha",
-          top: "Superior",
-          bottom: "Inferior"
-        };
-
-        function formatAnchorFace(anchorFace) {
-          if (!anchorFace) return "--";
-          return ANCHOR_FACE_LABELS[anchorFace] || anchorFace;
-        }
-
-        function hideInspectorViews() {
-          inspectorEmpty.style.display = "none";
-          inspectorUnmanaged.style.display = "none";
-          inspectorActive.style.display = "none";
-          inspectorChild.style.display = "none";
-          inspectorMultiNote.style.display = "none";
-        }
-
-        function renderInspector() {
-          var context = selectedContext;
-          hideInspectorViews();
-
-          if (!context) {
-            inspectorEmpty.style.display = "block";
-            renderManufacturingCard(null);
-            return;
-          }
-
-          if (context.selectionCount && context.selectionCount > 1) {
-            inspectorMultiNote.style.display = "block";
-          }
-
-          if (context.kind === "unmanaged") {
-            inspectorUnmanaged.style.display = "block";
-            renderManufacturingCard(context);
-            return;
-          }
-          if (context.kind === "furniture") {
-            renderFurnitureInspector(context);
-            renderManufacturingCard(context);
-            return;
-          }
-          renderChildInspector(context);
-          renderManufacturingCard(context);
-        }
-
-        // #470: the Fabricación card is the inspection entry point. Only
-        // managed parts/furniture carry it — arbitrary geometry never gets a
-        // manufacturing surface. Rendering is driven by the Ruby overlay
-        // state; this side never computes machining.
-        function renderManufacturingCard(context) {
-          var card = document.getElementById("manufacturing-card");
-          if (!card) return;
-          var multi = context && context.selectionCount && context.selectionCount > 1;
-          var eligible = context && !multi &&
-            (context.kind === "part" ||
-             (context.kind === "furniture" && capabilityEnabled(context, "canInspectManufacturing")));
-          card.style.display = eligible ? "block" : "none";
-          if (window.GraneteManufacturing) window.GraneteManufacturing.render();
-        }
-
-        function renderFurnitureInspector(context) {
-          inspectorActive.style.display = "block";
-
-          var def = context.definition || window.GraneteUI.library.findDefinitionById(context.furnitureDefinitionId);
-          inspectorDef = def || null;
-          inspectorName.textContent = (context.display && context.display.name) || (def ? def.name : "Mueble");
-
-          var legacy = context.representation === "legacy-group";
-          inspectorRepresentationWarning.style.display = legacy ? "block" : "none";
-          if (legacy) {
-            inspectorRepresentationWarning.textContent =
-              "Este mueble usa una representación anterior del plugin. Usá Granete → Migrar modelos anteriores… para actualizarlo y recuperar la edición.";
-          }
-
-          // Interactive validation reset
-          inspectorInteractiveBadge.textContent = "✓ Medidas válidas";
-          inspectorInteractiveBadge.className = "status-badge valid";
-
-          // The authoritative preflight badge is owned by
-          // GraneteMutation.renderPreflight (#466): only Ruby-pushed tracker
-          // states decide ready/warning/blocked — never local validity.
-
-          // Each control obeys its OWN capability, and a multi-selection
-          // fail-closes every mutation until batch editing exists.
-          var multi = context.selectionCount && context.selectionCount > 1;
-          var canEditParams = capabilityEnabled(context, "canEditParameters");
-          var canEditMaterials = capabilityEnabled(context, "canEditMaterialRoles");
-          var blockerReason = !canEditParams && context.capabilities && context.capabilities.canEditParameters
-            ? context.capabilities.canEditParameters.reason
-            : null;
-          inspectorEditBlocker.style.display = canEditParams ? "none" : "block";
-          inspectorEditBlockerReason.textContent = blockerReason || "La edición no está disponible para este mueble.";
-          inspectorParamsCard.style.display = canEditParams ? "block" : "none";
-
-          // One native switch for params + materials + both buttons.
-          inspectorEditFieldset.disabled = Boolean(multi || !canEditParams);
-          btnUpdate.disabled = Boolean(!canEditParams || multi);
-          btnDelete.disabled = Boolean(!capabilityEnabled(context, "canDelete") || multi);
-
-          // A denied canDelete explains itself with the Ruby-provided reason;
-          // enabled or multi-selection hides the note (multi has its own).
-          var deleteCap = context.capabilities && context.capabilities.canDelete;
-          var deleteUnavailable = !multi && !(deleteCap && deleteCap.supported);
-          inspectorDeleteBlocker.hidden = !deleteUnavailable;
-          if (deleteUnavailable) {
-            inspectorDeleteBlocker.textContent = (deleteCap && deleteCap.reason) ||
-              "La eliminación no está disponible para este mueble.";
-          }
-
-          if (!canEditParams) {
-            inspectorParams = {};
-            inspectorMaterialChoices = {};
-            inspectorMaterialsCard.style.display = "none";
-            return;
-          }
-          inspectorMaterialsCard.style.display = canEditMaterials ? "block" : "none";
-          if (!canEditMaterials) {
-            inspectorMaterialChoices = {};
-          }
-
-          inspectorParams = Object.assign({}, (def ? getDefaultParams(def) : {}), context.parameters || {});
-          inspectorMaterialChoices = Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(def), context.materialChoices || {});
-
-          renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
-            inspectorParams[name] = val;
-            updateInspectorSummary();
-            validateInteractiveClient(def, inspectorParams);
-          });
-          if (canEditMaterials) {
-            window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
-              inspectorMaterialChoices, function (role, id) {
-                inspectorMaterialChoices[role] = id;
-              });
-          }
-
-          updateInspectorSummary();
-        }
-
-        function renderChildInspector(context) {
-          inspectorChild.style.display = "block";
-          childKindBadge.textContent = KIND_BADGES[context.kind] || context.kind;
-
-          childName.textContent = (context.display && context.display.name) || "";
-
-          renderBreadcrumb(context);
-
-          if (context.kind === "hardware") {
-            childOriginNote.style.display = "block";
-            childOriginNote.textContent = context.placementKind === "manual"
-              ? "Origen: colocación manual."
-              : context.placementKind === "derived"
-                ? "Origen: derivado de las reglas de la definición."
-                : "Origen: sin determinar (faltan datos de procedencia).";
-          } else {
-            childOriginNote.style.display = "none";
-          }
-
-          childOwnerNote.style.display = "none";
-          if (context.ownerRecovery === "ambiguous") {
-            childOwnerNote.style.display = "block";
-            childOwnerNote.textContent =
-              "Hay varias copias del mismo mueble en el modelo; no se puede identificar con certeza el mueble dueño de esta pieza.";
-          } else if (context.ownerRecovery === "none") {
-            childOwnerNote.style.display = "block";
-            childOwnerNote.textContent =
-              "No se encontró el mueble dueño en el modelo (puede haber sido eliminado).";
-          }
-
-          // The button needs a resolvable owner ENTITY; an ambiguous or missing
-          // owner is honestly not navigable.
-          var ownerResolved = context.ownerRecovery === "path" || context.ownerRecovery === "scan";
-          btnGotoFurniture.style.display = ownerResolved && context.furnitureInstanceRef ? "inline-flex" : "none";
-
-          if (context.kind === "hardware") {
-            if (hwPlacementCard) {
-              hwPlacementCard.style.display = "block";
-              var hardwareList = catalogHardware || [];
-              var currentDef = hardwareList.find(function (h) {
-                return h.id === context.hardwareDefinitionId || h.code === context.hardwareDefinitionId;
-              });
-              if (hwDefName) hwDefName.textContent = currentDef ? currentDef.name : (context.hardwareDefinitionId || "--");
-              if (hwFaceVal) hwFaceVal.textContent = formatAnchorFace(context.anchorFace);
-
-              var isManual = context.placementKind === "manual";
-              var isDerived = context.placementKind === "derived";
-              if (hwProvenanceBadge) {
-                if (isManual) {
-                  hwProvenanceBadge.textContent = "Manual";
-                  hwProvenanceBadge.className = "status-badge success";
-                } else if (isDerived) {
-                  hwProvenanceBadge.textContent = "Derivado";
-                  hwProvenanceBadge.className = "status-badge pending";
-                } else {
-                  hwProvenanceBadge.textContent = "Desconocido";
-                  hwProvenanceBadge.className = "status-badge";
-                }
-              }
-
-              var currentOffset = 0;
-              if (Array.isArray(context.offsetMm)) {
-                currentOffset = context.offsetMm.length > 1 ? context.offsetMm[1] : context.offsetMm[0];
-              } else if (typeof context.offsetMm === "number") {
-                currentOffset = context.offsetMm;
-              }
-              if (hwOffsetInput) {
-                hwOffsetInput.value = currentOffset;
-                hwOffsetInput.disabled = !isManual;
-              }
-              if (btnApplyHwOffset) btnApplyHwOffset.disabled = !isManual;
-              if (hwDerivedLockedNote) hwDerivedLockedNote.style.display = isDerived ? "block" : "none";
-
-              if (hwReplacementSelect) {
-                hwReplacementSelect.disabled = !isManual;
-                hwReplacementSelect.innerHTML = "";
-                hardwareList.forEach(function (candidate) {
-                  var opt = document.createElement("option");
-                  opt.value = candidate.id;
-                  var isComp = currentDef && candidate.category === currentDef.category;
-                  var isCurrent = candidate.id === context.hardwareDefinitionId || candidate.code === context.hardwareDefinitionId;
-                  if (!isComp && !isCurrent) {
-                    // No se puede elegir un herraje de otra familia: queda
-                    // visible para no esconder el catálogo, pero deshabilitado.
-                    opt.disabled = true;
-                    opt.textContent = candidate.name + " (incompatible)";
-                  } else {
-                    opt.textContent = candidate.name;
-                  }
-                  if (isCurrent) {
-                    opt.selected = true;
-                  }
-                  hwReplacementSelect.appendChild(opt);
-                });
-              }
-              if (btnReplaceHw) btnReplaceHw.disabled = !isManual;
-            }
-
-            // Conflict banner: check recent mutation issues or preflight issues
-            if (hwConflictBanner) {
-              var mutState = window.GraneteState ? window.GraneteState.get("mutation") : null;
-              var conflictIssue = null;
-              if (mutState && mutState.issues && Array.isArray(mutState.issues)) {
-                conflictIssue = mutState.issues.find(function (iss) {
-                  return iss.code === "DRILLING_CONFLICT";
-                });
-              }
-              if (conflictIssue) {
-                hwConflictBanner.style.display = "block";
-                if (hwConflictMessage) hwConflictMessage.textContent = conflictIssue.message;
-                if (hwConflictRemediation) hwConflictRemediation.textContent = conflictIssue.remediation || "Mover la bisagra a una posición libre de perforaciones de entrepaño.";
-              } else {
-                hwConflictBanner.style.display = "none";
-              }
-            }
-          } else {
-            if (hwPlacementCard) hwPlacementCard.style.display = "none";
-            if (hwConflictBanner) hwConflictBanner.style.display = "none";
-          }
-
-          if (context.kind === "part") {
-            renderPartAuthoringCard(context);
-          } else if (partAuthoringCard) {
-            partAuthoringCard.style.display = "none";
-          }
-
-          renderChildFacts(context);
-          renderCapabilityList(childCapabilities, context.capabilities);
-        }
-
-        // #467 / SU-AUTH-1: the internal-component editor renders ONLY for
-        // parts whose Ruby capability set marks them authorable. Position
-        // inputs are prefilled with the server-resolved assembly pose; every
-        // accepted pose comes back from the authoritative resolve.
-        function renderPartAuthoringCard(context) {
-          if (!partAuthoringCard) return;
-          var movable = capabilityEnabled(context, "canMoveWithinConstraint");
-          var canDuplicate = capabilityEnabled(context, "canDuplicate");
-          var canAdd = capabilityEnabled(context, "canAddRelated");
-          var canRemove = capabilityEnabled(context, "canRemove");
-          var anyAction = movable || canDuplicate || canAdd || canRemove;
-          partAuthoringCard.style.display = anyAction ? "block" : "none";
-          if (!anyAction) return;
-
-          var translation = Array.isArray(context.assemblyTranslationMm)
-            ? context.assemblyTranslationMm : null;
-          if (partPosX) {
-            partPosX.value = translation ? translation[0] : "";
-            partPosX.disabled = !movable;
-          }
-          if (partPosY) {
-            partPosY.value = translation ? translation[1] : "";
-            partPosY.disabled = !movable;
-          }
-          if (partPosZ) {
-            partPosZ.value = translation ? translation[2] : "";
-            partPosZ.disabled = !movable;
-          }
-          if (btnApplyPartMove) btnApplyPartMove.disabled = !movable;
-          if (btnPartViewportMove) btnPartViewportMove.disabled = !movable;
-          if (btnPartDuplicate) btnPartDuplicate.disabled = !canDuplicate;
-          if (btnPartAdd) btnPartAdd.disabled = !canAdd;
-          if (btnPartRemove) btnPartRemove.disabled = !canRemove;
-          renderPartAuthoringFeedback();
-        }
-
-        // Honest post-command feedback: shows the last mutation issues for
-        // this furniture (stable codes + messages from Ruby), never a local
-        // guess. Clears when there are no issues to show.
-        function renderPartAuthoringFeedback() {
-          if (!partAuthoringFeedback) return;
-          var mutState = window.GraneteState ? window.GraneteState.get("mutation") : null;
-          var issue = null;
-          if (mutState && Array.isArray(mutState.issues) && mutState.phase &&
-              ["rejected", "aborted", "committed"].indexOf(mutState.phase) !== -1) {
-            issue = mutState.issues[0] || null;
-          }
-          if (issue) {
-            partAuthoringFeedback.textContent = issue.message || issue.code;
-            partAuthoringFeedback.style.display = "block";
-          } else {
-            partAuthoringFeedback.textContent = "";
-            partAuthoringFeedback.style.display = "none";
-          }
-        }
-
-        function renderBreadcrumb(context) {
-          childBreadcrumb.innerHTML = "";
-          var path = context.semanticPath || [];
-
-          var ownerKnown = (context.ownerRecovery === "path" || context.ownerRecovery === "scan");
-          if (ownerKnown && context.furnitureInstanceRef && path.length > 1) {
-            var ownerCrumb = document.createElement("button");
-            ownerCrumb.type = "button";
-            ownerCrumb.className = "crumb crumb-link";
-            ownerCrumb.textContent = path[0];
-            ownerCrumb.title = "Volver al contexto del mueble";
-            ownerCrumb.addEventListener("click", function () {
-              if (window.sketchup && window.sketchup.select_furniture) {
-                window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceRef: context.furnitureInstanceRef }));
-              }
-            });
-            childBreadcrumb.appendChild(ownerCrumb);
-
-            var sep = document.createElement("span");
-            sep.className = "crumb-sep";
-            sep.setAttribute("aria-hidden", "true");
-            sep.textContent = "›";
-            childBreadcrumb.appendChild(sep);
-          }
-
-          var current = document.createElement("span");
-          current.className = "crumb current";
-          current.textContent = path.length > 1 ? path[path.length - 1] : (context.display && context.display.name);
-          childBreadcrumb.appendChild(current);
-        }
-
-        function renderChildFacts(context) {
-          var facts = [
-            ["Mueble (ref. local)", context.furnitureInstanceRef],
-            ["Rol semántico", context.display && context.display.role],
-            ["Ocurrencia (componentInstanceId)", context.componentInstanceId],
-            ["Definición de pieza", context.componentDefinitionId],
-            ["Referencia de catálogo", context.catalogComponentId],
-            ["Colocación de herraje", context.hardwarePlacementId],
-            ["Definición de herraje", context.hardwareDefinitionId],
-            ["Pieza anfitriona", context.hostComponentInstanceId],
-            ["Proyecto", context.projectId],
-            ["Revisión base", context.baseRevisionId]
-          ];
-
-          childFacts.innerHTML = "";
-          facts.forEach(function (fact) {
-            if (!fact[1]) return;
-            var row = document.createElement("div");
-            row.className = "kv-row";
-            var k = document.createElement("span");
-            k.className = "k";
-            k.textContent = fact[0];
-            var v = document.createElement("span");
-            v.className = "v";
-            v.textContent = fact[1];
-            row.appendChild(k);
-            row.appendChild(v);
-            childFacts.appendChild(row);
-          });
-        }
-
-        function renderCapabilityList(container, capabilities) {
-          container.innerHTML = "";
-          var names = capabilities ? Object.keys(capabilities) : [];
-          names.forEach(function (name) {
-            var capability = capabilities[name] || {};
-            var row = document.createElement("div");
-            row.className = "capability-row";
-
-            var head = document.createElement("div");
-            head.className = "capability-row-head";
-            var label = document.createElement("span");
-            label.className = "capability-row-label";
-            label.textContent = CAPABILITY_LABELS[name] || name;
-            var badge = document.createElement("span");
-            badge.className = "status-badge " + (capability.supported ? "valid" : "pending");
-            badge.textContent = capability.supported ? "Disponible" : "No disponible";
-            head.appendChild(label);
-            head.appendChild(badge);
-            row.appendChild(head);
-
-            if (!capability.supported && capability.reason) {
-              var reason = document.createElement("p");
-              reason.className = "capability-reason";
-              reason.textContent = capability.reason;
-              row.appendChild(reason);
-            }
-
-            container.appendChild(row);
-          });
-        }
+        // The Inspector working snapshot/summary machinery
+        // (updateInspectorSummary, capability renderers, furniture/child/
+        // part/hardware Inspector views and their button bindings) lives
+        // in js/granete-inspector.js (#848 C4.7); the inline bootstrap
+        // only injects the shared helpers and re-arms nothing itself.
 
         // Search / category-filter / retry bindings live in
         // js/granete-library.js (#848 C4.3); btn-back-to-library and the
         // whole catalog placement intent (btn-insert, idempotency key,
         // #469 repeat) live in js/granete-configurator.js (#848 C4.4).
 
-        btnUpdate.addEventListener("click", function () {
-          if (!selectedContext || selectedContext.kind !== "furniture") return;
-          if (!capabilityEnabled(selectedContext, "canEditParameters")) return;
-          if (selectedContext.selectionCount > 1) return;
-          btnUpdate.disabled = true;
-          btnUpdate.innerHTML = icon("clock") + "<span>Actualizando…</span>";
-
-          var payload = {
-            instanceId: selectedContext.furnitureInstanceRef,
-            definitionId: selectedContext.furnitureDefinitionId,
-            parameters: inspectorParams,
-            materialChoices: inspectorMaterialChoices
-          };
-
-          // #498: managed edits ride the shared mutation controller —
-          // explicit state machine, one correlated command, double-submit
-          // guard. The legacy direct call remains as fallback when the
-          // runtime modules are not loaded.
-          var submitted = "unavailable";
-          if (window.GraneteMutation) {
-            submitted = window.GraneteMutation.submitUpdate(payload, selectedContext);
-          }
-          if (submitted === "unavailable" && window.sketchup && window.sketchup.update_furniture) {
-            window.sketchup.update_furniture(JSON.stringify(payload));
-          } else if (submitted === "unavailable") {
-            setTimeout(function () {
-              window.GraneteDialog.onUpdateResult({ success: true, name: selectedContext.display ? selectedContext.display.name : "" });
-            }, 500);
-          }
-        });
-
-        // Destructive action guard: first click arms the button, second click
-        // within the window confirms. Undo still applies after deletion.
-        var deleteArmed = false;
-        var deleteArmTimer = null;
-
-        function resetDeleteConfirm() {
-          deleteArmed = false;
-          if (deleteArmTimer) {
-            clearTimeout(deleteArmTimer);
-            deleteArmTimer = null;
-          }
-          btnDelete.innerHTML = icon("trash") + "<span>Eliminar Mueble</span>";
-          btnDelete.setAttribute("aria-label", "Eliminar Mueble");
-        }
-
-        btnDelete.addEventListener("click", function () {
-          if (!selectedContext || selectedContext.kind !== "furniture") return;
-          if (!capabilityEnabled(selectedContext, "canDelete")) return;
-          if (selectedContext.selectionCount > 1) return;
-          if (!deleteArmed) {
-            deleteArmed = true;
-            btnDelete.textContent = "¿Confirmar eliminación?";
-            btnDelete.setAttribute("aria-label", "Confirmar la eliminación del mueble");
-            deleteArmTimer = setTimeout(resetDeleteConfirm, 4000);
-            return;
-          }
-          resetDeleteConfirm();
-          if (window.sketchup && window.sketchup.delete_selected_furniture) {
-            var deletePayload = { instanceId: selectedContext.furnitureInstanceRef };
-            window.sketchup.delete_selected_furniture(JSON.stringify(deletePayload));
-          } else {
-            // Fallback sin host: mismo cierre honesto que el camino Ruby.
-            window.GraneteDialog.onDeleteResult({ ok: true });
-            window.GraneteDialog.onSelectionChange(null);
-          }
-        });
-
-        // Breadcrumb "return to owning furniture": viewport selection change
-        // only — the Ruby side never mutates geometry or metadata here.
-        btnGotoFurniture.addEventListener("click", function () {
-          if (!selectedContext || !selectedContext.furnitureInstanceRef) return;
-          if (window.sketchup && window.sketchup.select_furniture) {
-            window.sketchup.select_furniture(JSON.stringify({ furnitureInstanceRef: selectedContext.furnitureInstanceRef }));
-          }
-        });
-
-        // Interactive hardware placement editing (#468)
-        if (btnApplyHwOffset) {
-          btnApplyHwOffset.addEventListener("click", function () {
-            if (!selectedContext || selectedContext.kind !== "hardware") return;
-            if (selectedContext.placementKind === "derived") {
-              showToast("warning", "Los herrajes derivados se calculan por regla de ingeniería; no admiten edición manual.");
-              return;
-            }
-            var val = parseFloat(hwOffsetInput.value);
-            if (isNaN(val)) return;
-            if (window.GraneteMutation && typeof window.GraneteMutation.submitHardwarePlacementUpdate === "function") {
-              window.GraneteMutation.submitHardwarePlacementUpdate(val, selectedContext);
-            }
-          });
-        }
-
-        if (btnReplaceHw) {
-          btnReplaceHw.addEventListener("click", function () {
-            if (!selectedContext || selectedContext.kind !== "hardware") return;
-            if (selectedContext.placementKind === "derived") {
-              showToast("warning", "Los herrajes derivados no admiten sustitución manual.");
-              return;
-            }
-            var targetId = hwReplacementSelect.value;
-            if (!targetId) return;
-            if (window.GraneteMutation && typeof window.GraneteMutation.submitHardwareSubstitution === "function") {
-              window.GraneteMutation.submitHardwareSubstitution(targetId, selectedContext);
-            }
-          });
-        }
-
-        // Internal component authoring (#467): precise-mm move, constrained
-        // viewport drag, duplicate/add at the entered position and remove.
-        // All rides the versioned authoring_mutation channel; the accepted
-        // state comes only from the authoritative resolve.
-        function partPositionFromInputs() {
-          var x = parseFloat(partPosX.value);
-          var y = parseFloat(partPosY.value);
-          var z = parseFloat(partPosZ.value);
-          if (isNaN(x) || isNaN(y) || isNaN(z)) return null;
-          return [x, y, z];
-        }
-
-        function submitPartMutation(operation) {
-          if (!selectedContext || selectedContext.kind !== "part") return;
-          var translation = partPositionFromInputs();
-          if (!translation && operation !== "remove") {
-            showToast("error", "Ingresá la posición en milímetros (X, Y y Z) del componente.");
-            return;
-          }
-          var result = window.GraneteMutation.submitComponentMutation(operation, translation, selectedContext);
-          if (result === "busy") return;
-          if (result === "unavailable") {
-            showToast("error", "Esta acción requiere la conexión con el servidor autoritativo de Granete.");
-          }
-        }
-
-        if (btnApplyPartMove) {
-          btnApplyPartMove.addEventListener("click", function () {
-            submitPartMutation("move");
-          });
-        }
-
-        if (btnPartViewportMove) {
-          btnPartViewportMove.addEventListener("click", function () {
-            if (!selectedContext || selectedContext.kind !== "part") return;
-            var result = window.GraneteMutation.startComponentViewportMove(selectedContext);
-            if (result === "unavailable") {
-              showToast("error", "El gesto de viewport no está disponible para esta selección.");
-            }
-          });
-        }
-
-        if (btnPartDuplicate) {
-          btnPartDuplicate.addEventListener("click", function () {
-            submitPartMutation("duplicate");
-          });
-        }
-
-        if (btnPartAdd) {
-          btnPartAdd.addEventListener("click", function () {
-            submitPartMutation("add");
-          });
-        }
-
-        if (btnPartRemove) {
-          btnPartRemove.addEventListener("click", function () {
-            submitPartMutation("remove");
-          });
-        }
-
-        // Mutation-state feedback refresh (#467): the shared controller
-        // dispatches a DOM event after every outcome; the component editor
-        // shows the authoritative issues without polling.
-        document.addEventListener("granete-mutation-state", function () {
-          renderPartAuthoringFeedback();
-        });
-
         // #470 read-only manufacturing inspection (`Ver fabricación`).
         // Commands go through the versioned inspection channel; the view
-        // never derives machining from anything local.
+        // never derives machining from anything local. The runtime logic
+        // owns window.GraneteManufacturing; this stays as the thin inline
+        // runtime adapter (#848 C4.7) reading the Inspector's selection.
         (function () {
           var toggleBtn = document.getElementById("btn-manufacturing-toggle");
           var filterAll = document.getElementById("manufacturing-filter-all");
@@ -2382,7 +1605,7 @@
 
           if (toggleBtn) {
             toggleBtn.addEventListener("click", function () {
-              if (window.GraneteManufacturing) window.GraneteManufacturing.toggle(selectedContext);
+              if (window.GraneteManufacturing) window.GraneteManufacturing.toggle(window.GraneteUI.inspector.getSelectedContext());
             });
           }
           if (filterAll) {
@@ -2414,11 +1637,13 @@
         // #466 authoritative preflight review (`Verificar fabricación`).
         // The run button submits the read-only preflight_command channel;
         // rendering comes exclusively from the Ruby-pushed review state.
+        // Thin inline runtime adapter (#848 C4.7) reading the Inspector's
+        // selection; the runtime logic owns window.GranetePreflightReview.
         (function () {
           var runBtn = document.getElementById("btn-preflight-run");
           if (runBtn) {
             runBtn.addEventListener("click", function () {
-              if (window.GranetePreflightReview) window.GranetePreflightReview.run(selectedContext);
+              if (window.GranetePreflightReview) window.GranetePreflightReview.run(window.GraneteUI.inspector.getSelectedContext());
             });
           }
         })();
@@ -3760,18 +2985,48 @@
           }
         });
 
+        // #848 C4.7 (boundary-adjusted): the child Inspector module owns
+        // the part/hardware/aggregate surface (#467/#468). It receives
+        // the shared toast/capability helpers and a call-time hardware
+        // catalog accessor (the catalog slice stays owned by the
+        // inspector module). Wired BEFORE inspector.init, which routes
+        // child kinds to it at render time.
+        window.GraneteUI.inspectorChild.init({
+          showToast: showToast,
+          capabilityEnabled: capabilityEnabled,
+          getHardwareCatalog: function () { return window.GraneteUI.inspector.getHardwareCatalog(); }
+        });
+
+        // #848 C4.7: the inspector module owns the selection working copy,
+        // the Inspector render/action surface and the hardware catalog
+        // slice. The shared helpers stay HERE (single implementation,
+        // also consumed by the Configurator and the child Inspector
+        // module) and enter the module by explicit injection. Wired
+        // BEFORE materialRoles.init, whose read-only Inspector accessors
+        // now resolve against the module.
+        window.GraneteUI.inspector.init({
+          icon: icon,
+          showToast: showToast,
+          switchTab: switchTab,
+          getDefaultParams: getDefaultParams,
+          renderParamForm: renderParamForm,
+          estimatedPartsLabel: estimatedPartsLabel,
+          parameterIssueMessage: parameterIssueMessage,
+          capabilityEnabled: capabilityEnabled
+        });
+
         // #848 C4.6: the material roles module owns the shared material
         // authority (catalog, project defaults, role resolution and role
         // rendering). The bootstrap injects the icon helper and the
-        // read-only Inspector context accessors (call-time) that feed the
-        // selector context payload fallback — Inspector state itself stays
-        // owned by the Inspector slice. Wired before the configurator and
-        // finish selector, which consume its API below.
+        // read-only Inspector context accessors (call-time, resolved
+        // through the inspector module since #848 C4.7) that feed the
+        // selector context payload fallback. Wired before the
+        // configurator and finish selector, which consume its API below.
         window.GraneteUI.materialRoles.init({
           icon: icon,
-          getInspectorMaterialsCard: function () { return inspectorMaterialsCard; },
-          getInspectorDef: function () { return inspectorDef; },
-          getSelectedContext: function () { return selectedContext; }
+          getInspectorMaterialsCard: function () { return window.GraneteUI.inspector.getMaterialsCard(); },
+          getInspectorDef: function () { return window.GraneteUI.inspector.getDefinition(); },
+          getSelectedContext: function () { return window.GraneteUI.inspector.getSelectedContext(); }
         });
 
         // #848 C4.4: the configurator module owns the active definition

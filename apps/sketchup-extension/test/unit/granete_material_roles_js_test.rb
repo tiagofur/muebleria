@@ -17,6 +17,7 @@ require_relative '../test_helper'
 class GraneteMaterialRolesJsTest < Minitest::Test
   MATERIAL_ROLES_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/granete-material-roles.js',
                                        __dir__)
+  INSPECTOR_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/granete-inspector.js', __dir__)
   DIALOG_HTML = File.expand_path('../../src/granete_for_sketchup/resources/dialog.html', __dir__)
   DIALOG_SCRIPTS_LOADER = File.expand_path('../js/support/dialog_scripts.js', __dir__)
 
@@ -112,13 +113,13 @@ class GraneteMaterialRolesJsTest < Minitest::Test
     html = File.read(DIALOG_HTML, encoding: 'UTF-8')
     # GraneteDialog.setCatalog stays the Ruby-facing thin orchestrator: the
     # material slice (both the array reset and the object payload) delegates
-    # to the module; hardware keeps its inline slice until its own Phase B
-    # slice.
+    # to the module; the hardware slice delegates to the inspector module
+    # (#848 C4.7).
     assert_includes html, 'window.GraneteUI.materialRoles.setCatalog({ materials: [], categories: [] })'
     assert_includes html, 'window.GraneteUI.materialRoles.setCatalog({'
     assert_includes html, 'materials: payload.materials || [],'
     assert_includes html, 'categories: payload.materialCategories || []'
-    assert_includes html, 'catalogHardware = payload.hardware || [];'
+    assert_includes html, 'window.GraneteUI.inspector.setHardwareCatalog(payload.hardware || []);'
     # The GraneteState projection reads materials through the module API —
     # one material authority, no inline copy.
     assert_includes html, 'materials: window.GraneteUI.materialRoles.getMaterials(),'
@@ -126,6 +127,7 @@ class GraneteMaterialRolesJsTest < Minitest::Test
 
   def test_configurator_finish_selector_and_inspector_consume_the_material_roles_api
     html = File.read(DIALOG_HTML, encoding: 'UTF-8')
+    inspector_js = File.read(INSPECTOR_JS, encoding: 'UTF-8')
     # Configurator injection (material helpers no longer inline).
     assert_includes html, 'defaultMaterialChoices: window.GraneteUI.materialRoles.defaultMaterialChoices,'
     assert_includes html, 'renderMaterialSelectors: window.GraneteUI.materialRoles.renderMaterialSelectors,'
@@ -135,29 +137,36 @@ class GraneteMaterialRolesJsTest < Minitest::Test
     assert_includes html, 'getMaterialCategories: window.GraneteUI.materialRoles.getMaterialCategories,'
     assert_includes html, 'optionMaterialIds: window.GraneteUI.materialRoles.optionMaterialIds,'
     assert_includes html, 'updateMaterialSwatch: window.GraneteUI.materialRoles.updateMaterialSwatch,'
-    # Inspector shared calls (rollback, onMaterialChoiceApplied, render).
-    assert_equal 3, html.scan('window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard').length,
+    # Inspector shared calls (rollback, onMaterialChoiceApplied, render) live
+    # in the inspector module since #848 C4.7 and keep going through the
+    # material-roles API.
+    inspector_render = 'window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard'
+    assert_equal 3, inspector_js.scan(inspector_render).length,
                  'all inspector render paths (rollback + choice-applied + render) go through the module'
-    assert_includes html, 'window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef)'
-    assert_includes html, 'window.GraneteUI.materialRoles.defaultMaterialChoices(def)'
-    assert_equal 3, html.scan('window.GraneteUI.materialRoles.setProjectDefaultMaterial(').length,
+    assert_includes inspector_js, 'window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef)'
+    assert_includes inspector_js, 'window.GraneteUI.materialRoles.defaultMaterialChoices(def)'
+    assert_equal 3, inspector_js.scan('window.GraneteUI.materialRoles.setProjectDefaultMaterial(').length,
                  'project-default writes (inspector callbacks + onMaterialChoiceApplied) go through the module'
-    # onMaterialChoiceApplied keeps its cross-domain routing inline (until
-    # the Inspector slice); only its shared reads/writes migrated.
+    # onMaterialChoiceApplied stays a Ruby-facing thin wrapper in the dialog;
+    # its cross-domain routing (Inspector/Configurator/project scopes) lives
+    # in the inspector module.
     assert_includes html, 'onMaterialChoiceApplied: function (payload) {'
-    assert_includes html, 'window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope)'
-    # Wiring order: materialRoles.init → configurator.init →
-    # finishSelector.init → renderModelBindingStatus → dialog_ready.
+    assert_includes inspector_js, 'window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope)'
+    # Wiring order: inspector.init → materialRoles.init → configurator.init
+    # → finishSelector.init → renderModelBindingStatus → dialog_ready.
+    inspector_init = html.index('window.GraneteUI.inspector.init({')
     mr_init = html.index('window.GraneteUI.materialRoles.init({')
     config_init = html.index('window.GraneteUI.configurator.init({')
     fs_init = html.index('window.GraneteUI.finishSelector.init({')
     binding_render = html.index('renderModelBindingStatus({ state: "unbound" })')
     dialog_ready = html.index('window.sketchup.dialog_ready()')
+    refute_nil inspector_init
     refute_nil mr_init
     refute_nil config_init
     refute_nil fs_init
     refute_nil binding_render
     refute_nil dialog_ready
+    assert inspector_init < mr_init, 'inspector.init must run before materialRoles.init wires its accessors'
     assert mr_init < config_init, 'materialRoles.init must run before configurator.init consumes its API'
     assert config_init < fs_init, 'configurator.init must run before finishSelector.init (bootstrap order)'
     assert fs_init < binding_render, 'module wiring must complete before the first render'
