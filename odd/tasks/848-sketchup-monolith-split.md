@@ -574,9 +574,168 @@ Ruby-native selector.
   Material Roles: NOT_STARTED.
 
 
+## C4.6 — granete-material-roles.js
+
+Started from `main@ce8af2db48eed78470e6feb254fce6b5095276ba` (post-#859),
+branch `refactor/848-dialog-js-material-roles`, fresh worktree
+`muebles-worktrees/848-material-roles`. Extraction of the shared
+material/acabados authority: `window.GraneteUI.materialRoles` is now the
+single owner of the material catalog (materials + categories), the
+project-default material choices, role-compatible resolution, default
+choice resolution and material role rendering. NOT in scope: the Inspector
+slice (its choices/selection/mutation), Model Binding, Project Furniture.
+
+- **Extracted**: `resources/js/granete-material-roles.js` (275 lines
+  including the agent-first header). dialog.html went 4,009 → 3,852 lines;
+  inline JS 3,037 → 2,869 (the state vars `catalogMaterials`,
+  `catalogMaterialCategories`, `projectDefaultMaterials` + the whole
+  material helpers block: `materialById`, `optionMaterialIds`,
+  `defaultMaterialChoices`, `materialOptionLabel`, `updateMaterialSwatch`,
+  `updateMaterialMeta`, `renderMaterialSelectors`). `catalogHardware`
+  stays inline (hardware is not this slice).
+- **Public API (10, owner-approved names after the boundary review)**:
+  `init(deps)`, `setCatalog({materials, categories})`, `getMaterials`,
+  `getMaterialCategories`, `materialById`, `optionMaterialIds`,
+  `defaultMaterialChoices`, `renderMaterialSelectors`,
+  `updateMaterialSwatch`, `setProjectDefaultMaterial` (no legacy aliases:
+  no published C4.6 contract existed yet). **Private**: the three state
+  vars, `materialOptionLabel`, `updateMaterialMeta`. `updateMaterialMeta` has no
+  external consumer → private. `materialOptionLabel` had ZERO consumers
+  (src + tests) at extraction time → moved verbatim as pre-existing dead
+  code with a documenting comment (removal is its own cleanup, not this
+  behavior-preserving slice).
+- **Contract clarification (owner-approved)**: the module header states
+  that `projectDefaultMaterials` holds TEMPORARY, session-local dialog
+  defaults for the current flow — NOT persisted project truth and NOT
+  backend business truth. The historical write sites stay distinct (each
+  replaced by `setProjectDefaultMaterial(role, id)`, none deduplicated).
+- **Inspector context accessors**: `renderMaterialSelectors`' fallback
+  heuristic (isInspector/instanceId/definitionId when no `contextInfo` is
+  passed) reads `inspectorMaterialsCard`/`inspectorDef`/`selectedContext`
+  through injected call-time accessors (`getInspectorMaterialsCard`,
+  `getInspectorDef`, `getSelectedContext`) — the C4.4 `isModelConnected`
+  pattern. Inspector state stays owned by the Inspector slice; the module
+  never writes it. `renderMaterialSelectors` fail-fasts listing missing deps if
+  init was skipped (bootstrap always runs init).
+- **setCatalog orchestration**: `GraneteDialog.setCatalog` delegates the
+  material slice (array branch → `setCatalog({materials: [],
+  categories: []})`; object branch → `setCatalog({materials:
+  payload.materials || [], categories: payload.materialCategories || []})`)
+  and the GraneteState "catalog" projection now reads `materials:
+  GraneteUI.materialRoles.getMaterials()` (live array identity — no second
+  copy). Project defaults deliberately survive catalog refreshes
+  (pre-existing semantics, asserted). The catalogHardware array-branch
+  quirk stays untouched.
+- **Boundaries**: the Configurator keeps its `libMaterialChoices` snapshot
+  and consumes `defaultMaterialChoices`/`renderMaterialSelectors`/
+  `materialById`/`setProjectDefaultMaterial` via its existing init deps
+  (now sourced from
+  materialRoles). The Finish Selector receives
+  `getMaterialCategories`/`materialById`/`optionMaterialIds`/
+  `updateMaterialSwatch` at bootstrap. `onMaterialChoiceApplied` keeps its 3-branch cross-domain
+  routing INLINE (until the Inspector slice); only its shared
+  reads/writes migrated (`setProjectDefaultMaterial`,
+  `renderMaterialSelectors`, `materialById`). Inspector callbacks keep writing their own
+  `inspectorMaterialChoices`; project-scope writes go through
+  `materialRoles.setProjectDefaultMaterial`.
+- **Ruby-native selector**: `window.sketchup.open_material_selector`
+  stays PRIMARY with the exact payload; the `finishSelector.open` fallback
+  is call-time. Move fidelity: 154/155 normalized lines verbatim (modulo
+  the 4 accessor substitutions); the one residual is the Ruby-selector
+  condition split across two lines — formatting only. The post-review
+  rename is a pure API-name pass (callsites + tests), no behavior change.
+- **Preserved quirks** (documented, not fixed): the "opciónes" concat and
+  the dead `selectorTitle` live in the finish-selector module (untouched);
+  `materialOptionLabel` dead-but-preserved; the historical
+  `project_default` scope alias stays accepted alongside `project`.
+- **Load order**: markup → media → account → library → configurator →
+  finish-selector → **material-roles** → inline bootstrap → #498 runtime.
+  Bootstrap wiring order: account.init → library.init →
+  **materialRoles.init** → configurator.init → finishSelector.init →
+  btnClose listener → renderModelBindingStatus → configurator.close() →
+  dialog_ready.
+- **Harness migration**: `test/js/support/dialog_scripts.js` loads the
+  module between finish-selector and inline; `dialog_publish_test.js`
+  preload chain updated. Repointed (never deleted) asserts:
+  `granete_finish_selector_js_test.rb` (single-authority test flipped to
+  module ownership + materialRoles wiring),
+  `granete_configurator_js_test.rb` (setCatalog delegation +
+  renderMaterialSelectors/setProjectDefaultMaterial wiring),
+  `granete_library_js_test.rb`
+  (material slice delegation + projection), `dialog_library_view_test.rb`
+  (renderer asserts point at the module, incl. `material-chevron`).
+- **Focused tests**: `test/js/granete_material_roles_test.js` — 30 tests:
+  registration/idempotence, exact 10-entry API, catalog set/get live
+  identity, reset semantics, defaults survive refresh, materialById
+  found/miss, curated/invalid-filtered/all-materials option resolution,
+  default choice rules (project default offered / first candidate /
+  project default no longer offered / role without candidates), rendering
+  visibility/structure/aria, swatch signed media via GraneteUI.media +
+  color fallback, meta parts (code/thickness/grain/manufacturer), Ruby
+  primary payload + no fallback call, finish-selector fallback + apply
+  callback role/id/scope, Enter/Space trigger, context payloads
+  (configurator default / inspector via card identity / inspector via def
+  identity / explicit contextInfo), `setProjectDefaultMaterial` write
+  path, init fail-fast; integrated part: orchestrator object/array payload
+  semantics, GraneteState projection live-identity single authority,
+  project-scope choice surviving a full refresh, inspector materials
+  rendered through the module. Ruby side
+  `test/unit/granete_material_roles_js_test.rb` (7 tests, 135 assertions):
+  harness green + symbol guards (implementation + header in the module,
+  load order finish-selector → material-roles → inline in dialog.html AND
+  dialog_scripts.js, monolith carries no material implementation symbol,
+  setCatalog delegation + projection, configurator/finish-selector/
+  inspector consumption with wiring order materialRoles.init →
+  configurator.init → finishSelector.init → renderModelBindingStatus →
+  dialog_ready, Ruby-primary/fallback order, no `open_material_selector`
+  left in the monolith).
+- **Verify** (Homebrew `ruby@3.2` 3.2.11; fresh worktree `vendor/bundle`
+  installed frozen — no Gemfile/lockfile change): RuboCop 256 files /
+  0 offenses; unit suite 1167 runs, 8104 assertions, 0
+  failures/errors/skips; contract suite 6 runs, 4043 assertions, 0
+  failures; every Node harness under test/js green; `git diff --check`
+  clean; `verify_affected --plan` exit 0 (`sketchup-local-os` = `bundle
+  exec rake verify` green above; contracts drift + ci/factory unittest
+  suites green). RBZ rebuilt and read back by `package:verify`, sha256
+  `8217f0d271946aecd47e9f84e6b7653de901c0ba83f419b659f51dbd5d1c268f`,
+  packages granete-material-roles.js (supersedes the pre-rename build
+  `209a67fe…` after the owner-approved API-name refinement).
+- **Behavior changes: 0** (target). Documented notes: the
+  `renderMaterialSelectors` `requireDeps()` guard (new code path only
+  reachable if
+  init was skipped, which the bootstrap always runs) and the two-line
+  reflow of the Ruby-selector condition.
+- **Real SketchUp host smoke: NOT_RUN** (same phase-level gate as
+  C4.1–C4.5).
+- **Status**: the owner approved the pre-commit boundary review on
+  2026-09-26 with a naming-only refinement (getCategories →
+  getMaterialCategories, defaultChoices → defaultMaterialChoices,
+  renderSelectors → renderMaterialSelectors, updateSwatch →
+  updateMaterialSwatch, setProjectDefault → setProjectDefaultMaterial;
+  init/setCatalog/getMaterials/materialById/optionMaterialIds kept; no
+  legacy aliases) plus the session-local projectDefaults header
+  clarification. The refinement was applied and the full battery
+  revalidated green (tallies above). Committed as one implementation work
+  unit (`016b211a84a5064e3944a0abc945e1720e219ba7`) and published
+  against main as PR #860 (`Refs #848`, `Delivery: partial`,
+  `type:refactor`). Exact-head readback at publication (implementation
+  work unit): OPEN, non-draft, base main, headSha == 016b211a…,
+  MERGEABLE, issue #848 OPEN + status:approved; CI exact-head: PASS
+  16/16; PR Publication exact-head: PASS 1/1 (incl. Foundation Gate A +
+  real browser proofs and the three SketchUp Ruby runners). Docs-only
+  follow-ups advanced the PR HEAD afterwards (publication record
+  `09f65ba4123193681ac6545293776c737ab25ae4`, stale-name corrections
+  `e7ae0f97acd4318772c34e17ba2b032690e4a471`, then this evidence wording
+  correction); the implementation commit is unchanged. PR exact-head
+  check status is tracked live on GitHub — this artifact records only
+  the publication-time readback above and never certifies its own HEAD.
+  Merge remains human. **Real SketchUp host smoke: NOT_RUN** (same
+  phase-level gate).
+
+
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
   required before closing: NOT_RUN until executed.
 - No behavior change is in scope; anything discovered broken becomes its own
   issue.
-- Remaining Phase B modules after C4.5: material-roles, inspector,
-  model-binding, project-furniture.
+- Remaining Phase B modules after C4.6: inspector, model-binding,
+  project-furniture.

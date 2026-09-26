@@ -39,6 +39,7 @@ tocan en Phase B.
 | búsqueda/categorías/tarjetas/estado vacío de Biblioteca | `resources/js/granete-library.js` | `test/js/granete_library_test.js` (vía `test/unit/granete_library_js_test.rb`) |
 | configuración de parámetros/presets/preview/acción de inserción | `resources/js/granete-configurator.js` | `test/js/granete_configurator_test.js` (vía `test/unit/granete_configurator_js_test.rb`) |
 | selector visual de acabados / búsqueda / Miller columns / detalle / apply | `resources/js/granete-finish-selector.js` | `test/js/granete_finish_selector_test.js` (vía `test/unit/granete_finish_selector_js_test.rb`) |
+| materiales / roles / opciones / defaults de proyecto / swatches | `resources/js/granete-material-roles.js` | `test/js/granete_material_roles_test.js` (vía `test/unit/granete_material_roles_js_test.rb`) |
 
 Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies

@@ -117,12 +117,13 @@ class GraneteConfiguratorJsTest < Minitest::Test
     assert_includes html,
                     'getCatalogCreateIntentKey: function () { return window.GraneteUI.configurator.getIntentKey(); }'
     # setCatalog keeps the presets/materials/hardware split: presets belong
-    # to the configurator (single authority), materials stay until their
-    # own slice, and the post-refresh re-entry delegates wholesale.
+    # to the configurator (single authority), the material slice delegates
+    # to materialRoles (#848 C4.6), and the post-refresh re-entry delegates
+    # wholesale.
     assert_includes html, 'window.GraneteUI.configurator.setPresets(payload.presets || []);'
     assert_includes html, 'window.GraneteUI.configurator.setPresets([]);'
     assert_includes html, 'window.GraneteUI.configurator.refreshAfterCatalog();'
-    assert_includes html, 'catalogMaterials = payload.materials || [];'
+    assert_includes html, 'window.GraneteUI.materialRoles.setCatalog({'
     # The shared #469 placement preview handlers stay inline (they serve
     # the Project lane too) and read the catalog entry point through the
     # module API.
@@ -143,16 +144,17 @@ class GraneteConfiguratorJsTest < Minitest::Test
     assert_includes html, 'window.GraneteUI.configurator.open(def);'
     assert_includes html, 'getSelectedDefinitionId: function () {'
     assert_includes html, 'return window.GraneteUI.configurator.getActiveDefinitionId();'
-    # The bootstrap injects the shared helpers (single implementation,
-    # also consumed by the Inspector), the model-connected accessor and
-    # the project-default write BEFORE any module render can run.
+    # The bootstrap injects the shared helpers (param/summary stay inline;
+    # material helpers come from materialRoles since #848 C4.6, also
+    # consumed by the Inspector), the model-connected accessor and the
+    # project-default write BEFORE any module render can run.
     assert_includes html, 'window.GraneteUI.configurator.init({'
     assert_includes html, 'getDefaultParams: getDefaultParams,'
     assert_includes html, 'renderParamForm: renderParamForm,'
-    assert_includes html, 'renderMaterialSelectors: renderMaterialSelectors,'
+    assert_includes html, 'renderMaterialSelectors: window.GraneteUI.materialRoles.renderMaterialSelectors,'
     assert_includes html, 'estimatedPartsLabel: estimatedPartsLabel,'
     assert_includes html, 'isModelConnected: function () {'
-    assert_includes html, 'setProjectDefaultMaterial: function (role, id) {'
+    assert_includes html, 'setProjectDefaultMaterial: window.GraneteUI.materialRoles.setProjectDefaultMaterial,'
     # Initial view + initial binding render run after the injection.
     assert_includes html, 'window.GraneteUI.configurator.close();'
     bootstrap = html.index('window.GraneteUI.configurator.init({')

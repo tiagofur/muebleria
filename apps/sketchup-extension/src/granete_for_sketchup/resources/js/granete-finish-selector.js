@@ -15,14 +15,14 @@
 //   (getMaterialCategories) — never a second catalog authority
 // - the role allowed-material resolver (optionMaterialIds), material
 //   lookup (materialById), the shared swatch renderer
-//   (updateMaterialSwatch, also used by the inline material-role
+//   (updateMaterialSwatch, also used by the material-roles module
 //   rendering) and the icon helper — all injected, never copied
 //
 // Does NOT own:
 // - material catalog state (catalogMaterials/catalogMaterialCategories
-//   stay in dialog.html until the Material Roles slice)
-// - material-role rendering (renderMaterialSelectors stays inline) nor
-//   role option assignments
+//   are owned by window.GraneteUI.materialRoles since #848 C4.6)
+// - material-role rendering (renderMaterialSelectors is owned by
+//   window.GraneteUI.materialRoles) nor role option assignments
 // - Configurator/Inspector material choices or project defaults
 // - the Ruby-native selector (window.sketchup.open_material_selector
 //   remains the PRIMARY path; this modal is the local fallback)
@@ -67,8 +67,8 @@
   var selectorLastFocus = null;
 
   // Injected by the dialog bootstrap before any open(): the catalog
-  // accessors and shared material helpers stay single-implementation in
-  // dialog.html (the Material Roles slice decides their final owner).
+  // accessors and shared material helpers come from
+  // window.GraneteUI.materialRoles (#848 C4.6).
   var deps = {};
 
   function requireDeps() {

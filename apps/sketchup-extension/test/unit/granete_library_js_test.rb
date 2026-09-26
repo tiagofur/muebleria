@@ -93,17 +93,19 @@ class GraneteLibraryJsTest < Minitest::Test
     html = File.read(DIALOG_HTML, encoding: 'UTF-8')
     # Ruby keeps calling GraneteDialog.setCatalog with the same payload; the
     # browsing slice delegates to the module, presets delegate to the
-    # configurator module (#848 C4.4), and the not-yet-extracted slices
-    # (materials/hardware/media/GraneteState) stay here.
+    # configurator module (#848 C4.4), the material slice delegates to
+    # materialRoles (#848 C4.6), and the not-yet-extracted slices
+    # (hardware/media) stay here.
     assert_includes html, 'setCatalog: function'
     assert_includes html, 'window.GraneteUI.library.setCatalog(payload)'
     assert_includes html, 'window.GraneteUI.configurator.setPresets(payload.presets || []);'
-    assert_includes html, 'catalogMaterials = payload.materials || [];'
+    assert_includes html, 'window.GraneteUI.materialRoles.setCatalog({'
     assert_includes html, 'catalogHardware = payload.hardware || [];'
     assert_includes html, 'window.GraneteUI.media.setCatalogMedia(payload.media)'
     # The GraneteState projection reads through the module API — one
     # definitions authority, no inline copy.
     assert_includes html, 'definitions: window.GraneteUI.library.getDefinitions(),'
+    assert_includes html, 'materials: window.GraneteUI.materialRoles.getMaterials(),'
     assert_includes html, 'categories: window.GraneteUI.library.getCategories()'
     # External consumers migrated to explicit reads.
     assert_includes html, 'window.GraneteUI.library.findDefinitionById('

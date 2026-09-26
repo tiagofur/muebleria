@@ -20,13 +20,14 @@
 //   formatCategoryLabel) — never a second definitions collection
 // - window.GraneteUI.media (filenameFromPath/resolveUrl/requestRefresh)
 // - injected bootstrap dependencies via init(): shared presentation and
-//   param/material helpers that stay single-implementation in dialog.html
+//   param helpers that stay single-implementation in dialog.html
 //   (icon, showToast, createFurniturePlaceholderSvg, getDefaultParams,
-//   renderParamForm, defaultMaterialChoices, renderMaterialSelectors,
-//   materialById, estimatedPartsLabel, parameterIssueMessage), the
+//   renderParamForm, estimatedPartsLabel, parameterIssueMessage), the
+//   material helpers from window.GraneteUI.materialRoles (#848 C4.6:
+//   defaultMaterialChoices, renderMaterialSelectors, materialById), the
 //   model-connected accessor (isModelConnected), the project-default
-//   material write (setProjectDefaultMaterial) and the project-side
-//   effects of the legacy create fallback (switchTab,
+//   material write (setProjectDefaultMaterial → materialRoles) and the
+//   project-side effects of the legacy create fallback (switchTab,
 //   requestProjectFurniture, pfPlaceFailureMessage)
 // - window.sketchup catalog placement callbacks
 //   (begin_catalog_placement_preview, create_project_furniture,
@@ -34,9 +35,11 @@
 //
 // Does NOT own:
 // - the material catalog/hierarchy/selector modal or role rendering
-//   (injected renderMaterialSelectors; Material Roles slice decides the
-//   final owner) nor projectDefaultMaterials
-// - Inspector (shares the inline param/material/summary helpers)
+//   (renderMaterialSelectors/defaultMaterialChoices/materialById are
+//   owned by window.GraneteUI.materialRoles since #848 C4.6) nor
+//   projectDefaultMaterials
+// - Inspector (still shares the inline param/summary helpers; material
+//   helpers come from window.GraneteUI.materialRoles since #848 C4.6)
 // - Project Furniture rows/lifecycle (switchTab/requestProjectFurniture
 //   are injected effects of the legacy create fallback)
 // - the shared #469 placement preview handlers
@@ -65,8 +68,9 @@
   var repeatPreviewActive = false;
 
   // Injected by the dialog bootstrap before any render: shared helpers
-  // stay single-implementation in dialog.html (param/material forms are
-  // shared with the Inspector until its own Phase B slice).
+  // stay single-implementation (param forms are shared with the
+  // Inspector until its own Phase B slice; material helpers come from
+  // window.GraneteUI.materialRoles since #848 C4.6).
   var deps = {};
 
   // Browser↔configurator transition elements

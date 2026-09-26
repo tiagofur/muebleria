@@ -71,6 +71,12 @@ class DialogLibraryViewTest < Minitest::Test
       File.expand_path('../../src/granete_for_sketchup/resources/js/granete-configurator.js', __dir__),
       encoding: 'UTF-8'
     )
+    # #848 Phase B C4.6: los materiales (catálogo/roles/defaults) viven en
+    # js/granete-material-roles.js; sus asserts apuntan al módulo.
+    @material_roles_js = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/js/granete-material-roles.js', __dir__),
+      encoding: 'UTF-8'
+    )
     # #848: los estilos del panel viven en css/*.css.
     css_dir = File.expand_path('../../src/granete_for_sketchup/resources/css', __dir__)
     @css_content = Dir.children(css_dir).sort.map { |f| File.read(File.join(css_dir, f), encoding: 'UTF-8') }.join("\n")
@@ -152,9 +158,10 @@ class DialogLibraryViewTest < Minitest::Test
     # Una línea por parámetro: etiqueta a la izquierda, control a la derecha.
     assert_includes @html_content, 'param-control'
     # Los botones "Catálogo" por rol murieron: la fila es el control y el
-    # chevron comunica la navegación.
+    # chevron comunica la navegación. El chevron lo renderiza el módulo de
+    # materiales (#848 C4.6), ya no el monolito.
     refute_includes @html_content, 'btn-picker-open'
-    assert_includes @html_content, 'material-chevron'
+    assert_includes @material_roles_js, 'material-chevron'
     # El inspector comparte el patrón: dock con cotas junto a la acción
     # primaria, DENTRO del fieldset fail-closed (#476), y delete fuera.
     assert_includes @html_content, 'id="inspector-actionbar"'
@@ -305,11 +312,12 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'id="library-materials-container"'
     assert_includes @html_content, 'id="inspector-materials-card"'
     assert_includes @html_content, 'id="inspector-materials-container"'
-    # El renderer de roles y el snapshot por defecto siguen inline
-    # (helpers compartidos con el Inspector, #848 C4.4).
-    assert_includes @html_content, 'function renderMaterialSelectors('
-    assert_includes @html_content, 'function defaultMaterialChoices('
-    assert_includes @html_content, 'catalogMaterials = payload.materials || [];'
+    # El renderer de roles y el snapshot por defecto viven en el módulo
+    # js/granete-material-roles.js (#848 C4.6); el setCatalog del diálogo
+    # delega el slice de materiales.
+    assert_includes @material_roles_js, 'function renderMaterialSelectors('
+    assert_includes @material_roles_js, 'function defaultMaterialChoices('
+    assert_includes @html_content, 'window.GraneteUI.materialRoles.setCatalog({'
     # El payload de inserción del catálogo vive en el módulo del
     # configurador; el del inspector sigue inline.
     assert_includes @configurator_js, 'materialChoices: libMaterialChoices'
