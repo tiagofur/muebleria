@@ -15,6 +15,7 @@ require_relative '../test_helper'
 class GraneteLibraryJsTest < Minitest::Test
   LIBRARY_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/granete-library.js', __dir__)
   DIALOG_HTML = File.expand_path('../../src/granete_for_sketchup/resources/dialog.html', __dir__)
+  INSPECTOR_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/granete-inspector.js', __dir__)
 
   def test_real_javascript_library_harness_executes_and_passes
     js_test_path = File.expand_path('../js/granete_library_test.js', __dir__)
@@ -94,21 +95,23 @@ class GraneteLibraryJsTest < Minitest::Test
     # Ruby keeps calling GraneteDialog.setCatalog with the same payload; the
     # browsing slice delegates to the module, presets delegate to the
     # configurator module (#848 C4.4), the material slice delegates to
-    # materialRoles (#848 C4.6), and the not-yet-extracted slices
-    # (hardware/media) stay here.
+    # materialRoles (#848 C4.6), hardware delegates to the inspector module
+    # (#848 C4.7) and media stays here.
     assert_includes html, 'setCatalog: function'
     assert_includes html, 'window.GraneteUI.library.setCatalog(payload)'
     assert_includes html, 'window.GraneteUI.configurator.setPresets(payload.presets || []);'
     assert_includes html, 'window.GraneteUI.materialRoles.setCatalog({'
-    assert_includes html, 'catalogHardware = payload.hardware || [];'
+    assert_includes html, 'window.GraneteUI.inspector.setHardwareCatalog(payload.hardware || []);'
     assert_includes html, 'window.GraneteUI.media.setCatalogMedia(payload.media)'
     # The GraneteState projection reads through the module API — one
     # definitions authority, no inline copy.
     assert_includes html, 'definitions: window.GraneteUI.library.getDefinitions(),'
+    assert_includes html, 'hardware: window.GraneteUI.inspector.getHardwareCatalog(),'
     assert_includes html, 'materials: window.GraneteUI.materialRoles.getMaterials(),'
     assert_includes html, 'categories: window.GraneteUI.library.getCategories()'
-    # External consumers migrated to explicit reads.
-    assert_includes html, 'window.GraneteUI.library.findDefinitionById('
+    # External consumers migrated to explicit reads (the Inspector fallback
+    # lives in the inspector module since #848 C4.7).
+    assert_includes File.read(INSPECTOR_JS, encoding: 'UTF-8'), 'window.GraneteUI.library.findDefinitionById('
     # The bootstrap wires the shared helpers and the configurator hand-off
     # (call-time resolution through the configurator module, #848 C4.4)
     # before the first render; the browser render itself is driven by the
