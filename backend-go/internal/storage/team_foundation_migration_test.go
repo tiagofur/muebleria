@@ -24,7 +24,7 @@ func teamFoundationMigrationSQL(t *testing.T, suffix string) string {
 }
 
 func TestTeamFoundationMigration_EnforcesCountersSeatsAndRLS(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 96)
 	ctx := context.Background()
 
@@ -144,7 +144,7 @@ func TestTeamFoundationMigration_EnforcesCountersSeatsAndRLS(t *testing.T) {
 }
 
 func TestUpdateMembershipStatus_RevokesCredentialsWhenLeavingActiveState(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 96)
 	ctx := context.Background()
 	const (
@@ -205,7 +205,7 @@ func TestUpdateMembershipStatus_RevokesCredentialsWhenLeavingActiveState(t *test
 }
 
 func TestTeamFoundationMigration_AllowsOnlyOneWayAdminBootstrap(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 96)
 	ctx := context.Background()
 	const orgID = "b2000000-0000-0000-0000-000000000077"
@@ -249,7 +249,7 @@ func TestTeamFoundationMigration_AllowsOnlyOneWayAdminBootstrap(t *testing.T) {
 }
 
 func TestTeamFoundationMigration_ConcurrentAdminsCannotBothSuspend(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 96)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := context.Background()
@@ -311,7 +311,7 @@ func TestTeamFoundationMigration_ConcurrentAdminsCannotBothSuspend(t *testing.T)
 }
 
 func TestTeamFoundationMigration_DownFailsAfterCredentialRevocation(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 96)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `INSERT INTO users (id, email, normalized_email, password_hash, name, account_status) VALUES ('b1000000-0000-0000-0000-000000000003', 'revoke@example.test', 'revoke@example.test', 'x', 'Revoke', 'active')`); err != nil {
@@ -341,7 +341,7 @@ func TestTeamFoundationMigration_DownFailsAfterCredentialRevocation(t *testing.T
 }
 
 func TestTeamFoundationMigration_UpgradeFailsForActiveOrganizationWithoutAdmin(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 95)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `INSERT INTO organizations (id, name, slug, active) VALUES ('b2000000-0000-0000-0000-000000000009', 'Unsafe', 'unsafe-team', TRUE)`); err != nil {

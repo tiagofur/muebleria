@@ -61,12 +61,12 @@ func assertSecurityAuditEnvelope(t *testing.T, pool *pgxpool.Pool) {
 func TestSecurityAuditEnvelopeMigrationFreshUpgradeAndDown(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 110)
 	assertSecurityAuditEnvelope(t, fresh)
 	fresh.Close()
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 109)
 	if _, err := upgrade.Exec(ctx, `INSERT INTO security_audit_events (event_type) VALUES ('pre_envelope_event')`); err != nil {
 		t.Fatal(err)

@@ -41,7 +41,7 @@ func assertPrivateSnapshotSchema(t *testing.T, pool *pgxpool.Pool) {
 func TestPrivateReleaseSnapshot_MigrationFreshUpgradeDown(t *testing.T) {
 	for _, path := range []string{"fresh", "upgrade"} {
 		t.Run(path, func(t *testing.T) {
-			pool := multiOrgFreshDB(t)
+			pool := multiOrgFreshMigrationDB(t)
 			if path == "fresh" {
 				identityApplyThrough(t, pool, 122)
 			} else {

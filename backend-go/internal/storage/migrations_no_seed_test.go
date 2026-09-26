@@ -15,7 +15,7 @@ import (
 // pin, un INSERT "inofensivo" en una migración obligatoria vuelve a llenar de
 // basura las bases de prueba de todos.
 func TestMigrations_NoBusinessData(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	store := &storage.PostgresStore{Pool: pool}
 	if err := store.RunMigrations(context.Background()); err != nil {
 		t.Fatalf("run migrations: %v", err)

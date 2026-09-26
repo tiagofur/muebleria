@@ -92,7 +92,7 @@ func identitySeedPreMigration(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestIdentityLifecycleMigration_FreshDatabaseSchemaAndRLS(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 95)
 	ctx := context.Background()
 
@@ -369,7 +369,7 @@ func assertOnlyLifecycleRowVisible(t *testing.T, tx pgx.Tx, table, expectedID st
 }
 
 func TestIdentityLifecycleMigration_UpgradeBackfillsConstraintsAndInventory(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 94)
 	identitySeedPreMigration(t, pool)
 	ctx := context.Background()
@@ -455,7 +455,7 @@ func TestIdentityLifecycleMigration_UpgradeBackfillsConstraintsAndInventory(t *t
 }
 
 func TestIdentityLifecycleMigration_NormalizedEmailCollisionFailsAtomically(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 94)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `INSERT INTO users (email,password_hash,name,active) VALUES ('Case@Example.Test','x','One',TRUE), (' case@example.test ','x','Two',FALSE)`); err != nil {
@@ -481,7 +481,7 @@ func TestIdentityLifecycleMigration_NormalizedEmailCollisionFailsAtomically(t *t
 }
 
 func TestIdentityLifecycleMigration_ExactHashLockBoundaryAndRuntimeGrant(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 94)
 	identitySeedPreMigration(t, pool)
 	ctx := context.Background()
@@ -544,7 +544,7 @@ func TestIdentityLifecycleMigration_ExactHashLockBoundaryAndRuntimeGrant(t *test
 
 func TestIdentityLifecycleMigration_RollbackRejectsLossAndSafeRoundTrip(t *testing.T) {
 	t.Run("safe rollback and reapply", func(t *testing.T) {
-		pool := multiOrgFreshDB(t)
+		pool := multiOrgFreshMigrationDB(t)
 		identityApplyThrough(t, pool, 94)
 		identitySeedPreMigration(t, pool)
 		ctx := context.Background()
@@ -569,7 +569,7 @@ func TestIdentityLifecycleMigration_RollbackRejectsLossAndSafeRoundTrip(t *testi
 	})
 
 	t.Run("history blocks rollback", func(t *testing.T) {
-		pool := multiOrgFreshDB(t)
+		pool := multiOrgFreshMigrationDB(t)
 		identityApplyThrough(t, pool, 94)
 		identitySeedPreMigration(t, pool)
 		ctx := context.Background()

@@ -140,10 +140,13 @@ class WiringTest(unittest.TestCase):
     def test_ci_keeps_critical_guards_and_same_check_names(self):
         text = (ROOT / ".github/workflows/ci.yml").read_text()
         for fragment in ("if: ${{ always() }}", "name: Foundation Gate A", "name: Go Backend Tests",
-                         "go test -p 1 -timeout=30m -v ./...", "DATABASE_URL:",
+                         "storage-shard-plan:", "storage-shards:", "backend-go-other:",
+                         "scripts/backend-test-storage-shard.sh 3", "scripts/backend-test.sh -timeout=30m -v",
                          "os: [ubuntu-latest, macos-latest, windows-latest]", "fetch-depth: 0",
                          "scripts/ci_result.py", "toJSON(needs)", "contents: read"):
             self.assertIn(fragment, text)
+        self.assertNotIn("DATABASE_URL: postgres://postgres", text)
+        self.assertNotIn("go test -p 1 -timeout=30m -v ./...", text)
         self.assertNotIn("continue-on-error", text)
         self.assertNotIn("pull_request_target", text)
         self.assertEqual(len(re.findall(r"^\s+- run: pnpm typecheck$", text, re.M)), 1)
@@ -180,6 +183,26 @@ class BudgetTest(unittest.TestCase):
         with tempfile.TemporaryFile(mode="w+") as output:
             self.assertEqual(verify_affected.run_bounded([shutil.which("bash"), "-c", "sleep 30"], ROOT, output, 0.05), 124)
 
+
+class PilotGateAuthorityTest(unittest.TestCase):
+    def test_pilot_gate_keeps_migration_and_runtime_authorities_separate(self):
+        text = (ROOT / "scripts/pilot-gate.sh").read_text(encoding="utf-8")
+        self.assertIn('MIGRATION_DSN="postgres://postgres:', text)
+        self.assertIn('RUNTIME_DSN="postgres://granete_app:', text)
+        self.assertIn('scripts/postgres-init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro', text)
+        self.assertIn('MIGRATION_DATABASE_URL="${MIGRATION_DSN}"', text)
+        self.assertIn('DATABASE_URL="${RUNTIME_DSN}"', text)
+        self.assertNotIn('DATABASE_URL="${DSN}"', text)
+
+    def test_pilot_gate_rejects_legacy_single_dsn_before_execution(self):
+        result = subprocess.run(
+            [shutil.which("bash"), str(ROOT / "scripts/pilot-gate.sh"), "--dsn", "postgres://postgres:secret@localhost:5432/muebles_pilot_readiness"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no puede separar autoridad", result.stderr)
 
 if __name__ == "__main__":
     unittest.main()

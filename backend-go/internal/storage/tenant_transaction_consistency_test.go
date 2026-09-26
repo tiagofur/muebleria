@@ -11,18 +11,25 @@ import (
 )
 
 func TestConsistentCatalogTx_SourceView(t *testing.T) {
-	store := skipIfNoDB(t)
+	store := newMigratedRuntimeStore(t)
 	ctx := context.Background()
 	writer, err := store.Pool.Acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer writer.Release()
-	if _, err := writer.Exec(ctx, `CREATE TABLE tenant_catalog_consistency_test (id int PRIMARY KEY, quantity int);
-		INSERT INTO tenant_catalog_consistency_test VALUES (1, 4), (2, 4)`); err != nil {
+	admin, err := NewPostgresStore(TestMigrationDatabaseURLForRuntimeDatabase(t))
+	if err != nil {
 		t.Fatal(err)
 	}
-	defer writer.Exec(ctx, `DROP TABLE tenant_catalog_consistency_test`)
+	defer admin.Close()
+	if _, err := admin.Pool.Exec(ctx, `
+		CREATE TABLE tenant_catalog_consistency_test (id int PRIMARY KEY, quantity int);
+		INSERT INTO tenant_catalog_consistency_test VALUES (1, 4), (2, 4);
+		GRANT SELECT, INSERT, UPDATE, DELETE ON tenant_catalog_consistency_test TO granete_app`); err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Pool.Exec(ctx, `DROP TABLE tenant_catalog_consistency_test`)
 	rollback := errors.New("rollback reader")
 	for _, tc := range []struct {
 		name   string
@@ -76,7 +83,7 @@ func TestConsistentCatalogTx_SourceView(t *testing.T) {
 }
 
 func TestConsistentCatalogTx_BorrowedIsolation(t *testing.T) {
-	store := skipIfNoDB(t)
+	store := newMigratedRuntimeStore(t)
 	ctx := context.Background()
 	for _, isolation := range []pgx.TxIsoLevel{pgx.ReadUncommitted, pgx.ReadCommitted, pgx.RepeatableRead, pgx.Serializable} {
 		t.Run(string(isolation), func(t *testing.T) {
@@ -118,7 +125,7 @@ func TestConsistentCatalogTx_BorrowedIsolation(t *testing.T) {
 }
 
 func TestConsistentCatalogTx_CleanupAndOwnership(t *testing.T) {
-	store := skipIfNoDB(t)
+	store := newMigratedRuntimeStore(t)
 	ctx := context.Background()
 	config := store.Pool.Config()
 	config.MaxConns, config.MinConns = 1, 0
@@ -190,7 +197,7 @@ func TestConsistentCatalogTx_CleanupAndOwnership(t *testing.T) {
 }
 
 func TestConsistentCatalogTx_ClosedBorrowedTransaction(t *testing.T) {
-	store := skipIfNoDB(t)
+	store := newMigratedRuntimeStore(t)
 	ctx := context.Background()
 	tx, err := store.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
 	if err != nil {

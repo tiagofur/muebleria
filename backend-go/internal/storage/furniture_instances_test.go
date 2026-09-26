@@ -62,11 +62,11 @@ func furnitureInstancesMigrationSQL(t *testing.T) string {
 func TestFurnitureInstances_MigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 111)
 	assertFurnitureInstancesSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 110)
 	if _, err := upgrade.Exec(ctx, furnitureInstancesMigrationSQL(t)); err != nil {
 		t.Fatalf("upgrade apply 000111: %v", err)

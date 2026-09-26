@@ -117,7 +117,7 @@ func assertQuoteCommercial130Posture(t *testing.T, pool *pgxpool.Pool) int {
 }
 
 func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 130)
 	assertQuoteCommercial130Posture(t, pool)
 	seedQuoteMigrationProject(t, pool)
@@ -361,7 +361,7 @@ func TestQuoteCommercialSnapshotMigrationFreshAndDirectSQLValidation(t *testing.
 }
 
 func TestQuoteCommercialSnapshotMigrationUpgradePreservesLegacyRowsDownAndReplay(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 129)
 	seedQuoteMigrationProject(t, pool)
 	ctx := context.Background()

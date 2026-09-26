@@ -1403,19 +1403,32 @@ func updateProjectTx(ctx context.Context, tx pgx.Tx, id string, p *domain.Projec
 	if techStatus == "" {
 		techStatus = "pending_assignment"
 	}
-	// #712 §8 (aligned with the create path): the update rewrites customer_id,
-	// so the same logical FK scope applies — the customer must belong to the
-	// project's OWNING organization (shared sales/manufacturing orgs may update
-	// the project but never re-point it at a customer outside the owner
-	// tenant). Raised BEFORE the UPDATE so an unpersisted or foreign id
-	// surfaces as the neutral not-found instead of a raw FK violation.
+	// #712 §8: re-pointing customer_id remains an owner-only logical-FK
+	// transition. A shared manufacturing organization may update a project it
+	// can see, but it cannot read the sales-owned customer table. Lock the
+	// visible project row first so a same-customer update does not perform an
+	// unrelated cross-tenant customer lookup; if the reference changes, validate
+	// the incoming customer against the owning organization before the UPDATE.
 	var projectOrg string
-	if err := tx.QueryRow(ctx,
-		`SELECT organization_id FROM projects WHERE id = $1`, id).Scan(&projectOrg); err != nil {
+	var currentCustomerID *string
+	if err := tx.QueryRow(ctx, `
+		SELECT organization_id, customer_id
+		FROM projects
+		WHERE id = $1
+		FOR UPDATE`, id).Scan(&projectOrg, &currentCustomerID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("project not found")
+		}
 		return err
 	}
-	if err := ensureCustomerInOrgTx(ctx, tx, p.CustomerID, projectOrg); err != nil {
-		return err
+	currentCustomer := ""
+	if currentCustomerID != nil {
+		currentCustomer = *currentCustomerID
+	}
+	if p.CustomerID != currentCustomer {
+		if err := ensureCustomerInOrgTx(ctx, tx, p.CustomerID, projectOrg); err != nil {
+			return err
+		}
 	}
 
 	// #327: sales/manufacturing ownership is NOT writable through the generic

@@ -3,13 +3,10 @@ package storage_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
-	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func strPtr(s string) *string       { return &s }
@@ -22,34 +19,19 @@ func ptrFloat64(v float64) *float64 { return &v }
 //     a valid value that must NOT be erased — nullIfZeroFloat is NOT used);
 //   - all 8 fields round-trip together.
 func TestHardware_PersistsPreviewGeometry(t *testing.T) {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping live storage integration test")
-	}
-	if err := storage.ValidateTestDatabaseURL(url); err != nil {
-		t.Fatalf("TestHardware_PersistsPreviewGeometry rejected unsafe test database: %v", err)
-	}
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-	pool, err := pgxpool.New(ctx, url)
-	if err != nil {
-		t.Skipf("no db: %v", err)
-	}
-	// Register pool close FIRST so it runs LAST (t.Cleanup is LIFO); the
-	// row-deletion cleanup below must execute before the pool closes.
-	t.Cleanup(func() { pool.Close() })
-	store := &storage.PostgresStore{Pool: pool}
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	// Case 1: create with NO preview fields -> all stay nil (NULL = cost-only).
 	noPreview := newHardwarePreviewTestRow()
-	if err := store.CreateHardware(ctx, noPreview); err != nil {
-		t.Fatalf("create (no preview): %v", err)
-	}
-	registerHardwarePreviewCleanup(t, ctx, store, noPreview)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateHardware(txCtx, noPreview)
+	})
+	registerHardwarePreviewCleanup(t, noPreview)
 
-	got, err := store.GetHardwareByID(ctx, noPreview.ID)
-	if err != nil {
-		t.Fatalf("get (no preview): %v", err)
-	}
+	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
+		return store.GetHardwareByID(txCtx, noPreview.ID)
+	})
 	if got.PreviewShape != nil || got.PreviewSizeMm != nil || got.PreviewMetalness != nil || got.PreviewClearcoat != nil {
 		t.Fatalf("nil preview not preserved as nil: shape=%v size=%v metal=%v clear=%v",
 			got.PreviewShape, got.PreviewSizeMm, got.PreviewMetalness, got.PreviewClearcoat)
@@ -60,15 +42,14 @@ func TestHardware_PersistsPreviewGeometry(t *testing.T) {
 	zeroMetal := newHardwarePreviewTestRow()
 	zeroMetal.PreviewShape = strPtr("knob")
 	zeroMetal.PreviewMetalness = ptrFloat64(0.0)
-	if err := store.CreateHardware(ctx, zeroMetal); err != nil {
-		t.Fatalf("create (metalness 0): %v", err)
-	}
-	registerHardwarePreviewCleanup(t, ctx, store, zeroMetal)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateHardware(txCtx, zeroMetal)
+	})
+	registerHardwarePreviewCleanup(t, zeroMetal)
 
-	got, err = store.GetHardwareByID(ctx, zeroMetal.ID)
-	if err != nil {
-		t.Fatalf("get (metalness 0): %v", err)
-	}
+	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
+		return store.GetHardwareByID(txCtx, zeroMetal.ID)
+	})
 	if got.PreviewMetalness == nil || *got.PreviewMetalness != 0.0 {
 		t.Fatalf("metalness 0.0 not preserved on create: got %v", got.PreviewMetalness)
 	}
@@ -85,13 +66,12 @@ func TestHardware_PersistsPreviewGeometry(t *testing.T) {
 	noPreview.PreviewRoughness = ptrFloat64(0.3)
 	noPreview.PreviewMetalness = ptrFloat64(1.0)
 	noPreview.PreviewClearcoat = ptrFloat64(0.0)
-	if err := store.UpdateHardware(ctx, noPreview.ID, noPreview); err != nil {
-		t.Fatalf("update (all preview): %v", err)
-	}
-	got, err = store.GetHardwareByID(ctx, noPreview.ID)
-	if err != nil {
-		t.Fatalf("get (all preview): %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.UpdateHardware(txCtx, noPreview.ID, noPreview)
+	})
+	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
+		return store.GetHardwareByID(txCtx, noPreview.ID)
+	})
 	if got.PreviewShape == nil || *got.PreviewShape != "bar-pull" {
 		t.Fatalf("shape not persisted: %v", got.PreviewShape)
 	}
@@ -124,8 +104,8 @@ func newHardwarePreviewTestRow() *domain.Hardware {
 // registerHardwarePreviewCleanup hard-deletes the row this test created. The
 // store has no hardware hard-delete API, so delete via the pool (mirrors the
 // material_pbr_persist_test cleanup that DELETEs rather than nulling fields).
-func registerHardwarePreviewCleanup(t *testing.T, ctx context.Context, store *storage.PostgresStore, h *domain.Hardware) {
+func registerHardwarePreviewCleanup(t *testing.T, h *domain.Hardware) {
 	t.Cleanup(func() {
-		_, _ = store.Pool.Exec(ctx, "DELETE FROM hardwares WHERE id = $1", h.ID)
+		cleanupConnectStoreFixture(t, "DELETE FROM hardwares WHERE id = $1", h.ID)
 	})
 }

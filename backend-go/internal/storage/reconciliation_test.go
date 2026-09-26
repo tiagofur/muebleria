@@ -41,11 +41,11 @@ func quoteRevisionMigrationSQL(t *testing.T) string {
 func TestQuoteRevisions_MigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 115)
 	assertQuoteRevisionsSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 114)
 	if _, err := upgrade.Exec(ctx, quoteRevisionMigrationSQL(t)); err != nil {
 		t.Fatalf("upgrade apply 00115: %v", err)
@@ -2008,11 +2008,11 @@ func TestQuoteRevision_LifecycleMigration_FreshAndUpgrade(t *testing.T) {
 		}
 	}
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 116)
 	assertLifecycleTrigger(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 115)
 	if _, err := upgrade.Exec(ctx, lifecycleMigrationSQL(t)); err != nil {
 		t.Fatalf("upgrade apply 00116: %v", err)

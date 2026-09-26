@@ -20,21 +20,11 @@ import (
 // #667 / M1: versioned hardware 3D assets — upload lifecycle, exact binding,
 // validation evidence and DesignRevision publish pins. Every behavior test
 // below runs against real PostgreSQL (never mocks): the RLS/direct-SQL
-// claims run under the real granete_app_test runtime role.
+// claims run under the real granete_app runtime role.
 
 func hwAssetSHA(seed string) string {
 	out := strings.Repeat(seed, 32)
 	return "sha256-" + out[:64]
-}
-
-func hwAssetNewStore(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool) {
-	t.Helper()
-	pool := multiOrgFreshDB(t)
-	store := &storage.PostgresStore{Pool: pool}
-	if err := store.RunMigrations(context.Background()); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
-	return store, pool
 }
 
 // hwAssetWorld is the standard #667 fixture: the designs fixture (org A/B,
@@ -830,11 +820,11 @@ func mustResolveModuleLayout(t *testing.T, w *hwAssetWorld) string {
 // Migración: fresh apply through 000131 y upgrade 000130 → 000131 dejan el
 // mismo esquema, inventario RLS, grants e inmutabilidad.
 func TestHardwareAssets_MigrationFreshAndUpgrade(t *testing.T) {
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 131)
 	assertHardwareAssetsSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 130)
 	contents, err := os.ReadFile("../../db/migration/000131_hardware_3d_assets.up.sql")
 	if err != nil {

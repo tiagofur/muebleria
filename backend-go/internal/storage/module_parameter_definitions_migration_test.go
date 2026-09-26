@@ -16,7 +16,7 @@ import (
 
 func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 	t.Run("fresh schema has an empty authoritative definition list", func(t *testing.T) {
-		pool := multiOrgFreshDB(t)
+		pool := multiOrgFreshMigrationDB(t)
 		identityApplyThrough(t, pool, 103)
 
 		var defaultValue string
@@ -38,7 +38,7 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 	})
 
 	t.Run("upgrade preserves an existing legacy module", func(t *testing.T) {
-		pool := multiOrgFreshDB(t)
+		pool := multiOrgFreshMigrationDB(t)
 		identityApplyThrough(t, pool, 102)
 		ctx := context.Background()
 		const moduleID = "f1970000-0000-0000-0000-000000000001"
@@ -66,7 +66,7 @@ func TestModuleParameterDefinitionsMigrationFreshAndUpgrade(t *testing.T) {
 }
 
 func TestModuleParameterDefinitionsMigrationDownRemovesColumn(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 103)
 	downSQL, err := os.ReadFile("../../db/migration/000103_module_parameter_definitions.down.sql")
 	if err != nil {
@@ -97,7 +97,7 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pool := multiOrgFreshDB(t)
+			pool := multiOrgFreshMigrationDB(t)
 			// Applied through CURRENT (000135, #670-B): the typed-definition
 			// rejection is schema-version-independent and the catalog read now
 			// includes current_revision_id on agregados.
@@ -117,24 +117,44 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 }
 
 func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-	for _, row := range []struct{ org, id, code, defaultValue string }{{orgA, "f1970000-0000-0000-0000-00000000000a", "PARAM-A", "alpha"}, {orgB, "f1970000-0000-0000-0000-00000000000b", "PARAM-B", "beta"}} {
-		raw := `[{"name":"label","label":"Label","type":"string","defaultValue":"` + row.defaultValue + `","required":false,"category":"metadata","maxLength":80}]`
-		if _, err := store.Pool.Exec(ctx, `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES ($1,$2,$3,$3,$4::jsonb)`, row.id, row.org, row.code, raw); err != nil {
-			t.Fatal(err)
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+	tests := []struct {
+		organization string
+		actor        storage.TenantActor
+		id           string
+		code         string
+		want         string
+		notWant      string
+	}{
+		{fixture.orgA, fixture.actorA, "f1970000-0000-0000-0000-00000000000a", "PARAM-A", "alpha", "beta"},
+		{fixture.orgB, fixture.actorB, "f1970000-0000-0000-0000-00000000000b", "PARAM-B", "beta", "alpha"},
+	}
+	for _, tt := range tests {
+		maxLength := 80
+		module := &domain.Module{
+			ID: tt.id, Code: tt.code, Name: tt.code,
+			ParameterDefinitions: []domain.FurnitureParameterDefinition{{
+				Name: "label", Label: "Label", Type: domain.FurnitureParameterTypeString,
+				DefaultValue: tt.want, Required: false, Category: domain.FurnitureParameterCategoryMetadata,
+				MaxLength: &maxLength,
+			}},
+		}
+		if err := isolationRuntimeError(fixture, tt.actor, func(txCtx context.Context) error {
+			return store.CreateModule(txCtx, module)
+		}); err != nil {
+			t.Fatalf("create module for tenant %s: %v", tt.organization, err)
 		}
 	}
-	for _, tt := range []struct{ org, want, notWant string }{{orgA, "alpha", "beta"}, {orgB, "beta", "alpha"}} {
-		catalog, err := store.GetFullCatalog(storage.WithOrgCtx(ctx, tt.org))
-		if err != nil {
-			t.Fatal(err)
-		}
+	for _, tt := range tests {
+		catalog := isolationRuntimeValue(t, fixture, tt.actor, func(txCtx context.Context) (domain.Catalog, error) {
+			return store.GetFullCatalog(txCtx)
+		})
 		found := false
 		for _, module := range catalog.Modules {
 			for _, definition := range module.ParameterDefinitions {
 				if definition.DefaultValue == tt.notWant {
-					t.Fatalf("tenant %s saw %s", tt.org, tt.notWant)
+					t.Fatalf("tenant %s saw %s", tt.organization, tt.notWant)
 				}
 				if definition.DefaultValue == tt.want {
 					found = true
@@ -142,13 +162,13 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatalf("tenant %s missing own definition", tt.org)
+			t.Fatalf("tenant %s missing own definition", tt.organization)
 		}
 	}
 }
 
 func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 103)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
@@ -243,7 +263,7 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 
 	for index, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			pool := multiOrgFreshDB(t)
+			pool := multiOrgFreshMigrationDB(t)
 			identityApplyThrough(t, pool, 103)
 			store := &storage.PostgresStore{Pool: pool}
 			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)

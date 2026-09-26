@@ -44,7 +44,7 @@ func assertPairingOrganizationFirstIndex(t *testing.T, pool *pgxpool.Pool, index
 func TestDesignPairingGrantOrganizationIndexMigrationFreshAndUpgrade(t *testing.T) {
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 126)
 	assertPairingOrganizationFirstIndex(t, fresh, pairingOrganizationRepairIndex, true)
 	if _, err := fresh.Exec(ctx, pairingOrganizationIndexMigrationSQL(t, "down")); err != nil {
@@ -54,7 +54,7 @@ func TestDesignPairingGrantOrganizationIndexMigrationFreshAndUpgrade(t *testing.
 	assertPairingOrganizationFirstIndex(t, fresh, "idx_design_pairing_grants_organization", true)
 	fresh.Close()
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 125)
 	if _, err := upgrade.Exec(ctx, `DROP INDEX idx_design_pairing_grants_organization`); err != nil {
 		t.Fatalf("simulate original 000124 without organization-first index: %v", err)

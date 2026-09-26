@@ -3,7 +3,7 @@ package storage_test
 // F1 hardening (#668/#670 audit): the agregado_revisions /
 // published_assembly_snapshots / design_revision_assembly_snapshots family is
 // FORCE RLS for granete_app. These tests run everything through the real
-// granete_app_test role (NOBYPASSRLS) so RLS is actually enforced, and prove
+// granete_app role (NOBYPASSRLS) so RLS is actually enforced, and prove
 // the tenant read boundary contract:
 //
 //   F1-A org + tenant transaction          -> exact read works
@@ -25,7 +25,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -388,12 +387,11 @@ func TestAgregadoFamily_TenantBoundary_F1D_HistoricalPath(t *testing.T) {
 // A's transaction commits, the very same connection must serve org B with no
 // residual tenant context, and org B can never observe org A's rows.
 func TestAgregadoFamily_TenantBoundary_F1E_PooledConnectionReuse(t *testing.T) {
-	// The fixture only prepares the migrated database and the granete_app_test
-	// role; this test drives its own single-connection pool.
+	// The fixture only prepares the migrated database; this test drives its own
+	// single-connection canonical runtime pool.
 	fx := setupDesignsTestFixture(t)
 
 	appURL := fx.DatabaseURL(t)
-	appURL.User = url.UserPassword(rlsAppRole, "rls-test-password")
 	cfg, err := pgxpool.ParseConfig(appURL.String())
 	if err != nil {
 		t.Fatalf("parse app url: %v", err)

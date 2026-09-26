@@ -803,11 +803,11 @@ func assertRequoteProvenanceSchema(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestRequote_ProvenanceMigration_FreshAndUpgrade(t *testing.T) {
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 117)
 	assertRequoteProvenanceSchema(t, fresh)
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 116)
 	if _, err := upgrade.Exec(context.Background(), requoteProvenanceMigrationSQL(t)); err != nil {
 		t.Fatalf("upgrade apply 00117: %v", err)

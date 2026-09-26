@@ -3,13 +3,10 @@ package storage_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
-	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // Integration: requires isolated test Postgres. Verifies the machining JSONB column
@@ -19,34 +16,14 @@ import (
 //     nullable scalar (depth) intact;
 //   - updating back to nil clears the footprint (UPDATE writes NULL).
 func TestHardware_PersistsMachiningProfile(t *testing.T) {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping live storage integration test")
-	}
-	if err := storage.ValidateTestDatabaseURL(url); err != nil {
-		t.Fatalf("TestHardware_PersistsMachiningProfile rejected unsafe test database: %v", err)
-	}
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-	pool, err := pgxpool.New(ctx, url)
-	if err != nil {
-		t.Skipf("no db: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	store := &storage.PostgresStore{Pool: pool}
-	if err := store.RunMigrations(ctx); err != nil {
-		t.Fatalf("RunMigrations: %v", err)
-	}
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	// Case 1: create with NO machining -> stays nil (cost-only).
 	plain := newHardwareMachiningTestRow()
-	if err := store.CreateHardware(ctx, plain); err != nil {
-		t.Fatalf("create (no machining): %v", err)
-	}
-	registerHardwareMachiningCleanup(t, ctx, store, plain)
-	got, err := store.GetHardwareByID(ctx, plain.ID)
-	if err != nil {
-		t.Fatalf("get (no machining): %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateHardware(txCtx, plain) })
+	registerHardwareMachiningCleanup(t, plain)
+	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) { return store.GetHardwareByID(txCtx, plain.ID) })
 	if got.Machining != nil {
 		t.Fatalf("nil machining not preserved as nil: %+v", got.Machining)
 	}
@@ -70,14 +47,9 @@ func TestHardware_PersistsMachiningProfile(t *testing.T) {
 			},
 		},
 	}
-	if err := store.CreateHardware(ctx, minifix); err != nil {
-		t.Fatalf("create (minifix machining): %v", err)
-	}
-	registerHardwareMachiningCleanup(t, ctx, store, minifix)
-	got, err = store.GetHardwareByID(ctx, minifix.ID)
-	if err != nil {
-		t.Fatalf("get (minifix machining): %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateHardware(txCtx, minifix) })
+	registerHardwareMachiningCleanup(t, minifix)
+	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) { return store.GetHardwareByID(txCtx, minifix.ID) })
 	if got.Machining == nil || len(got.Machining.Parts) != 2 {
 		t.Fatalf("machining parts not persisted: %+v", got.Machining)
 	}
@@ -95,13 +67,8 @@ func TestHardware_PersistsMachiningProfile(t *testing.T) {
 
 	// Case 3: update back to nil -> UPDATE clears the footprint.
 	minifix.Machining = nil
-	if err := store.UpdateHardware(ctx, minifix.ID, minifix); err != nil {
-		t.Fatalf("update (clear machining): %v", err)
-	}
-	got, err = store.GetHardwareByID(ctx, minifix.ID)
-	if err != nil {
-		t.Fatalf("get (cleared machining): %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateHardware(txCtx, minifix.ID, minifix) })
+	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) { return store.GetHardwareByID(txCtx, minifix.ID) })
 	if got.Machining != nil {
 		t.Fatalf("machining not cleared on update: %+v", got.Machining)
 	}
@@ -117,8 +84,8 @@ func newHardwareMachiningTestRow() *domain.Hardware {
 	}
 }
 
-func registerHardwareMachiningCleanup(t *testing.T, ctx context.Context, store *storage.PostgresStore, h *domain.Hardware) {
+func registerHardwareMachiningCleanup(t *testing.T, h *domain.Hardware) {
 	t.Cleanup(func() {
-		_, _ = store.Pool.Exec(ctx, "DELETE FROM hardwares WHERE id = $1", h.ID)
+		cleanupConnectStoreFixture(t, "DELETE FROM hardwares WHERE id = $1", h.ID)
 	})
 }

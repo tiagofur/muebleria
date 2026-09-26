@@ -114,6 +114,36 @@ func TestPilotReadiness_MFAEnrollmentFlow(t *testing.T) {
 	fx.mfaFor(t, user)
 }
 
+func TestPilotReadiness_MFAProviderCachePreventsSecondEnrollment(t *testing.T) {
+	accepted := fx.inviteAndAccept(t, fx.a.admin.token, "mfa-provider-cache@pilot-readiness.test", "user")
+	user := pilotUser{id: accepted.User.ID, email: "mfa-provider-cache@pilot-readiness.test", token: accepted.Token}
+
+	first := fx.mfaFor(t, user)
+	count, err := fx.store.CountEnabledMFAFactors(context.Background(), user.id)
+	if err != nil {
+		t.Fatalf("count factors after first enrollment: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("enabled factors after first enrollment=%d, want 1", count)
+	}
+
+	second := fx.mfaFor(t, user)
+	if second != first {
+		t.Fatal("mfaFor did not reuse the cached provider")
+	}
+	count, err = fx.store.CountEnabledMFAFactors(context.Background(), user.id)
+	if err != nil || count != 1 {
+		t.Fatalf("enabled factors after cache reuse=(%d, %v), want (1, nil)", count, err)
+	}
+
+	delete(fx.mfaProviders, user.id)
+	if _, err := fx.cachedMFAProvider(user); err == nil {
+		t.Fatal("missing provider cache with an enabled factor must fail closed")
+	} else if !strings.Contains(err.Error(), "refusing second enrollment") {
+		t.Fatalf("missing provider diagnostic=%q, want explicit second-enrollment refusal", err)
+	}
+}
+
 func TestPilotReadiness_DeviceApprovalRequiresStepUp(t *testing.T) {
 	user := fx.a.admin
 	// Self-sufficient (shared fixture): ensure the user HAS a factor first so

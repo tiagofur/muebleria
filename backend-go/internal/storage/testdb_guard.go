@@ -194,17 +194,54 @@ func TestDatabaseURL(t testingT) string {
 	return raw
 }
 
-// TestAdminDatabaseURL returns the validated test admin database URL from DATABASE_URL,
-// routing to /postgres for infrastructure/maintenance operations (CREATE/DROP DATABASE).
-// It skips the test if DATABASE_URL is unset, and fails the test via t.Fatalf if the URL
-// does not satisfy the fail-closed test admin database isolation contract.
+// TestDatabaseURLForDB returns the runtime authority from DATABASE_URL retargeted
+// to one allowed disposable database. It never derives runtime credentials from
+// MIGRATION_DATABASE_URL.
+func TestDatabaseURLForDB(t testingT, databaseName string) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	raw := TestDatabaseURL(t)
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("TestDatabaseURLForDB parse error: invalid database URL (%s)", SanitizeDatabaseURL(raw))
+	}
+	u.Path = "/" + strings.TrimSpace(databaseName)
+	runtimeURL := u.String()
+	if err := ValidateTestDatabaseURL(runtimeURL); err != nil {
+		t.Fatalf("TestDatabaseURLForDB rejected unsafe database: %v", err)
+	}
+	return runtimeURL
+}
+
+// TestMigrationDatabaseURLForRuntimeDatabase preserves the database selected by
+// DATABASE_URL while taking credentials exclusively from MIGRATION_DATABASE_URL.
+// It is the fixture boundary for admin setup of the same runtime test database.
+func TestMigrationDatabaseURLForRuntimeDatabase(t testingT) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	runtimeURL := TestDatabaseURL(t)
+	u, err := url.Parse(runtimeURL)
+	if err != nil {
+		t.Fatalf("TestMigrationDatabaseURLForRuntimeDatabase parse error: invalid database URL (%s)", SanitizeDatabaseURL(runtimeURL))
+	}
+	return TestMigrationDatabaseURL(t, strings.TrimPrefix(u.Path, "/"))
+}
+
+// TestAdminDatabaseURL returns the dedicated migration/admin URL from
+// MIGRATION_DATABASE_URL, routing it to /postgres for maintenance operations.
+// Runtime DATABASE_URL credentials are never elevated for fixture setup.
 func TestAdminDatabaseURL(t testingT) string {
 	if h, ok := t.(interface{ Helper() }); ok {
 		h.Helper()
 	}
-	raw := os.Getenv("DATABASE_URL")
+	raw := os.Getenv("MIGRATION_DATABASE_URL")
 	if strings.TrimSpace(raw) == "" {
-		t.Skip("DATABASE_URL not set; skipping live test database suite")
+		t.Skip("MIGRATION_DATABASE_URL not set; skipping live test database suite")
+	}
+	if err := ValidateTestAdminDatabaseURL(raw); err != nil {
+		t.Fatalf("TestAdminDatabaseURL rejected unsafe database: %v", err)
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -216,6 +253,29 @@ func TestAdminDatabaseURL(t testingT) string {
 		t.Fatalf("TestAdminDatabaseURL rejected unsafe database: %v", err)
 	}
 	return adminURL
+}
+
+// TestMigrationDatabaseURL returns the dedicated migration authority retargeted
+// to one allowed test database. It preserves the admin credentials from
+// MIGRATION_DATABASE_URL and never derives them from DATABASE_URL.
+func TestMigrationDatabaseURL(t testingT, databaseName string) string {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	raw := os.Getenv("MIGRATION_DATABASE_URL")
+	if strings.TrimSpace(raw) == "" {
+		t.Skip("MIGRATION_DATABASE_URL not set; skipping live test database suite")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("TestMigrationDatabaseURL parse error: invalid database URL (%s)", SanitizeDatabaseURL(raw))
+	}
+	u.Path = "/" + strings.TrimSpace(databaseName)
+	migrationURL := u.String()
+	if err := ValidateTestAdminDatabaseURL(migrationURL); err != nil {
+		t.Fatalf("TestMigrationDatabaseURL rejected unsafe database: %v", err)
+	}
+	return migrationURL
 }
 
 type testingT interface {

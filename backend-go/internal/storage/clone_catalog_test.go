@@ -8,10 +8,72 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
+
+const (
+	cloneCatalogPlatformUser      = "c9000000-0000-0000-0000-000000000001"
+	cloneCatalogSourceMembership  = "c9000000-0000-0000-0000-000000000002"
+	cloneCatalogDestinationMember = "c9000000-0000-0000-0000-000000000003"
+)
+
+type cloneCatalogRuntimeFixture struct {
+	store       *storage.PostgresStore
+	platform    storage.TenantActor
+	source      storage.TenantActor
+	destination storage.TenantActor
+}
+
+func cloneCatalogRuntimeStore(t *testing.T, migrationPool *pgxpool.Pool, destinationID string) cloneCatalogRuntimeFixture {
+	t.Helper()
+	ctx := context.Background()
+	for _, statement := range []struct {
+		query string
+		args  []any
+	}{
+		{`INSERT INTO users (id, email, normalized_email, password_hash, name, account_status, platform_admin)
+			VALUES ($1, 'clone-platform@example.test', 'clone-platform@example.test', 'x', 'Clone platform', 'active', TRUE)`, []any{cloneCatalogPlatformUser}},
+		{`INSERT INTO memberships (id, organization_id, user_id, roles, status, joined_at) VALUES
+			($1, $2, $3, '{admin}', 'active', NOW()),
+			($4, $5, $3, '{admin}', 'active', NOW())`, []any{cloneCatalogSourceMembership, multiOrgInitialOrgID, cloneCatalogPlatformUser, cloneCatalogDestinationMember, destinationID}},
+		{`UPDATE organizations SET status='active', status_reason=NULL WHERE id IN ($1, $2)`, []any{multiOrgInitialOrgID, destinationID}},
+	} {
+		if _, err := migrationPool.Exec(ctx, statement.query, statement.args...); err != nil {
+			t.Fatalf("seed clone runtime actors: %v", err)
+		}
+	}
+	runtimePool, err := pgxpool.New(ctx, storage.TestDatabaseURLForDB(t, migrationPool.Config().ConnConfig.Database))
+	if err != nil {
+		t.Fatalf("open clone runtime pool: %v", err)
+	}
+	t.Cleanup(runtimePool.Close)
+	return cloneCatalogRuntimeFixture{
+		store:       &storage.PostgresStore{Pool: runtimePool},
+		platform:    storage.TenantActor{UserID: cloneCatalogPlatformUser, AuthorizedOrganizationIDs: []string{multiOrgInitialOrgID, destinationID}},
+		source:      storage.TenantActor{OrganizationID: multiOrgInitialOrgID, UserID: cloneCatalogPlatformUser, MembershipID: cloneCatalogSourceMembership},
+		destination: storage.TenantActor{OrganizationID: destinationID, UserID: cloneCatalogPlatformUser, MembershipID: cloneCatalogDestinationMember},
+	}
+}
+
+func cloneCatalogRuntimeError(fixture cloneCatalogRuntimeFixture, actor storage.TenantActor, run func(context.Context) error) error {
+	return fixture.store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, run)
+}
+
+func cloneCatalogRuntimeValue[T any](t *testing.T, fixture cloneCatalogRuntimeFixture, actor storage.TenantActor, run func(context.Context) (T, error)) T {
+	t.Helper()
+	var value T
+	if err := cloneCatalogRuntimeError(fixture, actor, func(txCtx context.Context) error {
+		var err error
+		value, err = run(txCtx)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
 
 // F172 / #326: cloning the base catalog into a new organization must copy
 // every catalog entity with fresh UUIDs, translate FKs AND the ids embedded
@@ -19,7 +81,7 @@ import (
 // componentId, agregados.hardware_lines → hardware_id).
 
 func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := context.Background()
 	if err := store.RunMigrations(ctx); err != nil {
@@ -64,8 +126,11 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 			t.Fatalf("seed: %v (%s)", err, s[:70])
 		}
 	}
+	runtimeFixture := cloneCatalogRuntimeStore(t, pool, orgB)
 
-	if err := store.CloneCatalog(ctx, storage.InitialOrganizationID, orgB); err != nil {
+	if err := cloneCatalogRuntimeError(runtimeFixture, runtimeFixture.platform, func(txCtx context.Context) error {
+		return runtimeFixture.store.CloneCatalog(txCtx, storage.InitialOrganizationID, orgB)
+	}); err != nil {
 		t.Fatalf("CloneCatalog: %v", err)
 	}
 
@@ -122,14 +187,8 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 		t.Fatalf("cloned parameter definition count = %d, want 2", len(clonedDefinitions))
 	}
 
-	sourceCatalog, err := store.GetFullCatalog(storage.WithOrgCtx(ctx, multiOrgInitialOrgID))
-	if err != nil {
-		t.Fatalf("source catalog: %v", err)
-	}
-	destinationCatalog, err := store.GetFullCatalog(storage.WithOrgCtx(ctx, orgB))
-	if err != nil {
-		t.Fatalf("destination catalog: %v", err)
-	}
+	sourceCatalog := cloneCatalogRuntimeValue(t, runtimeFixture, runtimeFixture.source, func(txCtx context.Context) (domain.Catalog, error) { return runtimeFixture.store.GetFullCatalog(txCtx) })
+	destinationCatalog := cloneCatalogRuntimeValue(t, runtimeFixture, runtimeFixture.destination, func(txCtx context.Context) (domain.Catalog, error) { return runtimeFixture.store.GetFullCatalog(txCtx) })
 	sourceModule := catalogModuleByCode(t, sourceCatalog, "MOD-GAB-01")
 	destinationModule := catalogModuleByCode(t, destinationCatalog, "MOD-GAB-01")
 	if issues := domain.ValidateModuleFurnitureParameterConsumers(destinationModule, destinationCatalog); len(issues) != 0 {
@@ -174,7 +233,9 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 	}
 
 	// Idempotencia de guard: clonar sobre catálogo no-vacío falla.
-	if err := store.CloneCatalog(ctx, storage.InitialOrganizationID, orgB); err == nil {
+	if err := cloneCatalogRuntimeError(runtimeFixture, runtimeFixture.platform, func(txCtx context.Context) error {
+		return runtimeFixture.store.CloneCatalog(txCtx, storage.InitialOrganizationID, orgB)
+	}); err == nil {
 		t.Fatal("clonar sobre catálogo no vacío debe fallar")
 	}
 
@@ -187,7 +248,7 @@ func TestCloneCatalog_RemapsFKsAndJSONB(t *testing.T) {
 }
 
 func TestCloneCatalog_RollsBackWhenParameterBindingTargetCannotBeRemapped(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := context.Background()
 	if err := store.RunMigrations(ctx); err != nil {
@@ -213,8 +274,11 @@ func TestCloneCatalog_RollsBackWhenParameterBindingTargetCannotBeRemapped(t *tes
 			t.Fatalf("seed rollback scenario: %v", err)
 		}
 	}
+	runtimeFixture := cloneCatalogRuntimeStore(t, pool, destinationOrg)
 
-	err := store.CloneCatalog(ctx, multiOrgInitialOrgID, destinationOrg)
+	err := cloneCatalogRuntimeError(runtimeFixture, runtimeFixture.platform, func(txCtx context.Context) error {
+		return runtimeFixture.store.CloneCatalog(txCtx, multiOrgInitialOrgID, destinationOrg)
+	})
 	if err == nil {
 		t.Fatal("CloneCatalog succeeded with an unresolvable parameter binding target")
 	}

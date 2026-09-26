@@ -25,6 +25,43 @@ import (
 // to org X never lists, reads, updates or deletes org Y's rows, and the
 // rejection is indistinguishable from "does not exist".
 
+func isolationFamilyActor(t *testing.T, fixture isolationRuntimeFixture, org string) storage.TenantActor {
+	t.Helper()
+	switch org {
+	case fixture.orgA:
+		return fixture.actorA
+	case fixture.orgB:
+		return fixture.actorB
+	default:
+		t.Fatalf("no runtime actor for organization %s", org)
+		return storage.TenantActor{}
+	}
+}
+
+func isolationFamilyError(t *testing.T, fixture isolationRuntimeFixture, org string, run func(context.Context) error) error {
+	t.Helper()
+	return isolationRuntimeError(fixture, isolationFamilyActor(t, fixture, org), run)
+}
+
+func isolationFamilyValue[T any](t *testing.T, fixture isolationRuntimeFixture, org string, run func(context.Context) (T, error)) T {
+	t.Helper()
+	return isolationRuntimeValue(t, fixture, isolationFamilyActor(t, fixture, org), run)
+}
+
+func isolationFamilySQLValue[T any](t *testing.T, fixture isolationRuntimeFixture, org string, run func(pgx.Tx) (T, error)) T {
+	t.Helper()
+	var value T
+	actor := isolationFamilyActor(t, fixture, org)
+	if err := runConnectStoreSQL(t, fixture.store.Pool, actor, func(tx pgx.Tx) error {
+		var err error
+		value, err = run(tx)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
 const (
 	isoProjectA = "c2000000-0000-0000-0000-00000000000a"
 	isoProjectB = "c2000000-0000-0000-0000-00000000000b"
@@ -33,28 +70,21 @@ const (
 )
 
 func TestIsolation_Stock(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 
 	// Each org tracks its own board with an entrada.
 	for _, seed := range []struct{ org, mat string }{{orgA, isoBoardA}, {orgB, isoBoardB}} {
-		if _, err := store.RecordStockMovement(scoped(ctx, seed.org), domain.StockMovement{
-			Kind: domain.StockKindTableros, MaterialID: seed.mat,
-			Type: domain.StockMovementEntrada, Delta: 10,
+		if err := isolationFamilyError(t, fixture, seed.org, func(txCtx context.Context) error {
+			_, err := store.RecordStockMovement(txCtx, domain.StockMovement{Kind: domain.StockKindTableros, MaterialID: seed.mat, Type: domain.StockMovementEntrada, Delta: 10})
+			return err
 		}); err != nil {
 			t.Fatalf("seed entrada for %s: %v", seed.org, err)
 		}
 	}
 
-	// Lists only see their own balances.
-	listA, err := store.ListStock(scoped(ctx, orgA))
-	if err != nil {
-		t.Fatalf("list stock A: %v", err)
-	}
-	listB, err := store.ListStock(scoped(ctx, orgB))
-	if err != nil {
-		t.Fatalf("list stock B: %v", err)
-	}
+	listA := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) ([]domain.MaterialStock, error) { return store.ListStock(txCtx) })
+	listB := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.MaterialStock, error) { return store.ListStock(txCtx) })
 	if len(listA) != 1 || listA[0].MaterialID != isoBoardA || listA[0].Quantity != 10 {
 		t.Fatalf("org A must see only its balance, got %+v", listA)
 	}
@@ -62,49 +92,41 @@ func TestIsolation_Stock(t *testing.T) {
 		t.Fatalf("org B must see only its balance, got %+v", listB)
 	}
 
-	// Foreign ledger reads are indistinguishable from missing.
-	movA, err := store.RecordStockMovement(scoped(ctx, orgA), domain.StockMovement{
-		Kind: domain.StockKindTableros, MaterialID: isoBoardA,
-		Type: domain.StockMovementEntrada, Delta: 2,
+	movA := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) (domain.StockMovement, error) {
+		return store.RecordStockMovement(txCtx, domain.StockMovement{Kind: domain.StockKindTableros, MaterialID: isoBoardA, Type: domain.StockMovementEntrada, Delta: 2})
 	})
-	if err != nil {
-		t.Fatalf("second entrada A: %v", err)
+	foreignMovement := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) (*domain.StockMovement, error) {
+		return store.GetStockMovementByID(txCtx, movA.ID)
+	})
+	if foreignMovement != nil {
+		t.Fatalf("org B reading org A's movement must return nil,nil — got %+v", foreignMovement)
 	}
-	if m, err := store.GetStockMovementByID(scoped(ctx, orgB), movA.ID); err != nil || m != nil {
-		t.Fatalf("org B reading org A's movement must return nil,nil — got (%+v, %v)", m, err)
-	}
-
-	// Cross-org salida fails (A's material is untracked from B's context) and
-	// never touches A's balance.
-	if _, err := store.RecordStockMovement(scoped(ctx, orgB), domain.StockMovement{
-		Kind: domain.StockKindTableros, MaterialID: isoBoardA,
-		Type: domain.StockMovementSalida, Delta: -1,
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error {
+		_, err := store.RecordStockMovement(txCtx, domain.StockMovement{Kind: domain.StockKindTableros, MaterialID: isoBoardA, Type: domain.StockMovementSalida, Delta: -1})
+		return err
 	}); !errors.Is(err, domain.ErrStockNotTracked) {
 		t.Fatalf("cross-org salida must fail with ErrStockNotTracked, got %v", err)
 	}
-	assertStockQuantity(t, store, isoBoardA, orgA, 12)
+	assertStockQuantity(t, store, fixture.actorA, isoBoardA, 12)
 
-	// Regression for migration 000091: the min-stock upsert conflict target is
-	// org-scoped, so B's upsert on A's material creates B's own row instead of
-	// mutating A's.
-	if _, err := store.UpsertStockMin(scoped(ctx, orgB), domain.StockKindTableros, isoBoardA, 999); err != nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error {
+		_, err := store.UpsertStockMin(txCtx, domain.StockKindTableros, isoBoardA, 999)
+		return err
+	}); err != nil {
 		t.Fatalf("foreign upsert min: %v", err)
 	}
-	rows, err := store.Pool.Query(ctx, `
-		SELECT organization_id, min_stock FROM material_stock
-		WHERE kind = 'tableros' AND material_id = $1`, isoBoardA)
-	if err != nil {
-		t.Fatalf("query stock rows: %v", err)
-	}
-	defer rows.Close()
 	minByOrg := map[string]float64{}
-	for rows.Next() {
-		var org string
-		var min float64
-		if err := rows.Scan(&org, &min); err != nil {
-			t.Fatalf("scan stock row: %v", err)
+	for _, actor := range []storage.TenantActor{fixture.actorA, fixture.actorB} {
+		if err := runConnectStoreSQL(t, store.Pool, actor, func(tx pgx.Tx) error {
+			var min float64
+			if err := tx.QueryRow(context.Background(), `SELECT min_stock FROM material_stock WHERE kind = 'tableros' AND material_id = $1 AND organization_id = $2`, isoBoardA, actor.OrganizationID).Scan(&min); err != nil {
+				return err
+			}
+			minByOrg[actor.OrganizationID] = min
+			return nil
+		}); err != nil {
+			t.Fatalf("query stock row: %v", err)
 		}
-		minByOrg[org] = min
 	}
 	if minByOrg[orgA] != 0 {
 		t.Fatalf("org A's min_stock was mutated by org B's upsert: %v", minByOrg)
@@ -112,398 +134,310 @@ func TestIsolation_Stock(t *testing.T) {
 	if minByOrg[orgB] != 999 {
 		t.Fatalf("org B's upsert must land on its own row: %v", minByOrg)
 	}
-	assertStockQuantity(t, store, isoBoardA, orgA, 12)
+	assertStockQuantity(t, store, fixture.actorA, isoBoardA, 12)
 }
 
-func assertStockQuantity(t *testing.T, store *storage.PostgresStore, materialID, org string, want float64) {
+func assertStockQuantity(t *testing.T, store *storage.PostgresStore, actor storage.TenantActor, materialID string, want float64) {
 	t.Helper()
 	var qty float64
-	if err := store.Pool.QueryRow(context.Background(), `
-		SELECT quantity FROM material_stock
-		WHERE kind = 'tableros' AND material_id = $1 AND organization_id = $2`,
-		materialID, org).Scan(&qty); err != nil {
-		t.Fatalf("stock quantity for %s: %v", org, err)
+	if err := runConnectStoreSQL(t, store.Pool, actor, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT quantity FROM material_stock WHERE kind = 'tableros' AND material_id = $1 AND organization_id = $2`, materialID, actor.OrganizationID).Scan(&qty)
+	}); err != nil {
+		t.Fatalf("stock quantity for %s: %v", actor.OrganizationID, err)
 	}
 	if qty != want {
-		t.Fatalf("stock quantity for %s: got %v, want %v", org, qty, want)
+		t.Fatalf("stock quantity for %s: got %v, want %v", actor.OrganizationID, qty, want)
 	}
 }
 
 func TestIsolation_PurchaseOrders(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 	const (
 		supA  = "c4100000-0000-0000-0000-00000000000a"
 		supB  = "c4100000-0000-0000-0000-00000000000b"
 		poAID = "c4200000-0000-0000-0000-00000000000a"
 		poBID = "c4200000-0000-0000-0000-00000000000b"
 	)
-	for _, seed := range []struct {
-		org, sup, po, mat string
-	}{
-		{orgA, supA, poAID, isoBoardA},
-		{orgB, supB, poBID, isoBoardB},
-	} {
-		if err := store.CreateSupplier(scoped(ctx, seed.org), domain.Supplier{
-			ID: seed.sup, Name: "Proveedor " + seed.org, Active: true,
+	for _, seed := range []struct{ org, sup, po, mat string }{{orgA, supA, poAID, isoBoardA}, {orgB, supB, poBID, isoBoardB}} {
+		if err := isolationFamilyError(t, fixture, seed.org, func(txCtx context.Context) error {
+			return store.CreateSupplier(txCtx, domain.Supplier{ID: seed.sup, Name: "Proveedor " + seed.org, Active: true})
 		}); err != nil {
 			t.Fatalf("seed supplier: %v", err)
 		}
-		if err := store.CreatePurchaseOrder(scoped(ctx, seed.org), domain.PurchaseOrder{
-			ID: seed.po, SupplierID: seed.sup,
-			Items: []domain.PurchaseOrderItem{{
-				Kind: domain.StockKindTableros, MaterialID: seed.mat, Quantity: 2,
-			}},
+		if err := isolationFamilyError(t, fixture, seed.org, func(txCtx context.Context) error {
+			return store.CreatePurchaseOrder(txCtx, domain.PurchaseOrder{ID: seed.po, SupplierID: seed.sup, Items: []domain.PurchaseOrderItem{{Kind: domain.StockKindTableros, MaterialID: seed.mat, Quantity: 2}}})
 		}); err != nil {
 			t.Fatalf("seed PO: %v", err)
 		}
 	}
-
-	// Lists never show the other org's POs.
-	listB, err := store.ListPurchaseOrders(scoped(ctx, orgB))
-	if err != nil {
-		t.Fatalf("list POs B: %v", err)
-	}
+	listB := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.PurchaseOrder, error) { return store.ListPurchaseOrders(txCtx) })
 	for _, po := range listB {
 		if po.ID == poAID {
 			t.Fatal("org A's PO leaked into org B's list")
 		}
 	}
-
-	// Foreign fetch is indistinguishable from missing (nil, nil).
-	if po, err := store.GetPurchaseOrderByID(scoped(ctx, orgB), poAID); err != nil || po != nil {
-		t.Fatalf("org B reading org A's PO must return nil,nil — got (%+v, %v)", po, err)
+	foreign := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) (*domain.PurchaseOrder, error) {
+		return store.GetPurchaseOrderByID(txCtx, poAID)
+	})
+	if foreign != nil {
+		t.Fatalf("org B reading org A's PO must return nil,nil — got %+v", foreign)
 	}
-
-	// Foreign state transition fails closed and leaves A's PO untouched.
-	if _, err := store.EmitPurchaseOrder(scoped(ctx, orgB), poAID); !errors.Is(err, pgx.ErrNoRows) {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { _, err := store.EmitPurchaseOrder(txCtx, poAID); return err }); !errors.Is(err, pgx.ErrNoRows) {
 		t.Fatalf("cross-org emit must fail with ErrNoRows, got %v", err)
 	}
-	var status string
-	if err := store.Pool.QueryRow(ctx, `SELECT status FROM purchase_orders WHERE id = $1`, poAID).Scan(&status); err != nil {
-		t.Fatalf("read PO status: %v", err)
-	}
+	status := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (string, error) {
+		var v string
+		err := tx.QueryRow(context.Background(), `SELECT status FROM purchase_orders WHERE id = $1`, poAID).Scan(&v)
+		return v, err
+	})
 	if status != string(domain.POBorrador) {
 		t.Fatalf("org A's PO status mutated by org B's emit: %q", status)
 	}
 }
 
 func TestIsolation_Warranties(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 	const (
 		ticketA = "c4300000-0000-0000-0000-00000000000a"
 		ticketB = "c4300000-0000-0000-0000-00000000000b"
 	)
-	for _, seed := range []struct {
-		org, id, project string
-	}{
-		{orgA, ticketA, isoProjectA},
-		{orgB, ticketB, isoProjectB},
-	} {
-		if err := store.CreateWarrantyTicket(scoped(ctx, seed.org), &domain.WarrantyTicket{
-			ID: seed.id, TicketNumber: "1", ProjectID: seed.project,
-			Title: "Puerta rayada", Category: domain.WarrantyCategoryOther,
-			Priority: domain.WarrantyPriorityNormal, Status: domain.WarrantyStatusOpen,
-			RefabricationPieces: []domain.WarrantyRefabricationPiece{},
+	for _, seed := range []struct{ org, id, project string }{{orgA, ticketA, isoProjectA}, {orgB, ticketB, isoProjectB}} {
+		if err := isolationFamilyError(t, fixture, seed.org, func(txCtx context.Context) error {
+			return store.CreateWarrantyTicket(txCtx, &domain.WarrantyTicket{ID: seed.id, TicketNumber: "1", ProjectID: seed.project, Title: "Puerta rayada", Category: domain.WarrantyCategoryOther, Priority: domain.WarrantyPriorityNormal, Status: domain.WarrantyStatusOpen, RefabricationPieces: []domain.WarrantyRefabricationPiece{}})
 		}); err != nil {
 			t.Fatalf("seed warranty: %v", err)
 		}
 	}
-
-	// Lists are org-scoped even when filtering by the other org's project.
-	listAll, err := store.ListWarrantyTickets(scoped(ctx, orgB), "", "", "")
-	if err != nil {
-		t.Fatalf("list warranties B: %v", err)
-	}
+	listAll := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.WarrantyTicket, error) {
+		return store.ListWarrantyTickets(txCtx, "", "", "")
+	})
 	for _, tk := range listAll {
 		if tk.ID == ticketA {
 			t.Fatal("org A's ticket leaked into org B's list")
 		}
 	}
-	listForeignProject, err := store.ListWarrantyTickets(scoped(ctx, orgB), isoProjectA, "", "")
-	if err != nil {
-		t.Fatalf("list warranties by foreign project: %v", err)
+	listForeign := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.WarrantyTicket, error) {
+		return store.ListWarrantyTickets(txCtx, isoProjectA, "", "")
+	})
+	if len(listForeign) != 0 {
+		t.Fatalf("org B must see no tickets for org A's project, got %d", len(listForeign))
 	}
-	if len(listForeignProject) != 0 {
-		t.Fatalf("org B must see no tickets for org A's project, got %d", len(listForeignProject))
-	}
-
-	// Foreign read fails like a missing row.
-	if _, err := store.GetWarrantyTicketByID(scoped(ctx, orgB), ticketA); err == nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { _, err := store.GetWarrantyTicketByID(txCtx, ticketA); return err }); err == nil {
 		t.Fatal("org B reading org A's ticket must fail")
 	}
-
-	// Foreign update/delete fail and leave the row intact.
-	hacked := &domain.WarrantyTicket{
-		ID: ticketA, TicketNumber: "1", ProjectID: isoProjectA,
-		Title: "HACKED", Category: domain.WarrantyCategoryOther,
-		Priority: domain.WarrantyPriorityNormal, Status: domain.WarrantyStatusOpen,
-		RefabricationPieces: []domain.WarrantyRefabricationPiece{},
-	}
-	if err := store.UpdateWarrantyTicket(scoped(ctx, orgB), hacked); err == nil {
+	hacked := &domain.WarrantyTicket{ID: ticketA, TicketNumber: "1", ProjectID: isoProjectA, Title: "HACKED", Category: domain.WarrantyCategoryOther, Priority: domain.WarrantyPriorityNormal, Status: domain.WarrantyStatusOpen, RefabricationPieces: []domain.WarrantyRefabricationPiece{}}
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.UpdateWarrantyTicket(txCtx, hacked) }); err == nil {
 		t.Fatal("cross-org warranty update must fail")
 	}
-	if err := store.DeleteWarrantyTicket(scoped(ctx, orgB), ticketA); err == nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeleteWarrantyTicket(txCtx, ticketA) }); err == nil {
 		t.Fatal("cross-org warranty delete must fail")
 	}
-	var title string
-	if err := store.Pool.QueryRow(ctx, `SELECT title FROM warranty_tickets WHERE id = $1`, ticketA).Scan(&title); err != nil {
-		t.Fatalf("warranty survived check: %v", err)
-	}
+	title := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (string, error) {
+		var v string
+		err := tx.QueryRow(context.Background(), `SELECT title FROM warranty_tickets WHERE id=$1`, ticketA).Scan(&v)
+		return v, err
+	})
 	if title != "Puerta rayada" {
 		t.Fatalf("org A's ticket was mutated: %q", title)
 	}
 }
 
 func TestIsolation_InternalMessages(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
-	if err := store.CreateProjectInternalMessage(scoped(ctx, orgA), &domain.ProjectInternalMessage{
-		ProjectID: isoProjectA, SenderName: "Vendedor Alfa",
-		MessageType: domain.InternalMsgComment, Content: "mensaje interno",
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
+	if err := isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
+		return store.CreateProjectInternalMessage(txCtx, &domain.ProjectInternalMessage{ProjectID: isoProjectA, SenderName: "Vendedor Alfa", MessageType: domain.InternalMsgComment, Content: "mensaje interno"})
 	}); err != nil {
 		t.Fatalf("seed message: %v", err)
 	}
-
-	// B sees nothing of A's project conversation.
-	msgsB, err := store.ListProjectInternalMessages(scoped(ctx, orgB), isoProjectA)
-	if err != nil {
-		t.Fatalf("list messages as B: %v", err)
-	}
+	msgsB := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.ProjectInternalMessage, error) {
+		return store.ListProjectInternalMessages(txCtx, isoProjectA)
+	})
 	if len(msgsB) != 0 {
 		t.Fatalf("org B must not see org A's internal messages, got %d", len(msgsB))
 	}
-	msgsA, err := store.ListProjectInternalMessages(scoped(ctx, orgA), isoProjectA)
-	if err != nil {
-		t.Fatalf("list messages as A: %v", err)
-	}
+	msgsA := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) ([]domain.ProjectInternalMessage, error) {
+		return store.ListProjectInternalMessages(txCtx, isoProjectA)
+	})
 	if len(msgsA) != 1 {
 		t.Fatalf("org A must see its own message, got %d", len(msgsA))
 	}
-
-	// A write from B on A's project id lands as B's own row (org-owned
-	// semantics) — A's conversation stays untouched.
-	if err := store.CreateProjectInternalMessage(scoped(ctx, orgB), &domain.ProjectInternalMessage{
-		ProjectID: isoProjectA, SenderName: "Intruso",
-		MessageType: domain.InternalMsgComment, Content: "no debe verse en A",
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error {
+		return store.CreateProjectInternalMessage(txCtx, &domain.ProjectInternalMessage{ProjectID: isoProjectA, SenderName: "Intruso", MessageType: domain.InternalMsgComment, Content: "no debe verse en A"})
 	}); err != nil {
 		t.Fatalf("foreign message create: %v", err)
 	}
-	msgsAAfter, err := store.ListProjectInternalMessages(scoped(ctx, orgA), isoProjectA)
-	if err != nil {
-		t.Fatalf("list messages as A after: %v", err)
-	}
+	msgsAAfter := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) ([]domain.ProjectInternalMessage, error) {
+		return store.ListProjectInternalMessages(txCtx, isoProjectA)
+	})
 	if len(msgsAAfter) != 1 {
 		t.Fatalf("org A's conversation changed by org B's write: %d messages", len(msgsAAfter))
 	}
 }
 
 func TestIsolation_ProjectPicking(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 	marked := time.Now().UTC()
-	if err := store.UpsertProjectPicking(scoped(ctx, orgA), domain.ProjectPicking{
-		ProjectID: isoProjectA, Material: "Tablero Roble",
-		Status: "completo", MarkedAt: &marked,
+	if err := isolationFamilyError(t, fixture, orgA, func(txCtx context.Context) error {
+		return store.UpsertProjectPicking(txCtx, domain.ProjectPicking{ProjectID: isoProjectA, Material: "Tablero Roble", Status: "completo", MarkedAt: &marked})
 	}); err != nil {
 		t.Fatalf("seed picking: %v", err)
 	}
-
-	// Lists are org-scoped.
-	picksB, err := store.ListAllPicking(scoped(ctx, orgB))
-	if err != nil {
-		t.Fatalf("list picking B: %v", err)
-	}
+	picksB := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.ProjectPicking, error) { return store.ListAllPicking(txCtx) })
 	for _, p := range picksB {
 		if p.ProjectID == isoProjectA {
 			t.Fatal("org A's picking row leaked into org B's list")
 		}
 	}
-	picksA, err := store.ListAllPicking(scoped(ctx, orgA))
-	if err != nil {
-		t.Fatalf("list picking A: %v", err)
-	}
+	picksA := isolationFamilyValue(t, fixture, orgA, func(txCtx context.Context) ([]domain.ProjectPicking, error) { return store.ListAllPicking(txCtx) })
 	if len(picksA) != 1 || picksA[0].ProjectID != isoProjectA || picksA[0].Status != "completo" {
 		t.Fatalf("org A must see its picking row, got %+v", picksA)
 	}
-
-	// Regression for migration 000091: B's upsert on A's (project, material)
-	// creates B's own row instead of updating A's.
-	if err := store.UpsertProjectPicking(scoped(ctx, orgB), domain.ProjectPicking{
-		ProjectID: isoProjectA, Material: "Tablero Roble", Status: "pendiente",
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error {
+		return store.UpsertProjectPicking(txCtx, domain.ProjectPicking{ProjectID: isoProjectA, Material: "Tablero Roble", Status: "pendiente"})
 	}); err != nil {
 		t.Fatalf("foreign picking upsert: %v", err)
 	}
-	var statusA string
-	if err := store.Pool.QueryRow(ctx, `
-		SELECT status FROM project_picking
-		WHERE project_id = $1 AND material = 'Tablero Roble' AND organization_id = $2`,
-		isoProjectA, orgA).Scan(&statusA); err != nil {
-		t.Fatalf("read org A picking: %v", err)
-	}
+	statusA := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (string, error) {
+		var v string
+		err := tx.QueryRow(context.Background(), `SELECT status FROM project_picking WHERE project_id=$1 AND material='Tablero Roble' AND organization_id=$2`, isoProjectA, orgA).Scan(&v)
+		return v, err
+	})
 	if statusA != "completo" {
 		t.Fatalf("org A's picking row was mutated by org B's upsert: %q", statusA)
 	}
 }
 
 func TestIsolation_ProjectTemplates(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 	const (
 		tplA = "c4400000-0000-0000-0000-00000000000a"
 		tplB = "c4400000-0000-0000-0000-00000000000b"
 	)
-	for _, seed := range []struct{ org, id, name string }{
-		{orgA, tplA, "Cocina estándar Alfa"},
-		{orgB, tplB, "Cocina estándar Beta"},
-	} {
-		if err := store.CreateProjectTemplate(scoped(ctx, seed.org), domain.ProjectTemplate{
-			ID: seed.id, Name: seed.name, Currency: "ARS", MarginFactor: 1.35,
-			Items: []domain.ProjectItem{},
+	for _, seed := range []struct{ org, id, name string }{{orgA, tplA, "Cocina estándar Alfa"}, {orgB, tplB, "Cocina estándar Beta"}} {
+		if err := isolationFamilyError(t, fixture, seed.org, func(txCtx context.Context) error {
+			return store.CreateProjectTemplate(txCtx, domain.ProjectTemplate{ID: seed.id, Name: seed.name, Currency: "ARS", MarginFactor: 1.35, Items: []domain.ProjectItem{}})
 		}); err != nil {
 			t.Fatalf("seed template: %v", err)
 		}
 	}
-
-	// Lists are org-scoped.
-	listB, err := store.ListProjectTemplates(scoped(ctx, orgB))
-	if err != nil {
-		t.Fatalf("list templates B: %v", err)
-	}
+	listB := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.ProjectTemplate, error) {
+		return store.ListProjectTemplates(txCtx)
+	})
 	for _, tpl := range listB {
 		if tpl.ID == tplA {
 			t.Fatal("org A's template leaked into org B's list")
 		}
 	}
-
-	// Foreign read/update/delete all fail like a missing row.
-	if _, err := store.GetProjectTemplateByID(scoped(ctx, orgB), tplA); err == nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { _, err := store.GetProjectTemplateByID(txCtx, tplA); return err }); err == nil {
 		t.Fatal("org B reading org A's template must fail")
 	}
-	if err := store.UpdateProjectTemplate(scoped(ctx, orgB), tplA, domain.ProjectTemplate{
-		Name: "HACKED", Currency: "ARS", Items: []domain.ProjectItem{},
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error {
+		return store.UpdateProjectTemplate(txCtx, tplA, domain.ProjectTemplate{Name: "HACKED", Currency: "ARS", Items: []domain.ProjectItem{}})
 	}); err == nil {
 		t.Fatal("cross-org template update must fail")
 	}
-	if err := store.DeleteProjectTemplate(scoped(ctx, orgB), tplA); err == nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeleteProjectTemplate(txCtx, tplA) }); err == nil {
 		t.Fatal("cross-org template delete must fail")
 	}
-	var name string
-	if err := store.Pool.QueryRow(ctx, `SELECT name FROM project_templates WHERE id = $1`, tplA).Scan(&name); err != nil {
-		t.Fatalf("template survived check: %v", err)
-	}
+	name := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (string, error) {
+		var v string
+		err := tx.QueryRow(context.Background(), `SELECT name FROM project_templates WHERE id=$1`, tplA).Scan(&v)
+		return v, err
+	})
 	if name != "Cocina estándar Alfa" {
 		t.Fatalf("org A's template was mutated: %q", name)
 	}
 }
 
 func TestIsolation_AmbientCategories(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 	const (
 		catA = "c4500000-0000-0000-0000-00000000000a"
 		catB = "c4500000-0000-0000-0000-00000000000b"
 	)
-	for _, seed := range []struct{ org, id, name string }{
-		{orgA, catA, "Pisos Alfa"},
-		{orgB, catB, "Pisos Beta"},
-	} {
-		if err := store.CreateAmbientCategory(scoped(ctx, seed.org), &domain.AmbientCategory{
-			ID: seed.id, Name: seed.name, SortOrder: 1,
+	for _, seed := range []struct{ org, id, name string }{{orgA, catA, "Pisos Alfa"}, {orgB, catB, "Pisos Beta"}} {
+		if err := isolationFamilyError(t, fixture, seed.org, func(txCtx context.Context) error {
+			return store.CreateAmbientCategory(txCtx, &domain.AmbientCategory{ID: seed.id, Name: seed.name, SortOrder: 1})
 		}); err != nil {
 			t.Fatalf("seed ambient category: %v", err)
 		}
 	}
-
-	// Lists are org-scoped.
-	catsB, err := store.ListAmbientCategories(scoped(ctx, orgB))
-	if err != nil {
-		t.Fatalf("list categories B: %v", err)
-	}
+	catsB := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.AmbientCategory, error) {
+		return store.ListAmbientCategories(txCtx)
+	})
 	for _, c := range catsB {
 		if c.ID == catA {
 			t.Fatal("org A's category leaked into org B's list")
 		}
 	}
-
-	// Foreign read/update/delete fail like a missing row.
-	if _, err := store.GetAmbientCategoryByID(scoped(ctx, orgB), catA); err == nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { _, err := store.GetAmbientCategoryByID(txCtx, catA); return err }); err == nil {
 		t.Fatal("org B reading org A's category must fail")
 	}
-	if err := store.UpdateAmbientCategory(scoped(ctx, orgB), catA, &domain.AmbientCategory{
-		Name: "HACKED", SortOrder: 2,
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error {
+		return store.UpdateAmbientCategory(txCtx, catA, &domain.AmbientCategory{Name: "HACKED", SortOrder: 2})
 	}); err == nil {
 		t.Fatal("cross-org category update must fail")
 	}
-	if err := store.DeleteAmbientCategory(scoped(ctx, orgB), catA); err != nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeleteAmbientCategory(txCtx, catA) }); err != nil {
 		t.Fatalf("cross-org category delete must surface an error: %v", err)
 	}
-	var count int
-	if err := store.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM ambient_categories WHERE id = $1`, catA).Scan(&count); err != nil || count != 1 {
-		t.Fatalf("org A's category must survive (count=%d err=%v)", count, err)
+	count := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (int, error) {
+		var v int
+		err := tx.QueryRow(context.Background(), `SELECT COUNT(*) FROM ambient_categories WHERE id=$1`, catA).Scan(&v)
+		return v, err
+	})
+	if count != 1 {
+		t.Fatalf("org A's category must survive (count=%d)", count)
 	}
 }
 
 func TestIsolation_AmbientMaterials(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 	const (
 		matA = "c4600000-0000-0000-0000-00000000000a"
 		matB = "c4600000-0000-0000-0000-00000000000b"
 	)
-	for _, seed := range []struct{ org, id, code string }{
-		{orgA, matA, "AMB-ALFA"},
-		{orgB, matB, "AMB-BETA"},
-	} {
-		if err := store.CreateAmbientMaterial(scoped(ctx, seed.org), &domain.AmbientMaterial{
-			ID: seed.id, Code: seed.code, Name: "Porcelanato", Active: true,
-			SurfaceType: domain.AmbientSurfaceFloor,
+	for _, seed := range []struct{ org, id, code string }{{orgA, matA, "AMB-ALFA"}, {orgB, matB, "AMB-BETA"}} {
+		if err := isolationFamilyError(t, fixture, seed.org, func(txCtx context.Context) error {
+			return store.CreateAmbientMaterial(txCtx, &domain.AmbientMaterial{ID: seed.id, Code: seed.code, Name: "Porcelanato", Active: true, SurfaceType: domain.AmbientSurfaceFloor})
 		}); err != nil {
 			t.Fatalf("seed ambient material: %v", err)
 		}
 	}
-
-	// Lists are org-scoped.
-	matsB, err := store.ListAmbientMaterials(scoped(ctx, orgB))
-	if err != nil {
-		t.Fatalf("list materials B: %v", err)
-	}
+	matsB := isolationFamilyValue(t, fixture, orgB, func(txCtx context.Context) ([]domain.AmbientMaterial, error) {
+		return store.ListAmbientMaterials(txCtx)
+	})
 	for _, m := range matsB {
 		if m.ID == matA {
 			t.Fatal("org A's ambient material leaked into org B's list")
 		}
 	}
-
-	// Foreign read fails like a missing row.
-	if _, err := store.GetAmbientMaterialByID(scoped(ctx, orgB), matA); err == nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { _, err := store.GetAmbientMaterialByID(txCtx, matA); return err }); err == nil {
 		t.Fatal("org B reading org A's ambient material must fail")
 	}
-
-	// Foreign deactivate is a no-op on A's row (0 rows affected).
-	if err := store.DeactivateAmbientMaterial(scoped(ctx, orgB), matA); err != nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeactivateAmbientMaterial(txCtx, matA) }); err != nil {
 		t.Fatalf("cross-org deactivate should be a silent no-op at storage level: %v", err)
 	}
-	var active bool
-	if err := store.Pool.QueryRow(ctx, `SELECT active FROM ambient_materials WHERE id = $1`, matA).Scan(&active); err != nil || !active {
-		t.Fatalf("org A's material must stay active (active=%v err=%v)", active, err)
+	active := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (bool, error) {
+		var v bool
+		err := tx.QueryRow(context.Background(), `SELECT active FROM ambient_materials WHERE id=$1`, matA).Scan(&v)
+		return v, err
+	})
+	if !active {
+		t.Fatal("org A's material must stay active")
 	}
 }
 
-// TestIsolation_ProjectMutators covers the write path of the project-scoped
-// mutators whose read path was already pinned by F179: a foreign org's mutate
-// call fails with the same not-found sentinel as a missing project, the
-// mutator never runs, and the owning org's project row is untouched.
 func TestIsolation_ProjectMutators(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
+	fixture := runtimeIsolationSetup(t)
+	store, orgA, orgB := fixture.store, fixture.orgA, fixture.orgB
 
 	type mutatorCase struct {
 		name     string
@@ -524,9 +458,13 @@ func TestIsolation_ProjectMutators(t *testing.T) {
 			notFound: storage.ErrQualityProjectNotFound,
 			mutate: func(org, project string) (bool, error) {
 				called := false
-				_, err := store.MutateProjectQuality(scoped(ctx, org), project, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
-					called = true
-					return &domain.QualityMutation{}, nil
+				var err error
+				err = isolationFamilyError(t, fixture, org, func(txCtx context.Context) error {
+					_, err = store.MutateProjectQuality(txCtx, project, func(snap *domain.QualitySnapshot) (*domain.QualityMutation, error) {
+						called = true
+						return &domain.QualityMutation{}, nil
+					})
+					return err
 				})
 				return called, err
 			},
@@ -536,9 +474,13 @@ func TestIsolation_ProjectMutators(t *testing.T) {
 			notFound: storage.ErrPartExecutionsNotFound,
 			mutate: func(org, project string) (bool, error) {
 				called := false
-				_, err := store.MutateProjectPartExecutions(scoped(ctx, org), project, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
-					called = true
-					return &domain.PartExecutionsMutation{}, nil
+				var err error
+				err = isolationFamilyError(t, fixture, org, func(txCtx context.Context) error {
+					_, err = store.MutateProjectPartExecutions(txCtx, project, func(snap *domain.PartExecutionsSnapshot) (*domain.PartExecutionsMutation, error) {
+						called = true
+						return &domain.PartExecutionsMutation{}, nil
+					})
+					return err
 				})
 				return called, err
 			},
@@ -548,9 +490,13 @@ func TestIsolation_ProjectMutators(t *testing.T) {
 			notFound: storage.ErrInstallationProjectNotFound,
 			mutate: func(org, project string) (bool, error) {
 				called := false
-				_, err := store.MutateProjectInstallation(scoped(ctx, org), project, func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error) {
-					called = true
-					return &domain.InstallationMutation{}, nil
+				var err error
+				err = isolationFamilyError(t, fixture, org, func(txCtx context.Context) error {
+					_, err = store.MutateProjectInstallation(txCtx, project, func(snap *domain.InstallationSnapshot) (*domain.InstallationMutation, error) {
+						called = true
+						return &domain.InstallationMutation{}, nil
+					})
+					return err
 				})
 				return called, err
 			},
@@ -560,9 +506,13 @@ func TestIsolation_ProjectMutators(t *testing.T) {
 			notFound: storage.ErrMaterialPlanningProjectNotFound,
 			mutate: func(org, project string) (bool, error) {
 				called := false
-				_, err := store.MutateProjectMaterialPlanning(scoped(ctx, org), project, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
-					called = true
-					return &domain.MaterialPlanningMutation{}, nil
+				var err error
+				err = isolationFamilyError(t, fixture, org, func(txCtx context.Context) error {
+					_, err = store.MutateProjectMaterialPlanning(txCtx, project, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
+						called = true
+						return &domain.MaterialPlanningMutation{}, nil
+					})
+					return err
 				})
 				return called, err
 			},
@@ -572,9 +522,13 @@ func TestIsolation_ProjectMutators(t *testing.T) {
 			notFound: storage.ErrSiteSurveyProjectNotFound,
 			mutate: func(org, project string) (bool, error) {
 				called := false
-				_, err := store.MutateProjectSurvey(scoped(ctx, org), project, func(survey *domain.SiteSurvey) (*domain.SiteSurveyMutation, error) {
-					called = true
-					return &domain.SiteSurveyMutation{}, nil
+				var err error
+				err = isolationFamilyError(t, fixture, org, func(txCtx context.Context) error {
+					_, err = store.MutateProjectSurvey(txCtx, project, func(survey *domain.SiteSurvey) (*domain.SiteSurveyMutation, error) {
+						called = true
+						return &domain.SiteSurveyMutation{}, nil
+					})
+					return err
 				})
 				return called, err
 			},

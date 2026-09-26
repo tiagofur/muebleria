@@ -3,7 +3,6 @@ package storage_test
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -32,20 +31,7 @@ const (
 
 func multiOrgAdminDSN(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL not set; skipping multi-org migration test")
-	}
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Skipf("cannot parse DATABASE_URL: %v", err)
-	}
-	u.Path = "/postgres"
-	adminDSN := u.String()
-	if err := storage.ValidateTestAdminDatabaseURL(adminDSN); err != nil {
-		t.Fatalf("multiOrgAdminDSN rejected unsafe test database: %v", err)
-	}
-	return adminDSN
+	return storage.TestAdminDatabaseURL(t)
 }
 
 func multiOrgExec(t *testing.T, pool *pgxpool.Pool, sql string) {
@@ -62,9 +48,10 @@ func firstLine(sql string) string {
 	return sql
 }
 
-// multiOrgFreshDB drops+creates a throwaway database and returns a pool to
-// it plus a closer that must run before the drop cleanup.
-func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
+// multiOrgFreshDBWithAuthority creates a throwaway database with the dedicated
+// admin connection, then opens it with precisely one validated authority. The
+// caller selects migration or runtime deliberately; credentials never cross.
+func multiOrgFreshDBWithAuthority(t *testing.T, databaseURL func(*testing.T, string) string) *pgxpool.Pool {
 	t.Helper()
 	adminDSN := multiOrgAdminDSN(t)
 	admin, err := pgxpool.New(context.Background(), adminDSN)
@@ -80,14 +67,7 @@ func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
 		t.Skipf("create test db: %v", err)
 	}
 
-	dsn := os.Getenv("DATABASE_URL")
-	u, _ := url.Parse(dsn)
-	u.Path = "/" + testDBName
-	testDSN := u.String()
-	if err := storage.ValidateTestDatabaseURL(testDSN); err != nil {
-		t.Fatalf("multiOrgFreshDB rejected unsafe test database: %v", err)
-	}
-	pool, err := pgxpool.New(ctx, testDSN)
+	pool, err := pgxpool.New(ctx, databaseURL(t, testDBName))
 	if err != nil {
 		t.Fatalf("connect test db: %v", err)
 	}
@@ -99,6 +79,20 @@ func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
 		admin.Close()
 	})
 	return pool
+}
+
+// multiOrgFreshDB is for runtime behavior tests.
+func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	return multiOrgFreshDBWithAuthority(t, func(t *testing.T, databaseName string) string { return storage.TestDatabaseURLForDB(t, databaseName) })
+}
+
+// multiOrgFreshMigrationDB is for schema and migration evolution tests.
+func multiOrgFreshMigrationDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	return multiOrgFreshDBWithAuthority(t, func(t *testing.T, databaseName string) string {
+		return storage.TestMigrationDatabaseURL(t, databaseName)
+	})
 }
 
 // multiOrgApplyLegacySchema applies every embedded migration up to version 79
@@ -164,7 +158,7 @@ func multiOrgSeedLegacyRows(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	multiOrgApplyLegacySchema(t, pool)
 	multiOrgSeedLegacyRows(t, pool)
 
@@ -246,7 +240,7 @@ func TestMultiOrg_BackfillFromLegacySchema(t *testing.T) {
 }
 
 func TestMultiOrg_PerOrgCodesAndSettings(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	multiOrgApplyLegacySchema(t, pool)
 	multiOrgSeedLegacyRows(t, pool)
 
@@ -302,7 +296,7 @@ func TestMultiOrg_PerOrgCodesAndSettings(t *testing.T) {
 }
 
 func TestMultiOrg_DownMigrationsRollBack(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	multiOrgApplyLegacySchema(t, pool)
 	multiOrgSeedLegacyRows(t, pool)
 
@@ -398,7 +392,7 @@ func TestMultiOrg_DownMigrationsRollBack(t *testing.T) {
 }
 
 func TestMultiOrg_FreshDatabaseGetsInitialOrg(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := context.Background()
 	if err := store.RunMigrations(ctx); err != nil {

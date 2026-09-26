@@ -12,7 +12,6 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
-	"golang.org/x/time/rate"
 )
 
 // #460 SEC-7 — MFA management and step-up authentication. A normal
@@ -36,56 +35,89 @@ const (
 	mfaAttemptEvery = time.Minute
 )
 
-// userRateLimiter is a token-bucket keyed by user (not IP): the actor behind
-// an authenticated MFA verification is known, so the bound follows the
-// identity. Same opportunistic eviction as the IP limiter.
+// userRateLimiter tracks a per-user MFA failure budget and in-flight
+// verifications. An admitted request leases one potential failure slot before
+// verification, closing the concurrency gap. Only invalid MFA credentials
+// settle that lease as a charge; successful and non-auth failures release it.
 type userRateLimiter struct {
 	mu       sync.Mutex
-	rps      rate.Limit
+	every    time.Duration
 	burst    int
-	limiters map[string]*ipBucket
+	now      func() time.Time
+	limiters map[string]*mfaAttemptBucket
 }
 
-func newUserRateLimiter(rps rate.Limit, burst int) *userRateLimiter {
-	return &userRateLimiter{rps: rps, burst: burst, limiters: make(map[string]*ipBucket)}
+type mfaAttemptBucket struct {
+	available  float64
+	inFlight   int
+	lastRefill time.Time
+	lastSeen   time.Time
 }
 
-func (rl *userRateLimiter) get(key string) *rate.Limiter {
+func newUserRateLimiter(every time.Duration, burst int) *userRateLimiter {
+	return &userRateLimiter{
+		every: every, burst: burst, now: time.Now, limiters: make(map[string]*mfaAttemptBucket),
+	}
+}
+
+func (rl *userRateLimiter) refill(bucket *mfaAttemptBucket, now time.Time) {
+	if rl.every <= 0 || !now.After(bucket.lastRefill) {
+		return
+	}
+	bucket.available = min(float64(rl.burst), bucket.available+float64(now.Sub(bucket.lastRefill))/float64(rl.every))
+	bucket.lastRefill = now
+}
+
+// reserve admits at most burst concurrent attempts and returns a completion
+// function which must be called exactly once with the verification result.
+func (rl *userRateLimiter) reserve(key string) (func(error), bool) {
 	rl.mu.Lock()
-	defer rl.mu.Unlock()
-	now := time.Now()
+	now := rl.now()
 	if len(rl.limiters) > 1024 {
-		for k, b := range rl.limiters {
-			if now.Sub(b.lastSeen) > 10*time.Minute {
+		for k, bucket := range rl.limiters {
+			if bucket.inFlight == 0 && now.Sub(bucket.lastSeen) > 10*time.Minute {
 				delete(rl.limiters, k)
 			}
 		}
 	}
-	b, exists := rl.limiters[key]
+	bucket, exists := rl.limiters[key]
 	if !exists {
-		b = &ipBucket{limiter: rate.NewLimiter(rl.rps, rl.burst)}
-		rl.limiters[key] = b
+		bucket = &mfaAttemptBucket{available: float64(rl.burst), lastRefill: now}
+		rl.limiters[key] = bucket
 	}
-	b.lastSeen = now
-	return b.limiter
+	rl.refill(bucket, now)
+	bucket.lastSeen = now
+	if bucket.available-float64(bucket.inFlight) < 1 {
+		rl.mu.Unlock()
+		return func(error) {}, false
+	}
+	bucket.inFlight++
+	rl.mu.Unlock()
+
+	var once sync.Once
+	return func(err error) {
+		once.Do(func() {
+			rl.mu.Lock()
+			defer rl.mu.Unlock()
+			now := rl.now()
+			rl.refill(bucket, now)
+			bucket.lastSeen = now
+			bucket.inFlight--
+			if errors.Is(err, storage.ErrMFAInvalidCode) || errors.Is(err, storage.ErrMFARecoveryInvalid) {
+				bucket.available = max(0, bucket.available-1)
+			}
+		})
+	}, true
 }
 
-// reserveMFAAttempt consumes one failure token IMMEDIATELY to prevent concurrency gaps.
-// If the operation succeeds or fails for non-auth reasons, the returned function MUST be called to refund the token.
+// reserveMFAAttempt admits the verification before it reaches storage. Its
+// completion charges only typed invalid-code errors; nil and every non-auth
+// error release their lease without spending failure budget.
 func (s *Server) reserveMFAAttempt(userID, purpose string) (func(err error), bool) {
 	if s.mfaAttemptLimiter == nil {
 		return func(error) {}, false
 	}
-	r := s.mfaAttemptLimiter.get(purpose + ":" + userID).Reserve()
-	if !r.OK() || r.Delay() > 0 {
-		r.Cancel()
-		return func(error) {}, false
-	}
-	return func(err error) {
-		if err == nil || (!errors.Is(err, storage.ErrMFAInvalidCode) && !errors.Is(err, storage.ErrMFARecoveryInvalid)) {
-			r.Cancel()
-		}
-	}, true
+	return s.mfaAttemptLimiter.reserve(purpose + ":" + userID)
 }
 
 // RequireStepUp is the reusable sensitive-command boundary: it runs AFTER

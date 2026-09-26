@@ -3,18 +3,21 @@ package storage_test
 import (
 	"context"
 	"errors"
-	"net/url"
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-const machineOutputTestOrgB = "00000000-0000-0000-0000-0000000009e1"
-const machineOutputRLSRole = "machine_output_rls_test"
+const (
+	machineOutputTestOrgA = "00000000-0000-0000-0000-0000000009e0"
+	machineOutputTestOrgB = "00000000-0000-0000-0000-0000000009e1"
+)
 
 func machineOutputValidSelection() domain.MachineOutputSelection {
 	return domain.MachineOutputSelection{
@@ -37,7 +40,7 @@ func TestMachineOutputProfileDigestMigrationFreshAndUpgrade(t *testing.T) {
 	const orgID = "00000000-0000-0000-0000-000000000692"
 	ctx := context.Background()
 
-	fresh := multiOrgFreshDB(t)
+	fresh := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, fresh, 132)
 	var nullable string
 	if err := fresh.QueryRow(ctx, `
@@ -47,7 +50,7 @@ func TestMachineOutputProfileDigestMigrationFreshAndUpgrade(t *testing.T) {
 		t.Fatalf("fresh digest column nullable=%q err=%v", nullable, err)
 	}
 
-	upgrade := multiOrgFreshDB(t)
+	upgrade := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, upgrade, 131)
 	if _, err := upgrade.Exec(ctx, `
 		INSERT INTO organizations (id, name, slug, type)
@@ -86,150 +89,136 @@ func TestMachineOutputProfileDigestMigrationFreshAndUpgrade(t *testing.T) {
 	}
 }
 
-// ensureOrgB creates a second organization for cross-org assertions.
-func ensureOrgB(t *testing.T, pool *pgxpool.Pool) {
+// migratedMachineOutputStoreWithTenantFixtures creates only isolated tenant
+// fixtures with migration authority. All product behavior below uses the runtime pool.
+func migratedMachineOutputStoreWithTenantFixtures(t *testing.T) (*storage.PostgresStore, *pgxpool.Pool, storage.TenantActor, storage.TenantActor) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `
-		INSERT INTO organizations (id, name, slug, type) VALUES ($1, 'machine-output-test-org-b', 'machine-output-test-org-b', 'factory')
-		ON CONFLICT (id) DO NOTHING
-	`, machineOutputTestOrgB); err != nil {
-		t.Skipf("seed org B: %v", err)
+	store, pool := migratedConnectStore(t)
+	migrationStore, _ := migrationConnectStore(t)
+	ctx := context.Background()
+	tx, err := migrationStore.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM machine_output_selections WHERE organization_id = $1`, machineOutputTestOrgB)
-		_, _ = pool.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, machineOutputTestOrgB)
-	})
+	defer tx.Rollback(ctx)
+	orgAActor := storage.TenantActor{OrganizationID: machineOutputTestOrgA, UserID: "93000000-0000-0000-0000-0000000009e0", MembershipID: "94000000-0000-0000-0000-0000000009e0"}
+	orgBActor := storage.TenantActor{OrganizationID: machineOutputTestOrgB, UserID: "93000000-0000-0000-0000-0000000009e1", MembershipID: "94000000-0000-0000-0000-0000000009e1"}
+	seedMachineOutputActor(t, tx, orgAActor, "machine-output-test-org-a", "machine-output-org-a@example.test")
+	seedMachineOutputActor(t, tx, orgBActor, "machine-output-test-org-b", "machine-output-org-b@example.test")
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit tenant fixtures: %v", err)
+	}
+	return store, pool, orgAActor, orgBActor
+}
+
+func seedMachineOutputActor(t *testing.T, tx pgx.Tx, actor storage.TenantActor, slug, email string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO organizations (id, name, slug, type)
+		VALUES ($1, $2, $2, 'factory')
+		ON CONFLICT (id) DO NOTHING`, actor.OrganizationID, slug); err != nil {
+		t.Fatalf("seed organization %s: %v", actor.OrganizationID, err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO users (id, email, password_hash, name, account_status, normalized_email)
+		VALUES ($1, $2, 'x', $3, 'active', $2)
+		ON CONFLICT (id) DO NOTHING`, actor.UserID, email, slug); err != nil {
+		t.Fatalf("seed user %s: %v", actor.UserID, err)
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO memberships (id, organization_id, user_id, roles)
+		VALUES ($1, $2, $3, ARRAY['admin']::text[])
+		ON CONFLICT (user_id, organization_id) DO NOTHING`, actor.MembershipID, actor.OrganizationID, actor.UserID); err != nil {
+		t.Fatalf("seed membership %s: %v", actor.MembershipID, err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE organizations SET status='active', status_reason=NULL WHERE id=$1`, actor.OrganizationID); err != nil {
+		t.Fatalf("activate organization %s: %v", actor.OrganizationID, err)
+	}
 }
 
 func TestMachineOutputSelections_VersionConflictAndList(t *testing.T) {
-	store, pool := connectStore(t)
-	orgA := storage.InitialOrganizationID
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM machine_output_selections WHERE organization_id = $1`, orgA)
-	})
-	ctxA := storage.WithOrgCtx(context.Background(), orgA)
-
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 	sel := machineOutputValidSelection()
-	saved, err := store.UpsertMachineOutputSelection(ctxA, sel, 0, "a@test")
-	if err != nil {
-		t.Fatalf("initial upsert: %v", err)
-	}
+	saved := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (domain.MachineOutputSelectionRecord, error) {
+		return store.UpsertMachineOutputSelection(txCtx, sel, 0, "a@test")
+	})
 	if saved.Version != 1 || saved.UpdatedBy != "a@test" {
 		t.Fatalf("saved record = %+v", saved)
 	}
 
-	// Editor A moves v1 -> v2.
-	saved2, err := store.UpsertMachineOutputSelection(ctxA, sel, 1, "a@test")
-	if err != nil {
-		t.Fatalf("update to v2: %v", err)
-	}
+	// Editor A moves v1 -> v2 in a separate request transaction.
+	saved2 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (domain.MachineOutputSelectionRecord, error) {
+		return store.UpsertMachineOutputSelection(txCtx, sel, 1, "a@test")
+	})
 	if saved2.Version != 2 {
 		t.Fatalf("version = %d, want 2", saved2.Version)
 	}
 
-	// Editor B still on v1: typed conflict, never a silent overwrite.
-	if _, err := store.UpsertMachineOutputSelection(ctxA, sel, 1, "b@test"); !errors.Is(err, storage.ErrVersionConflict) {
+	// Editor B still on v1: the error rolls back its own transaction.
+	ctx := storage.WithOrgCtx(context.Background(), actor.OrganizationID)
+	err := store.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+		_, err := store.UpsertMachineOutputSelection(txCtx, sel, 1, "b@test")
+		return err
+	})
+	if !errors.Is(err, storage.ErrVersionConflict) {
 		t.Fatalf("stale upsert err = %v, want ErrVersionConflict", err)
 	}
 
-	records, err := store.ListMachineOutputSelections(ctxA)
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
+	records := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) ([]domain.MachineOutputSelectionRecord, error) {
+		return store.ListMachineOutputSelections(txCtx)
+	})
 	if len(records) != 1 || records[0].Version != 2 || records[0].OutputProfileID != "ptx-generic" {
 		t.Fatalf("records = %+v", records)
 	}
 	if records[0].OutputProfileDigest == nil || *records[0].OutputProfileDigest != *sel.OutputProfileDigest {
 		t.Fatalf("profile digest was not preserved: %+v", records[0].OutputProfileDigest)
 	}
-
-	// Absence of configuration for a different operation is NO_OUTPUT_CONFIGURED.
-	if len(records) != 1 {
-		t.Fatalf("expected exactly one selection for the cutting operation")
-	}
 }
 
 func TestMachineOutputSelections_RLSTenantIsolation(t *testing.T) {
-	store, pool := connectStore(t)
-	orgA := storage.InitialOrganizationID
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM machine_output_selections WHERE organization_id = $1`, orgA)
-	})
-	ctxA := storage.WithOrgCtx(context.Background(), orgA)
-	if _, err := store.UpsertMachineOutputSelection(ctxA, machineOutputValidSelection(), 0, "a@test"); err != nil {
-		t.Fatalf("seed org A selection: %v", err)
-	}
-	ensureOrgB(t, pool)
-
-	// App role (no BYPASSRLS) scoped to org B: org A's selection is invisible.
-	admin, err := pgxpool.New(context.Background(), machineOutputAdminURL(t).String())
-	if err != nil {
-		t.Skipf("no db: %v", err)
-	}
-	t.Cleanup(admin.Close)
-	if _, err := admin.Exec(context.Background(), `DROP ROLE IF EXISTS `+machineOutputRLSRole); err != nil {
-		t.Skipf("drop role: %v", err)
-	}
-	if _, err := admin.Exec(context.Background(), `CREATE ROLE `+machineOutputRLSRole+` LOGIN PASSWORD 'machine-output-rls'
-		NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS IN ROLE granete_app`); err != nil {
-		t.Skipf("create app role (granete_app must exist): %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), `DROP ROLE IF EXISTS `+machineOutputRLSRole)
+	store, pool, orgAActor, orgBActor := migratedMachineOutputStoreWithTenantFixtures(t)
+	orgASelection := machineOutputValidSelection()
+	withinConnectStoreTenant(t, store, orgAActor, func(txCtx context.Context) error {
+		_, err := store.UpsertMachineOutputSelection(txCtx, orgASelection, 0, "a@test")
+		return err
 	})
 
-	appURL := machineOutputAdminURL(t)
-	appURL.User = url.UserPassword(machineOutputRLSRole, "machine-output-rls")
-	app, err := pgxpool.New(context.Background(), appURL.String())
-	if err != nil {
-		t.Fatalf("connect app role: %v", err)
-	}
-	t.Cleanup(app.Close)
-
-	ctx := context.Background()
-	tx, err := app.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, `SELECT set_config('app.organization_id', $1, true)`, machineOutputTestOrgB); err != nil {
-		t.Fatalf("set org B scope: %v", err)
+	// The real runtime role under org B cannot observe org A's selection.
+	orgBRecords := withinConnectStoreTenantValue(t, store, orgBActor, func(txCtx context.Context) ([]domain.MachineOutputSelectionRecord, error) {
+		return store.ListMachineOutputSelections(txCtx)
+	})
+	if len(orgBRecords) != 0 {
+		t.Fatalf("org B saw %d org-A selections: RLS isolation broken", len(orgBRecords))
 	}
 
-	var count int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM machine_output_selections`).Scan(&count); err != nil {
-		t.Fatalf("rls select: %v", err)
+	// A direct cross-org INSERT reaches PostgreSQL under org B's legitimate
+	// runtime scope and is rejected by the policy WITH CHECK. It rolls back
+	// before the next independently scoped read.
+	err := runConnectStoreSQL(t, pool, orgBActor, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `
+			INSERT INTO machine_output_selections (
+				organization_id, operation, machine_profile_id, machine_profile_revision_id,
+				output_profile_id, output_profile_revision_id, adapter_id, adapter_version,
+				adapter_implementation_digest, version, updated_by
+			) VALUES ($1, 'cutting', 'client-a-machine-b-hpp250', 'r1', 'ptx-generic', 'r1',
+				'granete-ptx', '1.0.0', '39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28', 1, 'intruder@test')
+		`, orgAActor.OrganizationID)
+		return err
+	})
+	if err == nil {
+		t.Fatal("cross-org insert was accepted: RLS WITH CHECK broken")
 	}
-	if count != 0 {
-		t.Fatalf("org B saw %d org-A selections: RLS isolation broken", count)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
+		t.Fatalf("cross-org insert error = %v, want RLS SQLSTATE 42501", err)
 	}
 
-	// Cross-org INSERT for org A under org B scope must be rejected by the
-	// policy WITH CHECK.
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO machine_output_selections (
-			organization_id, operation, machine_profile_id, machine_profile_revision_id,
-			output_profile_id, output_profile_revision_id, adapter_id, adapter_version,
-			adapter_implementation_digest, version, updated_by
-		) VALUES ($1, 'cutting', 'client-a-machine-b-hpp250', 'r1', 'ptx-generic', 'r1',
-			'granete-ptx', '1.0.0', '39df10ba24528b5d402a940ac2e6f9fc20b735011468013090cfc78f88511a28', 1, 'intruder@test')
-	`, orgA); err == nil {
-		t.Fatalf("cross-org insert was accepted: RLS WITH CHECK broken")
+	orgBRecords = withinConnectStoreTenantValue(t, store, orgBActor, func(txCtx context.Context) ([]domain.MachineOutputSelectionRecord, error) {
+		return store.ListMachineOutputSelections(txCtx)
+	})
+	if len(orgBRecords) != 0 {
+		t.Fatalf("org B saw %d selections after rejected insert", len(orgBRecords))
 	}
-}
-
-func machineOutputAdminURL(t *testing.T) *url.URL {
-	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL not set; skipping machine output selections integration test")
-	}
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Fatalf("parse dsn: %v", err)
-	}
-	if err := storage.ValidateTestDatabaseURL(u.String()); err != nil {
-		t.Fatalf("machineOutputAdminURL rejected unsafe test database: %v", err)
-	}
-	return u
 }

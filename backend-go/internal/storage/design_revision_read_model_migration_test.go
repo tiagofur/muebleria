@@ -10,7 +10,7 @@ import (
 func TestDesignRevisionReadModelMigrationFreshUpgradeAndDown(t *testing.T) {
 	assert := func(t *testing.T, fresh bool) {
 		t.Helper()
-		pool := multiOrgFreshDB(t)
+		pool := multiOrgFreshMigrationDB(t)
 		if fresh {
 			identityApplyThrough(t, pool, 129)
 		} else {

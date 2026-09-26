@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -44,6 +45,28 @@ func countCustomersByName(t *testing.T, store *storage.PostgresStore, org, name 
 	return n
 }
 
+func runtimeCustomerCount(t *testing.T, fixture isolationRuntimeFixture, actor storage.TenantActor) int {
+	t.Helper()
+	var count int
+	if err := runConnectStoreSQL(t, fixture.store.Pool, actor, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT count(*) FROM customers WHERE organization_id = $1`, actor.OrganizationID).Scan(&count)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+func runtimeCustomerCountByName(t *testing.T, fixture isolationRuntimeFixture, actor storage.TenantActor, name string) int {
+	t.Helper()
+	var count int
+	if err := runConnectStoreSQL(t, fixture.store.Pool, actor, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT count(*) FROM customers WHERE organization_id = $1 AND name = $2`, actor.OrganizationID, name).Scan(&count)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
 // The exact #712 boundary, pinned. Before the fix the shell's project insert
 // reached PostgreSQL with a customer id no committed row had and died on
 // projects_customer_id_fkey (23503) while the customer landed later as an
@@ -51,32 +74,27 @@ func countCustomersByName(t *testing.T, store *storage.PostgresStore, org, name 
 // and the raw FK itself must keep rejecting the same shape at the SQL level
 // (the fix never relaxes it).
 func TestProjectInlineCustomer_Boundary_ProjectReferencingUnpersistedCustomerFailsFK(t *testing.T) {
-	store, orgA, _ := isolationSetup(t)
-	ctx := context.Background()
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
 
-	p := &domain.Project{
-		ID:           inlineProjectID,
-		Name:         "Cocina Ana",
-		CustomerID:   neverPersisted,
-		Currency:     "MXN",
-		MarginFactor: 1.35,
-		Status:       domain.StatusDraft,
-		Items:        []domain.ProjectItem{},
-	}
-	err := store.CreateProject(scoped(ctx, orgA), p)
+	p := &domain.Project{ID: inlineProjectID, Name: "Cocina Ana", CustomerID: neverPersisted, Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProject(txCtx, p) })
 	if !errors.Is(err, storage.ErrCustomerNotFound) {
 		t.Fatalf("error = %v, want the neutral storage guard (unpersisted customer id)", err)
 	}
 	var n int
-	if err := store.Pool.QueryRow(ctx, `SELECT count(*) FROM projects WHERE id = $1`, inlineProjectID).Scan(&n); err != nil || n != 0 {
+	if err := runConnectStoreSQL(t, store.Pool, fixture.actorA, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT count(*) FROM projects WHERE id = $1`, inlineProjectID).Scan(&n)
+	}); err != nil || n != 0 {
 		t.Fatalf("no project row must survive, got count=%d err=%v", n, err)
 	}
 
 	// The DB constraint is the last-resort guard and stays untouched: a direct
 	// insert (bypassing the store method) still violates the FK.
-	_, sqlErr := store.Pool.Exec(ctx,
-		`INSERT INTO projects (id, name, customer_id, status, organization_id)
-		 VALUES ($1, 'Raw FK', $2, 'draft', $3)`, inlineDupID, neverPersisted, orgA)
+	sqlErr := runConnectStoreSQL(t, store.Pool, fixture.actorA, func(tx pgx.Tx) error {
+		_, err := tx.Exec(context.Background(), `INSERT INTO projects (id, name, customer_id, status, organization_id, sales_organization_id, manufacturing_organization_id) VALUES ($1, 'Raw FK', $2, 'draft', $3, $3, $3)`, inlineDupID, neverPersisted, fixture.orgA)
+		return err
+	})
 	if sqlErr == nil {
 		t.Fatal("raw insert with an unpersisted customer must still violate the FK")
 	}
@@ -88,40 +106,25 @@ func TestProjectInlineCustomer_Boundary_ProjectReferencingUnpersistedCustomerFai
 // Happy path (proof B): empty org → one customer row + one project row,
 // project.customer_id == the server-persisted customer.id.
 func TestProjectInlineCustomer_AtomicCreateServerOwnedIdentity(t *testing.T) {
-	store, orgA, _ := isolationSetup(t)
-	ctx := context.Background()
-	before := countCustomers(t, store, orgA)
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+	before := runtimeCustomerCount(t, fixture, fixture.actorA)
 
 	customer := domain.Customer{Name: "Ana López"}
-	p := &domain.Project{
-		ID:           inlineProjectID,
-		Name:         "Cocina Ana",
-		CustomerID:   "",
-		Currency:     "MXN",
-		MarginFactor: 1.35,
-		Status:       domain.StatusDraft,
-		Items:        []domain.ProjectItem{},
-	}
-	if err := store.CreateProjectWithInlineCustomer(scoped(ctx, orgA), p, &customer); err != nil {
+	p := &domain.Project{ID: inlineProjectID, Name: "Cocina Ana", Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	if err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProjectWithInlineCustomer(txCtx, p, &customer) }); err != nil {
 		t.Fatalf("CreateProjectWithInlineCustomer: %v", err)
 	}
-
-	// Server-owned identity: the storage minted and returned the persisted id.
 	if customer.ID == "" {
 		t.Fatal("inline customer id must be generated by the server, not the client")
 	}
 	if p.CustomerID != customer.ID {
 		t.Fatalf("project.customer_id = %q, want the persisted customer id %q", p.CustomerID, customer.ID)
 	}
-
-	// Exactly one new customer row, visible to normal readers of the org.
-	if got := countCustomers(t, store, orgA); got != before+1 {
+	if got := runtimeCustomerCount(t, fixture, fixture.actorA); got != before+1 {
 		t.Fatalf("customers = %d, want %d (exactly one new customer)", got, before+1)
 	}
-	list, err := store.ListCustomers(scoped(ctx, orgA))
-	if err != nil {
-		t.Fatalf("ListCustomers: %v", err)
-	}
+	list := isolationRuntimeValue(t, fixture, fixture.actorA, func(txCtx context.Context) ([]domain.Customer, error) { return store.ListCustomers(txCtx) })
 	found := false
 	for _, c := range list {
 		if c.ID == customer.ID {
@@ -134,61 +137,43 @@ func TestProjectInlineCustomer_AtomicCreateServerOwnedIdentity(t *testing.T) {
 	if !found {
 		t.Fatal("the created customer must be visible via ListCustomers")
 	}
-
-	// The project references exactly that row.
 	var ref string
-	if err := store.Pool.QueryRow(ctx,
-		`SELECT customer_id FROM projects WHERE id = $1`, inlineProjectID).Scan(&ref); err != nil {
+	if err := runConnectStoreSQL(t, store.Pool, fixture.actorA, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT customer_id FROM projects WHERE id = $1`, inlineProjectID).Scan(&ref)
+	}); err != nil {
 		t.Fatalf("read project: %v", err)
 	}
 	if ref != customer.ID {
 		t.Fatalf("projects.customer_id = %q, want %q", ref, customer.ID)
 	}
-	got, err := store.GetProjectByID(scoped(ctx, orgA), inlineProjectID)
-	if err != nil || got.CustomerID != customer.ID {
-		t.Fatalf("GetProjectByID = (%+v, %v), want customer %q", got, err, customer.ID)
+	got := isolationRuntimeValue(t, fixture, fixture.actorA, func(txCtx context.Context) (*domain.Project, error) {
+		return store.GetProjectByID(txCtx, inlineProjectID)
+	})
+	if got.CustomerID != customer.ID {
+		t.Fatalf("GetProjectByID = %+v, want customer %q", got, customer.ID)
 	}
 }
 
 // Atomicity (proof D): a controlled project failure AFTER the customer insert
 // must roll the customer back — no orphan residue from the joint intent.
 func TestProjectInlineCustomer_ProjectFailureRollsBackCustomer(t *testing.T) {
-	store, orgA, _ := isolationSetup(t)
-	ctx := context.Background()
-	before := countCustomers(t, store, orgA)
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+	before := runtimeCustomerCount(t, fixture, fixture.actorA)
 
-	// Controlled failure: the project id already exists in the same org.
-	existing := &domain.Project{
-		ID:           inlineDupID,
-		Name:         "Ya existe",
-		CustomerID:   "c1000000-0000-0000-0000-00000000000a",
-		Currency:     "MXN",
-		MarginFactor: 1.35,
-		Status:       domain.StatusDraft,
-		Items:        []domain.ProjectItem{},
-	}
-	if err := store.CreateProject(scoped(ctx, orgA), existing); err != nil {
+	existing := &domain.Project{ID: inlineDupID, Name: "Ya existe", CustomerID: "c1000000-0000-0000-0000-00000000000a", Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	if err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProject(txCtx, existing) }); err != nil {
 		t.Fatalf("seed existing project: %v", err)
 	}
-
 	customer := domain.Customer{Name: "Ana López"}
-	dup := &domain.Project{
-		ID:           inlineDupID, // duplicate key → controlled failure
-		Name:         "Cocina Ana",
-		CustomerID:   "",
-		Currency:     "MXN",
-		MarginFactor: 1.35,
-		Status:       domain.StatusDraft,
-		Items:        []domain.ProjectItem{},
-	}
-	if err := store.CreateProjectWithInlineCustomer(scoped(ctx, orgA), dup, &customer); err == nil {
+	dup := &domain.Project{ID: inlineDupID, Name: "Cocina Ana", Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	if err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProjectWithInlineCustomer(txCtx, dup, &customer) }); err == nil {
 		t.Fatal("duplicate project id must fail the transition")
 	}
-
-	if got := countCustomersByName(t, store, orgA, "Ana López"); got != 0 {
+	if got := runtimeCustomerCountByName(t, fixture, fixture.actorA, "Ana López"); got != 0 {
 		t.Fatalf("orphan customer rows = %d, want 0 (transition rolled back)", got)
 	}
-	if got := countCustomers(t, store, orgA); got != before {
+	if got := runtimeCustomerCount(t, fixture, fixture.actorA); got != before {
 		t.Fatalf("customers = %d, want %d (no residue)", got, before)
 	}
 }
@@ -196,25 +181,20 @@ func TestProjectInlineCustomer_ProjectFailureRollsBackCustomer(t *testing.T) {
 // Idempotent retry (proof F): re-sending the SAME intention (same project id)
 // conflicts on the project and must not duplicate the customer.
 func TestProjectInlineCustomer_RetrySameProjectIDDoesNotDuplicateCustomer(t *testing.T) {
-	store, orgA, _ := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
 	build := func() (*domain.Project, *domain.Customer) {
-		return &domain.Project{
-				ID: inlineProjectID, Name: "Cocina Ana", CustomerID: "", Currency: "MXN",
-				MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{},
-			}, &domain.Customer{Name: "Ana López"}
+		return &domain.Project{ID: inlineProjectID, Name: "Cocina Ana", Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}, &domain.Customer{Name: "Ana López"}
 	}
 	p1, c1 := build()
-	if err := store.CreateProjectWithInlineCustomer(scoped(ctx, orgA), p1, c1); err != nil {
+	if err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProjectWithInlineCustomer(txCtx, p1, c1) }); err != nil {
 		t.Fatalf("first attempt: %v", err)
 	}
-
-	p2, c2 := build() // same project id → same intention replayed
-	if err := store.CreateProjectWithInlineCustomer(scoped(ctx, orgA), p2, c2); err == nil {
+	p2, c2 := build()
+	if err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProjectWithInlineCustomer(txCtx, p2, c2) }); err == nil {
 		t.Fatal("replay with the same project id must conflict, not create again")
 	}
-	if got := countCustomersByName(t, store, orgA, "Ana López"); got != 1 {
+	if got := runtimeCustomerCountByName(t, fixture, fixture.actorA, "Ana López"); got != 1 {
 		t.Fatalf("'Ana López' rows = %d, want exactly 1 (no duplicate from the retry)", got)
 	}
 }
@@ -222,52 +202,41 @@ func TestProjectInlineCustomer_RetrySameProjectIDDoesNotDuplicateCustomer(t *tes
 // Tenant isolation (proof E): a valid customer id from another org must NOT
 // pass the logical FK — neutral not-found, no project row, RLS untouched.
 func TestProjectInlineCustomer_TenantIsolation_CustomerFromOtherOrgRejected(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
 	const customerB = "c1000000-0000-0000-0000-00000000000b"
-	p := &domain.Project{
-		ID: inlineProjectID, Name: "Cross", CustomerID: customerB,
-		Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
-		Items: []domain.ProjectItem{},
-	}
-	err := store.CreateProject(scoped(ctx, orgA), p)
+	p := &domain.Project{ID: inlineProjectID, Name: "Cross", CustomerID: customerB, Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProject(txCtx, p) })
 	if !errors.Is(err, storage.ErrCustomerNotFound) {
 		t.Fatalf("error = %v, want storage.ErrCustomerNotFound (neutral, tenant A cannot bind tenant B's customer)", err)
 	}
 	var n int
-	if err := store.Pool.QueryRow(ctx, `SELECT count(*) FROM projects WHERE id = $1`, inlineProjectID).Scan(&n); err != nil || n != 0 {
+	if err := runConnectStoreSQL(t, store.Pool, fixture.actorA, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT count(*) FROM projects WHERE id = $1`, inlineProjectID).Scan(&n)
+	}); err != nil || n != 0 {
 		t.Fatalf("project rows = %d err = %v, want 0", n, err)
 	}
-	_ = orgB
 }
 
 // The inline customer itself stays scoped to the CALLING org.
 func TestProjectInlineCustomer_TenantIsolation_InlineCustomerBelongsToCallingOrg(t *testing.T) {
-	store, orgA, orgB := isolationSetup(t)
-	ctx := context.Background()
-
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
 	customer := domain.Customer{Name: "Sólo Beta"}
-	p := &domain.Project{
-		ID: inlineProjectID, Name: "Obra Beta", CustomerID: "", Currency: "MXN",
-		MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{},
-	}
-	if err := store.CreateProjectWithInlineCustomer(scoped(ctx, orgB), p, &customer); err != nil {
+	p := &domain.Project{ID: inlineProjectID, Name: "Obra Beta", Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	if err := isolationRuntimeError(fixture, fixture.actorB, func(txCtx context.Context) error { return store.CreateProjectWithInlineCustomer(txCtx, p, &customer) }); err != nil {
 		t.Fatalf("inline create in org B: %v", err)
 	}
-
 	var orgID string
-	if err := store.Pool.QueryRow(ctx,
-		`SELECT organization_id FROM customers WHERE id = $1`, customer.ID).Scan(&orgID); err != nil {
+	if err := runConnectStoreSQL(t, store.Pool, fixture.actorB, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT organization_id FROM customers WHERE id = $1`, customer.ID).Scan(&orgID)
+	}); err != nil {
 		t.Fatalf("read customer org: %v", err)
 	}
-	if orgID != orgB {
-		t.Fatalf("customer.organization_id = %q, want org B %q", orgID, orgB)
+	if orgID != fixture.orgB {
+		t.Fatalf("customer.organization_id = %q, want org B %q", orgID, fixture.orgB)
 	}
-	listA, err := store.ListCustomers(scoped(ctx, orgA))
-	if err != nil {
-		t.Fatalf("list A: %v", err)
-	}
+	listA := isolationRuntimeValue(t, fixture, fixture.actorA, func(txCtx context.Context) ([]domain.Customer, error) { return store.ListCustomers(txCtx) })
 	for _, c := range listA {
 		if c.ID == customer.ID {
 			t.Fatal("org A must never see org B's inline customer")
@@ -278,23 +247,18 @@ func TestProjectInlineCustomer_TenantIsolation_InlineCustomerBelongsToCallingOrg
 // Existing-customer path (proof C) stays byte-identical: no customer created,
 // project references exactly the selected id.
 func TestProjectInlineCustomer_ExistingCustomerPathUnchanged(t *testing.T) {
-	store, orgA, _ := isolationSetup(t)
-	ctx := context.Background()
-	before := countCustomers(t, store, orgA)
-
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+	before := runtimeCustomerCount(t, fixture, fixture.actorA)
 	const existingA = "c1000000-0000-0000-0000-00000000000a"
-	p := &domain.Project{
-		ID: inlineProjectID, Name: "Con cliente existente", CustomerID: existingA,
-		Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
-		Items: []domain.ProjectItem{},
-	}
-	if err := store.CreateProject(scoped(ctx, orgA), p); err != nil {
+	p := &domain.Project{ID: inlineProjectID, Name: "Con cliente existente", CustomerID: existingA, Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	if err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProject(txCtx, p) }); err != nil {
 		t.Fatalf("CreateProject with existing customer: %v", err)
 	}
 	if p.CustomerID != existingA {
 		t.Fatalf("customer_id = %q, want the selected customer untouched", p.CustomerID)
 	}
-	if got := countCustomers(t, store, orgA); got != before {
+	if got := runtimeCustomerCount(t, fixture, fixture.actorA); got != before {
 		t.Fatalf("customers = %d, want %d (existing path never creates customers)", got, before)
 	}
 }
@@ -302,15 +266,10 @@ func TestProjectInlineCustomer_ExistingCustomerPathUnchanged(t *testing.T) {
 // A well-formed but missing customer id surfaces as the same neutral
 // not-found used everywhere — never a distinct cross-org oracle.
 func TestProjectInlineCustomer_MissingCustomerIsNeutralNotFound(t *testing.T) {
-	store, orgA, _ := isolationSetup(t)
-	ctx := context.Background()
-
-	p := &domain.Project{
-		ID: inlineProjectID, Name: "Fantasma", CustomerID: neverPersisted,
-		Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft,
-		Items: []domain.ProjectItem{},
-	}
-	err := store.CreateProject(scoped(ctx, orgA), p)
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+	p := &domain.Project{ID: inlineProjectID, Name: "Fantasma", CustomerID: neverPersisted, Currency: "MXN", MarginFactor: 1.35, Status: domain.StatusDraft, Items: []domain.ProjectItem{}}
+	err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.CreateProject(txCtx, p) })
 	if !errors.Is(err, storage.ErrCustomerNotFound) {
 		t.Fatalf("error = %v, want storage.ErrCustomerNotFound", err)
 	}
@@ -319,23 +278,20 @@ func TestProjectInlineCustomer_MissingCustomerIsNeutralNotFound(t *testing.T) {
 // §8 on the update surface too: PUT rewrites customer_id, so a cross-org
 // customer must be rejected there with the same neutral error.
 func TestProjectInlineCustomer_UpdateCannotBindOtherOrgCustomer(t *testing.T) {
-	store, orgA, _ := isolationSetup(t)
-	ctx := context.Background()
-
-	const projectID = "c2000000-0000-0000-0000-00000000000a" // seeded org A project
+	fixture := runtimeIsolationSetup(t)
+	store := fixture.store
+	const projectID = "c2000000-0000-0000-0000-00000000000a"
 	const customerB = "c1000000-0000-0000-0000-00000000000b"
-	current, err := store.GetProjectByID(scoped(ctx, orgA), projectID)
-	if err != nil {
-		t.Fatalf("seeded project: %v", err)
-	}
+	current := isolationRuntimeValue(t, fixture, fixture.actorA, func(txCtx context.Context) (*domain.Project, error) { return store.GetProjectByID(txCtx, projectID) })
 	current.CustomerID = customerB
-	err = store.UpdateProject(scoped(ctx, orgA), projectID, current)
+	err := isolationRuntimeError(fixture, fixture.actorA, func(txCtx context.Context) error { return store.UpdateProject(txCtx, projectID, current) })
 	if !errors.Is(err, storage.ErrCustomerNotFound) {
 		t.Fatalf("error = %v, want storage.ErrCustomerNotFound (update cannot bind another org's customer)", err)
 	}
 	var ref string
-	if err := store.Pool.QueryRow(ctx,
-		`SELECT customer_id FROM projects WHERE id = $1`, projectID).Scan(&ref); err != nil {
+	if err := runConnectStoreSQL(t, store.Pool, fixture.actorA, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT customer_id FROM projects WHERE id = $1`, projectID).Scan(&ref)
+	}); err != nil {
 		t.Fatalf("read project: %v", err)
 	}
 	if ref == customerB {

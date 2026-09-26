@@ -42,8 +42,6 @@ func newNamedRuntimeOrganizationStore(t *testing.T, fx *rlsFixture, applicationN
 	if err != nil {
 		t.Fatal(err)
 	}
-	config.ConnConfig.User = rlsAppRole
-	config.ConnConfig.Password = "rls-test-password"
 	config.ConnConfig.RuntimeParams["application_name"] = applicationName
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
@@ -76,7 +74,7 @@ func waitForOrganizationLockWait(t *testing.T, admin *pgxpool.Pool, applicationN
 }
 
 func TestOrganizationLifecycleMigration_BackfillsCanonicalStatusAndEntitlements(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 
@@ -115,7 +113,7 @@ func TestOrganizationLifecycleMigration_BackfillsCanonicalStatusAndEntitlements(
 }
 
 func TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 99)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `
@@ -140,7 +138,7 @@ func TestOrganizationLifecycleMigration_NormalizesHistoricalPartialFixture(t *te
 }
 
 func TestOrganizationLifecycleStorage_TransitionsEpochAndReadiness(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 	store := &storage.PostgresStore{Pool: pool}
@@ -254,7 +252,7 @@ func TestOrganizationOffboardingPreviewCountsExecutableProductionAndInstallation
 }
 
 func TestOrganizationLifecycleMigration_DownFailsClosedAfterLifecycleFact(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `UPDATE organizations SET credential_version=2 WHERE id=$1`, multiOrgInitialOrgID); err != nil {
@@ -269,7 +267,7 @@ func TestOrganizationLifecycleMigration_DownFailsClosedAfterLifecycleFact(t *tes
 }
 
 func TestOrganizationLifecycleMigration_RollbackAndReapplyWithoutFacts(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	identityApplyThrough(t, pool, 101)
 	ctx := context.Background()
 	for _, step := range []struct {
@@ -675,7 +673,9 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	totpCounter := auth.TOTPCounter(time.Now())
+	// Fixture allocation starts at current-1 so both real step-ups below fit in
+	// the verifier's ±1 window without a period-length test sleep.
+	totpCounter := nextFreshTOTPCounter(t, auth.TOTPCounter(time.Now())-2)
 	if _, err := fx.store.EnableMFAFactor(ctx, storage.EnableMFAFactorCommand{
 		UserID:   rlsUserA,
 		FactorID: pending.ID,
@@ -685,15 +685,7 @@ func TestPlatformLifecycleHTTPPostgresInheritedRuntimeRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, scope := range []string{domain.StepUpScopeSupportAccess, domain.StepUpScopePlatformAdmin} {
-		// First non-replayed counter; the ±1 acceptance window allows at most
-		// one future slot, so a second scope in the same interval waits for
-		// the next one instead of tripping replay protection.
-		next := totpCounter + 1
-		current := auth.TOTPCounter(time.Now())
-		if next > current+1 {
-			time.Sleep(time.Until(time.Unix((next-1)*int64(auth.TOTPPeriod.Seconds()), 0)) + 100*time.Millisecond)
-		}
-		totpCounter = next
+		totpCounter = nextFreshTOTPCounter(t, totpCounter)
 		if _, err := fx.store.VerifyMFAStepUp(ctx, storage.MFAStepUpCommand{
 			UserID:    rlsUserA,
 			SessionID: session.ID,

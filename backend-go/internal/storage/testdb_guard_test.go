@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -216,21 +217,99 @@ func TestGuardDoesNotLeakPassword(t *testing.T) {
 func TestTestDatabaseURL_Helper(t *testing.T) {
 	origFlag := os.Getenv("GRANETE_TEST_DATABASE")
 	origURL := os.Getenv("DATABASE_URL")
+	origMigrationURL := os.Getenv("MIGRATION_DATABASE_URL")
 	defer func() {
 		os.Setenv("GRANETE_TEST_DATABASE", origFlag)
 		os.Setenv("DATABASE_URL", origURL)
+		os.Setenv("MIGRATION_DATABASE_URL", origMigrationURL)
 	}()
 
 	os.Setenv("GRANETE_TEST_DATABASE", "1")
-	os.Setenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/granete_test")
+	os.Setenv("DATABASE_URL", "postgres://granete_app:runtime@localhost:5432/granete_test")
+	os.Setenv("MIGRATION_DATABASE_URL", "postgres://postgres:postgres@localhost:5432/granete_test")
 
 	url := storage.TestDatabaseURL(t)
-	if url != "postgres://postgres:postgres@localhost:5432/granete_test" {
+	if url != "postgres://granete_app:runtime@localhost:5432/granete_test" {
 		t.Fatalf("unexpected url: %s", url)
 	}
 
 	adminURL := storage.TestAdminDatabaseURL(t)
 	if !strings.HasSuffix(adminURL, "/postgres") {
 		t.Fatalf("unexpected admin url: %s", adminURL)
+	}
+}
+
+type guardFatal struct{ message string }
+
+func (e guardFatal) Error() string { return e.message }
+
+type guardT struct{}
+
+func (guardT) Helper()          {}
+func (guardT) Skip(args ...any) { panic(guardFatal{message: "skip"}) }
+func (guardT) Fatalf(format string, args ...any) {
+	panic(guardFatal{message: fmt.Sprintf(format, args...)})
+}
+
+func testAdminURLFailure(t *testing.T, want string, action func()) {
+	t.Helper()
+	defer func() {
+		recovered := recover()
+		failure, ok := recovered.(guardFatal)
+		if !ok {
+			t.Fatalf("TestAdminDatabaseURL did not fail closed: %#v", recovered)
+		}
+		if !strings.Contains(failure.message, want) {
+			t.Fatalf("unexpected failure %q; want %q", failure.message, want)
+		}
+	}()
+	action()
+}
+
+func TestTestAdminDatabaseURL_UsesOnlyMigrationAuthority(t *testing.T) {
+	t.Setenv("GRANETE_TEST_DATABASE", "1")
+	t.Setenv("DATABASE_URL", "postgres://granete_app:runtime-secret@localhost:5432/granete_test")
+	t.Setenv("MIGRATION_DATABASE_URL", "")
+	testAdminURLFailure(t, "skip", func() { storage.TestAdminDatabaseURL(guardT{}) })
+
+	t.Setenv("MIGRATION_DATABASE_URL", "postgres://postgres:admin-secret@localhost:5432/muebles")
+	testAdminURLFailure(t, "rejected unsafe database", func() { storage.TestAdminDatabaseURL(guardT{}) })
+}
+
+func TestTestMigrationDatabaseURL_UsesOnlyMigrationAuthority(t *testing.T) {
+	t.Setenv("GRANETE_TEST_DATABASE", "1")
+	t.Setenv("DATABASE_URL", "postgres://granete_app:runtime-secret@localhost:5432/granete_test")
+	t.Setenv("MIGRATION_DATABASE_URL", "")
+	testAdminURLFailure(t, "skip", func() { storage.TestMigrationDatabaseURL(guardT{}, "granete_test_migration") })
+
+	t.Setenv("MIGRATION_DATABASE_URL", "postgres://postgres:admin-secret@localhost:5432/postgres")
+	migrationURL := storage.TestMigrationDatabaseURL(t, "granete_test_migration")
+	if !strings.Contains(migrationURL, "postgres://postgres:admin-secret@localhost:5432/granete_test_migration") {
+		t.Fatalf("unexpected migration URL: %s", migrationURL)
+	}
+
+	testAdminURLFailure(t, "rejected unsafe database", func() { storage.TestMigrationDatabaseURL(guardT{}, "muebles") })
+}
+
+func TestTestDatabaseURLForDB_UsesOnlyRuntimeAuthority(t *testing.T) {
+	t.Setenv("GRANETE_TEST_DATABASE", "1")
+	t.Setenv("DATABASE_URL", "postgres://granete_app:runtime-secret@localhost:5432/granete_test")
+	t.Setenv("MIGRATION_DATABASE_URL", "postgres://postgres:admin-secret@localhost:5432/postgres")
+	runtimeURL := storage.TestDatabaseURLForDB(t, "granete_test_runtime")
+	if !strings.Contains(runtimeURL, "postgres://granete_app:runtime-secret@localhost:5432/granete_test_runtime") {
+		t.Fatalf("unexpected runtime URL: %s", runtimeURL)
+	}
+
+	t.Setenv("DATABASE_URL", "")
+	testAdminURLFailure(t, "skip", func() { storage.TestDatabaseURLForDB(guardT{}, "granete_test_runtime") })
+}
+
+func TestTestMigrationDatabaseURLForRuntimeDatabase_SeparatesCredentials(t *testing.T) {
+	t.Setenv("GRANETE_TEST_DATABASE", "1")
+	t.Setenv("DATABASE_URL", "postgres://granete_app:runtime-secret@localhost:5432/granete_test")
+	t.Setenv("MIGRATION_DATABASE_URL", "postgres://postgres:admin-secret@localhost:5432/postgres")
+	migrationURL := storage.TestMigrationDatabaseURLForRuntimeDatabase(t)
+	if !strings.Contains(migrationURL, "postgres://postgres:admin-secret@localhost:5432/granete_test") {
+		t.Fatalf("unexpected migration URL: %s", migrationURL)
 	}
 }

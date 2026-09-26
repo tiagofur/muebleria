@@ -16,7 +16,6 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
-	"golang.org/x/time/rate"
 )
 
 // actorCanViewCosts resolves COST-01/COST-02 for the request actor (F039 + F044).
@@ -83,7 +82,7 @@ func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimit
 		allowedOrigins:    allowedOrigins,
 		rateLimitRPS:      rateLimitRPS,
 		rateLimitBurst:    rateLimitBurst,
-		mfaAttemptLimiter: newUserRateLimiter(rate.Every(mfaAttemptEvery), mfaAttemptBurst),
+		mfaAttemptLimiter: newUserRateLimiter(mfaAttemptEvery, mfaAttemptBurst),
 	}
 }
 

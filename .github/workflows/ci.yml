@@ -168,26 +168,11 @@ jobs:
       - name: Verify extension and RBZ package
         run: bundle exec rake verify
 
-  backend-go:
-    name: Go Backend Tests
+  storage-shard-plan:
+    name: Storage shard coverage plan
     needs: impact
     if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['backend-go'] }}
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: granete_test
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres -d granete_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/granete_test?sslmode=disable
-      GRANETE_TEST_DATABASE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -196,13 +181,78 @@ jobs:
         with:
           go-version: '1.25.x'
           cache-dependency-path: backend-go/go.sum
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
-      - name: Run Go Tests
+      - name: Prove AST discovery covers exactly three non-empty storage shards
         working-directory: backend-go
-        # Keep serialization: cluster-level role DDL shares pg_auth_members.
-        # Keep the existing per-package timeout, not a fast-but-incomplete suite.
-        run: go test -p 1 -timeout=30m -v ./...
+        run: |
+          mkdir -p ../.ci-storage-shards
+          go run ./cmd/testshard discover -package ./internal/storage -format names > ../.ci-storage-shards/all-roots
+          for shard in 1 2 3; do
+            go run ./cmd/testshard shard -package ./internal/storage -count 3 -index "$shard" -strategy lpt \
+              -timings testdata/storage-before-81a7896.timings -format names > "../.ci-storage-shards/shard-$shard-roots"
+          done
+          python3 ../scripts/verify_storage_shard_plan.py \
+            --all ../.ci-storage-shards/all-roots \
+            --shard ../.ci-storage-shards/shard-1-roots \
+            --shard ../.ci-storage-shards/shard-2-roots \
+            --shard ../.ci-storage-shards/shard-3-roots
+
+  storage-shards:
+    name: Storage shard ${{ matrix.shard }}/3
+    needs: [impact, storage-shard-plan]
+    if: ${{ needs.impact.result == 'success' && needs.storage-shard-plan.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['backend-go'] }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: backend-go/go.sum
+      - name: Record storage shard start
+        run: |
+          printf 'storage shard %s/3 started=%s\n' "${{ matrix.shard }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Run isolated AST-selected storage shard
+        run: scripts/backend-test-storage-shard.sh 3 "${{ matrix.shard }}" lpt backend-go/testdata/storage-before-81a7896.timings
+
+  backend-go-other:
+    name: Go Backend Tests (excluding storage)
+    needs: impact
+    if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['backend-go'] }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: backend-go/go.sum
+      - name: Run all other Go packages through the isolated canonical runner
+        run: |
+          mapfile -t packages < <(cd backend-go && go list ./... | grep -Fvx 'github.com/tiagofur/muebles-backend/internal/storage')
+          test "${#packages[@]}" -gt 0
+          scripts/backend-test.sh -timeout=30m -v "${packages[@]}"
+
+  backend-go:
+    # Preserve the branch-protection check identity while requiring the plan,
+    # every matrix entry, and the unsharded non-storage backend packages.
+    name: Go Backend Tests
+    needs: [impact, storage-shard-plan, storage-shards, backend-go-other]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require every selected storage shard and other backend package proof
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_backend_go_result.py
 
   foundation-gate-a:
     # Preserve the existing check name as the stable aggregate; all expected

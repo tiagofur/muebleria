@@ -2,55 +2,41 @@ package storage_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/tiagofur/muebles-backend/internal/storage"
+	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
 // Integration: requires isolated test Postgres. Verifies texture tile mm columns
 // survive UpdateMaterialBoard + GetMaterialBoardByID.
 func TestMaterialBoard_PersistsTextureTileMm(t *testing.T) {
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set; skipping live storage integration test")
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	board := &domain.MaterialBoard{
+		Code:        uniqueID("TILE"),
+		Name:        "Texture tile persistence",
+		WidthMm:     1830,
+		LengthMm:    2440,
+		ThicknessMm: 18,
+		BoardPrice:  1000,
+		Active:      true,
 	}
-	if err := storage.ValidateTestDatabaseURL(url); err != nil {
-		t.Fatalf("TestMaterialBoard_PersistsTextureTileMm rejected unsafe test database: %v", err)
-	}
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-	pool, err := pgxpool.New(ctx, url)
-	if err != nil {
-		t.Skipf("no db: %v", err)
-	}
-	defer pool.Close()
-	store := &storage.PostgresStore{Pool: pool}
-
-	list, err := store.ListMaterialBoards(ctx)
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
-	if len(list) == 0 {
-		t.Skip("no materials")
-	}
-	m := list[0]
-	origW, origL := m.PreviewTextureTileWidthMm, m.PreviewTextureTileLengthMm
-	m.PreviewTextureTileWidthMm = 333
-	m.PreviewTextureTileLengthMm = 444
-	if err := store.UpdateMaterialBoard(ctx, m.ID, &m); err != nil {
-		t.Fatalf("update: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateMaterialBoard(txCtx, board)
+	})
 	t.Cleanup(func() {
-		m.PreviewTextureTileWidthMm = origW
-		m.PreviewTextureTileLengthMm = origL
-		_ = store.UpdateMaterialBoard(ctx, m.ID, &m)
+		cleanupConnectStoreFixture(t, `DELETE FROM material_boards WHERE id = $1`, board.ID)
 	})
 
-	got, err := store.GetMaterialBoardByID(ctx, m.ID)
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
+	board.PreviewTextureTileWidthMm = 333
+	board.PreviewTextureTileLengthMm = 444
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.UpdateMaterialBoard(txCtx, board.ID, board)
+	})
+
+	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.MaterialBoard, error) {
+		return store.GetMaterialBoardByID(txCtx, board.ID)
+	})
 	if got.PreviewTextureTileWidthMm != 333 || got.PreviewTextureTileLengthMm != 444 {
 		t.Fatalf("tiles not persisted: got %.0f x %.0f", got.PreviewTextureTileWidthMm, got.PreviewTextureTileLengthMm)
 	}

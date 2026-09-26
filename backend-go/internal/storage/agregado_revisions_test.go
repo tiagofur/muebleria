@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -133,189 +135,122 @@ func mockVisualAuthority(hardwareID string) (*domain.HardwareMountFrame, string,
 
 // 1. Tests A, B, C, D: Sequence, Historical Retrieval, Current Pointer
 func TestAgregadoRevisions_AppendOnlySequenceAndHistoricalRetrieval(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-
-	agregadoID := uniqueID("agr-seq")
-	code := uniqueID("CODE")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	agregadoID, code := uniqueID("agr-seq"), uniqueID("CODE")
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{ID: agregadoID, Code: code, Name: "Parametric Drawer Box", WidthMm: 600, HeightMm: 200, DepthMm: 500, Active: true})
 	})
-
-	// Create base Agregado
-	err := store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       agregadoID,
-		Code:     code,
-		Name:     "Parametric Drawer Box",
-		WidthMm:  600,
-		HeightMm: 200,
-		DepthMm:  500,
-		Active:   true,
+	r1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, sampleRecipeR1(), nil)
 	})
-	if err != nil {
-		t.Fatalf("CreateAgregado failed: %v", err)
+	if r1.RevisionNumber != 1 || r1.AgregadoID != agregadoID {
+		t.Fatalf("R1 = %+v", r1)
 	}
-
-	// Case A: Create revision 1
-	r1, err := store.CreateAgregadoRevision(ctx, agregadoID, sampleRecipeR1(), nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision R1 failed: %v", err)
-	}
-	if r1.RevisionNumber != 1 {
-		t.Errorf("R1 RevisionNumber = %d, want 1", r1.RevisionNumber)
-	}
-	if r1.AgregadoID != agregadoID {
-		t.Errorf("R1 AgregadoID = %s, want %s", r1.AgregadoID, agregadoID)
-	}
-
-	// Case B: Create revision 2 -> R1 remains intact
-	r2, err := store.CreateAgregadoRevision(ctx, agregadoID, sampleRecipeR2(), nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision R2 failed: %v", err)
-	}
+	r2 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, sampleRecipeR2(), nil)
+	})
 	if r2.RevisionNumber != 2 {
-		t.Errorf("R2 RevisionNumber = %d, want 2", r2.RevisionNumber)
+		t.Fatalf("R2 RevisionNumber = %d, want 2", r2.RevisionNumber)
 	}
-
-	// Verify R1 by ID and by Number is completely intact
-	fetchR1, err := store.GetAgregadoRevisionByID(ctx, r1.ID)
-	if err != nil {
-		t.Fatalf("GetAgregadoRevisionByID R1: %v", err)
-	}
+	fetchR1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.GetAgregadoRevisionByID(txCtx, r1.ID)
+	})
 	if fetchR1.RevisionNumber != 1 || fetchR1.Recipe.Notes != "Recipe revision 1" {
-		t.Errorf("fetchR1 corrupted: %+v", fetchR1)
+		t.Fatalf("fetchR1 corrupted: %+v", fetchR1)
 	}
-
-	fetchR1ByNum, err := store.GetAgregadoRevisionByNumber(ctx, agregadoID, 1)
-	if err != nil {
-		t.Fatalf("GetAgregadoRevisionByNumber 1: %v", err)
-	}
+	fetchR1ByNum := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.GetAgregadoRevisionByNumber(txCtx, agregadoID, 1)
+	})
 	if fetchR1ByNum.ID != r1.ID {
-		t.Errorf("fetchR1ByNum ID mismatch: %s vs %s", fetchR1ByNum.ID, r1.ID)
+		t.Fatalf("fetchR1ByNum ID mismatch: %s vs %s", fetchR1ByNum.ID, r1.ID)
 	}
-
-	// Case C: Current pointer updates to R2
-	if err := store.SetAgregadoCurrentRevision(ctx, agregadoID, r2.ID); err != nil {
-		t.Fatalf("SetAgregadoCurrentRevision R2: %v", err)
-	}
-
-	// GetAgregadoByID reads current_revision_id
-	agr, err := store.GetAgregadoByID(ctx, agregadoID)
-	if err != nil {
-		t.Fatalf("GetAgregadoByID: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SetAgregadoCurrentRevision(txCtx, agregadoID, r2.ID) })
+	agr := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, agregadoID) })
 	if agr.CurrentRevisionID == nil || *agr.CurrentRevisionID != r2.ID {
-		t.Errorf("agregado CurrentRevisionID = %v, want %s", agr.CurrentRevisionID, r2.ID)
+		t.Fatalf("agregado CurrentRevisionID = %v, want %s", agr.CurrentRevisionID, r2.ID)
 	}
-
-	currRev, err := store.GetAgregadoCurrentRevision(ctx, agregadoID)
-	if err != nil {
-		t.Fatalf("GetAgregadoCurrentRevision: %v", err)
-	}
+	currRev := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.GetAgregadoCurrentRevision(txCtx, agregadoID)
+	})
 	if currRev.ID != r2.ID || currRev.RevisionNumber != 2 {
-		t.Errorf("GetAgregadoCurrentRevision mismatch: %+v", currRev)
+		t.Fatalf("GetAgregadoCurrentRevision mismatch: %+v", currRev)
 	}
-
-	// Cross-agregado current revision foreign key protection
 	otherAgregadoID := uniqueID("agr-other")
-	err = store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       otherAgregadoID,
-		Code:     uniqueID("OTHER"),
-		Name:     "Other Agregado",
-		WidthMm:  400,
-		HeightMm: 150,
-		DepthMm:  400,
-		Active:   true,
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM agregados WHERE id = $1`, otherAgregadoID) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{ID: otherAgregadoID, Code: uniqueID("OTHER"), Name: "Other Agregado", WidthMm: 400, HeightMm: 150, DepthMm: 400, Active: true})
 	})
-	if err != nil {
-		t.Fatalf("Create other agregado: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, otherAgregadoID)
+	err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		return store.SetAgregadoCurrentRevision(txCtx, otherAgregadoID, r2.ID)
 	})
-
-	// Attempting to point otherAgregado to r2 (which belongs to agregadoID) must fail via fk_agregados_current_revision
-	err = store.SetAgregadoCurrentRevision(ctx, otherAgregadoID, r2.ID)
 	if err == nil {
 		t.Fatal("SetAgregadoCurrentRevision pointing to another agregado's revision must fail, got nil")
 	}
-
-	// Case D: ListAgregadoRevisions returns revisions ordered ascending
-	revs, err := store.ListAgregadoRevisions(ctx, agregadoID)
-	if err != nil {
-		t.Fatalf("ListAgregadoRevisions: %v", err)
-	}
-	if len(revs) != 2 {
-		t.Fatalf("expected 2 revisions, got %d", len(revs))
-	}
-	if revs[0].RevisionNumber != 1 || revs[1].RevisionNumber != 2 {
-		t.Errorf("revisions not ordered ascending: %+v", revs)
+	revs := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) ([]domain.AgregadoRevision, error) {
+		return store.ListAgregadoRevisions(txCtx, agregadoID)
+	})
+	if len(revs) != 2 || revs[0].RevisionNumber != 1 || revs[1].RevisionNumber != 2 {
+		t.Fatalf("revisions not ordered ascending: %+v", revs)
 	}
 }
 
 // 2. Tests B, G, H (Immutability): UPDATE & DELETE direct SQL rejected by trigger
 func TestAgregadoRevisions_ImmutabilityGuards(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-
+	store, runtimePool := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 	agregadoID := uniqueID("agr-imm")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{ID: agregadoID, Code: uniqueID("C-IMM"), Name: "Immutability Test", WidthMm: 600, HeightMm: 200, DepthMm: 500, Active: true})
+	})
+	r1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, sampleRecipeR1(), nil)
 	})
 
-	err := store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       agregadoID,
-		Code:     uniqueID("C-IMM"),
-		Name:     "Immutability Test",
-		WidthMm:  600,
-		HeightMm: 200,
-		DepthMm:  500,
-		Active:   true,
-	})
-	if err != nil {
-		t.Fatalf("CreateAgregado: %v", err)
+	for name, query := range map[string]string{
+		"update": `UPDATE agregado_revisions SET recipe = '{}' WHERE id = $1`,
+		"delete": `DELETE FROM agregado_revisions WHERE id = $1`,
+	} {
+		err := runConnectStoreSQL(t, runtimePool, actor, func(tx pgx.Tx) error { _, err := tx.Exec(context.Background(), query, r1.ID); return err })
+		if err == nil || !strings.Contains(err.Error(), "permission denied for table agregado_revisions") {
+			t.Fatalf("runtime %s must stop at SQL privilege boundary, got: %v", name, err)
+		}
 	}
 
-	r1, err := store.CreateAgregadoRevision(ctx, agregadoID, sampleRecipeR1(), nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision: %v", err)
-	}
-
-	// 1. Direct UPDATE on agregado_revisions must fail by trigger
-	_, err = pool.Exec(ctx, `UPDATE agregado_revisions SET recipe = '{}' WHERE id = $1`, r1.ID)
-	if err == nil || !strings.Contains(err.Error(), "is immutable once written") {
-		t.Fatalf("direct UPDATE on agregado_revisions must fail with immutability error, got: %v", err)
-	}
-
-	// 2. Direct DELETE on agregado_revisions must fail by trigger
-	_, err = pool.Exec(ctx, `DELETE FROM agregado_revisions WHERE id = $1`, r1.ID)
-	if err == nil || !strings.Contains(err.Error(), "is immutable once written") {
-		t.Fatalf("direct DELETE on agregado_revisions must fail with immutability error, got: %v", err)
+	adminStore, _ := migrationConnectStore(t)
+	for name, query := range map[string]string{
+		"update": `UPDATE agregado_revisions SET recipe = '{}' WHERE id = $1`,
+		"delete": `DELETE FROM agregado_revisions WHERE id = $1`,
+	} {
+		tx, err := adminStore.Pool.Begin(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(context.Background(), query, r1.ID)
+		_ = tx.Rollback(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "is immutable once written") {
+			t.Fatalf("admin %s must reach immutable trigger, got: %v", name, err)
+		}
 	}
 }
 
 // 3. Test E: Concurrent Revision Number Allocation & Unique Constraint
 func TestAgregadoRevisions_ConcurrentAllocationAndUniqueness(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	agregadoID := uniqueID("agr-conc")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{
+			ID:       agregadoID,
+			Code:     uniqueID("C-CONC"),
+			Name:     "Concurrency Agregado",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		})
 	})
-
-	err := store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       agregadoID,
-		Code:     uniqueID("C-CONC"),
-		Name:     "Concurrency Agregado",
-		WidthMm:  600,
-		HeightMm: 200,
-		DepthMm:  500,
-		Active:   true,
-	})
-	if err != nil {
-		t.Fatalf("CreateAgregado: %v", err)
-	}
 
 	const goroutines = 8
 	var wg sync.WaitGroup
@@ -328,7 +263,15 @@ func TestAgregadoRevisions_ConcurrentAllocationAndUniqueness(t *testing.T) {
 			defer wg.Done()
 			recipe := sampleRecipeR1()
 			recipe.Notes = fmt.Sprintf("Goroutine %d", idx)
-			rev, err := store.CreateAgregadoRevision(ctx, agregadoID, recipe, nil)
+			var rev *domain.AgregadoRevision
+			err := store.WithinTenantTx(
+				storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor,
+				func(txCtx context.Context) error {
+					var createErr error
+					rev, createErr = store.CreateAgregadoRevision(txCtx, agregadoID, recipe, nil)
+					return createErr
+				},
+			)
 			if err != nil {
 				errs <- err
 				return
@@ -426,63 +369,37 @@ func TestAgregadoRevisions_TenantIsolationRLS(t *testing.T) {
 
 // 5. Test H: Legacy Agregado Compatibility
 func TestAgregadoRevisions_LegacyAgregadoCompatibility(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
-
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 	agregadoID := uniqueID("agr-legacy")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
-	})
-
-	// Legacy insert directly without current_revision_id
-	_, err := pool.Exec(ctx, `
+	legacyCode := uniqueID("LEGACY")
+	adminStore, _ := migrationConnectStore(t)
+	if _, err := adminStore.Pool.Exec(context.Background(), `
 		INSERT INTO agregados (id, organization_id, code, name, width_mm, height_mm, depth_mm, active)
-		VALUES ($1, $2, $3, $4, 600, 200, 500, true)
-	`, agregadoID, storage.InitialOrganizationID, uniqueID("LEGACY"), "Legacy Agregado")
-	if err != nil {
-		t.Fatalf("direct insert legacy agregado: %v", err)
+		VALUES ($1, $2, $3, $4, 600, 200, 500, true)`,
+		agregadoID, actor.OrganizationID, legacyCode, "Legacy Agregado"); err != nil {
+		t.Fatalf("seed legacy agregado: %v", err)
 	}
 
-	// GetAgregadoByID must succeed with CurrentRevisionID == nil
-	agr, err := store.GetAgregadoByID(ctx, agregadoID)
-	if err != nil {
-		t.Fatalf("GetAgregadoByID legacy: %v", err)
-	}
+	agr := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, agregadoID) })
 	if agr.CurrentRevisionID != nil {
-		t.Errorf("legacy agregado should have nil CurrentRevisionID, got %v", agr.CurrentRevisionID)
+		t.Fatalf("legacy agregado should have nil CurrentRevisionID, got %v", agr.CurrentRevisionID)
 	}
-
-	// Soft-deleting an agregado does not delete its historical revisions
-	r1, err := store.CreateAgregadoRevision(ctx, agregadoID, sampleRecipeR1(), nil)
-	if err != nil {
-		t.Fatalf("add revision to legacy agregado: %v", err)
-	}
-
-	// Soft-delete / deactivate agregado
-	if err := store.DeactivateAgregado(ctx, agregadoID); err != nil {
-		t.Fatalf("deactivate agregado: %v", err)
-	}
-
-	// Deactivated agregado: active is false
-	deactivated, err := store.GetAgregadoByID(ctx, agregadoID)
-	if err != nil {
-		t.Fatalf("GetAgregadoByID after deactivate: %v", err)
-	}
+	r1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, sampleRecipeR1(), nil)
+	})
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAgregado(txCtx, agregadoID) })
+	deactivated := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, agregadoID) })
 	if deactivated.Active {
-		t.Errorf("expected agregado to be inactive after deactivation")
+		t.Fatal("expected agregado to be inactive after deactivation")
 	}
-
-	// R1 is still present in history
-	fetchedR1, err := store.GetAgregadoRevisionByID(ctx, r1.ID)
-	if err != nil {
-		t.Fatalf("GetAgregadoRevisionByID after deactivation: %v", err)
-	}
+	fetchedR1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.GetAgregadoRevisionByID(txCtx, r1.ID)
+	})
 	if fetchedR1.ID != r1.ID {
-		t.Errorf("fetched revision ID mismatch after deactivation")
+		t.Fatal("fetched revision ID mismatch after deactivation")
 	}
-
-	// Physical hard delete is blocked while revisions exist
-	err = store.DeleteAgregado(ctx, agregadoID)
+	err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error { return store.DeleteAgregado(txCtx, agregadoID) })
 	if err == nil {
 		t.Fatal("physical DeleteAgregado must fail while historical revisions exist (ON DELETE RESTRICT)")
 	}
@@ -490,33 +407,19 @@ func TestAgregadoRevisions_LegacyAgregadoCompatibility(t *testing.T) {
 
 // 6. Tests G, I, J, K, L, M, O: Published Assembly Snapshots, Zero-Scaling, Historical Freezing
 func TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	store, runtimePool := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	agregadoID := uniqueID("agr-snap")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{ID: agregadoID, Code: uniqueID("C-SNAP"), Name: "Snapshot Agregado", WidthMm: 600, HeightMm: 200, DepthMm: 520, Active: true})
 	})
-
-	err := store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       agregadoID,
-		Code:     uniqueID("C-SNAP"),
-		Name:     "Snapshot Agregado",
-		WidthMm:  600,
-		HeightMm: 200,
-		DepthMm:  520,
-		Active:   true,
-	})
-	if err != nil {
-		t.Fatalf("CreateAgregado: %v", err)
-	}
 
 	// Create revision 1
-	r1, err := store.CreateAgregadoRevision(ctx, agregadoID, sampleRecipeWithVariants(), nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision R1: %v", err)
-	}
-	_ = store.SetAgregadoCurrentRevision(ctx, agregadoID, r1.ID)
+	r1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, sampleRecipeWithVariants(), nil)
+	})
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SetAgregadoCurrentRevision(txCtx, agregadoID, r1.ID) })
 
 	// Resolve assembly against dimensions (W=600, H=200, D=520)
 	// Depth is 520; clearance is 10 -> max allowed 510; selects 500mm variant
@@ -558,9 +461,7 @@ func TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling(t *testing.T) 
 		ResolvedDepthMm:        520,
 		Snapshot:               snapshot,
 	}
-	if err := store.SavePublishedAssemblySnapshot(ctx, &record); err != nil {
-		t.Fatalf("SavePublishedAssemblySnapshot: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SavePublishedAssemblySnapshot(txCtx, &record) })
 	if record.ID == "" || record.PayloadHash == "" {
 		t.Fatalf("record missing ID or PayloadHash after save: %+v", record)
 	}
@@ -569,39 +470,43 @@ func TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling(t *testing.T) 
 	// Saving the exact same snapshot with identical payload_hash returns the existing record
 	duplicateRecord := record
 	duplicateRecord.ID = ""
-	if err := store.SavePublishedAssemblySnapshot(ctx, &duplicateRecord); err != nil {
-		t.Fatalf("idempotent SavePublishedAssemblySnapshot failed: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SavePublishedAssemblySnapshot(txCtx, &duplicateRecord) })
 	if duplicateRecord.ID != record.ID {
 		t.Errorf("duplicate save returned different ID: %s vs %s", duplicateRecord.ID, record.ID)
 	}
 
-	// Case H: Snapshot immutability guard
-	_, err = pool.Exec(ctx, `UPDATE published_assembly_snapshots SET resolved_width_mm = 999 WHERE id = $1`, record.ID)
-	if err == nil || !strings.Contains(err.Error(), "is immutable once written") {
-		t.Fatalf("direct UPDATE on published_assembly_snapshots must fail with immutability error, got: %v", err)
+	// Case H: runtime cannot mutate frozen rows directly; migration authority reaches the active trigger.
+	for name, query := range map[string]string{"update": `UPDATE published_assembly_snapshots SET resolved_width_mm = 999 WHERE id = $1`, "delete": `DELETE FROM published_assembly_snapshots WHERE id = $1`} {
+		err := runConnectStoreSQL(t, runtimePool, actor, func(tx pgx.Tx) error { _, err := tx.Exec(context.Background(), query, record.ID); return err })
+		if err == nil || !strings.Contains(err.Error(), "permission denied for table published_assembly_snapshots") {
+			t.Fatalf("runtime %s must stop at SQL privilege boundary, got: %v", name, err)
+		}
 	}
-	_, err = pool.Exec(ctx, `DELETE FROM published_assembly_snapshots WHERE id = $1`, record.ID)
-	if err == nil || !strings.Contains(err.Error(), "is immutable once written") {
-		t.Fatalf("direct DELETE on published_assembly_snapshots must fail with immutability error, got: %v", err)
+	adminStore, _ := migrationConnectStore(t)
+	for name, query := range map[string]string{"update": `UPDATE published_assembly_snapshots SET resolved_width_mm = 999 WHERE id = $1`, "delete": `DELETE FROM published_assembly_snapshots WHERE id = $1`} {
+		tx, err := adminStore.Pool.Begin(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = tx.Exec(context.Background(), query, record.ID)
+		_ = tx.Rollback(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "is immutable once written") {
+			t.Fatalf("admin %s must reach immutable trigger, got: %v", name, err)
+		}
 	}
 
 	// Case J, K, L: Mutate catalog (create R2, change current to R2, change variant sets)
 	r2Recipe := sampleRecipeWithVariants()
 	r2Recipe.VariantSets[0].Variants[1].NominalDimensionMm = 550
-	r2, err := store.CreateAgregadoRevision(ctx, agregadoID, r2Recipe, nil)
-	if err != nil {
-		t.Fatalf("create R2: %v", err)
-	}
-	if err := store.SetAgregadoCurrentRevision(ctx, agregadoID, r2.ID); err != nil {
-		t.Fatalf("set current to R2: %v", err)
-	}
+	r2 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, r2Recipe, nil)
+	})
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SetAgregadoCurrentRevision(txCtx, agregadoID, r2.ID) })
 
 	// Case M: Snapshot readback does NOT re-evaluate resolver; S1 is 100% frozen
-	readback, err := store.GetPublishedAssemblySnapshotByID(ctx, record.ID)
-	if err != nil {
-		t.Fatalf("GetPublishedAssemblySnapshotByID: %v", err)
-	}
+	readback := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.PublishedAssemblySnapshotRecord, error) {
+		return store.GetPublishedAssemblySnapshotByID(txCtx, record.ID)
+	})
 
 	if readback.AgregadoRevisionNumber != 1 {
 		t.Errorf("readback AgregadoRevisionNumber = %d, want 1", readback.AgregadoRevisionNumber)
@@ -621,24 +526,24 @@ func TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling(t *testing.T) 
 
 // 7. Test N: Fail-Closed on Corrupt Data
 func TestPublishedAssemblySnapshots_FailClosedOnCorruptData(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	agregadoID := uniqueID("agr-corrupt")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{
+			ID:       agregadoID,
+			Code:     uniqueID("C-CORR"),
+			Name:     "Corrupt Agregado",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  500,
+			Active:   true,
+		})
 	})
-
-	_ = store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       agregadoID,
-		Code:     uniqueID("C-CORR"),
-		Name:     "Corrupt Agregado",
-		WidthMm:  600,
-		HeightMm: 200,
-		DepthMm:  500,
-		Active:   true,
+	r1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, sampleRecipeR1(), nil)
 	})
-	r1, _ := store.CreateAgregadoRevision(ctx, agregadoID, sampleRecipeR1(), nil)
 
 	// Attempting to save invalid snapshot (e.g. basis det != 1.0 or unpinned member) fails closed before insert
 	invalidSnap := domain.PublishedAssemblySnapshot{
@@ -654,11 +559,13 @@ func TestPublishedAssemblySnapshots_FailClosedOnCorruptData(t *testing.T) {
 			},
 		},
 	}
-	err := store.SavePublishedAssemblySnapshot(ctx, &domain.PublishedAssemblySnapshotRecord{
-		AgregadoID:             agregadoID,
-		AgregadoRevisionID:     r1.ID,
-		AgregadoRevisionNumber: 1,
-		Snapshot:               invalidSnap,
+	err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		return store.SavePublishedAssemblySnapshot(txCtx, &domain.PublishedAssemblySnapshotRecord{
+			AgregadoID:             agregadoID,
+			AgregadoRevisionID:     r1.ID,
+			AgregadoRevisionNumber: 1,
+			Snapshot:               invalidSnap,
+		})
 	})
 	if err == nil {
 		t.Fatal("SavePublishedAssemblySnapshot must reject invalid unpinned snapshot")
@@ -684,27 +591,30 @@ func TestPublishedAssemblySnapshots_FailClosedOnCorruptData(t *testing.T) {
 		ResolvedDepthMm:        500,
 		Snapshot:               validSnap,
 	}
-	if err := store.SavePublishedAssemblySnapshot(ctx, &rec); err != nil {
-		t.Fatalf("save valid: %v", err)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SavePublishedAssemblySnapshot(txCtx, &rec) })
+
+	// This impossible historical state changes the frozen JSON dimensions. The immutable
+	// trigger is disabled only under migration authority for this fixture, then restored
+	// before the runtime readback; normal runtime DML cannot create this state.
+	adminStore, _ := migrationConnectStore(t)
+	if _, err = adminStore.Pool.Exec(context.Background(), `ALTER TABLE published_assembly_snapshots DISABLE TRIGGER protect_published_assembly_snapshots_immutable`); err != nil {
+		t.Fatalf("disable fixture trigger: %v", err)
+	}
+	defer func() {
+		_, _ = adminStore.Pool.Exec(context.Background(), `ALTER TABLE published_assembly_snapshots ENABLE TRIGGER protect_published_assembly_snapshots_immutable`)
+	}()
+	if _, err = adminStore.Pool.Exec(context.Background(), `UPDATE published_assembly_snapshots SET snapshot = jsonb_set(snapshot, '{resolvedDimensionsMm,0}', '-999') WHERE id = $1`, rec.ID); err != nil {
+		t.Fatalf("corrupt snapshot fixture: %v", err)
+	}
+	if _, err = adminStore.Pool.Exec(context.Background(), `ALTER TABLE published_assembly_snapshots ENABLE TRIGGER protect_published_assembly_snapshots_immutable`); err != nil {
+		t.Fatalf("restore fixture trigger: %v", err)
 	}
 
-	// Corrupting JSON directly in DB (simulating bit rot / DB manual tampering)
-	// We disable the trigger inside an admin block or direct SQL to simulate raw corruption
-	_, err = pool.Exec(ctx, `ALTER TABLE published_assembly_snapshots DISABLE TRIGGER protect_published_assembly_snapshots_immutable`)
-	if err != nil {
-		t.Fatalf("disable trigger: %v", err)
-	}
-	_, err = pool.Exec(ctx, `UPDATE published_assembly_snapshots SET snapshot = jsonb_set(snapshot, '{resolvedDimensionsMm,0}', '-999') WHERE id = $1`, rec.ID)
-	if err != nil {
-		t.Fatalf("corrupt snapshot: %v", err)
-	}
-	_, err = pool.Exec(ctx, `ALTER TABLE published_assembly_snapshots ENABLE TRIGGER protect_published_assembly_snapshots_immutable`)
-	if err != nil {
-		t.Fatalf("enable trigger: %v", err)
-	}
-
-	// Readback must fail closed with ErrCorruptAssemblySnapshot
-	_, err = store.GetPublishedAssemblySnapshotByID(ctx, rec.ID)
+	// Readback must fail closed with ErrCorruptAssemblySnapshot under the real runtime role.
+	err = store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+		_, err := store.GetPublishedAssemblySnapshotByID(txCtx, rec.ID)
+		return err
+	})
 	if err == nil || !strings.Contains(err.Error(), "readback validation failed") {
 		t.Fatalf("readback of corrupted snapshot must fail closed, got: %v", err)
 	}
@@ -1195,41 +1105,27 @@ func TestAgregadoRevisions_R2_CrossTenantFKsRejectedByConstraint(t *testing.T) {
 
 // 9. R3: Idempotence per recipe revision (R2 and R3 with identical geometry preserve distinct snapshots)
 func TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	agregadoID := uniqueID("agr-r3-dedup")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{ID: agregadoID, Code: uniqueID("C-R3"), Name: "Agregado R3 Dedup", WidthMm: 600, HeightMm: 200, DepthMm: 500, Active: true})
 	})
-
-	if err := store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       agregadoID,
-		Code:     uniqueID("C-R3"),
-		Name:     "Agregado R3 Dedup",
-		WidthMm:  600,
-		HeightMm: 200,
-		DepthMm:  500,
-		Active:   true,
-	}); err != nil {
-		t.Fatalf("CreateAgregado: %v", err)
-	}
 
 	// Create Recipe Revision R2
 	r2Recipe := sampleRecipeR1()
 	r2Recipe.Notes = "Revision R2"
-	r2, err := store.CreateAgregadoRevision(ctx, agregadoID, r2Recipe, nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision R2: %v", err)
-	}
+	r2 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, r2Recipe, nil)
+	})
 
 	// Create Recipe Revision R3: geometrically identical recipe
 	r3Recipe := sampleRecipeR1()
 	r3Recipe.Notes = "Revision R3 - identical geometry"
-	r3, err := store.CreateAgregadoRevision(ctx, agregadoID, r3Recipe, nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision R3: %v", err)
-	}
+	r3 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, r3Recipe, nil)
+	})
 
 	makeSnapshot := func(revNumber int) domain.PublishedAssemblySnapshot {
 		return domain.PublishedAssemblySnapshot{
@@ -1286,9 +1182,7 @@ func TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision(t *testing
 		ResolvedDepthMm:        500,
 		Snapshot:               snapR2,
 	}
-	if err := store.SavePublishedAssemblySnapshot(ctx, &recR2); err != nil {
-		t.Fatalf("SavePublishedAssemblySnapshot R2: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SavePublishedAssemblySnapshot(txCtx, &recR2) })
 
 	snapR3 := makeSnapshot(3)
 	recR3 := domain.PublishedAssemblySnapshotRecord{
@@ -1300,9 +1194,7 @@ func TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision(t *testing
 		ResolvedDepthMm:        500,
 		Snapshot:               snapR3,
 	}
-	if err := store.SavePublishedAssemblySnapshot(ctx, &recR3); err != nil {
-		t.Fatalf("SavePublishedAssemblySnapshot R3: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SavePublishedAssemblySnapshot(txCtx, &recR3) })
 
 	// R2 and R3 MUST NOT reuse each other's snapshots!
 	if recR2.ID == recR3.ID {
@@ -1310,18 +1202,16 @@ func TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision(t *testing
 	}
 
 	// Verify snapshots preserve their respective recipe revision identities
-	get2, err := store.GetPublishedAssemblySnapshotByID(ctx, recR2.ID)
-	if err != nil {
-		t.Fatalf("GetPublishedAssemblySnapshotByID R2: %v", err)
-	}
+	get2 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.PublishedAssemblySnapshotRecord, error) {
+		return store.GetPublishedAssemblySnapshotByID(txCtx, recR2.ID)
+	})
 	if get2.AgregadoRevisionID != r2.ID || get2.AgregadoRevisionNumber != 2 {
 		t.Errorf("R2 snapshot revision mismatch: ID=%s, Number=%d", get2.AgregadoRevisionID, get2.AgregadoRevisionNumber)
 	}
 
-	get3, err := store.GetPublishedAssemblySnapshotByID(ctx, recR3.ID)
-	if err != nil {
-		t.Fatalf("GetPublishedAssemblySnapshotByID R3: %v", err)
-	}
+	get3 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.PublishedAssemblySnapshotRecord, error) {
+		return store.GetPublishedAssemblySnapshotByID(txCtx, recR3.ID)
+	})
 	if get3.AgregadoRevisionID != r3.ID || get3.AgregadoRevisionNumber != 3 {
 		t.Errorf("R3 snapshot revision mismatch: ID=%s, Number=%d", get3.AgregadoRevisionID, get3.AgregadoRevisionNumber)
 	}
@@ -1329,9 +1219,7 @@ func TestPublishedAssemblySnapshots_R3_DeduplicationPerRecipeRevision(t *testing
 	// Retry publishing R3: must return the exact same snapshot R3, not create another
 	retryR3 := recR3
 	retryR3.ID = ""
-	if err := store.SavePublishedAssemblySnapshot(ctx, &retryR3); err != nil {
-		t.Fatalf("retry SavePublishedAssemblySnapshot R3: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SavePublishedAssemblySnapshot(txCtx, &retryR3) })
 	if retryR3.ID != recR3.ID {
 		t.Fatalf("retry publish created duplicate snapshot: %s vs %s", retryR3.ID, recR3.ID)
 	}
@@ -1467,30 +1355,23 @@ func TestAgregadoRevisions_R4_VerifyCurrentPointer(t *testing.T) {
 
 // 14. Test R5: Prove real PostgreSQL storage persistence of Increment B with MERIVOBOX pilot data
 func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
-	store, pool := connectStore(t)
-	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 
 	agregadoID := uniqueID("agr-mbx-pilot")
 	code := uniqueID("MBX-PILOT")
-	t.Cleanup(func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM published_assembly_snapshots WHERE agregado_id = $1`, agregadoID)
-		_, _ = pool.Exec(ctx, `DELETE FROM agregado_revisions WHERE agregado_id = $1`, agregadoID)
-		_, _ = pool.Exec(ctx, `DELETE FROM agregados WHERE id = $1`, agregadoID)
-	})
-
 	// 1. Create parent Agregado in DB
-	err := store.CreateAgregado(ctx, &domain.Agregado{
-		ID:       agregadoID,
-		Code:     code,
-		Name:     "Blum MERIVOBOX Height M Pilot Drawer",
-		WidthMm:  600,
-		HeightMm: 200,
-		DepthMm:  530,
-		Active:   true,
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{
+			ID:       agregadoID,
+			Code:     code,
+			Name:     "Blum MERIVOBOX Height M Pilot Drawer",
+			WidthMm:  600,
+			HeightMm: 200,
+			DepthMm:  530,
+			Active:   true,
+		})
 	})
-	if err != nil {
-		t.Fatalf("CreateAgregado failed: %v", err)
-	}
 
 	// 2. Insert AgregadoRevision R1 in DB
 	kitID := "kit-merivobox-m"
@@ -1620,16 +1501,13 @@ func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
 	zeroMult := 0.0
 	r1Recipe.Components[1].Overrides.LengthRule.Multiplier = &zeroMult
 
-	r1, err := store.CreateAgregadoRevision(ctx, agregadoID, r1Recipe, nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision R1 failed: %v", err)
-	}
+	r1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, r1Recipe, nil)
+	})
 	if r1.RevisionNumber != 1 {
 		t.Fatalf("expected R1 revision number 1, got %d", r1.RevisionNumber)
 	}
-	if err := store.SetAgregadoCurrentRevision(ctx, agregadoID, r1.ID); err != nil {
-		t.Fatalf("SetAgregadoCurrentRevision R1 failed: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SetAgregadoCurrentRevision(txCtx, agregadoID, r1.ID) })
 
 	// 3. Resolve assembly for canonical pilot LW570/D530 (outer W600 - 2x15mm panels; selects NL 500)
 	lwMm := 570.0 // Canonical pilot LW = 600 - 30
@@ -1670,9 +1548,7 @@ func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
 		ResolvedDepthMm:        530,
 		Snapshot:               s1Snapshot,
 	}
-	if err := store.SavePublishedAssemblySnapshot(ctx, &s1Record); err != nil {
-		t.Fatalf("SavePublishedAssemblySnapshot S1 failed: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SavePublishedAssemblySnapshot(txCtx, &s1Record) })
 	if s1Record.ID == "" || s1Record.PayloadHash == "" {
 		t.Fatalf("s1Record missing ID or PayloadHash: %+v", s1Record)
 	}
@@ -1681,31 +1557,26 @@ func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
 	r2Recipe := r1Recipe
 	r2Recipe.Notes = "Blum MERIVOBOX Recipe R2 - mutated recipe"
 	r2Recipe.CompatibilityRules[0].ClearanceMm = 50.0 // aggressive clearance change that would disqualify NL 500 at 530mm
-	r2, err := store.CreateAgregadoRevision(ctx, agregadoID, r2Recipe, nil)
-	if err != nil {
-		t.Fatalf("CreateAgregadoRevision R2 failed: %v", err)
-	}
+	r2 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.CreateAgregadoRevision(txCtx, agregadoID, r2Recipe, nil)
+	})
 	if r2.RevisionNumber != 2 {
 		t.Fatalf("expected R2 revision number 2, got %d", r2.RevisionNumber)
 	}
-	if err := store.SetAgregadoCurrentRevision(ctx, agregadoID, r2.ID); err != nil {
-		t.Fatalf("SetAgregadoCurrentRevision R2 failed: %v", err)
-	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.SetAgregadoCurrentRevision(txCtx, agregadoID, r2.ID) })
 
 	// Verify catalog currently points to R2
-	currRev, err := store.GetAgregadoCurrentRevision(ctx, agregadoID)
-	if err != nil {
-		t.Fatalf("GetAgregadoCurrentRevision: %v", err)
-	}
+	currRev := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.GetAgregadoCurrentRevision(txCtx, agregadoID)
+	})
 	if currRev.ID != r2.ID || currRev.RevisionNumber != 2 {
 		t.Fatalf("expected current revision to be R2, got %+v", currRev)
 	}
 
 	// 7. Re-read S1 from database by ID: Prove historical snapshot S1 is 100% isolated from R2
-	s1Readback, err := store.GetPublishedAssemblySnapshotByID(ctx, s1Record.ID)
-	if err != nil {
-		t.Fatalf("GetPublishedAssemblySnapshotByID S1: %v", err)
-	}
+	s1Readback := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.PublishedAssemblySnapshotRecord, error) {
+		return store.GetPublishedAssemblySnapshotByID(txCtx, s1Record.ID)
+	})
 
 	// Verify identity and revision immutability
 	if s1Readback.ID != s1Record.ID {
@@ -1771,7 +1642,7 @@ func TestMerivoboxPilotHistoricalPersistence_R5(t *testing.T) {
 
 // 15. Up/down migration replay test for 000135
 func TestAgregadoRevisions_Migration_UpDownReplay(t *testing.T) {
-	pool := multiOrgFreshDB(t)
+	pool := multiOrgFreshMigrationDB(t)
 	ctx := context.Background()
 	migrationStore := &storage.PostgresStore{Pool: pool}
 	if err := migrationStore.RunMigrations(ctx); err != nil {
@@ -1808,4 +1679,3 @@ func TestAgregadoRevisions_Migration_UpDownReplay(t *testing.T) {
 		}
 	}
 }
-
