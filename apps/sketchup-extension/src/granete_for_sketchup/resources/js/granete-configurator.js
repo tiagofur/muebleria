@@ -38,7 +38,8 @@
 //   (renderMaterialSelectors/defaultMaterialChoices/materialById are
 //   owned by window.GraneteUI.materialRoles since #848 C4.6) nor
 //   projectDefaultMaterials
-// - Inspector (shares the inline param/material/summary helpers)
+// - Inspector (still shares the inline param/summary helpers; material
+//   helpers come from window.GraneteUI.materialRoles since #848 C4.6)
 // - Project Furniture rows/lifecycle (switchTab/requestProjectFurniture
 //   are injected effects of the legacy create fallback)
 // - the shared #469 placement preview handlers

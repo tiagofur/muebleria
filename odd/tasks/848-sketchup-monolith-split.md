@@ -680,7 +680,7 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   semantics, GraneteState projection live-identity single authority,
   project-scope choice surviving a full refresh, inspector materials
   rendered through the module. Ruby side
-  `test/unit/granete_material_roles_js_test.rb` (7 tests, 131 assertions):
+  `test/unit/granete_material_roles_js_test.rb` (7 tests, 135 assertions):
   harness green + symbol guards (implementation + header in the module,
   load order finish-selector → material-roles → inline in dialog.html AND
   dialog_scripts.js, monolith carries no material implementation symbol,
@@ -723,12 +723,14 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   MERGEABLE, issue #848 OPEN + status:approved; CI exact-head: PASS
   16/16; PR Publication exact-head: PASS 1/1 (incl. Foundation Gate A +
   real browser proofs and the three SketchUp Ruby runners). Docs-only
-  follow-ups advanced the PR HEAD after publication (publication record
-  `09f65ba4123193681ac6545293776c737ab25ae4`, then this
-  documentation-accuracy correction); the implementation commit is
-  unchanged and was revalidated green on the docs heads as well. Merge
-  remains human. **Real SketchUp host smoke:
-  NOT_RUN** (same phase-level gate).
+  follow-ups advanced the PR HEAD afterwards (publication record
+  `09f65ba4123193681ac6545293776c737ab25ae4`, stale-name corrections
+  `e7ae0f97acd4318772c34e17ba2b032690e4a471`, then this evidence wording
+  correction); the implementation commit is unchanged. PR exact-head
+  check status is tracked live on GitHub — this artifact records only
+  the publication-time readback above and never certifies its own HEAD.
+  Merge remains human. **Real SketchUp host smoke: NOT_RUN** (same
+  phase-level gate).
 
 
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
