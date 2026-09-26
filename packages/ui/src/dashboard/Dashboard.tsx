@@ -536,6 +536,18 @@ export function Dashboard({
             >
               Cotizaciones recientes
             </h3>
+            {commercialSummariesStatus === 'unavailable' ? (
+              <div
+                className="alert alert--warning"
+                role="status"
+                data-testid="commercial-summaries-unavailable"
+              >
+                <span>
+                  La información comercial de las cotizaciones requiere una
+                  sesión con acceso al servidor.
+                </span>
+              </div>
+            ) : null}
             {commercialSummariesStatus === 'ready' && commercialSummariesStale ? (
               <div
                 className="alert alert--warning"
@@ -614,8 +626,9 @@ export function Dashboard({
                           </h4>
                           <CommercialStatusBadge
                             summary={summary}
-                            loading={!summariesReady && commercialSummariesStatus !== 'error'}
+                            loading={commercialSummariesStatus === 'loading'}
                             error={commercialSummariesStatus === 'error'}
+                            unavailable={commercialSummariesStatus === 'unavailable'}
                           />
                         </div>
                         <p className="dashboard-recent-card__client">

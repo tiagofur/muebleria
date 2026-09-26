@@ -320,6 +320,7 @@ import {
   type QuoteRevisionsQuery,
 } from './quoteRevisionAuthority';
 import { useProjectsCommercialSummaries } from './projectsCommercialSummaries';
+import { homeCommercialSummariesProps } from './homeCommercialSummaries';
 import {
   DEFAULT_API_BASE,
   isAdminRole,
@@ -1343,29 +1344,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         <Dashboard
           stats={dashboardStats}
           recentProjects={dashboardRecent}
-          commercialSummaries={
-            commercialSummaries.kind === 'ready'
-              ? commercialSummaries.summaries
-              : undefined
-          }
-          commercialSummariesStatus={
-            commercialSummaries.kind === 'ready'
-              ? 'ready'
-              : commercialSummaries.kind === 'error'
-                ? 'error'
-                : 'loading'
-          }
-          commercialSummariesStale={
-            commercialSummaries.kind === 'ready'
-              ? commercialSummaries.staleMessage
-              : undefined
-          }
-          onRetryCommercialSummaries={
-            commercialSummaries.kind === 'ready' ||
-            commercialSummaries.kind === 'error'
-              ? commercialSummaries.retry
-              : undefined
-          }
+          {...homeCommercialSummariesProps(session, commercialSummaries)}
           projectsCount={projects.length}
           onOpenProject={onDashboardOpenProject}
           onNewProject={canMutateProjects ? onDashboardNewProject : undefined}

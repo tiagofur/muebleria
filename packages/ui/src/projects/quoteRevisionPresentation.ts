@@ -183,8 +183,15 @@ export function buildRevisionLines(
  * Dataset state of the batch commercial summaries request (#642 / 2A).
  * Kept strictly separate from the per-project quoteStatus: an HTTP failure or
  * an in-flight request must never be read as `quoteStatus: 'none'`.
+ * `unavailable` (#642 / 2C round 2): the session has no remote commercial
+ * dataset at all (guest/local mode — the batch never fires). It is NOT a
+ * pending request: nothing will resolve it inside this session.
  */
-export type CommercialSummariesStatus = 'loading' | 'ready' | 'error';
+export type CommercialSummariesStatus =
+  | 'loading'
+  | 'ready'
+  | 'error'
+  | 'unavailable';
 
 /**
  * Filter value for the Cotizaciones list screen (#642 / 2A).

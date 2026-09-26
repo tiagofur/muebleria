@@ -18,7 +18,9 @@ import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api
  *   - mutable project/customer rows keep being ignored (frozen identity)
  *     and a Q2 accepted afterwards wins on Inicio exactly as on the list;
  *   - a failed summaries request is an error state with retry on Inicio —
- *     never "Sin cotización" — and recovers with the real backend.
+ *     never "Sin cotización" — and the visible Reintentar button performs the
+ *     real recovery (no reload/navigation/re-login);
+ *   - the recovered state restores Q2 and its authoritative exact total.
  */
 
 const PROJECT_ID = '99999999-6666-4699-8999-666666666666';
@@ -45,6 +47,8 @@ interface HomeFixture {
 }
 
 let seeded: HomeFixture;
+/** Authoritative Q2 total as displayed — set by test 2, reused by test 3. */
+let authoritativeQ2Price = '';
 
 async function prepareHomeFixture(): Promise<HomeFixture> {
   const apiBase = required('ORGANIZATION_API_BASE');
@@ -261,10 +265,11 @@ test('mutable rows stay invisible and an accepted Q2 wins on Inicio exactly as o
   const listCard = page.getByTestId(`project-card-${seeded.projectId}`);
   await expect(listCard.getByTestId('commercial-status-badge')).toContainText('Q2 · Aceptada');
   const listPrice = await listCard.locator('.project-card__price-value').textContent();
+  authoritativeQ2Price = listPrice ?? '';
   await page.goto('/');
   await expect(
     page.getByTestId(`dashboard-recent-${seeded.projectId}`).locator('.dashboard-recent-card__price'),
-  ).toHaveText(listPrice ?? '');
+  ).toHaveText(authoritativeQ2Price);
   await page.screenshot({ path: `${SCREENSHOT_DIR}/inicio-q2-aceptada.png`, fullPage: false });
 });
 
@@ -284,10 +289,24 @@ test('a failed summaries request is an error state on Inicio, never "Sin cotizac
   await expect(homeCard.locator('.dashboard-recent-card__price')).toHaveText('—');
   await page.screenshot({ path: `${SCREENSHOT_DIR}/inicio-error-batch.png`, fullPage: false });
 
-  // Recovery with the real backend: the authoritative state returns.
+  // Recovery THROUGH THE BUTTON: after removing the interception, the visible
+  // Reintentar fires the real batch request — no reload, no navigation, no
+  // re-login. The response restores the authoritative state on the SAME
+  // screen (error state gone, Q2 and its exact total back).
   await page.unroute('**/api/projects/commercial-summaries');
-  await page.goto('/');
-  await expect(
-    page.getByTestId(`dashboard-recent-${seeded.projectId}`).getByTestId('commercial-status-badge'),
-  ).toContainText('Q2 · Aceptada');
+  const summariesResponse = page.waitForResponse(
+    (response) =>
+      response.url().includes('/projects/commercial-summaries') &&
+      response.request().method() === 'GET',
+  );
+  await page
+    .getByTestId('commercial-summaries-error')
+    .getByRole('button', { name: 'Reintentar' })
+    .click();
+  const response = await summariesResponse;
+  expect(response.ok()).toBeTruthy();
+  await expect(page.getByTestId('commercial-summaries-error')).toHaveCount(0);
+  const recovered = page.getByTestId(`dashboard-recent-${seeded.projectId}`);
+  await expect(recovered.getByTestId('commercial-status-badge')).toContainText('Q2 · Aceptada');
+  await expect(recovered.locator('.dashboard-recent-card__price')).toHaveText(authoritativeQ2Price);
 });

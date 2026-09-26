@@ -16,6 +16,7 @@ export {
   formatLifecycleStatus,
   formatRevisionUnitDimensions,
   type BuildRevisionLinesOptions,
+  type CommercialSummariesStatus,
   type ProjectRevisionLineView,
   type ProjectRevisionUnitView,
 } from './quoteRevisionPresentation';

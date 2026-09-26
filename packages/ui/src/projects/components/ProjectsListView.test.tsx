@@ -271,6 +271,23 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     );
   });
 
+  it('8c. guest/unavailable dataset keeps the list behavior unchanged (#642 round 2)', () => {
+    // The shared status union gained `unavailable` (Inicio wiring). The list
+    // keeps its pre-existing treatment for a not-ready dataset: pending badge
+    // and no error banner — this locks that preserved behavior.
+    renderView({
+      commercialSummaries: undefined,
+      commercialSummariesStatus: 'unavailable',
+      commercialFiltersDisabled: true,
+    });
+
+    expect(screen.getAllByTestId('commercial-status-badge-loading').length).toBe(2);
+    expect(screen.queryByTestId('commercial-summaries-error')).toBeNull();
+    expect(screen.getByTestId('projects-results-summary').textContent).toBe(
+      'Mostrando 2 de 2 cotizaciones',
+    );
+  });
+
   it('9. clearing never triggers navigation, creation or template actions', async () => {
     const user = userEvent.setup();
     const spies = renderView({

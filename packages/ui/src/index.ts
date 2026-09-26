@@ -127,6 +127,7 @@ export {
   validateItemQuantity,
   validateProjectDraft,
   type BuildRevisionLinesOptions,
+  type CommercialSummariesStatus,
   type ProjectRevisionLineView,
   type ProjectRevisionUnitView,
   InternalCommsPanel,

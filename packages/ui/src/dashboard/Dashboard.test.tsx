@@ -536,6 +536,34 @@ describe('Inicio recent cards — commercial authority (#642)', () => {
     expect(card.textContent).not.toContain('$');
   });
 
+  it('guest/local dataset (unavailable) shows the explicit limitation, never an endless loading', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={undefined}
+        commercialSummariesStatus="unavailable"
+      />,
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    // No pending request is impersonated…
+    expect(card.textContent).not.toContain('Cargando…');
+    // …no authoritative answer is invented…
+    expect(card.textContent).not.toContain('Sin cotización');
+    // …no commercial price from legacy data…
+    expect(card.textContent).not.toContain('$');
+    // …while navigation identity and the card itself are kept.
+    expect(card.textContent).toContain('Cocina Ana');
+    expect(
+      card.querySelector('[data-testid="commercial-status-badge-unavailable"]')
+        ?.textContent,
+    ).toContain('No disponible');
+    // The limitation is explicit and offers no retry.
+    const notice = screen.getByTestId('commercial-summaries-unavailable');
+    expect(notice.textContent).toMatch(/sesi[oó]n/i);
+    expect(notice.querySelector('button')).toBeNull();
+  });
+
   it('ready+stale keeps the previous data visible with an explicit pending-refresh notice', async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
