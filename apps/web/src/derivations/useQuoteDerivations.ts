@@ -178,7 +178,12 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
     }));
   }, [projects, customers]);
 
-  /** F037: multi-owner portfolio table for gerente/admin only. */
+  /**
+   * F037: multi-owner portfolio table for gerente/admin only.
+   * PENDING #642 surface (with dashboardStats/countActiveProjects): still
+   * aggregates projectEstimates over Project.status — needs the same
+   * event-dated revision read model before it can follow commercial truth.
+   */
   const dashboardOwnerBreakdown = useMemo(() => {
     if (!canViewPortfolioDashboard) return undefined;
     return aggregatePortfolioByOwner(

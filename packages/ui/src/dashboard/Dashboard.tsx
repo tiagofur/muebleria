@@ -72,6 +72,8 @@ export type DashboardProps = {
   readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
   /** Dataset state of the batch request — loading/error are never "Sin cotización". */
   readonly commercialSummariesStatus?: CommercialSummariesStatus;
+  /** Ready+stale: previous data on screen pending a failed refresh (#642 §6). */
+  readonly commercialSummariesStale?: string | undefined;
   readonly onRetryCommercialSummaries?: () => void;
   /** Total projects in workspace (any status) — for getting-started gate. */
   readonly projectsCount?: number;
@@ -131,6 +133,7 @@ export function Dashboard({
   recentProjects,
   commercialSummaries,
   commercialSummariesStatus = 'loading',
+  commercialSummariesStale,
   onRetryCommercialSummaries,
   projectsCount = recentProjects.length,
   onOpenProject,
@@ -533,6 +536,24 @@ export function Dashboard({
             >
               Cotizaciones recientes
             </h3>
+            {commercialSummariesStatus === 'ready' && commercialSummariesStale ? (
+              <div
+                className="alert alert--warning"
+                role="status"
+                data-testid="commercial-summaries-stale"
+              >
+                <span>{commercialSummariesStale}</span>
+                {onRetryCommercialSummaries ? (
+                  <button
+                    type="button"
+                    className="btn btn--small btn--secondary"
+                    onClick={onRetryCommercialSummaries}
+                  >
+                    Reintentar
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {commercialSummariesStatus === 'error' ? (
               <div
                 className="alert alert--danger"

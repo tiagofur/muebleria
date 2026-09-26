@@ -1355,7 +1355,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                 ? 'error'
                 : 'loading'
           }
+          commercialSummariesStale={
+            commercialSummaries.kind === 'ready'
+              ? commercialSummaries.staleMessage
+              : undefined
+          }
           onRetryCommercialSummaries={
+            commercialSummaries.kind === 'ready' ||
             commercialSummaries.kind === 'error'
               ? commercialSummaries.retry
               : undefined

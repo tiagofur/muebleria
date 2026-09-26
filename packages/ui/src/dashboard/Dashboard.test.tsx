@@ -536,6 +536,32 @@ describe('Inicio recent cards — commercial authority (#642)', () => {
     expect(card.textContent).not.toContain('$');
   });
 
+  it('ready+stale keeps the previous data visible with an explicit pending-refresh notice', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={new Map([['prj-1', summaryOf()]])}
+        commercialSummariesStatus="ready"
+        commercialSummariesStale="No se pudo actualizar la información comercial. Se muestran datos anteriores; reintentá antes de decidir."
+        onRetryCommercialSummaries={onRetry}
+      />,
+    );
+    // The previous authoritative data stays on screen…
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    expect(
+      card.querySelector('[data-testid="commercial-status-badge"]')?.textContent,
+    ).toContain('Q2 · Aceptada');
+    expect(card.textContent).toContain('$650.00 MXN');
+    // …clearly flagged as stale, with a retry path.
+    const stale = screen.getByTestId('commercial-summaries-stale');
+    expect(stale.textContent).toContain('Se muestran datos anteriores');
+    await user.click(within(stale).getByRole('button', { name: 'Reintentar' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
   it('error dataset is an error state with retry — never "Sin cotización"', async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
