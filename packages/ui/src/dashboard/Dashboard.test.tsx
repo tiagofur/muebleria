@@ -4,8 +4,9 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ProjectCommercialSummary } from '@granete/storage';
 import { Dashboard, type DashboardProps } from './Dashboard';
 
 const baseProps: DashboardProps = {
@@ -17,22 +18,8 @@ const baseProps: DashboardProps = {
   },
   projectsCount: 2,
   recentProjects: [
-    {
-      id: 'prj-1',
-      name: 'Cocina Ana',
-      customerLabel: 'Ana López',
-      status: 'draft',
-      updatedAt: '2026-07-12T10:00:00.000Z',
-      salePrice: 202.5,
-    },
-    {
-      id: 'prj-2',
-      name: 'Living Pedro',
-      customerLabel: 'Pedro Ruiz',
-      status: 'quoted',
-      updatedAt: '2026-07-10T08:00:00.000Z',
-      salePrice: null,
-    },
+    { id: 'prj-1', name: 'Cocina Ana', customerLabel: 'Ana López' },
+    { id: 'prj-2', name: 'Living Pedro', customerLabel: 'Pedro Ruiz' },
   ],
   onOpenProject: vi.fn(),
   onNewProject: vi.fn(),
@@ -128,7 +115,29 @@ describe('Dashboard (F023)', () => {
 
   it('renders recent quotes and opens project on click', async () => {
     const user = userEvent.setup();
-    const { onOpenProject } = renderDashboard();
+    const { onOpenProject } = renderDashboard({
+      commercialSummaries: new Map<string, ProjectCommercialSummary>([
+        [
+          'prj-1',
+          {
+            projectId: 'prj-1',
+            projectName: 'Cocina Ana',
+            customerId: 'cus-1',
+            customerName: 'Ana López',
+            currency: 'MXN',
+            quoteStatus: 'published',
+            quoteRevisionId: 'qr-1',
+            quoteRevisionNumber: 1,
+            activeDraftRevisionNumber: null,
+            isLegacy: false,
+            saleTotal: 202.5,
+            furnitureQuantity: 2,
+            commercialActivityAt: '2026-07-12T10:00:00.000Z',
+          },
+        ],
+      ]),
+      commercialSummariesStatus: 'ready' as const,
+    });
 
     expect(screen.getByText('Cotizaciones recientes')).toBeTruthy();
     expect(screen.getByText('Cocina Ana')).toBeTruthy();
@@ -389,5 +398,165 @@ describe('Dashboard exception-first home (OC-090, #305)', () => {
     render(<Dashboard {...baseProps} opsExceptions={[]} />);
     expect(screen.queryByTestId('ops-exceptions-panel')).toBeNull();
     expect(screen.getByTestId('dashboard-stats')).toBeTruthy();
+  });
+});
+
+describe('Inicio recent cards — commercial authority (#642)', () => {
+  const liveRecent = [
+    { id: 'prj-1', name: 'Cocina Ana', customerLabel: 'Ana López' },
+    { id: 'prj-2', name: 'Living Pedro', customerLabel: 'Pedro Ruiz' },
+  ];
+
+  function summaryOf(
+    overrides: Record<string, unknown> = {},
+  ): ProjectCommercialSummary {
+    return {
+      projectId: 'prj-1',
+      projectName: 'Cocina Ana Histórica',
+      customerId: 'cus-1',
+      customerName: 'Ana López Histórica',
+      currency: 'MXN',
+      quoteStatus: 'accepted',
+      quoteRevisionId: 'qr-2',
+      quoteRevisionNumber: 2,
+      activeDraftRevisionNumber: null,
+      isLegacy: false,
+      saleTotal: 650,
+      furnitureQuantity: 3,
+      commercialActivityAt: '2026-09-20T12:00:00.000Z',
+      ...overrides,
+    } as ProjectCommercialSummary;
+  }
+
+  it('shows the accepted QuoteRevision authority, never Project.status or live estimates', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={new Map([['prj-1', summaryOf()]])}
+        commercialSummariesStatus="ready"
+      />,
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    // Commercial authority: Q2 · Aceptada from the server-chosen revision.
+    const badge = card.querySelector('[data-testid="commercial-status-badge"]');
+    expect(badge?.textContent).toContain('Q2 · Aceptada');
+    // The operative Project.status (draft) must not label a commercial card.
+    expect(card.textContent).not.toContain('Borrador');
+    // Exact frozen total with its currency — not the live-catalog estimate.
+    expect(card.textContent).toContain('$650.00 MXN');
+    // Real commercial activity date, never Project.updatedAt.
+    expect(card.textContent).toContain('Act. 20 sep 2026');
+    expect(card.textContent).not.toContain('12 jul');
+  });
+
+  it('keeps the frozen snapshot identity over the mutable project/customer rows', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={new Map([['prj-1', summaryOf()]])}
+        commercialSummariesStatus="ready"
+      />,
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    // Exact frozen name/customer — not the mutable rows (substring-safe).
+    expect(
+      card.querySelector('.dashboard-recent-card__name')?.textContent,
+    ).toBe('Cocina Ana Histórica');
+    expect(
+      card.querySelector('.dashboard-recent-card__client')?.textContent,
+    ).toBe('Ana López Histórica');
+  });
+
+  it('projects without a quote stay an honest "Sin cotización", not published/accepted', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={new Map([['prj-1', summaryOf({ quoteStatus: 'none', saleTotal: null, quoteRevisionId: null, quoteRevisionNumber: null, commercialActivityAt: null })]])}
+        commercialSummariesStatus="ready"
+      />,
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    expect(
+      card.querySelector('[data-testid="commercial-status-badge"]')?.textContent,
+    ).toContain('Sin cotización');
+    // No commercial activity date is invented from Project.updatedAt.
+    expect(card.textContent).not.toContain('Act.');
+    // Withheld/absent amount stays an em dash — never $0.00 “free furniture”.
+    expect(card.textContent).not.toContain('$0.00');
+  });
+
+  it('renders a withheld amount as absence, not zero', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={new Map([['prj-1', summaryOf({ saleTotal: null })]])}
+        commercialSummariesStatus="ready"
+      />,
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    expect(
+      card.querySelector('[data-testid="commercial-status-badge"]')?.textContent,
+    ).toContain('Q2 · Aceptada');
+    expect(card.textContent).toContain('—');
+    expect(card.textContent).not.toContain('$0.00');
+  });
+
+  it('legacy revisions show the honest “No disponible” total', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={new Map([['prj-1', summaryOf({ isLegacy: true, quoteStatus: 'published', quoteRevisionNumber: 1, saleTotal: null })]])}
+        commercialSummariesStatus="ready"
+      />,
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    expect(
+      card.querySelector('[data-testid="commercial-status-badge"]')?.textContent,
+    ).toContain('Q1 · Publicada');
+    expect(card.textContent).toContain('No disponible');
+  });
+
+  it('loading dataset keeps navigation identity and no per-card verdict', () => {
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummaries={undefined}
+        commercialSummariesStatus="loading"
+      />,
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    expect(card.textContent).toContain('Cocina Ana');
+    expect(card.textContent).not.toContain('Sin cotización');
+    expect(card.textContent).not.toContain('$');
+  });
+
+  it('error dataset is an error state with retry — never "Sin cotización"', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    render(
+      <Dashboard
+        {...baseProps}
+        recentProjects={liveRecent}
+        commercialSummariesStatus="error"
+        onRetryCommercialSummaries={onRetry}
+      />,
+    );
+    const banner = screen.getByTestId('commercial-summaries-error');
+    expect(banner.textContent).toContain(
+      'No se pudo cargar la información comercial.',
+    );
+    const card = screen.getByTestId('dashboard-recent-prj-1');
+    expect(
+      card.querySelector('[data-testid="commercial-status-badge-error"]'),
+    ).toBeTruthy();
+    expect(card.textContent).not.toContain('Sin cotización');
+    await user.click(within(banner).getByRole('button', { name: 'Reintentar' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

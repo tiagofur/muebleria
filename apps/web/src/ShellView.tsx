@@ -434,7 +434,7 @@ export interface ShellViewCtx {
   readonly customers: readonly Customer[];
   readonly dashboardHomeMode: "default" | "sales" | "engineering";
   readonly dashboardOwnerBreakdown: readonly OwnerPortfolioRow[] | undefined;
-  readonly dashboardRecent: { id: string; name: string; customerLabel: string; status: ProjectStatus; updatedAt: string; salePrice: number | null; }[];
+  readonly dashboardRecent: { id: string; name: string; customerLabel: string }[];
   readonly dashboardStats: { activeProjects: number; monthlyQuotedTotal: number; modulesCount: number; activeMaterials: number; };
   readonly deleteAgregado: (id: string) => Promise<void>;
   readonly deleteAmbientCategory: (id: string) => Promise<void>;
@@ -1343,6 +1343,23 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
         <Dashboard
           stats={dashboardStats}
           recentProjects={dashboardRecent}
+          commercialSummaries={
+            commercialSummaries.kind === 'ready'
+              ? commercialSummaries.summaries
+              : undefined
+          }
+          commercialSummariesStatus={
+            commercialSummaries.kind === 'ready'
+              ? 'ready'
+              : commercialSummaries.kind === 'error'
+                ? 'error'
+                : 'loading'
+          }
+          onRetryCommercialSummaries={
+            commercialSummaries.kind === 'error'
+              ? commercialSummaries.retry
+              : undefined
+          }
           projectsCount={projects.length}
           onOpenProject={onDashboardOpenProject}
           onNewProject={canMutateProjects ? onDashboardNewProject : undefined}

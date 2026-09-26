@@ -34,6 +34,7 @@ import {
 } from '../projectHelpers';
 import {
   QUOTE_COMMERCIAL_FILTER_OPTIONS,
+  resolveCommercialCardIdentity,
   type CommercialSummariesStatus,
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
@@ -120,24 +121,16 @@ export function ProjectsListView({
   const cardIdentity = (
     project: Project,
     summary?: ProjectCommercialSummary,
-  ): { readonly name: string; readonly customer: string | null } => {
-    // Frozen identity: a valid snapshot owns the historical name. Projects
-    // without a revision (none) or with a legacy revision keep their CURRENT
-    // project identity — the only identity the contract can assert there.
-    const frozen =
-      summariesReady &&
-      summary != null &&
-      !summary.isLegacy &&
-      summary.quoteStatus !== 'none';
-    return {
-      name: frozen ? summary.projectName : project.name,
-      customer: !summariesReady
-        ? null
-        : frozen && summary.customerName != null
-          ? summary.customerName
-          : resolveCustomerName(project.customerId, customers),
-    };
-  };
+  ): { readonly name: string; readonly customer: string | null } =>
+    // #642: frozen identity rule shared with the Inicio recent cards — a
+    // valid snapshot owns the historical name; none/legacy keep the current
+    // project identity; not-ready keeps navigation identity only.
+    resolveCommercialCardIdentity(
+      project,
+      summary,
+      summariesReady,
+      () => resolveCustomerName(project.customerId, customers),
+    );
 
   return (
     <>

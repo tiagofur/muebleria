@@ -4,7 +4,8 @@
  * Role-focused home variants (F043 / #88).
  */
 
-import type { AnalyticsPeriodDays, OpsException, ProjectStatus, WorkshopAnalytics } from '@granete/domain';
+import type { AnalyticsPeriodDays, OpsException, WorkshopAnalytics } from '@granete/domain';
+import type { ProjectCommercialSummary } from '@granete/storage';
 import type { ReactNode } from 'react';
 import {
   CheckCircle2,
@@ -21,11 +22,13 @@ import {
 import { EmptyState, PageHeader, PageLoading } from '../common';
 import '../catalogs/catalogs.css';
 import '../projects/projects.css';
+import { formatIsoDate } from '../projects/projectHelpers';
 import {
-  formatIsoDate,
-  projectStatusBadgeClass,
-  projectStatusLabel,
-} from '../projects/projectHelpers';
+  resolveCommercialCardIdentity,
+  type CommercialSummariesStatus,
+} from '../projects/quoteRevisionPresentation';
+import { CommercialStatusBadge } from '../projects/components/CommercialStatusBadge';
+import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 import {
   formatDashboardMoney,
   shouldShowGettingStarted,
@@ -39,9 +42,6 @@ export type DashboardRecentProject = {
   readonly id: string;
   readonly name: string;
   readonly customerLabel: string;
-  readonly status: ProjectStatus;
-  readonly updatedAt: string;
-  readonly salePrice: number | null;
 };
 
 export type DashboardStats = {
@@ -61,7 +61,18 @@ export type DashboardHomeMode = 'default' | 'sales' | 'engineering';
 
 export type DashboardProps = {
   readonly stats: DashboardStats;
+  /**
+   * Recent navigation entries (id + live fallback identity). The commercial
+   * representation of each card — status badge, frozen identity, exact total,
+   * activity date — comes from the batch commercial summaries (#642), the
+   * same authority the Cotizaciones list consumes.
+   */
   readonly recentProjects: readonly DashboardRecentProject[];
+  /** Batch summaries keyed by projectId — one dataset per session/org scope. */
+  readonly commercialSummaries?: ReadonlyMap<string, ProjectCommercialSummary> | undefined;
+  /** Dataset state of the batch request — loading/error are never "Sin cotización". */
+  readonly commercialSummariesStatus?: CommercialSummariesStatus;
+  readonly onRetryCommercialSummaries?: () => void;
   /** Total projects in workspace (any status) — for getting-started gate. */
   readonly projectsCount?: number;
   readonly onOpenProject: (projectId: string) => void;
@@ -104,17 +115,6 @@ export type DashboardProps = {
   readonly opsExceptions?: readonly OpsException[];
 };
 
-function StatusBadge({ status }: { readonly status: ProjectStatus }): ReactNode {
-  return (
-    <span className={`status-badge ${projectStatusBadgeClass(status)}`}>
-      <span className="status-badge__dot" aria-hidden>
-        ●
-      </span>
-      {projectStatusLabel(status)}
-    </span>
-  );
-}
-
 type GettingStartedStep = {
   readonly id: string;
   readonly title: string;
@@ -129,6 +129,9 @@ type GettingStartedStep = {
 export function Dashboard({
   stats,
   recentProjects,
+  commercialSummaries,
+  commercialSummariesStatus = 'loading',
+  onRetryCommercialSummaries,
   projectsCount = recentProjects.length,
   onOpenProject,
   onNewProject,
@@ -530,6 +533,24 @@ export function Dashboard({
             >
               Cotizaciones recientes
             </h3>
+            {commercialSummariesStatus === 'error' ? (
+              <div
+                className="alert alert--danger"
+                role="alert"
+                data-testid="commercial-summaries-error"
+              >
+                <span>No se pudo cargar la información comercial.</span>
+                {onRetryCommercialSummaries ? (
+                  <button
+                    type="button"
+                    className="btn btn--small btn--secondary"
+                    onClick={onRetryCommercialSummaries}
+                  >
+                    Reintentar
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {recentProjects.length === 0 ? (
               <EmptyState
                 variant="empty"
@@ -542,40 +563,74 @@ export function Dashboard({
                 className="dashboard__recent"
                 aria-label="Cotizaciones recientes"
               >
-                {recentProjects.map((project) => (
-                  <li key={project.id}>
-                    <button
-                      type="button"
-                      className="dashboard-recent-card"
-                      data-testid={`dashboard-recent-${project.id}`}
-                      onClick={() => onOpenProject(project.id)}
-                    >
-                      <div className="dashboard-recent-card__top">
-                        <h4 className="dashboard-recent-card__name">
-                          {project.name}
-                        </h4>
-                        <StatusBadge status={project.status} />
-                      </div>
-                      <p className="dashboard-recent-card__client">
-                        {project.customerLabel || '—'}
-                      </p>
-                      <div className="dashboard-recent-card__meta">
-                        <span className="dashboard-recent-card__date">
-                          {formatIsoDate(project.updatedAt)}
-                        </span>
-                        {project.salePrice === null ? (
-                          <span className="dashboard-recent-card__price dashboard-recent-card__price--muted">
-                            —
-                          </span>
-                        ) : (
-                          <span className="dashboard-recent-card__price">
-                            {formatDashboardMoney(project.salePrice)}
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                ))}
+                {recentProjects.map((project) => {
+                  // #642: the card's commercial truth is the batch summaries
+                  // dataset the Cotizaciones list already consumes — never
+                  // Project.status, priceSnapshot, live-catalog estimates or
+                  // Project.updatedAt.
+                  const summariesReady = commercialSummariesStatus === 'ready';
+                  const summary = commercialSummaries?.get(project.id);
+                  const identity = resolveCommercialCardIdentity(
+                    project,
+                    summary,
+                    summariesReady,
+                    () => project.customerLabel || null,
+                  );
+                  const activityDate = summariesReady
+                    ? (summary?.commercialActivityAt ?? null)
+                    : null;
+                  return (
+                    <li key={project.id}>
+                      <button
+                        type="button"
+                        className="dashboard-recent-card"
+                        data-testid={`dashboard-recent-${project.id}`}
+                        onClick={() => onOpenProject(project.id)}
+                      >
+                        <div className="dashboard-recent-card__top">
+                          <h4 className="dashboard-recent-card__name">
+                            {identity.name}
+                          </h4>
+                          <CommercialStatusBadge
+                            summary={summary}
+                            loading={!summariesReady && commercialSummariesStatus !== 'error'}
+                            error={commercialSummariesStatus === 'error'}
+                          />
+                        </div>
+                        <p className="dashboard-recent-card__client">
+                          {identity.customer ?? '—'}
+                        </p>
+                        <div className="dashboard-recent-card__meta">
+                          {activityDate != null ? (
+                            <span className="dashboard-recent-card__date">
+                              Act. {formatIsoDate(activityDate)}
+                            </span>
+                          ) : (
+                            <span className="dashboard-recent-card__date" />
+                          )}
+                          {summariesReady && summary?.saleTotal != null ? (
+                            <span className="dashboard-recent-card__price">
+                              {formatMoneyDisplay(summary.saleTotal, {
+                                currency: summary.currency,
+                              })}
+                            </span>
+                          ) : summariesReady && summary?.isLegacy ? (
+                            <span
+                              className="dashboard-recent-card__price dashboard-recent-card__price--muted"
+                              title="Precio histórico no disponible: esta revisión se creó antes del historial comercial congelado."
+                            >
+                              No disponible
+                            </span>
+                          ) : (
+                            <span className="dashboard-recent-card__price dashboard-recent-card__price--muted">
+                              —
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>

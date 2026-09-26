@@ -37,16 +37,7 @@ const baseDashboard: DashboardProps = {
     activeMaterials: 8,
   },
   projectsCount: 2,
-  recentProjects: [
-    {
-      id: 'prj-1',
-      name: 'Cocina Ana',
-      customerLabel: 'Ana López',
-      status: 'draft',
-      updatedAt: '2026-07-12T10:00:00.000Z',
-      salePrice: 202.5,
-    },
-  ],
+  recentProjects: [{ id: 'prj-1', name: 'Cocina Ana', customerLabel: 'Ana López' }],
   onOpenProject: vi.fn(),
   onNewProject: vi.fn(),
   onNewModule: vi.fn(),
