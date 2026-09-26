@@ -4,9 +4,8 @@
 // per-unit rows (quantity > 1 stays individually traceable), the Place
 // existing bridge (identity only — the panel never edits it) and the rule
 // that a failed placement never flips into success.
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { runDialogScripts } = require('./support/dialog_scripts');
 
 function createClassList(initial) {
   const classes = new Set(String(initial || '').split(/\s+/).filter(Boolean));
@@ -102,12 +101,9 @@ function buildSandbox() {
 }
 
 function runDialog() {
-  const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
-  const html = fs.readFileSync(htmlPath, 'utf8');
-  const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
-  vm.runInContext(scriptMatch[1], sandbox);
+  runDialogScripts(sandbox);
   return sandbox;
 }
 

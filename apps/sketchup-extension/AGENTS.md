@@ -21,6 +21,22 @@ los bridges y no debe recuperar lógica de cada dueño.
 evidencia local. El smoke real en SketchUp macOS/Windows sigue siendo evidencia
 V2: nunca lo sustituyas con estas pruebas ni lo declares ejecutado sin host.
 
+## Mapa rápido de JS del diálogo (#848 Phase B)
+
+`resources/js/` crece módulo por módulo bajo el namespace `window.GraneteUI`;
+`dialog.html` conserva markup + bootstrap inline y carga cada módulo antes
+del código inline que lo consume. Los siete `granete-{state,bridge,mutation,
+commercial-*,manufacturing,preflight-review}.js` son runtime #498 y no se
+tocan en Phase B.
+
+| Problema | Empieza aquí | Prueba focal |
+| --- | --- | --- |
+| imagen/textura de catálogo no carga o signed URL expiró | `resources/js/granete-media.js` | `test/js/granete_media_test.js` (vía `test/unit/granete_media_js_test.rb`) |
+
+Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
+orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies
+el contenido de un módulo dentro del test.
+
 ## Mandatory reading
 
 Before implementation, read:

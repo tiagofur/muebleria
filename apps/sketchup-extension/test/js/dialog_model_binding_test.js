@@ -4,9 +4,8 @@
 // project/design picker flow, the explicit rebind review and the rule that
 // failed results never flip into success — the HtmlDialog half the Ruby
 // connector tests can't cover.
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { runDialogScripts } = require('./support/dialog_scripts');
 
 function createClassList(initial) {
   const classes = new Set(String(initial || '').split(/\s+/).filter(Boolean));
@@ -95,12 +94,9 @@ function buildSandbox() {
 }
 
 function runDialog() {
-  const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
-  const html = fs.readFileSync(htmlPath, 'utf8');
-  const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
-  vm.runInContext(scriptMatch[1], sandbox);
+  runDialogScripts(sandbox);
   return sandbox;
 }
 

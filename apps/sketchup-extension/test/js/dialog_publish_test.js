@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
+const { dialogSources } = require('./support/dialog_scripts');
 
 function createClassList(initial) {
   const classes = new Set(String(initial || '').split(/\s+/).filter(Boolean));
@@ -100,20 +101,19 @@ function buildSandbox() {
 }
 
 function runDialog() {
-  const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
-  const html = fs.readFileSync(htmlPath, 'utf8');
-  const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
+  // The real dialog loads granete-media.js, the shared runtime state and
+  // the #466 review controller around the inline script: load them so the
+  // publish gate is exercised exactly as in the HtmlDialog.
   const resources = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js');
-  // The real dialog loads the shared runtime state + the #466 review
-  // controller before the inline script: load them so the publish gate is
-  // exercised exactly as in the HtmlDialog.
   const stateSource = fs.readFileSync(path.join(resources, 'granete-state.js'), 'utf8');
   const preflightSource = fs.readFileSync(path.join(resources, 'granete-preflight-review.js'), 'utf8');
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
+  const { media, inline } = dialogSources();
+  vm.runInContext(media, sandbox, { filename: 'granete-media.js' });
   vm.runInContext(stateSource, sandbox, { filename: 'granete-state.js' });
   vm.runInContext(preflightSource, sandbox, { filename: 'granete-preflight-review.js' });
-  vm.runInContext(scriptMatch[1], sandbox);
+  vm.runInContext(inline, sandbox, { filename: 'dialog-inline.js' });
   return sandbox;
 }
 

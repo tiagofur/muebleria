@@ -3,9 +3,8 @@
 // asserts the code-entry UX — submit/Enter wiring, busy states, inline
 // result messaging, the raw-code-never-persists rule and the regression
 // that manual (non-pairing) results keep their original toast channel.
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { runDialogScripts } = require('./support/dialog_scripts');
 
 function createClassList(initial) {
   const classes = new Set(String(initial || '').split(/\s+/).filter(Boolean));
@@ -92,12 +91,9 @@ function buildSandbox() {
 }
 
 function runDialog() {
-  const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
-  const html = fs.readFileSync(htmlPath, 'utf8');
-  const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
-  vm.runInContext(scriptMatch[1], sandbox);
+  runDialogScripts(sandbox);
   return sandbox;
 }
 

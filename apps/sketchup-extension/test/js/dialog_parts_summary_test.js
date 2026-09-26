@@ -5,9 +5,8 @@
 // user moves them, and an explicit "se calculan al resolver" when nothing
 // can be estimated. The backend/domain stays the authority (no resolved
 // count is invented here).
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { runDialogScripts } = require('./support/dialog_scripts');
 const assert = require('assert');
 
 function createMockElement(id = '') {
@@ -87,12 +86,9 @@ function buildSandbox() {
 }
 
 function runDialog() {
-  const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
-  const html = fs.readFileSync(htmlPath, 'utf8');
-  const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
-  vm.runInContext(scriptMatch[1], sandbox);
+  runDialogScripts(sandbox);
   return sandbox;
 }
 
