@@ -3,9 +3,11 @@ package storage_test
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -94,21 +96,35 @@ func updateModule858(t *testing.T, mod *domain.Module) {
 	withinConnectStoreTenant(t, store, connectStoreInitialActor, func(txCtx context.Context) error { return store.UpdateModule(txCtx, mod.ID, mod) })
 }
 
+// overrideRow858 reads module_components.overrides through the TENANT GUC
+// (direct SQL under the runtime role is RLS-governed; a GUC-less read fails
+// closed with zero rows — the CI lesson of the first push).
 func overrideRow858(t *testing.T, moduleID, componentID string) *string {
 	t.Helper()
 	_, pool := migratedConnectStore(t)
-	var raw []byte
-	err := pool.QueryRow(context.Background(),
-		`SELECT overrides FROM module_components WHERE module_id = $1 AND component_id = $2`,
-		moduleID, componentID).Scan(&raw)
+	var out *string
+	err := runConnectStoreSQL(t, pool, connectStoreInitialActor, func(tx pgx.Tx) error {
+		var raw []byte
+		scanErr := tx.QueryRow(context.Background(),
+			`SELECT overrides FROM module_components WHERE module_id = $1 AND component_id = $2`,
+			moduleID, componentID).Scan(&raw)
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			t.Fatalf("module_components row not visible under tenant GUC (module %s component %s)", moduleID, componentID)
+		}
+		if scanErr != nil {
+			return scanErr
+		}
+		if raw == nil {
+			return nil
+		}
+		str := string(raw)
+		out = &str
+		return nil
+	})
 	if err != nil {
 		t.Fatalf("reading module_components.overrides: %v", err)
 	}
-	if raw == nil {
-		return nil
-	}
-	str := string(raw)
-	return &str
+	return out
 }
 
 func assertPlacement858(t *testing.T, where string, got []domain.HardwarePlacement) {
