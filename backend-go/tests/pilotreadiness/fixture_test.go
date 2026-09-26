@@ -44,6 +44,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
+	"github.com/tiagofur/muebles-backend/internal/testutil"
 )
 
 const (
@@ -621,8 +622,9 @@ func mustStorageUser(f *fixture, email, name, hash string) *domain.User {
 
 // pilotTOTP mints one code per verification need, tracking the accepted
 // counter high-water mark exactly like the server does. TOTP replay rules
-// (±1 window) allow at most two fresh codes per 30s interval; when a test
-// needs a third the provider waits for the next interval instead of failing.
+// (±1 window) allow three fresh counters per verifier window. It waits only
+// after those counters are exhausted, or briefly at a rollover boundary so it
+// can recompute a still-valid code.
 type pilotTOTP struct {
 	raw  []byte
 	last int64 // highest counter handed out
@@ -630,24 +632,102 @@ type pilotTOTP struct {
 
 func newPilotTOTP(raw []byte) *pilotTOTP { return &pilotTOTP{raw: raw, last: -1} }
 
-func (p *pilotTOTP) next(t *testing.T) string {
+const pilotTOTPRolloverGuard = time.Second
+
+func (p *pilotTOTP) nextCounter(current int64) (int64, bool) {
+	return testutil.LeastFreshTOTPCounter(current, p.last)
+}
+
+func (p *pilotTOTP) nextWith(t testing.TB, now func() time.Time, wait func(time.Duration)) string {
 	t.Helper()
-	for attempt := 0; attempt < 3; attempt++ {
-		current := auth.TOTPCounter(time.Now())
-		candidate := current
-		if candidate <= p.last {
-			candidate = current + 1 // the future slot of the ±1 window
+	for attempt := 0; attempt < 2; attempt++ {
+		at := now()
+		current := auth.TOTPCounter(at)
+		candidate, ok := p.nextCounter(current)
+		untilBoundary := time.Unix((current+1)*int64(auth.TOTPPeriod.Seconds()), 0).Sub(at)
+		if ok && candidate == current-1 && untilBoundary <= pilotTOTPRolloverGuard {
+			wait(untilBoundary + pilotTOTPRolloverGuard)
+			continue
 		}
-		if candidate > p.last && candidate <= current+1 {
+		if ok {
 			p.last = candidate
 			return auth.TOTPCode(p.raw, candidate)
 		}
-		// Window exhausted: wait for the next 30s interval to open.
-		nextInterval := time.Unix((current+1)*int64(auth.TOTPPeriod.Seconds()), 0)
-		time.Sleep(time.Until(nextInterval) + 100*time.Millisecond)
+		// Every verifier-accepted counter has been used. Waiting for the next
+		// real boundary is the only honest way to make another code available.
+		wait(untilBoundary + pilotTOTPRolloverGuard)
 	}
-	t.Fatal("pilotTOTP: could not mint a fresh code after waiting for the next interval")
+	t.Fatal("pilotTOTP: verifier window remained exhausted after waiting for the next interval")
 	return ""
+}
+
+func TestPilotTOTPNextCounterUsesFreshVerifierWindow(t *testing.T) {
+	p := newPilotTOTP([]byte("pilot-totp-test-secret"))
+	const current = int64(100)
+
+	for _, want := range []int64{99, 100, 101} {
+		got, ok := p.nextCounter(current)
+		if !ok || got != want {
+			t.Fatalf("nextCounter(%d) = (%d, %t), want (%d, true)", current, got, ok, want)
+		}
+		p.last = got
+	}
+	if got, ok := p.nextCounter(current); ok {
+		t.Fatalf("nextCounter(%d) = (%d, true), want exhausted verifier window", current, got)
+	}
+}
+
+func TestPilotTOTPNextWaitsOnlyForAnExhaustedWindow(t *testing.T) {
+	p := newPilotTOTP([]byte("pilot-totp-test-secret"))
+	p.last = 101
+	period := auth.TOTPPeriod
+	beforeBoundary := time.Unix(100*int64(period.Seconds()), 0).Add(period - time.Millisecond)
+	afterBoundary := beforeBoundary.Add(2 * time.Millisecond)
+	nowCalls := 0
+	waits := []time.Duration{}
+
+	code := p.nextWith(t, func() time.Time {
+		nowCalls++
+		if nowCalls == 1 {
+			return beforeBoundary
+		}
+		return afterBoundary
+	}, func(wait time.Duration) { waits = append(waits, wait) })
+
+	if want := auth.TOTPCode(p.raw, 102); code != want || p.last != 102 {
+		t.Fatalf("nextWith selected counter=%d code=%q, want counter=102 code=%q", p.last, code, want)
+	}
+	if len(waits) != 1 || waits[0] <= 0 {
+		t.Fatalf("waits=%v, want one positive wait after real exhaustion", waits)
+	}
+}
+
+func TestPilotTOTPNextRecomputesAtRolloverBoundary(t *testing.T) {
+	p := newPilotTOTP([]byte("pilot-totp-test-secret"))
+	period := auth.TOTPPeriod
+	beforeBoundary := time.Unix(100*int64(period.Seconds()), 0).Add(period - time.Millisecond)
+	afterBoundary := beforeBoundary.Add(2 * time.Millisecond)
+	nowCalls := 0
+	waits := []time.Duration{}
+
+	p.nextWith(t, func() time.Time {
+		nowCalls++
+		if nowCalls == 1 {
+			return beforeBoundary
+		}
+		return afterBoundary
+	}, func(wait time.Duration) { waits = append(waits, wait) })
+
+	if p.last != 100 {
+		t.Fatalf("rollover selected counter=%d, want the recomputed current-1 counter 100", p.last)
+	}
+	if len(waits) != 1 || waits[0] >= period {
+		t.Fatalf("rollover waits=%v, want one short boundary guard", waits)
+	}
+}
+
+func (p *pilotTOTP) next(t *testing.T) string {
+	return p.nextWith(t, time.Now, time.Sleep)
 }
 
 // enablePilotMFA walks the real enrollment HTTP flow for a user: begin →
@@ -1021,18 +1101,40 @@ func (f *fixture) gatedRequest(t *testing.T, user pilotUser, scope string, do fu
 	return do()
 }
 
-// mfaFor returns the user's cached TOTP provider, walking the enrollment
-// flow once per user per fixture.
+// cachedMFAProvider returns an enrolled provider only from the fixture cache.
+// A missing entry for a user who already has an enabled factor is a fixture
+// integrity error: starting another enrollment would require security_admin
+// step-up and would conceal that the shared provider cache was lost.
+func (f *fixture) cachedMFAProvider(user pilotUser) (*pilotTOTP, error) {
+	if provider := f.mfaProviders[user.id]; provider != nil {
+		return provider, nil
+	}
+	count, err := f.store.CountEnabledMFAFactors(context.Background(), user.id)
+	if err != nil {
+		return nil, fmt.Errorf("count enabled MFA factors for %s: %w", user.email, err)
+	}
+	if count > 0 {
+		return nil, fmt.Errorf("pilot fixture missing cached TOTP provider for %s with %d enabled MFA factor(s); refusing second enrollment", user.email, count)
+	}
+	return nil, nil
+}
+
+// mfaFor returns the user's cached TOTP provider, enrolling exactly one first
+// factor per user when none exists yet.
 func (f *fixture) mfaFor(t *testing.T, user pilotUser) *pilotTOTP {
 	t.Helper()
 	if f.mfaProviders == nil {
 		f.mfaProviders = map[string]*pilotTOTP{}
 	}
-	provider, ok := f.mfaProviders[user.id]
-	if !ok {
-		provider = f.enablePilotMFA(t, user)
-		f.mfaProviders[user.id] = provider
+	provider, err := f.cachedMFAProvider(user)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if provider != nil {
+		return provider
+	}
+	provider = f.enablePilotMFA(t, user)
+	f.mfaProviders[user.id] = provider
 	return provider
 }
 
