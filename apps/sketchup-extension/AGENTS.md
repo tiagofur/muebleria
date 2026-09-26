@@ -14,8 +14,11 @@ los bridges y no debe recuperar lógica de cada dueño.
 | Design workflow | `ui/bridges/design_workflow_bridge.rb`: publicar/validar diseño, batch, gate y proyección de excepciones. No realiza mutación de placement. | `ui/bridges/design_workflow_bridge.rb`; `host/design_preflight_batch.rb`; `connection/design_publish.rb`; `test/unit/dialog_publish_workflow_test.rb` | `test/unit/dialog_publish_workflow_test.rb` |
 | Design Sync | No es un bridge C2 separado: `handle_synchronize_design` permanece con Project Furniture porque sincroniza el frontier de unidades del proyecto. | `ui/bridges/project_furniture_bridge.rb`; `connection/design_sync.rb`; `ui/dialog_controller.rb`; `test/unit/project_furniture_test.rb` | `test/unit/project_furniture_test.rb` |
 
-**Runtime y evidencia.** Usa Ruby `3.2.11` con
-`PATH="$HOME/.rbenv/shims:$PATH"`; ejecuta una prueba focal y después
+**Runtime y evidencia.** Usa Ruby `3.2.11` — confirma con `ruby -v` antes
+de la suite. Cualquier instalación 3.2.11 válida sirve (rbenv o Homebrew
+`ruby@3.2`); si una no puede cargar la extensión nativa del bundle
+vendoreado (`vendor/bundle`), usa la otra en lugar de reinstalar gems ni
+tocar Gemfile/Gemfile.lock. Ejecuta una prueba focal y después
 `bundle exec rake verify`. `git diff --check` y
 `python3 scripts/verify_affected.py --base origin/main --plan` completan la
 evidencia local. El smoke real en SketchUp macOS/Windows sigue siendo evidencia

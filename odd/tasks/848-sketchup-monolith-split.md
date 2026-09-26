@@ -145,8 +145,12 @@ order, harnesses running the real external file, zero behavior change.
 - **Security**: #460 SEC-3 unchanged — no credential in the webview, no
   `?token=`, short-lived per-file signed URLs, Ruby `refresh_media_url`
   on miss/expiry, retry window intact.
-- **Verify** (homebrew `ruby@3.2` 3.2.11 — the vendor bundle is linked to
-  its libruby; rbenv 3.2.11 fails to load the vendored json native ext):
+- **Verify** (Ruby 3.2.11 via Homebrew `ruby@3.2`; execution evidence for
+  this worktree, not a new permanent architecture: the existing vendored
+  native json extension is linked to Homebrew's libruby — `otool -L` on
+  `vendor/bundle/.../json/ext/parser.bundle` — so the rbenv 3.2.11
+  installation could not load it. Both rubies are 3.2.11; no gem reinstall,
+  Gemfile or Gemfile.lock changed):
   RuboCop 251 files / 0 offenses; unit suite 1138 runs, 7478 assertions,
   0 failures/errors/skips; contract suite 6 runs, 4043 assertions, 0
   failures; `git diff --check` clean; `verify_affected --plan` passes
