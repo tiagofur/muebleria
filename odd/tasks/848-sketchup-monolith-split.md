@@ -170,12 +170,89 @@ order, harnesses running the real external file, zero behavior change.
   NOT_RUN** (CEF loading external js before the inline script still needs
   the real host per phase-level gate).
 
+## C4.2 — granete-account.js
+
+Started from `main@5294768d0020a2a935ab4ce105b7d449158b8c9a` (post-#853),
+branch `refactor/848-dialog-js-account`. Same Phase B pattern: one state
+authority, real external module, real-file harnesses, zero behavior change.
+
+- **Extracted**: `resources/js/granete-account.js` (387 lines including the
+  agent-first header). dialog.html went 5,562 → 5,267 lines; inline JS
+  4,631 → 4,329 (DOM declarations + popover block + the six GraneteDialog
+  bridge methods + renderSessionLicense + the bottom login/enroll/copy/
+  web-devices/logout bindings moved out).
+- **Public API (9)**: `init(deps)` (injects the shared `showToast`/`icon`
+  helpers — no duplicated implementations), `open`, `close`, `setStatus`,
+  `onEnrollResult`, `onPollResult`, `onLoginResult`, `startEnrollCountdown`,
+  `clearEnrollmentTimers`. **Private**: `currentEnrollmentId`,
+  `enrollPollInterval`, `enrollCountdownInterval` (single owner — the
+  module), ~25 account DOM refs, `accountFocusTarget`, `renderSessionLicense`,
+  `fallbackCopy`. `onLoginResult` keeps the lazy
+  `window.GraneteCommercialProjection.invalidateSession()` lookup and the
+  post-pairing `get_model_binding()` re-ask.
+- **Bridge contract preserved**: Ruby still calls
+  `window.GraneteDialog.{setStatus,onEnrollResult,onPollResult,onLoginResult}`
+  via `execute_bridge` (dialog_controller.rb + session_bridge.rb —
+  untouched); `startEnrollCountdown`/`clearEnrollmentTimers` have no Ruby
+  callers but stay on GraneteDialog as thin delegation per the frozen
+  contract. Library's two empty-state CTAs now call
+  `window.GraneteUI.account.open()`. The shared document `keydown` Escape
+  listener split into two (module closes the popover; the inline bootstrap
+  keeps `resetPublishConfirm`), both firing in the original order. The
+  popover's `btn-close` ("Cerrar panel" → `close_dialog`) stays inline: it
+  is dialog chrome, not account logic; the module fetches it by id only as
+  the focus fallback it already was.
+- **Preserved quirks** (asserted by the focused harness): 5s poll interval;
+  429/transient errors never abort enrollment; expiry cleanup lands on the
+  next 1s countdown tick because the poll interval is armed after
+  `startEnrollCountdown`; cancel nulls the enrollment id while reject/expiry
+  do not; `loginServer` is seeded from `status.server_url` only when empty;
+  web-devices URL derives by stripping trailing slashes + `/api`.
+- **Load order**: markup → `js/granete-media.js` → `js/granete-account.js` →
+  inline bootstrap → the seven #498 runtime scripts. The module must be
+  operative before the inline script finishes because Ruby answers
+  `dialog_ready` with `GraneteDialog.setStatus` immediately; the bootstrap
+  calls `GraneteUI.account.init({ showToast, icon })` before `dialog_ready`.
+- **Harness migration**: `test/js/support/dialog_scripts.js` now loads
+  granete-media.js → granete-account.js → inline (the nine runDialogScripts
+  harnesses migrated automatically; `dialog_publish_test.js` adds account to
+  its explicit preload chain). No test copied module code; no assertion was
+  deleted.
+- **Focused tests**: `test/js/granete_account_test.js` — 30 tests covering
+  registration + idempotent re-execution, public API shape, pill
+  open/close + aria, outside-click and Escape dismissal, focus target
+  logged-in/out, focus restoration, setStatus pill/cards/user/license
+  (active/expired/none), enrollment start (server required, payload,
+  button disarm, bridge absent recovery), enroll failure, code+timers on
+  success, 5s poll tick payload, 429 resilience, transient retry, pending
+  copy, reject/expiry cleanup, countdown expiry, cancel (incl. dead id never
+  polls again), logout result, login result (projection invalidation +
+  model-binding re-ask), logout click, web-devices URL derivation (with and
+  without /api), clipboard copy with icon feedback and textarea fallback,
+  placeholder code never copied. Ruby side
+  `test/unit/granete_account_js_test.rb` (5 tests) runs the harness and adds
+  symbol-based structural guards: implementation lives in granete-account.js
+  with its header, dialog.html loads it after media and BEFORE the inline
+  script, the monolith no longer carries any account implementation symbol,
+  and GraneteDialog keeps all six wrappers as delegation plus the
+  bootstrap `init` wiring.
+- **Verify** (Homebrew `ruby@3.2` 3.2.11 — same vendored-bundle libruby
+  linkage note as C4.1; no gem or lockfile change): RuboCop 252 files /
+  0 offenses; unit suite 1143 runs, 7553 assertions, 0
+  failures/errors/skips; contract suite 6 runs, 4043 assertions, 0
+  failures; `git diff --check` clean; `verify_affected --plan` passes
+  (plan selects `sketchup-local-os` = `bundle exec rake verify`, green
+  above). RBZ rebuilt deterministically by `package:verify`, sha256
+  `85615e202ff951e541de72fb11948ed989e2e73bb1fee0542a131c7a2b0a0e05`.
+- **CI**: exact-head run recorded in the PR. **Real SketchUp host smoke:
+  NOT_RUN** (same phase-level gate as C4.1).
+
 
 
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
   required before closing: NOT_RUN until executed.
 - No behavior change is in scope; anything discovered broken becomes its own
   issue.
-- Remaining Phase B modules after the C4.1 pilot: account, library,
-  configurator, finish-selector, material-roles, inspector, model-binding,
-  project-furniture. C4.2: NOT_STARTED.
+- Remaining Phase B modules after C4.2: library, configurator,
+  finish-selector, material-roles, inspector, model-binding,
+  project-furniture. C4.3: NOT_STARTED.
