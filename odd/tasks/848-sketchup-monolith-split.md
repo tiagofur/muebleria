@@ -615,7 +615,7 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   through injected call-time accessors (`getInspectorMaterialsCard`,
   `getInspectorDef`, `getSelectedContext`) — the C4.4 `isModelConnected`
   pattern. Inspector state stays owned by the Inspector slice; the module
-  never writes it. `renderSelectors` fail-fasts listing missing deps if
+  never writes it. `renderMaterialSelectors` fail-fasts listing missing deps if
   init was skipped (bootstrap always runs init).
 - **setCatalog orchestration**: `GraneteDialog.setCatalog` delegates the
   material slice (array branch → `setCatalog({materials: [],
@@ -627,11 +627,12 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   (pre-existing semantics, asserted). The catalogHardware array-branch
   quirk stays untouched.
 - **Boundaries**: the Configurator keeps its `libMaterialChoices` snapshot
-  and consumes `defaultChoices`/`renderSelectors`/`materialById`/
-  `setProjectDefaultMaterial` via its existing init deps (now sourced from
+  and consumes `defaultMaterialChoices`/`renderMaterialSelectors`/
+  `materialById`/`setProjectDefaultMaterial` via its existing init deps
+  (now sourced from
   materialRoles). The Finish Selector receives
-  `getCategories`/`materialById`/`optionMaterialIds`/`updateSwatch` at
-  bootstrap. `onMaterialChoiceApplied` keeps its 3-branch cross-domain
+  `getMaterialCategories`/`materialById`/`optionMaterialIds`/
+  `updateMaterialSwatch` at bootstrap. `onMaterialChoiceApplied` keeps its 3-branch cross-domain
   routing INLINE (until the Inspector slice); only its shared
   reads/writes migrated (`setProjectDefaultMaterial`,
   `renderMaterialSelectors`, `materialById`). Inspector callbacks keep writing their own
@@ -659,7 +660,8 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   `granete_finish_selector_js_test.rb` (single-authority test flipped to
   module ownership + materialRoles wiring),
   `granete_configurator_js_test.rb` (setCatalog delegation +
-  renderSelectors/setProjectDefault wiring), `granete_library_js_test.rb`
+  renderMaterialSelectors/setProjectDefaultMaterial wiring),
+  `granete_library_js_test.rb`
   (material slice delegation + projection), `dialog_library_view_test.rb`
   (renderer asserts point at the module, incl. `material-chevron`).
 - **Focused tests**: `test/js/granete_material_roles_test.js` — 30 tests:
@@ -699,7 +701,8 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   packages granete-material-roles.js (supersedes the pre-rename build
   `209a67fe…` after the owner-approved API-name refinement).
 - **Behavior changes: 0** (target). Documented notes: the
-  `renderSelectors` `requireDeps()` guard (new code path only reachable if
+  `renderMaterialSelectors` `requireDeps()` guard (new code path only
+  reachable if
   init was skipped, which the bootstrap always runs) and the two-line
   reflow of the Ruby-selector condition.
 - **Real SketchUp host smoke: NOT_RUN** (same phase-level gate as
@@ -713,12 +716,18 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   legacy aliases) plus the session-local projectDefaults header
   clarification. The refinement was applied and the full battery
   revalidated green (tallies above). Committed as one implementation work
-  unit (`016b211a`) and published against main as PR #860 (`Refs #848`,
-  `Delivery: partial`, `type:refactor`; exact-head readback verified:
-  OPEN, non-draft, base main, headSha == commit, MERGEABLE, issue #848
-  OPEN + status:approved). CI exact-head: PASS 18/18 incl. Publication
-  metadata, Foundation Gate A + real browser proofs and the three
-  SketchUp Ruby runners. Merge remains human. **Real SketchUp host smoke:
+  unit (`016b211a84a5064e3944a0abc945e1720e219ba7`) and published
+  against main as PR #860 (`Refs #848`, `Delivery: partial`,
+  `type:refactor`). Exact-head readback at publication (implementation
+  work unit): OPEN, non-draft, base main, headSha == 016b211a…,
+  MERGEABLE, issue #848 OPEN + status:approved; CI exact-head: PASS
+  16/16; PR Publication exact-head: PASS 1/1 (incl. Foundation Gate A +
+  real browser proofs and the three SketchUp Ruby runners). Docs-only
+  follow-ups advanced the PR HEAD after publication (publication record
+  `09f65ba4123193681ac6545293776c737ab25ae4`, then this
+  documentation-accuracy correction); the implementation commit is
+  unchanged and was revalidated green on the docs heads as well. Merge
+  remains human. **Real SketchUp host smoke:
   NOT_RUN** (same phase-level gate).
 
 

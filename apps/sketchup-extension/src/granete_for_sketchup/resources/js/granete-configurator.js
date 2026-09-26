@@ -35,8 +35,8 @@
 //
 // Does NOT own:
 // - the material catalog/hierarchy/selector modal or role rendering
-//   (renderSelectors/defaultChoices/materialById are owned by
-//   window.GraneteUI.materialRoles since #848 C4.6) nor
+//   (renderMaterialSelectors/defaultMaterialChoices/materialById are
+//   owned by window.GraneteUI.materialRoles since #848 C4.6) nor
 //   projectDefaultMaterials
 // - Inspector (shares the inline param/material/summary helpers)
 // - Project Furniture rows/lifecycle (switchTab/requestProjectFurniture

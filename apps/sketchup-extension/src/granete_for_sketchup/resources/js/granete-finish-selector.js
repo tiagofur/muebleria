@@ -21,8 +21,8 @@
 // Does NOT own:
 // - material catalog state (catalogMaterials/catalogMaterialCategories
 //   are owned by window.GraneteUI.materialRoles since #848 C4.6)
-// - material-role rendering (renderMaterialSelectors/renderSelectors is
-//   owned by window.GraneteUI.materialRoles) nor role option assignments
+// - material-role rendering (renderMaterialSelectors is owned by
+//   window.GraneteUI.materialRoles) nor role option assignments
 // - Configurator/Inspector material choices or project defaults
 // - the Ruby-native selector (window.sketchup.open_material_selector
 //   remains the PRIMARY path; this modal is the local fallback)
