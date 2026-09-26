@@ -906,6 +906,12 @@
       <footer id="granete-version-footer">Granete para SketchUp</footer>
     </div>
 
+    <!-- #848 Phase B: catalog media module (signed URL resolution, refresh
+         throttling, DOM reapplication) under window.GraneteUI. It loads
+         BEFORE the inline script because the inline render paths consume
+         GraneteUI.media during their own initial execution. -->
+    <script src="js/granete-media.js"></script>
+
     <script>
       (function () {
         "use strict";
@@ -918,7 +924,6 @@
         var catalogHardware = [];
         var catalogSource = "loading";
         var licenseBlocked = false;
-        var catalogMedia = null;
         var activeLibDef = null;
         var libParams = {};
         var libMaterialChoices = {};
@@ -1156,80 +1161,6 @@
             '</svg>';
         }
 
-        // Workshop previews arrive as server-relative paths (/api/media/...).
-        // #460 SEC-3: they resolve through SHORT-LIVED signed per-file URLs
-        // minted by Ruby (catalogMedia.urls). The extension session credential
-        // never enters the webview, and no `?token=` query authentication
-        // exists anymore. Missing/expired grants ask Ruby to re-authorize via
-        // the refresh_media_url callback and return "" so callers render the
-        // placeholder meanwhile.
-        var mediaFilenameRe = /\/api\/media\/([0-9a-f]{32}\.(?:jpg|png|webp))/;
-        // Filename → timestamp of the last refresh request. A failed mint
-        // (offline, expired session) would otherwise leave the flag stuck and
-        // the image dead until the dialog reopens; the retry window lets the
-        // next render/error retry without hammering Ruby.
-        var pendingMediaRefresh = {};
-        var MEDIA_REFRESH_RETRY_MS = 5000;
-
-        function mediaFilenameFromPath(url) {
-          var m = mediaFilenameRe.exec(String(url || ""));
-          return m ? m[1] : null;
-        }
-
-        function mediaUrls() {
-          if (!catalogMedia) catalogMedia = { baseUrl: "", urls: {} };
-          if (!catalogMedia.urls) catalogMedia.urls = {};
-          return catalogMedia.urls;
-        }
-
-        function requestMediaRefresh(filename) {
-          if (!filename) return;
-          var last = pendingMediaRefresh[filename];
-          if (last && Date.now() - last < MEDIA_REFRESH_RETRY_MS) return;
-          pendingMediaRefresh[filename] = Date.now();
-          try {
-            sketchup.refresh_media_url(filename);
-          } catch (e) {
-            delete pendingMediaRefresh[filename];
-          }
-        }
-
-        function resolveMediaUrl(url) {
-          if (!url || typeof url !== "string") return url;
-          if (url.indexOf("http") === 0 || url.indexOf("data:") === 0) return url;
-          if (url.indexOf("/api/media/") !== 0) return url;
-          var filename = mediaFilenameFromPath(url);
-          if (!filename) return url;
-          var signed = mediaUrls()[filename];
-          if (signed) return signed;
-          requestMediaRefresh(filename);
-          return "";
-        }
-
-        // Re-applies signed URLs to everything currently tagged with its
-        // canonical media filename (module <img> cards and material swatches).
-        function applyMediaToDom() {
-          var nodes = document.querySelectorAll("[data-media-name]");
-          for (var i = 0; i < nodes.length; i++) {
-            var el = nodes[i];
-            var signed = mediaUrls()[el.getAttribute("data-media-name")];
-            if (!signed) continue;
-            if (el.tagName === "IMG") {
-              if (el.getAttribute("src") !== signed) {
-                el.setAttribute("src", signed);
-                // A grant landing after the placeholder covered a pending
-                // image must reveal the <img> again.
-                if (el.style.display === "none") {
-                  el.style.display = "";
-                  if (el.nextElementSibling) el.nextElementSibling.style.display = "none";
-                }
-              }
-            } else if (el.style.backgroundImage !== "url('" + signed + "')") {
-              el.style.backgroundImage = "url('" + signed + "')";
-            }
-          }
-        }
-
         function getDefinitionDefaultDims(def) {
           var params = def.parameters || [];
           var width = 600;
@@ -1398,8 +1329,8 @@
           host.innerHTML = "";
 
           var rawUrl = def.imageUrl || def.thumbnailUrl || def.previewUrl;
-          var mediaName = mediaFilenameFromPath(rawUrl);
-          var imageUrl = resolveMediaUrl(rawUrl);
+          var mediaName = window.GraneteUI.media.filenameFromPath(rawUrl);
+          var imageUrl = window.GraneteUI.media.resolveUrl(rawUrl);
 
           if (imageUrl) {
             var img = document.createElement("img");
@@ -1408,7 +1339,7 @@
               img.setAttribute("data-media-name", mediaName);
               img.onerror = function () {
                 host.innerHTML = createFurniturePlaceholderSvg();
-                requestMediaRefresh(mediaName);
+                window.GraneteUI.media.requestRefresh(mediaName);
               };
             } else {
               img.onerror = function () {
@@ -1492,8 +1423,8 @@
             return;
           }
           var rawUrl = mat.previewTextureUrl || mat.imageUrl;
-          var mediaName = mediaFilenameFromPath(rawUrl);
-          var url = resolveMediaUrl(rawUrl);
+          var mediaName = window.GraneteUI.media.filenameFromPath(rawUrl);
+          var url = window.GraneteUI.media.resolveUrl(rawUrl);
           if (mediaName) {
             // Tagged so a re-minted grant (updateMediaUrl) can repaint it.
             el.setAttribute("data-media-name", mediaName);
@@ -2400,8 +2331,8 @@
             preview.className = "furniture-card-preview";
 
             var rawImageUrl = def.imageUrl || def.thumbnailUrl || def.previewUrl;
-            var mediaName = mediaFilenameFromPath(rawImageUrl);
-            var imageUrl = resolveMediaUrl(rawImageUrl);
+            var mediaName = window.GraneteUI.media.filenameFromPath(rawImageUrl);
+            var imageUrl = window.GraneteUI.media.resolveUrl(rawImageUrl);
             if (mediaName) {
               // Server catalog media: the <img> always exists (tagged with its
               // canonical filename) so a re-minted grant can repaint it; while
@@ -2420,7 +2351,7 @@
                 img.style.display = "none";
                 if (img.nextElementSibling) img.nextElementSibling.style.display = "flex";
                 // #460 SEC-3: most likely an expired grant — re-mint and retry.
-                requestMediaRefresh(mediaName);
+                window.GraneteUI.media.requestRefresh(mediaName);
               };
               preview.appendChild(img);
 
@@ -2575,9 +2506,7 @@
 
           updateMediaUrl: function (payload) {
             if (!payload || !payload.filename || !payload.url) return;
-            mediaUrls()[payload.filename] = payload.url;
-            delete pendingMediaRefresh[payload.filename];
-            applyMediaToDom();
+            window.GraneteUI.media.updateSignedUrl(payload.filename, payload.url);
           },
 
           setStatus: function (status) {
@@ -2806,7 +2735,7 @@
               catalogMaterials = [];
               catalogSource = "local";
               licenseBlocked = false;
-              catalogMedia = null;
+              window.GraneteUI.media.setCatalogMedia(null);
             } else {
               payload = payload || {};
               catalog = payload.definitions || [];
@@ -2817,7 +2746,7 @@
               catalogHardware = payload.hardware || [];
               catalogSource = payload.source || "local";
               licenseBlocked = !!payload.licenseBlocked;
-              catalogMedia = payload.media || null;
+              window.GraneteUI.media.setCatalogMedia(payload.media);
               if (window.GraneteState) {
                 window.GraneteState.set("catalog", {
                   definitions: catalog,

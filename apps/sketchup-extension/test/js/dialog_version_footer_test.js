@@ -5,10 +5,9 @@
 // Static half: the footer markup carries no version literal and keeps
 // the granete-version-footer id. Dynamic half: the real dialog script's
 // setPluginVersion renders the pushed version into that footer.
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
+const { dialogSources, runDialogScripts } = require('./support/dialog_scripts');
 
 function createMockElement(id = '') {
   let textContentValue = '';
@@ -54,8 +53,7 @@ const sandbox = {
   }
 };
 
-const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
-const html = fs.readFileSync(htmlPath, 'utf-8');
+const { html } = dialogSources();
 
 // ---- static: no hardcoded version in the footer markup -----------------
 const footerMatch = html.match(/<footer[^>]*id="granete-version-footer"[^>]*>([\s\S]*?)<\/footer>/);
@@ -64,10 +62,8 @@ assert(!/v\d+\.\d+/.test(footerMatch[1]),
   `the footer must not hardcode a version (found: ${footerMatch[1].trim()}) — it renders what the extension pushes`);
 
 // ---- dynamic: setPluginVersion renders the pushed value ----------------
-const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
-assert(scriptMatch, 'dialog.html must carry its script');
 vm.createContext(sandbox);
-vm.runInContext(scriptMatch[1], sandbox);
+runDialogScripts(sandbox);
 
 sandbox.window.GraneteDialog.setPluginVersion({ version: '0.1.11-test' });
 const footer = registry['granete-version-footer'];

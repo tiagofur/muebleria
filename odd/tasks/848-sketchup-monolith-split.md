@@ -95,9 +95,87 @@ Completed from `main@d13e0c41fad7a6dcf389f83b04d8a1b95a773658`: refactor-only ex
 - [x] C3.3 Ruby 3.2.11: focused 43/264; RuboCop 250/0; units 1134/7441; contracts 6/4043; RBZ `f1ad870ed0fbcc4125cbf5f4ca71a955a3f851a9d358e9427039427752ab6e69`; diff-check and affected plan pass.
 - [x] C3.4 One work unit committed; final amendment handoff records its hash. V2 host smoke NOT_RUN.
 
-## Limitations and remaining scope
+## C4.1 — Phase B pilot: granete-media.js
+
+Started from `main@701865e4683b89e51fabd42aadf27061512f7949` (post-#852),
+branch `refactor/848-dialog-js-media`. Pilot extraction that sets the Phase B
+pattern: `window.GraneteUI` namespace, one authority, deterministic load
+order, harnesses running the real external file, zero behavior change.
+
+- **Extracted**: `resources/js/granete-media.js` (117 lines including the
+  agent-first Owns/Consumes/Does-NOT-own header). dialog.html went 5,633 →
+  5,562 lines; inline JS 4,713 → 4,631 (media block 1,159–1,231 + the
+  `catalogMedia` state var moved out; 11 inline callsites now call the API).
+- **Public API (5)**: `filenameFromPath`, `resolveUrl`, `requestRefresh`,
+  `updateSignedUrl(filename, url)` (stores grant + clears pending +
+  reapplies to DOM), `setCatalogMedia(media)` (sole catalog-media authority;
+  `null`/undefined normalize to reset). **Private**: `catalogMedia`,
+  `pendingMediaRefresh`, `MEDIA_REFRESH_RETRY_MS` (still 5000),
+  `mediaFilenameRe`, `mediaUrls()`, `applyMediaToDom()`.
+- **State ownership**: `GraneteUI.media` owns the whole media slice;
+  dialog.html keeps no `catalogMedia` copy. `GraneteDialog.setCatalog`
+  forwards `payload.media`; `updateMediaUrl` forwards to `updateSignedUrl`.
+  Preserved quirk: `pendingMediaRefresh` deliberately survives catalog
+  changes (throttle map is never reset on `setCatalogMedia`), and a received
+  grant clears it — both asserted by the focused harness.
+- **Load order**: markup → `js/granete-media.js` → inline bootstrap → the
+  seven #498 runtime scripts (untouched, still last). The module loads
+  before the inline script because inline render paths consume
+  `window.GraneteUI.media` during their own initial execution; inline
+  references are `window.`-qualified (vm sandboxes keep `window` and the
+  context global distinct; CEF does not).
+- **Harness migration**: new tiny loader `test/js/support/dialog_scripts.js`
+  (dialogSources/runDialogScripts) executes the REAL granete-media.js +
+  inline script in dialog.html order. Ten harnesses migrated (enrollment,
+  model_binding, inspector, parts_summary, pairing, project_furniture,
+  placement_preview, ux_states, publish, version_footer); publish keeps its
+  granete-state/granete-preflight-review preloads and adds media first. No
+  test copies module code; no assertion was deleted.
+- **Focused tests**: `test/js/granete_media_test.js` — 12 tests covering
+  registration + idempotent re-execution, public API shape, filename
+  contract, signed-resolution without bridge calls, passthrough rules,
+  miss → refresh + "" placeholder, 5s throttle window (fake clock), failed
+  mint releases the flag, grant re-application to `data-media-name` DOM
+  (img reveal + swatch repaint), grant clears throttle, catalog
+  reset/change never keeps stale authority, re-mint replaces URL. Ruby side
+  `test/unit/granete_media_js_test.rb` (4 tests) runs the harness and adds
+  symbol-based structural guards: implementation lives in granete-media.js
+  with its header, dialog.html loads it BEFORE the inline script, and the
+  monolith no longer carries any media implementation symbol.
+- **Security**: #460 SEC-3 unchanged — no credential in the webview, no
+  `?token=`, short-lived per-file signed URLs, Ruby `refresh_media_url`
+  on miss/expiry, retry window intact.
+- **Verify** (Ruby 3.2.11 via Homebrew `ruby@3.2`; execution evidence for
+  this worktree, not a new permanent architecture: the existing vendored
+  native json extension is linked to Homebrew's libruby — `otool -L` on
+  `vendor/bundle/.../json/ext/parser.bundle` — so the rbenv 3.2.11
+  installation could not load it. Both rubies are 3.2.11; no gem reinstall,
+  Gemfile or Gemfile.lock changed):
+  RuboCop 251 files / 0 offenses; unit suite 1138 runs, 7478 assertions,
+  0 failures/errors/skips; contract suite 6 runs, 4043 assertions, 0
+  failures; `git diff --check` clean; `verify_affected --plan` passes
+  (plan selects `sketchup-local-os` = `bundle exec rake verify`, green
+  above). RBZ rebuilt deterministically by `package:verify`, sha256
+  `c390144e643c94a6ad4eeba6bbe5a82864db10a82ec72848089baf963fdd9207`
+  (supersedes the first build `961a60eb…` after the review round below).
+- **Review round (owner, pre-merge)**: contract-fidelity correction —
+  `requestRefresh` now calls `window.sketchup.refresh_media_url(filename)`
+  exactly as the module header documents (same try/catch, retry, state and
+  error semantics), and the focused harness mocks the bridge on
+  `window.sketchup` like the integrated harnesses instead of a parallel
+  sandbox global. No public API, constant, regex, state, DOM reapplication,
+  load order, dialog.html, helper or other harness touched. Behavior
+  changes: 0.
+- **CI**: exact-head run recorded in the PR. **Real SketchUp host smoke:
+  NOT_RUN** (CEF loading external js before the inline script still needs
+  the real host per phase-level gate).
+
+
 
 - Real-host smoke (CEF loading external css/js on macOS AND Windows) is
   required before closing: NOT_RUN until executed.
 - No behavior change is in scope; anything discovered broken becomes its own
   issue.
+- Remaining Phase B modules after the C4.1 pilot: account, library,
+  configurator, finish-selector, material-roles, inspector, model-binding,
+  project-furniture. C4.2: NOT_STARTED.

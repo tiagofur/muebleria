@@ -4,9 +4,8 @@
 // breadcrumb navigation, provenance copy, unmanaged state and multi-selection
 // fail-closed behavior. Complements the Ruby tests (which prove the payload)
 // by proving what the HtmlDialog actually renders and blocks.
-const fs = require('fs');
-const path = require('path');
 const vm = require('vm');
+const { runDialogScripts } = require('./support/dialog_scripts');
 const assert = require('assert');
 
 function createMockElement(id = '', tagName = 'DIV') {
@@ -127,13 +126,9 @@ function buildSandbox() {
 }
 
 function runDialog() {
-  const htmlPath = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/dialog.html');
-  const html = fs.readFileSync(htmlPath, 'utf-8');
-  const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/i);
-  assert(scriptMatch, 'dialog.html must carry its script');
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
-  vm.runInContext(scriptMatch[1], sandbox);
+  runDialogScripts(sandbox);
   return sandbox;
 }
 
