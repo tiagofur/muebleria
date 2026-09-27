@@ -153,12 +153,14 @@ class GraneteMaterialRolesJsTest < Minitest::Test
     assert_includes html, 'onMaterialChoiceApplied: function (payload) {'
     assert_includes inspector_js, 'window.GraneteUI.configurator.applyMaterialChoice(role, materialId, isProjectScope)'
     # Wiring order: inspector.init → materialRoles.init → configurator.init
-    # → finishSelector.init → renderModelBindingStatus → dialog_ready.
+    # → finishSelector.init → modelBinding.setStatus (unbound) → dialog_ready.
+    # Since #848 C4.8 the initial render delegates to the model binding
+    # module (window.GraneteUI.modelBinding.setStatus).
     inspector_init = html.index('window.GraneteUI.inspector.init({')
     mr_init = html.index('window.GraneteUI.materialRoles.init({')
     config_init = html.index('window.GraneteUI.configurator.init({')
     fs_init = html.index('window.GraneteUI.finishSelector.init({')
-    binding_render = html.index('renderModelBindingStatus({ state: "unbound" })')
+    binding_render = html.index('window.GraneteUI.modelBinding.setStatus({ state: "unbound" })')
     dialog_ready = html.index('window.sketchup.dialog_ready()')
     refute_nil inspector_init
     refute_nil mr_init
