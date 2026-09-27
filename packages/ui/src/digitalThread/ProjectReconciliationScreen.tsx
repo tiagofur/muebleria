@@ -376,16 +376,26 @@ export function ProjectReconciliationScreen({
 
   // ---- Authoritative preflight (exact revision) --------------------------------
 
+  // #830: when the selected quote is the accepted baseline the release would
+  // pin, the preflight evaluates under that exact quote's frozen base
+  // authority — the same verdict createProductionRelease enforces. Any other
+  // selection (draft/superseded historical comparison) keeps the quote-less
+  // manufacturing verdict; the backend would reject the pair itself.
+  const preflightQuotePin =
+    selectedQuoteRevision?.status === 'accepted' && quoteRevisionId
+      ? quoteRevisionId
+      : null;
   const preflightQuery = useQuery({
     queryKey:
       activeDesignId && designRevisionId
-        ? queryKeys.preflight(activeDesignId, designRevisionId)
+        ? ['project-reconciliation', 'preflight', activeDesignId, designRevisionId, preflightQuotePin]
         : ['project-reconciliation', 'preflight', 'none'],
     queryFn: ({ signal }) =>
       api.evaluateDesignRevisionPreflight(
         token,
         activeDesignId as string,
         designRevisionId as string,
+        preflightQuotePin ? { quoteRevisionId: preflightQuotePin } : {},
         signal,
       ),
     enabled: activeDesignId !== null && designRevisionId !== null,
