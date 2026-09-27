@@ -636,7 +636,8 @@ issue artifact or product/auth scope is introduced.
   A transient cleanup failure remains retryable through the same run ID, and
   completed stops re-read container, temp-root, and recorded process state.
   A watchdog enforces the lifetime during preparation, verifies its parent
-  PID/start fingerprint before signalling, and prevents expired WAITING output.
+  PID/start fingerprint plus exact `__serve` run identity before signalling,
+  and prevents expired WAITING output.
 - `python3 scripts/test_ci_organization_browser_preparation.py`: 13 passed,
   one opt-in real-Go preflight skipped. `bash -n` and `shellcheck` on the gate,
   `node --check` on the browser helper, `git diff --check`, and focused

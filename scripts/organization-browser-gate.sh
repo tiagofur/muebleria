@@ -341,11 +341,15 @@ if [ -n "${INTERACTIVE}" ]; then
     FAILURE_REASON=supervisor_identity_unavailable
     exit 1
   }
+  supervisor_still_owned() {
+    [ "$(ps -p "${supervisor_pid}" -o lstart= 2>/dev/null | xargs)" = "${supervisor_start}" ] &&
+      ps -p "${supervisor_pid}" -o command= 2>/dev/null | grep -Fq "__serve ${RUN_ID}"
+  }
   (while [ "$(date +%s)" -lt "${EXPIRES_AT}" ]; do
-      [ "$(ps -p "${supervisor_pid}" -o lstart= 2>/dev/null | xargs)" = "${supervisor_start}" ] || exit 0
+      supervisor_still_owned || exit 0
       sleep 1
     done
-    [ "$(ps -p "${supervisor_pid}" -o lstart= 2>/dev/null | xargs)" = "${supervisor_start}" ] || exit 0
+    supervisor_still_owned || exit 0
     : >"${RUN_DIR}/expired"; kill -TERM "${supervisor_pid}") &
   DEADLINE_PID=$!
 fi
