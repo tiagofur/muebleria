@@ -659,6 +659,13 @@ issue artifact or product/auth scope is introduced.
   races remain the main review risk; incomplete ownership intentionally needs
   manual exact-run inspection instead of broad cleanup. No size exception is
   presumed. Fresh independent review and exact-head CI remain pending.
+- Correction work-unit commit: `31f5870cd86405b3020f99573b4e24ff55124fea`
+  (278 additions, 26 deletions; generated files: none). Its rollback boundary
+  is the retry/readback, pending-spawn ownership, watchdog, their DB-free
+  regressions, and the matching isolation/task documentation; T3 and the
+  original T4 behavior remain separate. The branch is 1,037 authored lines
+  versus `b5697951021f6484cf3e71161ec396ff6f434194` before this
+  task-only commit, still within the approved 801–1,200 assessment band.
 
 ### T3 observed work-unit evidence
 
