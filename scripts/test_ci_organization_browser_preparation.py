@@ -3,6 +3,8 @@
 import json
 import os
 from pathlib import Path
+import re
+import select
 import shutil
 import signal
 import subprocess
@@ -17,13 +19,26 @@ DEFAULT_GATE = ROOT / "scripts/organization-browser-gate.sh"
 
 
 class BrowserPreparationLauncherTest(unittest.TestCase):
+    def start_interactive(self, gate, env):
+        command = ['bash', str(gate), 'prepare', 'tests/organization/prequote-design.spec.ts']
+        process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True)
+        readable, _, _ = select.select([process.stdout], [], [], 30)
+        self.assertTrue(readable, 'interactive preparation did not publish a run ID')
+        line = process.stdout.readline()
+        match = re.search(r'run-id=([a-f0-9]{24})', line)
+        self.assertIsNotNone(match, line)
+        return process, match.group(1)
+
     def run_gate_with_doubles(self, preflight_exit, *, real_preflight=False, poison=None,
                               fail_admin=False, cancel_after_server=False,
-                              browser_lang="en_US.UTF-8"):
+                              browser_lang="en_US.UTF-8", exercise=None):
         with tempfile.TemporaryDirectory(prefix="browser-preparation-double-") as tmp:
             tmpdir = Path(tmp)
             capture = tmpdir / "children.jsonl"
             server_pid = tmpdir / "server.pid"
+            web_pid = tmpdir / "web.pid"
+            browser_pid = tmpdir / "browser.pid"
             bindir = tmpdir / "bin"
             bindir.mkdir()
             shim = bindir / "shim"
@@ -32,6 +47,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "import json, os, pathlib, subprocess, sys, time, urllib.parse\n"
                 + f"capture = pathlib.Path({str(capture)!r})\n"
                 + f"server_pid = pathlib.Path({str(server_pid)!r})\n"
+                + f"web_pid = pathlib.Path({str(web_pid)!r})\n"
+                + f"browser_pid = pathlib.Path({str(browser_pid)!r})\n"
                 + f"preflight_exit = {preflight_exit}\n"
                 + f"fail_admin = {fail_admin!r}\n"
                 + f"real_preflight = {real_preflight!r}\n"
@@ -56,7 +73,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "if name == 'go' and args[:1] == ['build']:\n"
                 + "    pathlib.Path(args[args.index('-o') + 1]).symlink_to(pathlib.Path(sys.argv[0]).resolve())\n"
                 + "    sys.exit(0)\n"
-                + "if name in ('go', 'pnpm', 'granete-server'):\n"
+                + "if name in ('go', 'pnpm', 'node', 'granete-server'):\n"
                 + "    def target(key):\n"
                 + "        raw = os.environ.get(key)\n"
                 + "        if not raw: return None\n"
@@ -89,6 +106,13 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "    if name == 'granete-server':\n"
                 + "        server_pid.write_text(str(os.getpid()))\n"
                 + "        time.sleep(60)\n"
+                + "    if name == 'node' and 'vite/bin/vite.js' in ' '.join(args):\n"
+                + "        web_pid.write_text(str(os.getpid()))\n"
+                + "        time.sleep(60)\n"
+                + "    if name == 'node' and 'organization-interactive-browser' in ' '.join(args):\n"
+                + "        browser_pid.write_text(str(os.getpid()))\n"
+                + "        pathlib.Path(os.environ['ORGANIZATION_BROWSER_READY']).write_text('ready')\n"
+                + "        time.sleep(60)\n"
                 + "    if name == 'go' and args[:2] == ['run', './cmd/server']:\n"
                 + "        child = subprocess.Popen([sys.executable, '-c',\n"
                 + "            'import os,pathlib,time; pathlib.Path(' + repr(str(server_pid)) + ').write_text(str(os.getpid())); time.sleep(60)'])\n"
@@ -99,7 +123,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 encoding="utf-8",
             )
             shim.chmod(0o755)
-            for name in ("docker", "go", "curl", "pnpm"):
+            for name in ("docker", "go", "curl", "pnpm", "node"):
                 (bindir / name).symlink_to(shim)
             env = os.environ.copy()
             env.update({
@@ -128,6 +152,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
             else:
                 env["LANG"] = browser_lang
             gate = Path(os.environ.get("ORGANIZATION_GATE_TEST_SCRIPT", DEFAULT_GATE))
+            if exercise is not None:
+                return exercise(gate, env, tmpdir, capture, server_pid, web_pid, browser_pid)
             command = ["bash", str(gate), "tests/organization/prequote-design.spec.ts"]
             if cancel_after_server:
                 process = subprocess.Popen(command, cwd=ROOT, env=env, stdout=subprocess.PIPE,
@@ -230,6 +256,106 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         self.assertFalse(survivor, 'backend child survived cancellation cleanup')
         self.assertFalse(any('./cmd/admin' in r['command'] for r in records),
                          'admin launched after the gate was cancelled')
+
+    def test_interactive_run_uses_one_preparation_and_cleans_owned_resources(self):
+        def exercise(gate, env, tmpdir, capture, server_pid, web_pid, browser_pid):
+            command = ["bash", str(gate)]
+            launcher, run_id = self.start_interactive(gate, env)
+
+            def control(action):
+                return subprocess.run(command + [action, run_id], cwd=ROOT, env=env,
+                                      capture_output=True, text=True, timeout=20)
+
+            waiting = control("status")
+            self.assertIn("WAITING_FOR_HUMAN", waiting.stdout)
+            self.assertIn("host_result=NOT_RUN", waiting.stdout)
+            self.assertIn("automated_result=PASS", waiting.stdout)
+            for secret in ("ambient-secret", "synthetic", "Gate-"):
+                self.assertNotIn(secret, waiting.stdout)
+            self.assertTrue(all(path.exists() for path in (server_pid, web_pid, browser_pid)))
+            continued = control("continue")
+            self.assertEqual(continued.returncode, 0, continued.stderr)
+            self.assertIn("HOST_CHECK_IN_PROGRESS", control("status").stdout)
+            self.assertEqual(control("stop").returncode, 0)
+            self.assertEqual(control("stop").returncode, 0)
+            launcher.communicate(timeout=10)
+            self.assertEqual(launcher.returncode, 0)
+            stopped = control("status")
+            self.assertIn("FINISHED", stopped.stdout)
+            self.assertIn("host_result=NOT_RUN", stopped.stdout)
+            records = [json.loads(line) for line in capture.read_text().splitlines()]
+            self.assertEqual(len([r for r in records if './cmd/testdb-preflight' in r['command']]), 1)
+            self.assertEqual(len([r for r in records if './cmd/admin' in r['command']]), 5)
+            self.assertEqual(len([r for r in records if r['command'].startswith('pnpm exec')]), 1)
+            for path in (server_pid, web_pid, browser_pid):
+                pid = int(path.read_text())
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(pid, 0)
+            self.assertEqual(list(tmpdir.glob('granete-organization-gate.*')), [])
+            self.assertEqual(list(tmpdir.glob('granete-organization-browser-profile.*')), [])
+
+        self.run_gate_with_doubles(0, exercise=exercise)
+
+    def test_interactive_invalid_id_and_failed_preparation_do_not_claim_readiness(self):
+        def exercise(gate, env, tmpdir, capture, server_pid, web_pid, browser_pid):
+            invalid = subprocess.run(['bash', str(gate), 'stop', '../bad'], cwd=ROOT, env=env,
+                                     capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(invalid.returncode, 0)
+            invalid_age = subprocess.run(['bash', str(gate), 'prepare', 'tests/organization/prequote-design.spec.ts'],
+                                         cwd=ROOT, env=dict(env, ORGANIZATION_GATE_MAX_AGE_SECONDS='3601'),
+                                         capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(invalid_age.returncode, 0)
+            self.assertFalse(capture.exists(), 'invalid max age started a writable child')
+            started = subprocess.run(['bash', str(gate), 'prepare', 'tests/organization/prequote-design.spec.ts'],
+                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=20)
+            self.assertNotEqual(started.returncode, 0)
+            self.assertIn('environment_state=ABORTED', started.stderr)
+            self.assertIn('cleanup=COMPLETE', started.stderr)
+            self.assertFalse(web_pid.exists())
+            self.assertFalse(browser_pid.exists())
+            self.assertEqual(list(tmpdir.glob('granete-organization-gate.*')), [])
+
+        self.run_gate_with_doubles(0, fail_admin=True, exercise=exercise)
+
+    def test_interactive_expiry_and_forced_owner_loss_are_bounded(self):
+        def exercise(gate, env, tmpdir, capture, server_pid, web_pid, browser_pid):
+            command = ['bash', str(gate)]
+            short_env = dict(env, ORGANIZATION_GATE_MAX_AGE_SECONDS='4')
+            launcher, run_id = self.start_interactive(gate, short_env)
+            run_dir = tmpdir / f'granete-organization-sessions-{os.getuid()}' / run_id
+            deadline = time.monotonic() + 8
+            while time.monotonic() < deadline:
+                state = subprocess.run(command + ['status', run_id], cwd=ROOT, env=env,
+                                       capture_output=True, text=True, timeout=10).stdout
+                if 'environment_state=INCOMPLETE' in state: break
+                time.sleep(0.1)
+            self.assertIn('environment_state=INCOMPLETE', state)
+            self.assertIn('cleanup=COMPLETE', state)
+            launcher.communicate(timeout=10)
+
+            second_launcher, second_id = self.start_interactive(gate, env)
+            second_dir = tmpdir / f'granete-organization-sessions-{os.getuid()}' / second_id
+            owner = int((second_dir / 'owner.pid').read_text())
+            os.kill(owner, signal.SIGKILL)  # only this test-owned supervisor
+            second_launcher.communicate(timeout=10)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                observed = subprocess.run(command + ['status', second_id], cwd=ROOT, env=env,
+                                          capture_output=True, text=True, timeout=10).stdout
+                if 'environment_state=ORPHANED' in observed: break
+                time.sleep(0.1)
+            self.assertIn('environment_state=ORPHANED', observed)
+            recovered = subprocess.run(command + ['stop', second_id], cwd=ROOT, env=env,
+                                       capture_output=True, text=True, timeout=30)
+            self.assertEqual(recovered.returncode, 0, recovered.stderr)
+            self.assertIn('environment_state=INCOMPLETE', recovered.stdout)
+            self.assertIn('cleanup=COMPLETE', recovered.stdout)
+            self.assertEqual(list(tmpdir.glob('granete-organization-gate.*')), [])
+            for path in (server_pid, web_pid, browser_pid):
+                pid = int(path.read_text())
+                with self.assertRaises(ProcessLookupError): os.kill(pid, 0)
+
+        self.run_gate_with_doubles(0, exercise=exercise)
 
     @unittest.skipUnless(os.environ.get('GRANETE_TEST_REAL_GO_PREFLIGHT') == '1',
                          'opt-in local real Go preflight; DB-free and no Docker')

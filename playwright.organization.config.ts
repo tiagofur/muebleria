@@ -35,7 +35,7 @@ export default defineConfig({
     screenshot: 'off',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
+  webServer: process.env.ORGANIZATION_GATE_EXTERNAL_WEB === '1' ? undefined : {
     command: `pnpm --filter @granete/web dev --host 127.0.0.1 --port ${webPort} --strictPort`,
     url: baseURL,
     reuseExistingServer: false,

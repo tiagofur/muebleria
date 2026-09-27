@@ -527,7 +527,7 @@ independently reviewed. One PR, with the approved `size:exception`.
   success/error/signal cleanup. Run `bash -n`, focused Go checks, and one real
   disposable automatic gate before closing this work unit. Record exact commit,
   authored-line count, rollback boundary, and observed checks here.
-- [ ] **T4 — Continue one interactive run and clean it exactly.** Add the
+- [x] **T4 — Continue one interactive run and clean it exactly.** Add the
   opt-in private run state, concrete continue/stop actions, owned backend/DB/
   web/browser lifetimes, and maximum-age expiry without recreating the DB or
   changing auth/MFA/step-up. Completion of automated React/Go work must leave
@@ -546,8 +546,56 @@ Acceptance remains partial: the interactive infrastructure and isolation need
 fresh independent review and exact-head checks. Installed SketchUp, MFA/device
 approval, same-ID placement, WorkingCopy, and the Phase 1 product result remain
 outside this increment and `NOT_RUN` until separately observed. Next step:
-record the T3 work-unit commit, mirror this full document to Engram, then begin
-T4 with safe RED after the parent authorizes continuation.
+record the T4 work-unit identity, mirror this full document to Engram, then
+request fresh independent review and exact-head checks before the partial PR.
+
+### T4 observed work-unit evidence
+
+- Safe RED: the new DB-free launcher lifecycle test initially ran `prepare`
+  against the prior gate, which treated it as a Playwright argument and exited
+  without a run ID. No PostgreSQL connection or writable child was used.
+  GREEN: `python3 scripts/test_ci_organization_browser_preparation.py` passed
+  10 tests (one opt-in real-Go preflight skip). The added tests cover one
+  preparation, correct synthetic DB targets and ambient-secret exclusion,
+  waiting/continue/stop state, invalid ID and max age before writers, failed
+  preparation, four-second expiry, forced-owner loss and exact-run recovery,
+  idempotent stop, and no surviving test-owned server/web/browser. Existing
+  cases retain automatic success/failure/cancellation and a foreign sentinel.
+- The first real detached attempt passed the automated 2/2 Chromium checks and
+  created a ready browser, but its launcher environment reaped the detached
+  supervisor when `prepare` exited. `status` reported `ORPHANED` rather than
+  claiming availability; exact-run `stop` removed the container and profile.
+  The corrected procedure keeps the preparation terminal attached while the
+  supervisor runs. This is a lifecycle requirement, not an auth timeout fix.
+- Real disposable positive with the attached procedure: `LANG=en_US.UTF-8
+  bash scripts/organization-browser-gate.sh prepare
+  tests/organization/prequote-design.spec.ts` produced a private run ID,
+  `WAITING_FOR_HUMAN`, `automated_result=PASS`, and `host_result=NOT_RUN`.
+  Readback showed 2/2 Chromium tests, ready browser profile, backend and web
+  listening only on `127.0.0.1`, and PostgreSQL published only on loopback.
+  `continue` recorded `HOST_CHECK_IN_PROGRESS` without host PASS. Two `stop`
+  calls returned `FINISHED`/`cleanup=COMPLETE`; independent readback found zero
+  owned PIDs/listeners, no container, and no temporary profile. A separate
+  ordinary automatic command passed the same 2/2 Chromium suite and exited.
+  No persistent database, Keychain, installed SketchUp, or human MFA session
+  was touched.
+- V0/V1: `bash -n scripts/organization-browser-gate.sh`, `shellcheck` on the
+  same script, `node --check scripts/organization-interactive-browser.mjs`,
+  `git diff --check`, `pnpm typecheck`, `pnpm test`, and focused
+  `cd backend-go && go test ./cmd/server` passed. The conservative
+  `verify_affected.py --base origin/main --plan` selects broader CI because T3
+  changes Go server binding; those checks and independent exact-head review
+  remain pending. The final state-only `failure_reason` addition has DB-free
+  test/static proof; final exact-head operational evidence is for the parent
+  to confirm after candidate freeze.
+- Rollback boundary: interactive branches of the existing gate, new private
+  browser helper, Playwright external-web reuse switch, lifecycle doubles,
+  and the interactive paragraph in the canonical isolation contract. T3's
+  loopback bind and ordinary automatic preparation remain independent.
+  Forced-kill recovery depends on private run metadata and exact process
+  fingerprints; a power loss can erase temporary metadata, so no recovery PASS
+  is claimed without fresh resource readback. #398's Phase 1 installed-host,
+  MFA/device, placement, and WorkingCopy acceptance remain `NOT_RUN`.
 
 ### T3 observed work-unit evidence
 

@@ -2,24 +2,271 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SESSION_ROOT="${TMPDIR:-/tmp}/granete-organization-sessions-$(id -u)"
+RUN_ID=""
+RUN_DIR=""
+INTERACTIVE=""
+ENVIRONMENT_STATE="STARTING"
+AUTOMATED_RESULT="NOT_RUN"
+HOST_RESULT="NOT_RUN"
+FINAL_STATE="ABORTED"
+FAILURE_REASON=""
+EXPIRES_AT=""
+WEB_PID=""
+BROWSER_PID=""
+GATE_TEST_PID=""
+umask 077
+
+session_state() {
+  printf 'run_id=%s\nenvironment_state=%s\nautomated_result=%s\nhost_result=%s\nexpires_at_epoch=%s\napi_url=http://127.0.0.1:%s/api\nweb_url=http://127.0.0.1:%s\ncleanup=%s\nfailure_reason=%s\n' \
+    "${RUN_ID}" "${ENVIRONMENT_STATE}" "${AUTOMATED_RESULT}" "${HOST_RESULT}" \
+    "${EXPIRES_AT}" "${BACKEND_PORT:-}" "${ORGANIZATION_WEB_PORT:-}" "${CLEANUP_RESULT:-PENDING}" "${FAILURE_REASON}" \
+    >"${RUN_DIR}/state.next"
+  mv "${RUN_DIR}/state.next" "${RUN_DIR}/state"
+}
+
+session_id_valid() { [[ "${1:-}" =~ ^[a-f0-9]{24}$ ]]; }
+session_field() { sed -n "s/^${2}=//p" "${1}/state" 2>/dev/null | head -1 || true; }
+
+remember_process() {
+  [ -n "${INTERACTIVE}" ] || return 0
+  local pid="$1" kind="$2" start
+  start="$(ps -p "${pid}" -o lstart= 2>/dev/null | xargs)"
+  printf '%s\n%s\n' "${pid}" "${start}" >"${RUN_DIR}/${kind}.owner"
+}
+
+owned_process() {
+  local kind="$1" pid start current command
+  [ -f "${RUN_DIR}/${kind}.owner" ] || return 1
+  pid="$(sed -n '1p' "${RUN_DIR}/${kind}.owner")"
+  start="$(sed -n '2p' "${RUN_DIR}/${kind}.owner")"
+  [[ "${pid}" =~ ^[0-9]+$ ]] && [ -n "${start}" ] || return 1
+  current="$(ps -p "${pid}" -o lstart= 2>/dev/null | xargs)"
+  [ "${current}" = "${start}" ] || return 1
+  command="$(ps -p "${pid}" -o command= 2>/dev/null)"
+  case "${kind}" in
+    backend) [[ "${command}" == *"$(cat "${RUN_DIR}/tmp-root")/granete-server"* ]] ;;
+    web) [[ "${command}" == *vite/bin/vite.js* && "${command}" == *"--port $(cat "${RUN_DIR}/web-port")"* ]] ;;
+    browser) [[ "${command}" == *organization-interactive-browser.mjs* && "${command}" == *"${RUN_ID}"* ]] ;;
+    *) return 1 ;;
+  esac
+}
+
+recover_orphan() {
+  local kind pid result=COMPLETE container tmp_root remaining
+  AUTOMATED_RESULT="$(session_field "${RUN_DIR}" automated_result)"
+  HOST_RESULT="$(session_field "${RUN_DIR}" host_result)"
+  EXPIRES_AT="$(session_field "${RUN_DIR}" expires_at_epoch)"
+  FAILURE_REASON=owner_exited_without_cleanup
+  for kind in browser web backend; do
+    if owned_process "${kind}"; then
+      pid="$(sed -n '1p' "${RUN_DIR}/${kind}.owner")"
+      kill -TERM "${pid}" 2>/dev/null || true
+      for _ in $(seq 1 10); do
+        owned_process "${kind}" || break
+        sleep 1
+      done
+      owned_process "${kind}" && result=INCOMPLETE
+    fi
+  done
+  container="$(cat "${RUN_DIR}/container" 2>/dev/null || true)"
+  if [[ "${container}" =~ ^granete-org-gate-[0-9]+-[a-f0-9]{8}$ ]]; then
+    docker rm -f "${container}" >/dev/null 2>&1 || true
+    if remaining="$(docker ps -aq --filter "name=^/${container}$" 2>/dev/null)"; then
+      [ -z "${remaining}" ] || result=INCOMPLETE
+    else
+      result=INCOMPLETE
+    fi
+  else
+    result=INCOMPLETE
+  fi
+  tmp_root="$(cat "${RUN_DIR}/tmp-root" 2>/dev/null || true)"
+  if [[ "${tmp_root}" == "${TMPDIR:-/tmp}"/granete-organization-gate.* ]]; then
+    rm -rf -- "${tmp_root}"
+    [ ! -e "${tmp_root}" ] || result=INCOMPLETE
+  else
+    result=INCOMPLETE
+  fi
+  CLEANUP_RESULT="${result}"
+  ENVIRONMENT_STATE=INCOMPLETE
+  FINAL_STATE=INCOMPLETE
+  session_state
+  [ "${result}" = COMPLETE ]
+}
+
+case "${1:-}" in
+  prepare)
+    shift
+    [ "$#" -gt 0 ] || { echo '[organization-gate] a test spec is required' >&2; exit 2; }
+    if [ -n "${ORGANIZATION_GATE_MAX_AGE_SECONDS:-}" ]; then
+      [[ "${ORGANIZATION_GATE_MAX_AGE_SECONDS}" =~ ^[0-9]+$ ]] &&
+        [ "${ORGANIZATION_GATE_MAX_AGE_SECONDS}" -ge 1 ] &&
+        [ "${ORGANIZATION_GATE_MAX_AGE_SECONDS}" -le 3600 ] || {
+          echo '[organization-gate] max age must be between 1 and 3600 seconds' >&2; exit 2;
+        }
+    fi
+    mkdir -p "${SESSION_ROOT}"
+    chmod 700 "${SESSION_ROOT}"
+    RUN_ID="$(openssl rand -hex 12)"
+    RUN_DIR="${SESSION_ROOT}/${RUN_ID}"
+    mkdir -m 700 "${RUN_DIR}"
+    launch_env=(env -i PATH="${PATH}" HOME="${HOME:-/}" TMPDIR="${TMPDIR:-/tmp}" LANG="${LANG:-}")
+    for asset in PHASE1_BLANCO_FROSTY_FILE PHASE1_MOSCATO_FILE; do
+      if [ -n "${!asset:-}" ]; then launch_env+=("${asset}=${!asset}"); fi
+    done
+    if [ -n "${ORGANIZATION_GATE_MAX_AGE_SECONDS:-}" ]; then
+      launch_env+=("ORGANIZATION_GATE_MAX_AGE_SECONDS=${ORGANIZATION_GATE_MAX_AGE_SECONDS}")
+    fi
+    nohup "${launch_env[@]}" bash "${ROOT}/scripts/organization-browser-gate.sh" __serve "${RUN_ID}" "$@" \
+      </dev/null >/dev/null 2>&1 &
+    owner_pid=$!
+    printf '%s\n' "${owner_pid}" >"${RUN_DIR}/owner.pid"
+    trap 'kill -TERM "${owner_pid}" 2>/dev/null || true; wait "${owner_pid}" 2>/dev/null || true' INT TERM EXIT
+    for _ in $(seq 1 300); do
+      state="$(session_field "${RUN_DIR}" environment_state)"
+      if [ "${state}" = WAITING_FOR_HUMAN ]; then
+        printf 'run-id=%s\n' "${RUN_ID}"
+        cat "${RUN_DIR}/state"
+        # Keep this terminal attached. Some launchers reap detached descendants
+        # as soon as their command exits, despite nohup.
+        wait "${owner_pid}" || true
+        exit 0
+      fi
+      if [ "${state}" = ABORTED ] || [ "${state}" = INCOMPLETE ]; then
+        cat "${RUN_DIR}/state" >&2
+        exit 1
+      fi
+      kill -0 "$(cat "${RUN_DIR}/owner.pid")" 2>/dev/null || {
+        echo "[organization-gate] preparation owner exited; run-id=${RUN_ID}" >&2
+        exit 1
+      }
+      sleep 1
+    done
+    printf '[organization-gate] preparation is still running; run-id=%s\n' "${RUN_ID}" >&2
+    exit 1
+    ;;
+  status|continue|stop)
+    action="$1"; run_id="${2:-}"
+    session_id_valid "${run_id}" || { echo '[organization-gate] invalid run ID' >&2; exit 2; }
+    run_dir="${SESSION_ROOT}/${run_id}"
+    [ -f "${run_dir}/state" ] || { echo '[organization-gate] run not found' >&2; exit 1; }
+    state="$(session_field "${run_dir}" environment_state)"
+    if [ "${action}" = status ]; then
+      owner="$(cat "${run_dir}/owner.pid" 2>/dev/null || true)"
+      if [[ "${state}" != FINISHED && "${state}" != ABORTED && "${state}" != INCOMPLETE ]] &&
+        ! ps -p "${owner}" -o command= 2>/dev/null | grep -Fq "__serve ${run_id}"; then
+        sed -e 's/^environment_state=.*/environment_state=ORPHANED/' \
+          -e 's/^cleanup=.*/cleanup=UNKNOWN/' "${run_dir}/state"
+      else
+        cat "${run_dir}/state"
+      fi
+      exit 0
+    fi
+    if [ "${action}" = stop ] && [[ "${state}" = FINISHED || "${state}" = ABORTED || "${state}" = INCOMPLETE ]]; then
+      cat "${run_dir}/state"; exit 0
+    fi
+    owner="$(cat "${run_dir}/owner.pid" 2>/dev/null || true)"
+    [[ "${owner}" =~ ^[0-9]+$ ]] || { echo '[organization-gate] owner unavailable; inspect run resources' >&2; exit 1; }
+    if ! ps -p "${owner}" -o command= 2>/dev/null | grep -Fq "__serve ${run_id}"; then
+      if [ "${action}" = stop ]; then
+        RUN_ID="${run_id}"; RUN_DIR="${run_dir}"
+        BACKEND_PORT="$(session_field "${run_dir}" api_url | sed -n 's@.*127.0.0.1:\([0-9]*\)/api@\1@p')"
+        ORGANIZATION_WEB_PORT="$(cat "${run_dir}/web-port" 2>/dev/null || true)"
+        recover_orphan
+        cat "${run_dir}/state"
+        exit 0
+      fi
+      echo '[organization-gate] owner unavailable; run may need stop recovery' >&2; exit 1
+    fi
+    if [ "${action}" = continue ]; then
+      [ "${state}" = WAITING_FOR_HUMAN ] || { echo '[organization-gate] run is not waiting for a human' >&2; exit 1; }
+      : >"${run_dir}/continue"
+    else
+      : >"${run_dir}/stop"
+      kill -TERM "${owner}"
+    fi
+    for _ in $(seq 1 30); do
+      state="$(session_field "${run_dir}" environment_state)"
+      if [ "${action}" = continue ] && [ "${state}" = HOST_CHECK_IN_PROGRESS ]; then break; fi
+      if [ "${action}" = stop ] && [[ "${state}" = FINISHED || "${state}" = ABORTED || "${state}" = INCOMPLETE ]]; then break; fi
+      sleep 1
+    done
+    if [ "${action}" = stop ] && [[ "${state}" != FINISHED && "${state}" != ABORTED && "${state}" != INCOMPLETE ]]; then
+      echo '[organization-gate] cleanup not confirmed; inspect run resources' >&2
+      exit 1
+    fi
+    cat "${run_dir}/state"
+    exit 0
+    ;;
+  __serve)
+    RUN_ID="${2:-}"
+    session_id_valid "${RUN_ID}" || exit 2
+    RUN_DIR="${SESSION_ROOT}/${RUN_ID}"
+    [ -d "${RUN_DIR}" ] || exit 2
+    INTERACTIVE=1
+    max_age="${ORGANIZATION_GATE_MAX_AGE_SECONDS:-3600}"
+    [[ "${max_age}" =~ ^[0-9]+$ ]] && [ "${max_age}" -ge 1 ] && [ "${max_age}" -le 3600 ] || {
+      echo '[organization-gate] max age must be between 1 and 3600 seconds' >&2; exit 2;
+    }
+    EXPIRES_AT="$(($(date +%s) + max_age))"
+    shift 2
+    session_state
+    ;;
+esac
+
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/granete-organization-gate.XXXXXX")"
+if [ -n "${INTERACTIVE}" ]; then printf '%s\n' "${TMP_ROOT}" >"${RUN_DIR}/tmp-root"; fi
 CONTAINER=""
 BACKEND_PID=""
 
 cleanup() {
+  local previous_status=$? cleanup_result=COMPLETE remaining
+  if [ -n "${GATE_TEST_PID}" ]; then
+    kill "${GATE_TEST_PID}" >/dev/null 2>&1 || true
+    wait "${GATE_TEST_PID}" >/dev/null 2>&1 || true
+  fi
+  if [ -n "${BROWSER_PID}" ]; then
+    kill "${BROWSER_PID}" >/dev/null 2>&1 || true
+    wait "${BROWSER_PID}" >/dev/null 2>&1 || true
+    kill -0 "${BROWSER_PID}" >/dev/null 2>&1 && cleanup_result=INCOMPLETE
+  fi
+  if [ -n "${WEB_PID}" ]; then
+    kill "${WEB_PID}" >/dev/null 2>&1 || true
+    wait "${WEB_PID}" >/dev/null 2>&1 || true
+    kill -0 "${WEB_PID}" >/dev/null 2>&1 && cleanup_result=INCOMPLETE
+  fi
   if [ -n "${BACKEND_PID}" ]; then
     kill "${BACKEND_PID}" >/dev/null 2>&1 || true
     wait "${BACKEND_PID}" >/dev/null 2>&1 || true
+    kill -0 "${BACKEND_PID}" >/dev/null 2>&1 && cleanup_result=INCOMPLETE
   fi
   docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+  if [ -n "${CONTAINER}" ]; then
+    if remaining="$(docker ps -aq --filter "name=^/${CONTAINER}$" 2>/dev/null)"; then
+      [ -z "${remaining}" ] || cleanup_result=INCOMPLETE
+    else
+      cleanup_result=INCOMPLETE
+    fi
+  fi
   rm -rf "${TMP_ROOT}"
+  [ ! -e "${TMP_ROOT}" ] || cleanup_result=INCOMPLETE
   unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY ADMIN_PASSWORD ORGANIZATION_TEST_DATABASE_URL
+  if [ -n "${INTERACTIVE}" ]; then
+    if [ -f "${RUN_DIR}/stop" ]; then FINAL_STATE=FINISHED; fi
+    if [ "${previous_status}" -ne 0 ] && [ -z "${FAILURE_REASON}" ] && [ "${FINAL_STATE}" != FINISHED ]; then
+      FAILURE_REASON=unexpected_exit
+    fi
+    ENVIRONMENT_STATE="${FINAL_STATE}"
+    CLEANUP_RESULT="${cleanup_result}"
+    session_state
+  fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
 fail() {
+  FAILURE_REASON="$1"
   printf '[organization-gate] FAIL: %s\n' "$1" >&2
   exit 1
 }
@@ -37,6 +284,7 @@ for command in docker go pnpm curl openssl python3; do
 done
 docker info >/dev/null 2>&1 || fail "Docker is not available"
 CONTAINER="granete-org-gate-$$-$(openssl rand -hex 4)"
+if [ -n "${INTERACTIVE}" ]; then printf '%s\n' "${CONTAINER}" >"${RUN_DIR}/container"; fi
 
 free_port() {
   python3 - <<'PY'
@@ -59,6 +307,7 @@ ORGANIZATION_WEB_PORT="$(free_port)"
 while [ "${ORGANIZATION_WEB_PORT}" = "${BACKEND_PORT}" ]; do
   ORGANIZATION_WEB_PORT="$(free_port)"
 done
+if [ -n "${INTERACTIVE}" ]; then printf '%s\n' "${ORGANIZATION_WEB_PORT}" >"${RUN_DIR}/web-port"; fi
 ORGANIZATION_GATE_EMAIL="browser-gate@example.com"
 ORGANIZATION_GATE_A_OWNER_EMAIL="browser-gate-a-owner@example.com"
 ORGANIZATION_GATE_B_OWNER_EMAIL="browser-gate-b-owner@example.com"
@@ -160,6 +409,7 @@ GATE_ADMIN_ENV=("${GATE_BASE_ENV[@]}" ADMIN_PASSWORD="${ADMIN_PASSWORD}")
 (cd "${ROOT}/backend-go" && exec "${GATE_SERVER_ENV[@]}" \
   "${TMP_ROOT}/granete-server" >"${TMP_ROOT}/backend.log" 2>&1) &
 BACKEND_PID=$!
+remember_process "${BACKEND_PID}" backend
 for _ in $(seq 1 120); do
   curl -fsS "http://127.0.0.1:${BACKEND_PORT}/api/health" >/dev/null 2>&1 && break
   kill -0 "${BACKEND_PID}" >/dev/null 2>&1 || {
@@ -232,6 +482,77 @@ run_prepared_automatic_gate() {
   printf '[organization-gate] PASS\n'
 }
 
-# Both modes will share the preparation above. The automatic runner retains
-# ownership until Playwright returns, then the existing EXIT trap cleans up.
-run_prepared_automatic_gate "$@"
+run_prepared_interactive_gate() {
+  ENVIRONMENT_STATE=PREPARATION_RUNNING
+  AUTOMATED_RESULT=FAIL
+  session_state
+
+  # Playwright must reuse this exact Vite process; its normal webServer entry
+  # would otherwise close the human-facing site when the test finishes.
+  (cd "${ROOT}/apps/web" && exec env -i PATH="${PATH}" HOME="${HOME:-/}" \
+    TMPDIR="${TMPDIR:-/tmp}" VITE_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api" \
+    node node_modules/vite/bin/vite.js --host 127.0.0.1 \
+      --port "${ORGANIZATION_WEB_PORT}" --strictPort >"${TMP_ROOT}/web.log" 2>&1) &
+  WEB_PID=$!
+  remember_process "${WEB_PID}" web
+  for _ in $(seq 1 120); do
+    if curl -fsS "http://127.0.0.1:${ORGANIZATION_WEB_PORT}" >/dev/null 2>&1; then break; fi
+    kill -0 "${WEB_PID}" >/dev/null 2>&1 || fail "interactive web server exited"
+    sleep 1
+  done
+  curl -fsS "http://127.0.0.1:${ORGANIZATION_WEB_PORT}" >/dev/null \
+    || fail "interactive web server did not become ready"
+
+  (cd "${ROOT}" && exec "${GATE_BROWSER_ENV[@]}" ORGANIZATION_GATE_EXTERNAL_WEB=1 \
+    pnpm exec playwright test --config=playwright.organization.config.ts "$@" \
+    >"${TMP_ROOT}/automated.log" 2>&1) &
+  GATE_TEST_PID=$!
+  wait "${GATE_TEST_PID}" || fail "interactive automated segment failed"
+  GATE_TEST_PID=""
+  AUTOMATED_RESULT=PASS
+
+  profile="${TMP_ROOT}/browser-profile"
+  mkdir -m 700 "${profile}"
+  ready="${TMP_ROOT}/browser.ready"
+  (cd "${ROOT}" && exec env -i PATH="${PATH}" HOME="${HOME:-/}" \
+    TMPDIR="${TMPDIR:-/tmp}" LANG="${BROWSER_LANG}" \
+    ORGANIZATION_GATE_EMAIL="${ORGANIZATION_GATE_EMAIL}" \
+    ORGANIZATION_GATE_PASSWORD="${ADMIN_PASSWORD}" \
+    ORGANIZATION_GATE_ORG_NAME='Browser Gate A' \
+    ORGANIZATION_WEB_URL="http://127.0.0.1:${ORGANIZATION_WEB_PORT}" \
+    ORGANIZATION_BROWSER_PROFILE="${profile}" ORGANIZATION_BROWSER_READY="${ready}" \
+    node scripts/organization-interactive-browser.mjs "${RUN_ID}" \
+    >"${TMP_ROOT}/browser.log" 2>&1) &
+  BROWSER_PID=$!
+  remember_process "${BROWSER_PID}" browser
+  for _ in $(seq 1 120); do
+    [ -f "${ready}" ] && break
+    kill -0 "${BROWSER_PID}" >/dev/null 2>&1 || fail "interactive browser exited before readiness"
+    sleep 1
+  done
+  [ -f "${ready}" ] || fail "interactive browser did not become ready"
+  ENVIRONMENT_STATE=WAITING_FOR_HUMAN
+  session_state
+  while [ "$(date +%s)" -lt "${EXPIRES_AT}" ]; do
+    if [ -f "${RUN_DIR}/stop" ]; then FINAL_STATE=FINISHED; break; fi
+    if [ -f "${RUN_DIR}/continue" ] && [ "${ENVIRONMENT_STATE}" = WAITING_FOR_HUMAN ]; then
+      rm -f "${RUN_DIR}/continue"
+      ENVIRONMENT_STATE=HOST_CHECK_IN_PROGRESS
+      session_state
+    fi
+    if ! kill -0 "${BACKEND_PID}" "${WEB_PID}" "${BROWSER_PID}" >/dev/null 2>&1; then
+      FINAL_STATE=INCOMPLETE
+      break
+    fi
+    sleep 1
+  done
+  [ "${FINAL_STATE}" = ABORTED ] && FINAL_STATE=INCOMPLETE
+}
+
+# Both modes share the complete preparation above. Only the explicit internal
+# supervisor entry keeps the disposable resources after Playwright completes.
+if [ -n "${INTERACTIVE}" ]; then
+  run_prepared_interactive_gate "$@"
+else
+  run_prepared_automatic_gate "$@"
+fi
