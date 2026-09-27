@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type {
@@ -1583,6 +1583,75 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
       'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
     ));
     expect(await screen.findByText('Copiado')).toBeInTheDocument();
+  });
+
+  it('replaces the pending technical-copy reset and cancels it when its owner unmounts', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setupFetchMock();
+    const rendered = renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    fireEvent.click(screen.getByTestId('toggle-technical-audit'));
+
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
+    fireEvent.click(screen.getByTestId('copy-revision-id'));
+    await act(async () => Promise.resolve());
+    expect(writeText).toHaveBeenCalledWith(REV_3_ID);
+    const firstResetTimerCallIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 2000);
+    expect(firstResetTimerCallIndex).toBeGreaterThanOrEqual(0);
+    const firstResetTimer = setTimeoutSpy.mock.results[firstResetTimerCallIndex]?.value;
+
+    fireEvent.click(screen.getByTestId('copy-revision-id'));
+    await act(async () => Promise.resolve());
+    expect(writeText).toHaveBeenCalledTimes(2);
+    const resetTimerCallIndexes = setTimeoutSpy.mock.calls
+      .map(([, delay], index) => ({ delay, index }))
+      .filter(({ delay }) => delay === 2000)
+      .map(({ index }) => index);
+    expect(resetTimerCallIndexes).toHaveLength(2);
+    const secondResetTimer = setTimeoutSpy.mock.results[resetTimerCallIndexes[1]!]!.value;
+    const ownerCancelledReplacedReset = clearTimeoutSpy.mock.calls.some(([timer]) => timer === firstResetTimer);
+
+    rendered.unmount();
+    const ownerCancelledUnmountedReset = clearTimeoutSpy.mock.calls.some(([timer]) => timer === secondResetTimer);
+    window.clearTimeout(firstResetTimer);
+    window.clearTimeout(secondResetTimer);
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
+    expect(ownerCancelledReplacedReset).toBe(true);
+    expect(ownerCancelledUnmountedReset).toBe(true);
+  });
+
+  it('does not schedule a technical-copy reset when clipboard completion is stale after unmount', async () => {
+    let resolveWrite!: () => void;
+    const writeText = vi.fn(() => new Promise<void>((resolve) => {
+      resolveWrite = resolve;
+    }));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setupFetchMock();
+    const rendered = renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID } });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    fireEvent.click(screen.getByTestId('toggle-technical-audit'));
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+    fireEvent.click(screen.getByTestId('copy-revision-id'));
+    expect(writeText).toHaveBeenCalledWith(REV_3_ID);
+
+    rendered.unmount();
+    await act(async () => {
+      resolveWrite();
+      await Promise.resolve();
+    });
+    const staleResetTimers = setTimeoutSpy.mock.calls
+      .map(([, delay], index) => ({ delay, index }))
+      .filter(({ delay }) => delay === 2000);
+    for (const { index } of staleResetTimers) {
+      window.clearTimeout(setTimeoutSpy.mock.results[index]!.value);
+    }
+    setTimeoutSpy.mockRestore();
+    expect(staleResetTimers).toHaveLength(0);
   });
 
   // ---------------------------------------------------------------------------

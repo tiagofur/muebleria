@@ -25,6 +25,8 @@ At artifact creation there was no current product RED. Task `642-DISC-01` has no
 
 The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is independently approved, test-only historical local evidence. It proves a normal same-ID React Customer/Project/FurnitureInstance -> Q1 -> R1 -> P1 -> Engineering journey while `Project.status` remains `draft`; it is not part of this branch, must not be modified, and does not substitute for the fresh dashboard RED required here.
 
+PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lifecycle defect after all `176` UI files and `2006` tests passed: `ProjectDesignsScreen` left a two-second copy-feedback timer alive past jsdom teardown, and the delayed reset dispatched React state after `window` had been removed. The affected source and test are unchanged from the pinned base and current `origin/main`; this correction restores reliable verification for the same PR and does not expand #642 product acceptance.
+
 ## Authorized scope
 
 - Add the smallest real-browser assertion that creates or reaches the same normal React identity, confirms `Project.status = draft`, confirms the canonical exact P1 identity, opens the normal Production Dashboard, and expects that project to be discoverable.
@@ -33,6 +35,7 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - Preserve exact project/design/quote/release identity and fail closed when the required release authority is missing or stale.
 - Keep the browser proof on disposable PostgreSQL and the normal product route; do not replace it with an API-only or direct-route assertion.
 - If the same root inseparably changes a shared card selector, retain only the minimum coherent correction and prove its bounded effect. Otherwise leave queue/station consumers as explicit remaining #642 acceptance.
+- Add one deterministic regression proof for copy-feedback timer ownership, then make `TechnicalCopyButton` own and cancel its pending reset on unmount and before a later copy.
 
 ## Exclusions
 
@@ -42,6 +45,7 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - No SketchUp or `#867`, PTX, serializer, warehouse, stock, picking, exports, or unrelated commercial consumer work.
 - No changes to the sibling #398 worktree or candidate.
 - No persistent development/production database, destructive cleanup, push, PR creation, merge, issue closure, force push, or second product writer.
+- No global timer guard, `typeof window` workaround, swallowed exception, sleep, test-only product branch, dashboard/browser-fixture rewrite, Queue/station work, #848/#867, Phase 1, or PTX change.
 
 ## Route and execution controls
 
@@ -51,6 +55,7 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - TDD: **enabled** by repository `AGENTS.md` (`Strict TDD Mode: enabled`).
 - Safe TDD runner: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` using the runner's disposable PostgreSQL/runtime-role isolation. The spec path is planned and does not exist at artifact creation.
 - TDD contract: RED must be the fresh normal-dashboard visibility assertion for a `draft` Project with canonical exact P1. Only after observing and recording that product-owned RED may the minimum product fix begin; then run GREEN and a bounded refactor/readback. A setup or assertion bug is harness-owned and must not be misreported as product RED.
+- CI correction TDD runner: `pnpm --filter @granete/ui exec vitest run src/digitalThread/ProjectDesignsScreen.test.tsx`. The new regression must deterministically fail before the product edit by proving that an unmounted copy button still invokes its reset callback when pending timers advance; only that observed lifecycle RED authorizes the source change.
 - Receipt-driven development: clone-local **off**; review/delivery status remains `disabled/unmanaged` unless the user explicitly enables it.
 
 ## Tasks
@@ -83,10 +88,19 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
   - Correction boundary: give this scenario one stable exclusive module ID and use it through React selection, quote/design/release assertions, and live-default mutation. Do not overwrite or restore a shared module; keep its edge, material, hardware, and option fixtures on exclusive IDs and isolated catalog writes.
   - Correction acceptance: the focused scenario remains GREEN and `bash scripts/organization-browser-gate.sh` passes the complete disposable-PostgreSQL browser suite without downstream contamination.
 
+- [ ] **642-CI-04 — Own and cancel copy-feedback timers**
+  - Add deterministic fake-timer coverage for copy -> pending reset -> unmount -> timer advance, requiring no post-unmount reset callback or unhandled error. Cover replacement of an earlier pending reset when a second copy occurs if it stays within the same focused component contract.
+  - Observe the focused lifecycle RED before changing production source. Stop without a product edit if the assertion cannot fail for the diagnosed reason.
+  - Give `TechnicalCopyButton` local ownership of its pending timeout, cancel it on unmount and before scheduling another reset, and preserve current copied-label and rejection behavior.
+  - Run the focused ProjectDesigns screen, focused Production Manager dashboard, full UI suite with zero unhandled errors, UI typecheck, `git diff --check`, final clean preflight, and the focused disposable-PostgreSQL browser gate.
+  - Update this artifact and its complete Engram mirror, then create one Conventional Commit containing the regression, lifecycle fix, and artifact evidence. Do not push or mutate PR metadata.
+  - Acceptance: deterministic RED -> GREEN is recorded; no reset dispatch survives unmount; recopy owns one current reset; all required checks pass; and the candidate is handed back at an exact clean HEAD for independent review.
+
 ## Verification plan
 
 - V0: artifact/diff readback, `git diff --check`, focused format/type checks for changed paths, `python3 scripts/verify_affected.py --base origin/main --plan`, and final clean preflight.
 - V1: focused component/unit checks selected by the exact eligibility code changed, including eligible canonical P1 and ineligible/no-release behavior.
+- V1 CI correction: focused `ProjectDesignsScreen.test.tsx`, focused `ProductionManagerDashboard.test.tsx`, full `@granete/ui` suite with zero unhandled errors, and `@granete/ui` typecheck.
 - V2 correction gate: `bash scripts/organization-browser-gate.sh` with disposable PostgreSQL and a real browser across the complete organization suite; the focused spec remains a diagnostic check only.
 - Existing #398 browser evidence is historical routing evidence only and is not V2 proof for this candidate.
 - Production Queue, station progression, physical execution, SketchUp/TestUp, PTX, and warehouse evidence are `NOT_RUN` unless separately authorized and applicable.
@@ -118,11 +132,23 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - Correction V1/V0 GREEN: `pnpm --filter @granete/ui exec vitest run src/production/ProductionManagerDashboard.test.tsx` -> `8 passed`; `pnpm --filter @granete/ui typecheck` and `git diff --check` completed successfully.
 - Exact-head CI and fresh independent review remain pending; the earlier approval does not cover the correction HEAD.
 - Production Queue, station screens, physical progression, SketchUp/TestUp, PTX, and warehouse remain `NOT_RUN` and outside this task.
+- `642-CI-04` diagnosis before source edits: PR `#869` run `36297444946` completed `176/176` UI files and `2006/2006` tests, then failed on one post-teardown `ReferenceError: window is not defined` from `TechnicalCopyButton`'s uncancelled two-second reset into `handleTechnicalCopyReset`. The target source and test were unchanged from both pinned base and current `origin/main`, so #869 exposed but did not introduce the defect.
+- Strict-TDD lifecycle RED: `pnpm --filter @granete/ui exec vitest run src/digitalThread/ProjectDesignsScreen.test.tsx` -> `1 failed, 59 passed`. The isolated regression proved that unmount did not cancel the captured two-second reset timer. An initial fake-timer harness attempt also stranded fake timer bindings for later tests; the harness was corrected to observe the real timer handle and clean it explicitly before claiming the product RED.
+- Second focused lifecycle RED after the first cleanup implementation: stale clipboard completion after unmount still scheduled one two-second reset (`1 failed, 60 passed`). The component now tracks mounted state as well as its timer, so neither resolved nor rejected stale clipboard work dispatches copy state after unmount.
+- Minimal lifecycle fix: each `TechnicalCopyButton` owns one reset timer, cancels a prior reset before recopy, clears the current reset on unmount, and ignores clipboard completion after unmount. Existing copied-label timing and rejection reset behavior remain unchanged while mounted; no global guard, sleep, swallowed exception, or test-only product path was added.
+- Focused Project Designs GREEN: `pnpm --filter @granete/ui exec vitest run src/digitalThread/ProjectDesignsScreen.test.tsx` -> `61 passed`.
+- Focused dashboard GREEN: `pnpm --filter @granete/ui exec vitest run src/production/ProductionManagerDashboard.test.tsx` -> `8 passed`.
+- Full UI GREEN: `pnpm --filter @granete/ui test` -> `176 passed` files, `2008 passed` tests, exit `0`; log scan found zero `Unhandled Errors`, `ReferenceError: window is not defined`, or unhandled-error matches.
+- V0 GREEN: `pnpm --filter @granete/ui typecheck` and `git diff --check` completed successfully.
+- Focused disposable-PostgreSQL V2 GREEN: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` -> `1 passed (10.2s)` and `[organization-gate] PASS`, with matching backend/fixture database identity.
+- Affected-plan readback again selected every job because the ODD artifact is a sensitive/unknown boundary. The required UI, typecheck, diff, and focused organization browser checks ran; unrelated backend, SketchUp, visual, and foundation full gates remain `NOT_RUN` for this bounded CI correction.
 
 ## Forecast and delivery strategy
 
 - Reviewed candidate authored size is **739 lines** (738 additions, 1 deletion). This remains below 800, so the explicit normal-range policy applies and no slicing evaluation is triggered.
 - Corrected candidate authored size is **765 lines** (764 additions, 1 deletion) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`; it remains below 800, so no slicing evaluation is required.
+- CI correction forecast: approximately **70-110 additional authored lines**, for an expected cumulative total of **835-875**. This enters the 800-1200 evaluation range. The evaluated strategy remains one PR because the lifecycle regression and fix directly restore this same PR's exact-head required UI check; separating them would leave #869 knowingly red and split one atomic correction. No code-golf or artificial split is justified. Stop for a human checkpoint if the actual total exceeds 1200.
+- Actual pre-commit cumulative size is **893 authored lines** (889 additions, 4 deletions) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`. The prior 800-1200 evaluation therefore applies: keep this inseparable exact-head CI repair in PR #869, with no artificial split and no size exception.
 - Strategy: **single PR** while the actual authored total remains in the user-authorized normal range.
 - User size policy: **0-800 authored lines is normal; 800-1200 requires evaluation before delivery; over 1200 requires a user checkpoint before continuing or delivery**.
 - The 400-line ODD value remains a planning heuristic only. Do not code-golf, omit proof, or split one coherent root change solely to satisfy it.
@@ -143,4 +169,4 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 
 ## Next step
 
-Return the correction plus this exact evidence to the parent for fresh review and separately authorized PR update. Do not push from this task.
+Execute `642-CI-04` under strict TDD, then return the exact clean correction candidate to the parent for fresh review and separately authorized PR update. Do not push from this task.

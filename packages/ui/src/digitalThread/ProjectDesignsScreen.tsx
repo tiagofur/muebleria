@@ -330,6 +330,24 @@ function TechnicalCopyButton({
   readonly onCopySuccess: (key: string) => void;
   readonly onCopyReset: (key: string) => void;
 }) {
+  const resetTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+  }, []);
+
+  const cancelPendingReset = () => {
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = null;
+    }
+  };
+
   return (
     <button
       type="button"
@@ -342,10 +360,19 @@ function TechnicalCopyButton({
         void navigator.clipboard
           ?.writeText(value)
           .then(() => {
+            if (!mountedRef.current) return;
+            cancelPendingReset();
             onCopySuccess(valueKey);
-            window.setTimeout(() => onCopyReset(valueKey), 2000);
+            resetTimerRef.current = window.setTimeout(() => {
+              resetTimerRef.current = null;
+              onCopyReset(valueKey);
+            }, 2000);
           })
-          .catch(() => onCopyReset(valueKey));
+          .catch(() => {
+            if (!mountedRef.current) return;
+            cancelPendingReset();
+            onCopyReset(valueKey);
+          });
       }}
     >
       <Copy size={14} strokeWidth={1.5} />
