@@ -667,6 +667,21 @@ issue artifact or product/auth scope is introduced.
   original T4 behavior remain separate. The branch is 1,037 authored lines
   versus `b5697951021f6484cf3e71161ec396ff6f434194` before this
   task-only commit, still within the approved 801–1,200 assessment band.
+- Timer identity hardening commit: `773a9a189fb0e1c4ab1078b07dbc62e4046a1e1e`
+  (8 additions, 3 deletions). It also checks the exact `__serve <run-id>`
+  command before signalling, so same-second PID reuse cannot target an
+  unrelated process. DB-free 13-test suite (one opt-in skip), `bash -n`,
+  `shellcheck`, and `git diff --check` passed after this change. The same
+  source commit passed a further real foreground-owned disposable replay:
+  2/2 Chromium, loopback DB/API/web, ready profile, sanitized state,
+  `continue`, and two successful stops with no remaining owned process,
+  listener, container, or temp profile. Installed-host acceptance remains
+  `NOT_RUN`.
+- The branch totals 1,049 authored additions plus deletions from its approved
+  base before this evidence-only update (generated files: none). The live
+  `origin/main` ref later advanced to `d8c28d2f383fbc7c7964414bb0604880b6c265a6`;
+  base reconciliation, fresh independent review, and exact-head CI belong to
+  the parent before publication. No push or PR was made here.
 
 ### T3 observed work-unit evidence
 
