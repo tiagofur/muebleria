@@ -88,7 +88,7 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
   - Correction boundary: give this scenario one stable exclusive module ID and use it through React selection, quote/design/release assertions, and live-default mutation. Do not overwrite or restore a shared module; keep its edge, material, hardware, and option fixtures on exclusive IDs and isolated catalog writes.
   - Correction acceptance: the focused scenario remains GREEN and `bash scripts/organization-browser-gate.sh` passes the complete disposable-PostgreSQL browser suite without downstream contamination.
 
-- [ ] **642-CI-04 — Own and cancel copy-feedback timers**
+- [x] **642-CI-04 — Own and cancel copy-feedback timers**
   - Add deterministic fake-timer coverage for copy -> pending reset -> unmount -> timer advance, requiring no post-unmount reset callback or unhandled error. Cover replacement of an earlier pending reset when a second copy occurs if it stays within the same focused component contract.
   - Observe the focused lifecycle RED before changing production source. Stop without a product edit if the assertion cannot fail for the diagnosed reason.
   - Give `TechnicalCopyButton` local ownership of its pending timeout, cancel it on unmount and before scheduling another reset, and preserve current copied-label and rejection behavior.
@@ -158,6 +158,9 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 - Review-correction full UI GREEN: `176/176` files and `2009/2009` tests, with zero unhandled/window-error log matches.
 - Review-correction V0 GREEN: `pnpm --filter @granete/ui typecheck` and `git diff --check`. The first typecheck attempt found only test-side `Function` typing in the timer wrapper; it was corrected to a typed forwarding closure before the successful validation run.
 - Review-correction focused disposable-PostgreSQL browser GREEN: `1 passed (10.0s)` and `[organization-gate] PASS`, with matching backend/fixture database identity.
+- Review-correction work-unit commit: `bbbdc6d10b918eefc9a50fda25423d8243c192cf` (`fix(ui): restore copy timers after strict replay`) contains the StrictMode root fix, strengthened fake-timer proof, retained stale-completion coverage, and this evidence together.
+- Clean preflight on the review-correction work unit: `python3 scripts/factory_preflight.py --require node pnpm --require-clean` -> `PREFLIGHT_OK_NOT_VERIFIED`, `dirty: false`, exact HEAD `bbbdc6d10b918eefc9a50fda25423d8243c192cf`.
+- Review-correction rollback boundary: revert `bbbdc6d1` to remove only the StrictMode setup restoration, its exact regressions, and this correction evidence; the prior timer ownership and #642 dashboard/browser behavior remain independently revertible.
 
 ## Forecast and delivery strategy
 
@@ -166,7 +169,7 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 - CI correction forecast: approximately **70-110 additional authored lines**, for an expected cumulative total of **835-875**. This enters the 800-1200 evaluation range. The evaluated strategy remains one PR because the lifecycle regression and fix directly restore this same PR's exact-head required UI check; separating them would leave #869 knowingly red and split one atomic correction. No code-golf or artificial split is justified. Stop for a human checkpoint if the actual total exceeds 1200.
 - Final cumulative size is **897 authored lines** (893 additions, 4 deletions) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`. The prior 800-1200 evaluation therefore applies: keep this inseparable exact-head CI repair in PR #869, with no artificial split and no size exception.
 - Review-correction forecast: approximately **25-55 additional authored lines**, for an expected cumulative total of **922-952**. This remains inside the already evaluated 800-1200 range and stays one atomic PR correction; stop for a human checkpoint before publication if actual scope exceeds 1200.
-- Review-correction actual pre-commit cumulative size is **999 authored lines** (979 additions, 20 deletions). It remains inside the evaluated 800-1200 range; the test replacement and one-line StrictMode lifecycle root are one inseparable correction, so no artificial split or size exception is warranted.
+- Review-correction final cumulative size is **1003 authored lines** (983 additions, 20 deletions). It remains inside the evaluated 800-1200 range; the test replacement and one-line StrictMode lifecycle root are one inseparable correction, so no artificial split or size exception is warranted.
 - Strategy: **single PR** while the actual authored total remains in the user-authorized normal range.
 - User size policy: **0-800 authored lines is normal; 800-1200 requires evaluation before delivery; over 1200 requires a user checkpoint before continuing or delivery**.
 - The 400-line ODD value remains a planning heuristic only. Do not code-golf, omit proof, or split one coherent root change solely to satisfy it.
@@ -185,7 +188,8 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 - [x] Independent review completed: APPROVED with no blockers at `9682d706b3736ba64356edfe7338e74620879f2c` vs `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
 - [x] Verification correction completed in work-unit commit `280f7930e60a69cc23f1f32af594679911efa349` (`test(organization): isolate #642 release fixture`): exclusive fixture persisted without shared-module mutation, focused browser passed `1/1`, and the complete disposable-PostgreSQL browser suite passed `93/93`.
 - [x] Exact-head UI timer correction completed in work-unit commit `dfad368a75368f6554c740c4254afe3fbc97d091`: focused Project Designs passed `61/61`, dashboard passed `8/8`, full UI passed `2008/2008` with zero unhandled matches, typecheck/diff/browser passed, and clean preflight confirmed the work unit.
+- [x] Independent-review correction completed in work-unit commit `bbbdc6d10b918eefc9a50fda25423d8243c192cf`: StrictMode RED observed, strengthened fake-timer boundary passed, all requested checks passed, and clean preflight confirmed the exact work unit.
 
 ## Next step
 
-Correct the two exact independent-review blockers in one bounded round, then return the clean exact candidate to the parent for re-review and separately authorized PR update. Do not push from this task.
+Return the clean exact candidate to the parent for one fresh re-review and separately authorized PR update. Do not push from this task.
