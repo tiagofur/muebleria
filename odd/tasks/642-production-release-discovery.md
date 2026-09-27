@@ -1,0 +1,129 @@
+# #642 Production release discovery
+
+## Objective
+
+Prove, in a real browser against disposable PostgreSQL, that the normal Production Dashboard fails to discover the same React-created project when it remains `draft` but has a canonical exact P1 `ProductionRelease`, then fix only that first demonstrated #642 discovery boundary without adding a second acceptance write or expanding horizontally into the remaining factory surfaces.
+
+## Authority and pinned state
+
+- Issue: `#642` is open and labeled `status:approved`.
+- Current owner boundary: #642 owns the remaining list/dashboard operational eligibility that still depends on legacy `Project.status`; it explicitly forbids restoring `Project.status = accepted` as an acceptance workaround.
+- Branch: `fix/642-production-release-discovery`.
+- Worktree: `/Users/tiagofur/.codex/worktrees/642-production-discovery/muebles`.
+- Exact base: `origin/main@5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
+- Starting HEAD: `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
+- Ownership: one delegated writer for this bounded #642 vertical; the issue has no assignee and no open PR for this branch at artifact creation.
+- Remote authorization: configured Git/GitHub session for readback of `tiagofur/muebleria` and a conditional owner PR later. No push or PR is authorized now.
+- Lane: substantial ODD work with this single execution artifact.
+- Historical boundary: existing historical #642 artifacts remain untouched. This artifact records only the current production-release discovery vertical.
+
+## Problem and current evidence
+
+Current source inspection indicates that `ProductionManagerDashboard.tsx` filters projects through legacy `Project.status` values `accepted|produced`. The approved same-ID Q1 -> R1 -> P1 path intentionally leaves the Project status at `draft`, while contextual Engineering and the exact `/orders/{project}` route can already work from canonical release authority. This makes the dashboard filter the suspected first discovery boundary, not proof of a total factory block.
+
+At artifact creation there was no current product RED. Task `642-DISC-01` has now observed the fresh branch-specific dashboard RED on this exact base; the evidence is recorded below. No product code changed before that RED.
+
+The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is independently approved, test-only historical local evidence. It proves a normal same-ID React Customer/Project/FurnitureInstance -> Q1 -> R1 -> P1 -> Engineering journey while `Project.status` remains `draft`; it is not part of this branch, must not be modified, and does not substitute for the fresh dashboard RED required here.
+
+## Authorized scope
+
+- Add the smallest real-browser assertion that creates or reaches the same normal React identity, confirms `Project.status = draft`, confirms the canonical exact P1 identity, opens the normal Production Dashboard, and expects that project to be discoverable.
+- Run that assertion first and record the actual failure before editing product code.
+- Fix only the first proven dashboard discovery/eligibility root by reusing canonical exact ProductionRelease authority already present in the product.
+- Preserve exact project/design/quote/release identity and fail closed when the required release authority is missing or stale.
+- Keep the browser proof on disposable PostgreSQL and the normal product route; do not replace it with an API-only or direct-route assertion.
+- If the same root inseparably changes a shared card selector, retain only the minimum coherent correction and prove its bounded effect. Otherwise leave queue/station consumers as explicit remaining #642 acceptance.
+
+## Exclusions
+
+- No `Project.status` mutation, mirroring, hidden acceptance write, or test fixture workaround.
+- No claim that the entire factory path is blocked; direct contextual routes already provide a bypass.
+- No horizontal expansion into `ProductionQueue`, station screens, Cut/CNC/Edge/Assembly, or other factory cards unless the first demonstrated dashboard root is technically inseparable.
+- No SketchUp or `#867`, PTX, serializer, warehouse, stock, picking, exports, or unrelated commercial consumer work.
+- No changes to the sibling #398 worktree or candidate.
+- No persistent development/production database, destructive cleanup, push, PR creation, merge, issue closure, force push, or second product writer.
+
+## Route and execution controls
+
+- Route: **delegated direct**.
+- Trigger evidence: the leader already performed the bounded cross-file mapping, and the preparation/writer trigger is satisfied by this single delegated writer. The expected browser test plus non-trivial product correction touch at least two files; implementation remains with this writer rather than returning inline to the parent.
+- Skill resolution: `paths-injected` (`implementer`, `work-unit-commits`, `go-testing`, and `control-in-app-browser`).
+- TDD: **enabled** by repository `AGENTS.md` (`Strict TDD Mode: enabled`).
+- Safe TDD runner: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` using the runner's disposable PostgreSQL/runtime-role isolation. The spec path is planned and does not exist at artifact creation.
+- TDD contract: RED must be the fresh normal-dashboard visibility assertion for a `draft` Project with canonical exact P1. Only after observing and recording that product-owned RED may the minimum product fix begin; then run GREEN and a bounded refactor/readback. A setup or assertion bug is harness-owned and must not be misreported as product RED.
+- Receipt-driven development: clone-local **off**; review/delivery status remains `disabled/unmanaged` unless the user explicitly enables it.
+
+## Tasks
+
+- [x] **642-DISC-01 — Observe the first real dashboard RED from zero**
+  - Read only the existing same-ID browser helpers and the affected dashboard eligibility seam needed to author the test.
+  - Add one focused browser scenario that starts from the normal React journey, preserves the same Project/FurnitureInstance/Q1/R1/P1 identities, and proves both `Project.status = draft` and canonical exact P1 before opening the normal Production Dashboard.
+  - Assert that the project is discoverable on the dashboard, using stable IDs or exact user-visible identity rather than names, ordering, dates, or status mutation.
+  - Run the safe focused gate and record the first failure with Expected, Actual, exact boundary, and ownership.
+  - Stop without a product edit if the scenario is immediate GREEN, fails before reaching the dashboard, or proves a different owner/root.
+  - Acceptance: an observed, reproducible product-owned RED at the normal dashboard discovery boundary under the disposable PostgreSQL browser gate.
+
+- [x] **642-DISC-02 — Replace only the proven legacy eligibility boundary**
+  - Reuse the existing canonical exact ProductionRelease projection/authority; do not introduce another lifecycle, API, status mirror, or per-card N+1 query.
+  - Make the smallest coherent dashboard eligibility change that admits the exact P1 project while it remains `draft` and continues to exclude projects without eligible canonical release authority.
+  - Keep late/stale responses and project/tenant/session boundaries fail-closed.
+  - Run RED -> GREEN with the same focused browser gate, then perform only a bounded refactor/readback justified by the change.
+  - Stop horizontal expansion after the first proven root. Record Production Queue/station/card gaps as remaining acceptance unless the corrected code path is literally shared and inseparable.
+  - Acceptance: the focused browser scenario is GREEN; the exact Project remains `draft`; the canonical P1 identity is unchanged; and the negative no-eligible-release case remains hidden or blocked according to existing semantics.
+  - Work-unit evidence: focused command/result, runtime scenario/result, rollback boundary, and Conventional Commit identity with test and behavior together.
+
+- [ ] **642-DISC-03 — Freeze, review, and hand off the bounded candidate**
+  - Read back the exact diff and authored-line count; run applicable V0/V1/V2 checks and the conservative affected-check plan.
+  - Run `python3 scripts/factory_preflight.py --require node pnpm --require-clean` after work-unit commits.
+  - Record every command/result plus explicit `NOT_RUN`, `BLOCKED`, and remaining queue/station acceptance.
+  - Update this artifact and its Engram mirror with exact base/HEAD, changed paths, commits, rollback boundary, and next step.
+  - Hand the exact candidate to a different fresh reviewer. Do not self-approve, push, or create a PR without renewed authorization.
+  - Acceptance: reviewable Conventional Commit work unit(s), clean exact-head evidence, and an honest partial #642 handoff.
+
+## Verification plan
+
+- V0: artifact/diff readback, `git diff --check`, focused format/type checks for changed paths, `python3 scripts/verify_affected.py --base origin/main --plan`, and final clean preflight.
+- V1: focused component/unit checks selected by the exact eligibility code changed, including eligible canonical P1 and ineligible/no-release behavior.
+- V2: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` with disposable PostgreSQL and a real browser on the normal Production Dashboard.
+- Existing #398 browser evidence is historical routing evidence only and is not V2 proof for this candidate.
+- Production Queue, station progression, physical execution, SketchUp/TestUp, PTX, and warehouse evidence are `NOT_RUN` unless separately authorized and applicable.
+
+## Verification results
+
+- Strict-TDD product RED observed with the exact required command: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` -> exit `1`, `1 failed` after 13.0 seconds in Chromium.
+- Disposable PostgreSQL preparation and backend/fixture database identity readback passed before the scenario. The test reached canonical Q1 acceptance, exact R1 approval, exact P1 creation/cutting-demand assertions, and the explicit `Project.status = draft` plus exact resolved P1/Q1/R1 assertions without an earlier setup or harness failure.
+- The normal `/production-dashboard` route rendered the `Dashboard de Producción` heading, then the stable row assertion failed: expected `pm-project-row-30582ca6-5436-4645-bf95-97ed07b5c062` visible; actual element not found after 5 seconds.
+- Product owner/root: #642, `packages/ui/src/production/ProductionManagerDashboard.tsx:66-74`, whose current local eligibility filter includes only `accepted|produced`. No production source was edited after RED.
+- Focused component RED before the product edit: `pnpm --filter @granete/ui test -- ProductionManagerDashboard.test.tsx` ran the UI suite and failed only the two new dashboard authority assertions (`canonical draft` expected 1/received 0; modern/stale without canonical authority expected 0/received 2); 2004 existing tests passed.
+- Minimal product fix: `ProductionManagerDashboard` now consumes the existing shared `projectAllowsProductionAccess` rule. Canonical release authority admits the draft/P1 project; explicit pre-Digital-Thread `hasDigitalThreadContext: false` preserves legacy accepted/produced compatibility; missing/modern/stale projections fail closed. No new query, cache, status mutation, queue rule, or cross-session state was added.
+- Focused V1 GREEN: `pnpm --filter @granete/ui exec vitest run src/production/ProductionManagerDashboard.test.tsx` -> `8 passed`.
+- Full UI V1 GREEN: `pnpm --filter @granete/ui test` -> `176 passed` files, `2006 passed` tests.
+- V2 GREEN: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` -> `1 passed (10.3s)` and `[organization-gate] PASS`; disposable preparation read back two isolated organizations, and backend/fixture database identities matched.
+- V0 GREEN: `pnpm --filter @granete/ui typecheck` and `git diff --check` completed successfully.
+- V0 NOT_RUN: focused Prettier check could not run because `prettier` is not installed (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`). No dependency installation was attempted.
+- Affected-plan readback: `python3 scripts/verify_affected.py --base origin/main --plan` conservatively selected all jobs because the ODD artifact is an unknown/sensitive boundary. The exact UI suite, typecheck, and organization browser proof ran; unrelated backend, SketchUp, visual, and foundation full gates remain pending/not run for final handoff selection.
+- Production Queue, station screens, physical progression, SketchUp/TestUp, PTX, and warehouse remain `NOT_RUN` and outside this task.
+
+## Forecast and delivery strategy
+
+- Frozen pre-commit authored size is **737 lines** (736 additions, 1 deletion). This remains below 800, so the explicit normal-range policy applies and no slicing evaluation is triggered.
+- Strategy: **single PR** while the actual authored total remains in the user-authorized normal range.
+- User size policy: **0-800 authored lines is normal; 800-1200 requires evaluation before delivery; over 1200 requires a user checkpoint before continuing or delivery**.
+- The 400-line ODD value remains a planning heuristic only. Do not code-golf, omit proof, or split one coherent root change solely to satisfy it.
+- If the actual scope crosses a policy threshold, update this artifact before the next commit and follow the required evaluation/checkpoint.
+
+## Progress and evidence
+
+- [x] Worktree, branch, exact `origin/main`, and starting HEAD read back at `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
+- [x] Issue #642 read back as open and `status:approved`; no assignee or existing branch PR was present.
+- [x] `python3 scripts/factory_preflight.py` -> `PREFLIGHT_OK_NOT_VERIFIED`; clean worktree at preflight; tests `NOT_RUN`; required local tools reported present.
+- [x] CodeGraph index present in the isolated worktree before structural exploration.
+- [x] Historical #398 evidence and sibling worktree preserved as read-only context.
+- [x] Fresh normal-dashboard product RED observed: normal dashboard rendered, but the exact same-ID draft/P1 project row was absent.
+- [x] Product correction implemented: shared canonical release authority drives only dashboard discovery; negative modern/stale no-release paths fail closed.
+- [ ] Work-unit commit created.
+- [ ] Independent review completed.
+
+## Next step
+
+Freeze the verified work unit, create the authorized Conventional Commit with behavior, tests, and this artifact together, then record exact commit/base evidence and stop for parent review. Do not push or create a PR.

@@ -24,6 +24,7 @@ const projects = [
     name: 'Cocina Ana',
     customerId: 'customer-1',
     status: 'accepted',
+    hasDigitalThreadContext: false,
     currency: 'MXN',
     createdAt: '2026-08-18T00:00:00.000Z',
     updatedAt: '2026-08-18T00:00:00.000Z',
@@ -36,6 +37,7 @@ const projects = [
     name: 'Closet pendiente',
     customerId: 'customer-2',
     status: 'produced',
+    hasDigitalThreadContext: false,
     currency: 'MXN',
     createdAt: '2026-08-18T00:00:00.000Z',
     updatedAt: '2026-08-18T00:00:00.000Z',
@@ -58,6 +60,79 @@ function renderDashboard() {
 afterEach(cleanup);
 
 describe('ProductionManagerDashboard', () => {
+  it('discovers a draft project through canonical release authority only', async () => {
+    const canonicalProject = {
+      ...projects[0],
+      id: 'canonical-draft',
+      name: 'Canonical P1',
+      status: 'draft',
+      hasDigitalThreadContext: true,
+      resolvedProductionRelease: {
+        source: 'canonical',
+        releaseId: 'release-p1',
+        releaseNumber: 1,
+        status: 'active',
+      },
+    } as Project;
+    const unreleasedProject = {
+      ...projects[0],
+      id: 'unreleased-draft',
+      name: 'No release',
+      status: 'draft',
+      hasDigitalThreadContext: true,
+      resolvedProductionRelease: undefined,
+    } as Project;
+
+    render(
+      <ProductionManagerDashboard
+        projects={[canonicalProject, unreleasedProject]}
+        repo={{
+          getProductionDashboard: async () => metrics,
+          getProductionActiveJobs: async () => [],
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pm-total-projects').textContent).toBe('1'),
+    );
+    expect(screen.getByTestId('pm-project-row-canonical-draft')).not.toBeNull();
+    expect(screen.queryByTestId('pm-project-row-unreleased-draft')).toBeNull();
+  });
+
+  it('fails closed when a modern or stale payload lacks canonical authority', async () => {
+    const modernWithoutRelease = {
+      ...projects[0],
+      id: 'modern-without-release',
+      hasDigitalThreadContext: true,
+      resolvedProductionRelease: undefined,
+    } as Project;
+    const stalePayload = {
+      ...projects[0],
+      id: 'stale-payload',
+      hasDigitalThreadContext: undefined,
+      resolvedProductionRelease: undefined,
+    } as Project;
+
+    render(
+      <ProductionManagerDashboard
+        projects={[modernWithoutRelease, stalePayload]}
+        repo={{
+          getProductionDashboard: async () => metrics,
+          getProductionActiveJobs: async () => [],
+        }}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('pm-total-projects').textContent).toBe('0'),
+    );
+    expect(
+      screen.queryByTestId('pm-project-row-modern-without-release'),
+    ).toBeNull();
+    expect(screen.queryByTestId('pm-project-row-stale-payload')).toBeNull();
+  });
+
   it('counts the same accepted and produced projects that it renders', async () => {
     renderDashboard();
 

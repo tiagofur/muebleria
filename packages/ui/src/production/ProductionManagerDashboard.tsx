@@ -23,6 +23,7 @@ import {
   buildProjectFloorSummary,
   PIPELINE_SECTORS,
   PRODUCTION_SECTOR_LABELS_ES,
+  projectAllowsProductionAccess,
   type PipelineSector,
 } from '@granete/domain';
 import { PageHeader } from '../common';
@@ -66,7 +67,7 @@ export function ProductionManagerDashboard({
   // Build summaries for all production projects
   const productionProjects = useMemo(() => {
     return projects
-      .filter((p) => p.status === 'accepted' || p.status === 'produced')
+      .filter(projectAllowsProductionAccess)
       .map((project) => ({
         project,
         summary: buildProjectFloorSummary(project),
