@@ -28,14 +28,13 @@ module Granete
         attr_reader :mode, :scope, :active_feature_id, :filter, :unavailable_reason, :snapshot
 
         def initialize(resolver:, locator:, model_provider:, preflight_tracker:,
-                       logger: nil, on_state_change: nil, on_viewport_selection: nil)
+                       logger: nil, on_state_change: nil)
           @resolver = resolver
           @locator = locator
           @model_provider = model_provider
           @preflight_tracker = preflight_tracker
           @logger = logger
           @on_state_change = on_state_change
-          @on_viewport_selection = on_viewport_selection
           @mode = 'off'
           @scope = nil
           @snapshot = nil
@@ -106,8 +105,9 @@ module Granete
 
         # Selection changed while ON: re-scope. Same furniture → only the
         # part filter moves (no re-resolve needed: the snapshot covers the
-        # whole furniture); different furniture or no managed selection →
-        # clear/disable honestly.
+        # whole furniture; a dropped snapshot self-heals with one
+        # authoritative re-resolve); different furniture or no managed
+        # selection → clear/disable honestly.
         def rescope(new_scope)
           return unless mode_on?
 
@@ -124,8 +124,16 @@ module Granete
           if same_furniture
             @scope = normalized
             @active_feature_id = nil
-            invalidate_view
-            notify_state_change
+            if @snapshot
+              invalidate_view
+              notify_state_change
+            else
+              # Self-healing (#470): an honest clear (empty selection
+              # mid-replace, or a resolve that went unavailable) drops the
+              # snapshot; the same furniture coming back re-resolves
+              # authoritatively instead of staying dead.
+              refresh
+            end
           else
             enable(normalized)
           end
@@ -230,10 +238,32 @@ module Granete
           mark_stale('una mutación de fabricación está en curso')
         end
 
-        # Viewport picking fell through to an entity: forward it (the dialog
-        # bridge resolves the semantic context and re-scopes).
-        def on_viewport_selection(entity)
-          @on_viewport_selection&.call(entity)
+        # Restores SketchUp's natural selection while the inspection tool
+        # owns the viewport (#470): a click outside the markers replaces the
+        # model selection with the entity the tool's PickHelper resolved as
+        # the select-tool-equivalent pick, and a click on empty space clears
+        # it. Writing model.selection is the ONLY selection act: the #476
+        # SelectionObserver flow then updates the dialog and re-scopes the
+        # overlay exactly as for a click made without the overlay. Selection
+        # writes open no operation and touch no entity/metadata, so
+        # inspection stays read-only for the model.
+        def select_naturally(entity)
+          model = @model_provider.call
+          return unless model.respond_to?(:selection)
+
+          selection = model.selection
+          if entity.nil?
+            selection.clear unless selection.empty?
+            return
+          end
+          return if selection.length == 1 && selection.first == entity
+
+          selection.clear unless selection.empty?
+          selection.add(entity)
+        rescue StandardError => e
+          # A host hiccup while writing the selection must never crash the
+          # viewport tool; the click is simply inert.
+          @logger&.warn('manufacturing_overlay_natural_selection_failed', error: e.message)
         end
 
         # Features in scope for drawing: snapshot features filtered by the

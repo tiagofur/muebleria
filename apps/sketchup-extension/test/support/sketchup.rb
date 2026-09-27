@@ -594,6 +594,27 @@ module SketchupStub
     end
   end
 
+  # Host-faithful PickHelper surface (#470): built with the entity the
+  # do_pick/best_picked pair would resolve for a click (nil models a click
+  # on empty viewport space). path_at mirrors the real root→leaf path API.
+  class PickHelperStub
+    def initialize(picked_entity)
+      @picked_entity = picked_entity
+    end
+
+    def do_pick(_x, _y)
+      @picked_entity ? 1 : 0
+    end
+
+    def best_picked
+      @picked_entity
+    end
+
+    def path_at(_index)
+      [@picked_entity].compact
+    end
+  end
+
   class SelectionStub
     include Enumerable
 
@@ -810,6 +831,10 @@ module SketchupStub
     attr_reader :active_entities, :selection, :definitions, :materials, :operations,
                 :selected_tools, :observers, :layers
     attr_accessor :active_view
+    # Host-faithful Model#active_path: the open instance chain (root→innermost
+    # open context), [] while editing the model root. Read by native-selection
+    # semantics (#470) and by the #476 owner recovery.
+    attr_accessor :active_path
 
     def initialize
       @active_entities = EntitiesStub.new
@@ -821,6 +846,7 @@ module SketchupStub
       @operations = []
       @selected_tools = []
       @active_view = ViewStub.new
+      @active_path = []
       @observers = []
     end
 

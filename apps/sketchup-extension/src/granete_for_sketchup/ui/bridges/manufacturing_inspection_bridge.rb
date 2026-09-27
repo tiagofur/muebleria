@@ -6,7 +6,7 @@
 module Granete
   module SketchUpExtension
     module UserInterface
-      module ManufacturingInspectionBridge # rubocop:disable Metrics/ModuleLength
+      module ManufacturingInspectionBridge
         # Lazy, injectable overlay manager: built on first inspection use so
         # sessions that never inspect pay nothing.
         def manufacturing_overlay
@@ -23,8 +23,7 @@ module Granete
             model_provider: method(:active_model),
             preflight_tracker: mutation_coordinator.preflight_tracker,
             logger: @logger,
-            on_state_change: ->(_payload) { push_manufacturing_state(@dialog) if @dialog&.visible? },
-            on_viewport_selection: ->(entity) { handle_viewport_selection(entity) }
+            on_state_change: ->(_payload) { push_manufacturing_state(@dialog) if @dialog&.visible? }
           )
         end
 
@@ -92,20 +91,12 @@ module Granete
           navigation
         end
 
-        # Viewport pick fell through to a model entity: resolve its semantic
-        # context and run the normal selection flow (dialog update + overlay
-        # re-scope) — identical to clicking it in the model.
-        def handle_viewport_selection(entity)
-          model = active_model
-          return unless model
-
-          context = @selection_observer.resolve(entity, selection: model.selection)
-          handle_selection_change(context)
-        end
-
         # Selection changed: re-scope the active overlay to the managed
         # part/furniture context, or clear it honestly for unmanaged
-        # selections (#470 §44/#45).
+        # selections (#470 §44/#45). Viewport clicks under the inspection
+        # tool reach this flow by writing model.selection
+        # (Overlay::Manager#select_naturally): the #476 observer stays the
+        # single selection authority.
         def rescope_overlay_from_selection(payload)
           overlay = @manufacturing_overlay
           return unless overlay&.mode_on?

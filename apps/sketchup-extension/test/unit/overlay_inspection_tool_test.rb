@@ -105,10 +105,13 @@ class OverlayInspectionToolTest < Minitest::Test
     assert_equal marker.visual_id, @manager.active_feature_id
   end
 
-  def test_click_away_falls_through_without_selecting
+  # A view without a pick_helper cannot resolve what is under the cursor:
+  # the click is still consumed (the tool owns the viewport) but stays
+  # inert — no feature selection, no selection write.
+  def test_click_away_without_a_pickable_view_is_consumed_and_inert
     handled = @tool.onLButtonDown(0, 5000, 5000, @view)
 
-    refute handled
+    assert handled
     assert_nil @manager.active_feature_id
   end
 
