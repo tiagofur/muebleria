@@ -10,7 +10,11 @@
 // (requestProjectFurniture), the render of every distinct panel state
 // (loading / empty / error / unbound / connected list), the per-unit rows
 // and action lifecycle (Colocar / Reintentar sincronización / Cancelar /
-// Restaurar / Seleccionar), the shared #469 placement-preview result
+// Restaurar / Seleccionar), the missing-unit recovery pair #870 (Restaurar
+// posición — the Restorer at the recorded WorkingCopy transform — and
+// Colocar manualmente — the SAME existing unit driven through the shared
+// #469 placement preview; neither ever creates a new unit), the shared #469
+// placement-preview result
 // handlers for the Project lane (the catalog lane's repeat state + re-arm
 // live in js/granete-configurator.js and are consumed call-time), the
 // failure copy tables (PF_ERROR_COPY + pfPlaceFailureMessage), the host
@@ -119,10 +123,29 @@
     error: "No se pudieron cargar los muebles del proyecto."
   };
 
+  // furnitureInstanceId → { button, label, lane }: the shared #469 preview
+  // handlers serve BOTH Project lanes (unplaced #389 and missing #870), so
+  // every entry carries its own re-arm label and lane for honest cancel
+  // copy — never a second placement state machine.
   var pfPlacing = {};
   var pfConfirming = {};
   var pfCancelling = {};
   var pfRestoring = {};
+
+  // Re-arms the entry point that started a placement (preview refused,
+  // cancelled, failed or position-pending). Returns the button, if any.
+  function rearmPlaceButton(key) {
+    var entry = pfPlacing[key];
+    delete pfPlacing[key];
+    if (!entry) return null;
+    entry.button.disabled = false;
+    entry.button.textContent = entry.label;
+    return entry.button;
+  }
+
+  function placeEntryLane(key) {
+    return pfPlacing[key] ? pfPlacing[key].lane : null;
+  }
 
   function renderHostSaveAwareness(payload) {
     pfSaveAwareness.style.display = payload && payload.needsSave ? "block" : "none";
@@ -293,7 +316,10 @@
 
   function pfUnitCard(row) {
     var card = document.createElement("div");
-    card.className = "card pf-unit-card";
+    // #870: the missing-unit card is a stacked recovery card — information
+    // owns the full width and both same-level actions sit below.
+    var missing = row.reconciliationState === "missing_local";
+    card.className = "card pf-unit-card" + (missing ? " pf-unit-card--recovery" : "");
 
     var main = document.createElement("div");
     main.className = "pf-unit-main";
@@ -335,7 +361,17 @@
       main.appendChild(dims);
     }
 
-    if (row.reason) {
+    if (missing) {
+      // #870: plain recovery copy replaces the raw reconciliation reason.
+      var missingLine = document.createElement("div");
+      missingLine.className = "pf-unit-meta";
+      missingLine.textContent = "Este mueble pertenece al proyecto, pero ya no está en este archivo de SketchUp.";
+      main.appendChild(missingLine);
+      var recoveryLine = document.createElement("div");
+      recoveryLine.className = "pf-unit-meta";
+      recoveryLine.textContent = "Puedes restaurarlo en su posición anterior o colocarlo nuevamente.";
+      main.appendChild(recoveryLine);
+    } else if (row.reason) {
       var reason = document.createElement("div");
       reason.className = "pf-unit-meta";
       reason.textContent = row.reason;
@@ -345,7 +381,7 @@
     // Granete IDs are diagnostics, not product noise: secondary line.
     var ref = document.createElement("div");
     ref.className = "pf-unit-ref";
-    ref.textContent = String(row.id || "").slice(0, 8);
+    ref.textContent = "Unidad " + String(row.id || "").slice(0, 8);
     main.appendChild(ref);
 
     card.appendChild(main);
@@ -380,14 +416,33 @@
         action.disabled = !!pfPlacing[row.id];
         action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
         card.appendChild(action);
-    } else if (row.reconciliationState === "missing_local") {
+    } else if (missing) {
+      // #870 — two same-level recovery intents for the SAME unit: the
+      // recorded-position restore (Restorer) or a manual placement of the
+      // existing unit through the shared #469 preview. Never a new unit.
+      var busy = pfRestoring[row.id] || pfPlacing[row.id];
+      var actions = document.createElement("div");
+      actions.className = "pf-unit-actions";
+
       var restore = document.createElement("button");
       restore.className = "btn btn-secondary";
       restore.style.width = "auto";
-      restore.textContent = pfRestoring[row.id] ? "Restaurando…" : "Restaurar en este archivo";
-      restore.disabled = !!pfRestoring[row.id];
+      restore.textContent = pfRestoring[row.id] ? "Restaurando…" : "↶ Restaurar posición";
+      restore.disabled = !!busy;
       restore.addEventListener("click", function () { restoreFurnitureInstance(row.id, restore); });
-      card.appendChild(restore);
+      actions.appendChild(restore);
+
+      var manual = document.createElement("button");
+      manual.className = "btn btn-secondary";
+      manual.style.width = "auto";
+      manual.textContent = pfPlacing[row.id] ? "Colocando…" : "+ Colocar manualmente";
+      manual.disabled = !!busy;
+      manual.addEventListener("click", function () {
+        placeFurnitureInstance(row.id, manual, "+ Colocar manualmente", "missing");
+      });
+      actions.appendChild(manual);
+
+      card.appendChild(actions);
     } else if (row.reconciliationState === "present_synced") {
       var action = document.createElement("button");
       action.className = "btn btn-secondary";
@@ -403,22 +458,28 @@
     return card;
   }
 
-  function placeFurnitureInstance(furnitureInstanceId, button) {
-    if (!furnitureInstanceId || pfPlacing[furnitureInstanceId]) return;
+  function placeFurnitureInstance(furnitureInstanceId, button, label, lane) {
+    label = label || "Colocar";
+    lane = lane || "unplaced";
+    // #870: a missing unit's two recovery intents are mutually exclusive
+    // while one is in flight (pfRestoring guards the same identity).
+    if (!furnitureInstanceId || pfPlacing[furnitureInstanceId] || pfRestoring[furnitureInstanceId]) return;
     document.getElementById("pf-placement-error").style.display = "none";
-    pfPlacing[furnitureInstanceId] = button;
+    pfPlacing[furnitureInstanceId] = { button: button, label: label, lane: lane };
     button.disabled = true;
     button.textContent = "Colocando…";
     if (window.sketchup && window.sketchup.begin_placement_preview) {
       // #469: transient cursor-following preview; the click commits
-      // through the canonical place command.
+      // through the canonical place command. #870: the SAME entry point
+      // and payload drive a missing unit's manual placement — Ruby keeps
+      // the identity and reinserts that exact unit.
       window.sketchup.begin_placement_preview(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
     } else if (window.sketchup && window.sketchup.place_furniture_instance) {
       window.sketchup.place_furniture_instance(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
     } else {
       delete pfPlacing[furnitureInstanceId];
       button.disabled = false;
-      button.textContent = "Colocar";
+      button.textContent = label;
       deps.showToast("error", "Colocar disponible sólo dentro de SketchUp.");
     }
   }
@@ -438,12 +499,7 @@
     }
     window.GraneteUI.configurator.cancelRepeatPreview();
     var key = result.instanceId || result.definitionId;
-    var button = pfPlacing[key];
-    delete pfPlacing[key];
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Colocar";
-    }
+    rearmPlaceButton(key);
     if (!result.instanceId) {
       // Catalog lane: re-arm the library insert entry point.
       window.GraneteUI.configurator.rearmInsertButton();
@@ -456,23 +512,23 @@
     deps.showToast("error", message);
   }
 
-  // #469 — Esc / tool switch: zero residue, the unit stays pending.
+  // #469 — Esc / tool switch: zero residue, the unit stays in its previous
+  // panel state (pending for the unplaced lane #389, still missing for the
+  // manual recovery lane #870 — no automatic restore, no fallback).
   function handlePlacementPreviewCancelled(result) {
     result = result || {};
     window.GraneteUI.configurator.cancelRepeatPreview();
     var key = result.instanceId || result.definitionId;
-    var button = pfPlacing[key];
-    delete pfPlacing[key];
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Colocar";
-    }
+    var lane = placeEntryLane(key);
+    rearmPlaceButton(key);
     if (!result.instanceId) {
       // Catalog lane: re-arm the library insert entry point.
       window.GraneteUI.configurator.rearmInsertButton();
     }
-    deps.showToast("info", result.instanceId ? "Colocación cancelada: el mueble sigue pendiente."
-      : "Colocación cancelada: no se insertó nada en el modelo.");
+    deps.showToast("info", !result.instanceId ? "Colocación cancelada: no se insertó nada en el modelo."
+      : lane === "missing"
+        ? "Colocación cancelada: el mueble sigue faltando en este archivo."
+        : "Colocación cancelada: el mueble sigue pendiente.");
   }
 
   function confirmPlacementInstance(furnitureInstanceId, button) {
@@ -506,7 +562,7 @@
   }
 
   function restoreFurnitureInstance(furnitureInstanceId, button) {
-    if (!furnitureInstanceId || pfRestoring[furnitureInstanceId]) return;
+    if (!furnitureInstanceId || pfRestoring[furnitureInstanceId] || pfPlacing[furnitureInstanceId]) return;
     pfRestoring[furnitureInstanceId] = button;
     button.disabled = true;
     button.textContent = "Restaurando…";
@@ -515,39 +571,28 @@
     } else {
       delete pfRestoring[furnitureInstanceId];
       button.disabled = false;
-      button.textContent = "Restaurar en este archivo";
+      button.textContent = "↶ Restaurar posición";
       deps.showToast("error", "Restaurar está disponible sólo dentro de SketchUp.");
     }
   }
 
   function handlePlaceFurnitureResult(result) {
     result = result || {};
-    var button = pfPlacing[result.instanceId];
-    delete pfPlacing[result.instanceId];
+    // One lane-aware re-arm serves every outcome (the entry carries its
+    // own resting label): refusal, failure and the honest
+    // pending_position intermediate all leave the entry point usable
+    // again without waiting for the list refresh.
+    rearmPlaceButton(result.instanceId);
     if (result.ok) {
       document.getElementById("pf-placement-error").style.display = "none";
       if (result.code === "already_placed") {
         deps.showToast("success", "Ese mueble ya está colocado: se seleccionó el existente.");
       } else if (result.code === "pending_position") {
-        // The furniture was inserted locally but position sync is still
-        // pending — re-arm the button so the user can retry or confirm
-        // without waiting for the list refresh to reconstruct the card.
-        if (button) {
-          button.disabled = false;
-          button.textContent = "Colocar";
-        }
         deps.showToast("info", "Mueble insertado, pero la sincronización de posición quedó pendiente.");
       } else {
         deps.showToast("success", "✓ Mueble colocado y sincronizado con el diseño.");
       }
       return;
-    }
-    // Re-arm the failed unit's button synchronously: the failure is
-    // honest, the rows keep their last server state and the user may
-    // retry (after fixing the cause) without a panel reload.
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Colocar";
     }
     var message = pfPlaceFailureMessage(result);
     var diagnostic = document.getElementById("pf-placement-error");
@@ -600,7 +645,7 @@
     }
     if (button) {
       button.disabled = false;
-      button.textContent = "Restaurar en este archivo";
+      button.textContent = "↶ Restaurar posición";
     }
     deps.showToast("error", pfPlaceFailureMessage(result));
   }

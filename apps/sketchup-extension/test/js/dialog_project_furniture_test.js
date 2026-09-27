@@ -167,7 +167,7 @@ function runTests() {
     assert.equal(placedButton.textContent, 'Seleccionar');
   });
 
-  test('missing local is visible and exposes only the exact restore action', (sandbox) => {
+  test('missing local is visible and exposes exactly the two #870 recovery actions', (sandbox) => {
     const panel = connectedPanel();
     panel.attention = 1;
     panel.items[0].reconciliationState = 'missing_local';
@@ -178,17 +178,21 @@ function runTests() {
     const card = el(sandbox, 'pf-pending-list').children[0];
     const labels = card.children[0].children[0].children.map((child) => child.textContent);
     assert.ok(labels.includes('Falta en este archivo'));
-    assert.equal(card.children.length, 2, 'missing_local must expose one action');
-    assert.equal(card.children[1].textContent, 'Restaurar en este archivo');
+    assert.equal(card.children.length, 2, 'information block + actions row');
+    const actions = card.children[1];
+    assert.equal(actions.className, 'pf-unit-actions');
+    assert.equal(actions.children.length, 2, 'missing_local exposes the two same-level recovery intents');
+    assert.equal(actions.children[0].textContent, '↶ Restaurar posición');
+    assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
     assert.ok(card.children[0].children.some((child) =>
-      child.textContent.includes('falta en este archivo SketchUp')));
+      child.textContent.includes('ya no está en este archivo de SketchUp')));
   });
 
   test('restore sends exact identity once while in flight', (sandbox) => {
     const panel = connectedPanel();
     panel.items[0].reconciliationState = 'missing_local';
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
-    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    const button = el(sandbox, 'pf-pending-list').children[0].children[1].children[0];
     button.click();
     button.click();
     const calls = sandbox.__bridge.filter((call) => call.action === 'restore_furniture_instance');
@@ -201,13 +205,13 @@ function runTests() {
     const panel = connectedPanel();
     panel.items[0].reconciliationState = 'missing_local';
     sandbox.window.GraneteDialog.onProjectFurniture(panel);
-    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    const button = el(sandbox, 'pf-pending-list').children[0].children[1].children[0];
     button.click();
     sandbox.window.GraneteDialog.onRestoreFurnitureResult({
       ok: false, code: 'authority_changed', reason: 'changed', instanceId: FI_1
     });
     assert.equal(button.disabled, false);
-    assert.equal(button.textContent, 'Restaurar en este archivo');
+    assert.equal(button.textContent, '↶ Restaurar posición');
   });
 
   test('save awareness is visible until Ruby reports a real save', (sandbox) => {

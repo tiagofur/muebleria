@@ -253,6 +253,74 @@ class PlacementPreviewFlowTest < Minitest::Test
     assert_in_epsilon 0.0, stored['translation_mm'][0], 1e-6
   end
 
+  # #870 — a missing_local WorkingCopy item: the unit WAS placed (recorded
+  # transform + locator) and its authorized composition diverges from the
+  # quoted display (which says 900 wide with no finish choices).
+  def missing_item
+    {
+      'furniture_instance_id' => FI_1,
+      'furniture_definition_id' => DEFINITION_ID,
+      'definition_version' => 4,
+      'parameters' => { 'widthMm' => 640, 'heightMm' => 800, 'depthMm' => 500 },
+      'material_choices' => { 'FRENTES' => 'mat-frente-autorizado' },
+      'transform' => { 'translation_mm' => [250.0, 0.0, 0.0], 'rotation_deg' => [0.0, 0.0, 90.0] },
+      'technical_client_locator' => { 'kind' => 'sketchup_persistent_id', 'value' => 'old-root' }
+    }
+  end
+
+  # #870 — manual recovery of a missing unit rides the SAME preview lane:
+  # prepare resolves the WorkingCopy-authoritative composition and the
+  # commit reinserts the SAME identity at the accepted transform.
+  def test_missing_unit_previews_and_commits_the_same_existing_unit
+    stub_working_copy(working_copy_body([missing_item]))
+
+    prepared = @placer.prepare_placement_preview(FI_1)
+    assert prepared['ok'], prepared.inspect
+    assert_equal 'preview_ready', prepared['code']
+    assert_equal FI_1, prepared['instanceId']
+    assert prepared['layout_signature'], 'the preview pins the composition it resolved'
+
+    result = @placer.place(FI_1, transformation: accepted_transform,
+                                 expected_layout_signature: prepared['layout_signature'])
+    assert result['ok'], result.inspect
+
+    located = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)
+    assert located['entity'], 'the missing unit is back in the file'
+    assert_equal 1, located['duplicates'], 'the SAME unit reinserted — never a second identity'
+
+    stored = PF::TransformContract.from_host(located['entity'].transformation)
+    assert_in_epsilon 1000.0, stored['translation_mm'][0], 1e-6
+    assert_in_epsilon 30.0, stored['translation_mm'][2], 1e-6
+
+    # Authorized composition verbatim: the item's parameters/choices, not
+    # the quoted display seeds.
+    metadata = MS.new(@model).read(located['entity'])
+    assert_equal FI_1, metadata.dig('identity', 'furnitureInstanceId')
+    assert_equal missing_item['parameters'], metadata.dig('intent', 'parameters')
+    assert_equal missing_item['material_choices'], metadata.dig('intent', 'materialChoices')
+
+    # Identity invariant: recovery never mints business identity.
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+  end
+
+  # #870 — a stale preview never lands: the missing unit's composition
+  # changed after the gesture pinned it, so the commit fails closed before
+  # touching the host.
+  def test_missing_unit_commit_fails_closed_when_composition_changed_since_preview
+    stub_working_copy(working_copy_body([missing_item]))
+    prepared = @placer.prepare_placement_preview(FI_1)
+    assert prepared['ok'], prepared.inspect
+
+    @catalog.dims_mutable = [1200, 800, 500]
+    result = @placer.place(FI_1, transformation: accepted_transform,
+                                 expected_layout_signature: prepared['layout_signature'])
+
+    refute result['ok']
+    assert_equal 'composition_changed', result['code']
+    assert_empty top_level_entities, 'nothing was inserted against the stale preview'
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+  end
+
   def test_cancel_after_preview_leaves_no_residue_and_unit_stays_pending
     @placer.prepare_placement_preview(FI_1)
     # Esc: the tool drew nothing into the model; there is nothing to roll

@@ -537,6 +537,79 @@ class ProjectFurnitureTest < Minitest::Test
     assert_empty @transport.requests_for('PUT', %r{/working-copy})
   end
 
+  # The accepted #870 manual-placement gesture: 1 m along +X and 30 mm up.
+  def accepted_preview_transform
+    Geom::Transformation.axes(
+      Geom::Point3d.new(1000 / 25.4, 0, 30 / 25.4),
+      Geom::Vector3d.new(0, 1, 0), Geom::Vector3d.new(-1, 0, 0), Geom::Vector3d.new(0, 0, 1)
+    )
+  end
+
+  # #870 — manual recovery of a missing unit (Colocar manualmente): the
+  # SAME FurnitureInstance reenters placement through the explicit preview
+  # transform, and its composition comes verbatim from the AUTHORIZED
+  # WorkingCopy item — never re-seeded from the quoted display.
+  def test_missing_local_manual_placement_uses_working_copy_inputs_and_same_identity
+    item = restore_item(
+      parameters: { 'widthMm' => 650, 'shelfCount' => 2 },
+      choices: { 'FRENTES' => 'moscato-id' }
+    )
+    stub_working_copy(working_copy_body([item]))
+    # The quoted display disagrees with the authorized item on BOTH axes:
+    # width (600 vs 650) and frontal material (white-id vs moscato-id).
+    stub_project_furniture([instance_body(FI_1, 'quote', display_choices: { 'FRENTES' => 'white-id' })])
+
+    result = @placer.place(FI_1, transformation: accepted_preview_transform)
+
+    assert result['ok'], result.inspect
+    assert_equal 'pending_position', result['code']
+    assert_equal FI_1, result['instanceId']
+
+    located = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)
+    assert located['entity'], 'the missing unit is back in the file'
+    assert_equal 1, located['duplicates'], 'exactly one root — never a second unit'
+
+    stored = PF::TransformContract.from_host(located['entity'].transformation)
+    assert_in_epsilon 1000.0, stored['translation_mm'][0], 1e-6
+    assert_in_epsilon 30.0, stored['translation_mm'][2], 1e-6
+
+    resolve = @catalog.layout_resolves.last
+    assert_equal 650, resolve['parameters']['widthMm'],
+                 'the item parameters drove the resolve, not the 600 display seed'
+    assert_equal 2, resolve['parameters']['shelfCount']
+    assert_equal({ 'FRENTES' => 'moscato-id' }, resolve['choices'],
+                 'the item choices drove the resolve, not the quoted finish')
+
+    metadata = MS.new(@model).read(located['entity'])
+    assert_equal FI_1, metadata.dig('identity', 'furnitureInstanceId')
+    assert_equal item['parameters'], metadata.dig('intent', 'parameters')
+    assert_equal item['material_choices'], metadata.dig('intent', 'materialChoices')
+
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances}),
+                 'manual recovery never creates furniture'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy}),
+                 'the placer level owns no working-copy write (the preview commit convergence does)'
+  end
+
+  # #870 — the missing unit's preview preparation and its commit resolve
+  # the SAME WorkingCopy-authoritative inputs: the pinned signature is
+  # exactly what the commit re-answers.
+  def test_missing_local_manual_preview_and_commit_share_working_copy_inputs
+    stub_working_copy(working_copy_body([restore_item(parameters: { 'widthMm' => 650 })]))
+
+    prepared = @placer.prepare_placement_preview(FI_1)
+    assert prepared['ok'], prepared.inspect
+    assert_equal 'preview_ready', prepared['code']
+    assert_equal 650, @catalog.layout_resolves.last['parameters']['widthMm'],
+                 'the preview resolves the item parameters, not the display seeds'
+
+    result = @placer.place(FI_1, transformation: accepted_preview_transform,
+                                 expected_layout_signature: prepared['layout_signature'])
+    assert result['ok'], result.inspect
+    assert_equal 1, PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['duplicates']
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+  end
+
   def test_confirm_writes_working_item_with_final_transform
     @transport.respond(:get, "/projects/#{PROJECT_ID}/furniture-instances", 200,
                        [instance_body(FI_1, 'quote', display_dims: [650, 720, 560])])

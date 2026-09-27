@@ -329,8 +329,8 @@ test('unit cards: per-unit badge, reconciliation copy, ref slice and empty list 
   const name = pending.children[0].children[0].children[0];
   assert.ok(name.children[0].textContent.includes('Base 600'));
   assert.equal(name.children[1].textContent, 'Unidad 1 de 2');
-  assert.equal(pending.children[0].children[0].children[2].textContent, FI_1.slice(0, 8),
-    'Granete IDs are diagnostics: 8-char secondary line');
+  assert.equal(pending.children[0].children[0].children[2].textContent, 'Unidad ' + FI_1.slice(0, 8),
+    'Granete IDs are diagnostics: muted "Unidad <short-id>" secondary line (#870)');
 
   const placed = el(sandbox, 'pf-placed-list');
   assert.equal(placed.children[0].children[1].textContent, 'Seleccionar');
@@ -421,17 +421,141 @@ test('pending_confirmation row offers confirm + cancel with exact payloads', () 
   assert.equal(sandbox.__bridge.find((c) => c.action === 'cancel_placement_instance').payload.furnitureInstanceId, FI_1);
 });
 
-test('missing_local row offers exactly one restore action', () => {
-  const sandbox = buildSandbox();
-  const pf = runModule(sandbox);
+// ---------------------------------------------------------------------
+// #870 — missing_local dual recovery (restore recorded position + manual
+// placement of the SAME existing unit through the shared #469 preview)
+// ---------------------------------------------------------------------
+
+function renderMissingCard(sandbox, pf) {
   const panel = connectedPanel();
   panel.items[0].reconciliationState = 'missing_local';
+  panel.items[0].reason = 'Granete espera este mueble, pero falta en este archivo SketchUp';
   pf.renderProjectFurniture(panel);
-  const card = el(sandbox, 'pf-pending-list').children[0];
-  assert.equal(card.children.length, 2);
-  assert.equal(card.children[1].textContent, 'Restaurar en este archivo');
-  card.children[1].click();
-  assert.equal(sandbox.__bridge.find((c) => c.action === 'restore_furniture_instance').payload.furnitureInstanceId, FI_1);
+  return el(sandbox, 'pf-pending-list').children[0];
+}
+
+test('missing card: full-width information first, then the two compact recovery actions', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const card = renderMissingCard(sandbox, pf);
+
+  assert.equal(card.className, 'card pf-unit-card pf-unit-card--recovery',
+    'the recovery card stacks vertically — no side-by-side giant button');
+  assert.equal(card.children.length, 2, 'information block + actions row');
+  const main = card.children[0];
+  const actions = card.children[1];
+  assert.equal(main.className, 'pf-unit-main');
+  assert.equal(actions.className, 'pf-unit-actions');
+  assert.equal(actions.children.length, 2, 'exactly two same-level recovery intents');
+  assert.equal(actions.children[0].textContent, '↶ Restaurar posición');
+  assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
+
+  // New plain copy replaces the raw reconciliation reason (#870 §8).
+  const mainText = main.children.map((child) => child.textContent).join('\n');
+  assert.ok(mainText.includes('Este mueble pertenece al proyecto, pero ya no está en este archivo de SketchUp.'));
+  assert.ok(mainText.includes('Puedes restaurarlo en su posición anterior o colocarlo nuevamente.'));
+  assert.ok(!mainText.includes('Granete espera este mueble'), 'the old confusing reason copy is gone');
+
+  // Technical id stays diagnostic: muted secondary line.
+  const ref = main.children[main.children.length - 1];
+  assert.equal(ref.className, 'pf-unit-ref');
+  assert.equal(ref.textContent, 'Unidad ' + FI_1.slice(0, 8));
+
+  // Information precedes the actions in DOM order (narrow-panel safe).
+  assert.ok(card.children.indexOf(main) < card.children.indexOf(actions));
+});
+
+test('Restaurar posición dispatches the exact restore bridge and blocks the manual intent', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const actions = renderMissingCard(sandbox, pf).children[1];
+
+  actions.children[0].click();
+  const call = sandbox.__bridge.find((c) => c.action === 'restore_furniture_instance');
+  assert.ok(call, 'the existing restore bridge serves the recorded-position intent');
+  assert.deepStrictEqual(call.payload, { furnitureInstanceId: FI_1 });
+  assert.equal(actions.children[0].textContent, 'Restaurando…');
+  assert.equal(actions.children[0].disabled, true);
+
+  actions.children[1].click();
+  assert.ok(!sandbox.__bridge.find((c) => c.action === 'begin_placement_preview'),
+    'no preview may start while the same unit is restoring');
+});
+
+test('Colocar manualmente begins the shared #469 preview with the exact existing identity', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const actions = renderMissingCard(sandbox, pf).children[1];
+
+  actions.children[1].click();
+  const call = sandbox.__bridge.find((c) => c.action === 'begin_placement_preview');
+  assert.ok(call, 'manual placement reuses the shared preview entry point — no second pipeline');
+  assert.deepStrictEqual(call.payload, { furnitureInstanceId: FI_1 },
+    'identity only: the missing unit itself, never a definition/new-unit payload');
+  assert.equal(actions.children[1].textContent, 'Colocando…');
+
+  actions.children[1].click();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_placement_preview').length, 1,
+    'double click must not re-send (no duplicate gesture)');
+
+  actions.children[0].click();
+  assert.ok(!sandbox.__bridge.find((c) => c.action === 'restore_furniture_instance'),
+    'restore must not start while the same unit is placing');
+
+  // Identity invariant (#870): this lane NEVER creates furniture.
+  assert.ok(!sandbox.__bridge.some((c) => c.action === 'create_project_furniture'),
+    'manual placement of an existing unit never calls the create-unit flow');
+});
+
+test('manual placement cancelled: manual label re-arm, missing-state copy, no panel mutation', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const actions = renderMissingCard(sandbox, pf).children[1];
+  const before = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length;
+
+  actions.children[1].click();
+  pf.handlePlacementPreviewCancelled({ instanceId: FI_1 });
+  assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
+  assert.equal(actions.children[1].disabled, false);
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Colocación cancelada: el mueble sigue faltando en este archivo.');
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, before,
+    'cancel never re-requests the panel — the unit keeps its missing state');
+});
+
+test('manual placement preview refused: re-arm keeps the manual label and writes the diagnostic', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const actions = renderMissingCard(sandbox, pf).children[1];
+
+  actions.children[1].click();
+  pf.handlePlacementPreviewStarted({ ok: false, code: 'preview_busy', instanceId: FI_1 });
+  assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
+  assert.equal(actions.children[1].disabled, false);
+  assert.ok(el(sandbox, 'pf-placement-error').textContent.includes('preview_busy'));
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].type, 'error');
+});
+
+test('manual placement result path: success, pending_position and failure re-arm the manual label', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const actions = renderMissingCard(sandbox, pf).children[1];
+
+  actions.children[1].click();
+  pf.handlePlaceFurnitureResult({ ok: true, code: 'placed', instanceId: FI_1 });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    '✓ Mueble colocado y sincronizado con el diseño.');
+
+  actions.children[1].click();
+  pf.handlePlaceFurnitureResult({ ok: true, code: 'pending_position', instanceId: FI_1 });
+  assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Mueble insertado, pero la sincronización de posición quedó pendiente.');
+
+  actions.children[1].click();
+  pf.handlePlaceFurnitureResult({ ok: false, code: 'resolution_failed', reason: 'boom', instanceId: FI_1 });
+  assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
+  assert.ok(el(sandbox, 'pf-placement-error').textContent.includes('boom'));
 });
 
 // ---------------------------------------------------------------------
@@ -511,7 +635,7 @@ test('handleRestoreFurnitureResult: success reloads the panel, restored=false ke
   const panel = connectedPanel();
   panel.items[0].reconciliationState = 'missing_local';
   pf.renderProjectFurniture(panel);
-  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  const button = el(sandbox, 'pf-pending-list').children[0].children[1].children[0];
   button.click();
   const before = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length;
   pf.handleRestoreFurnitureResult({ ok: true, restored: false, instanceId: FI_1 });
@@ -524,7 +648,7 @@ test('handleRestoreFurnitureResult: success reloads the panel, restored=false ke
   assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, '✓ Mueble restaurado en este archivo.');
   button.click();
   pf.handleRestoreFurnitureResult({ ok: false, code: 'recovery_blocked', instanceId: FI_1 });
-  assert.equal(button.textContent, 'Restaurar en este archivo');
+  assert.equal(button.textContent, '↶ Restaurar posición');
   assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'La restauración está bloqueada.');
 });
 

@@ -121,13 +121,15 @@ Una entidad local apunta a una instancia inexistente/removed/cancelled o ajena a
 
 No debe tratarse como unidad válida del diseño. Reutilizar las reglas existentes de lifecycle/orphan/duplicate en lugar de inventar identidad nueva.
 
-## 5. Recuperación `missing_local` — Restaurar en este archivo
+## 5. Recuperación `missing_local` — Restaurar posición / Colocar manualmente
 
-La acción principal para `missing_local` es:
+Una unidad `missing_local` tiene DOS intents de recuperación del mismo nivel (#870), ambos sobre
+la MISMA FurnitureInstance — nunca crean una nueva unidad ni otra identidad.
 
-**Restaurar en este archivo**
+**Restaurar posición** (antes "Restaurar en este archivo")
 
-La recuperación NO crea una nueva FurnitureInstance y NO vuelve a escribir el Design Working Copy.
+Reinserta la unidad en el transform registrado del Working Copy. La recuperación NO crea una
+nueva FurnitureInstance y NO vuelve a escribir el Design Working Copy.
 
 Precondiciones server/host:
 
@@ -165,6 +167,34 @@ se revierte únicamente la raíz recién insertada. Un retry que encuentra una r
 `present_synced`, nunca crea una copia.
 
 Si la inserción local falla, el Working Copy permanece intacto y el estado continúa `missing_local`.
+
+**Colocar manualmente** (#870)
+
+Reusa el lane de placement preview #469 existente — misma entrada
+(`begin_placement_preview({ furnitureInstanceId })`), misma herramienta (`FurniturePlacementTool`),
+misma sesión de gesto; NO hay segundo tool/session manager. La unidad falta pero existe: el
+preview sigue al cursor y el click confirma la posición NUEVA elegida por el usuario.
+
+Reglas:
+
+1. `Placer#place` acepta una fila `missing_local` SÓLO con `transformation` explícita (el gesto
+   aceptado del preview). El place ordinario (origen + Move) sigue `fail-closed`
+   (`host_reconciliation_required`), igual que `incompatible`/`unknown`;
+2. la preparación del preview Y el commit resuelven parámetros/material choices del item
+   autorizado del Working Copy (semántica restore: `preserve_parameters`), nunca del display
+   cotizado — la firma de composición del gesto cubre la composición autorizada;
+3. el commit inserta con la MISMA identidad y la convergencia existente
+   (`converge_inserted_unit`) hace el merge-PUT del nuevo transform/locator preservando la
+   configuración autorizada;
+4. `Esc` cancela sin mutación: la unidad permanece `missing_local`, sin fallback a la posición
+   anterior.
+
+```text
+missing unit FI-123
+→ begin_placement_preview (item inputs) → FurniturePlacementTool
+→ click → place(FI-123, transformation, signature) → converge merge-PUT
+→ present_synced con transform nuevo · MISMA identidad
+```
 
 ## 6. Nunca auto-borrar el servidor al abrir un SKP antiguo
 
