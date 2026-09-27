@@ -86,12 +86,12 @@ ni crear otra autoridad de selección.
 ## Tareas
 
 - [x] Arranque: issue + skills + preflight + reservas (sin escritor previo)
-- [x] Auditoría del flujo exacto (D1–D5)
+- [x] Auditoría del flujo exacto (D1–D6)
 - [x] Reproducción con tests que fallan (5F+1E contra HEAD eafc014f)
 - [x] Implementación del fix
-- [x] Suite Ruby de unidad + rubocop (1218 unit + 6 boundary, 0 fallos; lint limpio)
-- [ ] TestUp host smoke (host ocupado por run ajeno phase1 al momento del fix)
-- [ ] Verificación (`verify_affected`) + publicación PR
+- [x] Suite Ruby de unidad + rubocop (1217 unit + 6 boundary, 0 fallos; lint limpio)
+- [x] TestUp host smoke REAL: 6/6 PASS, 44 assertions (RBZ del branch, host restaurado)
+- [x] Verificación (`rake verify` + package reproducible) + publicación PR
 
 ## Evidencia
 
@@ -103,32 +103,57 @@ correcto). Fallos mapeados: D1 (selección no escrita), D3 (vacío no limpia),
 D4 (leaf vs topmost), D2 (`on_viewport_selection` expuesto), brecha latente
 de rescope post-clear.
 
+### D6 — métodos fantasma de la API (descubierto en host real)
+
+El `select_under_cursor` original llamaba `View#pickhelper` y
+`PickHelper#best_path`, que NO existen en el host real (verificado contra
+sketchup-api-stubs 0.7.11: los nombres reales son `View#pick_helper` —
+forma sin args SU 2025+ — `PickHelper#do_pick(x,y)` y `#best_picked`,
+documentado como «la entidad que habría picado el Select tool»). El guard
+`respond_to?(:pickhelper)` retornaba temprano: todo el fall-through estaba
+MUERTO en producción. El fix usa la API real y delega la semántica de
+selección nativa al propio host (sin trimming manual de paths).
+
 ### Implementación (archivos tocados)
 
 - `src/granete_for_sketchup/overlay/inspection_tool.rb`: fall-through →
-  `@manager.select_naturally(pick_path_under_cursor(x, y, view))` + consume
-  (`true`); pick crudo root→leaf, sin resolución semántica en la tool.
-- `src/granete_for_sketchup/overlay/manager.rb`: `select_naturally(path)`
+  `@manager.select_naturally(native_pick_under_cursor(x, y, view))`
+  (do_pick + best_picked) + consume (`true`); sin resolución semántica en
+  la tool.
+- `src/granete_for_sketchup/overlay/manager.rb`: `select_naturally(entity)`
   escribe `model.selection` (replace/clear, no-op idempotente, fail-soft);
-  `native_selection_target` = primer elemento tras el prefijo común con
-  `active_path`; `rescope` misma-mueble auto-sana con refresh cuando el
-  snapshot es nil; eliminados kwarg/método `on_viewport_selection`.
+  `rescope` misma-mueble auto-sana con refresh cuando el snapshot es nil;
+  eliminados kwarg/método `on_viewport_selection`.
 - `src/granete_for_sketchup/ui/bridges/manufacturing_inspection_bridge.rb`:
   eliminados wiring y `handle_viewport_selection` (segunda autoridad).
-- `test/support/sketchup.rb`: `PickHelperStub` + `ModelStub#active_path`
-  (host-faithful, default []).
+- `test/support/sketchup.rb`: `PickHelperStub` (do_pick/best_picked/path_at)
+  + `ModelStub#active_path` (host-faithful, default []).
 - `test/unit/overlay_natural_selection_test.rb`: 7 tests del contrato.
-- `test/unit/overlay_inspection_tool_test.rb`: click-away sin pickhelper →
+- `test/unit/overlay_inspection_tool_test.rb`: click-away sin pick_helper →
   consumido e inerte (antes: `refute handled` — codificaba el bug).
 - `test/testup/TC_ManufacturingOverlaySmoke.rb`: B2 real-host natural
-  selection (click en mueble → topmost; vacío → clear).
+  selection (zoom al mueble; grid screen-space con do_pick/path_at; click
+  en mueble → selección topmost; vacío → clear).
 
-### Post-fix (ruby@3.2, bundle del repo)
+### Post-fix local (ruby@3.2, bundle del repo, commit 9fd3983a)
 
 - overlay_natural_selection: 7 runs / 31 assertions, 0 fallos
-- overlay_inspection_tool: 7/12, 0 fallos; overlay_manager: 16/68, 0 fallos
-- `rake unit boundary`: 1218 runs / 9066 assertions + 6 / 4043, 0 fallos
-- rubocop (7 archivos tocados): no offenses
+- `rake verify`: syntax OK, rubocop limpio, unit 1217/9064, boundary 6/4043,
+  package reproducible sha256 bab73b08057e7af9ef268690fbc83926aa9d49d8bafde6906677457b1680e985
+
+### Host real (SketchUp 2026 arm64, RBZ del branch instalado)
+
+- `progress/host_smoke_470_testup_ci.json` (TestUp CI, config
+  `testup-ci-470.yml`): **Success — 6/6 PASS, 44 assertions, 0 failures**,
+  incluyendo `test_clicks_outside_markers_follow_natural_selection`:
+  click en mueble (fuera de markers) → `model.selection` = [instancia
+  mueble topmost]; click en vacío → selección limpia; marker click →
+  selección especial sin tocar el modelo (test A).
+- Instalación del host restaurada al backup original tras el run
+  (granete_for_sketchup.rb sha256 a7fdbfed… verificado).
+- Nota de proceso: el host estuvo ocupado por el run TestUp del worktree
+  phase1 (base eafc014f) al comenzar; se esperó su salida antes de tocar
+  la instalación compartida.
 
 ### Flujo resultante (una sola autoridad)
 
@@ -137,4 +162,14 @@ click fuera de markers → `select_naturally` → `model.selection` (replace/cle
 → dialog `onSelectionChange` + `rescope_overlay_from_selection` → overlay
 re-scopeado/limpio honestamente. Click en marker → selección especial MF, sin
 tocar `model.selection`.
+
+## Entrega
+
+- HEAD `9fd3983a` (código) + evidencia sobre el mismo src.
+- PR: `Refs #470` + `Delivery: partial` — el bug de selección reportado está
+  fixeado y probado (unit + host real); el cierre de #470 queda sujeto a la
+  validación en vivo del owner del flujo completo de inspección.
+- Exclusiones reafirmadas: modificadores de selección (shift/ctrl) fuera de
+  alcance; plain-click replace como el Select nativo.
+
 
