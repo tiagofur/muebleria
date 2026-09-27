@@ -590,3 +590,8 @@ T4 with safe RED after the parent authorizes continuation.
   bind-forwarding assertion in its Python double. Existing admin/DB guards,
   default production bind, and #398 checkpoint remain untouched. T4 is next;
   the interactive mode is still `NOT_IMPLEMENTED`.
+- T3 work-unit commit: `51ad935c86c968f73b718175fbb4f8da63d9954b`
+  against `b5697951021f6484cf3e71161ec396ff6f434194`, with 184 authored
+  additions and 5 deletions (189 total), generated files: none. One coherent
+  partial #823 PR remains the authorized delivery; no size exception is
+  assumed. Fresh independent review and final exact-head CI remain pending.
