@@ -887,6 +887,15 @@ invented; helpers/bridge/bootstrap stay inline for that audit to decide.
 - **Behavior changes: 0** (target). Documented wiring movements above.
 - **Real SketchUp host smoke: NOT_RUN** (same phase-level gate as
   C4.1–C4.8). #848 remains OPEN; Phase B acceptance audit pending.
+- **Publication record**: committed as one implementation work unit
+  (`e41c68b40e33b3fe6109d996e84308346a62ed30`, 11 files, +1936/−622) from
+  base `944e5149f8287b0ef19e10e75912d78bd5c4a382` and published against
+  main as PR #867 (`Refs #848`, `Delivery: partial`, `type:refactor`;
+  metadata contract validated locally before creation). Exact-head remote
+  state (CI, MERGEABLE, labels) lives in GitHub — this artifact records the
+  publication, not the PR's future head. Merge remains human. Remaining:
+  post-C4.9 architectural/acceptance audit (dialog.html 1851 vs ~900
+  target + real SketchUp/CEF host smoke) before any #848 closure decision.
 
 ## C4.8 — granete-model-binding.js (PRE-COMMIT: awaiting owner boundary review)
 
