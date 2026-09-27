@@ -123,12 +123,18 @@ base-mode freeze (that would create a third authority).
       `Delivery: complete` only if all acceptance holds). Parent-owned after
       the local candidate is complete; no push, PR, merge or issue closure is
       authorized for the implementer.
-- [ ] T9 — Canonical Q1 real-PostgreSQL proof: author base-treatment choices,
+- [x] T9 — Canonical Q1 real-PostgreSQL proof: author base-treatment choices,
       create Q1 via `CreateInitialDesignQuoteRevision`, confirm the persisted
       commercial `PricingContext`, publish/accept, approve a compatible design,
       then preflight, production approval and release. Verify frozen BOM for
       each applicable role while module default X differs from quoted Y.
-      This is missing proof, not a presumed data-loss bug; do not invent RED.
+      GREEN for all three roles on the real `CreateInitialDesignQuoteRevision`
+      path, then publish/accept, design publish, quoted preflight, production
+      approval and release, with frozen BOM readback. Initial fixture runs
+      blocked for unsupported historical definition versions and missing
+      explicit release dimensions; after correcting those fixture inputs,
+      the canonical product path passed without a source fix. This was NOT
+      an observed product RED.
 - [ ] T10 — RED→GREEN per-command catalog consistency: deterministic
       two-connection PostgreSQL mutation test (no sleeps/mocks) for preflight,
       production approval and release; make the first two use an equivalent
@@ -144,6 +150,12 @@ base-mode freeze (that would create a third authority).
 
 ## Verification
 
+- T9 focused V2: `scripts/backend-test.sh -run
+  '^TestProductionRelease_CanonicalDesignQ1CarriesBaseChoiceToFrozenBOM$'
+  -count=1 ./internal/storage` — green, 3 mode subtests, disposable
+  PostgreSQL 16 with unprivileged runtime role. Rollback boundary:
+  `production_release_canonical_q1_test.go` only (contract proof, no product
+  behavior change).
 - Engine: `go test ./internal/domain/engine/...` green (focused + package).
 - Storage: full serialized suite via `scripts/backend-test.sh ./internal/storage`
   — 572s green against ephemeral postgres:16 (runtime role granete_app,
@@ -168,8 +180,9 @@ base-mode freeze (that would create a third authority).
   does not authorize protected `size:exception` label, a push, PR or scope
   expansion. A split before transactional/API parity would be unsafe.
 - `origin/main` advanced with #848 SketchUp-only commits (zero path overlap).
-  Preserve the recovered branch and integrate `origin/main` by a normal
-  history-preserving merge before additional source changes; stop on conflict.
+  Preserved the recovered branch and integrated `origin/main` cleanly via
+  normal merge `d1654852023539fde764124b60baa56f6af76355`; no #848 reversal
+  appears in the three-dot #830 diff. Scope/strategy doc commit `c7379fee`.
 - Effective TDD: **strict enabled**, source `AGENTS.md` gentle-ai directive.
   Exact focused runners: `go test` in `backend-go` for pure engine/API tests;
   `scripts/backend-test.sh` from `backend-go` for disposable PostgreSQL
@@ -181,6 +194,12 @@ base-mode freeze (that would create a third authority).
 - Forecast: starting authored 1495 lines; T9–T11 will increase the atomic
   candidate. Running authored count and exact category split must be refreshed
   at final handoff; no code-golf or artificial split to meet a line cap.
+- Inherited candidate disposition: **KEEP** exact frozen-quote authority,
+  quote-less module policy, release resolution and generated API/client parity;
+  **FIX** incomplete approval/preflight transaction boundaries and malformed
+  context HTTP mapping; **INCOMPLETE** canonical Q1 and concurrent-catalog
+  proof until T9/T10 tests; **REMOVE** none (no duplicated engine or fallback
+  found). This classifies rather than restarts GLM's implementation.
 - Engram recovery mirror: full-document readback confirmed at observation
   `#1760` for topic `odd/830-frozen-base-treatment-authority/tasks`;
   subsequent task updates must refresh and read back both copies.
