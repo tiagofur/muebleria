@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { Client } from 'pg';
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
-import { GATE_MODULE_A_ID, putWorkingCopyCurrent, required } from './support/api';
+import { putWorkingCopyCurrent, required } from './support/api';
 
 const STRUCTURE_ID = '89800000-0000-4000-8000-000000000001';
 const HARDWARE_ID = '89800000-0000-4000-8000-000000000002';
@@ -12,7 +12,9 @@ const BODY_GROUP_ID = '89800000-0000-4000-8000-000000000006';
 const ZOCLO_GROUP_ID = '89800000-0000-4000-8000-000000000007';
 const PATAS_GROUP_ID = '89800000-0000-4000-8000-000000000008';
 const PRESET_ID = '89800000-0000-4000-8000-000000000009';
-const BODY_ROLE = 'CONTINUITY-BODY';
+const MODULE_ID = '89800000-0000-4000-8000-000000000010';
+const MODULE_CODE = 'DISCOVERY-P1';
+const BODY_ROLE = 'DISCOVERY-P1-BODY';
 const WIDTH_R1_MM = 600;
 const WIDTH_R2_MM = 650;
 const HEIGHT_MM = 720;
@@ -31,36 +33,37 @@ async function prepareCatalog(): Promise<number> {
   });
   const repository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => owner.token });
   const catalog = await repository.getCatalog();
-  const template = catalog.modules.find((module) => module.id === GATE_MODULE_A_ID) ?? catalog.modules[0]!;
+  const template = catalog.modules.find((module) => module.code === 'GATE-A') ?? catalog.modules[0]!;
   const depthMm = template.externalDims?.depth || 590;
   const dimensions = { width: WIDTH_R1_MM, height: HEIGHT_MM, depth: depthMm };
+  const isolatedCatalogWrite = () => ({
+    ...catalog,
+    materials: [], edges: [], hardware: [], optionGroups: [], modules: [],
+    structures: [], components: [], agregados: [], categories: [], customers: [],
+    ambientMaterials: [], ambientCategories: [], materialCategories: [],
+  });
 
   // Catalog persistence writes materials before edge bands. Establish the
   // referenced edge first so the material's defaultEdgeBandId satisfies the
   // real PostgreSQL foreign key rather than weakening the fixture.
   await repository.saveCatalog({
-    ...catalog,
-    edges: [
-      ...catalog.edges.filter((edge) => edge.id !== EDGE_ID),
-      {
-        id: EDGE_ID,
-        code: 'CONTINUITY-EDGE',
-        name: 'Continuity edge',
-        thicknessMm: 1,
-        costPerMl: 4,
-        active: true,
-      },
-    ],
+    ...isolatedCatalogWrite(),
+    edges: [{
+      id: EDGE_ID,
+      code: 'DISCOVERY-P1-EDGE',
+      name: 'Discovery P1 edge',
+      thicknessMm: 1,
+      costPerMl: 4,
+      active: true,
+    }],
   });
 
   await repository.saveCatalog({
-    ...catalog,
-    materials: [
-      ...catalog.materials.filter((material) => material.id !== MATERIAL_ID),
-      {
+    ...isolatedCatalogWrite(),
+    materials: [{
         id: MATERIAL_ID,
-        code: 'CONTINUITY-BOARD',
-        name: 'Continuity board',
+        code: 'DISCOVERY-P1-BOARD',
+        name: 'Discovery P1 board',
         widthMm: 1830,
         lengthMm: 2440,
         thicknessMm: 18,
@@ -70,42 +73,32 @@ async function prepareCatalog(): Promise<number> {
         costPerM2: 125,
         defaultEdgeBandId: EDGE_ID,
         active: true,
-      },
-    ],
-    edges: [
-      ...catalog.edges.filter((edge) => edge.id !== EDGE_ID),
-      {
+      }],
+    edges: [{
         id: EDGE_ID,
-        code: 'CONTINUITY-EDGE',
-        name: 'Continuity edge',
+        code: 'DISCOVERY-P1-EDGE',
+        name: 'Discovery P1 edge',
         thicknessMm: 1,
         costPerMl: 4,
         active: true,
-      },
-    ],
+      }],
     optionGroups: [
-      ...catalog.optionGroups.filter((group) => ![BODY_ROLE, 'ZOCLO', 'PATAS'].includes(group.code)),
-      { id: BODY_GROUP_ID, code: BODY_ROLE, name: 'Continuity body', kind: 'board' as const, required: true, optionIds: [MATERIAL_ID] },
-      { id: ZOCLO_GROUP_ID, code: 'ZOCLO', name: 'Continuity plinth', kind: 'board' as const, required: false, optionIds: [MATERIAL_ID] },
-      { id: PATAS_GROUP_ID, code: 'PATAS', name: 'Continuity legs', kind: 'hardware' as const, required: false, optionIds: [HARDWARE_ID] },
+      { id: BODY_GROUP_ID, code: BODY_ROLE, name: 'Discovery P1 body', kind: 'board' as const, required: true, optionIds: [MATERIAL_ID] },
+      { id: ZOCLO_GROUP_ID, code: 'ZOCLO', name: 'Discovery P1 plinth', kind: 'board' as const, required: false, optionIds: [MATERIAL_ID] },
+      { id: PATAS_GROUP_ID, code: 'PATAS', name: 'Discovery P1 legs', kind: 'hardware' as const, required: false, optionIds: [HARDWARE_ID] },
     ],
-    structures: [
-      ...(catalog.structures ?? []).filter((structure) => structure.id !== STRUCTURE_ID),
-      {
+    structures: [{
         id: STRUCTURE_ID,
-        code: 'CONTINUITY-STRUCT',
-        name: 'Continuity structure',
+        code: 'DISCOVERY-P1-STRUCT',
+        name: 'Discovery P1 structure',
         externalDims: dimensions,
         components: [{ componentId: COMPONENT_ID, quantity: 1 }],
         active: true,
-      },
-    ],
-    components: [
-      ...(catalog.components ?? []).filter((component) => component.id !== COMPONENT_ID),
-      {
+      }],
+    components: [{
         id: COMPONENT_ID,
-        code: 'CONTINUITY-PANEL',
-        name: 'Continuity panel',
+        code: 'DISCOVERY-P1-PANEL',
+        name: 'Discovery P1 panel',
         placement: 'interno' as const,
         geometry: {
           kind: 'rectangular_board' as const,
@@ -123,35 +116,52 @@ async function prepareCatalog(): Promise<number> {
         ],
         optionRoles: [BODY_ROLE],
         active: true,
-      },
-    ],
-    hardware: [
-      ...catalog.hardware.filter((hardware) => hardware.id !== HARDWARE_ID),
-      {
+      }],
+    hardware: [{
         id: HARDWARE_ID,
-        code: 'CONTINUITY-LEG',
-        name: 'Continuity adjustable leg',
+        code: 'DISCOVERY-P1-LEG',
+        name: 'Discovery P1 adjustable leg',
         unit: 'piece',
         costPerUnit: 10,
         active: true,
-      },
-    ],
+      }],
     modules: [
       {
         ...template,
-        id: GATE_MODULE_A_ID,
+        id: MODULE_ID,
+        code: MODULE_CODE,
+        name: 'Discovery P1 module',
         structureId: STRUCTURE_ID,
         baseMode: 'plinth_board',
         baseClearanceMm: BASE_CLEARANCE_MM,
         components: [],
-        hardwareLines: [{ id: 'continuity-legs-line', quantity: 1, optionRole: 'PATAS' }],
+        hardwareLines: [{ id: 'discovery-p1-legs-line', quantity: 1, optionRole: 'PATAS' }],
         externalDims: dimensions,
         presets: [
-          { id: PRESET_ID, name: 'Continuity 600', width: WIDTH_R1_MM, height: HEIGHT_MM, depth: depthMm },
+          { id: PRESET_ID, name: 'Discovery P1 600', width: WIDTH_R1_MM, height: HEIGHT_MM, depth: depthMm },
         ],
       },
     ],
   });
+
+  const persisted = await repository.getCatalog();
+  expect(persisted.modules.find((module) => module.id === template.id)).toEqual(template);
+  expect(persisted.modules.find((module) => module.id === MODULE_ID)).toMatchObject({
+    id: MODULE_ID,
+    code: MODULE_CODE,
+    presets: [expect.objectContaining({ id: PRESET_ID, name: 'Discovery P1 600' })],
+  });
+  expect(persisted.edges.find((edge) => edge.id === EDGE_ID)).toMatchObject({ id: EDGE_ID, code: 'DISCOVERY-P1-EDGE' });
+  expect(persisted.materials.find((material) => material.id === MATERIAL_ID)).toMatchObject({
+    id: MATERIAL_ID,
+    code: 'DISCOVERY-P1-BOARD',
+    defaultEdgeBandId: EDGE_ID,
+  });
+  expect(persisted.optionGroups).toEqual(expect.arrayContaining([
+    expect.objectContaining({ id: BODY_GROUP_ID, code: BODY_ROLE, optionIds: [MATERIAL_ID] }),
+    expect.objectContaining({ id: ZOCLO_GROUP_ID, code: 'ZOCLO', optionIds: [MATERIAL_ID] }),
+    expect.objectContaining({ id: PATAS_GROUP_ID, code: 'PATAS', optionIds: [HARDWARE_ID] }),
+  ]));
 
   return depthMm;
 }
@@ -235,13 +245,13 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   await page.getByRole('button', { name: 'Agregar mueble' }).click();
   const lineModal = page.getByRole('dialog', { name: 'Agregar mueble' });
   await lineModal.getByLabel('Mueble').click();
-  await lineModal.getByRole('option', { name: /GATE-A/ }).click();
+  await lineModal.locator(`#add-module-listbox-opt-${MODULE_ID}`).click();
   await lineModal.getByLabel('Cantidad').fill('2');
   await expect(lineModal.getByTestId('add-item-measure-preset')).toHaveValue(PRESET_ID);
-  await expect(lineModal.getByLabel(/Continuity body/)).toHaveValue(MATERIAL_ID);
-  await expect(lineModal.getByLabel(/Continuity plinth/)).toHaveValue(MATERIAL_ID);
-  await lineModal.getByLabel(/Continuity legs/).selectOption(HARDWARE_ID);
-  await expect(lineModal.getByLabel(/Continuity legs/)).toHaveValue(HARDWARE_ID);
+  await expect(lineModal.getByLabel(/Discovery P1 body/)).toHaveValue(MATERIAL_ID);
+  await expect(lineModal.getByLabel(/Discovery P1 plinth/)).toHaveValue(MATERIAL_ID);
+  await lineModal.getByLabel(/Discovery P1 legs/).selectOption(HARDWARE_ID);
+  await expect(lineModal.getByLabel(/Discovery P1 legs/)).toHaveValue(HARDWARE_ID);
   await lineModal.getByRole('button', { name: 'Agregar', exact: true }).click();
   await expect(lineModal).not.toBeVisible();
 
@@ -260,7 +270,7 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   expect(editableProject.items).toHaveLength(1);
   const quoteLine = editableProject.items[0]!;
   expect(quoteLine).toMatchObject({
-    module_id: GATE_MODULE_A_ID,
+    module_id: MODULE_ID,
     quantity: 2,
     option_choices: { [BODY_ROLE]: MATERIAL_ID, ZOCLO: MATERIAL_ID, PATAS: HARDWARE_ID },
     measure_preset_id: PRESET_ID,
@@ -288,13 +298,13 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   expect(instances).toEqual(expect.arrayContaining([
     expect.objectContaining({
       project_id: project.id,
-      furniture_definition_id: GATE_MODULE_A_ID,
+      furniture_definition_id: MODULE_ID,
       origin: 'quote',
       lifecycle_status: 'active',
     }),
     expect.objectContaining({
       project_id: project.id,
-      furniture_definition_id: GATE_MODULE_A_ID,
+      furniture_definition_id: MODULE_ID,
       origin: 'quote',
       lifecycle_status: 'active',
     }),
@@ -330,7 +340,7 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   expect(q1?.items.map((item) => item.furnitureInstanceId).sort()).toEqual(instanceIds);
   expect(q1?.items).toEqual(expect.arrayContaining(instanceIds.map((instanceId) => expect.objectContaining({
     furnitureInstanceId: instanceId,
-    furnitureDefinitionId: GATE_MODULE_A_ID,
+    furnitureDefinitionId: MODULE_ID,
     parameters: { widthMm: WIDTH_R1_MM, heightMm: HEIGHT_MM, depthMm },
     materialChoices: { [BODY_ROLE]: MATERIAL_ID, ZOCLO: MATERIAL_ID, PATAS: HARDWARE_ID },
   }))));
@@ -378,15 +388,16 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   }
   const catalogRepository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => owner.token });
   const liveCatalog = await catalogRepository.getCatalog();
-  const originalModule = liveCatalog.modules.find((module) => module.id === GATE_MODULE_A_ID)!;
+  const originalModule = liveCatalog.modules.find((module) => module.id === MODULE_ID)!;
   const saveModuleDefault = (baseMode: 'plinth_board' | 'legs') => catalogRepository.saveCatalog({
     ...liveCatalog, materials: [], edges: [], hardware: [], optionGroups: [], components: [],
     structures: [], agregados: [], categories: [], customers: [],
+    ambientMaterials: [], ambientCategories: [], materialCategories: [],
     modules: [{ ...originalModule, baseMode }],
   });
   await saveModuleDefault('legs');
   expect((await catalogRepository.getCatalog())
-    .modules.find((module) => module.id === GATE_MODULE_A_ID)?.baseMode).toBe('legs');
+    .modules.find((module) => module.id === MODULE_ID)?.baseMode).toBe('legs');
   expect(await client.listDesignRevisions(owner.token, design.id)).toEqual([]);
 
   // React does not author geometry yet. Use only the supported backend working
@@ -394,7 +405,7 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   await putWorkingCopyCurrent(client, owner.token, design.id, {
     items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
-        furniture_definition_id: GATE_MODULE_A_ID,
+        furniture_definition_id: MODULE_ID,
         parameters: { widthMm: WIDTH_R1_MM, heightMm: HEIGHT_MM, depthMm },
         material_choices: { [BODY_ROLE]: MATERIAL_ID, ZOCLO: MATERIAL_ID, PATAS: HARDWARE_ID },
       })),
@@ -409,7 +420,7 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   expect(r1.items.map((item) => item.furniture_instance_id).sort()).toEqual(instanceIds);
   expect(r1.items).toEqual(expect.arrayContaining(instanceIds.map((instanceId) => expect.objectContaining({
     furniture_instance_id: instanceId,
-    furniture_definition_id: GATE_MODULE_A_ID,
+    furniture_definition_id: MODULE_ID,
     parameters: { widthMm: WIDTH_R1_MM, heightMm: HEIGHT_MM, depthMm },
     material_choices: { [BODY_ROLE]: MATERIAL_ID, ZOCLO: MATERIAL_ID, PATAS: HARDWARE_ID },
   }))));
@@ -470,7 +481,7 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
   expect(p1Demand.units.map((unit) => unit.furniture_instance_id).sort()).toEqual(instanceIds);
   for (const unit of p1Demand.units) {
     expect(unit).toMatchObject({
-      furniture_definition_id: GATE_MODULE_A_ID,
+      furniture_definition_id: MODULE_ID,
       module_width_mm: WIDTH_R1_MM,
       module_height_mm: HEIGHT_MM,
       module_depth_mm: depthMm,
@@ -481,14 +492,14 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
     expect(unit.pieces).toEqual(expect.arrayContaining([
       expect.objectContaining({
         part_id: expect.stringContaining(COMPONENT_ID),
-        description: 'Continuity panel',
+        description: 'Discovery P1 panel',
         length_mm: depthMm,
         width_mm: WIDTH_R1_MM,
         thickness_mm: 18,
         material_id: MATERIAL_ID,
-        material_code: 'CONTINUITY-BOARD',
+        material_code: 'DISCOVERY-P1-BOARD',
         edge_band_id: EDGE_ID,
-        edge_band_code: 'CONTINUITY-EDGE',
+        edge_band_code: 'DISCOVERY-P1-EDGE',
         option_role: BODY_ROLE,
       }),
       expect.objectContaining({

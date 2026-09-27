@@ -13,7 +13,7 @@ Prove, in a real browser against disposable PostgreSQL, that the normal Producti
 - Exact base: `origin/main@5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
 - Starting HEAD: `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
 - Ownership: one delegated writer for this bounded #642 vertical; the issue has no assignee and no open PR for this branch at artifact creation.
-- Remote authorization: configured Git/GitHub session for readback of `tiagofur/muebleria` and a conditional owner PR later. No push or PR is authorized now.
+- Remote state: PR `#869` exists for this branch. Its exact-head CI exposed the verification defect below; this correction must not force-push, open another PR, merge, or push from this delegated task.
 - Lane: substantial ODD work with this single execution artifact.
 - Historical boundary: existing historical #642 artifacts remain untouched. This artifact records only the current production-release discovery vertical.
 
@@ -79,12 +79,15 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
   - Update this artifact and its Engram mirror with exact base/HEAD, changed paths, commits, rollback boundary, and next step.
   - Hand the exact candidate to a different fresh reviewer. Do not self-approve, push, or create a PR without renewed authorization.
   - Acceptance: reviewable Conventional Commit work unit(s), clean exact-head evidence, and an honest partial #642 handoff.
+  - Reopened after PR `#869` full browser CI run `36295531023`: the new scenario passed, then six later scenarios failed because it overwrote the shared `GATE_MODULE_A_ID` preset with `Continuity 600`. The saved-catalog upsert does not restore shared fixtures.
+  - Correction boundary: give this scenario one stable exclusive module ID and use it through React selection, quote/design/release assertions, and live-default mutation. Do not overwrite or restore a shared module; keep its edge, material, hardware, and option fixtures on exclusive IDs and isolated catalog writes.
+  - Correction acceptance: the focused scenario remains GREEN and `bash scripts/organization-browser-gate.sh` passes the complete disposable-PostgreSQL browser suite without downstream contamination.
 
 ## Verification plan
 
 - V0: artifact/diff readback, `git diff --check`, focused format/type checks for changed paths, `python3 scripts/verify_affected.py --base origin/main --plan`, and final clean preflight.
 - V1: focused component/unit checks selected by the exact eligibility code changed, including eligible canonical P1 and ineligible/no-release behavior.
-- V2: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` with disposable PostgreSQL and a real browser on the normal Production Dashboard.
+- V2 correction gate: `bash scripts/organization-browser-gate.sh` with disposable PostgreSQL and a real browser across the complete organization suite; the focused spec remains a diagnostic check only.
 - Existing #398 browser evidence is historical routing evidence only and is not V2 proof for this candidate.
 - Production Queue, station progression, physical execution, SketchUp/TestUp, PTX, and warehouse evidence are `NOT_RUN` unless separately authorized and applicable.
 
@@ -106,12 +109,20 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - Rollback boundary: revert the work-unit commit to remove only the `ProductionManagerDashboard` shared authority filter, its focused tests, the new browser scenario, and this focused ODD artifact; no queue/station/backend/SketchUp behavior is coupled to it.
 - Independent review APPROVED exact candidate `9682d706b3736ba64356edfe7338e74620879f2c` against base `5b93d336b194077ec116a10d9bd7fff9d4ca9658` with no blockers. The reviewer re-ran the release-authority domain suite (`15/15`), focused dashboard UI (`8/8`), disposable-PostgreSQL browser scenario (`1/1`), diff check, and clean preflight successfully.
 - Parent spot-check: focused dashboard UI re-run passed `8/8` on the same reviewed candidate.
-- Remote PR creation and exact-head CI remain pending and are not implied by local review approval.
+- PR `#869` full browser CI run `36295531023` is the strict-TDD correction RED: the new spec (`#61`) passed, then six later scenarios failed. Reviewer comparison proved the base full browser suite passes `92/92`; the candidate test alone mutated shared `GATE_MODULE_A_ID` to the `Continuity 600` preset, and `saveCatalog` upsert semantics made the attempted restore incomplete. This is a test-isolation defect, not a production regression.
+- Verification correction: the scenario now owns stable module `89800000-0000-4000-8000-000000000010` (`DISCOVERY-P1`) and uses that identity in the React selector and every quote, FurnitureInstance, Q1, R1, and P1 assertion. Catalog writes contain only the scenario's exclusive edge, material, hardware, option groups, component, structure, and module; they no longer upsert or attempt to restore shared fixtures.
+- Isolation readback inside the browser scenario proves the original `GATE-A` module remains byte-for-byte equal to its pre-write API projection and proves the exclusive edge, material/default edge, option memberships, preset, and module identities persisted as authored.
+- Focused correction diagnostic: first local attempt reached a harness-owned strict-selector ambiguity because the broad module-name regexp also matched the scenario's material/hardware options; replacing it with the stable exclusive module-ID selector removed the harness ambiguity. No production failure was claimed.
+- Focused V2 GREEN: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` -> `1 passed (11.1s)` and `[organization-gate] PASS` on disposable PostgreSQL.
+- Required full V2 GREEN: `bash scripts/organization-browser-gate.sh` -> `93 passed (5.4m)` and `[organization-gate] PASS` on disposable PostgreSQL. The corrected scenario passed as test `#61`, and every downstream scenario, including the six that failed in CI, also passed.
+- Correction V1/V0 GREEN: `pnpm --filter @granete/ui exec vitest run src/production/ProductionManagerDashboard.test.tsx` -> `8 passed`; `pnpm --filter @granete/ui typecheck` and `git diff --check` completed successfully.
+- Exact-head CI and fresh independent review remain pending; the earlier approval does not cover the correction HEAD.
 - Production Queue, station screens, physical progression, SketchUp/TestUp, PTX, and warehouse remain `NOT_RUN` and outside this task.
 
 ## Forecast and delivery strategy
 
 - Reviewed candidate authored size is **739 lines** (738 additions, 1 deletion). This remains below 800, so the explicit normal-range policy applies and no slicing evaluation is triggered.
+- Corrected candidate authored size is **765 lines** (764 additions, 1 deletion) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`; it remains below 800, so no slicing evaluation is required.
 - Strategy: **single PR** while the actual authored total remains in the user-authorized normal range.
 - User size policy: **0-800 authored lines is normal; 800-1200 requires evaluation before delivery; over 1200 requires a user checkpoint before continuing or delivery**.
 - The 400-line ODD value remains a planning heuristic only. Do not code-golf, omit proof, or split one coherent root change solely to satisfy it.
@@ -128,7 +139,8 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - [x] Product correction implemented: shared canonical release authority drives only dashboard discovery; negative modern/stale no-release paths fail closed.
 - [x] Work-unit commit created: `5897435fd47c74faca44e4db3b9fe4bfe8088465`.
 - [x] Independent review completed: APPROVED with no blockers at `9682d706b3736ba64356edfe7338e74620879f2c` vs `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
+- [x] Verification correction completed locally: exclusive fixture persisted without shared-module mutation, focused browser passed `1/1`, and the complete disposable-PostgreSQL browser suite passed `93/93`.
 
 ## Next step
 
-Return the mechanically closed artifact to the parent for exact-head readback and any separately authorized PR/CI publication. Do not push or create a PR from this task.
+Commit the correction with this artifact, record its exact identity/count, and return the new clean HEAD to the parent for fresh review and separately authorized PR update. Do not push from this task.
