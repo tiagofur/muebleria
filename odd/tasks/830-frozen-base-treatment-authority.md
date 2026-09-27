@@ -159,6 +159,14 @@ base-mode freeze (that would create a third authority).
       PostgreSQL under runtime RLS, gofmt/vet, `git diff --check`, factory
       preflight and affected-check plan/selected run. Independent review/CI
       remain parent-owned and not proven by local tests.
+- [x] T13 — Browser consequence of exact quoted preflight: Q1/R1 with a
+      design-first unit outside the frozen commercial snapshot must NOT show
+      READY; surface the server's actionable frozen-base 409 instead of a
+      generic retry-only error, disable production commands, and prove the
+      later requote/approval/release path with the disposable browser gate.
+      Observed UI RED: generic retry-only copy concealed the server's 409;
+      GREEN: focused Vitest and real Chromium Q1→Q2/R2→P1, then all 92
+      organization-browser gate cases green in disposable PostgreSQL.
 
 ## Verification
 
@@ -181,14 +189,42 @@ base-mode freeze (that would create a third authority).
 - Current focused storage regressions: `scripts/backend-test.sh -run
   '^(TestProductionRelease_|TestEvaluateDesignRevisionPreflight_|
   TestApproveDesignRevision_|TestFrozenBaseCommands_)' -count=1
-  ./internal/storage` — green (42.196s). Full refreshed storage suite pending.
+  ./internal/storage` — green (42.196s); full suite result recorded below.
 - The first refreshed full storage suite found one legacy #826 test using a
   READ COMMITTED helper for quoted preflight (`TestReleaseGate_HardwareOnlyModuleSurplusChoicesConverge`):
   RED `ErrInconsistentCatalogTransaction`. Switched that test to the existing
   `releaseTx` REPEATABLE READ helper; its disposable-PostgreSQL focused rerun
-  is GREEN. Full suite rerun is pending; no product fallback was introduced.
+  is GREEN. The full rerun below confirms no other storage regressions; no
+  product fallback was introduced.
+- Refreshed full storage suite rerun: `scripts/backend-test.sh -count=1
+  ./internal/storage` — GREEN, 450.783s against disposable PostgreSQL 16;
+  runtime `granete_app` stayed unprivileged/RLS-scoped.
+- Final UI checks: `pnpm typecheck` and `pnpm test` — GREEN (UI 176 files/2004
+  tests; Web 42 files/547; database-isolation 16). Focused UI 409 test was
+  observed RED with generic retry text, then GREEN with the server remedy.
+  `node .agents/skills/impeccable/scripts/detect.mjs --json` on the affected
+  UI files returned `[]`.
+- Browser: `scripts/organization-browser-gate.sh
+  tests/organization/project-reconciliation.spec.ts -g 'quote-first path'`
+  — GREEN (1/1, 14s); full `scripts/organization-browser-gate.sh` — GREEN
+  (92/92, 5.2m), synthetic organizations and disposable database.
+- Affected-check plan selected shared TypeScript, Go, SketchUp, visual and
+  foundation gates. `python3 scripts/verify_affected.py --base origin/main
+  --budget-seconds 600` was attempted at clean `527062e7` and BLOCKED before
+  launching jobs: `isolated DATABASE_URL required`. No ambient or persistent
+  DB credential was substituted. Relevant jobs were run independently with
+  the canonical disposable runners; unrelated selected jobs remain NOT_RUN.
+- Script checks: 55 CI tests GREEN (one skipped by suite), 19 factory
+  efficiency GREEN, 13 workflow-contract GREEN.
 - Current `go vet ./internal/domain/... ./internal/api/...
   ./internal/storage/...` — green. `git diff --check` — green.
+- Browser gate at the corrected backend/frontend HEAD found 88 passing and
+  one relevant RED: Q1/R1 has a design-first unit absent from Q1, so exact
+  quoted preflight correctly returns 409 rather than the historical READY
+  assertion. A new UI test then observed the business message hidden behind
+  a generic retry-only alert (RED); focused UI GREEN after projecting only
+  the typed `frozen_base_context` 409 and disabling approval/release. Focused
+  and full disposable browser reruns are green as recorded below.
 - Engine: `go test ./internal/domain/engine/...` green (focused + package).
 - Storage: full serialized suite via `scripts/backend-test.sh ./internal/storage`
   — 572s green against ephemeral postgres:16 (runtime role granete_app,

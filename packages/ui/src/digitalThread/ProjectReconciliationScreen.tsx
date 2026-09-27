@@ -401,6 +401,13 @@ export function ProjectReconciliationScreen({
     enabled: activeDesignId !== null && designRevisionId !== null,
   });
   const preflight = preflightQuery.data ?? null;
+  const frozenBasePreflightError =
+    preflightQuotePin &&
+    preflightQuery.error instanceof GraneteApiError &&
+    preflightQuery.error.status === 409 &&
+    (preflightQuery.error.payload.details as Record<string, unknown>).blocker === 'frozen_base_context'
+      ? preflightQuery.error.message
+      : null;
 
   // ---- Releases ----------------------------------------------------------------
 
@@ -1304,6 +1311,7 @@ export function ProjectReconciliationScreen({
                   preflight={preflight}
                   loading={preflightQuery.isLoading && designRevisionId !== null}
                   error={preflightQuery.isError && designRevisionId !== null}
+                  frozenBaseBlockerMessage={frozenBasePreflightError}
                   onRetry={() => void preflightQuery.refetch()}
                 />
                 <ApprovalPanel
@@ -1315,7 +1323,7 @@ export function ProjectReconciliationScreen({
                   quoteLabel={quoteLabel}
                   designRevisionLabel={revLabel}
                   pairCommercialBlocked={pairCommercialBlock}
-                  preflightBlocked={preflight ? preflight.status === 'blocked' : null}
+                  preflightBlocked={frozenBasePreflightError ? true : preflight ? preflight.status === 'blocked' : null}
                   submitting={approveSubmitting}
                   error={approveError}
                   onApprove={() => void handleApprove()}
@@ -1325,7 +1333,7 @@ export function ProjectReconciliationScreen({
                   revisionApproved={selectedDesignRevision?.status === 'approved'}
                   quoteAccepted={selectedQuoteRevision?.status === 'accepted'}
                   quoteLabel={quoteLabel}
-                  preflightReady={preflight ? preflight.status === 'ready' : null}
+                  preflightReady={frozenBasePreflightError ? false : preflight ? preflight.status === 'ready' : null}
                   submitting={releaseSubmitting}
                   error={releaseError}
                   preflightIssues={releasePreflightIssues}
