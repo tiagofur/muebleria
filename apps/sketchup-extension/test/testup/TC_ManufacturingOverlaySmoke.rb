@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'fileutils'
 require 'testup/testcase'
 
 # Real-host smoke test for #470 / SU-VIS-1: ManufacturingFeature 3D
@@ -86,6 +87,81 @@ module Granete
         assert_equal markers.first.visual_id, manager.active_feature_id
       ensure
         manager&.disable
+      end
+
+      # B2: natural selection under the overlay (#470 real-host bug). While
+      # the inspection tool owns the viewport, a click on furniture geometry
+      # (not on a marker) must write model.selection like the native Select
+      # tool — the topmost instance of the editing context — and a click on
+      # empty space must clear it. The #476 SelectionObserver flow, not the
+      # tool, reacts to that selection.
+      def test_clicks_outside_markers_follow_natural_selection
+        manager = build_manager
+        manager.enable(scope)
+        part = managed_part('side-left-01')
+        model.selection.clear
+        model.selection.add(part)
+        tool = Overlay::InspectionTool.new(manager)
+        view = model.active_view
+        zoom_to_furniture(view)
+
+        on_furniture = nil
+        3.times do
+          zoom_to_furniture(view) # forces a render pass every iteration
+          on_furniture = screen_point_on_furniture_off_markers(view, manager)
+          break unless on_furniture.nil?
+        end
+        if on_furniture.nil?
+          flunk "no clickable furniture point away from markers: vp=#{view.vpwidth}x#{view.vpheight} " \
+                "diag=#{natural_selection_diagnostics(view, manager)}"
+        end
+
+        handled = tool.onLButtonDown(0, on_furniture.x, on_furniture.y, view)
+        assert handled, 'the tool consumes the click it resolved'
+        assert_equal [granete_furniture_instances.first], model.selection.to_a,
+                     'a geometry click must select the topmost instance natively'
+
+        empty = screen_point_on_empty_space(view)
+        skip 'no empty viewport point available' unless empty
+
+        tool.onLButtonDown(0, empty.x, empty.y, view)
+        assert model.selection.empty?, 'an empty-space click must clear the selection'
+      ensure
+        manager&.disable
+      end
+
+      # Fills the viewport with the furniture (view state only) so the
+      # natural-selection click search has a representative, on-screen body.
+      # The throwaway write_image forces one real render pass: in a fresh
+      # host process TestUp can run before any draw happened, and
+      # PickHelper#do_pick needs that pass to resolve anything.
+      def zoom_to_furniture(view)
+        view.zoom(granete_furniture_instances.first)
+        view.invalidate
+        begin
+          tmp = File.join(Dir.tmpdir, "granete-470-render-#{Process.pid}.png")
+          view.write_image(tmp)
+          FileUtils.rm_f(tmp)
+        rescue StandardError
+          nil
+        end
+      end
+
+      # Compact one-line probe summary for the flunk message when the grid
+      # search finds nothing: what the viewport shows and what a few
+      # candidate points actually pick.
+      def natural_selection_diagnostics(view, manager)
+        root = granete_furniture_instances.first
+        probes = [[0.5, 0.5], [0.35, 0.5], [0.65, 0.5], [0.5, 0.35], [0.5, 0.65]].map do |fx, fy|
+          x = (view.vpwidth * fx).to_i
+          y = (view.vpheight * fy).to_i
+          picked = pick_summary(view, x, y)
+          "[#{x},#{y}=>#{picked}]"
+        end.join
+        markers = manager.projected_features.length
+        "root=#{root.class} markers=#{markers} probes=#{probes}"
+      rescue StandardError => e
+        "diag_failed: #{e.message}"
       end
 
       # C: moved furniture — overlay follows exactly, never stays at origin.
@@ -193,6 +269,116 @@ module Granete
       end
 
       private
+
+      # A managed part instance nested in the (single) furniture root,
+      # resolved by Granete metadata — never by name.
+      def managed_part(component_instance_id)
+        root = granete_furniture_instances.first
+        part = root.definition.entities.find do |entity|
+          entity.respond_to?(:definition) &&
+            metadata_store.read(entity)&.dig('identity', 'instanceRef') == component_instance_id
+        end
+        flunk "fixture part #{component_instance_id} not found" unless part
+        part
+      end
+
+      # Screen point that hits the furniture body but stays clear of every
+      # projected marker. Search: project the furniture bounds corners to
+      # get its screen rectangle, then probe a grid inside it with the SAME
+      # PickHelper the tool uses until a point is both root-picked and
+      # marker-clear — robust to whatever the active camera shows.
+      def screen_point_on_furniture_off_markers(view, manager)
+        root = granete_furniture_instances.first
+        corners = bounds_corners(root.bounds).filter_map do |corner|
+          screen = view.screen_coords(corner)
+          next nil if screen.respond_to?(:z) && screen.z.negative?
+
+          [screen.x, screen.y]
+        end
+        return nil if corners.empty?
+
+        xs = corners.map(&:first)
+        ys = corners.map(&:last)
+        min_x = xs.min.clamp(1, view.vpwidth - 2)
+        max_x = xs.max.clamp(1, view.vpwidth - 2)
+        min_y = ys.min.clamp(1, view.vpheight - 2)
+        max_y = ys.max.clamp(1, view.vpheight - 2)
+        return nil if min_x > max_x || min_y > max_y
+
+        steps = 12
+        (1..steps).each do |i|
+          (1..steps).each do |j|
+            x = min_x + ((max_x - min_x) * i / (steps + 1))
+            y = min_y + ((max_y - min_y) * j / (steps + 1))
+            point = Geom::Point3d.new(x, y, 0)
+            next unless root_pick?(view, point)
+            return point if clear_of_markers?(view, manager, point)
+          end
+        end
+        nil
+      rescue StandardError
+        nil
+      end
+
+      def bounds_corners(bounds)
+        min = bounds.min
+        max = bounds.max
+        [min.x, max.x].product([min.y, max.y]).product([min.z, max.z]).map do |(xy, z)|
+          Geom::Point3d.new(xy[0], xy[1], z)
+        end
+      end
+
+      def clear_of_markers?(view, manager, screen)
+        manager.projected_features.all? do |feature|
+          [feature.center, *feature.ring_points].all? do |point|
+            projected = view.screen_coords(point)
+            next true if projected.respond_to?(:z) && projected.z.negative?
+
+            distance = Math.sqrt(((projected.x - screen.x)**2) + ((projected.y - screen.y)**2))
+            distance > Overlay::ScreenPicker::DEFAULT_THRESHOLD_PX + 6
+          end
+        end
+      end
+
+      # The click point must resolve, through the same PickHelper the tool
+      # uses (do_pick + path_at), to a path rooted at the furniture
+      # instance (native topmost at the root editing context).
+      def root_pick?(view, screen)
+        ph = view.pick_helper
+        count = ph.do_pick(screen.x, screen.y)
+        return false unless count.is_a?(Integer) && count.positive?
+
+        path = ph.path_at(0)
+        path.is_a?(Array) && !path.empty? && path.first == granete_furniture_instances.first
+      end
+
+      # One candidate-point pick summary for diagnostics.
+      def pick_summary(view, pos_x, pos_y)
+        ph = view.pick_helper
+        count = ph.do_pick(pos_x, pos_y)
+        return 'none' unless count.is_a?(Integer) && count.positive?
+
+        path = ph.path_at(0)
+        best = ph.best_picked
+        label = best.respond_to?(:name) ? best.name.to_s : ''
+        "#{path.length}:#{best.class}(#{label})"
+      rescue StandardError => e
+        "err:#{e.class}"
+      end
+
+      # A viewport corner that resolves to no entity at all.
+      def screen_point_on_empty_space(view)
+        candidates = [[5, 5], [5, 30], [30, 5]]
+        candidates.each do |x, y|
+          point = Geom::Point3d.new(x, y, 0)
+          ph = view.pick_helper
+          count = ph.do_pick(x, y)
+          return point unless count.is_a?(Integer) && count.positive?
+        end
+        nil
+      rescue StandardError
+        nil
+      end
 
       def model
         Sketchup.active_model

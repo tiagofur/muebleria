@@ -28,14 +28,14 @@ module Granete
         attr_reader :mode, :scope, :active_feature_id, :filter, :unavailable_reason, :snapshot
 
         def initialize(resolver:, locator:, model_provider:, preflight_tracker:,
-                       logger: nil, on_state_change: nil, on_viewport_selection: nil)
+                       logger: nil, on_state_change: nil, on_selection_written: nil)
           @resolver = resolver
           @locator = locator
           @model_provider = model_provider
           @preflight_tracker = preflight_tracker
           @logger = logger
           @on_state_change = on_state_change
-          @on_viewport_selection = on_viewport_selection
+          @on_selection_written = on_selection_written
           @mode = 'off'
           @scope = nil
           @snapshot = nil
@@ -106,8 +106,9 @@ module Granete
 
         # Selection changed while ON: re-scope. Same furniture → only the
         # part filter moves (no re-resolve needed: the snapshot covers the
-        # whole furniture); different furniture or no managed selection →
-        # clear/disable honestly.
+        # whole furniture; a dropped snapshot self-heals with one
+        # authoritative re-resolve); different furniture or no managed
+        # selection → clear/disable honestly.
         def rescope(new_scope)
           return unless mode_on?
 
@@ -124,8 +125,16 @@ module Granete
           if same_furniture
             @scope = normalized
             @active_feature_id = nil
-            invalidate_view
-            notify_state_change
+            if @snapshot
+              invalidate_view
+              notify_state_change
+            else
+              # Self-healing (#470): an honest clear (empty selection
+              # mid-replace, or a resolve that went unavailable) drops the
+              # snapshot; the same furniture coming back re-resolves
+              # authoritatively instead of staying dead.
+              refresh
+            end
           else
             enable(normalized)
           end
@@ -230,10 +239,92 @@ module Granete
           mark_stale('una mutación de fabricación está en curso')
         end
 
-        # Viewport picking fell through to an entity: forward it (the dialog
-        # bridge resolves the semantic context and re-scopes).
-        def on_viewport_selection(entity)
-          @on_viewport_selection&.call(entity)
+        # Restores SketchUp's natural selection while the inspection tool
+        # owns the viewport (#470): a click outside the markers replaces the
+        # model selection with the entity the tool's PickHelper resolved as
+        # the select-tool-equivalent pick, and a click on empty space clears
+        # it. Writing model.selection is the ONLY selection act. The #476
+        # SelectionObserver flow then updates the dialog and re-scopes the
+        # overlay exactly as for a click made without the overlay — with
+        # one host-reality correction: the real host fires
+        # onSelectionCleared synchronously for the clear but DEFERS (or
+        # drops) onSelectionBulkChange for Ruby selection writes inside a
+        # tool event handler, which left the inspector stuck on "no
+        # selection". After a successful add the manager therefore delivers
+        # the observer's own bulk notification for the REAL selection via
+        # the on_selection_written hook — the same canonical #476 flow,
+        # idempotent if the host delivers its deferred copy later.
+        # Selection writes open no operation and touch no entity/metadata,
+        # so inspection stays read-only for the model.
+        def select_naturally(entity)
+          model = @model_provider.call
+          return unless model.respond_to?(:selection)
+
+          selection = model.selection
+          if entity.nil?
+            selection.clear unless selection.empty?
+            return
+          end
+          return if selection.length == 1 && same_entity?(selection.first, entity)
+
+          selection.clear unless selection.empty?
+          selection.add(entity)
+          deliver_selection_written(selection)
+        rescue StandardError => e
+          # A host hiccup while writing the selection must never crash the
+          # viewport tool; the click is simply inert.
+          @logger&.warn('manufacturing_overlay_natural_selection_failed', error: e.message)
+        end
+
+        # Esc mirrors the native Select tool (#470 real-host UX): inside an
+        # open editing context it leaves the context ONE level
+        # (Model#close_active, the host's own API); at the model root it
+        # clears the selection. Navigation/selection state only — never a
+        # productive mutation.
+        def escape_naturally
+          model = @model_provider.call
+          path = model.active_path if model.respond_to?(:active_path)
+          if path.is_a?(Array) && !path.empty?
+            model.close_active if model.respond_to?(:close_active)
+            return
+          end
+
+          selection = model.selection if model.respond_to?(:selection)
+          selection.clear unless selection.nil? || selection.empty?
+        rescue StandardError => e
+          @logger&.warn('manufacturing_overlay_escape_failed', error: e.message)
+        end
+
+        # Double-click mirrors the native Select tool (#470 real-host UX):
+        # on the openable instance the first click of the pair just
+        # selected, it ENTERS its editing context (Model#active_path=, the
+        # host's own open API); on empty space while a context is open it
+        # LEAVES the context one level; anything else falls back to plain
+        # natural selection. The overlay keeps drawing whatever the scope
+        # holds — transforms are read live per frame.
+        def open_or_close_context_naturally(entity)
+          model = @model_provider.call
+          path = model.active_path if model.respond_to?(:active_path)
+          inside_context = path.is_a?(Array) && !path.empty?
+
+          if entity.nil?
+            model.close_active if inside_context && model.respond_to?(:close_active)
+            return
+          end
+
+          selection = model.selection if model.respond_to?(:selection)
+          if openable_instance?(entity) && selection &&
+             selection.length == 1 && same_entity?(selection.first, entity) &&
+             model.respond_to?(:active_path=)
+            # The real host returns nil (not []) for active_path at the
+            # model root — normalize before appending the opened instance.
+            model.active_path = (path || []) + [entity]
+            return
+          end
+
+          select_naturally(entity)
+        rescue StandardError => e
+          @logger&.warn('manufacturing_overlay_context_navigation_failed', error: e.message)
         end
 
         # Features in scope for drawing: snapshot features filtered by the
@@ -289,6 +380,36 @@ module Granete
         end
 
         private
+
+        # Deliver the host's pending bulk notification for OUR selection
+        # write through the canonical #476 observer flow.
+        def deliver_selection_written(selection)
+          @on_selection_written&.call(selection)
+        rescue StandardError => e
+          @logger&.warn('manufacturing_overlay_selection_delivery_failed', error: e.message)
+        end
+
+        # Only real containers are openable for editing — exactly the
+        # entity classes the native double-click opens.
+        def openable_instance?(entity)
+          (defined?(::Sketchup::ComponentInstance) && entity.is_a?(::Sketchup::ComponentInstance)) ||
+            (defined?(::Sketchup::Group) && entity.is_a?(::Sketchup::Group))
+        end
+
+        # Host-faithful entity identity: Sketchup::Entity does NOT define
+        # #==, so on the real host two wrappers of the SAME entity compare
+        # as different Ruby objects. The stable same-session identity is
+        # Entity#entityID (unique within the model).
+        def same_entity?(one, other)
+          return false if one.nil? || other.nil?
+          return true if one.equal?(other)
+
+          if one.respond_to?(:entityID) && other.respond_to?(:entityID)
+            one.entityID == other.entityID
+          else
+            one == other
+          end
+        end
 
         def normalize_scope(scope)
           scope.to_h.select do |key, value|
@@ -348,13 +469,23 @@ module Granete
           nil
         end
 
+        # The modern host Tool STACK is preferred (#470 real-host bug):
+        # push_tool saves the currently active tool (the native Select in
+        # the normal flow) and pop_tool RESTORES it — hiding the overlay
+        # hands the viewport back exactly as it was. The legacy
+        # Model#select_tool path is a fallback only: select_tool(nil)
+        # deselects the tool without restoring anything, which left the
+        # viewport with no active tool at all (the reported "can't do
+        # anything anymore" freeze).
         def push_tool
           model = @model_provider.call
           @tool = InspectionTool.new(self)
-          if model.respond_to?(:select_tool)
-            model.select_tool(@tool)
-          elsif model.respond_to?(:tools) && model.tools.respond_to?(:push_tool)
+          if model.respond_to?(:tools) && model.tools.respond_to?(:push_tool)
+            @tool_pushed_on_stack = true
             model.tools.push_tool(@tool)
+          elsif model.respond_to?(:select_tool)
+            @tool_pushed_on_stack = false
+            model.select_tool(@tool)
           end
           invalidate_view
         end
@@ -363,12 +494,13 @@ module Granete
           return unless @tool
 
           model = @model_provider.call
-          if model.respond_to?(:select_tool)
-            model.select_tool(nil)
-          elsif model.respond_to?(:tools) && model.tools.respond_to?(:pop_tool)
+          if @tool_pushed_on_stack && model.respond_to?(:tools) && model.tools.respond_to?(:pop_tool)
             model.tools.pop_tool
+          elsif model.respond_to?(:select_tool)
+            model.select_tool(nil)
           end
           @tool = nil
+          @tool_pushed_on_stack = false
         end
 
         def invalidate_view

@@ -15,7 +15,13 @@ module Granete
       #     STALE-scoped scopes draw nothing productive, stale scopes draw
       #     dimmed markers;
       #   - markers are pure viewport pixels — nothing here can be scanned
-      #     back into manufacturing truth because nothing is created.
+      #     back into manufacturing truth because nothing is created;
+      #   - a click on a marker selects the ManufacturingFeature (overlay
+      #     state only); any other click delegates to the manager to write
+      #     SketchUp's NATURAL model selection — the #476 SelectionObserver
+      #     flow, identical to a click without the overlay, then updates
+      #     the dialog and re-scopes this overlay. The tool never resolves
+      #     selection semantics itself.
       #
       # Colors mirror the dialog design tokens (dialog.html :root):
       #   brand-500 / warning-700 / danger-600 / neutral-700.
@@ -72,14 +78,43 @@ module Granete
             return true
           end
 
-          # A click on empty space falls through to the model so selecting a
-          # different part re-scopes the overlay (the natural authoring flow).
-          select_under_cursor(x, y, view)
-          false
+          # Any other click follows SketchUp's natural selection (#470): the
+          # manager writes model.selection itself (replace on geometry, clear
+          # on empty space) and the #476 SelectionObserver flow — the same
+          # one that runs without the overlay — updates the dialog and
+          # re-scopes this overlay. The tool consumes the click it performed.
+          @manager.select_naturally(native_pick_under_cursor(x, y, view))
+          true
         end
 
-        def onCancel(_reason, view)
+        # SketchUp's Tool#onCancel carries a REASON: 0 = the user pressed
+        # Escape, 1 = the user re-selected this same tool, 2 = the user ran
+        # Undo while the tool was active. Only a REAL Escape (0) runs the
+        # native escape (leave the open editing context one level, or clear
+        # the selection at the model root); the other reasons must leave
+        # selection, context and overlay exactly as they were — the host
+        # performs its own native behavior. The overlay mode itself stays
+        # ON (dialog-driven lifecycle per #470).
+        def onCancel(reason, view)
+          @manager.escape_naturally if reason.zero?
           view.invalidate if view.respond_to?(:invalidate)
+        end
+
+        # Double-click mirrors the native Select tool (#470 real-host UX):
+        # markers keep their special selection; everything else enters the
+        # context of the instance the first click selected, leaves the open
+        # context on empty space, or falls back to natural selection.
+        # rubocop:disable-next SketchupSuggestions/ToolInvalidate, Naming/MethodParameterName, Naming/PredicateMethod
+        def onLButtonDoubleClick(_flags, x, y, view)
+          feature = ScreenPicker.pick(x, y, @manager.projected_features, view)
+          if feature
+            @manager.select_feature(feature.visual_id)
+            view.invalidate if view.respond_to?(:invalidate)
+            return true
+          end
+
+          @manager.open_or_close_context_naturally(native_pick_under_cursor(x, y, view))
+          true
         end
 
         private
@@ -125,14 +160,22 @@ module Granete
                          size: LABEL_SIZE, color: color_for(view, COLOR_STALE), bold: true)
         end
 
+        # The entity the native Select tool would pick under the cursor, or
+        # nil for a click on empty space: the HOST's own pick resolution
+        # (PickHelper#do_pick + #best_picked — the select-tool-equivalent
+        # entity of the current editing context), never a hand-rolled path
+        # walk in plugin code.
         # rubocop:disable-next Naming/MethodParameterName
-        def select_under_cursor(x, y, view)
-          return unless view.respond_to?(:pickhelper)
+        def native_pick_under_cursor(x, y, view)
+          return nil unless view.respond_to?(:pick_helper)
 
-          ph = view.pickhelper(x, y)
-          picked = ph.best_path if ph.respond_to?(:best_path)
-          entity = picked&.last
-          @manager.on_viewport_selection(entity) if entity
+          ph = view.pick_helper
+          return nil unless ph.respond_to?(:do_pick)
+
+          count = ph.do_pick(x, y)
+          return nil unless count.is_a?(Integer) && count.positive?
+
+          ph.best_picked if ph.respond_to?(:best_picked)
         rescue StandardError
           nil
         end
