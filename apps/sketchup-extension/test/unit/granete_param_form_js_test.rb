@@ -9,7 +9,8 @@ require_relative '../test_helper'
 # the owner (Option B of the post-C4.9 audit). getDefaultParams,
 # renderParamForm, parameterIssueMessage and estimatedPartsLabel live in
 # granete-param-form.js with the Owns/Consumes/Does-NOT-own header; the
-# module is pure (no init, no injected deps, no module state, no Ruby
+# module is stateless (no init, no injected dependency bag, no module
+# state, no Ruby
 # bridge, no chrome/capability helpers, no configurator/inspector state);
 # dialog.html keeps NO parametric implementation symbols and wires both
 # consumer init bags (configurator + inspector) to window.GraneteUI.paramForm.*;
@@ -60,7 +61,7 @@ class GraneteParamFormJsTest < Minitest::Test
      'window.GraneteUI.paramForm = {'].each do |symbol|
       assert_includes source, symbol, "granete-param-form.js owns #{symbol}"
     end
-    # Pure module: idempotent guard, no init, no injected deps.
+    # Stateless module: idempotent guard, no init, no injected dependency bag.
     assert_includes source, 'if (window.GraneteUI.paramForm) return;'
     refute_includes source, 'init: function', 'the module is init-free by contract'
     refute_includes source, 'requireDeps', 'the module takes no dep bag'

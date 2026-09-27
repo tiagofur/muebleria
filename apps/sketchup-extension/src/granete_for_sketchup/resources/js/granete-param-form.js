@@ -17,10 +17,14 @@
 //   heuristic labeled "Aprox.", and "Piezas: se calculan al resolver" when
 //   nothing can be estimated honestly.
 //
-// Consumes: nothing. Pure functions over their arguments — no module
-// state, no init(), no injected deps, no window.sketchup calls and no
-// references to other GraneteUI modules (deliberately init-free: that is
-// the agent-first property this boundary buys).
+// Consumes: browser DOM primitives (`document.createElement`) for
+// renderParamForm, the caller-owned container passed to that renderer and
+// the caller-provided onChange callback. No GraneteUI modules, no
+// window.sketchup calls and no injected dependency bag.
+//
+// The module owns no mutable module state; getDefaultParams,
+// parameterIssueMessage and estimatedPartsLabel are value helpers, while
+// renderParamForm is a stateless DOM renderer over caller-owned state.
 //
 // Does NOT own: configurator/inspector state (they keep the values and
 // call back via onChange); interactive param validation

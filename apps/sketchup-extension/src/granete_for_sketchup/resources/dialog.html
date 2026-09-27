@@ -1030,9 +1030,10 @@
 
     <!-- #848 post-C4.9: shared parameter-form module (defaults, param
          form rendering, PARAMETER_* issue copy, honest estimated-parts
-         label) under window.GraneteUI.paramForm. Pure functions with no
-         init/deps/state: it loads before the inline bootstrap, which
-         injects its API into the configurator and inspector init bags. -->
+         label) under window.GraneteUI.paramForm. Stateless with no
+         init/dependency bag/module state: it loads before the inline
+         bootstrap, which injects its API into the configurator and
+         inspector init bags. -->
     <script src="js/granete-param-form.js"></script>
 
     <script>

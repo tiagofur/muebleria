@@ -50,7 +50,8 @@ Límites entre consumidores del formulario de parámetros: Configurator =
 configuración activa + intent de inserción; Inspector = working copy de la
 selección; `granete-param-form.js` = presentación/semántica compartida del
 formulario (defaults, render, copy de issues PARAMETER_*, estimado honesto
-#847) — funciones puras, sin estado ni init.
+#847) — módulo stateless, sin init ni dependency bag; renderParamForm
+consume el DOM y muta únicamente el container recibido por el caller.
 
 Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies

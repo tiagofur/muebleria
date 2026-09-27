@@ -755,7 +755,7 @@ and NO line-count chasing toward the literal `≤ ~900`.
 - **Why this boundary is real architecture, not line-count chasing**: the
   audit's remaining-inline classification found exactly one domain-sized
   group with no owner (getDefaultParams, renderParamForm,
-  parameterIssueMessage, estimatedPartsLabel — ~243–252 lines): pure,
+  parameterIssueMessage, estimatedPartsLabel — ~243–252 lines): stateless,
   single-implementation, consumed by exactly the same two modules
   (configurator + inspector) that receive them by init injection. Leaving
   them inline kept param-form symptoms routing into `dialog.html` (the
@@ -766,7 +766,12 @@ and NO line-count chasing toward the literal `≤ ~900`.
   checkbox + badge, string inputs + hints, aria), the PARAMETER_* issue →
   Spanish copy table and the #847 honest estimated-parts label. It OWNS NO
   state (stateless by contract, `State authority: none` in the header), has
-  NO init() and NO injected deps (pure functions over their arguments),
+  NO init() and NO injected dependency bag (stateless / single
+  implementation: getDefaultParams, parameterIssueMessage and
+  estimatedPartsLabel are value helpers, while renderParamForm is a
+  stateless DOM renderer that consumes browser DOM primitives and mutates
+  only the caller-owned container, invoking the caller-provided onChange;
+  it consumes no other GraneteUI module and no external state authority),
   makes NO `window.sketchup` calls, and consumes NO other GraneteUI module.
   Does NOT own: configurator/inspector state, capability authority
   (capabilityEnabled stays inline), chrome (icon/toast/tabs), interactive
