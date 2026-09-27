@@ -86,39 +86,67 @@ base-mode freeze (that would create a third authority).
 
 ## Tasks
 
-- [ ] T1 — RED engine: pricing BOM under frozen context Y ≠ release BOM under
+- [x] T1 — RED engine: pricing BOM under frozen context Y ≠ release BOM under
       module default X (plinth_board→ZOCLO, plinth_strip→ZOCLO_PERFIL,
-      legs→PATAS), strict gate rejects retained choices.
-- [ ] T2 — RED storage (real PostgreSQL): Q3 frozen Y + R3 retained choice →
-      `CreateProductionRelease` must succeed; today it fails with
-      "choice … is not consumed".
-- [ ] T3 — Engine authority: `ReleaseResolutionContext` + threading through
+      legs→PATAS), strict gate rejects retained choices. Observed 3/3 RED at
+      `c6cfb8d6^` ("release unit choice … is not consumed").
+- [x] T2 — RED storage (real PostgreSQL): Q3 frozen plinth_board + retained
+      ZOCLO choice → `CreateProductionRelease` failed with
+      "choice ZOCLO is not consumed" (canonical runner, granete_app role).
+- [x] T3 — Engine authority: `ReleaseResolutionContext` (+constructor
+      fail-closed, exact-identity lookup) threaded through
       `ResolveReleaseCollection` → `resolveReleaseUnitOpt` →
-      `ResolveBomForRelease`.
-- [ ] T4 — Storage loader + gates: `loadReleaseBaseAuthority`, readiness
-      chain, fail-closed typed errors.
-- [ ] T5 — Preflight explicit quote: store signature, API handler, OpenAPI
-      (request body + issue code enum), regenerated clients, drift check.
-- [ ] T6 — Negative proofs: quoted missing context, malformed mode, unit
-      mismatch, quote-less incompatibility (no contamination), module-default
-      mutation after Q must not reinterpret quoted truth, cross-project/tenant.
-- [ ] T7 — Regressions: #826 engine suite, #727 presets/material-choices,
-      reconciliation, adjacent storage suites.
+      `ResolveBomForRelease`. `ConsumedOptionRoles` now counts
+      base-treatment-synthesized hardware lines so legs/plinth_strip consume
+      their choices under the governing mode.
+- [x] T4 — Storage loader + gates: `loadReleaseBaseAuthority` (snapshot
+      parse fail-closed → typed causes), readiness chain carries the exact
+      quote id; `validateQuoteRevisionBaseline` shared by release/approval/
+      preflight.
+- [x] T5 — Preflight explicit quote: optional `quoteRevisionId` body
+      (EvaluateDesignRevisionPreflightRequest), `frozen_base_context` issue
+      code, OpenAPI + Go/TS clients regenerated, drift check green. The one
+      real caller (ProjectReconciliationScreen) now pins the selected
+      accepted quote and keeps quote-less for historical comparisons.
+- [x] T6 — Negative proofs: legacy missing-context (typed frozen_base_context
+      missing on BOTH verdicts), malformed/incomplete (reconciliation parse
+      gate + loader invalid), unit mismatch (frozen_base_context with exact
+      identity), quote-less (no contamination, honest BLOCK under mutated
+      module default), module-default mutation after Q (frozen truth immune,
+      same BOM on re-release), cross-project quote and cross-tenant baseline.
+- [x] T7 — Regressions: engine+domain+api packages green; FULL serialized
+      storage suite green (572s, granete_app, disposable postgres 16);
+      #826/#727 suites included there; TS typecheck (web/ui/mobile) + unit
+      tests green; check_openapi_drift green; CI/factory script suites green;
+      organization browser gate run for the UI change.
 - [ ] T8 — Independent review + publication (`Fixes #830` /
-      `Delivery: complete` only if all acceptance holds).
+      `Delivery: complete` only if all acceptance holds). PAUSED at §17: the
+      authored count crossed >~1200 WITH an OpenAPI change — reporting before
+      publishing per the size policy.
 
 ## Verification
 
-- Engine: `go test ./internal/domain/engine/...` (focused, then package).
-- Storage: real PostgreSQL in a disposable container DB (never `muebles`),
-  `NOSUPERUSER`/`NOBYPASSRLS` runtime role, `GOFLAGS=-p=1 -parallel=1`.
-- Contracts: `python3 scripts/check_openapi_drift.py` + generated client regen.
-- Browser/SketchUp host proof: NOT_RUN unless exercised (report honestly).
+- Engine: `go test ./internal/domain/engine/...` green (focused + package).
+- Storage: full serialized suite via `scripts/backend-test.sh ./internal/storage`
+  — 572s green against ephemeral postgres:16 (runtime role granete_app,
+  NOSUPERUSER/NOBYPASSRLS role separation, DB never `muebles`).
+- Contracts: `python3 scripts/check_openapi_drift.py` green ("generated files
+  are current; operation drift negative proofs passed").
+- TS: `pnpm typecheck` + `pnpm test` green.
+- Browser: organization-browser gate run (UI change); SketchUp host: NOT_RUN
+  (untouched by this issue).
 
 ## Progress
 
-- Audit complete at base `3eaf22c6`; branch
-  `fix/830-frozen-base-treatment-authority`.
+- Audit complete at base `3eaf22c6` (merge-base confirmed); branch
+  `fix/830-frozen-base-treatment-authority`, commits `553c76c6` → `c116afe6`.
+- Authored size vs merge-base: 29 files, +1394/−89 (~1483 changed lines);
+  production ≈ 560, the rest is the PostgreSQL integration matrix the issue
+  acceptance mandates plus the ODD artifact. Crossed the >~1200 band WITH an
+  OpenAPI/clients change → publication paused for the human size decision
+  (no size:exception self-applied).
+- Note: `origin/main` advanced past the pinned base (other writers' merges);
+  merge conflict check pending at publication time.
 - Incident 2026-09-26 ~17:34: an external cleanup swept `muebles-worktrees/`
   (all 8 registered stale worktrees plus this one, minutes after creation;
   no code existed yet — only this artifact, restored verbatim). Worktree
