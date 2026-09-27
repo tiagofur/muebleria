@@ -442,11 +442,8 @@ module Granete
               return failure(:host_reconciliation_required,
                              reconciliation['reason'] || 'el estado local del diseño no se pudo reconciliar')
             end
-            row = reconciliation['items'].find { |item| item['id'] == furniture_instance_id }
-            if row && %w[missing_local incompatible unknown].include?(row['reconciliationState'])
-              return failure(:host_reconciliation_required,
-                             row['reason'] || 'el estado local del mueble no se pudo reconciliar')
-            end
+            admission, manual_missing = placement_admission(reconciliation, furniture_instance_id, transformation)
+            return admission unless admission == true
 
             unit = resolve_unit(context['binding'], furniture_instance_id)
             # Failures, already_placed (focus) and pending_confirmation
@@ -455,7 +452,8 @@ module Granete
 
             insert_furniture_unit(model, context['binding'], unit['unit'],
                                   transformation: transformation,
-                                  expected_layout_signature: expected_layout_signature)
+                                  expected_layout_signature: expected_layout_signature,
+                                  missing_manual: manual_missing)
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -474,6 +472,10 @@ module Granete
           # returned layout/label for its preview; identity and productive
           # state are untouched until the commit click revalidates through
           # #place itself.
+          # #870 — a missing_local unit previews through the SAME entry
+          # point with its WorkingCopy-authoritative inputs (the exact
+          # source its commit re-reads), so the gesture signature covers
+          # the authorized composition, not the quoted display.
           def prepare_placement_preview(furniture_instance_id)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
@@ -486,21 +488,17 @@ module Granete
               return failure(:host_reconciliation_required,
                              reconciliation['reason'] || 'el estado local del diseño no se pudo reconciliar')
             end
+            missing_manual = missing_local_row?(reconciliation, furniture_instance_id)
 
             unit = resolve_unit(context['binding'], furniture_instance_id)
             return unit unless unit['unit']
 
-            instance = unit['unit']
-            definition = @catalog_provider.find_definition(instance.furniture_definition_id)
-            unless definition
-              return failure(:definition_unavailable,
-                             'el catálogo del taller no incluye la definición de este mueble')
-            end
+            resolved = preview_inputs(context, unit['unit'], missing_manual)
+            return resolved unless resolved.is_a?(Array)
 
-            params, choices = PlacementGuards.placement_inputs(@service, @intent_store,
-                                                               context['binding'], instance, definition)
+            definition, params, choices = resolved
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
-            { 'ok' => true, 'code' => 'preview_ready', 'instanceId' => instance.id,
+            { 'ok' => true, 'code' => 'preview_ready', 'instanceId' => unit['unit'].id,
               'definition' => definition, 'parameters' => params,
               'material_choices' => choices, 'layout' => layout,
               'layout_signature' => PlacementGuards.layout_signature(layout) }
@@ -719,20 +717,27 @@ module Granete
           # `transformation` the position is already final: the canonical
           # insertion receives it verbatim and skips the Move handoff.
           def insert_furniture_unit(model, binding, instance, transformation: nil,
-                                    expected_layout_signature: nil)
+                                    expected_layout_signature: nil, missing_manual: false)
             definition = @catalog_provider.find_definition(instance.furniture_definition_id)
             unless definition
               return failure(:definition_unavailable,
                              'el catálogo del taller no incluye la definición de este mueble')
             end
 
-            params, choices = PlacementGuards.placement_inputs(@service, @intent_store, binding, instance, definition)
+            # #870: a manually placed missing unit keeps its AUTHORIZED
+            # composition — the same source its preview resolved, so the
+            # pinned layout signature still matches.
+            inputs = resolve_placement_inputs(binding, instance, definition, missing_manual)
+            return inputs unless inputs.is_a?(Array)
+
+            params, choices = inputs
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
             signature_mismatch = composition_mismatch(expected_layout_signature, layout)
             return signature_mismatch if signature_mismatch
 
             insert_physical_unit(model, binding, instance, definition, params, choices, layout,
-                                 transformation: transformation, prepare: transformation.nil?)
+                                 transformation: transformation, prepare: transformation.nil?,
+                                 preserve_parameters: missing_manual)
           end
 
           # A pinned composition that no longer matches the freshly resolved
@@ -747,12 +752,13 @@ module Granete
           end
 
           def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout,
-                                   transformation: nil, prepare: true)
+                                   transformation: nil, prepare: true, preserve_parameters: false)
             result = @furniture_builder_factory.call(model).place_existing_furniture(
               model, furniture_instance_id: instance.id, definition: definition,
                      parameters: parameters, resolved_layout: layout, material_choices: choices,
                      project_id: binding.project_id, design_id: binding.design_id,
-                     transformation: transformation, prepare: prepare
+                     transformation: transformation, prepare: prepare,
+                     preserve_parameters: preserve_parameters
             )
             return failure(:placement_failed, result['error']) unless result['success']
 
@@ -760,6 +766,80 @@ module Granete
                          furniture_instance_id: instance.id, components: result['component_count'])
             { 'ok' => true, 'code' => 'pending_position', 'instanceId' => instance.id,
               'components' => result['component_count'] }
+          end
+
+          # Admission of an existing unit against the live reconciliation
+          # (#870): unreconcilable rows fail closed, and a missing_local
+          # unit re-enters placement ONLY through an explicit preview
+          # gesture — the ordinary origin+Move path stays closed. Returns
+          # [failure_answer, false] to block, or [true, manual_missing].
+          def placement_admission(reconciliation, furniture_instance_id, transformation)
+            row = reconciliation['items'].find { |item| item['id'] == furniture_instance_id }
+            manual_missing = row && row['reconciliationState'] == 'missing_local' && transformation
+            if row && %w[missing_local incompatible unknown].include?(row['reconciliationState']) && !manual_missing
+              blocked = failure(:host_reconciliation_required,
+                                row['reason'] || 'el estado local del mueble no se pudo reconciliar')
+              return [blocked, false]
+            end
+
+            [true, !!manual_missing]
+          end
+
+          # True when the live reconciliation still classifies this unit as
+          # missing_local — the #870 manual-recovery preview lane.
+          def missing_local_row?(reconciliation, furniture_instance_id)
+            row = reconciliation['items'].find { |item| item['id'] == furniture_instance_id }
+            !!(row && row['reconciliationState'] == 'missing_local')
+          end
+
+          # Definition + composition inputs for the #469 preview: the
+          # exact catalog definition plus the lane-appropriate inputs.
+          # Returns a failure answer, or [definition, params, choices].
+          def preview_inputs(context, instance, missing_manual)
+            definition = @catalog_provider.find_definition(instance.furniture_definition_id)
+            unless definition
+              return failure(:definition_unavailable,
+                             'el catálogo del taller no incluye la definición de este mueble')
+            end
+
+            inputs = resolve_placement_inputs(context['binding'], instance, definition, missing_manual)
+            return inputs unless inputs.is_a?(Array)
+
+            [definition, *inputs]
+          end
+
+          # The composition inputs a placement renders from. Ordinary lanes
+          # seed from the quote display (#389/#620); a #870 missing unit's
+          # manual recovery keeps its AUTHORIZED WorkingCopy item verbatim
+          # (restore semantics — never re-seeded from the quoted display).
+          # Returns [params, choices], or the correlated failure itself
+          # when the backing item no longer exists.
+          def resolve_placement_inputs(binding, instance, definition, missing_manual)
+            unless missing_manual
+              return PlacementGuards.placement_inputs(@service, @intent_store, binding, instance, definition)
+            end
+
+            recovered = missing_unit_inputs(binding, instance)
+            return recovered unless recovered['ok']
+
+            [recovered['parameters'], recovered['material_choices']]
+          end
+
+          # #870 — manual recovery of a missing_local unit resolves its
+          # composition from the AUTHORITATIVE WorkingCopy item: parameters
+          # and material choices verbatim, exactly like the Restorer.
+          # Preview preparation and the commit both go through here, so
+          # the gesture signature covers the authorized composition.
+          def missing_unit_inputs(binding, instance)
+            working = @service.get_working_copy(binding.design_id)
+            item = working.items.find { |candidate| candidate.furniture_instance_id == instance.id }
+            unless item
+              return { 'ok' => false, 'code' => 'working_copy_changed',
+                       'reason' => 'el Working Copy ya no contiene exactamente este mueble' }
+            end
+
+            { 'ok' => true, 'parameters' => item.parameters || {},
+              'material_choices' => item.material_choices || {} }
           end
 
           # Phase 4 — sync with the FINAL transform: GET → merge by
