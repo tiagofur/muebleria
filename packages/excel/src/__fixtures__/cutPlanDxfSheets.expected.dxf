@@ -6,6 +6,8 @@ HEADER
 $ACADVER
 1
 AC1009
+999
+granete.dxf-cut-plan-projection.v1
 9
 $INSBASE
 10
@@ -432,6 +434,16 @@ ETIQUETA
 30.00
 1
 Sin cantos
+0
+CIRCLE
+8
+PERF_F5
+10
+1180.00
+20
+30.00
+40
+2.50
 0
 POLYLINE
 8

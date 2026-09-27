@@ -10,10 +10,8 @@
  * Layers: TABLERO (board outline), PIEZA (piece contours), ETIQUETA (labels),
  * VETA (grain direction), PERF (drilling circles), RETAZO (useful remnants).
  * Units are millimeters, Y axis up, origin at each block's bottom-left corner.
- * Drilling holes are projected on the piece plane for non-rotated pieces only
- * (rotated hole mirroring is undefined without a machine-side convention), and
- * only for faces parallel to the piece plane ('front'/'back') — edge-drilled
- * holes (top/bottom/left/right) do not project onto the 2D contour.
+ * Drilling circles use the DXF-only +90° CCW projection policy below. Edge
+ * circles are reference symbols, not vertical machining instructions.
  */
 
 import type {
@@ -27,7 +25,7 @@ export interface DxfCutPlanExportInput {
   readonly cutPlan: CutPlan;
   readonly variant: 'sheets' | 'pieces';
   readonly projectName?: string;
-  /** Optional drilling patterns keyed by pieceCode — drawn as PERF circles. */
+  /** Optional drilling patterns keyed by exact labelRef, or unique partCode. */
   readonly drilling?: readonly PartDrillingPattern[];
 }
 
@@ -109,8 +107,15 @@ const PIECES_ROW_MAX_MM = 6000;
 const PIECES_GAP_MM = 100;
 const LABEL_HEIGHT_MM = 30;
 const LABEL_LINE_STEP_MM = 38;
-
-const PROJECTED_DRILLING_FACES: ReadonlySet<string> = new Set(['front', 'back']);
+/**
+ * Output-only DXF policy: XY is right/up; rotated means +90° CCW normalized
+ * to the placed rectangle's minimum corner. Back-face mirroring happens in
+ * the unrotated local frame before rotation. This marker is traceability, not
+ * a machine capability claim or a global meaning for CutPlan.rotated.
+ */
+const DXF_PROJECTION_POLICY = 'granete.dxf-cut-plan-projection.v1';
+/** Numeric comparison only; this is not a machining clearance. */
+const FRAME_TOLERANCE_MM = 0.01;
 
 const ASCII_MAP: Record<string, string> = {
   á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ü: 'u', ñ: 'n',
@@ -193,6 +198,134 @@ function circle(layer: string, x: number, y: number, radius: number): string {
   );
 }
 
+function requireFinite(value: number, description: string, minimum = 0): void {
+  if (!Number.isFinite(value) || value < minimum) {
+    throw new ValidationError(`Invalid DXF drilling ${description}`, { value });
+  }
+}
+
+function validateDrillingForPiece(piece: CutPlanPlacedPiece, pattern: PartDrillingPattern): void {
+  if (pattern.holes.length === 0) return;
+  const length = piece.rotated ? piece.widthMm : piece.lengthMm;
+  const width = piece.rotated ? piece.lengthMm : piece.widthMm;
+  for (const [name, value] of [
+    ['piece length', piece.lengthMm], ['piece width', piece.widthMm],
+    ['pattern length', pattern.lengthMm], ['pattern width', pattern.widthMm],
+    ['piece X', piece.xMm], ['piece Y', piece.yMm],
+  ] as const) requireFinite(value, name, name.endsWith('X') || name.endsWith('Y') ? 0 : Number.EPSILON);
+  if (Math.abs(length - pattern.lengthMm) > FRAME_TOLERANCE_MM ||
+      Math.abs(width - pattern.widthMm) > FRAME_TOLERANCE_MM) {
+    throw new ValidationError('DXF drilling frame differs from placed cut contour', {
+      pieceId: piece.id, patternKey: pattern.pieceCode, length, width,
+      patternLength: pattern.lengthMm, patternWidth: pattern.widthMm,
+    });
+  }
+  for (const hole of pattern.holes) {
+    requireFinite(hole.xMm, 'hole X');
+    requireFinite(hole.yMm, 'hole Y');
+    requireFinite(hole.diameterMm, 'diameter', Number.EPSILON);
+    requireFinite(hole.depthMm, 'depth', Number.EPSILON);
+    if (hole.face === 'front' || hole.face === 'back') {
+      if (hole.xMm > width || hole.yMm > length) {
+        throw new ValidationError('DXF face drilling lies outside its piece frame', { pieceId: piece.id });
+      }
+    } else if (hole.face === 'left' || hole.face === 'right') {
+      if (hole.yMm > length) {
+        throw new ValidationError('DXF edge drilling lies outside its piece frame', { pieceId: piece.id });
+      }
+    } else if (hole.face === 'top' || hole.face === 'bottom') {
+      if (hole.xMm > width) {
+        throw new ValidationError('DXF edge drilling lies outside its piece frame', { pieceId: piece.id });
+      }
+    } else {
+      throw new ValidationError('Unsupported DXF drilling face', { face: hole.face });
+    }
+    if (hole.face !== 'front' && hole.face !== 'back' && piece.thicknessMm != null) {
+      requireFinite(piece.thicknessMm, 'piece thickness', Number.EPSILON);
+      const thicknessCoordinate = hole.face === 'left' || hole.face === 'right' ? hole.xMm : hole.yMm;
+      if (thicknessCoordinate > piece.thicknessMm) {
+        throw new ValidationError('DXF edge drilling lies outside piece thickness', { pieceId: piece.id });
+      }
+    }
+  }
+}
+
+/** Validate the entire request before constructing any output file. */
+function bindDrilling(
+  plan: CutPlan,
+  patterns?: readonly PartDrillingPattern[],
+): Map<CutPlanPlacedPiece, PartDrillingPattern> | undefined {
+  if (!patterns) return undefined;
+  const pieces = (plan.sheets ?? []).flatMap((sheet) => sheet.pieces);
+  const keys = new Set<string>();
+  const bound = new Map<CutPlanPlacedPiece, PartDrillingPattern>();
+  for (const pattern of patterns) {
+    const key = pattern.pieceCode?.trim();
+    if (!key || keys.has(key)) {
+      throw new ValidationError('Duplicate or empty DXF drilling pattern key', { pieceCode: key });
+    }
+    keys.add(key);
+    const exact = pieces.filter((piece) => piece.labelRef?.trim() === key);
+    const byCode = pieces.filter((piece) => piece.partCode?.trim() === key);
+    if (exact.length && byCode.some((piece) => !exact.includes(piece))) {
+      throw new ValidationError('Ambiguous DXF drilling pattern key', { pieceCode: key });
+    }
+    const candidates = exact.length ? exact : byCode;
+    if (candidates.length !== 1 || bound.has(candidates[0]!)) {
+      throw new ValidationError('Ambiguous or unmatched DXF drilling pattern', { pieceCode: key });
+    }
+    const piece = candidates[0]!;
+    bound.set(piece, pattern);
+    validateDrillingForPiece(piece, pattern);
+  }
+  for (const piece of pieces) {
+    if (bound.has(piece)) continue;
+    const label = piece.labelRef?.trim();
+    const copy = label?.match(/^(.*)-C([2-9]|[1-9]\d+)$/);
+    const baseLabel = copy?.[1];
+    const basePieces = baseLabel ? pieces.filter((candidate) => candidate.labelRef?.trim() === baseLabel) : [];
+    const copyPieces = label ? pieces.filter((candidate) => candidate.labelRef?.trim() === label) : [];
+    const basePiece = basePieces[0];
+    const basePattern = basePiece && bound.get(basePiece);
+    if (!baseLabel || !basePattern || basePattern.pieceCode.trim() !== baseLabel) {
+      throw new ValidationError('Missing DXF drilling pattern for placed piece', {
+        pieceId: piece.id, labelRef: piece.labelRef,
+      });
+    }
+    if (basePieces.length !== 1 || copyPieces.length !== 1 || keys.has(label!) ||
+        piece.partCode !== basePiece!.partCode || piece.moduleCode !== basePiece!.moduleCode) {
+      throw new ValidationError('Ambiguous DXF drilling copy occurrence', {
+        pieceId: piece.id, labelRef: piece.labelRef, baseLabel,
+      });
+    }
+    validateDrillingForPiece(piece, basePattern);
+    bound.set(piece, basePattern);
+  }
+  return bound;
+}
+
+function projectHole(
+  piece: CutPlanPlacedPiece,
+  hole: PartDrillingPattern['holes'][number],
+  originX: number,
+  originY: number,
+): readonly [number, number] {
+  const length = piece.rotated ? piece.widthMm : piece.lengthMm;
+  const width = piece.rotated ? piece.lengthMm : piece.widthMm;
+  // Back mirror is in the local unrotated frame, before placement.
+  let u: number;
+  let v: number;
+  switch (hole.face) {
+    case 'front': u = hole.yMm; v = hole.xMm; break;
+    case 'back': u = hole.yMm; v = width - hole.xMm; break;
+    case 'left': u = hole.yMm; v = 0; break;
+    case 'right': u = hole.yMm; v = width; break;
+    case 'bottom': u = 0; v = hole.xMm; break;
+    case 'top': u = length; v = hole.xMm; break;
+  }
+  return piece.rotated ? [originX + width - v, originY + u] : [originX + u, originY + v];
+}
+
 function edgesLabel(p: CutPlanPlacedPiece): string {
   const edges = [p.L1 ? 'L1' : '', p.L2 ? 'L2' : '', p.W1 ? 'W1' : '', p.W2 ? 'W2' : '']
     .filter(Boolean)
@@ -216,7 +349,7 @@ function drawPiece(
   x: number,
   y: number,
   withMaterial: boolean,
-  drillingByPiece?: Map<string, PartDrillingPattern>,
+  drillingByPiece?: Map<CutPlanPlacedPiece, PartDrillingPattern>,
 ): void {
   entities.push(polyline('PIEZA', x, y, p.lengthMm, p.widthMm));
 
@@ -235,30 +368,13 @@ function drawPiece(
     entities.push(line('VETA', cx + half, cy, cx + half - 40, cy - 20));
   }
 
-  if (drillingByPiece && !p.rotated) {
-    const pattern = drillingByPiece.get(p.labelRef ?? p.partCode) ?? drillingByPiece.get(p.partCode);
+  if (drillingByPiece) {
+    const pattern = drillingByPiece.get(p);
     if (pattern) {
       for (const hole of pattern.holes) {
         const layer = drillingLayerName(hole.face, hole.diameterMm);
-        // Face-plane convention (partDrillingResolver, mirrors hardwarePlacement):
-        // front/back holes carry xMm along the piece WIDTH and yMm along the
-        // LENGTH. The piece rect is drawn with X = length / Y = width.
-        if (hole.face === 'front') {
-          entities.push(circle(layer, x + hole.yMm, y + hole.xMm, hole.diameterMm / 2));
-        } else if (hole.face === 'back') {
-          // Back face: MIRRORED on the width axis — the operator flips the
-          // piece around its length axis and runs these coordinates as drawn.
-          entities.push(circle(layer, x + hole.yMm, y + (p.widthMm - hole.xMm), hole.diameterMm / 2));
-        } else if (hole.face === 'left' || hole.face === 'right') {
-          // Edge normal to width: projected at the piece side, positioned
-          // along the length by the hole's y.
-          const edgeY = hole.face === 'left' ? 0 : p.widthMm;
-          entities.push(circle(layer, x + hole.yMm, y + edgeY, hole.diameterMm / 2));
-        } else {
-          // top/bottom: edge normal to length, positioned along the width.
-          const edgeX = hole.face === 'top' ? p.lengthMm : 0;
-          entities.push(circle(layer, x + edgeX, y + hole.xMm, hole.diameterMm / 2));
-        }
+        const [holeX, holeY] = projectHole(p, hole, x, y);
+        entities.push(circle(layer, holeX, holeY, hole.diameterMm / 2));
       }
     }
   }
@@ -268,6 +384,7 @@ function buildHeader(maxX: number, maxY: number): string {
   let s = '';
   s += pair(0, 'SECTION') + pair(2, 'HEADER');
   s += pair(9, '$ACADVER') + pair(1, 'AC1009');
+  s += pair(999, DXF_PROJECTION_POLICY);
   s += pair(9, '$INSBASE') + pair(10, '0.0') + pair(20, '0.0') + pair(30, '0.0');
   s += pair(9, '$EXTMIN') + pair(10, '0.0') + pair(20, '0.0') + pair(30, '0.0');
   s += pair(9, '$EXTMAX') + pair(10, fmt(maxX)) + pair(20, fmt(maxY)) + pair(30, '0.0');
@@ -292,7 +409,7 @@ function buildLayerTable(extraLayerNames: readonly string[] = []): string {
 
 function buildSingleSheetDxf(
   sheet: CutPlan['sheets'][number],
-  drillingByPiece?: Map<string, PartDrillingPattern>,
+  drillingByPiece?: Map<CutPlanPlacedPiece, PartDrillingPattern>,
 ): string {
   const entities: string[] = [];
   entities.push(polyline('TABLERO', 0, 0, sheet.sheetLengthMm, sheet.sheetWidthMm));
@@ -335,7 +452,7 @@ function buildSingleSheetDxf(
 
 function buildSinglePieceDxf(
   piece: CutPlanPlacedPiece,
-  drillingByPiece?: Map<string, PartDrillingPattern>,
+  drillingByPiece?: Map<CutPlanPlacedPiece, PartDrillingPattern>,
 ): string {
   const entities: string[] = [];
   drawPiece(entities, piece, 0, 0, true, drillingByPiece);
@@ -348,7 +465,7 @@ function buildSinglePieceDxf(
   );
 }
 
-function buildSheetsVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDrillingPattern>): string {
+function buildSheetsVariant(plan: CutPlan, drillingByPiece?: Map<CutPlanPlacedPiece, PartDrillingPattern>): string {
   const entities: string[] = [];
   let offsetX = 0;
   let maxX = 0;
@@ -396,7 +513,7 @@ function buildSheetsVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDri
   );
 }
 
-function buildPiecesVariant(plan: CutPlan, drillingByPiece?: Map<string, PartDrillingPattern>): string {
+function buildPiecesVariant(plan: CutPlan, drillingByPiece?: Map<CutPlanPlacedPiece, PartDrillingPattern>): string {
   const entities: string[] = [];
   const pieces = plan.sheets.flatMap((s) => s.pieces);
   const labelsReservedMm = 180;
@@ -435,13 +552,10 @@ function wrapEntities(entities: string[]): string {
  */
 export function generateDxfBySheet(options: GenerateDxfOptions): DxfSheetCutFile[] {
   const { cutPlan, projectName, drilling } = options;
+  const drillingByPiece = bindDrilling(cutPlan, drilling);
   if (!cutPlan.sheets || cutPlan.sheets.length === 0) {
     return [];
   }
-
-  const drillingByPiece = drilling
-    ? new Map(drilling.map((pattern) => [pattern.pieceCode, pattern] as const))
-    : undefined;
 
   const baseProject = sanitizeFileNameToken(
     projectName || cutPlan.projectName || cutPlan.projectId || 'plan-de-corte',
@@ -479,6 +593,7 @@ export function generateDxfBySheet(options: GenerateDxfOptions): DxfSheetCutFile
  */
 export function generateDxfByPiece(options: GenerateDxfOptions): DxfPieceCutFile[] {
   const { cutPlan, projectName, drilling } = options;
+  const drillingByPiece = bindDrilling(cutPlan, drilling);
   if (!cutPlan.sheets || cutPlan.sheets.length === 0) {
     return [];
   }
@@ -487,10 +602,6 @@ export function generateDxfByPiece(options: GenerateDxfOptions): DxfPieceCutFile
   if (pieces.length === 0) {
     return [];
   }
-
-  const drillingByPiece = drilling
-    ? new Map(drilling.map((pattern) => [pattern.pieceCode, pattern] as const))
-    : undefined;
 
   const baseProject = sanitizeFileNameToken(
     projectName || cutPlan.projectName || cutPlan.projectId || 'plan-de-corte',
@@ -552,9 +663,7 @@ export function dxfCutPlanExport(input: DxfCutPlanExportInput): Uint8Array {
     });
   }
 
-  const drillingByPiece = drilling
-    ? new Map(drilling.map((pattern) => [pattern.pieceCode, pattern] as const))
-    : undefined;
+  const drillingByPiece = bindDrilling(cutPlan, drilling);
 
   const body =
     variant === 'sheets'
@@ -563,4 +672,3 @@ export function dxfCutPlanExport(input: DxfCutPlanExportInput): Uint8Array {
 
   return new TextEncoder().encode(body);
 }
-

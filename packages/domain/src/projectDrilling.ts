@@ -40,9 +40,21 @@ export interface ResolveProjectDrillingParams {
 export interface ProjectDrillingResult {
   /** Full engine output per piece (issues + fallback flag included). */
   readonly patterns: readonly ResolvedPartDrilling[];
+  /** Internal resolution failures; deliberately excluded from data serialization. */
+  readonly resolutionIssues: readonly ProjectDrillingResolutionIssue[];
   /** Schema `muebles.drilling-data.v1` payload (same shape the report exports). */
   readonly data: ProjectDrillingData;
   readonly links: readonly CutRowPieceLink[];
+}
+
+export interface ProjectDrillingResolutionIssue {
+  readonly code: 'DRILLING_BOM_RESOLUTION_FAILED';
+  readonly message: string;
+  readonly projectId: string;
+  readonly projectItemId: string;
+  readonly moduleId: string;
+  readonly stage: 'secondary-bom';
+  readonly blocking: true;
 }
 
 /**
@@ -108,6 +120,7 @@ export function resolveProjectDrilling(
   const derivedByKey = new Map<string, DerivedJointPlacement[]>();
   const partsByKey = new Map<string, readonly ResolvedBoardPart[]>();
   const moduleIdByKey = new Map<string, string>();
+  const resolutionIssues: ProjectDrillingResolutionIssue[] = [];
 
   for (const item of project.items) {
     if (!(item.quantity > 0)) continue;
@@ -132,7 +145,18 @@ export function resolveProjectDrilling(
         item.customDims,
       ).boardParts;
     } catch {
-      continue; // unresolvable items are reported by the BOM path, not here
+      // Primary cut rows may have resolved with a different BOM context. Keep
+      // partial patterns for diagnostics, but never imply complete drilling.
+      resolutionIssues.push({
+        code: 'DRILLING_BOM_RESOLUTION_FAILED',
+        message: 'No se pudo resolver el BOM secundario para las perforaciones del ítem del proyecto.',
+        projectId: project.id,
+        projectItemId: item.id,
+        moduleId: module.id,
+        stage: 'secondary-bom',
+        blocking: true,
+      });
+      continue;
     }
     partsByKey.set(cacheKey, parts);
     moduleIdByKey.set(cacheKey, module.id);
@@ -200,6 +224,7 @@ export function resolveProjectDrilling(
 
   return {
     patterns,
+    resolutionIssues,
     links,
     data: {
       schema: 'muebles.drilling-data.v1',

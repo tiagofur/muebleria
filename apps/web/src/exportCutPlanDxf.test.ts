@@ -111,6 +111,29 @@ function buildCutPlanFixture(): CutPlan {
 }
 
 describe('exportCutPlanDxf', () => {
+  it('does not start a download when a later DXF file has an invalid drilling frame', async () => {
+    const base = buildCutPlanFixture();
+    const plan: CutPlan = {
+      ...base,
+      sheets: [...base.sheets, {
+        ...base.sheets[0]!, sheetIndex: 1,
+        pieces: [{ ...base.sheets[0]!.pieces[0]!, id: 'p-later', labelRef: 'LATER' }],
+      }],
+    };
+    const deps = {
+      createObjectURL: vi.fn(), revokeObjectURL: vi.fn(), createElement: vi.fn(),
+      appendChild: vi.fn(), removeChild: vi.fn(),
+    } as unknown as DownloadDeps;
+    await expect(downloadCutPlanDxf(plan, 'sheets', undefined, deps, {
+      drilling: [{
+        pieceCode: 'LATER', moduleCode: 'M01', partName: 'Lateral',
+        lengthMm: 799, widthMm: 500, materialName: 'MDF Blanco 18mm',
+        holes: [{ face: 'front', xMm: 20, yMm: 30, diameterMm: 5, depthMm: 10, type: 'dowel' }],
+      }],
+    })).rejects.toThrow(/frame differs/);
+    expect(deps.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it('dxfZipFileName formats zip file name for sheets and pieces', () => {
     expect(dxfZipFileName('Cocina Moderna', 'sheets')).toBe('Cocina-Moderna-nesting-tableros.zip');
     expect(dxfZipFileName('Cocina Moderna', 'pieces')).toBe('Cocina-Moderna-nesting-piezas.zip');
