@@ -120,9 +120,27 @@ base-mode freeze (that would create a third authority).
       tests green; check_openapi_drift green; CI/factory script suites green;
       organization browser gate run for the UI change.
 - [ ] T8 — Independent review + publication (`Fixes #830` /
-      `Delivery: complete` only if all acceptance holds). PAUSED at §17: the
-      authored count crossed >~1200 WITH an OpenAPI change — reporting before
-      publishing per the size policy.
+      `Delivery: complete` only if all acceptance holds). Parent-owned after
+      the local candidate is complete; no push, PR, merge or issue closure is
+      authorized for the implementer.
+- [ ] T9 — Canonical Q1 real-PostgreSQL proof: author base-treatment choices,
+      create Q1 via `CreateInitialDesignQuoteRevision`, confirm the persisted
+      commercial `PricingContext`, publish/accept, approve a compatible design,
+      then preflight, production approval and release. Verify frozen BOM for
+      each applicable role while module default X differs from quoted Y.
+      This is missing proof, not a presumed data-loss bug; do not invent RED.
+- [ ] T10 — RED→GREEN per-command catalog consistency: deterministic
+      two-connection PostgreSQL mutation test (no sleeps/mocks) for preflight,
+      production approval and release; make the first two use an equivalent
+      consistent snapshot while re-evaluating at each HTTP command boundary.
+- [ ] T11 — RED→GREEN malformed frozen-context API contract: missing and
+      invalid quoted context return structured, actionable HTTP 409 in
+      preflight, approval and release, never 500 or SQL internals.
+- [ ] T12 — Exact-HEAD local verification and handoff: V0/V1/V2, relevant
+      #826/#727 regressions, OpenAPI drift/generated parity, disposable
+      PostgreSQL under runtime RLS, gofmt/vet, `git diff --check`, factory
+      preflight and affected-check plan/selected run. Independent review/CI
+      remain parent-owned and not proven by local tests.
 
 ## Verification
 
@@ -140,13 +158,32 @@ base-mode freeze (that would create a third authority).
 
 - Audit complete at base `3eaf22c6` (merge-base confirmed); branch
   `fix/830-frozen-base-treatment-authority`, commits `553c76c6` → `c116afe6`.
-- Authored size vs merge-base: 29 files, +1394/−89 (~1483 changed lines);
-  production ≈ 560, the rest is the PostgreSQL integration matrix the issue
-  acceptance mandates plus the ODD artifact. Crossed the >~1200 band WITH an
-  OpenAPI/clients change → publication paused for the human size decision
-  (no size:exception self-applied).
-- Note: `origin/main` advanced past the pinned base (other writers' merges);
-  merge conflict check pending at publication time.
+- The latest verified #830 three-dot diff against `origin/main` at
+  `3375d658da50d9beea0f6cbbd8a7f5cd40a5b636` is 29 files,
+  +1422/−89 = 1511 total: production 490, tests 823, authored OpenAPI 28,
+  ODD 154, generated 16. Authored additions+deletions are 1495. This
+  supersedes the older merge-base estimate above.
+- The human accepted an **atomic size exception** for exactly this #830
+  vertical; delivery strategy `exception-ok`, single atomic candidate. This
+  does not authorize protected `size:exception` label, a push, PR or scope
+  expansion. A split before transactional/API parity would be unsafe.
+- `origin/main` advanced with #848 SketchUp-only commits (zero path overlap).
+  Preserve the recovered branch and integrate `origin/main` by a normal
+  history-preserving merge before additional source changes; stop on conflict.
+- Effective TDD: **strict enabled**, source `AGENTS.md` gentle-ai directive.
+  Exact focused runners: `go test` in `backend-go` for pure engine/API tests;
+  `scripts/backend-test.sh` from `backend-go` for disposable PostgreSQL
+  storage/API integration. RED is required for observed B/C defects;
+  T9 may be GREEN-only if the canonical path already works.
+- Route: **delegated direct**, one sole writer in this recovered worktree.
+  Triggers: understanding spans 4+ files and implementation touches 2+
+  non-trivial files. Work-unit commits retain tests and behavior together.
+- Forecast: starting authored 1495 lines; T9–T11 will increase the atomic
+  candidate. Running authored count and exact category split must be refreshed
+  at final handoff; no code-golf or artificial split to meet a line cap.
+- Engram recovery mirror: full-document readback confirmed at observation
+  `#1760` for topic `odd/830-frozen-base-treatment-authority/tasks`;
+  subsequent task updates must refresh and read back both copies.
 - Incident 2026-09-26 ~17:34: an external cleanup swept `muebles-worktrees/`
   (all 8 registered stale worktrees plus this one, minutes after creation;
   no code existed yet — only this artifact, restored verbatim). Worktree
