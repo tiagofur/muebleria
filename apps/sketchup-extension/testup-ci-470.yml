@@ -1,6 +1,6 @@
-Path: "/Users/tiagofur/dev/carpinteria/muebles-worktrees/470-inspection-natural-selection/apps/sketchup-extension/test/testup"
-Output: "/Users/tiagofur/dev/carpinteria/muebles-worktrees/470-inspection-natural-selection/progress/host_smoke_470_testup_ci.json"
-ErrorLogPath: "/Users/tiagofur/dev/carpinteria/muebles-worktrees/470-inspection-natural-selection/progress/host_smoke_470_testup_error.log"
+Path: "%CONFIG_DIR%/test/testup"
+Output: "%CONFIG_DIR%/../../progress/host_smoke_470_testup_ci.json"
+ErrorLogPath: "%CONFIG_DIR%/../../progress/host_smoke_470_testup_error.log"
 Tests:
   - "Granete::SketchUpExtension::TC_ManufacturingOverlaySmoke#"
 KeepOpen: false

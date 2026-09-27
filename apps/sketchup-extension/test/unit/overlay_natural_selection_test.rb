@@ -55,7 +55,21 @@ class OverlayNaturalSelectionTest < Minitest::Test
     @store = Metadata::Store.new(@model)
     @provider = OverlayFixture::FakeCatalogProvider.new
     @payloads = []
-    @manager = Overlay::Manager.new(
+    @manager = build_manager
+    # Native-like start: the part is the SOLE selection exactly as when the
+    # user enabled `Ver fabricación` from its contextual inspector (the
+    # fixture builder leaves the placed furniture root selected).
+    @model.selection.clear
+    @model.selection.add(part_by_ref('side-left-01'))
+    @manager.enable('furnitureInstanceRef' => OverlayFixture::FURNITURE_INSTANCE_ID,
+                    'componentInstanceId' => 'side-left-01')
+    @tool = @model.tools.pushes.first
+    @view = PickableView.new
+    attach_dialog_selection_flow
+  end
+
+  def build_manager
+    Overlay::Manager.new(
       resolver: Overlay::InspectionResolver.new(
         catalog_provider: @provider,
         metadata_store_factory: ->(m) { Metadata::Store.new(m) }
@@ -67,16 +81,6 @@ class OverlayNaturalSelectionTest < Minitest::Test
       model_provider: -> { @model },
       preflight_tracker: Host::PreflightTracker.new
     )
-    # Native-like start: the part is the SOLE selection exactly as when the
-    # user enabled `Ver fabricación` from its contextual inspector (the
-    # fixture builder leaves the placed furniture root selected).
-    @model.selection.clear
-    @model.selection.add(part_by_ref('side-left-01'))
-    @manager.enable('furnitureInstanceRef' => OverlayFixture::FURNITURE_INSTANCE_ID,
-                    'componentInstanceId' => 'side-left-01')
-    @tool = @model.selected_tools.first
-    @view = PickableView.new
-    attach_dialog_selection_flow
   end
 
   # The dialog's selection flow (#476 observer → payload + overlay
@@ -124,6 +128,56 @@ class OverlayNaturalSelectionTest < Minitest::Test
     assert_equal 'unavailable', @manager.status
     assert_match 'pieza administrada', @manager.unavailable_reason
     assert_empty @manager.projected_features
+  end
+
+  # Case B of the reported UX: switching to another part of the SAME
+  # furniture while `Ver fabricación` stays ON — no re-enable, no second
+  # inspection system, exactly one self-heal re-resolve.
+  def test_click_on_another_part_of_the_same_furniture_moves_the_scope
+    part_b = part_by_ref('side-right-01')
+    @view.picked = part_b
+    resolves_before = @provider.resolved_layout_calls
+
+    @tool.onLButtonDown(0, 9999, 9999, @view)
+
+    assert_equal [part_b], @model.selection.to_a
+    assert_equal 'side-right-01', @payloads.last['componentInstanceId']
+    assert @manager.mode_on?, 'inspection stays ON for a same-furniture switch'
+    assert_equal 'side-right-01', @manager.scope['componentInstanceId']
+    assert_equal ['side-right-01'], @manager.scoped_features.map(&:host_component_instance_id).uniq
+    assert_equal 'current', @manager.status
+    # Single canonical path: the clear+add native pair drives ONE
+    # self-heal resolve — never a duplicate rescope per click.
+    assert_equal resolves_before + 1, @provider.resolved_layout_calls
+  end
+
+  # Case E of the reported UX: unmanaged geometry must be selected
+  # honestly and the overlay must NOT keep presenting the previous
+  # managed scope as if it were still selected.
+  def test_click_on_unmanaged_geometry_clears_the_overlay_honestly
+    stranger = @model.active_entities.add_group
+    @view.picked = stranger
+
+    @tool.onLButtonDown(0, 9999, 9999, @view)
+
+    assert_equal [stranger], @model.selection.to_a, 'the host pick is selected natively'
+    assert_equal 'unmanaged', @payloads.last['kind']
+    assert_equal 'unavailable', @manager.status
+    assert_match 'pieza administrada', @manager.unavailable_reason
+    assert_empty @manager.projected_features
+  end
+
+  # One interaction, one canonical event path: the observer receives
+  # exactly the native clear+add pair and nothing else (no manual context
+  # fires, no duplicate rescope work).
+  def test_natural_click_flows_only_through_the_selection_observer
+    @view.picked = furniture_root
+    resolves_before = @provider.resolved_layout_calls
+
+    @tool.onLButtonDown(0, 9999, 9999, @view)
+
+    assert_equal([nil, 'furniture'], @payloads.map { |payload| payload && payload['kind'] })
+    assert_equal resolves_before + 1, @provider.resolved_layout_calls
   end
 
   def test_click_on_a_marker_keeps_native_selection_untouched
@@ -176,6 +230,99 @@ class OverlayNaturalSelectionTest < Minitest::Test
   # #476 SelectionContext via the model selection only.
   def test_manager_exposes_no_parallel_selection_channel
     refute_respond_to @manager, :on_viewport_selection
+  end
+
+  # Hiding the overlay hands the viewport back to whatever tool was active
+  # before (the native Select in the normal flow) — the reported
+  # "can't do anything anymore" freeze came from select_tool(nil) leaving
+  # the host with no active tool at all.
+  def test_disable_restores_the_tool_active_before_the_overlay
+    previous = Object.new
+    @model.tools.push_tool(previous)
+    manager = build_manager
+    manager.enable('furnitureInstanceRef' => OverlayFixture::FURNITURE_INSTANCE_ID,
+                   'componentInstanceId' => 'side-left-01')
+
+    assert manager.mode_on?
+    assert_instance_of Overlay::InspectionTool, @model.tools.active_tool
+
+    manager.disable
+
+    assert_equal 1, @model.tools.pops, 'the overlay popped its tool off the stack'
+    assert_equal previous, @model.tools.active_tool, 'the previous tool is restored'
+  end
+
+  # Esc inside an open editing context leaves it one level — the native
+  # Select behavior the trapped-editor bug report asked for.
+  def test_escape_inside_an_open_context_leaves_it_one_level
+    @model.active_path = [furniture_root, part_by_ref('shelf-01')]
+    @tool.onCancel(0, @view)
+    assert_equal [furniture_root], @model.active_path
+
+    @tool.onCancel(0, @view)
+    assert_empty @model.active_path
+  end
+
+  # Esc at the model root clears the selection, like the native first Esc.
+  def test_escape_at_the_model_root_clears_the_selection
+    refute_empty @model.selection.to_a
+
+    @tool.onCancel(0, @view)
+
+    assert_empty @model.selection.to_a
+  end
+
+  # Double-click on the instance the first click just selected ENTERS its
+  # editing context — the native way back into the furniture.
+  def test_double_click_opens_the_context_of_the_selected_instance
+    @manager.select_naturally(furniture_root)
+    @view.picked = furniture_root
+
+    handled = @tool.onLButtonDoubleClick(0, 9999, 9999, @view)
+
+    assert handled
+    assert_equal [furniture_root], @model.active_path
+    assert_equal [furniture_root], @model.selection.to_a
+  end
+
+  # Double-click on empty space while a context is open LEAVES it one
+  # level. Host-faithful outcome: leaving the context DROPS a selection
+  # that lives inside it (the nested part), exactly like native SketchUp.
+  def test_double_click_on_empty_space_leaves_the_open_context
+    @model.active_path = [furniture_root]
+    @view.picked = nil
+
+    @tool.onLButtonDoubleClick(0, 9999, 9999, @view)
+
+    assert_empty @model.active_path
+    assert_empty @model.selection.to_a,
+                 'leaving the context drops the nested selection, natively'
+  end
+
+  # Double-click on a marker stays special: feature selection only.
+  def test_double_click_on_a_marker_keeps_the_special_selection
+    marker = @manager.projected_features.first
+    screen = @view.screen_coords(marker.center)
+
+    handled = @tool.onLButtonDoubleClick(0, screen.x, screen.y, @view)
+
+    assert handled
+    assert_equal marker.visual_id, @manager.active_feature_id
+    assert_equal [part_by_ref('side-left-01')], @model.selection.to_a
+    assert_empty @model.active_path
+    assert_empty @payloads
+  end
+
+  # Double-click on a non-selected or non-openable pick falls back to plain
+  # natural selection instead of inventing navigation.
+  def test_double_click_on_an_unselected_pick_falls_back_to_selection
+    part_b = part_by_ref('side-right-01')
+    @view.picked = part_b
+
+    @tool.onLButtonDoubleClick(0, 9999, 9999, @view)
+
+    assert_empty @model.active_path, 'nothing is opened for an unselected pick'
+    assert_equal [part_b], @model.selection.to_a
   end
 
   private

@@ -87,8 +87,30 @@ module Granete
           true
         end
 
+        # Esc mirrors the native Select tool (#470 real-host UX): leave the
+        # open editing context one level, or clear the selection at the
+        # model root. The overlay mode itself stays ON (dialog-driven
+        # lifecycle per #470).
         def onCancel(_reason, view)
+          @manager.escape_naturally
           view.invalidate if view.respond_to?(:invalidate)
+        end
+
+        # Double-click mirrors the native Select tool (#470 real-host UX):
+        # markers keep their special selection; everything else enters the
+        # context of the instance the first click selected, leaves the open
+        # context on empty space, or falls back to natural selection.
+        # rubocop:disable-next SketchupSuggestions/ToolInvalidate, Naming/MethodParameterName, Naming/PredicateMethod
+        def onLButtonDoubleClick(_flags, x, y, view)
+          feature = ScreenPicker.pick(x, y, @manager.projected_features, view)
+          if feature
+            @manager.select_feature(feature.visual_id)
+            view.invalidate if view.respond_to?(:invalidate)
+            return true
+          end
+
+          @manager.open_or_close_context_naturally(native_pick_under_cursor(x, y, view))
+          true
         end
 
         private

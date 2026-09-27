@@ -62,7 +62,7 @@ class OverlayInspectionToolTest < Minitest::Test
     )
     @manager.enable('furnitureInstanceRef' => OverlayFixture::FURNITURE_INSTANCE_ID,
                     'componentInstanceId' => 'side-left-01')
-    @tool = @model.selected_tools.first
+    @tool = @model.tools.pushes.first
     @view = DrawSpyView.new
   end
 

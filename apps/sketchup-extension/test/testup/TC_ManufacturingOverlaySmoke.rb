@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'fileutils'
 require 'testup/testcase'
 
 # Real-host smoke test for #470 / SU-VIS-1: ManufacturingFeature 3D
@@ -126,9 +127,19 @@ module Granete
 
       # Fills the viewport with the furniture (view state only) so the
       # natural-selection click search has a representative, on-screen body.
+      # The throwaway write_image forces one real render pass: in a fresh
+      # host process TestUp can run before any draw happened, and
+      # PickHelper#do_pick needs that pass to resolve anything.
       def zoom_to_furniture(view)
         view.zoom(granete_furniture_instances.first)
         view.invalidate
+        begin
+          tmp = File.join(Dir.tmpdir, "granete-470-render-#{Process.pid}.png")
+          view.write_image(tmp)
+          FileUtils.rm_f(tmp)
+        rescue StandardError
+          nil
+        end
       end
 
       # Compact one-line probe summary for the flunk message when the grid

@@ -43,8 +43,9 @@ class OverlayManagerTest < Minitest::Test
 
     assert manager.mode_on?
     assert_equal 'current', manager.status
-    assert_equal 1, model.selected_tools.length
-    assert_instance_of Overlay::InspectionTool, model.selected_tools.first
+    assert_equal 1, model.tools.pushes.length
+    assert_instance_of Overlay::InspectionTool, model.tools.pushes.first
+    assert_instance_of Overlay::InspectionTool, model.tools.active_tool
     # Only the selected board's features are in scope (#470 §8).
     hosts = manager.scoped_features.map(&:host_component_instance_id).uniq
     assert_equal ['side-left-01'], hosts
@@ -87,8 +88,9 @@ class OverlayManagerTest < Minitest::Test
     assert_equal definitions_before, model.definitions.to_a.length
     assert_equal operations_before, model.operations.length,
                  'overlay must never open a SketchUp operation'
-    # OFF pops the tool: the last selection is nil (deactivation).
-    assert_nil model.selected_tools.last
+    # OFF pops the tool off the host stack, restoring the viewport.
+    assert_equal 1, model.tools.pops
+    assert_nil model.tools.active_tool
     assert_equal 'off', manager.status
     assert_empty manager.projected_features
   end

@@ -277,7 +277,17 @@ module SketchupStub
     end
   end
 
+  # Host-faithful Entity#entityID surface: a unique id within the model
+  # session — the stable same-entity identity SketchUp actually exposes
+  # (Sketchup::Entity defines no #==).
+  module EntityIdStub
+    def entityID
+      @granete_entity_id ||= SketchupStub.next_entity_id
+    end
+  end
+
   class FaceStub < Sketchup::Face
+    include EntityIdStub
     attr_accessor :normal, :material
     attr_reader :points
 
@@ -425,6 +435,7 @@ module SketchupStub
   end
 
   class GroupStub < Sketchup::Group
+    include EntityIdStub
     include AttributeContainer
     include DrawingElementVisibility
 
@@ -490,6 +501,7 @@ module SketchupStub
   end
 
   class ComponentInstanceStub < Sketchup::ComponentInstance
+    include EntityIdStub
     include AttributeContainer
     include DrawingElementVisibility
 
@@ -612,6 +624,37 @@ module SketchupStub
 
     def path_at(_index)
       [@picked_entity].compact
+    end
+  end
+
+  # Host-faithful tool STACK (Sketchup::Tools#push_tool/#pop_tool): pushes
+  # are recorded and pop restores the previous tool — the surface the
+  # overlay lifecycle uses to hand the viewport back exactly as it was.
+  class ToolsStub
+    attr_reader :pushes, :pops
+
+    def initialize
+      @stack = []
+      @pushes = []
+      @pops = 0
+    end
+
+    def push_tool(tool)
+      @stack.push(tool)
+      @pushes.push(tool)
+      tool.activate if tool.respond_to?(:activate)
+      true
+    end
+
+    def pop_tool
+      @pops += 1
+      popped = @stack.pop
+      popped&.deactivate(nil) if popped.respond_to?(:deactivate)
+      @stack.last
+    end
+
+    def active_tool
+      @stack.last
     end
   end
 
@@ -829,11 +872,12 @@ module SketchupStub
     include AttributeContainer
 
     attr_reader :active_entities, :selection, :definitions, :materials, :operations,
-                :selected_tools, :observers, :layers
+                :selected_tools, :observers, :layers, :tools
     attr_accessor :active_view
     # Host-faithful Model#active_path: the open instance chain (root→innermost
     # open context), [] while editing the model root. Read by native-selection
-    # semantics (#470) and by the #476 owner recovery.
+    # semantics (#470) and by the #476 owner recovery; written by the native
+    # double-click context entry.
     attr_accessor :active_path
 
     def initialize
@@ -845,9 +889,19 @@ module SketchupStub
       @layers.add('Layer0')
       @operations = []
       @selected_tools = []
+      @tools = ToolsStub.new
       @active_view = ViewStub.new
       @active_path = []
       @observers = []
+    end
+
+    # Host-faithful Model#close_active: leaves the open editing context
+    # ONE level (no-op at the model root). Like the real host, leaving a
+    # context DROPS a selection that lives inside the closed context.
+    def close_active
+      @active_path = @active_path[0...-1] || []
+      @selection.clear
+      true
     end
 
     # Host-faithful Model#drawing_element_visible?(path) (REAL API,
@@ -958,6 +1012,10 @@ module SketchupStub
 
     def next_persistent_id
       @entity_seq += 1
+    end
+
+    def next_entity_id
+      @entity_id_seq = (@entity_id_seq || 0) + 1
     end
 
     def next_guid
