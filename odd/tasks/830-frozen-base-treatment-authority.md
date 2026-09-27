@@ -182,6 +182,11 @@ base-mode freeze (that would create a third authority).
   '^(TestProductionRelease_|TestEvaluateDesignRevisionPreflight_|
   TestApproveDesignRevision_|TestFrozenBaseCommands_)' -count=1
   ./internal/storage` — green (42.196s). Full refreshed storage suite pending.
+- The first refreshed full storage suite found one legacy #826 test using a
+  READ COMMITTED helper for quoted preflight (`TestReleaseGate_HardwareOnlyModuleSurplusChoicesConverge`):
+  RED `ErrInconsistentCatalogTransaction`. Switched that test to the existing
+  `releaseTx` REPEATABLE READ helper; its disposable-PostgreSQL focused rerun
+  is GREEN. Full suite rerun is pending; no product fallback was introduced.
 - Current `go vet ./internal/domain/... ./internal/api/...
   ./internal/storage/...` — green. `git diff --check` — green.
 - Engine: `go test ./internal/domain/engine/...` green (focused + package).
