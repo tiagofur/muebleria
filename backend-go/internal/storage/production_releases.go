@@ -238,9 +238,13 @@ type releaseGateOutcome struct {
 // preflight AND the release snapshot resolution over the exact immutable
 // revision items (§§16–17 + #727 preflight↔release parity): a revision is
 // manufacturing-ready only if the SAME snapshot would resolve in
-// ResolveReleaseCollection. No BOM rule is duplicated here — both verdicts
-// come from the same engines the release command runs.
-func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Context, projectOrgID, designRevisionID string, items []domain.DesignRevisionItem) (*releaseGateOutcome, error) {
+// ResolveReleaseCollection. quoteRevisionID (#830) selects the base-treatment
+// authority: when an exact QuoteRevision governs, its frozen per-unit
+// commercial context resolves the base mode; empty keeps the quote-less
+// policy (module defaults of this same catalog snapshot). No BOM rule is
+// duplicated here — both verdicts come from the same engines the release
+// command runs.
+func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Context, projectOrgID, designRevisionID, quoteRevisionID string, items []domain.DesignRevisionItem) (*releaseGateOutcome, error) {
 	// 1. Authoritative manufacturing preflight against the organization
 	// catalog (§§16–§17). Any blocker rejects the whole command.
 	definitions, err := s.loadReferencedFurnitureDefinitionParameters(ctx, projectOrgID, items)
@@ -257,6 +261,23 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 			&domain.ReleasePreflightBlockedError{Result: preflight}
 	}
 
+	// 1b. Frozen base authority (#830): a quoted release loads the exact
+	// revision's immutable per-unit base contexts inside this same boundary.
+	// Missing/malformed/unbound frozen truth blocks BOTH the command and the
+	// read-only preflight verdict — never a silent fallback to module
+	// defaults.
+	var authority *engine.ReleaseResolutionContext
+	if quoteRevisionID != "" {
+		authority, err = s.loadReleaseBaseAuthority(ctx, quoteRevisionID, items)
+		if err != nil {
+			var frozen *domain.FrozenBaseContextError
+			if errors.As(err, &frozen) {
+				return &releaseGateOutcome{items: items, preflight: preflightBlockedByFrozenBaseContext(preflight, err)}, err
+			}
+			return nil, err
+		}
+	}
+
 	// 2. Release snapshot resolution (#727): the manufacturing preflight alone
 	// is not the release verdict — the exact snapshot must also resolve. A
 	// resolution failure is reported BOTH as the typed command error (409
@@ -266,7 +287,7 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog)
+	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority)
 	if err != nil {
 		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
 			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
@@ -325,23 +346,9 @@ func preflightBlockedBySnapshotResolution(ready *domain.ManufacturingPreflightRe
 func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID, projectID, quoteRevisionID, designRevisionID string) (*releaseGateOutcome, error) {
 	// 1. Commercial baseline: exact, same-project, accepted. A draft or
 	// superseded quote never grounds production.
-	const quoteStatusAccepted = "accepted"
 	if quoteRevisionID != "" {
-		var qrProjectID, qrStatus string
-		err := s.db(ctx).QueryRow(ctx, `
-			SELECT project_id, status FROM quote_revisions WHERE id = $1
-		`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, domain.ErrQuoteRevisionNotFound
-			}
+		if err := s.validateQuoteRevisionBaseline(ctx, projectID, quoteRevisionID); err != nil {
 			return nil, err
-		}
-		if qrProjectID != projectID {
-			return nil, domain.ErrCrossProjectRelease
-		}
-		if qrStatus != quoteStatusAccepted {
-			return nil, domain.ErrReleaseQuoteNotAccepted
 		}
 	}
 
@@ -373,29 +380,64 @@ func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID
 
 	// 4. Manufacturing readiness: authoritative preflight + release snapshot
 	// resolution (#727 parity — the gate cannot present as ready a revision
-	// whose exact snapshot would fail to resolve).
-	return s.evaluateReleaseManufacturingReadiness(ctx, projectOrgID, designRevisionID, items)
+	// whose exact snapshot would fail to resolve) under the frozen base
+	// authority of the exact quote (#830).
+	return s.evaluateReleaseManufacturingReadiness(ctx, projectOrgID, designRevisionID, quoteRevisionID, items)
 }
 
-// EvaluateDesignRevisionPreflight (#502 / WEB-DT-3) evaluates the exact same
-// authoritative release manufacturing preflight that gates
+// validateQuoteRevisionBaseline enforces the commercial baseline contract
+// shared by the release command, the production approval and the quoted
+// preflight (#830): the exact QuoteRevision must exist, belong to the same
+// project and be accepted. Cross-project and missing are their typed domain
+// errors, never a uniform 404 here (the callers own that policy).
+func (s *PostgresStore) validateQuoteRevisionBaseline(ctx context.Context, projectID, quoteRevisionID string) error {
+	const quoteStatusAccepted = "accepted"
+	var qrProjectID, qrStatus string
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT project_id, status FROM quote_revisions WHERE id = $1
+	`, quoteRevisionID).Scan(&qrProjectID, &qrStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrQuoteRevisionNotFound
+		}
+		return err
+	}
+	if qrProjectID != projectID {
+		return domain.ErrCrossProjectRelease
+	}
+	if qrStatus != quoteStatusAccepted {
+		return domain.ErrReleaseQuoteNotAccepted
+	}
+	return nil
+}
+
+// EvaluateDesignRevisionPreflight (#502 / WEB-DT-3, #830) evaluates the exact
+// same authoritative release manufacturing preflight that gates
 // CreateProductionRelease — read-only, over the immutable revision snapshot
-// and the organization catalog. There is deliberately no second engine: the
-// same loaders, the same domain function, the same verdict a release command
-// would enforce. Nothing is persisted and no release is created.
-func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error) {
+// and the organization catalog. quoteRevisionID is the explicit commercial
+// baseline the release would pin: when present it is validated exactly like
+// the release command (same project, accepted) and its frozen per-unit base
+// contexts govern the resolution — the same authority, never an implicit
+// "latest accepted quote". Empty keeps the quote-less policy. There is
+// deliberately no second engine: the same loaders, the same domain function,
+// the same verdict a release command would enforce. Nothing is persisted and
+// no release is created.
+func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, designID, revisionID, quoteRevisionID string) (*domain.ManufacturingPreflightResult, error) {
 	if !isValidUUID(designID) || !isValidUUID(revisionID) {
+		return nil, domain.ErrInvalidReleaseCommand
+	}
+	if quoteRevisionID != "" && !isValidUUID(quoteRevisionID) {
 		return nil, domain.ErrInvalidReleaseCommand
 	}
 
 	// 1. Load the exact revision pinned to its design (cross-design answers
 	// the uniform revision 404, mirroring GetDesignRevision semantics) and
 	// resolve the owning organization for the catalog lookup.
-	var drDesignID, projectOrgID string
+	var drDesignID, drProjectID, projectOrgID string
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT design_id::text, organization_id::text
+		SELECT design_id::text, project_id, organization_id::text
 		FROM design_revisions WHERE id = $1
-	`, revisionID).Scan(&drDesignID, &projectOrgID)
+	`, revisionID).Scan(&drDesignID, &drProjectID, &projectOrgID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignRevisionNotFound
@@ -406,6 +448,15 @@ func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, des
 		return nil, domain.ErrDesignRevisionNotFound
 	}
 
+	// 1b. Exact commercial baseline (#830): the quoted preflight enforces the
+	// same baseline contract the release command enforces, so its verdict can
+	// never diverge from the release it previews.
+	if quoteRevisionID != "" {
+		if err := s.validateQuoteRevisionBaseline(ctx, drProjectID, quoteRevisionID); err != nil {
+			return nil, err
+		}
+	}
+
 	// 2. Immutable snapshot items: the exact preflight inputs a release
 	// would validate.
 	items, err := s.ListDesignRevisionItems(ctx, revisionID)
@@ -414,17 +465,22 @@ func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, des
 	}
 
 	// 3-4. The ONE authoritative verdict, extended with the release snapshot
-	// resolution (#727 parity): the preflight may not report READY for a
-	// revision whose exact snapshot would fail to resolve at release time.
-	// RLS scopes the revision read to the organizations that can access the
-	// project, so a foreign revision never reaches this point. Both blocked
-	// verdicts (manufacturing issues, unresolvable snapshot) are RESULTS, not
-	// errors — the read-only evaluation answers with the authoritative verdict.
-	outcome, err := s.evaluateReleaseManufacturingReadiness(ctx, projectOrgID, revisionID, items)
+	// resolution (#727 parity) and the frozen base authority (#830): the
+	// preflight may not report READY for a revision whose exact snapshot
+	// would fail to resolve at release time. RLS scopes the revision read to
+	// the organizations that can access the project, so a foreign revision
+	// never reaches this point. Every blocked verdict (manufacturing issues,
+	// unresolvable snapshot, frozen base authority) is a RESULT, not an
+	// error — the read-only evaluation answers with the authoritative verdict.
+	outcome, err := s.evaluateReleaseManufacturingReadiness(ctx, projectOrgID, revisionID, quoteRevisionID, items)
 	if err != nil {
 		var blocked *domain.ReleasePreflightBlockedError
 		if errors.As(err, &blocked) {
 			return blocked.Result, nil
+		}
+		var frozen *domain.FrozenBaseContextError
+		if errors.As(err, &frozen) {
+			return outcome.preflight, nil
 		}
 		if errors.Is(err, ErrReleaseSnapshotResolution) {
 			return outcome.preflight, nil

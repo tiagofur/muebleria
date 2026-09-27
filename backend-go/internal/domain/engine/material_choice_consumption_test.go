@@ -31,7 +31,7 @@ func consumptionFixture(t *testing.T) (domain.DesignRevisionItem, domain.Catalog
 
 func TestConsumedOptionRolesMatchesReleaseGate(t *testing.T) {
 	item, catalog := consumptionFixture(t)
-	unit, err := resolveReleaseUnit(item, catalog, nil)
+	unit, err := resolveReleaseUnit(item, catalog, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestIntersectConsumedOptionChoicesBomNeutral(t *testing.T) {
 	}
 	before, err := resolveReleaseUnitOpt(domain.DesignRevisionItem{FurnitureInstanceID: item.FurnitureInstanceID,
 		FurnitureDefinitionID: item.FurnitureDefinitionID, Parameters: nil,
-		MaterialChoices: map[string]string{"INTERIOR": "mat-body", "EDGE": "edge", "HINGE": "hinge"}}, catalog, nil, false)
+		MaterialChoices: map[string]string{"INTERIOR": "mat-body", "EDGE": "edge", "HINGE": "hinge"}}, catalog, nil, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestIntersectConsumedOptionChoicesBomNeutral(t *testing.T) {
 	}
 	after, err := resolveReleaseUnitOpt(domain.DesignRevisionItem{FurnitureInstanceID: item.FurnitureInstanceID,
 		FurnitureDefinitionID: item.FurnitureDefinitionID, Parameters: nil,
-		MaterialChoices: filtered}, catalog, nil, false)
+		MaterialChoices: filtered}, catalog, nil, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestIntersectConvergesWhenOnlyFixedHardwareConsumes(t *testing.T) {
 	item.Parameters = nil
 	item.MaterialChoices = map[string]string{"JALADERA": "hinge", "CORREDERA": "hinge"}
 
-	before, err := resolveReleaseUnitOpt(item, catalog, nil, false)
+	before, err := resolveReleaseUnitOpt(item, catalog, nil, false, nil)
 	if err != nil {
 		t.Fatalf("fixed-hardware module must resolve: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestIntersectConvergesWhenOnlyFixedHardwareConsumes(t *testing.T) {
 	}
 	converged := item
 	converged.MaterialChoices = filtered
-	after, err := resolveReleaseUnitOpt(converged, catalog, nil, false)
+	after, err := resolveReleaseUnitOpt(converged, catalog, nil, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

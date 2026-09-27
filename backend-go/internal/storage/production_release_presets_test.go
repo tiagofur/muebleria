@@ -44,7 +44,7 @@ func TestProductionRelease_ExplicitDimensionsPresetModule(t *testing.T) {
 	var preflight *domain.ManufacturingPreflightResult
 	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3)
+		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, "")
 		return err
 	}); err != nil {
 		t.Fatalf("evaluate preflight: %v", err)
@@ -196,7 +196,7 @@ func TestProductionRelease_PreflightParityBlocksUnresolvableRevision(t *testing.
 	var preflight *domain.ManufacturingPreflightResult
 	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, revR4)
+		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, revR4, "")
 		return err
 	}); err != nil {
 		t.Fatalf("evaluate preflight: %v", err)

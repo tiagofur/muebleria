@@ -322,7 +322,7 @@ func TestReleaseGate_HardwareOnlyModuleSurplusChoicesConverge(t *testing.T) {
 	// The release gate (the same evaluation the release command runs) accepts
 	// the published revision: hardware demand exists and choices ≡ consumed.
 	preflight, err := fiTxAnd(t, fx.rlsFixture, fiActorA(), func(ctx context.Context) (*domain.ManufacturingPreflightResult, error) {
-		return fx.store.EvaluateDesignRevisionPreflight(ctx, design.ID, revisionID)
+		return fx.store.EvaluateDesignRevisionPreflight(ctx, design.ID, revisionID, "")
 	})
 	if err != nil {
 		t.Fatal(err)

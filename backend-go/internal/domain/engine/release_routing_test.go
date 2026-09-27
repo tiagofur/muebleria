@@ -43,7 +43,7 @@ func routingFixture(t *testing.T) ([]domain.DesignRevisionItem, []ResolvedReleas
 
 	units := make([]ResolvedReleaseUnit, 0, len(items))
 	for _, i := range items {
-		unit, err := resolveReleaseUnit(i, catalog, nil)
+		unit, err := resolveReleaseUnit(i, catalog, nil, nil)
 		if err != nil {
 			t.Fatalf("resolve unit %s: %v", i.FurnitureInstanceID, err)
 		}

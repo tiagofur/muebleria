@@ -38,7 +38,7 @@ func TestProductionRelease_SelectedMaterialAuthority(t *testing.T) {
 				var preflight *domain.ManufacturingPreflightResult
 				err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 					var err error
-					preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3)
+					preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, "")
 					return err
 				})
 				valid := scenario == "valid"
