@@ -275,6 +275,13 @@ function bindDrilling(
       }
     }
   }
+  for (const piece of pieces) {
+    if (!bound.has(piece)) {
+      throw new ValidationError('Missing DXF drilling pattern for placed piece', {
+        pieceId: piece.id, labelRef: piece.labelRef,
+      });
+    }
+  }
   return bound;
 }
 

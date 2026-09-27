@@ -492,7 +492,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         setExportBusy(false);
       }
     },
-    [toast],
+    [projects, selectedProject, catalog, toast, setExportBusy],
   );
 
   const handleExportCutPlanPtx = useCallback(

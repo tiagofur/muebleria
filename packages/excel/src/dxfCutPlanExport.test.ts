@@ -337,6 +337,35 @@ describe('dxfCutPlanExport', () => {
       expect(() => generateDxfBySheet({ cutPlan: repeated, drilling: [pattern, lateBad] })).toThrow(/frame differs/);
     });
 
+    it('rejects a partially supplied drilling batch in every route, while accepting explicit zero-hole coverage', () => {
+      const cutPlan = buildCutPlanFixture();
+      const partial = [drillingFixture[0]!];
+      const complete = [partial[0]!, { ...drillingFixture[1]!, holes: [] }];
+      const routes = [
+        (drilling?: readonly PartDrillingPattern[]) => dxfCutPlanExport({ cutPlan, variant: 'sheets', drilling }),
+        (drilling?: readonly PartDrillingPattern[]) => dxfCutPlanExport({ cutPlan, variant: 'pieces', drilling }),
+        (drilling?: readonly PartDrillingPattern[]) => generateDxfBySheet({ cutPlan, drilling }),
+        (drilling?: readonly PartDrillingPattern[]) => generateDxfByPiece({ cutPlan, drilling }),
+      ];
+
+      for (const route of routes) {
+        expect(() => route(partial)).toThrow(/Missing DXF drilling pattern/);
+        expect(() => route(complete)).not.toThrow();
+        expect(() => route()).not.toThrow();
+      }
+
+      const sheet = cutPlan.sheets[0]!;
+      const laterPiece = { ...sheet.pieces[1]!, sheetIndex: 1 };
+      const multiSheet: CutPlan = {
+        ...cutPlan,
+        sheets: [
+          { ...sheet, pieces: [sheet.pieces[0]!] },
+          { ...sheet, sheetIndex: 1, pieces: [laterPiece] },
+        ],
+      };
+      expect(() => generateDxfBySheet({ cutPlan: multiSheet, drilling: partial })).toThrow(/Missing DXF drilling pattern/);
+    });
+
     it('is deterministic, does not mutate inputs, and marks the output policy', () => {
       const { plan, pattern } = projectionFixture(true);
       const before = JSON.stringify({ plan, pattern });
