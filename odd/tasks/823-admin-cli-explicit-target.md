@@ -461,3 +461,132 @@ independently reviewed. One PR, with the approved `size:exception`.
   `scripts/test_ci_organization_browser_preparation.py`. The existing T2 DB
   isolation, direct-Playwright identity handshake, and merged T1 stay intact.
   Delivery remains `Refs #823` / `Delivery: partial`; #823 remains open.
+
+## T3–T4 continuation — explicit interactive disposable gate (pending)
+
+- Authority and base: the human authorized a local, opt-in interactive lifecycle
+  for the disposable Phase 1 harness, not auth/MFA/token/RLS changes or a
+  functional Project/Design fix. This independent #823 worktree starts clean at
+  `origin/main` `b5697951021f6484cf3e71161ec396ff6f434194` on
+  `codex/823-interactive-gate`. Preserve the #398 checkpoint `fdd11ea4` and all
+  other worktrees; #398 remains the product-reproduction coordinator. Its
+  Phase 1 spec and gate-only loopback listener fix are not on this base.
+- Objective and scope: keep the existing automatic prepare → test → cleanup
+  path as default. Add a minimal explicit prepare/run-state/continue/stop
+  lifecycle with one preparation, a private local run identity, visible
+  non-secret environment and test states, a bounded maximum age, and
+  run-owned idempotent cleanup. Reuse the current tmpfs PostgreSQL, distinct
+  runtime/migration roles, preflight, browser/backend DB identity handshake,
+  scoped `env -i`, UTF-8 browser locale, and disposable media. Do not create a
+  persistent DB, generic environment manager, production endpoint, or
+  credential/session workaround. No SketchUp, Keychain, or owner-file mutation
+  is authorized by these tasks.
+- Route: delegated direct; the existing launcher, Go listener, Playwright
+  configuration/setup, CI launcher doubles, and isolation documentation are
+  multiple non-trivial files. One bounded writer owns T3–T4. Strict TDD is
+  enabled by `AGENTS.md`; observe safe RED, GREEN, then REFACTOR. DB-free
+  runners: `python3 scripts/test_ci_organization_browser_preparation.py` and,
+  if the Go listener changes, `cd backend-go && go test ./cmd/server`.
+  Operational positive uses the existing exact disposable runner
+  `LANG=en_US.UTF-8 bash scripts/organization-browser-gate.sh tests/organization/prequote-design.spec.ts`;
+  the new interactive command must be documented only after it exists.
+- Delivery: `ask-on-risk` is resolved for this increment by the human's explicit
+  choice of **one coherent partial #823 PR**. The existing approximately
+  400-authored-line figure is only a review-planning heuristic. For this work,
+  0–800 authored additions plus deletions is normal; at 801–1,200 assess and
+  document cohesion/risk without stopping or splitting solely for size; above
+  1,200, checkpoint with a breakdown and proposed boundary before substantial
+  expansion or publication. T3 and T4 may be separate work-unit commits in the
+  same PR, but do not separate an open environment from its stop/cleanup proof.
+  Count handwritten additions **and** deletions in behavior, tests, and docs;
+  report generated changes separately. No `size:exception` or protected label
+  is presumed. If a real checker requires an exception, report its exact
+  command/diagnostic; do not preemptively change the checker or repeat a size
+  authorization question. No code-golf, omitted proof, force push, or auto-merge.
+- Pre-write component forecast (authored additions + deletions): interactive
+  lifecycle/ownership 300–420; integration with the current launcher and
+  gate-only loopback bind 140–210; deterministic doubles and focused Go/browser
+  regressions 300–390; concise operational/isolation documentation and task
+  evidence 60–100. Total approximately **800–1,120 authored lines**; generated
+  files expected: none. Likely touched files:
+  `scripts/organization-browser-gate.sh`, one small lifecycle helper under
+  `scripts/` only if necessary, `scripts/test_ci_organization_browser_preparation.py`,
+  `backend-go/cmd/server/main.go`, a focused `backend-go/cmd/server/` bind test,
+  `playwright.organization.config.ts`, at most one focused
+  `tests/organization/support/` seam, `docs/architecture/test-database-isolation.md`,
+  and this existing task document. Reconcile this forecast with actual diffs;
+  crossing 800 alone is not a stop condition.
+
+- [x] **T3 — Preserve one safe preparation and restrict the gate listener.**
+  First pin the 20-minute boundary by source line and process sequence. Add the
+  gate-only loopback bind behavior missing from this base (without changing the
+  normal server bind) and extract only the preparation/ownership seam needed by
+  both modes. Keep automatic execution and teardown unchanged. RED/GREEN checks:
+  focused DB-free Go bind tests and existing launcher doubles, including
+  rejected targets before writes, ambient-variable exclusion, and automatic
+  success/error/signal cleanup. Run `bash -n`, focused Go checks, and one real
+  disposable automatic gate before closing this work unit. Record exact commit,
+  authored-line count, rollback boundary, and observed checks here.
+- [ ] **T4 — Continue one interactive run and clean it exactly.** Add the
+  opt-in private run state, concrete continue/stop actions, owned backend/DB/
+  web/browser lifetimes, and maximum-age expiry without recreating the DB or
+  changing auth/MFA/step-up. Completion of automated React/Go work must leave
+  the same environment available for human and host steps; incomplete waiting
+  must record host/binding/placement as `NOT_RUN`, never Phase 1 PASS. RED/GREEN
+  launcher doubles must cover opt-in only, single preparation, continued
+  availability, wrong/replayed run, explicit stop, failure/interruption,
+  expiry, idempotent cleanup without harming foreign resources, and CI never
+  waiting for a human. Then run a real disposable start → identity → ready →
+  stop → process/port/container/temp-profile cleanup readback. Document the
+  actual commands, sanitized state, maximum age, and honest forced-termination/
+  power-loss recovery limit. Record exact commit, authored-line count, rollback
+  boundary, and observed checks here.
+
+Acceptance remains partial: the interactive infrastructure and isolation need
+fresh independent review and exact-head checks. Installed SketchUp, MFA/device
+approval, same-ID placement, WorkingCopy, and the Phase 1 product result remain
+outside this increment and `NOT_RUN` until separately observed. Next step:
+record the T3 work-unit commit, mirror this full document to Engram, then begin
+T4 with safe RED after the parent authorizes continuation.
+
+### T3 observed work-unit evidence
+
+- The 20-minute limit is in #398 checkpoint `fdd11ea4`,
+  `tests/organization/phase1-project-design.spec.ts:212-214,278-284`:
+  `PHASE1_HANDOFF_SECONDS` is capped at 1,200 and the test awaits that interval.
+  When Playwright returns, the existing launcher at
+  `scripts/organization-browser-gate.sh:229-231` exits; its `EXIT` trap at
+  lines 9-20 kills the backend and removes the container and temporary media.
+  This is not evidence of authentication expiry, and the #398 file was not
+  copied or changed here.
+- Safe RED, before implementation: `cd backend-go && go test ./cmd/server -run
+  '^TestServerListenAddress$' -count=1` failed to compile with
+  `undefined: serverListenAddress`. The DB-free launcher double
+  `python3 scripts/test_ci_organization_browser_preparation.py` failed only
+  its new server bind assertion (`None` versus `127.0.0.1`); 7 tests ran,
+  with one opt-in preflight test skipped. No database connection was made.
+- GREEN: `cd backend-go && go test ./cmd/server` passed; the targeted bind
+  test passed, including ordinary `:PORT`, gate-only loopback, and missing/
+  non-loopback rejection. The launcher double passed 7 tests (one opt-in
+  skip); with `GRANETE_TEST_REAL_GO_PREFLIGHT=1` it passed all 7, including
+  real Go preflight against synthetic rejected targets without connecting.
+  `bash -n scripts/organization-browser-gate.sh`, `shellcheck` on that script,
+  and `git diff --check` passed.
+- Real disposable automatic gate: `LANG=en_US.UTF-8 bash
+  scripts/organization-browser-gate.sh tests/organization/prequote-design.spec.ts`
+  exited 0, read back `granete_gate` with two users and two organizations,
+  matched backend/fixture database identity, passed 2/2 Chromium tests, and
+  printed `[organization-gate] PASS`. This proves the default automatic path
+  remains functional; it does not yet prove an interactive session or an
+  installed SketchUp host. An OS socket readback was not captured in this run;
+  the gate-only bind is covered by Go unit tests and launcher forwarding checks.
+- `python3 scripts/verify_affected.py --base origin/main --plan` selected
+  broader jobs because the backend changed; those broad jobs remain `NOT_RUN`
+  for this T3 work unit and must be considered on the final exact candidate.
+  The new `run_prepared_automatic_gate` function is only an ownership seam;
+  T4 must reuse the preparation above it, not duplicate a second setup.
+- Rollback boundary: gate-only Go listener decision and focused test,
+  server-only bind setting and automatic runner seam in the launcher, and the
+  bind-forwarding assertion in its Python double. Existing admin/DB guards,
+  default production bind, and #398 checkpoint remain untouched. T4 is next;
+  the interactive mode is still `NOT_IMPLEMENTED`.

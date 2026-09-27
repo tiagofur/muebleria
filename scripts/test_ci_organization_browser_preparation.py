@@ -70,6 +70,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "        'media_dir': os.environ.get('MEDIA_DIR'),\n"
                 + "        'isolated': os.environ.get('ORGANIZATION_TEST_ISOLATED'),\n"
                 + "        'testdb': os.environ.get('GRANETE_TEST_DATABASE'),\n"
+                + "        'bind_host': os.environ.get('ORGANIZATION_GATE_BIND_HOST'),\n"
                 + "        'lang': os.environ.get('LANG'),\n"
                 # Python may set LC_CTYPE itself while coercing the C locale;
                 # its os.environ cannot attest the raw env passed to execve.
@@ -187,6 +188,8 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         self.assertRegex(browser[0]['identity_digest'], r'^[0-9a-f]{64}$')
         self.assertTrue(all(r['identity_digest'] is None for r in records if not r['command'].startswith('pnpm ')))
         server = next(r for r in records if r['command'].startswith('server '))
+        self.assertEqual(server['bind_host'], '127.0.0.1')
+        self.assertTrue(all(r['bind_host'] is None for r in records if r is not server))
         self.assertTrue(server['media_dir'].endswith('/media'))
         self.assertIn('/granete-organization-gate.', server['media_dir'])
         self.assertEqual(browser[0]['media_dir'], server['media_dir'])

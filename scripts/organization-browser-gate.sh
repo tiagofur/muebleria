@@ -147,7 +147,7 @@ unset GATE_DB_MARKER
 GATE_SERVER_ENV=("${GATE_BASE_ENV[@]}"
   JWT_SECRET="${JWT_SECRET}" REFRESH_TOKEN_PEPPER="${REFRESH_TOKEN_PEPPER}"
   MEDIA_SIGNING_KEY="${MEDIA_SIGNING_KEY}" MFA_ENCRYPTION_KEY="${MFA_ENCRYPTION_KEY}"
-  MEDIA_DIR="${MEDIA_DIR}" PORT="${BACKEND_PORT}"
+  MEDIA_DIR="${MEDIA_DIR}" PORT="${BACKEND_PORT}" ORGANIZATION_GATE_BIND_HOST=127.0.0.1
   CORS_ALLOWED_ORIGINS="http://127.0.0.1:${ORGANIZATION_WEB_PORT}"
   RATE_LIMIT_RPS=100 RATE_LIMIT_BURST=100)
 GATE_ADMIN_ENV=("${GATE_BASE_ENV[@]}" ADMIN_PASSWORD="${ADMIN_PASSWORD}")
@@ -226,6 +226,12 @@ GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
   VITE_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api"
   ORGANIZATION_TEST_OUTPUT="${TMP_ROOT}/playwright-output")
 
-cd "${ROOT}"
-"${GATE_BROWSER_ENV[@]}" pnpm exec playwright test --config=playwright.organization.config.ts "$@"
-printf '[organization-gate] PASS\n'
+run_prepared_automatic_gate() {
+  cd "${ROOT}"
+  "${GATE_BROWSER_ENV[@]}" pnpm exec playwright test --config=playwright.organization.config.ts "$@"
+  printf '[organization-gate] PASS\n'
+}
+
+# Both modes will share the preparation above. The automatic runner retains
+# ownership until Playwright returns, then the existing EXIT trap cleans up.
+run_prepared_automatic_gate "$@"
