@@ -461,3 +461,295 @@ independently reviewed. One PR, with the approved `size:exception`.
   `scripts/test_ci_organization_browser_preparation.py`. The existing T2 DB
   isolation, direct-Playwright identity handshake, and merged T1 stay intact.
   Delivery remains `Refs #823` / `Delivery: partial`; #823 remains open.
+
+## T3–T4 continuation — explicit interactive disposable gate (pending)
+
+- Authority and base: the human authorized a local, opt-in interactive lifecycle
+  for the disposable Phase 1 harness, not auth/MFA/token/RLS changes or a
+  functional Project/Design fix. This independent #823 worktree starts clean at
+  `origin/main` `b5697951021f6484cf3e71161ec396ff6f434194` on
+  `codex/823-interactive-gate`. Preserve the #398 checkpoint `fdd11ea4` and all
+  other worktrees; #398 remains the product-reproduction coordinator. Its
+  Phase 1 spec and gate-only loopback listener fix are not on this base.
+- Objective and scope: keep the existing automatic prepare → test → cleanup
+  path as default. Add a minimal explicit prepare/run-state/continue/stop
+  lifecycle with one preparation, a private local run identity, visible
+  non-secret environment and test states, a bounded maximum age, and
+  run-owned idempotent cleanup. Reuse the current tmpfs PostgreSQL, distinct
+  runtime/migration roles, preflight, browser/backend DB identity handshake,
+  scoped `env -i`, UTF-8 browser locale, and disposable media. Do not create a
+  persistent DB, generic environment manager, production endpoint, or
+  credential/session workaround. No SketchUp, Keychain, or owner-file mutation
+  is authorized by these tasks.
+- Route: delegated direct; the existing launcher, Go listener, Playwright
+  configuration/setup, CI launcher doubles, and isolation documentation are
+  multiple non-trivial files. One bounded writer owns T3–T4. Strict TDD is
+  enabled by `AGENTS.md`; observe safe RED, GREEN, then REFACTOR. DB-free
+  runners: `python3 scripts/test_ci_organization_browser_preparation.py` and,
+  if the Go listener changes, `cd backend-go && go test ./cmd/server`.
+  Operational positive uses the existing exact disposable runner
+  `LANG=en_US.UTF-8 bash scripts/organization-browser-gate.sh tests/organization/prequote-design.spec.ts`;
+  the new interactive command must be documented only after it exists.
+- Delivery: `ask-on-risk` is resolved for this increment by the human's explicit
+  choice of **one coherent partial #823 PR**. The existing approximately
+  400-authored-line figure is only a review-planning heuristic. For this work,
+  0–800 authored additions plus deletions is normal; at 801–1,200 assess and
+  document cohesion/risk without stopping or splitting solely for size; above
+  1,200, checkpoint with a breakdown and proposed boundary before substantial
+  expansion or publication. T3 and T4 may be separate work-unit commits in the
+  same PR, but do not separate an open environment from its stop/cleanup proof.
+  Count handwritten additions **and** deletions in behavior, tests, and docs;
+  report generated changes separately. No `size:exception` or protected label
+  is presumed. If a real checker requires an exception, report its exact
+  command/diagnostic; do not preemptively change the checker or repeat a size
+  authorization question. No code-golf, omitted proof, force push, or auto-merge.
+- Pre-write component forecast (authored additions + deletions): interactive
+  lifecycle/ownership 300–420; integration with the current launcher and
+  gate-only loopback bind 140–210; deterministic doubles and focused Go/browser
+  regressions 300–390; concise operational/isolation documentation and task
+  evidence 60–100. Total approximately **800–1,120 authored lines**; generated
+  files expected: none. Likely touched files:
+  `scripts/organization-browser-gate.sh`, one small lifecycle helper under
+  `scripts/` only if necessary, `scripts/test_ci_organization_browser_preparation.py`,
+  `backend-go/cmd/server/main.go`, a focused `backend-go/cmd/server/` bind test,
+  `playwright.organization.config.ts`, at most one focused
+  `tests/organization/support/` seam, `docs/architecture/test-database-isolation.md`,
+  and this existing task document. Reconcile this forecast with actual diffs;
+  crossing 800 alone is not a stop condition.
+
+- [x] **T3 — Preserve one safe preparation and restrict the gate listener.**
+  First pin the 20-minute boundary by source line and process sequence. Add the
+  gate-only loopback bind behavior missing from this base (without changing the
+  normal server bind) and extract only the preparation/ownership seam needed by
+  both modes. Keep automatic execution and teardown unchanged. RED/GREEN checks:
+  focused DB-free Go bind tests and existing launcher doubles, including
+  rejected targets before writes, ambient-variable exclusion, and automatic
+  success/error/signal cleanup. Run `bash -n`, focused Go checks, and one real
+  disposable automatic gate before closing this work unit. Record exact commit,
+  authored-line count, rollback boundary, and observed checks here.
+- [x] **T4 — Continue one interactive run and clean it exactly.** Add the
+  opt-in private run state, concrete continue/stop actions, owned backend/DB/
+  web/browser lifetimes, and maximum-age expiry without recreating the DB or
+  changing auth/MFA/step-up. Completion of automated React/Go work must leave
+  the same environment available for human and host steps; incomplete waiting
+  must record host/binding/placement as `NOT_RUN`, never Phase 1 PASS. RED/GREEN
+  launcher doubles must cover opt-in only, single preparation, continued
+  availability, wrong/replayed run, explicit stop, failure/interruption,
+  expiry, idempotent cleanup without harming foreign resources, and CI never
+  waiting for a human. Then run a real disposable start → identity → ready →
+  stop → process/port/container/temp-profile cleanup readback. Document the
+  actual commands, sanitized state, maximum age, and honest forced-termination/
+  power-loss recovery limit. Record exact commit, authored-line count, rollback
+  boundary, and observed checks here.
+
+Acceptance remains partial: the interactive infrastructure and isolation need
+fresh independent review and exact-head checks. Installed SketchUp, MFA/device
+approval, same-ID placement, WorkingCopy, and the Phase 1 product result remain
+outside this increment and `NOT_RUN` until separately observed. Next step:
+record the T4 work-unit identity, mirror this full document to Engram, then
+request fresh independent review and exact-head checks before the partial PR.
+
+### T4 observed work-unit evidence
+
+- Safe RED: the new DB-free launcher lifecycle test initially ran `prepare`
+  against the prior gate, which treated it as a Playwright argument and exited
+  without a run ID. No PostgreSQL connection or writable child was used.
+  GREEN: `python3 scripts/test_ci_organization_browser_preparation.py` passed
+  10 tests (one opt-in real-Go preflight skip). The added tests cover one
+  preparation, correct synthetic DB targets and ambient-secret exclusion,
+  waiting/continue/stop state, invalid ID and max age before writers, failed
+  preparation, four-second expiry, forced-owner loss and exact-run recovery,
+  idempotent stop, and no surviving test-owned server/web/browser. Existing
+  cases retain automatic success/failure/cancellation and a foreign sentinel.
+- The first real detached attempt passed the automated 2/2 Chromium checks and
+  created a ready browser, but its launcher environment reaped the detached
+  supervisor when `prepare` exited. `status` reported `ORPHANED` rather than
+  claiming availability; exact-run `stop` removed the container and profile.
+  The corrected procedure keeps the preparation terminal attached while the
+  supervisor runs. This is a lifecycle requirement, not an auth timeout fix.
+- Real disposable positive with the attached procedure: `LANG=en_US.UTF-8
+  bash scripts/organization-browser-gate.sh prepare
+  tests/organization/prequote-design.spec.ts` produced a private run ID,
+  `WAITING_FOR_HUMAN`, `automated_result=PASS`, and `host_result=NOT_RUN`.
+  Readback showed 2/2 Chromium tests, ready browser profile, backend and web
+  listening only on `127.0.0.1`, and PostgreSQL published only on loopback.
+  `continue` recorded `HOST_CHECK_IN_PROGRESS` without host PASS. Two `stop`
+  calls returned `FINISHED`/`cleanup=COMPLETE`; independent readback found zero
+  owned PIDs/listeners, no container, and no temporary profile. A separate
+  ordinary automatic command passed the same 2/2 Chromium suite and exited.
+  No persistent database, Keychain, installed SketchUp, or human MFA session
+  was touched.
+- Exact behavior commit `e7b246f47197eed9676fcf4b0090d382b8d71323` was
+  replayed with a foreground-owned preparation terminal: 2/2 Chromium checks,
+  `WAITING_FOR_HUMAN`, a ready browser profile, loopback-only DB/API/web,
+  sanitized state without DSN/password/token/cookie, followed by
+  `continue`/`stop` and zero surviving run-owned PIDs, listeners, container,
+  or temp profile. The preparation terminal then exited 0. This verifies
+  browser-process ownership, not installed SketchUp-host acceptance.
+- V0/V1: `bash -n scripts/organization-browser-gate.sh`, `shellcheck` on the
+  same script, `node --check scripts/organization-interactive-browser.mjs`,
+  `git diff --check`, `pnpm typecheck`, `pnpm test`, and focused
+  `cd backend-go && go test ./cmd/server` passed. The conservative
+  `verify_affected.py --base origin/main --plan` selects broader CI because T3
+  changes Go server binding; those checks and independent exact-head review
+  remain pending. The final state-only `failure_reason` addition has DB-free
+  test/static proof and was present in the real interactive replay above.
+  After this task-only evidence commit, the parent still owns candidate freeze,
+  independent review, and exact-head CI.
+- Rollback boundary: interactive branches of the existing gate, new private
+  browser helper, Playwright external-web reuse switch, lifecycle doubles,
+  and the interactive paragraph in the canonical isolation contract. T3's
+  loopback bind and ordinary automatic preparation remain independent.
+  Forced-kill recovery depends on private run metadata and exact process
+  fingerprints; a power loss can erase temporary metadata, so no recovery PASS
+  is claimed without fresh resource readback. #398's Phase 1 installed-host,
+  MFA/device, placement, and WorkingCopy acceptance remain `NOT_RUN`.
+- T4 coherent behavior/test/documentation work-unit commit:
+  `e7b246f47197eed9676fcf4b0090d382b8d71323` (573 additions, 10
+  deletions; 583 authored lines; generated files: none). The accumulated
+  branch versus `b5697951021f6484cf3e71161ec396ff6f434194` is 765
+  authored lines before this task-only evidence update, within the human's
+  normal 0–800 range. No push, PR, independent review, or final CI yet.
+
+### T4 reopened after independent review
+
+Fresh review of `beaed488ec60e14ca0a5714777970cadbb0391c9` requested one
+bounded correction before T4 can close: retry cleanup when state is incomplete,
+fail closed when forced termination precedes process-ownership recording, and
+enforce the local deadline throughout preparation. The earlier green evidence
+above remains historical, not proof that these three negative boundaries pass.
+Use DB-free RED cases first, then GREEN and a real disposable replay. No new
+issue artifact or product/auth scope is introduced.
+
+### T4 bounded review correction evidence
+
+- Safe RED: three new DB-free launcher tests failed against the reviewed
+  candidate. A simulated Docker removal failure made `stop` exit 0 with
+  `cleanup=INCOMPLETE`; a forced kill while process recording was blocked made
+  orphan recovery exit 0 with `cleanup=COMPLETE` despite an unrecorded backend;
+  a one-second lifetime with slow preflight still launched the server after
+  expiry. No real PostgreSQL connection was opened in these tests.
+- GREEN: each interactive child now has a pending-spawn marker before launch
+  and an atomic PID/start-time record before that marker becomes `started`.
+  Missing ownership evidence makes stop nonzero and preserves the exact run's
+  container/temp evidence for manual inspection; it never claims cleanup.
+  A transient cleanup failure remains retryable through the same run ID, and
+  completed stops re-read container, temp-root, and recorded process state.
+  A watchdog enforces the lifetime during preparation, verifies its parent
+  PID/start fingerprint plus exact `__serve` run identity before signalling,
+  and prevents expired WAITING output.
+- `python3 scripts/test_ci_organization_browser_preparation.py`: 13 passed,
+  one opt-in real-Go preflight skipped. `bash -n` and `shellcheck` on the gate,
+  `node --check` on the browser helper, `git diff --check`, and focused
+  `cd backend-go && go test ./cmd/server` passed. One initial Go invocation
+  from the repository root failed because no `go.mod` exists there; the
+  correct module-root invocation passed. This was a command-location error,
+  not a source or database failure.
+- Real disposable foreground-owned replay: 2/2 Chromium tests passed;
+  `WAITING_FOR_HUMAN`, ready browser profile, and PostgreSQL/API/web listeners
+  were all loopback-only. State contained no DSN/password/token/cookie.
+  `continue`, then two `stop` calls, produced `FINISHED`/`cleanup=COMPLETE`;
+  independent readback found no owned PID, listener, container, or temp profile.
+  The default automatic disposable gate also exited 0 with 2/2 Chromium PASS.
+  No persistent DB, human MFA, Keychain, installed SketchUp, or #398 file was
+  touched. The real run did not exercise a power loss or a real Docker failure;
+  those negative paths are DB-free deterministic checks, not V2 claims.
+- Cohesion/risk in the authorized 801–1,200 band: the added lines are one
+  launcher-owned lifecycle and its exact failure/expiry tests plus canonical
+  documentation, not a second manager or product/auth change. Shell process
+  races remain the main review risk; incomplete ownership intentionally needs
+  manual exact-run inspection instead of broad cleanup. No size exception is
+  presumed. Fresh independent review and exact-head CI remain pending.
+- Correction work-unit commit: `31f5870cd86405b3020f99573b4e24ff55124fea`
+  (278 additions, 26 deletions; generated files: none). Its rollback boundary
+  is the retry/readback, pending-spawn ownership, watchdog, their DB-free
+  regressions, and the matching isolation/task documentation; T3 and the
+  original T4 behavior remain separate. The branch is 1,037 authored lines
+  versus `b5697951021f6484cf3e71161ec396ff6f434194` before this
+  task-only commit, still within the approved 801–1,200 assessment band.
+- Timer identity hardening commit: `773a9a189fb0e1c4ab1078b07dbc62e4046a1e1e`
+  (8 additions, 3 deletions). It also checks the exact `__serve <run-id>`
+  command before signalling, so same-second PID reuse cannot target an
+  unrelated process. DB-free 13-test suite (one opt-in skip), `bash -n`,
+  `shellcheck`, and `git diff --check` passed after this change. The same
+  source commit passed a further real foreground-owned disposable replay:
+  2/2 Chromium, loopback DB/API/web, ready profile, sanitized state,
+  `continue`, and two successful stops with no remaining owned process,
+  listener, container, or temp profile. Installed-host acceptance remains
+  `NOT_RUN`.
+- The branch totals 1,049 authored additions plus deletions from its approved
+  base before this evidence-only update (generated files: none). The live
+  `origin/main` ref later advanced to `d8c28d2f383fbc7c7964414bb0604880b6c265a6`;
+  base reconciliation, fresh independent review, and exact-head CI belong to
+  the parent before publication. No push or PR was made here.
+
+### T4 base integration before renewed review
+
+- Original base: `b5697951021f6484cf3e71161ec396ff6f434194`; original
+  clean tip: `3751b368da936d68eb728e3dc2c2a49a6e4ef297`. A fresh
+  `git fetch origin main` confirmed new base
+  `d8c28d2f383fbc7c7964414bb0604880b6c265a6`. Its five changed paths
+  were documentation-only and disjoint from this feature's eight paths.
+- All eight local commits rebased onto that exact base without conflict or
+  discarded content. Rebased tip before this integration-evidence commit:
+  `1f46007c9b4eb0273f5d5bcc5a2a0610a9f11a5d`. The eight feature paths
+  were byte-identical to the original tip; the diff against the new base was
+  1,052 additions and 12 deletions (1,064 authored lines; generated: none).
+- Rebasing verification: `python3 scripts/test_ci_organization_browser_preparation.py`
+  passed 13 tests with one opt-in skip; `bash -n`, `shellcheck`, browser-helper
+  `node --check`, focused `cd backend-go && go test ./cmd/server`, and
+  `git diff --check origin/main HEAD` passed. A fresh disposable browser run
+  after rebase is `NOT_RUN`: incoming commits changed only unrelated docs and
+  all executable feature bytes were identical, so repeating the costly V2
+  environment would not test a changed executable boundary. Earlier V2 proof
+  remains source-byte evidence, not exact-rebased-HEAD CI or host proof.
+- The one-PR cohesion/risk assessment still applies; this integration adds no
+  product/auth logic. The parent must mirror the updated artifact, obtain a
+  fresh independent review, and run exact-head required CI before publication.
+
+### T3 observed work-unit evidence
+
+- The 20-minute limit is in #398 checkpoint `fdd11ea4`,
+  `tests/organization/phase1-project-design.spec.ts:212-214,278-284`:
+  `PHASE1_HANDOFF_SECONDS` is capped at 1,200 and the test awaits that interval.
+  When Playwright returns, the existing launcher at
+  `scripts/organization-browser-gate.sh:229-231` exits; its `EXIT` trap at
+  lines 9-20 kills the backend and removes the container and temporary media.
+  This is not evidence of authentication expiry, and the #398 file was not
+  copied or changed here.
+- Safe RED, before implementation: `cd backend-go && go test ./cmd/server -run
+  '^TestServerListenAddress$' -count=1` failed to compile with
+  `undefined: serverListenAddress`. The DB-free launcher double
+  `python3 scripts/test_ci_organization_browser_preparation.py` failed only
+  its new server bind assertion (`None` versus `127.0.0.1`); 7 tests ran,
+  with one opt-in preflight test skipped. No database connection was made.
+- GREEN: `cd backend-go && go test ./cmd/server` passed; the targeted bind
+  test passed, including ordinary `:PORT`, gate-only loopback, and missing/
+  non-loopback rejection. The launcher double passed 7 tests (one opt-in
+  skip); with `GRANETE_TEST_REAL_GO_PREFLIGHT=1` it passed all 7, including
+  real Go preflight against synthetic rejected targets without connecting.
+  `bash -n scripts/organization-browser-gate.sh`, `shellcheck` on that script,
+  and `git diff --check` passed.
+- Real disposable automatic gate: `LANG=en_US.UTF-8 bash
+  scripts/organization-browser-gate.sh tests/organization/prequote-design.spec.ts`
+  exited 0, read back `granete_gate` with two users and two organizations,
+  matched backend/fixture database identity, passed 2/2 Chromium tests, and
+  printed `[organization-gate] PASS`. This proves the default automatic path
+  remains functional; it does not yet prove an interactive session or an
+  installed SketchUp host. An OS socket readback was not captured in this run;
+  the gate-only bind is covered by Go unit tests and launcher forwarding checks.
+- `python3 scripts/verify_affected.py --base origin/main --plan` selected
+  broader jobs because the backend changed; those broad jobs remain `NOT_RUN`
+  for this T3 work unit and must be considered on the final exact candidate.
+  The new `run_prepared_automatic_gate` function is only an ownership seam;
+  T4 must reuse the preparation above it, not duplicate a second setup.
+- Rollback boundary: gate-only Go listener decision and focused test,
+  server-only bind setting and automatic runner seam in the launcher, and the
+  bind-forwarding assertion in its Python double. Existing admin/DB guards,
+  default production bind, and #398 checkpoint remain untouched. T4 is next;
+  the interactive mode is still `NOT_IMPLEMENTED`.
+- T3 work-unit commit: `51ad935c86c968f73b718175fbb4f8da63d9954b`
+  against `b5697951021f6484cf3e71161ec396ff6f434194`, with 184 authored
+  additions and 5 deletions (189 total), generated files: none. One coherent
+  partial #823 PR remains the authorized delivery; no size exception is
+  assumed. Fresh independent review and final exact-head CI remain pending.

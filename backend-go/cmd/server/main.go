@@ -29,6 +29,11 @@ func main() {
 		slog.Error("Invalid configuration, refusing to start", "error", err)
 		os.Exit(1)
 	}
+	listenAddress, err := serverListenAddress(cfg.Port, os.Getenv("ORGANIZATION_TEST_ISOLATED"), os.Getenv("ORGANIZATION_GATE_BIND_HOST"))
+	if err != nil {
+		slog.Error("Invalid disposable browser gate listener", "error", err)
+		os.Exit(1)
+	}
 	if os.Getenv("ORGANIZATION_TEST_ISOLATED") == "1" {
 		// This opt-in probe must never become a way to boot a test-marked
 		// backend against an ordinary database before migrations run.
@@ -117,7 +122,7 @@ func main() {
 	// TLS/HSTS: this process serves plain HTTP; terminate TLS at a reverse
 	// proxy (Caddy/nginx) in production and set DATABASE_URL with sslmode=require.
 	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
+		Addr:              listenAddress,
 		Handler:           handler,
 		ReadTimeout:       10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -150,4 +155,16 @@ func main() {
 	}
 
 	slog.Info("HTTP server stopped. Goodbye!")
+}
+
+// The long-lived interactive gate must not expose disposable credentials on
+// other interfaces. Ordinary server binding remains unchanged.
+func serverListenAddress(port, isolated, host string) (string, error) {
+	if isolated != "1" {
+		return ":" + port, nil
+	}
+	if host != "127.0.0.1" {
+		return "", errors.New("disposable browser gate requires ORGANIZATION_GATE_BIND_HOST=127.0.0.1")
+	}
+	return host + ":" + port, nil
 }

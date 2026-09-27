@@ -71,6 +71,42 @@ servidor, no el padre de un proceso `go run` que podría dejarlo vivo. El servid
 y Playwright reciben el mismo `MEDIA_DIR` descartable; no se hereda el valor
 ambiental.
 
+The interactive organization gate is opt-in and uses the same preparation,
+database identity check, disposable PostgreSQL container, and loopback-only
+backend/web listeners. In one terminal, keep the preparation command attached:
+
+```sh
+LANG=en_US.UTF-8 bash scripts/organization-browser-gate.sh prepare tests/organization/prequote-design.spec.ts
+```
+
+It prints a private run ID after the automated browser segment passes and the
+separate human-facing browser is ready. In another terminal, use the printed ID:
+
+```sh
+bash scripts/organization-browser-gate.sh status <run-id>
+bash scripts/organization-browser-gate.sh continue <run-id>
+bash scripts/organization-browser-gate.sh stop <run-id>
+```
+
+`continue` records that host checking began; it does not assert a host PASS.
+`stop` is idempotent and removes the run-owned browser, web server, backend,
+container, and temporary browser profile. The local maximum age is 3,600
+seconds; `ORGANIZATION_GATE_MAX_AGE_SECONDS` may shorten it to 1–3,600 seconds.
+The deadline also applies during preparation: an expired run cannot announce
+`WAITING_FOR_HUMAN`. If cleanup readback is incomplete, `stop` exits nonzero;
+retry `stop` with the same run ID after the transient failure clears. A missing
+spawn ownership record is different: the gate preserves the exact run's
+container and temporary evidence and refuses automatic cleanup until an
+operator verifies those resources. Do not delete by a broad name prefix.
+The ordinary gate command remains automatic and never waits for a human.
+Run state exposes URLs, expiry, automated result, and `host_result=NOT_RUN`,
+but not credentials, DSNs, tokens, or cookies. Do not terminate the attached
+preparation terminal while using the browser. If the supervisor is forcibly
+killed, `status` reports `ORPHANED`/`cleanup=UNKNOWN`; `stop` attempts recovery
+using exact run-owned process/container metadata. After a machine power loss,
+the OS may clear temporary metadata or Docker may already remove the `--rm`
+container: recovery cannot be certified without fresh resource readback.
+
 ### Pilot Readiness y suites throwaway
 
 `backend-go/tests/pilotreadiness/`, `multiOrgFreshDB` y otros fixtures ya crean bases separadas y las eliminan. Deben converger al helper común cuando #823 lo implemente, sin perder pruebas de concurrencia/RLS.
