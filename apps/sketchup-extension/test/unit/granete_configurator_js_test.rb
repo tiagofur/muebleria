@@ -125,12 +125,15 @@ class GraneteConfiguratorJsTest < Minitest::Test
     assert_includes html, 'window.GraneteUI.configurator.setPresets([]);'
     assert_includes html, 'window.GraneteUI.configurator.refreshAfterCatalog();'
     assert_includes html, 'window.GraneteUI.materialRoles.setCatalog({'
-    # The shared #469 placement preview handlers stay inline (they serve
-    # the Project lane too) and read the catalog entry point through the
-    # module API.
-    assert_includes html, 'window.GraneteUI.configurator.isRepeatPreviewActive()'
-    assert_includes html, 'window.GraneteUI.configurator.cancelRepeatPreview()'
-    assert_includes html, 'window.GraneteUI.configurator.rearmInsertButton()'
+    # The shared #469 placement preview handlers moved with the Project
+    # lane into js/granete-project-furniture.js (#848 C4.9) and read the
+    # catalog entry point through the module API (call-time).
+    project_furniture_js = File.expand_path('../../src/granete_for_sketchup/resources/js/' \
+                                            'granete-project-furniture.js', __dir__)
+    pf_source = File.read(project_furniture_js, encoding: 'UTF-8')
+    assert_includes pf_source, 'window.GraneteUI.configurator.isRepeatPreviewActive()'
+    assert_includes pf_source, 'window.GraneteUI.configurator.cancelRepeatPreview()'
+    assert_includes pf_source, 'window.GraneteUI.configurator.rearmInsertButton()'
     # Selection/material routing reads the module's exact presence
     # semantics, not a duplicated definition copy. Both reads moved into
     # the inspector module (#848 C4.7) with the material-choice routing.

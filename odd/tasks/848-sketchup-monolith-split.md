@@ -740,6 +740,154 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
 - Remaining Phase B modules after C4.6: inspector, model-binding,
   project-furniture.
 
+## C4.9 — granete-project-furniture.js (owner pre-commit review: APPROVED)
+
+Started from `main@944e5149f8287b0ef19e10e75912d78bd5c4a382` (post-C4.8/PR
+#865), branch `refactor/848-dialog-js-project-furniture`. Final Phase B
+slice: mechanical extraction of the Project Furniture panel (#389 / DT-5)
+per the owner's C4.9 brief. C4.8's temporary seam is closed: `lastPfState`
+and `requestProjectFurniture` moved into the module, the
+`invalidateProjectFurniture` init dep of the Model Binding module now
+captures `projectFurniture.invalidate`, and the connected reload in the
+inline `onModelBindingStatus` orchestrator calls the module API — same
+fan-out order (binding render → Commercial Projection → Commercial
+Bootstrap → connected PF reload).
+
+**Owner ratification (pre-commit checkpoint review, 2026-09-26)**: the
+boundary is approved exactly as presented — the module as single
+dialog-side Project Furniture authority; `lastPfState` permanently out of
+the inline; the C4.8 seam closed via `GraneteUI.projectFurniture.invalidate`;
+the historical `onModelBindingStatus` fan-out order preserved; neither
+domain acquires the other's state; the 14-entry public API accepted (each
+entry keeps a real/Ruby-facing consumer, no private helpers exposed);
+`showToast` + call-time deps accepted; the Project-lane placement-preview
+handlers approved inside the module (catalog lane stays under the
+Configurator); documented quirks deliberately preserved; move-fidelity
+565/565 + enumerated transformations approved; 690 lines within the #848
+gate; verification/packaging sufficient to proceed; behavior changes: 0;
+Real SketchUp host smoke NOT_RUN.
+
+**Phase-acceptance distinction (owner-mandated)**: C4.9 completes the
+planned Project Furniture extraction and the enumerated Phase B
+domain-module set. It does NOT establish #848 phase acceptance.
+`dialog.html` remains 1,851 lines vs the issue's ~900-line acceptance
+target, and the real SketchUp/CEF host smoke remains NOT_RUN. Both are
+pending the post-C4.9 architectural/acceptance audit. No C4.10 was
+invented; helpers/bridge/bootstrap stay inline for that audit to decide.
+
+- **Boundary**: `window.GraneteUI.projectFurniture` owns the panel
+  dialog-side state (`lastPfState`, `pfPlacing`/`pfConfirming`/
+  `pfCancelling`/`pfRestoring`, `designSyncBusy`, `lastDesignSyncOutcome`),
+  the request/reload orchestration, the render of every distinct panel
+  state (loading/empty/error/unbound/connected), the per-unit rows and
+  action lifecycle, the #810 design-sync card, the host save-awareness
+  banner, the shared #469 placement-preview Project-lane handlers (the
+  catalog lane's repeat state + re-arm are consumed call-time through
+  `GraneteUI.configurator`) and the failure copy tables. Does NOT own:
+  Model Binding/pairing/publish/validation, Commercial
+  Projection/Bootstrap, the catalog placement intent,
+  `handleCreateProjectFurnitureResult` (Configurator), Inspector, Library,
+  materials, Ruby placement tools/host mutation, business identity.
+- **Public API (14, historical names preserved)**: `init(deps)` (injects
+  `showToast`), `onProjectTabVisible` (switchTab seam — the
+  `lastPfState === null` condition moved with its state), `invalidate`
+  (Model Binding seam; dep-free pure state write, like modelBinding's
+  `isConnected`), `requestProjectFurniture` (Configurator dep + inline
+  connected reload), `renderProjectFurniture`,
+  `handlePlaceFurnitureResult`, `handlePlacementPreviewStarted`,
+  `handlePlacementPreviewCancelled`, `handleConfirmPlacementResult`,
+  `handleCancelPlacementResult`, `handleRestoreFurnitureResult`,
+  `handleSynchronizeDesignResult`, `renderHostSaveAwareness`,
+  `pfPlaceFailureMessage` (Configurator dep). Every entry has a real
+  consumer; render helpers stay private.
+- **Injected deps (1)**: `showToast`. Everything else call-time,
+  window-qualified exactly as before (Ruby bridges, configurator API,
+  lazy `GraneteCommercialProjection.refresh()`).
+- **Ruby-facing contract unchanged**: no Ruby change; the GraneteDialog
+  wrappers keep the exact names/payloads as thin delegation;
+  `onProjectFurniture` stays the inline cross-domain orchestrator
+  (module render + Commercial Projection `setHostReconciliation`).
+- **Move fidelity**: mechanical audit extracted the exact moved block
+  from base `944e5149` (565 lines, from `var pfUnbound` through the
+  panel listeners) and diffed it against the module after only the two
+  enumerated normalizations (dedent + `deps.showToast(` plumbing):
+  **565/565 lines identical, zero diff hunks**. Section banner comment
+  adapted into the module header; the inline `lastPfState = null` seam
+  lambda became the module's `invalidate()`; the switchTab condition
+  became `onProjectTabVisible()`; button listeners register at module
+  load instead of mid-inline (different-element single listeners; same
+  documented C4.5/C4.8 rationale).
+- **Preserved quirks (documented, asserted, not fixed)**: repeated
+  Proyecto-tab visits before the first payload re-request (lastPfState
+  stays null until a render); `unreachable` never appends the reason
+  suffix; refresh re-arm is timer-based (500 ms); ok place results do
+  not re-request (the Ruby push refreshes); pending_position re-arms the
+  button instead of reloading; renderDesignSyncCard is busy-guarded (a
+  sync-result render is ignored while Sincronizando); the #810 sync
+  action disables at dirty === 0; `lastDesignSyncOutcome` declared after
+  its reader via var hoisting (order kept).
+- **Load order**: markup → media → account → library → configurator →
+  finish-selector → material-roles → inspector-child → inspector →
+  model-binding → **project-furniture** → inline bootstrap → #498
+  runtime. Bootstrap init order: … materialRoles.init →
+  **projectFurniture.init** → modelBinding.init (captures
+  `projectFurniture.invalidate`) → configurator.init (captures
+  `requestProjectFurniture`/`pfPlaceFailureMessage`) → finishSelector.init
+  → unbound render → dialog_ready. `dialog_scripts.js` loads the real
+  module in the same position; `dialog_publish_test.js` preload chain
+  updated.
+- **Focused tests**: `test/js/granete_project_furniture_test.js` — 36
+  tests driving the REAL module: registration + idempotent re-execution
+  (single listener registration), exact 14-entry API, init contract +
+  fail-fast (10 guarded entries) + dep-free `invalidate`/
+  `pfPlaceFailureMessage`, tab-visible/request/invalidate semantics
+  (loading card only when nothing rendered, stale-state keep-list rule,
+  no-bridge unbound fallback), connected render (counts/titles/split/
+  terminal exclusion/attention suffix), error-state copy table + reason
+  rules, unit cards (badge/meta/ref-slice/notes), exact bridge payloads
+  (place identity-only, preview-preferred, legacy fallback, no-bridge
+  re-arm, select/confirm/cancel/restore), all result handlers (including
+  restored=false copy), shared #469 handlers (catalog copy via call-time
+  configurator API; refusal/cancel re-arm + rearmInsertButton for the
+  definitionId lane), #810 sync surface (busy guard, Sincronizando,
+  success refreshes projection + panel, conflict/error outcomes),
+  refresh/retry listeners (500 ms timer), pfPlaceFailureMessage groups,
+  save awareness, structural no-model-binding/no-wrapper-fan-out.
+  Integrated surface continues through `dialog_project_furniture_test.js`
+  (24 tests via the full real chain, untouched). Ruby side
+  `test/unit/granete_project_furniture_js_test.rb` (8 runs, 214
+  assertions): runs the harness + symbol guards (header, module owns the
+  full state/render set with exact payloads/500 ms marker, monolith
+  carries no PF implementation symbol incl. all DOM refs, load order
+  model-binding → project-furniture → inline in dialog.html AND
+  dialog_scripts.js, bootstrap seam wiring, wrappers thin + orchestrator
+  order, Model Binding does not own PF rows and vice versa).
+- **Repointed (never deleted) asserts**: `granete_model_binding_js_test.rb`
+  (lastPfState now owned by the module; the seam delegates via
+  `projectFurniture.invalidate`; the connected reload asserts the module
+  API call), `granete_configurator_js_test.rb` (the three shared-#469
+  handler asserts now read granete-project-furniture.js).
+- **Verify** (Homebrew `ruby@3.2` 3.2.11, vendored bundle — same libruby
+  linkage note as C4.1–C4.8; no gem or lockfile change): all Node
+  harnesses under test/js green (30 files incl. the new focused one);
+  RuboCop 260 files / 0 offenses; unit suite 1200 runs, 8864 assertions,
+  0 failures/errors/skips; contract suite 6 runs, 4043 assertions, 0
+  failures; `git diff --check` clean; `verify_affected --plan` exit 0
+  (conservatively expanded by the pre-existing untracked `.codex/`,
+  `.github/hooks/`, `plugin-siguiente.md` — not part of this slice);
+  contracts drift + ci/factory unittest suites green. RBZ rebuilt +
+  `package:verify` readback, sha256
+  `f3faff24ec5853282c55470a7693af33339cdbb9e15f4bdef5aab8b0341401f6`,
+  packages granete-project-furniture.js (content read back).
+- **Size**: dialog.html 2376 → 1851 lines; inline JS 1347 → 806 lines;
+  granete-project-furniture.js 690 lines (≤ ~800 gate: no STOP).
+  dialog.html remains above the ~900 end target — the remaining inline
+  accounting is in the owner checkpoint (shared helper block +
+  GraneteDialog bridge + bootstrap; no C4.10 invented).
+- **Behavior changes: 0** (target). Documented wiring movements above.
+- **Real SketchUp host smoke: NOT_RUN** (same phase-level gate as
+  C4.1–C4.8). #848 remains OPEN; Phase B acceptance audit pending.
+
 ## C4.8 — granete-model-binding.js (PRE-COMMIT: awaiting owner boundary review)
 
 Started from `main@3375d658da50d9beea0f6cbbd8a7f5cd40a5b636` (post-C4.7),

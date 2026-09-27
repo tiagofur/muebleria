@@ -1,0 +1,766 @@
+// Focused #848 Phase B C4.9 harness for the REAL
+// resources/js/granete-project-furniture.js module (window.GraneteUI.
+// projectFurniture): registration + idempotent re-execution, public API
+// shape, init contract + fail-fast deps, state ownership (lastPfState,
+// in-flight maps, #810 sync outcomes), request/invalidate/tab-visible
+// semantics, exact bridge calls, every panel state render, the result
+// handlers (place/confirm/cancel/restore/sync + shared #469 preview
+// handlers), the button listeners, the Model Binding invalidation seam
+// and the preserved quirks. The integrated surface (GraneteDialog
+// wrappers, full dialog.html chain) stays covered by
+// test/js/dialog_project_furniture_test.js — this harness drives the
+// module directly, never a copy of its code.
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const RESOURCES = path.resolve(__dirname, '../../src/granete_for_sketchup/resources');
+const MODULE_SOURCE = fs.readFileSync(path.join(RESOURCES, 'js/granete-project-furniture.js'), 'utf8');
+
+function createMockElement(id) {
+  const el = {
+    id: id || '',
+    children: [],
+    disabled: false,
+    value: '',
+    listeners: {},
+    _textContent: '',
+    // All PF state cards start hidden in the markup (no pre-render).
+    style: { display: 'none' },
+    className: ''
+  };
+  Object.defineProperty(el, 'textContent', {
+    get() { return el._textContent; },
+    set(v) { el._textContent = String(v); }
+  });
+  Object.defineProperty(el, 'innerHTML', {
+    get() { return ''; },
+    set() { el.children.length = 0; }
+  });
+  el.addEventListener = (evt, cb) => {
+    el.listeners[evt] = el.listeners[evt] || [];
+    el.listeners[evt].push(cb);
+  };
+  el.click = () => {
+    (el.listeners.click || []).forEach((cb) => cb({ preventDefault: () => {} }));
+  };
+  el.appendChild = (child) => { el.children.push(child); return child; };
+  return el;
+}
+
+function buildSandbox() {
+  const registry = {};
+  const bridgeCalls = [];
+  const toasts = [];
+  const timers = [];
+  const configuratorCalls = [];
+  let projectionRefreshes = 0;
+
+  const documentMock = {
+    getElementById: (id) => (registry[id] = registry[id] || createMockElement(id)),
+    createElement: () => createMockElement('')
+  };
+
+  const sandbox = {
+    console,
+    setTimeout: (fn) => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+    document: documentMock,
+    JSON,
+    window: {
+      sketchup: {
+        get_project_furniture: () => bridgeCalls.push({ action: 'get_project_furniture' }),
+        begin_placement_preview: (p) => bridgeCalls.push({ action: 'begin_placement_preview', payload: JSON.parse(p) }),
+        place_furniture_instance: (p) => bridgeCalls.push({ action: 'place_furniture_instance', payload: JSON.parse(p) }),
+        confirm_placement_instance: (p) => bridgeCalls.push({ action: 'confirm_placement_instance', payload: JSON.parse(p) }),
+        cancel_placement_instance: (p) => bridgeCalls.push({ action: 'cancel_placement_instance', payload: JSON.parse(p) }),
+        restore_furniture_instance: (p) => bridgeCalls.push({ action: 'restore_furniture_instance', payload: JSON.parse(p) }),
+        select_project_furniture: (p) => bridgeCalls.push({ action: 'select_project_furniture', payload: JSON.parse(p) }),
+        synchronize_design: () => bridgeCalls.push({ action: 'synchronize_design' })
+      },
+      GraneteUI: {
+        configurator: {
+          isRepeatPreviewActive: () => { configuratorCalls.push('isRepeatPreviewActive'); return false; },
+          cancelRepeatPreview: () => configuratorCalls.push('cancelRepeatPreview'),
+          rearmInsertButton: () => configuratorCalls.push('rearmInsertButton')
+        }
+      },
+      GraneteCommercialProjection: {
+        refresh: () => { projectionRefreshes += 1; }
+      }
+    },
+    __registry: registry,
+    __bridge: bridgeCalls,
+    __toasts: toasts,
+    __timers: timers,
+    __configuratorCalls: configuratorCalls,
+    __projectionRefreshes: () => projectionRefreshes
+  };
+  return sandbox;
+}
+
+// Runs the REAL module source; showToast is injectable to capture toasts.
+function runModule(sandbox, deps) {
+  vm.createContext(sandbox);
+  vm.runInContext(MODULE_SOURCE, sandbox, { filename: 'granete-project-furniture.js' });
+  sandbox.window.GraneteUI.projectFurniture.init(Object.assign({
+    showToast: (type, message) => sandbox.__toasts.push({ type, message })
+  }, deps || {}));
+  return sandbox.window.GraneteUI.projectFurniture;
+}
+
+function reexecuteModuleSource(sandbox) {
+  vm.runInContext(MODULE_SOURCE, sandbox, { filename: 'granete-project-furniture.js' });
+}
+
+function el(sandbox, id) {
+  return sandbox.__registry[id];
+}
+
+function visible(elm) {
+  return elm.style.display !== 'none';
+}
+
+const FI_1 = '51000000-0000-0000-0000-0000000000f1';
+const FI_2 = '51000000-0000-0000-0000-0000000000f2';
+
+function connectedPanel() {
+  return {
+    state: 'connected',
+    pending: 2,
+    placed: 1,
+    items: [
+      { id: FI_1, name: 'Base 600', dimensions_label: '600 × 720 × 560 mm', definitionId: 'def-1',
+        origin: 'quote', terminal: false, placed: false, reconciliationState: 'unplaced', unitIndex: 1, unitTotal: 2 },
+      { id: FI_2, name: 'Base 600', dimensions_label: '600 × 720 × 560 mm', definitionId: 'def-1',
+        origin: 'quote', terminal: false, placed: false, reconciliationState: 'unplaced', unitIndex: 2, unitTotal: 2 },
+      { id: '51000000-0000-0000-0000-0000000000f3', name: 'Torre horno', dimensions_label: '600 × 2100 × 560 mm',
+        definitionId: 'def-2', origin: 'quote', terminal: false, placed: true,
+        reconciliationState: 'present_synced', unitIndex: 1, unitTotal: 1 }
+    ]
+  };
+}
+
+const tests = [];
+const test = (name, fn) => tests.push({ name, fn });
+
+// ---------------------------------------------------------------------
+// Registration, API shape, init contract
+// ---------------------------------------------------------------------
+
+test('registers window.GraneteUI.projectFurniture with the exact public API', () => {
+  const sandbox = buildSandbox();
+  vm.createContext(sandbox);
+  vm.runInContext(MODULE_SOURCE, sandbox, { filename: 'granete-project-furniture.js' });
+  const pf = sandbox.window.GraneteUI.projectFurniture;
+  const api = Object.keys(pf).sort();
+  const expected = ['handleCancelPlacementResult', 'handleConfirmPlacementResult',
+    'handlePlaceFurnitureResult', 'handlePlacementPreviewCancelled',
+    'handlePlacementPreviewStarted', 'handleRestoreFurnitureResult',
+    'handleSynchronizeDesignResult', 'init', 'invalidate',
+    'onProjectTabVisible', 'pfPlaceFailureMessage', 'renderHostSaveAwareness',
+    'renderProjectFurniture', 'requestProjectFurniture'].sort();
+  assert.deepStrictEqual(api, expected);
+  Object.keys(pf).forEach((key) => assert.strictEqual(typeof pf[key], 'function', key + ' must be a function'));
+});
+
+test('module re-execution is idempotent: same API identity, no duplicated listeners', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  reexecuteModuleSource(sandbox);
+  assert.strictEqual(sandbox.window.GraneteUI.projectFurniture, pf,
+    're-execution must keep the first registration');
+  assert.equal(el(sandbox, 'btn-pf-refresh').listeners.click.length, 1);
+  assert.equal(el(sandbox, 'btn-pf-retry').listeners.click.length, 1);
+  assert.equal(el(sandbox, 'btn-design-sync').listeners.click.length, 1);
+});
+
+test('init contract: the toast dep enters by injection and is consumed at call time', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.handleSynchronizeDesignResult({ ok: false, code: 'conflict', reason: 'x' });
+  assert.equal(sandbox.__toasts.length, 1);
+  assert.equal(sandbox.__toasts[0].type, 'error');
+});
+
+test('public entries fail fast listing missing deps when init was skipped', () => {
+  const sandbox = buildSandbox();
+  vm.createContext(sandbox);
+  vm.runInContext(MODULE_SOURCE, sandbox, { filename: 'granete-project-furniture.js' });
+  const pf = sandbox.window.GraneteUI.projectFurniture;
+  ['renderProjectFurniture', 'requestProjectFurniture', 'handlePlaceFurnitureResult',
+    'handlePlacementPreviewStarted', 'handlePlacementPreviewCancelled',
+    'handleConfirmPlacementResult', 'handleCancelPlacementResult',
+    'handleRestoreFurnitureResult', 'handleSynchronizeDesignResult',
+    'renderHostSaveAwareness'].forEach((entry) => {
+    assert.throws(() => pf[entry]({}), /GraneteUI\.projectFurniture\.init is required before use; missing deps: showToast/,
+      entry + ' must fail fast before init');
+  });
+});
+
+test('invalidate and pfPlaceFailureMessage are dep-free by contract', () => {
+  const sandbox = buildSandbox();
+  vm.createContext(sandbox);
+  vm.runInContext(MODULE_SOURCE, sandbox, { filename: 'granete-project-furniture.js' });
+  const pf = sandbox.window.GraneteUI.projectFurniture;
+  assert.doesNotThrow(() => pf.invalidate());
+  assert.equal(pf.pfPlaceFailureMessage({ code: 'unbound' }), 'Conectá el modelo al proyecto primero.');
+});
+
+// ---------------------------------------------------------------------
+// State ownership + request/invalidate/tab-visible semantics
+// ---------------------------------------------------------------------
+
+test('onProjectTabVisible requests the rows exactly once on first load', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  assert.equal(visible(el(sandbox, 'pf-loading-state')), false, 'no pre-render');
+  pf.onProjectTabVisible();
+  assert.equal(visible(el(sandbox, 'pf-loading-state')), true);
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 1);
+  pf.onProjectTabVisible();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 2,
+    'preserved quirk: visits before the first payload re-request (lastPfState stays null until a render)');
+});
+
+test('request keeps the rendered connected list and never flashes the loading card', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  assert.equal(visible(el(sandbox, 'pf-list-view')), true);
+  pf.requestProjectFurniture();
+  assert.equal(visible(el(sandbox, 'pf-loading-state')), false,
+    'stale-state handling: the list stays visible while refreshing');
+  assert.equal(visible(el(sandbox, 'pf-list-view')), true);
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 1);
+});
+
+test('request without a bridge falls back to the unbound render', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  delete sandbox.window.sketchup;
+  pf.onProjectTabVisible();
+  assert.equal(visible(el(sandbox, 'pf-unbound-state')), true);
+});
+
+test('invalidate clears the rendered-state guard so the next tab visit reloads', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  pf.onProjectTabVisible();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 0,
+    'a rendered connected panel is not re-requested');
+  pf.invalidate();
+  pf.onProjectTabVisible();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 1,
+    'after invalidation the Proyecto tab reloads the rows');
+  assert.equal(visible(el(sandbox, 'pf-loading-state')), true,
+    'invalidated rows show the loading card again');
+});
+
+// ---------------------------------------------------------------------
+// Panel state rendering
+// ---------------------------------------------------------------------
+
+test('connected render: counts, titles, pending/placed split and terminal exclusion', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.items.push({ id: '51000000-0000-0000-0000-0000000000f4', name: 'Viejo',
+    terminal: true, placed: false, reconciliationState: 'terminal', unitIndex: 3, unitTotal: 3 });
+  pf.renderProjectFurniture(panel);
+  assert.equal(visible(el(sandbox, 'pf-list-view')), true);
+  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puestos · 2 pendientes');
+  assert.equal(el(sandbox, 'pf-pending-title').textContent, 'Pendientes y divergencias (2)');
+  assert.equal(el(sandbox, 'pf-placed-title').textContent, 'Puestos / Sincronizados (1)');
+  assert.equal(el(sandbox, 'pf-pending-list').children.length, 2);
+  assert.equal(el(sandbox, 'pf-placed-list').children.length, 1);
+  assert.equal(visible(el(sandbox, 'design-sync-card')), true);
+});
+
+test('attention suffix renders only when attention > 0', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puestos · 2 pendientes');
+  const panel = connectedPanel();
+  panel.attention = 2;
+  pf.renderProjectFurniture(panel);
+  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puestos · 2 pendientes · 2 requieren atención');
+});
+
+test('empty project renders the honest empty state (and hides the sync card)', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture({ state: 'connected', items: [], pending: 0, placed: 0 });
+  assert.equal(visible(el(sandbox, 'pf-empty-state')), true);
+  assert.equal(visible(el(sandbox, 'pf-list-view')), false);
+});
+
+test('error states: titles, copy table and the unreachable reason-suffix rule', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture({ state: 'unbound' });
+  assert.equal(visible(el(sandbox, 'pf-unbound-state')), true);
+
+  pf.renderProjectFurniture({ state: 'unreachable', reason: 'timeout' });
+  assert.equal(el(sandbox, 'pf-error-title').textContent, 'No se pudieron cargar');
+  assert.equal(el(sandbox, 'pf-error-detail').textContent, 'No se pudo contactar al servidor. Probá de nuevo.',
+    'preserved quirk: unreachable never appends the reason suffix');
+
+  pf.renderProjectFurniture({ state: 'stale_base' });
+  assert.equal(el(sandbox, 'pf-error-title').textContent, 'Diseño no editable');
+  assert.equal(visible(el(sandbox, 'pf-error-state')), true);
+
+  pf.renderProjectFurniture({ state: 'bad_contract', reason: 'shape mismatch' });
+  assert.equal(el(sandbox, 'pf-error-detail').textContent,
+    'El servidor respondió datos que esta extensión no entiende. Actualizá la extensión. (shape mismatch)');
+
+  pf.renderProjectFurniture({ state: 'mystery_state', reason: 'algo raro' });
+  assert.equal(el(sandbox, 'pf-error-detail').textContent, 'algo raro',
+    'unknown states fall back to the raw reason');
+});
+
+test('unit cards: per-unit badge, reconciliation copy, ref slice and empty list notes', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const pending = el(sandbox, 'pf-pending-list');
+  const name = pending.children[0].children[0].children[0];
+  assert.ok(name.children[0].textContent.includes('Base 600'));
+  assert.equal(name.children[1].textContent, 'Unidad 1 de 2');
+  assert.equal(pending.children[0].children[0].children[2].textContent, FI_1.slice(0, 8),
+    'Granete IDs are diagnostics: 8-char secondary line');
+
+  const placed = el(sandbox, 'pf-placed-list');
+  assert.equal(placed.children[0].children[1].textContent, 'Seleccionar');
+
+  pf.renderProjectFurniture({ state: 'connected', items: [], pending: 0, placed: 0, dirty: 0 });
+  // Empty connected went to the empty state; force a list render through
+  // the missing_local path to exercise the no-rows note instead.
+  const panel = connectedPanel();
+  panel.items = [];
+  panel.pending = 0;
+  panel.placed = 0;
+  // items: [] renders the empty card, so exercise renderPfList emptiness
+  // through a payload whose only rows are terminal (filtered out).
+  const terminalOnly = { state: 'connected', pending: 0, placed: 0, dirty: 0,
+    items: [{ id: 't1', name: 'Viejo', terminal: true, placed: false, reconciliationState: 'terminal' }] };
+  pf.renderProjectFurniture(terminalOnly);
+  assert.equal(el(sandbox, 'pf-pending-list').children.length, 1);
+  assert.ok(el(sandbox, 'pf-pending-list').children[0].textContent.includes('No hay unidades pendientes ni divergencias.'));
+  assert.ok(el(sandbox, 'pf-placed-list').children[0].textContent.includes('Todavía no hay unidades sincronizadas.'));
+});
+
+// ---------------------------------------------------------------------
+// Exact bridge calls + action lifecycle
+// ---------------------------------------------------------------------
+
+test('Colocar prefers the #469 preview and sends identity only, with in-flight guard', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  button.click();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_placement_preview').length, 1);
+  assert.equal(sandbox.__bridge[0].payload.furnitureInstanceId, FI_1);
+  assert.ok(!sandbox.__bridge[0].payload.definitionId, 'definition/name/position never ride the payload');
+  assert.equal(button.textContent, 'Colocando…');
+  button.click();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_placement_preview').length, 1,
+    'double click must not re-send');
+  const second = el(sandbox, 'pf-pending-list').children[1].children[1];
+  second.click();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_placement_preview').length, 2);
+});
+
+test('Colocar falls back to place_furniture_instance without the preview bridge', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  delete sandbox.window.sketchup.begin_placement_preview;
+  el(sandbox, 'pf-pending-list').children[0].children[1].click();
+  const call = sandbox.__bridge.find((c) => c.action === 'place_furniture_instance');
+  assert.ok(call, 'legacy place command must be the fallback');
+  assert.equal(call.payload.furnitureInstanceId, FI_1);
+});
+
+test('Colocar without any bridge re-arms honestly with the exact toast', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  delete sandbox.window.sketchup;
+  el(sandbox, 'pf-pending-list').children[0].children[1].click();
+  assert.equal(el(sandbox, 'pf-pending-list').children[0].children[1].textContent, 'Colocar');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Colocar disponible sólo dentro de SketchUp.');
+});
+
+test('Seleccionar dispatches select_project_furniture with exact identity', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  el(sandbox, 'pf-placed-list').children[0].children[1].click();
+  const call = sandbox.__bridge.find((c) => c.action === 'select_project_furniture');
+  assert.ok(call);
+  assert.equal(call.payload.furnitureInstanceId, '51000000-0000-0000-0000-0000000000f3');
+});
+
+test('pending_confirmation row offers confirm + cancel with exact payloads', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.items[0].reconciliationState = 'pending_confirmation';
+  pf.renderProjectFurniture(panel);
+  const actions = el(sandbox, 'pf-pending-list').children[0].children[1];
+  assert.equal(actions.children[0].textContent, 'Reintentar sincronización');
+  assert.equal(actions.children[1].textContent, 'Cancelar');
+  actions.children[0].click();
+  actions.children[1].click();
+  assert.equal(sandbox.__bridge.find((c) => c.action === 'confirm_placement_instance').payload.furnitureInstanceId, FI_1);
+  assert.equal(sandbox.__bridge.find((c) => c.action === 'cancel_placement_instance').payload.furnitureInstanceId, FI_1);
+});
+
+test('missing_local row offers exactly one restore action', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.items[0].reconciliationState = 'missing_local';
+  pf.renderProjectFurniture(panel);
+  const card = el(sandbox, 'pf-pending-list').children[0];
+  assert.equal(card.children.length, 2);
+  assert.equal(card.children[1].textContent, 'Restaurar en este archivo');
+  card.children[1].click();
+  assert.equal(sandbox.__bridge.find((c) => c.action === 'restore_furniture_instance').payload.furnitureInstanceId, FI_1);
+});
+
+// ---------------------------------------------------------------------
+// Result handlers
+// ---------------------------------------------------------------------
+
+test('handlePlaceFurnitureResult: already_placed honest success without panel reload', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const before = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length;
+  pf.handlePlaceFurnitureResult({ ok: true, code: 'already_placed', instanceId: FI_1 });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Ese mueble ya está colocado: se seleccionó el existente.');
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, before,
+    'ok place results do not re-request (the Ruby push refreshes the panel)');
+});
+
+test('handlePlaceFurnitureResult: pending_position re-arms the button (preserved quirk)', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  button.click();
+  pf.handlePlaceFurnitureResult({ ok: true, code: 'pending_position', instanceId: FI_1 });
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Colocar');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Mueble insertado, pero la sincronización de posición quedó pendiente.');
+});
+
+test('handlePlaceFurnitureResult: failure re-arms and writes the exact diagnostic', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  button.click();
+  pf.handlePlaceFurnitureResult({ ok: false, code: 'resolution_failed', reason: 'MATERIAL_CHOICE_INVALID', instanceId: FI_1 });
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Colocar');
+  const diagnostic = el(sandbox, 'pf-placement-error');
+  assert.ok(visible(diagnostic));
+  assert.ok(diagnostic.textContent.includes('MATERIAL_CHOICE_INVALID'));
+  assert.ok(diagnostic.textContent.includes(FI_1));
+  assert.equal(visible(el(sandbox, 'pf-list-view')), true, 'rows keep their last server state');
+});
+
+test('handleConfirmPlacementResult / handleCancelPlacementResult re-arm on failure only', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.items[0].reconciliationState = 'pending_confirmation';
+  pf.renderProjectFurniture(panel);
+  const actions = el(sandbox, 'pf-pending-list').children[0].children[1];
+
+  actions.children[0].click();
+  pf.handleConfirmPlacementResult({ ok: true, instanceId: FI_1 });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, '✓ Posición sincronizada con el taller.');
+
+  actions.children[0].click();
+  pf.handleConfirmPlacementResult({ ok: false, code: 'sync_failed', instanceId: FI_1 });
+  assert.equal(actions.children[0].textContent, 'Reintentar sincronización');
+
+  actions.children[1].click();
+  pf.handleCancelPlacementResult({ ok: true, instanceId: FI_1 });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'Colocación cancelada.');
+
+  actions.children[1].click();
+  pf.handleCancelPlacementResult({ ok: false, reason: 'no se pudo', instanceId: FI_1 });
+  assert.equal(actions.children[1].textContent, 'Cancelar');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'no se pudo');
+});
+
+test('handleRestoreFurnitureResult: success reloads the panel, restored=false keeps the verified copy', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.items[0].reconciliationState = 'missing_local';
+  pf.renderProjectFurniture(panel);
+  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  button.click();
+  const before = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length;
+  pf.handleRestoreFurnitureResult({ ok: true, restored: false, instanceId: FI_1 });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'El mueble ya estaba restaurado y verificado.');
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, before + 1,
+    'restore success re-requests the panel');
+  button.click();
+  pf.handleRestoreFurnitureResult({ ok: true, instanceId: FI_1 });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, '✓ Mueble restaurado en este archivo.');
+  button.click();
+  pf.handleRestoreFurnitureResult({ ok: false, code: 'recovery_blocked', instanceId: FI_1 });
+  assert.equal(button.textContent, 'Restaurar en este archivo');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'La restauración está bloqueada.');
+});
+
+// ---------------------------------------------------------------------
+// Shared #469 placement-preview handlers (Project lane + catalog callouts)
+// ---------------------------------------------------------------------
+
+test('handlePlacementPreviewStarted: ok toast picks the catalog copy through the call-time configurator API', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.handlePlacementPreviewStarted({ ok: true });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Vista previa activa: hacé clic en el modelo para colocar · Esc para cancelar.');
+  assert.deepStrictEqual(sandbox.__configuratorCalls, ['isRepeatPreviewActive']);
+
+  // With the repeat preview active the catalog-lane copy wins.
+  sandbox.window.GraneteUI.configurator.isRepeatPreviewActive = () => {
+    sandbox.__configuratorCalls.push('isRepeatPreviewActive');
+    return true;
+  };
+  pf.handlePlacementPreviewStarted({ ok: true });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Vista previa activa: hacé clic para colocar otro · Esc para terminar.');
+});
+
+test('handlePlacementPreviewStarted: refusal re-arms the unit + catalog entry point and writes the diagnostic', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  button.click();
+  pf.handlePlacementPreviewStarted({ ok: false, code: 'preview_busy', instanceId: FI_1 });
+  assert.equal(button.textContent, 'Colocar');
+  assert.ok(el(sandbox, 'pf-placement-error').textContent.includes('preview_busy'));
+  assert.deepStrictEqual(sandbox.__configuratorCalls, ['cancelRepeatPreview'],
+    'the failed project-lane preview still cancels any catalog repeat');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].type, 'error');
+
+  // Catalog lane (definitionId only): re-arm the library insert button.
+  sandbox.__configuratorCalls.length = 0;
+  pf.handlePlacementPreviewStarted({ ok: false, code: 'preview_unavailable', definitionId: 'def-9' });
+  assert.deepStrictEqual(sandbox.__configuratorCalls, ['cancelRepeatPreview', 'rearmInsertButton']);
+});
+
+test('handlePlacementPreviewCancelled: unit stays pending / catalog lane re-arms the insert button', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  button.click();
+  pf.handlePlacementPreviewCancelled({ instanceId: FI_1 });
+  assert.equal(button.textContent, 'Colocar');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Colocación cancelada: el mueble sigue pendiente.');
+
+  sandbox.__configuratorCalls.length = 0;
+  pf.handlePlacementPreviewCancelled({ definitionId: 'def-9' });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
+    'Colocación cancelada: no se insertó nada en el modelo.');
+  assert.deepStrictEqual(sandbox.__configuratorCalls, ['cancelRepeatPreview', 'rearmInsertButton']);
+});
+
+// ---------------------------------------------------------------------
+// #810 design synchronization surface
+// ---------------------------------------------------------------------
+
+test('synchronizeDesign: busy guard, Sincronizando copy and the no-bridge honest failure', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  el(sandbox, 'btn-design-sync').click();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'synchronize_design').length, 1);
+  assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Sincronizando');
+  el(sandbox, 'btn-design-sync').click();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'synchronize_design').length, 1,
+    'double click while busy never re-enters');
+
+  const noBridge = buildSandbox();
+  const pfNoBridge = runModule(noBridge);
+  delete noBridge.window.sketchup;
+  pfNoBridge.handleSynchronizeDesignResult; // no-op reference check
+  el(noBridge, 'btn-design-sync').click();
+  assert.equal(noBridge.__toasts[noBridge.__toasts.length - 1].message,
+    'Sincronización disponible sólo dentro de SketchUp.');
+  assert.equal(el(noBridge, 'btn-design-sync').textContent, 'Sincronizar diseño');
+});
+
+test('handleSynchronizeDesignResult: success refreshes the projection + panel; conflict/error keep honest outcomes', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const refreshes = sandbox.__projectionRefreshes();
+  pf.handleSynchronizeDesignResult({ ok: true, code: 'synchronized', changes: { added: [FI_1], updated: [], removed: [FI_2] } });
+  assert.equal(sandbox.__projectionRefreshes(), refreshes + 1,
+    'the confirmed total comes from the backend projection (#810 rule F)');
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'Diseño sincronizado (2 cambios).');
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 1);
+
+  pf.handleSynchronizeDesignResult({ ok: true, changes: {} });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'El diseño ya estaba sincronizado.');
+
+  pf.handleSynchronizeDesignResult({ ok: false, code: 'conflict', reason: 'cambió' });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'Conflicto: el diseño cambió en el servidor.');
+
+  pf.handleSynchronizeDesignResult({ ok: false, code: 'unreachable', reason: 'down' });
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message, 'No se pudo sincronizar el diseño.');
+});
+
+test('design-sync card renders the exact pending/synchronized/conflict/error outcomes', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+
+  panel.dirty = 2;
+  pf.renderProjectFurniture(panel);
+  assert.equal(el(sandbox, 'design-sync-badge').className, 'status-badge pending');
+  assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Pendiente');
+  assert.ok(el(sandbox, 'design-sync-status').textContent.includes('2 cambios locales pendientes'));
+  assert.equal(el(sandbox, 'btn-design-sync').disabled, false);
+
+  panel.dirty = 0;
+  pf.renderProjectFurniture(panel);
+  assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Sincronizado');
+  assert.equal(el(sandbox, 'btn-design-sync').disabled, true, 'a clean design cannot re-sync');
+
+  pf.handleSynchronizeDesignResult({ ok: false, code: 'conflict', reason: 'x' });
+  pf.renderProjectFurniture(panel);
+  assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Conflicto');
+
+  pf.handleSynchronizeDesignResult({ ok: false, code: 'unreachable', reason: 'abajo' });
+  pf.renderProjectFurniture(panel);
+  assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Error de sincronización');
+  assert.equal(el(sandbox, 'btn-design-sync').textContent, 'Reintentar sincronización');
+});
+
+// ---------------------------------------------------------------------
+// Button listeners + seams
+// ---------------------------------------------------------------------
+
+test('refresh button disarms, requests and re-arms after the 500ms window', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture(connectedPanel());
+  const refresh = el(sandbox, 'btn-pf-refresh');
+  refresh.click();
+  assert.equal(refresh.disabled, true);
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 1);
+  assert.equal(sandbox.__timers.length, 1, 'the re-arm is timer-based, not immediate');
+  sandbox.__timers[0]();
+  assert.equal(refresh.disabled, false);
+});
+
+test('retry button re-requests the panel', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderProjectFurniture({ state: 'unreachable' });
+  el(sandbox, 'btn-pf-retry').click();
+  assert.equal(sandbox.__bridge.filter((c) => c.action === 'get_project_furniture').length, 1);
+});
+
+test('pfPlaceFailureMessage: reason passthrough and the grouped context-changed family', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  assert.equal(pf.pfPlaceFailureMessage({ code: 'service_error', reason: 'boom' }), 'boom');
+  assert.equal(pf.pfPlaceFailureMessage({ code: 'service_error' }), 'Error de comunicación con el servidor.');
+  ['working_copy_changed', 'authority_changed', 'binding_changed', 'context_changed'].forEach((code) => {
+    assert.equal(pf.pfPlaceFailureMessage({ code }), 'El modelo o el diseño cambió; actualizá y reintentá.');
+  });
+  assert.equal(pf.pfPlaceFailureMessage({ code: 'mystery' }), 'No se pudo colocar el mueble.');
+});
+
+test('renderHostSaveAwareness toggles the banner from the Ruby projection', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  pf.renderHostSaveAwareness({ needsSave: true });
+  assert.equal(visible(el(sandbox, 'pf-save-awareness')), true);
+  pf.renderHostSaveAwareness({ needsSave: false });
+  assert.equal(visible(el(sandbox, 'pf-save-awareness')), false);
+});
+
+// ---------------------------------------------------------------------
+// Structural: single authorities
+// ---------------------------------------------------------------------
+
+test('structural: the module owns no model-binding state and no wrapper fan-out', () => {
+  ['var modelBindingState', 'GraneteCommercialProjection.setHostReconciliation',
+    'renderModelBindingStatus', 'window.GraneteUI.modelBinding',
+    'function handleCreateProjectFurnitureResult('].forEach((symbol) => {
+    assert.ok(!MODULE_SOURCE.includes(symbol), 'project-furniture module must not carry ' + symbol);
+  });
+});
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message || 'assertion failed');
+}
+assert.equal = (actual, expected, message) => {
+  if (actual !== expected) {
+    throw new Error((message || 'assert.equal') + ` — expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+  }
+};
+assert.strictEqual = (actual, expected, message) => assert.equal(actual, expected, message);
+assert.ok = (condition, message) => {
+  if (!condition) throw new Error(message || 'expected truthy');
+};
+assert.deepStrictEqual = (actual, expected, message) => {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) throw new Error((message || 'assert.deepStrictEqual') + ` — expected ${e}, got ${a}`);
+};
+assert.throws = (fn, matcher, message) => {
+  let threw = null;
+  try { fn(); } catch (error) { threw = error; }
+  if (!threw) throw new Error((message || 'assert.throws') + ' — no exception thrown');
+  if (matcher && !matcher.test(threw.message)) {
+    throw new Error((message || 'assert.throws') + ` — message "${threw.message}" does not match ${matcher}`);
+  }
+};
+assert.doesNotThrow = (fn, message) => {
+  try { fn(); } catch (error) {
+    throw new Error((message || 'assert.doesNotThrow') + ` — threw ${error.message}`);
+  }
+};
+
+const results = [];
+for (const { name, fn } of tests) {
+  try {
+    fn();
+    results.push({ name, passed: true });
+  } catch (error) {
+    results.push({ name, passed: false, error: error.message });
+  }
+}
+
+const failed = results.filter((r) => !r.passed);
+console.log(JSON.stringify({
+  success: failed.length === 0,
+  testsPassed: results.length - failed.length,
+  testsTotal: results.length,
+  failures: failed
+}, null, 2));
+process.exit(failed.length === 0 ? 0 : 1);

@@ -24,16 +24,19 @@
 // runtime loads after the inline script, so the subscription stays a
 // no-op in the real host exactly as before).
 // Injected via init(): showToast (shared inline helper) and
-// invalidateProjectFurniture — the temporary C4.8 → Project Furniture
-// seam: every status render invalidates the Project Furniture rows
-// exactly where renderModelBindingStatus historically set
-// lastPfState = null; PF state stays owned by the inline Project
-// Furniture section until its own Phase B slice.
+// invalidateProjectFurniture — the Project Furniture invalidation seam:
+// every status render invalidates the Project Furniture rows exactly
+// where renderModelBindingStatus historically set lastPfState = null.
+// Since #848 C4.9 the seam delegates to the Project Furniture module
+// (window.GraneteUI.projectFurniture.invalidate); the rows state lives
+// there, this module never copies it.
 //
 // Does NOT own: backend binding truth (the Ruby connector is the
 // authority; this view never invents or edits business identity and never
-// rebinds silently), Project Furniture state/rows (lastPfState stays
-// inline-owned), Commercial Projection/Bootstrap state, preflight/
+// rebinds silently), Project Furniture state/rows (owned by
+// js/granete-project-furniture.js since #848 C4.9; this module only
+// invalidates them through the injected seam), Commercial
+// Projection/Bootstrap state, preflight/
 // manufacturing computation, Configurator state.
 (function () {
   "use strict";
@@ -43,8 +46,8 @@
   if (window.GraneteUI.modelBinding) return;
 
   // Injected by the dialog bootstrap before any render: the shared toast
-  // helper and the temporary Project Furniture invalidation seam (#848
-  // C4.8 — the seam disappears when Project Furniture gets its own slice).
+  // helper and the Project Furniture invalidation seam (delegating to the
+  // Project Furniture module since #848 C4.9).
   var deps = {};
 
   function requireDeps() {
@@ -124,8 +127,8 @@
     modelBindingState.pendingTarget = null;
     // A binding change invalidates the Project Furniture rows: the
     // next visit to the Proyecto tab reloads them (#389). The rows
-    // state stays owned by the Project Furniture section — this is
-    // the temporary C4.8 seam, not a second PF authority.
+    // state is owned by the Project Furniture module (#848 C4.9) —
+    // this seam only informs it, never a second PF authority.
     deps.invalidateProjectFurniture();
 
     var copy = MODEL_BINDING_COPY[status.state] || MODEL_BINDING_COPY.invalid;
