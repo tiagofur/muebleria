@@ -42,9 +42,9 @@ func TestProductionRelease_ExplicitDimensionsPresetModule(t *testing.T) {
 	// Preflight↔release parity (positive): the exact snapshot resolution runs
 	// inside the readiness evaluation, so READY means releasable.
 	var preflight *domain.ManufacturingPreflightResult
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3)
+		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, "")
 		return err
 	}); err != nil {
 		t.Fatalf("evaluate preflight: %v", err)
@@ -93,7 +93,7 @@ func TestProductionRelease_ExplicitDimensionsPresetModule(t *testing.T) {
 	// the ITEM's 600×720×560 (part 560×600) — never the preset 800×900×600
 	// (which would produce 600×800).
 	var snapshot *storage.ReleaseManufacturingSnapshot
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		snapshot, err = fx.store.GetProductionReleaseManufacturingSnapshot(ctx, fx.projectID, p1.Release.ID)
 		return err
@@ -163,7 +163,7 @@ func TestProductionRelease_PreflightParityBlocksUnresolvableRevision(t *testing.
 	// Publish R4 with items identical to the accepted Q3 (reconciliation stays
 	// clean, so ONLY the resolution gate can reject).
 	var revR4 string
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
@@ -194,9 +194,9 @@ func TestProductionRelease_PreflightParityBlocksUnresolvableRevision(t *testing.
 	// PARITY: the read-only preflight verdict is BLOCKED with the exact typed
 	// issue — it can never again report READY for this revision.
 	var preflight *domain.ManufacturingPreflightResult
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, revR4)
+		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, revR4, "")
 		return err
 	}); err != nil {
 		t.Fatalf("evaluate preflight: %v", err)
@@ -240,7 +240,7 @@ func TestProductionRelease_PreflightParityBlocksUnresolvableRevision(t *testing.
 	// Design-first release path (no commercial baseline) is blocked by the
 	// same resolution gate: generic approval (no commercial gates) + release
 	// without a pinned quote.
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
 			DesignID:         fx.designID,
 			DesignRevisionID: revR4,

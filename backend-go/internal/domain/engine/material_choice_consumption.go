@@ -27,7 +27,7 @@ type unitConsumption struct {
 // commercial seed with extra roles — exactly what callers want classified,
 // not rejected here (the strict gate keeps owning rejection).
 func resolveUnitConsumption(item domain.DesignRevisionItem, catalog domain.Catalog) (*unitConsumption, error) {
-	unit, err := resolveReleaseUnitOpt(item, catalog, nil, false)
+	unit, err := resolveReleaseUnitOpt(item, catalog, nil, false, nil)
 	if err != nil {
 		return nil, err
 	}

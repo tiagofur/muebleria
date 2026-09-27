@@ -395,7 +395,7 @@ type Store interface {
 	// #502 / WEB-DT-3: read-only evaluation of the authoritative release
 	// manufacturing preflight (#466 parity: the exact gate the release
 	// command enforces, without creating anything).
-	EvaluateDesignRevisionPreflight(ctx context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error)
+	EvaluateDesignRevisionPreflight(ctx context.Context, designID, revisionID, quoteRevisionID string) (*domain.ManufacturingPreflightResult, error)
 	// #395 / DT-11: immutable ProductionRelease pinned to the exact approved
 	// DesignRevision (+ optional exact accepted QuoteRevision) and the
 	// server-computed manufacturing fingerprint; readback derives staleness.

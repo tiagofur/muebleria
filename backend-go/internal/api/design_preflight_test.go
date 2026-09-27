@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -275,5 +276,74 @@ func TestHandleDesignRevisionPreflight_ExactIDsForwarded(t *testing.T) {
 	}
 	if stub.evaluatePreflightCalls != 1 {
 		t.Fatalf("expected exactly one store evaluation, got %d", stub.evaluatePreflightCalls)
+	}
+	if stub.evaluatePreflightQuoteID != "" {
+		t.Fatalf("body-less preflight is quote-less: no quote may reach the store, got %q", stub.evaluatePreflightQuoteID)
+	}
+}
+
+func TestHandleDesignRevisionPreflight_ExactQuotePinForwarded(t *testing.T) {
+	// #830: the optional body carries the EXACT QuoteRevision the release
+	// would pin — forwarded verbatim, never an implicit latest-accepted quote.
+	stub := &stubStore{}
+	server := &Server{Store: stub}
+	designID := "30000000-0000-4000-8000-000000000005"
+	revisionID := "40000000-0000-4000-8000-000000000007"
+	quoteID := "aaaaaaa2-0000-4000-8000-000000000001"
+
+	req := newPreflightRequest("user-1", []domain.UserRole{domain.RoleAdmin}, designID, revisionID)
+	req.Body = io.NopCloser(strings.NewReader(`{"quoteRevisionId":"` + quoteID + `"}`))
+	w := httptest.NewRecorder()
+	server.HandleDesignRevisionPreflight(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if stub.evaluatePreflightQuoteID != quoteID {
+		t.Fatalf("exact quote pin must be forwarded verbatim, got %q", stub.evaluatePreflightQuoteID)
+	}
+
+	// Invalid pin UUID rejects 400 before any store call.
+	stub2 := &stubStore{}
+	server2 := &Server{Store: stub2}
+	req = newPreflightRequest("user-1", []domain.UserRole{domain.RoleAdmin}, designID, revisionID)
+	req.Body = io.NopCloser(strings.NewReader(`{"quoteRevisionId":"nope"}`))
+	w = httptest.NewRecorder()
+	server2.HandleDesignRevisionPreflight(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid quoteRevisionId must 400, got %d", w.Code)
+	}
+	if stub2.evaluatePreflightCalls != 0 {
+		t.Fatalf("invalid pin must not reach the store, got %d calls", stub2.evaluatePreflightCalls)
+	}
+}
+
+func TestHandleDesignRevisionPreflight_FrozenBaseBlockerIsActionable409(t *testing.T) {
+	// #830: a quoted preflight over a quote whose frozen base context cannot
+	// govern surfaces the shared typed blocker vocabulary — a structured 409
+	// with the single actionable message, never an opaque 500.
+	server := &Server{Store: &stubStore{evaluatePreflightErr: &domain.FrozenBaseContextError{
+		FurnitureInstanceID:   "fi-830",
+		FurnitureDefinitionID: "def-830",
+		Cause:                 domain.FrozenBaseContextMissingCause,
+		Reason:                "la unidad no congeló su contexto de base al cotizar",
+	}}}
+	req := newPreflightRequest("user-1", []domain.UserRole{domain.RoleAdmin},
+		"30000000-0000-4000-8000-000000000005", "40000000-0000-4000-8000-000000000007")
+	req.Body = io.NopCloser(strings.NewReader(`{"quoteRevisionId":"aaaaaaa3-0000-4000-8000-000000000001"}`))
+	w := httptest.NewRecorder()
+
+	server.HandleDesignRevisionPreflight(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("frozen base blocker must be a 409, got %d: %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, fragment := range []string{
+		domain.FrozenBaseContextUserMessage,
+		`"blocker":"` + domain.FrozenBaseContextMissingCause + `"`,
+		`"furnitureInstanceId":"fi-830"`,
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("expected fragment %q in body %s", fragment, body)
+		}
 	}
 }

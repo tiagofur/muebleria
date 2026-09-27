@@ -30,18 +30,19 @@ type ResolvedReleaseUnit struct {
 // tenant-scoped catalog. Callers must capture that catalog and result atomically;
 // this pure function does not make a mutable catalog historically authoritative.
 func ResolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog) (*ResolvedReleaseUnit, error) {
-	return resolveReleaseUnit(item, catalog, nil)
+	return resolveReleaseUnit(item, catalog, nil, nil)
 }
 
-func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget) (*ResolvedReleaseUnit, error) {
-	return resolveReleaseUnitOpt(item, catalog, collection, true)
+func resolveReleaseUnit(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, baseCtx *BaseResolutionContext) (*ResolvedReleaseUnit, error) {
+	return resolveReleaseUnitOpt(item, catalog, collection, true, baseCtx)
 }
 
 // resolveReleaseUnitOpt with strictChoices=false skips the choices≡consumed
 // tail validation: the #826 consumption helpers resolve with the FULL
 // commercial seed (extra roles included) to derive the consumed set, then let
-// callers intersect or reject explicitly.
-func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, strictChoices bool) (*ResolvedReleaseUnit, error) {
+// callers intersect or reject explicitly. baseCtx (#830) is the unit's frozen
+// base-treatment authority; nil resolves with the module catalog defaults.
+func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalog, collection *releaseExpansionBudget, strictChoices bool, baseCtx *BaseResolutionContext) (*ResolvedReleaseUnit, error) {
 	if strings.TrimSpace(item.FurnitureInstanceID) == "" || strings.TrimSpace(item.FurnitureDefinitionID) == "" {
 		return nil, fmt.Errorf("release unit requires physical and definition identities")
 	}
@@ -122,7 +123,9 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 	}
 	// #727: publishedDesignAuthority — the item's explicit dimensions are the
 	// manufacturing truth; commercial measure presets are not consulted.
-	bom, err := ResolveBomForRelease(prepared, item.MaterialChoices, catalog, dims)
+	// #830: the frozen base context (quoted authority) resolves the same
+	// effective base mode the pricing snapshot froze for this exact unit.
+	bom, err := ResolveBomForRelease(prepared, item.MaterialChoices, catalog, dims, baseCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,13 +176,24 @@ func ConsumedOptionRoles(module domain.Module, choices map[string]string, catalo
 			consumed["EDGE"] = part.EdgeBandID
 		}
 	}
+	catalogLineIDs := map[string]bool{}
 	for _, line := range collectAllHardwareLines(module, catalog) {
+		catalogLineIDs[line.ID] = true
 		if line.HardwareID == "" {
 			for _, resolved := range bom.HardwareLines {
 				if resolved.ID == line.ID {
 					consumed[line.OptionRole] = resolved.HardwareID
 				}
 			}
+		}
+	}
+	// #830: base treatment synthesizes hardware lines (ZOCLO_PERFIL/PATAS)
+	// that no catalog line owns. A resolved synthesized line only exists when
+	// the effective base mode asked for it AND the choice selected its
+	// hardware — so it consumes exactly that role under the governing mode.
+	for _, resolved := range bom.HardwareLines {
+		if !catalogLineIDs[resolved.ID] {
+			consumed[resolved.OptionRole] = resolved.HardwareID
 		}
 	}
 	return consumed

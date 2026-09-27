@@ -98,14 +98,17 @@ func ResolveBomWithDims(
 // custom dimensions; fixed modules keep rejecting them. Every other
 // validation — structure, components, formulas, materials, hardware,
 // choices, base treatment — is the same single resolveBomCommon path: this
-// is an authority boundary, not a second BOM engine.
+// is an authority boundary, not a second BOM engine. baseContext (#830) is
+// the unit's frozen base-treatment authority; nil keeps the module catalog
+// defaults (quote-less policy).
 func ResolveBomForRelease(
 	module domain.Module,
 	optionChoices map[string]string,
 	catalog domain.Catalog,
 	customDims *domain.ItemCustomDims,
+	baseContext *BaseResolutionContext,
 ) (domain.ResolvedBom, error) {
-	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, nil)
+	return resolveBomCommon(module, optionChoices, catalog, publishedDesignAuthority, "", nil, customDims, baseContext)
 }
 
 // ResolveBomWithPin is the #108-aware variant of ResolveBom. It accepts an

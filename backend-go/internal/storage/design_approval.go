@@ -68,6 +68,22 @@ func (s *PostgresStore) ApproveDesignRevisionForProduction(ctx context.Context, 
 	if !isValidUUID(cmd.QuoteRevisionID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
+	if transactionFromContext(ctx) == nil {
+		actor, ok := TenantActorFromCtx(ctx)
+		if !ok {
+			return nil, ErrInvalidTenantActor
+		}
+		var result *domain.DesignRevision
+		err := s.WithinTenantTx(WithConsistentCatalogTx(ctx), actor, func(txCtx context.Context) error {
+			var err error
+			result, err = s.ApproveDesignRevisionForProduction(txCtx, cmd)
+			return err
+		})
+		return result, err
+	}
+	if err := verifyConsistentCatalogTx(ctx, transactionFromContext(ctx)); err != nil {
+		return nil, err
+	}
 	return s.approveDesignRevision(ctx, cmd.DesignID, cmd.DesignRevisionID, cmd.QuoteRevisionID, cmd.ProjectID, cmd.ActorUserID, cmd.IP, cmd.RequestID)
 }
 

@@ -207,6 +207,7 @@ type stubStore struct {
 	evaluatePreflightCalls       int
 	evaluatePreflightDesignID    string
 	evaluatePreflightRevisionID  string
+	evaluatePreflightQuoteID     string
 	listProductionReleasesResult []storage.ProductionReleaseReadback
 	listProductionReleasesErr    error
 	getProductionReleaseResult   *storage.ProductionReleaseReadback
@@ -4166,10 +4167,11 @@ func (s *stubStore) ApproveDesignRevisionForProduction(_ context.Context, cmd st
 	})
 }
 
-func (s *stubStore) EvaluateDesignRevisionPreflight(_ context.Context, designID, revisionID string) (*domain.ManufacturingPreflightResult, error) {
+func (s *stubStore) EvaluateDesignRevisionPreflight(_ context.Context, designID, revisionID, quoteRevisionID string) (*domain.ManufacturingPreflightResult, error) {
 	s.evaluatePreflightCalls++
 	s.evaluatePreflightDesignID = designID
 	s.evaluatePreflightRevisionID = revisionID
+	s.evaluatePreflightQuoteID = quoteRevisionID
 	if s.evaluatePreflightErr != nil {
 		return nil, s.evaluatePreflightErr
 	}
