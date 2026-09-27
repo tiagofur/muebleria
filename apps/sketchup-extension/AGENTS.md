@@ -44,6 +44,14 @@ tocan en Phase B.
 | Inspector child: pieza / herraje / aggregate / breadcrumb / #467 / #468 | `resources/js/granete-inspector-child.js` | `test/js/granete_inspector_child_test.js` (vía `test/unit/granete_inspector_child_js_test.rb`) |
 | conexión modelo/proyecto/diseño / pairing / rebind / publicar / validar diseño | `resources/js/granete-model-binding.js` | `test/js/granete_model_binding_test.js` (vía `test/unit/granete_model_binding_js_test.rb`) |
 | muebles del proyecto no aparecen / panel Proyecto / colocar-restaurar unidades / #810 sincronización de diseño / banner de guardado | `resources/js/granete-project-furniture.js` | `test/js/granete_project_furniture_test.js` (vía `test/unit/granete_project_furniture_js_test.rb`); bridge Ruby `ui/bridges/project_furniture_bridge.rb` |
+| formulario de parámetros mal renderizado / stepper o mm cambia mal / defaults no aparecen / error de parámetro equivocado / estimado de piezas incorrecto | `resources/js/granete-param-form.js` | `test/js/granete_param_form_test.js` (vía `test/unit/granete_param_form_js_test.rb`) |
+
+Límites entre consumidores del formulario de parámetros: Configurator =
+configuración activa + intent de inserción; Inspector = working copy de la
+selección; `granete-param-form.js` = presentación/semántica compartida del
+formulario (defaults, render, copy de issues PARAMETER_*, estimado honesto
+#847) — módulo stateless, sin init ni dependency bag; renderParamForm
+consume el DOM y muta únicamente el container recibido por el caller.
 
 Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies

@@ -83,6 +83,12 @@ class DialogLibraryViewTest < Minitest::Test
       File.expand_path('../../src/granete_for_sketchup/resources/js/granete-inspector.js', __dir__),
       encoding: 'UTF-8'
     )
+    # #848 post-C4.9: el formulario de parámetros compartido (defaults/
+    # render/copy de issues/estimado honesto) vive en js/granete-param-form.js.
+    @param_form_js = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/js/granete-param-form.js', __dir__),
+      encoding: 'UTF-8'
+    )
     # #848: los estilos del panel viven en css/*.css.
     css_dir = File.expand_path('../../src/granete_for_sketchup/resources/css', __dir__)
     @css_content = Dir.children(css_dir).sort.map { |f| File.read(File.join(css_dir, f), encoding: 'UTF-8') }.join("\n")
@@ -146,7 +152,7 @@ class DialogLibraryViewTest < Minitest::Test
     # Sliders are gone: measures are precise mm text fields.
     refute_includes @html_content, '"range"'
     refute_includes @html_content, 'slider-row'
-    assert_includes @html_content, 'className = "dim-input"',
+    assert_includes @param_form_js, 'className = "dim-input"',
                     'el JS crea el input mm (la clase dim-input-row murió con las filas compactas #847)'
     assert_includes @css_content, '.param-control .dim-input',
                     'el estilo del input mm vive en css/configurator.css (#848)'
@@ -162,7 +168,8 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'id="library-summary-parts"'
     assert_includes @html_content, 'Medidas y Opciones'
     # Una línea por parámetro: etiqueta a la izquierda, control a la derecha.
-    assert_includes @html_content, 'param-control'
+    # #848 post-C4.9: la fila param-control la construye granete-param-form.js.
+    assert_includes @param_form_js, 'param-control'
     # Los botones "Catálogo" por rol murieron: la fila es el control y el
     # chevron comunica la navegación. El chevron lo renderiza el módulo de
     # materiales (#848 C4.6), ya no el monolito.
@@ -289,9 +296,12 @@ class DialogLibraryViewTest < Minitest::Test
     # the counting params sit at their defaults, the heuristic reads the
     # CURRENT values, every local number is labeled "Aprox." and nothing is
     # invented when no estimate exists ("se calculan al resolver").
-    assert_includes @html_content, 'function estimatedPartsLabel('
-    assert_includes @html_content, 'estimatedPartCount'
-    assert_includes @html_content, 'estimatedHardwareCount'
+    # #848 post-C4.9: la implementación del conteo honesto vive en el módulo
+    # granete-param-form; dialog.html conserva sólo el wiring.
+    assert_includes @param_form_js, 'function estimatedPartsLabel('
+    assert_includes @param_form_js, 'estimatedPartCount'
+    assert_includes @param_form_js, 'estimatedHardwareCount'
+    refute_includes @html_content, 'function estimatedPartsLabel('
     # #848 C4.4: el dock del configurador consume el helper compartido
     # inyectado desde el módulo; el del inspector vive en el módulo del
     # Inspector (#848 C4.7) con el mismo helper inyectado.
@@ -299,8 +309,8 @@ class DialogLibraryViewTest < Minitest::Test
                     'libSummaryParts.textContent = deps.estimatedPartsLabel(activeLibDef, libParams);'
     assert_includes @inspector_js,
                     'inspectorSummaryParts.textContent = deps.estimatedPartsLabel(inspectorDef, inspectorParams);'
-    assert_includes @html_content, '"Aprox. "'
-    assert_includes @html_content, 'Piezas: se calculan al resolver'
+    assert_includes @param_form_js, '"Aprox. "'
+    assert_includes @param_form_js, 'Piezas: se calculan al resolver'
   end
 
   def test_insertion_result_reports_resolved_component_counts

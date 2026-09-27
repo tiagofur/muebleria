@@ -150,16 +150,17 @@ class GraneteConfiguratorJsTest < Minitest::Test
     assert_includes html, 'window.GraneteUI.configurator.open(def);'
     assert_includes html, 'getSelectedDefinitionId: function () {'
     assert_includes html, 'return window.GraneteUI.configurator.getActiveDefinitionId();'
-    # The bootstrap injects the shared helpers (param/summary stay inline;
-    # material helpers come from materialRoles since #848 C4.6, also
-    # consumed by the Inspector) and the project-default write BEFORE any
-    # module render can run. The model-connected accessor is read through
-    # the model binding module since #848 C4.8.
+    # The bootstrap injects the helpers (param/summary come from the
+    # granete-param-form module since #848 post-C4.9; material helpers come
+    # from materialRoles since #848 C4.6, also consumed by the Inspector)
+    # and the project-default write BEFORE any module render can run. The
+    # model-connected accessor is read through the model binding module
+    # since #848 C4.8.
     assert_includes html, 'window.GraneteUI.configurator.init({'
-    assert_includes html, 'getDefaultParams: getDefaultParams,'
-    assert_includes html, 'renderParamForm: renderParamForm,'
+    assert_includes html, 'getDefaultParams: window.GraneteUI.paramForm.getDefaultParams,'
+    assert_includes html, 'renderParamForm: window.GraneteUI.paramForm.renderParamForm,'
     assert_includes html, 'renderMaterialSelectors: window.GraneteUI.materialRoles.renderMaterialSelectors,'
-    assert_includes html, 'estimatedPartsLabel: estimatedPartsLabel,'
+    assert_includes html, 'estimatedPartsLabel: window.GraneteUI.paramForm.estimatedPartsLabel,'
     assert_includes html, 'isModelConnected: window.GraneteUI.modelBinding.isConnected,'
     assert_includes html, 'setProjectDefaultMaterial: window.GraneteUI.materialRoles.setProjectDefaultMaterial,'
     # Initial view + initial binding render run after the injection.

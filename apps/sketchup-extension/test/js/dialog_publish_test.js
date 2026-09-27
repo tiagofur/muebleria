@@ -105,7 +105,7 @@ function runDialog() {
   // granete-library.js, granete-configurator.js, granete-finish-selector.js,
   // granete-material-roles.js, granete-inspector-child.js,
   // granete-inspector.js, granete-model-binding.js,
-  // granete-project-furniture.js, the shared runtime
+  // granete-project-furniture.js, granete-param-form.js, the shared runtime
   // state and the #466 review controller around the inline script: load
   // them so the publish gate is exercised exactly as in the HtmlDialog.
   const resources = path.resolve(__dirname, '../../src/granete_for_sketchup/resources/js');
@@ -113,7 +113,7 @@ function runDialog() {
   const preflightSource = fs.readFileSync(path.join(resources, 'granete-preflight-review.js'), 'utf8');
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
-  const { media, account, library, configurator, finishSelector, materialRoles, inspectorChild, inspector, modelBinding, projectFurniture, inline } = dialogSources();
+  const { media, account, library, configurator, finishSelector, materialRoles, inspectorChild, inspector, modelBinding, projectFurniture, paramForm, inline } = dialogSources();
   vm.runInContext(media, sandbox, { filename: 'granete-media.js' });
   vm.runInContext(account, sandbox, { filename: 'granete-account.js' });
   vm.runInContext(library, sandbox, { filename: 'granete-library.js' });
@@ -124,6 +124,7 @@ function runDialog() {
   vm.runInContext(inspector, sandbox, { filename: 'granete-inspector.js' });
   vm.runInContext(modelBinding, sandbox, { filename: 'granete-model-binding.js' });
   vm.runInContext(projectFurniture, sandbox, { filename: 'granete-project-furniture.js' });
+  vm.runInContext(paramForm, sandbox, { filename: 'granete-param-form.js' });
   vm.runInContext(stateSource, sandbox, { filename: 'granete-state.js' });
   vm.runInContext(preflightSource, sandbox, { filename: 'granete-preflight-review.js' });
   vm.runInContext(inline, sandbox, { filename: 'dialog-inline.js' });
