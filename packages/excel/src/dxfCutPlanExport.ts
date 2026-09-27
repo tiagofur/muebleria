@@ -204,6 +204,52 @@ function requireFinite(value: number, description: string, minimum = 0): void {
   }
 }
 
+function validateDrillingForPiece(piece: CutPlanPlacedPiece, pattern: PartDrillingPattern): void {
+  if (pattern.holes.length === 0) return;
+  const length = piece.rotated ? piece.widthMm : piece.lengthMm;
+  const width = piece.rotated ? piece.lengthMm : piece.widthMm;
+  for (const [name, value] of [
+    ['piece length', piece.lengthMm], ['piece width', piece.widthMm],
+    ['pattern length', pattern.lengthMm], ['pattern width', pattern.widthMm],
+    ['piece X', piece.xMm], ['piece Y', piece.yMm],
+  ] as const) requireFinite(value, name, name.endsWith('X') || name.endsWith('Y') ? 0 : Number.EPSILON);
+  if (Math.abs(length - pattern.lengthMm) > FRAME_TOLERANCE_MM ||
+      Math.abs(width - pattern.widthMm) > FRAME_TOLERANCE_MM) {
+    throw new ValidationError('DXF drilling frame differs from placed cut contour', {
+      pieceId: piece.id, patternKey: pattern.pieceCode, length, width,
+      patternLength: pattern.lengthMm, patternWidth: pattern.widthMm,
+    });
+  }
+  for (const hole of pattern.holes) {
+    requireFinite(hole.xMm, 'hole X');
+    requireFinite(hole.yMm, 'hole Y');
+    requireFinite(hole.diameterMm, 'diameter', Number.EPSILON);
+    requireFinite(hole.depthMm, 'depth', Number.EPSILON);
+    if (hole.face === 'front' || hole.face === 'back') {
+      if (hole.xMm > width || hole.yMm > length) {
+        throw new ValidationError('DXF face drilling lies outside its piece frame', { pieceId: piece.id });
+      }
+    } else if (hole.face === 'left' || hole.face === 'right') {
+      if (hole.yMm > length) {
+        throw new ValidationError('DXF edge drilling lies outside its piece frame', { pieceId: piece.id });
+      }
+    } else if (hole.face === 'top' || hole.face === 'bottom') {
+      if (hole.xMm > width) {
+        throw new ValidationError('DXF edge drilling lies outside its piece frame', { pieceId: piece.id });
+      }
+    } else {
+      throw new ValidationError('Unsupported DXF drilling face', { face: hole.face });
+    }
+    if (hole.face !== 'front' && hole.face !== 'back' && piece.thicknessMm != null) {
+      requireFinite(piece.thicknessMm, 'piece thickness', Number.EPSILON);
+      const thicknessCoordinate = hole.face === 'left' || hole.face === 'right' ? hole.xMm : hole.yMm;
+      if (thicknessCoordinate > piece.thicknessMm) {
+        throw new ValidationError('DXF edge drilling lies outside piece thickness', { pieceId: piece.id });
+      }
+    }
+  }
+}
+
 /** Validate the entire request before constructing any output file. */
 function bindDrilling(
   plan: CutPlan,
@@ -230,57 +276,30 @@ function bindDrilling(
     }
     const piece = candidates[0]!;
     bound.set(piece, pattern);
-    if (pattern.holes.length === 0) continue;
-
-    const length = piece.rotated ? piece.widthMm : piece.lengthMm;
-    const width = piece.rotated ? piece.lengthMm : piece.widthMm;
-    for (const [name, value] of [
-      ['piece length', piece.lengthMm], ['piece width', piece.widthMm],
-      ['pattern length', pattern.lengthMm], ['pattern width', pattern.widthMm],
-      ['piece X', piece.xMm], ['piece Y', piece.yMm],
-    ] as const) requireFinite(value, name, name.endsWith('X') || name.endsWith('Y') ? 0 : Number.EPSILON);
-    if (Math.abs(length - pattern.lengthMm) > FRAME_TOLERANCE_MM ||
-        Math.abs(width - pattern.widthMm) > FRAME_TOLERANCE_MM) {
-      throw new ValidationError('DXF drilling frame differs from placed cut contour', {
-        pieceId: piece.id, patternKey: key, length, width,
-        patternLength: pattern.lengthMm, patternWidth: pattern.widthMm,
-      });
-    }
-    for (const hole of pattern.holes) {
-      requireFinite(hole.xMm, 'hole X');
-      requireFinite(hole.yMm, 'hole Y');
-      requireFinite(hole.diameterMm, 'diameter', Number.EPSILON);
-      requireFinite(hole.depthMm, 'depth', Number.EPSILON);
-      if (hole.face === 'front' || hole.face === 'back') {
-        if (hole.xMm > width || hole.yMm > length) {
-          throw new ValidationError('DXF face drilling lies outside its piece frame', { pieceId: piece.id });
-        }
-      } else if (hole.face === 'left' || hole.face === 'right') {
-        if (hole.yMm > length) {
-          throw new ValidationError('DXF edge drilling lies outside its piece frame', { pieceId: piece.id });
-        }
-      } else if (hole.face === 'top' || hole.face === 'bottom') {
-        if (hole.xMm > width) {
-          throw new ValidationError('DXF edge drilling lies outside its piece frame', { pieceId: piece.id });
-        }
-      } else {
-        throw new ValidationError('Unsupported DXF drilling face', { face: hole.face });
-      }
-      if (hole.face !== 'front' && hole.face !== 'back' && piece.thicknessMm != null) {
-        requireFinite(piece.thicknessMm, 'piece thickness', Number.EPSILON);
-        const thicknessCoordinate = hole.face === 'left' || hole.face === 'right' ? hole.xMm : hole.yMm;
-        if (thicknessCoordinate > piece.thicknessMm) {
-          throw new ValidationError('DXF edge drilling lies outside piece thickness', { pieceId: piece.id });
-        }
-      }
-    }
+    validateDrillingForPiece(piece, pattern);
   }
   for (const piece of pieces) {
-    if (!bound.has(piece)) {
+    if (bound.has(piece)) continue;
+    const label = piece.labelRef?.trim();
+    const copy = label?.match(/^(.*)-C([2-9]|[1-9]\d+)$/);
+    const baseLabel = copy?.[1];
+    const basePieces = baseLabel ? pieces.filter((candidate) => candidate.labelRef?.trim() === baseLabel) : [];
+    const copyPieces = label ? pieces.filter((candidate) => candidate.labelRef?.trim() === label) : [];
+    const basePiece = basePieces[0];
+    const basePattern = basePiece && bound.get(basePiece);
+    if (!baseLabel || !basePattern || basePattern.pieceCode.trim() !== baseLabel) {
       throw new ValidationError('Missing DXF drilling pattern for placed piece', {
         pieceId: piece.id, labelRef: piece.labelRef,
       });
     }
+    if (basePieces.length !== 1 || copyPieces.length !== 1 || keys.has(label!) ||
+        piece.partCode !== basePiece!.partCode || piece.moduleCode !== basePiece!.moduleCode) {
+      throw new ValidationError('Ambiguous DXF drilling copy occurrence', {
+        pieceId: piece.id, labelRef: piece.labelRef, baseLabel,
+      });
+    }
+    validateDrillingForPiece(piece, basePattern);
+    bound.set(piece, basePattern);
   }
   return bound;
 }

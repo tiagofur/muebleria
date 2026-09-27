@@ -3,7 +3,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CutPlan, PartDrillingPattern } from '@granete/domain';
-import { ValidationError } from '@granete/domain';
+import {
+  DEFAULT_CUT_PLAN_CONFIG, ValidationError, generateCutRows,
+  optimizeCutPlan, resolveProjectDrilling,
+} from '@granete/domain';
+import { IDS, plantillaCatalogWithModules, plantillaProject } from '@granete/domain/fixtures';
 import {
   dxfCutPlanExport,
   generateDxfBySheet,
@@ -335,6 +339,25 @@ describe('dxfCutPlanExport', () => {
       }
       const lateBad = { ...pattern, pieceCode: 'ROT-2', widthMm: 399 };
       expect(() => generateDxfBySheet({ cutPlan: repeated, drilling: [pattern, lateBad] })).toThrow(/frame differs/);
+      const copyLabel = `${piece.labelRef}-C2`;
+      const collidingCopies: CutPlan = {
+        ...plan,
+        sheets: [{ ...plan.sheets[0]!, pieces: [piece,
+          { ...second, labelRef: copyLabel },
+          { ...second, id: 'canonical-row', labelRef: copyLabel }] }],
+      };
+      expect(() => generateDxfByPiece({ cutPlan: collidingCopies, drilling: [pattern] }))
+        .toThrow(/Ambiguous/);
+      expect(() => generateDxfByPiece({ cutPlan: collidingCopies, drilling: [
+        pattern, { ...pattern, pieceCode: copyLabel },
+      ] })).toThrow(/Ambiguous/);
+      const unrelatedSuffix: CutPlan = {
+        ...plan,
+        sheets: [{ ...plan.sheets[0]!, pieces: [piece,
+          { ...second, labelRef: copyLabel, partCode: 'OTHER' }] }],
+      };
+      expect(() => generateDxfByPiece({ cutPlan: unrelatedSuffix, drilling: [pattern] }))
+        .toThrow(/Ambiguous/);
     });
 
     it('rejects a partially supplied drilling batch in every route, while accepting explicit zero-hole coverage', () => {
@@ -364,6 +387,47 @@ describe('dxfCutPlanExport', () => {
         ],
       };
       expect(() => generateDxfBySheet({ cutPlan: multiSheet, drilling: partial })).toThrow(/Missing DXF drilling pattern/);
+    });
+
+    it('exports both real quantity copies from resolver through optimizer in all DXF routes', () => {
+      const project = {
+        ...plantillaProject,
+        items: plantillaProject.items.filter((item) => item.id === IDS.itemGab)
+          .map((item) => ({ ...item, quantity: 2 })),
+      };
+      const catalog = plantillaCatalogWithModules;
+      const rows = generateCutRows(project, catalog);
+      const resolved = resolveProjectDrilling({ project, catalog });
+      const cutPlan = optimizeCutPlan(project.id, rows, catalog.materials, {
+        ...DEFAULT_CUT_PLAN_CONFIG, deductEdgeBand: false,
+      });
+      const pieces = cutPlan.sheets.flatMap((sheet) => sheet.pieces);
+      const patternByLabel = new Map(resolved.data.patterns.map((pattern) => [pattern.pieceCode, pattern]));
+      const copiedRow = rows.find((row) => row.quantity === 2 &&
+        (patternByLabel.get(row.labelRef ?? '')?.holes.length ?? 0) > 0)!;
+      const basePiece = pieces.find((piece) => piece.labelRef === copiedRow.labelRef)!;
+      const copyPiece = pieces.find((piece) => piece.labelRef === `${copiedRow.labelRef}-C2`)!;
+      const holeCount = patternByLabel.get(copiedRow.labelRef!)!.holes.length;
+      expect(resolved.data.patterns).toHaveLength(rows.length);
+      expect(basePiece).toBeDefined();
+      expect(copyPiece).toBeDefined();
+
+      const byPiece = generateDxfByPiece({ cutPlan, drilling: resolved.data.patterns });
+      for (const piece of [basePiece, copyPiece]) {
+        const file = byPiece.find((candidate) => candidate.pieceId === piece.id)!;
+        expect(circleEntities(file.dxfContent)).toHaveLength(holeCount);
+        const sheetFile = generateDxfBySheet({ cutPlan, drilling: resolved.data.patterns })
+          .find((candidate) => candidate.sheetIndex === piece.sheetIndex)!;
+        const inPiece = circleEntities(sheetFile.dxfContent).filter((circle) =>
+          circle.x >= piece.xMm && circle.x <= piece.xMm + piece.lengthMm &&
+          circle.y >= piece.yMm && circle.y <= piece.yMm + piece.widthMm);
+        expect(inPiece).toHaveLength(holeCount);
+      }
+      const expectedTotal = rows.reduce((sum, row) =>
+        sum + row.quantity * (patternByLabel.get(row.labelRef ?? '')?.holes.length ?? 0), 0);
+      expect(circleEntities(decode(dxfCutPlanExport({ cutPlan, variant: 'sheets', drilling: resolved.data.patterns })))).toHaveLength(expectedTotal);
+      expect(circleEntities(decode(dxfCutPlanExport({ cutPlan, variant: 'pieces', drilling: resolved.data.patterns })))).toHaveLength(expectedTotal);
+      expect(byPiece.reduce((sum, file) => sum + circleEntities(file.dxfContent).length, 0)).toBe(expectedTotal);
     });
 
     it('is deterministic, does not mutate inputs, and marks the output policy', () => {
