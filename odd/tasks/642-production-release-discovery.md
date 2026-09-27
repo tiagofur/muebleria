@@ -72,7 +72,7 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
   - Acceptance: the focused browser scenario is GREEN; the exact Project remains `draft`; the canonical P1 identity is unchanged; and the negative no-eligible-release case remains hidden or blocked according to existing semantics.
   - Work-unit evidence: focused command/result, runtime scenario/result, rollback boundary, and Conventional Commit identity with test and behavior together.
 
-- [ ] **642-DISC-03 — Freeze, review, and hand off the bounded candidate**
+- [x] **642-DISC-03 — Freeze, review, and hand off the bounded candidate**
   - Read back the exact diff and authored-line count; run applicable V0/V1/V2 checks and the conservative affected-check plan.
   - Run `python3 scripts/factory_preflight.py --require node pnpm --require-clean` after work-unit commits.
   - Record every command/result plus explicit `NOT_RUN`, `BLOCKED`, and remaining queue/station acceptance.
@@ -104,11 +104,14 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - Affected-plan readback: `python3 scripts/verify_affected.py --base origin/main --plan` conservatively selected all jobs because the ODD artifact is an unknown/sensitive boundary. The exact UI suite, typecheck, and organization browser proof ran; unrelated backend, SketchUp, visual, and foundation full gates remain pending/not run for final handoff selection.
 - Work-unit commit: `5897435fd47c74faca44e4db3b9fe4bfe8088465` (`fix(production): discover canonical release projects`) contains the dashboard behavior, focused unit proof, disposable-PG browser proof, and this execution artifact together.
 - Rollback boundary: revert the work-unit commit to remove only the `ProductionManagerDashboard` shared authority filter, its focused tests, the new browser scenario, and this focused ODD artifact; no queue/station/backend/SketchUp behavior is coupled to it.
+- Independent review APPROVED exact candidate `9682d706b3736ba64356edfe7338e74620879f2c` against base `5b93d336b194077ec116a10d9bd7fff9d4ca9658` with no blockers. The reviewer re-ran the release-authority domain suite (`15/15`), focused dashboard UI (`8/8`), disposable-PostgreSQL browser scenario (`1/1`), diff check, and clean preflight successfully.
+- Parent spot-check: focused dashboard UI re-run passed `8/8` on the same reviewed candidate.
+- Remote PR creation and exact-head CI remain pending and are not implied by local review approval.
 - Production Queue, station screens, physical progression, SketchUp/TestUp, PTX, and warehouse remain `NOT_RUN` and outside this task.
 
 ## Forecast and delivery strategy
 
-- Frozen pre-commit authored size is **737 lines** (736 additions, 1 deletion). This remains below 800, so the explicit normal-range policy applies and no slicing evaluation is triggered.
+- Reviewed candidate authored size is **739 lines** (738 additions, 1 deletion). This remains below 800, so the explicit normal-range policy applies and no slicing evaluation is triggered.
 - Strategy: **single PR** while the actual authored total remains in the user-authorized normal range.
 - User size policy: **0-800 authored lines is normal; 800-1200 requires evaluation before delivery; over 1200 requires a user checkpoint before continuing or delivery**.
 - The 400-line ODD value remains a planning heuristic only. Do not code-golf, omit proof, or split one coherent root change solely to satisfy it.
@@ -124,8 +127,8 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - [x] Fresh normal-dashboard product RED observed: normal dashboard rendered, but the exact same-ID draft/P1 project row was absent.
 - [x] Product correction implemented: shared canonical release authority drives only dashboard discovery; negative modern/stale no-release paths fail closed.
 - [x] Work-unit commit created: `5897435fd47c74faca44e4db3b9fe4bfe8088465`.
-- [ ] Independent review completed.
+- [x] Independent review completed: APPROVED with no blockers at `9682d706b3736ba64356edfe7338e74620879f2c` vs `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
 
 ## Next step
 
-Stop for fresh parent review of the exact candidate against `origin/main@5b93d336b194077ec116a10d9bd7fff9d4ca9658`. Independent review remains pending; do not push or create a PR.
+Return the mechanically closed artifact to the parent for exact-head readback and any separately authorized PR/CI publication. Do not push or create a PR from this task.
