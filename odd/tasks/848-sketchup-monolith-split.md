@@ -384,7 +384,7 @@ human. **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
   getDefaultParams, renderParamForm, defaultMaterialChoices,
   renderMaterialSelectors, materialById, estimatedPartsLabel,
   parameterIssueMessage, isModelConnected (accessor over
-  modelBindingState — Model Binding internals stay out), 
+  modelBindingState — Model Binding internals stay out),
   setProjectDefaultMaterial (write into projectDefaultMaterials — Material
   Roles state stays out), switchTab, requestProjectFurniture,
   pfPlaceFailureMessage (project-side effects of the legacy create
@@ -739,6 +739,134 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   issue.
 - Remaining Phase B modules after C4.6: inspector, model-binding,
   project-furniture.
+
+## Post-C4.9 — Final shared parameter-form extraction (owner-approved Option B)
+
+Started from `main@5b93d336b194077ec116a10d9bd7fff9d4ca9658` (post-C4.9, PR
+#867 merged), branch `refactor/848-dialog-js-param-form` in worktree
+`muebles-worktrees/848-param-form`. The post-C4.9 architectural/acceptance
+audit (same session, 2026-09-26) concluded `NEEDS OWNER ARCHITECTURAL
+DECISION` with Option B recommended; the owner APPROVED exactly one further
+extraction — the shared parametric form family into
+`resources/js/granete-param-form.js` under `window.GraneteUI.paramForm` —
+with NO chrome extraction, NO `granete-utils.js`, NO reopening of C4.1–C4.9,
+and NO line-count chasing toward the literal `≤ ~900`.
+
+- **Why this boundary is real architecture, not line-count chasing**: the
+  audit's remaining-inline classification found exactly one domain-sized
+  group with no owner (getDefaultParams, renderParamForm,
+  parameterIssueMessage, estimatedPartsLabel — ~243–252 lines): pure,
+  single-implementation, consumed by exactly the same two modules
+  (configurator + inspector) that receive them by init injection. Leaving
+  them inline kept param-form symptoms routing into `dialog.html` (the
+  anti-pattern #848 exists to kill); every other remaining inline group is
+  shell/chrome, thin bridge, orchestrators, runtime adapters or bootstrap.
+- **Boundary**: the module OWNS parameter defaults, the interactive param
+  form rendering (mm dim inputs, clamped steppers, enums, boolean
+  checkbox + badge, string inputs + hints, aria), the PARAMETER_* issue →
+  Spanish copy table and the #847 honest estimated-parts label. It OWNS NO
+  state (stateless by contract, `State authority: none` in the header), has
+  NO init() and NO injected deps (pure functions over their arguments),
+  makes NO `window.sketchup` calls, and consumes NO other GraneteUI module.
+  Does NOT own: configurator/inspector state, capability authority
+  (capabilityEnabled stays inline), chrome (icon/toast/tabs), interactive
+  param validation (validateInteractiveClient — granete-inspector.js),
+  catalog/material semantics, Ruby bridges, backend rules.
+- **Public API (4)**: `getDefaultParams`, `renderParamForm`,
+  `parameterIssueMessage`, `estimatedPartsLabel`. Consumers:
+  `window.GraneteUI.configurator` and `window.GraneteUI.inspector` receive
+  them via their unchanged init() dep bags; the bootstrap wiring now passes
+  `window.GraneteUI.paramForm.*` (8 references; both init contracts
+  unchanged).
+- **Load order**: markup → media → … → project-furniture →
+  **granete-param-form** → inline bootstrap → #498 runtime. It is consumed
+  only by the bootstrap init wiring, so the minimal correct position is
+  immediately before the inline script; `dialog_scripts.js` loads the REAL
+  file in the same position and `dialog_publish_test.js`'s documented
+  preload chain gained it in the same slot.
+- **Move fidelity**: the three inline spans (getDefaultParams L1357-1363,
+  renderParamForm L1377-1538, parameterIssueMessage + #847 comment +
+  estimatedPartsLabel L1540-1600 of base dialog.html) were extracted
+  programmatically and re-audited: **230/230 lines byte-identical after the
+  single normalizations dedent(-6) + IIFE/namespace/header wrap**; zero
+  body edits; the ownership comments around the moved block updated to name
+  the new owner; no syntax/copy/DOM/payload/semantics changes.
+- **Tests**: new focused harness `test/js/granete_param_form_test.js` (22
+  tests driving the REAL file: registration + idempotent re-execution,
+  exact 4-entry API, statelessness incl. no-bridge/no-DOM-ids on
+  comment-stripped source, getDefaultParams, every control type with the
+  onChange contract and clamping semantics — including the preserved
+  behavior that steppers recompute from currentValues, never from the
+  display node — parameterIssueMessage exact 9-code copy table + branching,
+  estimatedPartsLabel honesty precedence #847). New structural wrapper
+  `test/unit/granete_param_form_js_test.rb` (7 runs, 124 assertions):
+  header/contract, ownership symbols, no init/deps, dialog.html carries NO
+  parametric implementation symbols and no bare-identifier wiring may
+  regrow, load order mirrored in loader, both init bags wired, module free
+  of chrome/capability/bridge/foreign-state symbols. Repointed (never
+  deleted) asserts: `granete_configurator_js_test.rb` +
+  `granete_inspector_js_test.rb` (init wiring asserts now read the
+  paramForm module API), `dialog_library_view_test.rb` (implementation
+  asserts for estimatedPartsLabel/dim-input/param-control now point at the
+  module, plus a refute that the function does not regrow inline),
+  `dialog_publish_test.js` (preload chain).
+- **Size accounting**: dialog.html 1851 → **1627**; inline JS 806 → **575**
+  (span incl. tags; 573 content); `granete-param-form.js` **293** (≤ ~800
+  gate). Remaining inline reclassification: chrome (icons 36, tabs 41,
+  toast/capability 20), thin bridge 182 (30 thin + 5 guarded + 2 local +
+  3 documented orchestrators), runtime adapters 56, init wiring ~150,
+  final wiring + dialog_ready 19, scaffold/comments/blanks ~69 — **no
+  param-domain implementation remains inline**.
+- **Verify** (Homebrew `ruby@3.2` 3.2.11, vendored bundle; no gem or
+  lockfile change): all 31 Node harnesses under test/js green; RuboCop 261
+  files / 0 offenses; unit suite 1207 runs, 8990 assertions, 0
+  failures/errors/skips; contract suite 6 runs, 4043 assertions, 0
+  failures; `git diff --check` clean; `verify_affected --plan` exit 0;
+  contracts drift + ci/factory unittest suites green. RBZ rebuilt +
+  `package:verify` readback, sha256
+  `7eee66fc2c95d4ffc6b90d19a4fd4b5a1169de4879c7e8571048b18d2f0d054e`,
+  packages `granete_for_sketchup/resources/js/granete-param-form.js`
+  (content read back).
+- **No new rubocop disables**: this slice adds zero `rubocop:disable`
+  lines, zero exclusions and zero `.rubocop.yml` changes (verified by diff
+  inspection). The audit's Ruby findings (new ModuleLength/complexity
+  disables from the C1 split, placement_preview_bridge 628 vs ~600,
+  duplicated payload-parse idiom, 2 unwired Node harnesses) remain
+  owner-approved deviations or separate follow-up issues — not touched
+  here.
+- **CSS residual inline (reported, not moved)**: the two pre-existing
+  `<style>` blocks (`.preflight-issue*` L690-697, `.manufacturing-feature*`
+  L722-732) could move mechanically to `css/inspector.css` (both style
+  Inspector-pane domain surfaces). Cascade check: the only selector
+  overlap in `css/` is base.css:277 (the grouped `:focus-visible` a11y
+  outline, a different state); the link order loads inspector.css after
+  base.css, which preserves today's effective precedence (the body blocks
+  currently also apply after base.css), so no override inversion was
+  identified. Still out of this slice's scope per the owner's catch-all
+  ban; awaits separate authorization.
+- **Behavior changes: 0** (target). Real SketchUp host smoke: **NOT_RUN**
+  (remains the phase-level gate after this final extraction, per owner).
+- **Acceptance clarification prepared (NOT applied to the issue)**: the
+  literal `dialog.html ≤ ~900` is arithmetically incompatible with the
+  issue's own outcome ("conserva markup + manifiesto + bootstrap mínimo"):
+  structural markup (890, byte-stable since baseline) + manifests (18+7
+  tags) + contract banners (112) + pre-existing residual style (19) exceed
+  900 with zero inline JS. The proposed replacement wording awaits owner
+  approval (recorded in the pre-commit checkpoint of this slice).
+- **Publication**: owner pre-commit review **APPROVED** (2026-09-27)
+  exactly with the boundary presented — public API of 4, no init/dep/state,
+  consumers Configurator + Inspector only, fidelity 230/230, sizes,
+  AGENTS routing + ODD + tests, and the deliberate stays: chrome,
+  GraneteDialog and runtime adapters inline; the 2 residual CSS blocks and
+  the remaining Ruby findings explicitly OUT of this slice; no additional
+  extraction authorized. The `≤ ~900` clarification proposal is ratified
+  conceptually but the issue body is NOT to be edited until the
+  post-smoke closure decision. Published as ONE cohesive work-unit commit
+  (`refactor(sketchup): extract shared parameter form module`) from base
+  `5b93d336b194077ec116a10d9bd7fff9d4ca9658` against `main`
+  (`Refs #848`, `Delivery: partial`, `type:refactor`). Exact-head remote
+  state (CI, mergeability, PR checks) lives in GitHub; merge remains
+  human. #848 remains OPEN.
 
 ## C4.9 — granete-project-furniture.js (owner pre-commit review: APPROVED)
 

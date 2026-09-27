@@ -174,12 +174,14 @@ class GraneteInspectorJsTest < Minitest::Test
     assert library_init < inspector_init
     assert mr_init < config_init
     assert config_init < dialog_ready
-    # The injected shared helpers stay single-implementation in the dialog.
+    # The shared helpers enter by injection: the param-form family lives in
+    # the granete-param-form module since #848 post-C4.9 (single
+    # implementation shared with the Configurator).
     assert_includes html, 'window.GraneteUI.inspector.init({'
-    assert_includes html, 'getDefaultParams: getDefaultParams,'
-    assert_includes html, 'renderParamForm: renderParamForm,'
-    assert_includes html, 'estimatedPartsLabel: estimatedPartsLabel,'
-    assert_includes html, 'parameterIssueMessage: parameterIssueMessage'
+    assert_includes html, 'getDefaultParams: window.GraneteUI.paramForm.getDefaultParams,'
+    assert_includes html, 'renderParamForm: window.GraneteUI.paramForm.renderParamForm,'
+    assert_includes html, 'estimatedPartsLabel: window.GraneteUI.paramForm.estimatedPartsLabel,'
+    assert_includes html, 'parameterIssueMessage: window.GraneteUI.paramForm.parameterIssueMessage,'
   end
 
   def test_no_duplicated_runtime_logic_in_the_module
