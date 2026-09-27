@@ -119,6 +119,21 @@ Hinge placement
 Cup drilling
 ```
 
+## Factory construction and contact-aware recipes — 2026-09-27
+
+The detailed target contract is [Factory construction and joinery](factory-construction-and-joinery.md).
+It extends the closed #356 baseline without treating its initial shelf slice as universal machining support.
+
+Factory defaults belong to the manufacturing overlay (#775), not personal settings or the commercial StoreCatalogOverlay.
+Customers must have bounded self-service in React Config and in the component editor (#875).
+Connection intent, verified contact geometry and versioned joint recipes generate operations for every participant (#874).
+One placement pattern in the joint frame is transformed into each part's local frame; per-factory preferences do not redefine coordinate conventions.
+History pins exact effective content; later preferences never rewrite released manufacturing.
+
+The independent [DXF projection and resolution-integrity contract](../manufacturing/dxf-cut-plan-projection.md) owns the authorized #676 extension.
+Valid projection does not establish complete input or physical CNC compatibility.
+These documents specify target behavior and acceptance, not proof of implemented or machine-validated functionality.
+
 ## CNC and machine output
 
 Machine formats are adapters over resolved manufacturing data.
@@ -160,3 +175,5 @@ Before production:
 - Physical production rule (cut/CNC/edge work parts; assembly converges): `docs/production-flow-v2.md`
 - Preflight gate inside the instantiation pipeline: `parametric-furniture-library.md` (§5) and `smart-furniture-engine.md`
 - Issues: #356 (parametric relationships / joint-driven machining), #347 (authoritative manufacturing preflight)
+- Factory policy/contact extension: [factory-construction-and-joinery.md](factory-construction-and-joinery.md); #775/#874/#875, coordinated by #776
+- DXF projection/integrity: [dxf-cut-plan-projection.md](../manufacturing/dxf-cut-plan-projection.md); #676
