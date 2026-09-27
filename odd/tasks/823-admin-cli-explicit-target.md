@@ -579,6 +579,13 @@ request fresh independent review and exact-head checks before the partial PR.
   ordinary automatic command passed the same 2/2 Chromium suite and exited.
   No persistent database, Keychain, installed SketchUp, or human MFA session
   was touched.
+- Exact behavior commit `e7b246f47197eed9676fcf4b0090d382b8d71323` was
+  replayed with a foreground-owned preparation terminal: 2/2 Chromium checks,
+  `WAITING_FOR_HUMAN`, a ready browser profile, loopback-only DB/API/web,
+  sanitized state without DSN/password/token/cookie, followed by
+  `continue`/`stop` and zero surviving run-owned PIDs, listeners, container,
+  or temp profile. The preparation terminal then exited 0. This verifies
+  browser-process ownership, not installed SketchUp-host acceptance.
 - V0/V1: `bash -n scripts/organization-browser-gate.sh`, `shellcheck` on the
   same script, `node --check scripts/organization-interactive-browser.mjs`,
   `git diff --check`, `pnpm typecheck`, `pnpm test`, and focused
@@ -586,8 +593,9 @@ request fresh independent review and exact-head checks before the partial PR.
   `verify_affected.py --base origin/main --plan` selects broader CI because T3
   changes Go server binding; those checks and independent exact-head review
   remain pending. The final state-only `failure_reason` addition has DB-free
-  test/static proof; final exact-head operational evidence is for the parent
-  to confirm after candidate freeze.
+  test/static proof and was present in the real interactive replay above.
+  After this task-only evidence commit, the parent still owns candidate freeze,
+  independent review, and exact-head CI.
 - Rollback boundary: interactive branches of the existing gate, new private
   browser helper, Playwright external-web reuse switch, lifecycle doubles,
   and the interactive paragraph in the canonical isolation contract. T3's
@@ -596,6 +604,12 @@ request fresh independent review and exact-head checks before the partial PR.
   fingerprints; a power loss can erase temporary metadata, so no recovery PASS
   is claimed without fresh resource readback. #398's Phase 1 installed-host,
   MFA/device, placement, and WorkingCopy acceptance remain `NOT_RUN`.
+- T4 coherent behavior/test/documentation work-unit commit:
+  `e7b246f47197eed9676fcf4b0090d382b8d71323` (573 additions, 10
+  deletions; 583 authored lines; generated files: none). The accumulated
+  branch versus `b5697951021f6484cf3e71161ec396ff6f434194` is 765
+  authored lines before this task-only evidence update, within the human's
+  normal 0–800 range. No push, PR, independent review, or final CI yet.
 
 ### T3 observed work-unit evidence
 
