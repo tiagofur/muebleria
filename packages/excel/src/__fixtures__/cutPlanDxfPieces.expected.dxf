@@ -6,6 +6,8 @@ HEADER
 $ACADVER
 1
 AC1009
+999
+granete.dxf-cut-plan-projection.v1
 9
 $INSBASE
 10
@@ -400,6 +402,16 @@ ETIQUETA
 30.00
 1
 MDF Blanco 18mm
+0
+CIRCLE
+8
+PERF_F5
+10
+1180.00
+20
+200.00
+40
+2.50
 0
 ENDSEC
 0

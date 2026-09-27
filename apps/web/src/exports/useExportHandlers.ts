@@ -458,18 +458,23 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
       setExportBusy(true);
       try {
         const suffix = variant === 'sheets' ? 'tableros' : 'piezas';
-        // F130: real drilling (manual + derived joints + engine). Best effort —
-        // an unresolvable project must still export the nesting geometry.
-        let drilling;
-        try {
-          const project =
-            projects.find((p) => p.id === cutPlan.projectId) ?? selectedProject;
-          if (project && catalog) {
-            drilling = resolveProjectDrilling({ project, catalog }).data.patterns;
-          }
-        } catch {
-          drilling = undefined;
+        // F130: a drilling resolution failure must not become a geometry-only DXF.
+        const project =
+          projects.find((p) => p.id === cutPlan.projectId) ??
+          (selectedProject?.id === cutPlan.projectId ? selectedProject : undefined);
+        if (!project || !catalog) {
+          throw new Error('No se puede resolver la perforación del proyecto para exportar DXF');
         }
+        const resolved = resolveProjectDrilling({ project, catalog });
+        const resolutionIssue = resolved.resolutionIssues[0];
+        if (resolutionIssue) {
+          throw new Error(`No se puede exportar DXF: ${resolutionIssue.message} Revise el ítem ${resolutionIssue.projectItemId}.`);
+        }
+        const drillingIssue = resolved.patterns.find((pattern) => pattern.issues.length > 0);
+        if (drillingIssue) {
+          throw new Error(`No se puede exportar DXF: perforación inválida en ${drillingIssue.pieceCode}`);
+        }
+        const drilling = resolved.data.patterns;
         await downloadCutPlanDxf(cutPlan, variant, undefined, undefined, { drilling });
         toast({
           type: 'success',
