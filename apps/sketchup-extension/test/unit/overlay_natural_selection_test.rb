@@ -55,7 +55,20 @@ class OverlayNaturalSelectionTest < Minitest::Test
     @store = Metadata::Store.new(@model)
     @provider = OverlayFixture::FakeCatalogProvider.new
     @payloads = []
+    # Production wiring order: the observer exists first; the manager then
+    # delivers the canonical #476 bulk flow itself after its selection
+    # writes (the real host defers/drops onSelectionBulkChange for Ruby
+    # writes inside a tool event handler — the stuck-inspector bug).
+    @observer = Observers::SelectionObserver.new(
+      metadata_store: @store,
+      catalog_provider: @provider,
+      on_selection_change: lambda do |payload|
+        @payloads << payload
+        @manager.rescope(scope_of(payload)) if @manager&.mode_on?
+      end
+    )
     @manager = build_manager
+    @model.selection.add_observer(@observer)
     # Native-like start: the part is the SOLE selection exactly as when the
     # user enabled `Ver fabricación` from its contextual inspector (the
     # fixture builder leaves the placed furniture root selected).
@@ -65,7 +78,9 @@ class OverlayNaturalSelectionTest < Minitest::Test
                     'componentInstanceId' => 'side-left-01')
     @tool = @model.tools.pushes.first
     @view = PickableView.new
-    attach_dialog_selection_flow
+    # The observer is attached production-early, so the setup's own
+    # selection writes publish payloads — tests start from a clean slate.
+    @payloads.clear
   end
 
   def build_manager
@@ -79,23 +94,9 @@ class OverlayNaturalSelectionTest < Minitest::Test
         model_provider: -> { @model }
       ),
       model_provider: -> { @model },
-      preflight_tracker: Host::PreflightTracker.new
+      preflight_tracker: Host::PreflightTracker.new,
+      on_selection_written: ->(selection) { @observer.onSelectionBulkChange(selection) }
     )
-  end
-
-  # The dialog's selection flow (#476 observer → payload + overlay
-  # re-scope), mirroring ObserverBridge#handle_selection_change: this is
-  # the ONLY wiring through which a viewport click may re-scope the overlay.
-  def attach_dialog_selection_flow
-    observer = Observers::SelectionObserver.new(
-      metadata_store: @store,
-      catalog_provider: @provider,
-      on_selection_change: lambda do |payload|
-        @payloads << payload
-        @manager.rescope(scope_of(payload)) if @manager.mode_on?
-      end
-    )
-    @model.selection.add_observer(observer)
   end
 
   def test_click_on_furniture_geometry_selects_it_natively_and_re_scopes
@@ -176,7 +177,13 @@ class OverlayNaturalSelectionTest < Minitest::Test
 
     @tool.onLButtonDown(0, 9999, 9999, @view)
 
-    assert_equal([nil, 'furniture'], @payloads.map { |payload| payload && payload['kind'] })
+    # The cleared half fires synchronously; every delivered bulk (the
+    # stub's own plus the manager's host-reality self-delivery) carries
+    # the SAME context — no foreign kinds, one self-heal refresh at most.
+    kinds = @payloads.map { |payload| payload && payload['kind'] }
+    assert_nil kinds.first, 'the native clear half must arrive first'
+    assert kinds.length >= 2, 'the bulk context must be delivered'
+    assert kinds[1..].all? { |kind| kind == 'furniture' }, kinds.inspect
     assert_equal resolves_before + 1, @provider.resolved_layout_calls
   end
 

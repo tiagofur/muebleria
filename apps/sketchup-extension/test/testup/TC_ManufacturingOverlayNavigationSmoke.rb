@@ -51,10 +51,15 @@ module Granete
       # B2d: the trapped-editor flow from the real-host report, driven at
       # the API level (no viewport geometry): inside the furniture with a
       # part selected, Esc leaves the context one level, double-click
-      # semantics re-enter it and leave it again on empty space, and
-      # hiding the overlay closes the mode cleanly on the real host APIs.
+      # semantics re-enter it and leave it again on empty space, the
+      # canonical #476 flow DELIVERS the new selection context (the real
+      # host defers/drops onSelectionBulkChange for Ruby writes inside a
+      # tool event handler — the stuck-inspector bug), and hiding the
+      # overlay closes the mode cleanly on the real host APIs.
       def test_escape_and_double_click_navigate_contexts_natively
+        attach_canonical_selection_flow
         manager = build_manager
+        @flow_manager = manager
         manager.enable(scope)
         root = granete_furniture_instances.first
         part = managed_part('side-left-01')
@@ -77,9 +82,15 @@ module Granete
         assert_empty model.selection.to_a
         assert manager.mode_on?
 
+        # Re-selecting the furniture WRITES the selection and the canonical
+        # flow delivers the furniture context — the inspector cannot stay
+        # stuck on "no selection" anymore.
+        manager.select_naturally(root)
+        assert_equal [root], model.selection.to_a
+        assert_equal 'furniture', @observed_payloads.last, 'the bulk context must be delivered'
+
         # Double-click semantics re-enter the furniture: the click pair
         # selected the root, the double-click opens its context.
-        manager.select_naturally(root)
         manager.open_or_close_context_naturally(root)
         assert_equal [root], model.active_path.to_a
 
@@ -98,6 +109,7 @@ module Granete
       ensure
         # The real host returns nil for active_path at the model root.
         model.active_path = [] if model.respond_to?(:active_path=) && !(model.active_path || []).empty?
+        model&.selection&.remove_observer(@canonical_observer) if @canonical_observer
         manager&.disable
       end
 
@@ -170,6 +182,32 @@ module Granete
         end
       end
 
+      # The dialog's selection flow on the real host (#476 observer →
+      # payload + overlay re-scope): production order — observer first,
+      # then the manager with its host-reality self-delivery hook.
+      def attach_canonical_selection_flow
+        @observed_payloads = []
+        @canonical_observer = Granete::SketchUpExtension::Observers::SelectionObserver.new(
+          metadata_store: metadata_store,
+          catalog_provider: GoldenCatalogProvider.new(@scenario_body),
+          on_selection_change: lambda do |payload|
+            @observed_payloads << (payload && payload['kind'])
+            @flow_manager.rescope(scope_of_payload(payload)) if @flow_manager&.mode_on?
+          end
+        )
+        model.selection.add_observer(@canonical_observer)
+      end
+
+      def scope_of_payload(payload)
+        return {} unless payload.is_a?(Hash)
+
+        result = {}
+        result['furnitureInstanceId'] = payload['furnitureInstanceId'] if payload['furnitureInstanceId']
+        result['furnitureInstanceRef'] = payload['furnitureInstanceRef'] if payload['furnitureInstanceRef']
+        result['componentInstanceId'] = payload['componentInstanceId'] if payload['componentInstanceId']
+        result
+      end
+
       def build_manager
         Overlay::Manager.new(
           resolver: Overlay::InspectionResolver.new(
@@ -180,7 +218,8 @@ module Granete
           locator: build_locator,
           model_provider: method(:model),
           preflight_tracker: Host::PreflightTracker.new,
-          logger: quiet_logger
+          logger: quiet_logger,
+          on_selection_written: ->(selection) { @canonical_observer.onSelectionBulkChange(selection) }
         )
       end
 

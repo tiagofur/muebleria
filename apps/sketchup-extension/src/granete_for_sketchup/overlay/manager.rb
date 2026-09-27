@@ -28,13 +28,14 @@ module Granete
         attr_reader :mode, :scope, :active_feature_id, :filter, :unavailable_reason, :snapshot
 
         def initialize(resolver:, locator:, model_provider:, preflight_tracker:,
-                       logger: nil, on_state_change: nil)
+                       logger: nil, on_state_change: nil, on_selection_written: nil)
           @resolver = resolver
           @locator = locator
           @model_provider = model_provider
           @preflight_tracker = preflight_tracker
           @logger = logger
           @on_state_change = on_state_change
+          @on_selection_written = on_selection_written
           @mode = 'off'
           @scope = nil
           @snapshot = nil
@@ -242,11 +243,19 @@ module Granete
         # owns the viewport (#470): a click outside the markers replaces the
         # model selection with the entity the tool's PickHelper resolved as
         # the select-tool-equivalent pick, and a click on empty space clears
-        # it. Writing model.selection is the ONLY selection act: the #476
+        # it. Writing model.selection is the ONLY selection act. The #476
         # SelectionObserver flow then updates the dialog and re-scopes the
-        # overlay exactly as for a click made without the overlay. Selection
-        # writes open no operation and touch no entity/metadata, so
-        # inspection stays read-only for the model.
+        # overlay exactly as for a click made without the overlay — with
+        # one host-reality correction: the real host fires
+        # onSelectionCleared synchronously for the clear but DEFERS (or
+        # drops) onSelectionBulkChange for Ruby selection writes inside a
+        # tool event handler, which left the inspector stuck on "no
+        # selection". After a successful add the manager therefore delivers
+        # the observer's own bulk notification for the REAL selection via
+        # the on_selection_written hook — the same canonical #476 flow,
+        # idempotent if the host delivers its deferred copy later.
+        # Selection writes open no operation and touch no entity/metadata,
+        # so inspection stays read-only for the model.
         def select_naturally(entity)
           model = @model_provider.call
           return unless model.respond_to?(:selection)
@@ -260,6 +269,7 @@ module Granete
 
           selection.clear unless selection.empty?
           selection.add(entity)
+          deliver_selection_written(selection)
         rescue StandardError => e
           # A host hiccup while writing the selection must never crash the
           # viewport tool; the click is simply inert.
@@ -370,6 +380,14 @@ module Granete
         end
 
         private
+
+        # Deliver the host's pending bulk notification for OUR selection
+        # write through the canonical #476 observer flow.
+        def deliver_selection_written(selection)
+          @on_selection_written&.call(selection)
+        rescue StandardError => e
+          @logger&.warn('manufacturing_overlay_selection_delivery_failed', error: e.message)
+        end
 
         # Only real containers are openable for editing — exactly the
         # entity classes the native double-click opens.

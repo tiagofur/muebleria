@@ -229,6 +229,47 @@ totalmente inerte.
 - El archivo final tras la ronda 2 tiene 16 tests / 73 aserciones, todos
   verdes.
 
+## Ronda 3 — inspector pegado en vacío (mismo PR)
+
+Reporte del owner tras validar 0.1.12: la trampa del editor está resuelta
+(selecciona piezas, vuelve al mueble, no se traba), pero al volver a
+seleccionar el mueble o una pieza el Inspector no carga sus datos — queda
+como sin selección.
+
+### Causa raíz (D10)
+
+El host real dispara `onSelectionCleared` sincrónico pero DIFIERE/SUPRIME
+`onSelectionBulkChange` para escrituras de selección hechas desde Ruby
+dentro del handler de un tool (observado en smokes: payloads `[nil]` con la
+selección ya escrita). El inspector recibía el vacío del clear y nunca el
+contexto nuevo.
+
+### Fix ronda 3
+
+- `Overlay::Manager#select_naturally`: tras un `add` exitoso entrega él
+  mismo la notificación bulk del flujo canónico #476 para la selección REAL
+  vía hook `on_selection_written` (idempotente si el host entrega su copia
+  diferida después — mismo payload, mismo rescope sin re-resolve).
+- El bridge cablea el hook al observer real:
+  `@selection_observer.onSelectionBulkChange(selection)`.
+- Unit/smoke espejan el wiring de producción (observer primero, manager
+  después con el hook); aserciones de secuencia toleran la entrega
+  duplicada idempotente y mantienen el budget de rescope (+1 refresh).
+- Versión 0.1.13 para identificación del owner (0.1.12 fue la primera
+  build que él validó en vivo).
+
+### Evidencia ronda 3
+
+- Unit: 1227 runs / 9112 assertions + boundary 6/4043, 0 fallos; rubocop
+  limpio; `rake verify` PASS (paquete reproducible 510d4d97…).
+- Host real, INSTALACIÓN 0.1.13 del owner (readback exacto):
+  - Navegación 1/1 PASS / **12 aserciones**, ahora incluyendo la prueba
+    directa del fix: tras `select_naturally(root)` el observer real del
+    host recibe el contexto `furniture` (el inspector no puede quedar en
+    vacío).
+  - Overlay smokes 6/6 PASS (2 corridas tras añadir reintento con render
+    forzado en el precondicionado del test B2).
+
 ## Entrega
 
 - Ronda 1: HEAD `9fd3983a` + evidencia `6c156803`. Ronda 2: este commit.

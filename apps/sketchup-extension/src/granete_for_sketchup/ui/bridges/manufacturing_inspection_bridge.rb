@@ -23,7 +23,11 @@ module Granete
             model_provider: method(:active_model),
             preflight_tracker: mutation_coordinator.preflight_tracker,
             logger: @logger,
-            on_state_change: ->(_payload) { push_manufacturing_state(@dialog) if @dialog&.visible? }
+            on_state_change: ->(_payload) { push_manufacturing_state(@dialog) if @dialog&.visible? },
+            # The real host defers/drops onSelectionBulkChange for Ruby
+            # selection writes inside a tool event handler: the manager
+            # delivers the canonical #476 bulk flow itself after its write.
+            on_selection_written: ->(selection) { @selection_observer.onSelectionBulkChange(selection) }
           )
         end
 

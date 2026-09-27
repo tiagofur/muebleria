@@ -105,7 +105,12 @@ module Granete
         view = model.active_view
         zoom_to_furniture(view)
 
-        on_furniture = screen_point_on_furniture_off_markers(view, manager)
+        on_furniture = nil
+        3.times do
+          zoom_to_furniture(view) # forces a render pass every iteration
+          on_furniture = screen_point_on_furniture_off_markers(view, manager)
+          break unless on_furniture.nil?
+        end
         if on_furniture.nil?
           flunk "no clickable furniture point away from markers: vp=#{view.vpwidth}x#{view.vpheight} " \
                 "diag=#{natural_selection_diagnostics(view, manager)}"
