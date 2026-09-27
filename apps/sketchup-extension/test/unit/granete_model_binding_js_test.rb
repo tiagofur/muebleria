@@ -13,8 +13,9 @@ require_relative '../test_helper'
 # are unchanged and stay thin delegation; the connected-status fan-out
 # (commercial contexts + Project Furniture reload) remains the inline
 # onModelBindingStatus orchestrator; Project Furniture state (lastPfState)
-# stays inline-owned until its own Phase B slice; the Configurator reads
-# the connection through the module accessor. Symbol-based, not
+# is owned by js/granete-project-furniture.js since #848 C4.9 and this
+# module only invalidates it through the injected seam; the Configurator
+# reads the connection through the module accessor. Symbol-based, not
 # line-count-based.
 class GraneteModelBindingJsTest < Minitest::Test
   MODEL_BINDING_JS = File.expand_path('../../src/granete_for_sketchup/resources/js/' \
@@ -166,7 +167,8 @@ class GraneteModelBindingJsTest < Minitest::Test
     orchestrator = html.index('window.GraneteUI.modelBinding.setStatus(status);')
     commercial = html.index('window.GraneteCommercialProjection.setBinding(status);')
     bootstrap_commercial = html.index('window.GraneteCommercialBootstrap.setBinding(status);')
-    pf_reload = html.index('if (status && status.state === "connected") requestProjectFurniture();')
+    pf_reload = html.index('if (status && status.state === "connected") ' \
+                           'window.GraneteUI.projectFurniture.requestProjectFurniture();')
     refute_nil orchestrator
     refute_nil commercial
     refute_nil bootstrap_commercial
@@ -175,16 +177,21 @@ class GraneteModelBindingJsTest < Minitest::Test
            'commercial fan-out + connected PF reload keep their inline orchestrator order'
   end
 
-  def test_project_furniture_authority_stays_inline_until_its_own_slice
+  def test_project_furniture_authority_lives_in_its_own_phase_b_slice
     html = File.read(DIALOG_HTML, encoding: 'UTF-8')
     source = File.read(MODEL_BINDING_JS, encoding: 'UTF-8')
-    # lastPfState keeps its single inline owner; the module only receives
-    # the invalidation seam through init.
-    assert_includes html, 'var lastPfState = null;', 'Project Furniture owns lastPfState'
+    # Since #848 C4.9 lastPfState is owned by the Project Furniture
+    # module; this module never copies it and invalidates the rows
+    # through the injected seam.
+    project_furniture_js = File.expand_path('../../src/granete_for_sketchup/resources/js/' \
+                                            'granete-project-furniture.js', __dir__)
+    assert_includes File.read(project_furniture_js, encoding: 'UTF-8'),
+                    'var lastPfState = null;', 'Project Furniture module owns lastPfState'
     refute_includes source, 'var lastPfState', 'the module must not copy PF state'
+    refute_includes html, 'var lastPfState', 'the monolith must not keep a PF state copy'
     assert_includes html,
-                    'invalidateProjectFurniture: function () { lastPfState = null; }',
-                    'the temporary C4.8 seam invalidates the inline-owned PF rows'
+                    'invalidateProjectFurniture: window.GraneteUI.projectFurniture.invalidate',
+                    'the C4.8 seam delegates to the Project Furniture module API'
     assert_includes source, 'deps.invalidateProjectFurniture();',
                     'every status render invalidates through the seam'
   end

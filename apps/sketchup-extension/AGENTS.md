@@ -43,6 +43,7 @@ tocan en Phase B.
 | Inspector / selección / mueble / update / delete / routing de materiales | `resources/js/granete-inspector.js` | `test/js/granete_inspector_test.js` (vía `test/unit/granete_inspector_js_test.rb`) |
 | Inspector child: pieza / herraje / aggregate / breadcrumb / #467 / #468 | `resources/js/granete-inspector-child.js` | `test/js/granete_inspector_child_test.js` (vía `test/unit/granete_inspector_child_js_test.rb`) |
 | conexión modelo/proyecto/diseño / pairing / rebind / publicar / validar diseño | `resources/js/granete-model-binding.js` | `test/js/granete_model_binding_test.js` (vía `test/unit/granete_model_binding_js_test.rb`) |
+| muebles del proyecto no aparecen / panel Proyecto / colocar-restaurar unidades / #810 sincronización de diseño / banner de guardado | `resources/js/granete-project-furniture.js` | `test/js/granete_project_furniture_test.js` (vía `test/unit/granete_project_furniture_js_test.rb`); bridge Ruby `ui/bridges/project_furniture_bridge.rb` |
 
 Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies
