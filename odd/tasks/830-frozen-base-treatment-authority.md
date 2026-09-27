@@ -158,7 +158,10 @@ base-mode freeze (that would create a third authority).
       #826/#727 regressions, OpenAPI drift/generated parity, disposable
       PostgreSQL under runtime RLS, gofmt/vet, `git diff --check`, factory
       preflight and affected-check plan/selected run. Independent review/CI
-      remain parent-owned and not proven by local tests.
+      remain parent-owned and not proven by local tests. Relevant V0/V1/V2
+      checks are green; selected `verify_affected` is BLOCKED before launch by
+      its isolated-DB guard, and unrelated SketchUp/visual/foundation jobs
+      are NOT_RUN. Parent decides that remaining verification boundary.
 - [x] T13 — Browser consequence of exact quoted preflight: Q1/R1 with a
       design-first unit outside the frozen commercial snapshot must NOT show
       READY; surface the server's actionable frozen-base 409 instead of a
@@ -179,11 +182,14 @@ base-mode freeze (that would create a third authority).
 - T10 focused V2: `scripts/backend-test.sh -run '^TestFrozenBaseCommands_'
   -count=1 ./internal/storage` — green with real two-connection PostgreSQL
   mutation and runtime RLS role; observed RED preceded the transaction fix.
+  T10/T11 work-unit commit `b80edce3ea499d74c3ad27b50f22386c4d0d911a`.
 - T11 focused V1/V2: `go test ./internal/api/... -count=1` and
   `scripts/backend-test.sh -run
   '^TestProductionRelease_FrozenBaseAuthority_LegacyContextFailsClosed$'
   -count=1 ./internal/storage` — green after observed HTTP 500/200 and typed
   storage RED. The frozen-context normalization is scoped to quoted failures.
+  #826 fixture-boundary correction commit
+  `527062e775395e63c9a63fa5bae17f003c31a529`.
 - Current pure suites: `go test ./internal/domain/engine/...
   ./internal/domain/... ./internal/api/... -count=1` — green.
 - Current focused storage regressions: `scripts/backend-test.sh -run
@@ -208,6 +214,7 @@ base-mode freeze (that would create a third authority).
   tests/organization/project-reconciliation.spec.ts -g 'quote-first path'`
   — GREEN (1/1, 14s); full `scripts/organization-browser-gate.sh` — GREEN
   (92/92, 5.2m), synthetic organizations and disposable database.
+  T13 work-unit commit `876386b451221eb12cb488237a54f6be8dc8e3ed`.
 - Affected-check plan selected shared TypeScript, Go, SketchUp, visual and
   foundation gates. `python3 scripts/verify_affected.py --base origin/main
   --budget-seconds 600` was attempted at clean `527062e7` and BLOCKED before
@@ -225,25 +232,22 @@ base-mode freeze (that would create a third authority).
   a generic retry-only alert (RED); focused UI GREEN after projecting only
   the typed `frozen_base_context` 409 and disabling approval/release. Focused
   and full disposable browser reruns are green as recorded below.
-- Engine: `go test ./internal/domain/engine/...` green (focused + package).
-- Storage: full serialized suite via `scripts/backend-test.sh ./internal/storage`
-  — 572s green against ephemeral postgres:16 (runtime role granete_app,
-  NOSUPERUSER/NOBYPASSRLS role separation, DB never `muebles`).
-- Contracts: `python3 scripts/check_openapi_drift.py` green ("generated files
-  are current; operation drift negative proofs passed").
-- TS: `pnpm typecheck` + `pnpm test` green.
-- Browser: organization-browser gate run (UI change); SketchUp host: NOT_RUN
-  (untouched by this issue).
+- Inherited pre-correction evidence: engine and full storage (572s),
+  OpenAPI drift, TS typecheck/tests and organization browser gate were green
+  at the recovered head; current rerun evidence is recorded above. SketchUp
+  host remains NOT_RUN (untouched by #830).
 
 ## Progress
 
 - Audit complete at base `3eaf22c6` (merge-base confirmed); branch
   `fix/830-frozen-base-treatment-authority`, commits `553c76c6` → `c116afe6`.
-- The latest verified #830 three-dot diff against `origin/main` at
-  `3375d658da50d9beea0f6cbbd8a7f5cd40a5b636` is 29 files,
-  +1422/−89 = 1511 total: production 490, tests 823, authored OpenAPI 28,
-  ODD 154, generated 16. Authored additions+deletions are 1495. This
-  supersedes the older merge-base estimate above.
+- The recovered candidate initially had 29 paths and +1422/−89 = 1511
+  changed lines (1495 authored excluding generated). The mandatory canonical
+  Q1, transaction/concurrency, HTTP and browser proofs expanded this same
+  atomic vertical. Against `origin/main` at `944e5149`, the final three-dot
+  candidate has 38 paths, +2124/−137 = 2261 total: production 639, tests
+  1318, generated 16, docs/ODD 288. Authored additions+deletions excluding
+  generated are 2245; do not reuse the initial estimate.
 - The human accepted an **atomic size exception** for exactly this #830
   vertical; delivery strategy `exception-ok`, single atomic candidate. This
   does not authorize protected `size:exception` label, a push, PR or scope
@@ -252,6 +256,11 @@ base-mode freeze (that would create a third authority).
   Preserved the recovered branch and integrated `origin/main` cleanly via
   normal merge `d1654852023539fde764124b60baa56f6af76355`; no #848 reversal
   appears in the three-dot #830 diff. Scope/strategy doc commit `c7379fee`.
+- `origin/main` advanced again to `944e5149f8287b0ef19e10e75912d78bd5c4a382`
+  via #865 / #848 model-binding extraction (10 SketchUp/ODD paths, zero #830
+  overlap). Integrated by clean normal merge
+  `80154ac3838d155959a2cba6ced87ef9bc618113`; branch is 0 behind, 12
+  ahead. No #865/#848 path appears in the #830 three-dot diff.
 - Effective TDD: **strict enabled**, source `AGENTS.md` gentle-ai directive.
   Exact focused runners: `go test` in `backend-go` for pure engine/API tests;
   `scripts/backend-test.sh` from `backend-go` for disposable PostgreSQL
@@ -260,15 +269,15 @@ base-mode freeze (that would create a third authority).
 - Route: **delegated direct**, one sole writer in this recovered worktree.
   Triggers: understanding spans 4+ files and implementation touches 2+
   non-trivial files. Work-unit commits retain tests and behavior together.
-- Forecast: starting authored 1495 lines; T9–T11 will increase the atomic
-  candidate. Running authored count and exact category split must be refreshed
-  at final handoff; no code-golf or artificial split to meet a line cap.
+- Forecast was 1495 authored at recovery; required T9–T13 proof/corrections
+  raised the atomic candidate above 2200 authored. Exact final category
+  counts are computed at handoff; no code-golf or unsafe artificial split.
 - Inherited candidate disposition: **KEEP** exact frozen-quote authority,
   quote-less module policy, release resolution and generated API/client parity;
   **FIX** incomplete approval/preflight transaction boundaries and malformed
-  context HTTP mapping; **INCOMPLETE** canonical Q1 and concurrent-catalog
-  proof until T9/T10 tests; **REMOVE** none (no duplicated engine or fallback
-  found). This classifies rather than restarts GLM's implementation.
+  context HTTP mapping; **RESOLVED** canonical Q1, concurrent-catalog, and
+  browser consequence proof in T9–T13; **REMOVE** none (no duplicated engine
+  or fallback found). This classifies rather than restarts GLM's implementation.
 - Engram recovery mirror: full-document readback confirmed at observation
   `#1760` for topic `odd/830-frozen-base-treatment-authority/tasks`;
   subsequent task updates must refresh and read back both copies.
