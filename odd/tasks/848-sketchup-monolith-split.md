@@ -739,3 +739,181 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
   issue.
 - Remaining Phase B modules after C4.6: inspector, model-binding,
   project-furniture.
+
+## C4.7 — granete-inspector.js + granete-inspector-child.js
+## (boundary-adjusted; owner-approved)
+
+Started from `main@9d5638ccb4c401ad69f7fe630b73a0e3dc07b0a0`, branch
+`refactor/848-dialog-js-inspector`. After the owner-approved boundary
+adjustment (below) the candidate was updated onto current
+`main@b2532d457d9d0853869610908801acd3462218b5` (#862 diff verified
+PTX/excel/docs only — zero SketchUp overlap, fast-forward kept the
+uncommitted work) and re-verified in full from that base. Extraction of the
+Inspector surface: the working selection context, top-level routing and
+furniture rendering, capability-driven actions, bridge result handlers and
+the hardware catalog slice (`granete-inspector.js`) plus the child
+part/hardware/aggregate surface with #467 part authoring and #468 hardware
+placement/substitution (`granete-inspector-child.js`). **Status: pre-commit
+review 2 APPROVED by the owner for commit/publication. The owner ratified
+the architecture (main/child boundary, capabilityEnabled shared inline
+helper, hardware catalog ownership in the main module, the child
+`activeChildContext` same-reference rule) with behavior changes: 0 and Real
+SketchUp host smoke NOT_RUN. This section records the STABLE evidence of
+the implementation work unit, verified from base `b2532d45`; it does not
+self-certify the PR's future exact head — the dynamic exact-head state
+(Publication/CI) lives in GitHub.**
+
+- **Public size metrics (baseline = real main `b2532d45` → final, the
+  numbers the PR reports)**: dialog.html 3851 → 3106 lines; inline JS
+  2869 → 2091 lines (measured from git with the same wc/regex method as
+  every C4.x slice; owner-brief estimate said 3852/2867 — the measured
+  baseline governs). New modules: `granete-inspector.js` 517 lines,
+  `granete-inspector-child.js` 549 lines. Additional context only, NOT a
+  baseline: the intermediate single-module candidate measured dialog 3066 /
+  inline 2067 / inspector 965.
+- **Approved boundary adjustment (owner decision, pre-commit review 1 → 2;
+  NOT an exception)**: the first candidate measured 965 lines against the
+  hard #848 ≤~800-per-new-JS requirement and was STOPPED. The owner
+  approved a responsibility split into a second coherent module — the
+  CHILD lane (part/hardware/aggregate rendering, breadcrumb, #467 part
+  authoring, #468 hardware placement/substitution) — explicitly rejecting
+  a utils/common dump and any additional module, and later RATIFIED the
+  split in pre-commit review 2. Behavior changes: 0 (mechanical fidelity
+  audit below).
+- **granete-inspector.js owns (517 lines incl. header)**:
+  selectedContext (sole authority), inspectorDef, inspectorParams,
+  inspectorMaterialChoices, catalogHardware (single dialog-side owner:
+  setCatalog object branch delegates, array branch preserves the
+  historical non-reset, GraneteState projection reads the live
+  reference), top-level routing (null/unmanaged/furniture/child
+  dispatch), furniture Inspector render, update/delete flows,
+  material-choice bridge orchestration, activateInspectorTab,
+  selected-context publication to GraneteMutation, manufacturing card
+  visibility. Public API unchanged from the audited 11 entries.
+  Injected deps (8): the audited 7 + `capabilityEnabled` (§ below).
+  Child kinds route through `GraneteUI.inspectorChild.render(context)` —
+  the SAME context object, no clone — and every top-level re-render
+  drops the lane via `GraneteUI.inspectorChild.hide()` inside
+  hideInspectorViews.
+- **granete-inspector-child.js owns (549 lines incl. header)**:
+  renderChildInspector, renderBreadcrumb, renderChildFacts,
+  renderCapabilityList, the child DOM refs (child view, breadcrumb, kind
+  badge, origin/owner notes, facts, capabilities, goto-furniture, the
+  #468 hw placement/conflict set incl. hwSubstitutionFeedback, the #467
+  part authoring set), provenance/origin/owner notes, renderPartAuthoringCard/Feedback,
+  partPositionFromInputs, submitPartMutation and all child listeners
+  (#468 offset/substitution, #467 move/viewport/duplicate/add/remove,
+  granete-mutation-state feedback). Public API (3, all with consumers):
+  `init`, `render`, `hide`. Injected deps (3): showToast,
+  capabilityEnabled, getHardwareCatalog (call-time accessor — the
+  catalog slice stays owned by the main module; verified at call time by
+  the focused harness). Child lane state: `activeChildContext` references
+  the SAME object the Inspector routed — owner-brief option A: set only
+  by render, cleared by hide, never a clone, no second selection
+  authority (handlers only fire while the child view is visible, and
+  every selection change re-renders or hides the lane, so the reference
+  tracks the Inspector's selectedContext exactly). Documented in the
+  module header.
+- **capabilityEnabled (owner-brief §3 decision, RATIFIED in review 2)**:
+  the audit proved it
+  pure/stateless (only reads `context.capabilities[name].supported`; no
+  module state) and used by BOTH the furniture and child paths. The
+  preferred owner (granete-inspector.js) would have required exposing a
+  new main-API entry beyond the audited §7 list or a main→child handoff
+  API; the owner-brief sanctioned alternative applies — the helper
+  returns to its pre-C4.7 single implementation inline in dialog.html
+  (its historical location) and is injected into BOTH Inspector modules
+  via init. No third helper module; no public-API changes on either
+  module. requireDeps on the main module now lists 8 (fail-fast).
+- **Bootstrap order**: account.init → library.init →
+  **inspectorChild.init** (showToast, capabilityEnabled, call-time
+  getHardwareCatalog wrapper) → **inspector.init** (+capabilityEnabled
+  dep) → materialRoles.init → configurator.init → finishSelector.init →
+  renderModelBindingStatus → configurator.close → dialog_ready. Load
+  order: markup → media → account → library → configurator →
+  finish-selector → material-roles → **inspector-child** →
+  **inspector** → inline → #498 runtime. Child loads before the
+  Inspector so the routing resolves `GraneteUI.inspectorChild` at call
+  time (both registered before the inline bootstrap; no init cycle, no
+  render before init). Ruby/GraneteDialog knowledge unchanged: the five
+  Ruby-facing wrappers still delegate ONLY to
+  `window.GraneteUI.inspector.*`; nothing Ruby-facing mentions
+  inspectorChild.
+- **Move fidelity (mechanical line-level audit of the split)**: the
+  965-line candidate was reconstructed verbatim and diffed region by
+  region against the two modules. Child DOM refs block: identical +
+  blank-line separators only. Capability/badge tables: identical + one
+  blank line. Renderer block (renderChildInspector →
+  renderCapabilityList): exactly 3 enumerated transformations —
+  `requireDeps()` + `activeChildContext = context;` inserted at the
+  renderChildInspector entry, `catalogHardware || []` →
+  `deps.getHardwareCatalog() || []` (1 site), `capabilityEnabled(` →
+  `deps.capabilityEnabled(` (4 sites in renderPartAuthoringCard).
+  Listener block (btnGotoFurniture, #468 offset/substitution, #467 part
+  handlers, granete-mutation-state): byte-identical modulo the single
+  enumerated `selectedContext` → `activeChildContext` substitution.
+  capabilityEnabled body restored in dialog.html verbatim (modulo
+  indent + a new comment). Main module retained code: identical except
+  the enumerated requireDeps line, the shared-helper comment tweak, the
+  two delegation lines and blank-line collapses around the dropped
+  blocks. Zero copy/condition-order/payload/capability-check/timeout/
+  listener-count/copy-string differences; selectedContext reference
+  semantics proven by the harnesses (mutation ctx === routed context
+  object). New lines in both modules: headers, IIFE/namespace guards,
+  deps/requireDeps plumbing, the child hide()/API mapping.
+- **Preserved quirks / documented notes** (behavior changes: 0): the
+  requireDeps fail-fast is a new path only reachable if init were
+  skipped (the bootstrap always inits before dialog_ready — C4.5/C4.7-r1
+  precedent; child `hide()` stays dep-free like the main accessors);
+  child listener registration happens at child-module load (before
+  inspector-module load; the same handler count and bodies — same
+  independent-handler rationale as C4.7 r1); the child hardware view now
+  reads the catalog through the injected call-time accessor, which
+  returns the owner's live `catalogHardware` — identical values and
+  identity per render; the delegation adds no fallback: if the child
+  module were missing, the main module fails loudly (no silent
+  degradation).
+- **Harness migration**: `test/js/support/dialog_scripts.js` loads the
+  child module between material-roles and the inspector (mirrors
+  dialog.html); `dialog_publish_test.js` preload chain updated.
+  `granete_inspector_test.js` keeps the main-focused coverage (26
+  tests; the 8 child-specific tests were REPOINTED, never deleted) plus
+  a new routing test proving child kinds delegate with the same
+  reference and every other render drops the lane; its structural test
+  now also guards the shared capability helper (dialog ×1, injected ×2,
+  neither module defines it) and the delegation lines. New
+  `granete_inspector_child_test.js` (23 tests) drives the REAL child
+  module across the full child minimum list (child general:
+  part/hardware/aggregate render, breadcrumb, owner path/scan/ambiguous/
+  none, facts, capabilities; hardware: manual/derived/unknown, anchor
+  labels, offset prefill, derived lock, replacement compatibility,
+  drilling conflict incl. default remediation, offset mutation,
+  substitution; part: structural hidden, authorable visible, XYZ
+  prefill, per-button capability gating, move, viewport, duplicate/add/
+  remove, mutation feedback; plus registration/API, init contract and
+  lane hygiene). Structural Ruby: `granete_inspector_js_test.rb` (9
+  runs, 195 assertions — threshold 30→25 documented as the repoint, not
+  a weakening) now guards delegation-without-child-regrowth; new
+  `granete_inspector_child_js_test.rb` (8 runs, 146 assertions) guards
+  the child header/ownership, no selectedContext/catalog/materialRoles/
+  mutation authority, #467/#468 living here, load order (dialog +
+  loader), child init wired before inspector.init, the shared
+  capability helper contract, and no child DOM refs in the main module.
+  Repointed structural suites re-run individually green:
+  granete_library_js_test 5/118, granete_material_roles_js_test 7/137,
+  granete_configurator_js_test 6/180, dialog_library_view_test 13/177.
+  `dialog_inspector_test.js` integration continues unchanged through
+  the real chain: 71 checks green.
+- **Verify (from `main@b2532d45`, Homebrew ruby@3.2 3.2.11 vendored
+  bundle)**: all 28 Node harnesses green (exit 0). `bundle exec rake
+  verify`: RuboCop 258 files / 0 offenses; unit 1184 runs, 8449
+  assertions, 0 failures/errors/skips; contract suite 6 runs, 4043
+  assertions, 0 failures. RBZ rebuilt + `package:verify`, sha256
+  `132c95abc29e518237ecf95744ea9b4f3a77e9ceb746ed00587725ed6e01d4b2`;
+  readback confirms BOTH `granete_for_sketchup/resources/js/
+  granete-inspector.js` AND `granete-inspector-child.js` inside the RBZ.
+  `git diff --check` clean; `verify_affected --base origin/main --plan`
+  exit 0 (conservatively expanded by the pre-existing untracked
+  `.codex/`, `.github/hooks/`, `plugin-siguiente.md` — not part of this
+  slice); openapi drift + repo CI/factory unittest suites pass. Real
+  SketchUp host smoke: NOT_RUN (same phase-level gate).

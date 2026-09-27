@@ -77,6 +77,12 @@ class DialogLibraryViewTest < Minitest::Test
       File.expand_path('../../src/granete_for_sketchup/resources/js/granete-material-roles.js', __dir__),
       encoding: 'UTF-8'
     )
+    # #848 Phase B C4.7: el Inspector (selección/render/acciones) vive en
+    # js/granete-inspector.js; sus asserts de implementación apuntan al módulo.
+    @inspector_js = File.read(
+      File.expand_path('../../src/granete_for_sketchup/resources/js/granete-inspector.js', __dir__),
+      encoding: 'UTF-8'
+    )
     # #848: los estilos del panel viven en css/*.css.
     css_dir = File.expand_path('../../src/granete_for_sketchup/resources/css', __dir__)
     @css_content = Dir.children(css_dir).sort.map { |f| File.read(File.join(css_dir, f), encoding: 'UTF-8') }.join("\n")
@@ -287,22 +293,23 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'estimatedPartCount'
     assert_includes @html_content, 'estimatedHardwareCount'
     # #848 C4.4: el dock del configurador consume el helper compartido
-    # inyectado desde el módulo; el del inspector sigue inline.
+    # inyectado desde el módulo; el del inspector vive en el módulo del
+    # Inspector (#848 C4.7) con el mismo helper inyectado.
     assert_includes @configurator_js,
                     'libSummaryParts.textContent = deps.estimatedPartsLabel(activeLibDef, libParams);'
-    assert_includes @html_content,
-                    'inspectorSummaryParts.textContent = estimatedPartsLabel(inspectorDef, inspectorParams);'
+    assert_includes @inspector_js,
+                    'inspectorSummaryParts.textContent = deps.estimatedPartsLabel(inspectorDef, inspectorParams);'
     assert_includes @html_content, '"Aprox. "'
     assert_includes @html_content, 'Piezas: se calculan al resolver'
   end
 
   def test_insertion_result_reports_resolved_component_counts
-    # El inspector (inline) y el resultado de inserción del catálogo
-    # (#848 C4.4, módulo) reportan ambos los conteos resueltos.
-    assert_includes @html_content, 'result.component_count'
+    # El inspector (#848 C4.7, módulo) y el resultado de inserción del
+    # catálogo (#848 C4.4, módulo) reportan ambos los conteos resueltos.
+    assert_includes @inspector_js, 'result.component_count'
     assert_includes @configurator_js, 'result.component_count'
     assert_includes @configurator_js, 'result.hardware_count'
-    assert_includes @html_content, 'inspectorDef = def || null;'
+    assert_includes @inspector_js, 'inspectorDef = def || null;'
   end
 
   def test_material_selectors_ride_the_configurator_and_payloads
@@ -319,9 +326,10 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @material_roles_js, 'function defaultMaterialChoices('
     assert_includes @html_content, 'window.GraneteUI.materialRoles.setCatalog({'
     # El payload de inserción del catálogo vive en el módulo del
-    # configurador; el del inspector sigue inline.
+    # configurador; el del inspector vive en el módulo del Inspector
+    # (#848 C4.7).
     assert_includes @configurator_js, 'materialChoices: libMaterialChoices'
-    assert_includes @html_content, 'materialChoices: inspectorMaterialChoices'
+    assert_includes @inspector_js, 'materialChoices: inspectorMaterialChoices'
     assert_includes @html_content, 'Materiales del Taller'
   end
 end
