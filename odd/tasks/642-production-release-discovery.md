@@ -139,7 +139,7 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - [x] Product correction implemented: shared canonical release authority drives only dashboard discovery; negative modern/stale no-release paths fail closed.
 - [x] Work-unit commit created: `5897435fd47c74faca44e4db3b9fe4bfe8088465`.
 - [x] Independent review completed: APPROVED with no blockers at `9682d706b3736ba64356edfe7338e74620879f2c` vs `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
-- [x] Verification correction completed in work-unit commit `280f7930aa9fcd63daf190dc61727a2a50d81c74` (`test(organization): isolate #642 release fixture`): exclusive fixture persisted without shared-module mutation, focused browser passed `1/1`, and the complete disposable-PostgreSQL browser suite passed `93/93`.
+- [x] Verification correction completed in work-unit commit `280f7930e60a69cc23f1f32af594679911efa349` (`test(organization): isolate #642 release fixture`): exclusive fixture persisted without shared-module mutation, focused browser passed `1/1`, and the complete disposable-PostgreSQL browser suite passed `93/93`.
 
 ## Next step
 
