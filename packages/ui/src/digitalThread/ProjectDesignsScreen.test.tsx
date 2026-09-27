@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -572,6 +573,7 @@ function renderScreen(props: {
   onBack?: () => void;
   canMutate?: boolean;
   seedRevisionDetail?: DesignRevision;
+  strictMode?: boolean;
 } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -587,23 +589,25 @@ function renderScreen(props: {
     );
   }
 
+  const content = (
+    <QueryClientProvider client={queryClient}>
+      <ProjectDesignsScreen
+        baseUrl={API}
+        token="test-jwt-token"
+        projectId={PROJECT_ID}
+        queryKeys={keys}
+        initialContext={props.initialContext}
+        onContextChange={props.onContextChange}
+        onOpenFurnitureMatrix={props.onOpenFurnitureMatrix}
+        onOpenReconciliation={props.onOpenReconciliation}
+        onBack={props.onBack}
+        canMutate={props.canMutate}
+      />
+    </QueryClientProvider>
+  );
+
   return {
-    ...render(
-      <QueryClientProvider client={queryClient}>
-        <ProjectDesignsScreen
-          baseUrl={API}
-          token="test-jwt-token"
-          projectId={PROJECT_ID}
-          queryKeys={keys}
-          initialContext={props.initialContext}
-          onContextChange={props.onContextChange}
-          onOpenFurnitureMatrix={props.onOpenFurnitureMatrix}
-          onOpenReconciliation={props.onOpenReconciliation}
-          onBack={props.onBack}
-          canMutate={props.canMutate}
-        />
-      </QueryClientProvider>,
-    ),
+    ...render(props.strictMode ? <StrictMode>{content}</StrictMode> : content),
     queryClient,
     keys,
   };
@@ -630,6 +634,10 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    if (vi.isFakeTimers()) {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it('renders design alternatives and switches between them', async () => {
@@ -1585,7 +1593,42 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     expect(await screen.findByText('Copiado')).toBeInTheDocument();
   });
 
-  it('replaces the pending technical-copy reset and cancels it when its owner unmounts', async () => {
+  it('keeps copy success, rejection and timed reset active after StrictMode effect replay', async () => {
+    const writeText = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('clipboard denied'))
+      .mockResolvedValueOnce(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    setupFetchMock();
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_3_ID }, strictMode: true });
+
+    await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
+    fireEvent.click(screen.getByTestId('toggle-technical-audit'));
+    const copyButton = screen.getByTestId('copy-revision-id');
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(copyButton);
+      await act(async () => Promise.resolve());
+      expect(copyButton).toHaveTextContent('Copiado');
+
+      fireEvent.click(copyButton);
+      await act(async () => Promise.resolve());
+      expect(copyButton).toHaveTextContent('Copiar');
+
+      fireEvent.click(copyButton);
+      await act(async () => Promise.resolve());
+      expect(copyButton).toHaveTextContent('Copiado');
+      act(() => vi.advanceTimersByTime(2001));
+      expect(copyButton).toHaveTextContent('Copiar');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels replaced and unmounted resets without a post-unmount callback', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     setupFetchMock();
@@ -1594,34 +1637,43 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
     fireEvent.click(screen.getByTestId('toggle-technical-audit'));
 
-    const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
-    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout');
-    fireEvent.click(screen.getByTestId('copy-revision-id'));
-    await act(async () => Promise.resolve());
-    expect(writeText).toHaveBeenCalledWith(REV_3_ID);
-    const firstResetTimerCallIndex = setTimeoutSpy.mock.calls.findIndex(([, delay]) => delay === 2000);
-    expect(firstResetTimerCallIndex).toBeGreaterThanOrEqual(0);
-    const firstResetTimer = setTimeoutSpy.mock.results[firstResetTimerCallIndex]?.value;
+    vi.useFakeTimers();
+    const fakeSetTimeout = window.setTimeout.bind(window);
+    const originalSetTimeout = window.setTimeout;
+    const resetCallbacks: Array<ReturnType<typeof vi.fn>> = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      window.setTimeout = ((callback: TimerHandler, delay?: number, ...args: unknown[]) => {
+        if (typeof callback === 'function' && delay === 2000) {
+          const observedCallback = vi.fn((...callbackArgs: unknown[]) => callback(...callbackArgs));
+          resetCallbacks.push(observedCallback);
+          return fakeSetTimeout(observedCallback, delay, ...args);
+        }
+        return fakeSetTimeout(callback, delay, ...args);
+      }) as typeof window.setTimeout;
 
-    fireEvent.click(screen.getByTestId('copy-revision-id'));
-    await act(async () => Promise.resolve());
-    expect(writeText).toHaveBeenCalledTimes(2);
-    const resetTimerCallIndexes = setTimeoutSpy.mock.calls
-      .map(([, delay], index) => ({ delay, index }))
-      .filter(({ delay }) => delay === 2000)
-      .map(({ index }) => index);
-    expect(resetTimerCallIndexes).toHaveLength(2);
-    const secondResetTimer = setTimeoutSpy.mock.results[resetTimerCallIndexes[1]!]!.value;
-    const ownerCancelledReplacedReset = clearTimeoutSpy.mock.calls.some(([timer]) => timer === firstResetTimer);
+      fireEvent.click(screen.getByTestId('copy-revision-id'));
+      await act(async () => Promise.resolve());
+      fireEvent.click(screen.getByTestId('copy-revision-id'));
+      await act(async () => Promise.resolve());
+      expect(writeText).toHaveBeenCalledTimes(2);
+      expect(resetCallbacks).toHaveLength(2);
+      expect(vi.getTimerCount()).toBe(1);
 
-    rendered.unmount();
-    const ownerCancelledUnmountedReset = clearTimeoutSpy.mock.calls.some(([timer]) => timer === secondResetTimer);
-    window.clearTimeout(firstResetTimer);
-    window.clearTimeout(secondResetTimer);
-    setTimeoutSpy.mockRestore();
-    clearTimeoutSpy.mockRestore();
-    expect(ownerCancelledReplacedReset).toBe(true);
-    expect(ownerCancelledUnmountedReset).toBe(true);
+      window.setTimeout = originalSetTimeout;
+      rendered.unmount();
+      rendered.queryClient.clear();
+      expect(() => act(() => vi.advanceTimersByTime(2001))).not.toThrow();
+      expect(resetCallbacks[0]).not.toHaveBeenCalled();
+      expect(resetCallbacks[1]).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      window.setTimeout = originalSetTimeout;
+      consoleError.mockRestore();
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
   });
 
   it('does not schedule a technical-copy reset when clipboard completion is stale after unmount', async () => {

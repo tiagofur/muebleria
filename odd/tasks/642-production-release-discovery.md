@@ -88,19 +88,23 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
   - Correction boundary: give this scenario one stable exclusive module ID and use it through React selection, quote/design/release assertions, and live-default mutation. Do not overwrite or restore a shared module; keep its edge, material, hardware, and option fixtures on exclusive IDs and isolated catalog writes.
   - Correction acceptance: the focused scenario remains GREEN and `bash scripts/organization-browser-gate.sh` passes the complete disposable-PostgreSQL browser suite without downstream contamination.
 
-- [x] **642-CI-04 — Own and cancel copy-feedback timers**
+- [ ] **642-CI-04 — Own and cancel copy-feedback timers**
   - Add deterministic fake-timer coverage for copy -> pending reset -> unmount -> timer advance, requiring no post-unmount reset callback or unhandled error. Cover replacement of an earlier pending reset when a second copy occurs if it stays within the same focused component contract.
   - Observe the focused lifecycle RED before changing production source. Stop without a product edit if the assertion cannot fail for the diagnosed reason.
   - Give `TechnicalCopyButton` local ownership of its pending timeout, cancel it on unmount and before scheduling another reset, and preserve current copied-label and rejection behavior.
   - Run the focused ProjectDesigns screen, focused Production Manager dashboard, full UI suite with zero unhandled errors, UI typecheck, `git diff --check`, final clean preflight, and the focused disposable-PostgreSQL browser gate.
   - Update this artifact and its complete Engram mirror, then create one Conventional Commit containing the regression, lifecycle fix, and artifact evidence. Do not push or mutate PR metadata.
   - Acceptance: deterministic RED -> GREEN is recorded; no reset dispatch survives unmount; recopy owns one current reset; all required checks pass; and the candidate is handed back at an exact clean HEAD for independent review.
+  - Reopened after independent review BLOCKED exact candidate `96a4fcab9d326a67942d650d6c768becfcdcc996`: React StrictMode replays effect setup -> cleanup -> setup, but the effect setup did not restore `mountedRef.current = true`, leaving copy success and rejection paths permanently gated in the real web root.
+  - Review correction: add a StrictMode regression that proves copied feedback, timed reset, and rejection reset survive effect replay before setting `mountedRef.current = true` in effect setup. Strengthen the unmount proof with fake timers activated only after screen loading, then prove pending reset -> unmount -> advance beyond two seconds produces no callback/state dispatch/unhandled error and leaves zero timers. Preserve recopy last-reset and late clipboard completion coverage.
+  - One-round boundary: if either focused blocker remains after this correction and one full validation pass, stop and return the exact evidence to the parent without another implementation loop.
 
 ## Verification plan
 
 - V0: artifact/diff readback, `git diff --check`, focused format/type checks for changed paths, `python3 scripts/verify_affected.py --base origin/main --plan`, and final clean preflight.
 - V1: focused component/unit checks selected by the exact eligibility code changed, including eligible canonical P1 and ineligible/no-release behavior.
 - V1 CI correction: focused `ProjectDesignsScreen.test.tsx`, focused `ProductionManagerDashboard.test.tsx`, full `@granete/ui` suite with zero unhandled errors, and `@granete/ui` typecheck.
+- V1 review correction: the focused Project Designs suite must include real `StrictMode` effect replay plus isolated post-load fake-timer proof with timer restoration in `finally`/`afterEach`.
 - V2 correction gate: `bash scripts/organization-browser-gate.sh` with disposable PostgreSQL and a real browser across the complete organization suite; the focused spec remains a diagnostic check only.
 - Existing #398 browser evidence is historical routing evidence only and is not V2 proof for this candidate.
 - Production Queue, station progression, physical execution, SketchUp/TestUp, PTX, and warehouse evidence are `NOT_RUN` unless separately authorized and applicable.
@@ -145,6 +149,15 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 - Work-unit commit: `dfad368a75368f6554c740c4254afe3fbc97d091` (`fix(ui): cancel technical copy reset timers`) contains the lifecycle fix, both deterministic regressions, and the ODD evidence together.
 - Final clean preflight on that work unit: `python3 scripts/factory_preflight.py --require node pnpm --require-clean` -> `PREFLIGHT_OK_NOT_VERIFIED`, `dirty: false`, exact HEAD `dfad368a75368f6554c740c4254afe3fbc97d091`; its `tests: NOT_RUN` field is preflight metadata, not a substitute for the recorded functional checks.
 - Rollback boundary: revert the work-unit commit to remove only `TechnicalCopyButton` timer ownership, its focused lifecycle regressions, and this task's evidence; the earlier #642 dashboard behavior and isolated browser fixture remain independent.
+- Independent review BLOCKED exact candidate `96a4fcab9d326a67942d650d6c768becfcdcc996` on two correction-owned defects: StrictMode effect replay left `mountedRef` false, and the prior unmount test observed cancellation rather than executing the post-unmount timer boundary.
+- StrictMode RED before the source correction: `pnpm --filter @granete/ui exec vitest run src/digitalThread/ProjectDesignsScreen.test.tsx` -> `1 failed, 61 passed`; under real `<StrictMode>` replay, the first successful copy expected `Copiado` but remained `Copiar`. The strengthened post-load fake-timer unmount proof and stale clipboard completion proof already passed in that run.
+- Minimal review correction: the effect setup now restores `mountedRef.current = true` before returning cleanup. No other product behavior changed.
+- Strengthened lifecycle proof: fake timers activate only after the screen is loaded; test-side timer wrapping observes both recopy callbacks; only the last reset remains pending; unmount plus QueryClient disposal leaves zero timers; advancing beyond two seconds invokes neither callback, emits no captured console error, and throws no unhandled error. Timer globals are restored in `finally` with an `afterEach` safety net.
+- StrictMode coverage proves success shows `Copiado`, rejection cancels/reset to `Copiar`, and a later successful copy resets to `Copiar` after 2001 ms despite setup -> cleanup -> setup replay. Existing late clipboard completion coverage remains GREEN.
+- Review-correction focused GREEN: Project Designs `62/62`; Production Manager dashboard `8/8`.
+- Review-correction full UI GREEN: `176/176` files and `2009/2009` tests, with zero unhandled/window-error log matches.
+- Review-correction V0 GREEN: `pnpm --filter @granete/ui typecheck` and `git diff --check`. The first typecheck attempt found only test-side `Function` typing in the timer wrapper; it was corrected to a typed forwarding closure before the successful validation run.
+- Review-correction focused disposable-PostgreSQL browser GREEN: `1 passed (10.0s)` and `[organization-gate] PASS`, with matching backend/fixture database identity.
 
 ## Forecast and delivery strategy
 
@@ -152,6 +165,8 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 - Corrected candidate authored size is **765 lines** (764 additions, 1 deletion) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`; it remains below 800, so no slicing evaluation is required.
 - CI correction forecast: approximately **70-110 additional authored lines**, for an expected cumulative total of **835-875**. This enters the 800-1200 evaluation range. The evaluated strategy remains one PR because the lifecycle regression and fix directly restore this same PR's exact-head required UI check; separating them would leave #869 knowingly red and split one atomic correction. No code-golf or artificial split is justified. Stop for a human checkpoint if the actual total exceeds 1200.
 - Final cumulative size is **897 authored lines** (893 additions, 4 deletions) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`. The prior 800-1200 evaluation therefore applies: keep this inseparable exact-head CI repair in PR #869, with no artificial split and no size exception.
+- Review-correction forecast: approximately **25-55 additional authored lines**, for an expected cumulative total of **922-952**. This remains inside the already evaluated 800-1200 range and stays one atomic PR correction; stop for a human checkpoint before publication if actual scope exceeds 1200.
+- Review-correction actual pre-commit cumulative size is **999 authored lines** (979 additions, 20 deletions). It remains inside the evaluated 800-1200 range; the test replacement and one-line StrictMode lifecycle root are one inseparable correction, so no artificial split or size exception is warranted.
 - Strategy: **single PR** while the actual authored total remains in the user-authorized normal range.
 - User size policy: **0-800 authored lines is normal; 800-1200 requires evaluation before delivery; over 1200 requires a user checkpoint before continuing or delivery**.
 - The 400-line ODD value remains a planning heuristic only. Do not code-golf, omit proof, or split one coherent root change solely to satisfy it.
@@ -173,4 +188,4 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 
 ## Next step
 
-Return the exact clean correction candidate to the parent for fresh independent review and separately authorized PR update. Do not push from this task.
+Correct the two exact independent-review blockers in one bounded round, then return the clean exact candidate to the parent for re-review and separately authorized PR update. Do not push from this task.
