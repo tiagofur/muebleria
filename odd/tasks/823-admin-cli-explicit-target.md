@@ -683,6 +683,30 @@ issue artifact or product/auth scope is introduced.
   base reconciliation, fresh independent review, and exact-head CI belong to
   the parent before publication. No push or PR was made here.
 
+### T4 base integration before renewed review
+
+- Original base: `b5697951021f6484cf3e71161ec396ff6f434194`; original
+  clean tip: `3751b368da936d68eb728e3dc2c2a49a6e4ef297`. A fresh
+  `git fetch origin main` confirmed new base
+  `d8c28d2f383fbc7c7964414bb0604880b6c265a6`. Its five changed paths
+  were documentation-only and disjoint from this feature's eight paths.
+- All eight local commits rebased onto that exact base without conflict or
+  discarded content. Rebased tip before this integration-evidence commit:
+  `1f46007c9b4eb0273f5d5bcc5a2a0610a9f11a5d`. The eight feature paths
+  were byte-identical to the original tip; the diff against the new base was
+  1,052 additions and 12 deletions (1,064 authored lines; generated: none).
+- Rebasing verification: `python3 scripts/test_ci_organization_browser_preparation.py`
+  passed 13 tests with one opt-in skip; `bash -n`, `shellcheck`, browser-helper
+  `node --check`, focused `cd backend-go && go test ./cmd/server`, and
+  `git diff --check origin/main HEAD` passed. A fresh disposable browser run
+  after rebase is `NOT_RUN`: incoming commits changed only unrelated docs and
+  all executable feature bytes were identical, so repeating the costly V2
+  environment would not test a changed executable boundary. Earlier V2 proof
+  remains source-byte evidence, not exact-rebased-HEAD CI or host proof.
+- The one-PR cohesion/risk assessment still applies; this integration adds no
+  product/auth logic. The parent must mirror the updated artifact, obtain a
+  fresh independent review, and run exact-head required CI before publication.
+
 ### T3 observed work-unit evidence
 
 - The 20-minute limit is in #398 checkpoint `fdd11ea4`,
