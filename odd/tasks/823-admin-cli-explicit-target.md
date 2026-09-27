@@ -611,6 +611,55 @@ request fresh independent review and exact-head checks before the partial PR.
   authored lines before this task-only evidence update, within the human's
   normal 0–800 range. No push, PR, independent review, or final CI yet.
 
+### T4 reopened after independent review
+
+Fresh review of `beaed488ec60e14ca0a5714777970cadbb0391c9` requested one
+bounded correction before T4 can close: retry cleanup when state is incomplete,
+fail closed when forced termination precedes process-ownership recording, and
+enforce the local deadline throughout preparation. The earlier green evidence
+above remains historical, not proof that these three negative boundaries pass.
+Use DB-free RED cases first, then GREEN and a real disposable replay. No new
+issue artifact or product/auth scope is introduced.
+
+### T4 bounded review correction evidence
+
+- Safe RED: three new DB-free launcher tests failed against the reviewed
+  candidate. A simulated Docker removal failure made `stop` exit 0 with
+  `cleanup=INCOMPLETE`; a forced kill while process recording was blocked made
+  orphan recovery exit 0 with `cleanup=COMPLETE` despite an unrecorded backend;
+  a one-second lifetime with slow preflight still launched the server after
+  expiry. No real PostgreSQL connection was opened in these tests.
+- GREEN: each interactive child now has a pending-spawn marker before launch
+  and an atomic PID/start-time record before that marker becomes `started`.
+  Missing ownership evidence makes stop nonzero and preserves the exact run's
+  container/temp evidence for manual inspection; it never claims cleanup.
+  A transient cleanup failure remains retryable through the same run ID, and
+  completed stops re-read container, temp-root, and recorded process state.
+  A watchdog enforces the lifetime during preparation, verifies its parent
+  PID/start fingerprint before signalling, and prevents expired WAITING output.
+- `python3 scripts/test_ci_organization_browser_preparation.py`: 13 passed,
+  one opt-in real-Go preflight skipped. `bash -n` and `shellcheck` on the gate,
+  `node --check` on the browser helper, `git diff --check`, and focused
+  `cd backend-go && go test ./cmd/server` passed. One initial Go invocation
+  from the repository root failed because no `go.mod` exists there; the
+  correct module-root invocation passed. This was a command-location error,
+  not a source or database failure.
+- Real disposable foreground-owned replay: 2/2 Chromium tests passed;
+  `WAITING_FOR_HUMAN`, ready browser profile, and PostgreSQL/API/web listeners
+  were all loopback-only. State contained no DSN/password/token/cookie.
+  `continue`, then two `stop` calls, produced `FINISHED`/`cleanup=COMPLETE`;
+  independent readback found no owned PID, listener, container, or temp profile.
+  The default automatic disposable gate also exited 0 with 2/2 Chromium PASS.
+  No persistent DB, human MFA, Keychain, installed SketchUp, or #398 file was
+  touched. The real run did not exercise a power loss or a real Docker failure;
+  those negative paths are DB-free deterministic checks, not V2 claims.
+- Cohesion/risk in the authorized 801–1,200 band: the added lines are one
+  launcher-owned lifecycle and its exact failure/expiry tests plus canonical
+  documentation, not a second manager or product/auth change. Shell process
+  races remain the main review risk; incomplete ownership intentionally needs
+  manual exact-run inspection instead of broad cleanup. No size exception is
+  presumed. Fresh independent review and exact-head CI remain pending.
+
 ### T3 observed work-unit evidence
 
 - The 20-minute limit is in #398 checkpoint `fdd11ea4`,

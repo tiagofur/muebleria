@@ -27,18 +27,23 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
         self.assertTrue(readable, 'interactive preparation did not publish a run ID')
         line = process.stdout.readline()
         match = re.search(r'run-id=([a-f0-9]{24})', line)
-        self.assertIsNotNone(match, line)
+        if match is None:
+            stdout, stderr = process.communicate(timeout=10)
+            self.fail(f'interactive preparation returned no run ID: {line}{stdout}{stderr[-800:]}')
         return process, match.group(1)
 
     def run_gate_with_doubles(self, preflight_exit, *, real_preflight=False, poison=None,
                               fail_admin=False, cancel_after_server=False,
-                              browser_lang="en_US.UTF-8", exercise=None):
+                              browser_lang="en_US.UTF-8", exercise=None,
+                              slow_preflight=False, pause_recording=False):
         with tempfile.TemporaryDirectory(prefix="browser-preparation-double-") as tmp:
             tmpdir = Path(tmp)
             capture = tmpdir / "children.jsonl"
             server_pid = tmpdir / "server.pid"
             web_pid = tmpdir / "web.pid"
             browser_pid = tmpdir / "browser.pid"
+            fail_cleanup = tmpdir / "fail-cleanup"
+            recording_window = tmpdir / "recording-window"
             bindir = tmpdir / "bin"
             bindir.mkdir()
             shim = bindir / "shim"
@@ -54,9 +59,22 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + f"real_preflight = {real_preflight!r}\n"
                 + f"real_go = {shutil.which('go')!r}\n"
                 + f"poison = {poison or {}!r}\n"
+                + f"slow_preflight = {slow_preflight!r}\n"
+                + f"pause_recording = {pause_recording!r}\n"
+                + f"fail_cleanup = pathlib.Path({str(fail_cleanup)!r})\n"
+                + f"recording_window = pathlib.Path({str(recording_window)!r})\n"
+                + f"real_ps = {shutil.which('ps')!r}\n"
                 + "name = pathlib.Path(sys.argv[0]).name\n"
                 + "args = sys.argv[1:]\n"
+                + "if name == 'ps':\n"
+                + f"    pending = list(pathlib.Path({str(tmpdir)!r}).glob('granete-organization-sessions-*/*/backend.pending'))\n"
+                + "    if pause_recording and 'lstart=' in args and pending and not recording_window.exists():\n"
+                + "        recording_window.write_text(str(os.getpid()))\n"
+                + "        time.sleep(60)\n"
+                + "    os.execv(real_ps, [real_ps] + args)\n"
                 + "if name == 'docker':\n"
+                + "    if args[0] == 'rm' and fail_cleanup.exists(): sys.exit(1)\n"
+                + "    if args[0] == 'ps' and fail_cleanup.exists(): print('synthetic-container')\n"
                 + "    if args[0] == 'logs': print('PostgreSQL init process complete; ready for start up.')\n"
                 + "    elif args[0] == 'inspect': print('127.0.0.1:56321' if 'HostIp' in ' '.join(args) else '56321')\n"
                 + "    elif args[0] == 'port': print('127.0.0.1:56321')\n"
@@ -96,6 +114,7 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "        'ambient_secret_keys': sorted(key for key in ('AMBIENT_SECRET', 'AWS_SECRET_ACCESS_KEY') if key in os.environ)}\n"
                 + "    with capture.open('a') as stream: stream.write(json.dumps(record) + '\\n')\n"
                 + "    if name == 'go' and args[:2] == ['run', './cmd/testdb-preflight']:\n"
+                + "        if slow_preflight: time.sleep(3)\n"
                 + "        if real_preflight:\n"
                 + "            prepared = os.environ.copy()\n"
                 + "            for key, value in poison.items():\n"
@@ -118,12 +137,13 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 + "            'import os,pathlib,time; pathlib.Path(' + repr(str(server_pid)) + ').write_text(str(os.getpid())); time.sleep(60)'])\n"
                 + "        child.wait()\n"
                 + "    if name == 'go' and args[:2] == ['run', './cmd/admin'] and fail_admin: sys.exit(1)\n"
+                + "    if name == 'pnpm' and os.environ.get('ORGANIZATION_GATE_EXTERNAL_WEB') == '1': time.sleep(0.5)\n"
                 + "    sys.exit(0)\n"
                 + "sys.exit(1)\n",
                 encoding="utf-8",
             )
             shim.chmod(0o755)
-            for name in ("docker", "go", "curl", "pnpm", "node"):
+            for name in ("docker", "go", "curl", "pnpm", "node", "ps"):
                 (bindir / name).symlink_to(shim)
             env = os.environ.copy()
             env.update({
@@ -356,6 +376,83 @@ class BrowserPreparationLauncherTest(unittest.TestCase):
                 with self.assertRaises(ProcessLookupError): os.kill(pid, 0)
 
         self.run_gate_with_doubles(0, exercise=exercise)
+
+    def test_incomplete_cleanup_requires_exact_run_retry(self):
+        def exercise(gate, env, tmpdir, capture, server_pid, web_pid, browser_pid):
+            launcher, run_id = self.start_interactive(gate, env)
+            fail_cleanup = tmpdir / 'fail-cleanup'
+            fail_cleanup.touch()
+            command = ['bash', str(gate), 'stop', run_id]
+            first = subprocess.run(command, cwd=ROOT, env=env, capture_output=True,
+                                   text=True, timeout=20)
+            self.assertNotEqual(first.returncode, 0, first.stdout)
+            self.assertIn('cleanup=INCOMPLETE', first.stdout)
+            fail_cleanup.unlink()
+            second = subprocess.run(command, cwd=ROOT, env=env, capture_output=True,
+                                    text=True, timeout=20)
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertIn('cleanup=COMPLETE', second.stdout)
+            launcher.communicate(timeout=10)
+
+        self.run_gate_with_doubles(0, exercise=exercise)
+
+    def test_unrecorded_spawn_never_claims_complete_recovery(self):
+        def exercise(gate, env, tmpdir, capture, server_pid, web_pid, browser_pid):
+            launcher = subprocess.Popen(['bash', str(gate), 'prepare',
+                                         'tests/organization/prequote-design.spec.ts'],
+                                        cwd=ROOT, env=env, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, text=True)
+            window = tmpdir / 'recording-window'
+            deadline = time.monotonic() + 10
+            while not window.exists() and time.monotonic() < deadline: time.sleep(0.01)
+            self.assertTrue(window.exists(), 'backend spawn recording window was not reached')
+            run_dir = next(tmpdir.glob('granete-organization-sessions-*/*'))
+            run_id = run_dir.name
+            root = Path((run_dir / 'tmp-root').read_text().strip())
+            owner = int((run_dir / 'owner.pid').read_text())
+            os.kill(owner, signal.SIGKILL)
+            launcher.communicate(timeout=10)
+            try:
+                stopped = subprocess.run(['bash', str(gate), 'stop', run_id], cwd=ROOT,
+                                         env=env, capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(stopped.returncode, 0, stopped.stdout)
+                self.assertIn('cleanup=INCOMPLETE', stopped.stdout)
+                self.assertTrue(root.exists(), 'unowned process evidence was deleted')
+                self.assertTrue(server_pid.exists())
+                os.kill(int(server_pid.read_text()), 0)
+            finally:
+                for path in (server_pid, window):
+                    if path.exists():
+                        try: os.kill(int(path.read_text()), signal.SIGTERM)
+                        except ProcessLookupError: pass
+
+        self.run_gate_with_doubles(0, exercise=exercise, pause_recording=True)
+
+    def test_deadline_during_preparation_never_publishes_waiting(self):
+        def exercise(gate, env, tmpdir, capture, server_pid, web_pid, browser_pid):
+            short_env = dict(env, ORGANIZATION_GATE_MAX_AGE_SECONDS='1')
+            launcher = subprocess.Popen(['bash', str(gate), 'prepare',
+                                         'tests/organization/prequote-design.spec.ts'],
+                                        cwd=ROOT, env=short_env, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, text=True)
+            try:
+                try:
+                    stdout, stderr = launcher.communicate(timeout=8)
+                except subprocess.TimeoutExpired:
+                    run_dir = next(tmpdir.glob('granete-organization-sessions-*/*'))
+                    subprocess.run(['bash', str(gate), 'stop', run_dir.name], cwd=ROOT,
+                                   env=env, capture_output=True, text=True, timeout=20)
+                    stdout, stderr = launcher.communicate(timeout=10)
+                self.assertNotEqual(launcher.returncode, 0, stdout)
+                self.assertNotIn('run-id=', stdout)
+                self.assertNotIn('environment_state=WAITING_FOR_HUMAN', stdout + stderr)
+                self.assertFalse(server_pid.exists(), 'server launched after expired preflight')
+            finally:
+                if launcher.poll() is None:
+                    launcher.kill()
+                    launcher.communicate(timeout=5)
+
+        self.run_gate_with_doubles(0, exercise=exercise, slow_preflight=True)
 
     @unittest.skipUnless(os.environ.get('GRANETE_TEST_REAL_GO_PREFLIGHT') == '1',
                          'opt-in local real Go preflight; DB-free and no Docker')

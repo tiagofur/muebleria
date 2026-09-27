@@ -15,6 +15,7 @@ EXPIRES_AT=""
 WEB_PID=""
 BROWSER_PID=""
 GATE_TEST_PID=""
+DEADLINE_PID=""
 umask 077
 
 session_state() {
@@ -32,7 +33,23 @@ remember_process() {
   [ -n "${INTERACTIVE}" ] || return 0
   local pid="$1" kind="$2" start
   start="$(ps -p "${pid}" -o lstart= 2>/dev/null | xargs)"
-  printf '%s\n%s\n' "${pid}" "${start}" >"${RUN_DIR}/${kind}.owner"
+  [ -n "${start}" ] || fail "${kind} process ownership could not be recorded"
+  printf '%s\n%s\n' "${pid}" "${start}" >"${RUN_DIR}/${kind}.owner.next"
+  mv "${RUN_DIR}/${kind}.owner.next" "${RUN_DIR}/${kind}.owner"
+  mv "${RUN_DIR}/${kind}.pending" "${RUN_DIR}/${kind}.started"
+}
+
+mark_spawn() { [ -z "${INTERACTIVE}" ] || : >"${RUN_DIR}/$1.pending"; }
+safe_to_kill() { [ -z "${INTERACTIVE}" ] || [ ! -e "${RUN_DIR}/$1.pending" ]; }
+
+ownership_evidence_complete() {
+  local kind
+  for kind in backend web test browser; do
+    [ ! -e "${RUN_DIR}/${kind}.pending" ] || return 1
+    if [ -e "${RUN_DIR}/${kind}.started" ]; then
+      [ -s "${RUN_DIR}/${kind}.owner" ] || return 1
+    fi
+  done
 }
 
 owned_process() {
@@ -48,6 +65,7 @@ owned_process() {
     backend) [[ "${command}" == *"$(cat "${RUN_DIR}/tmp-root")/granete-server"* ]] ;;
     web) [[ "${command}" == *vite/bin/vite.js* && "${command}" == *"--port $(cat "${RUN_DIR}/web-port")"* ]] ;;
     browser) [[ "${command}" == *organization-interactive-browser.mjs* && "${command}" == *"${RUN_ID}"* ]] ;;
+    test) [[ "${command}" == *playwright* ]] ;;
     *) return 1 ;;
   esac
 }
@@ -58,7 +76,14 @@ recover_orphan() {
   HOST_RESULT="$(session_field "${RUN_DIR}" host_result)"
   EXPIRES_AT="$(session_field "${RUN_DIR}" expires_at_epoch)"
   FAILURE_REASON=owner_exited_without_cleanup
-  for kind in browser web backend; do
+  if ! ownership_evidence_complete; then
+    FAILURE_REASON=ownership_evidence_incomplete
+    CLEANUP_RESULT=INCOMPLETE
+    ENVIRONMENT_STATE=INCOMPLETE
+    session_state
+    return 1
+  fi
+  for kind in browser test web backend; do
     if owned_process "${kind}"; then
       pid="$(sed -n '1p' "${RUN_DIR}/${kind}.owner")"
       kill -TERM "${pid}" 2>/dev/null || true
@@ -94,6 +119,21 @@ recover_orphan() {
   [ "${result}" = COMPLETE ]
 }
 
+completed_cleanup_readback() {
+  local kind container tmp_root remaining
+  ownership_evidence_complete || return 1
+  for kind in browser test web backend; do
+    owned_process "${kind}" && return 1
+  done
+  container="$(cat "${RUN_DIR}/container" 2>/dev/null || true)"
+  if [ -n "${container}" ]; then
+    remaining="$(docker ps -aq --filter "name=^/${container}$" 2>/dev/null)" || return 1
+    [ -z "${remaining}" ] || return 1
+  fi
+  tmp_root="$(cat "${RUN_DIR}/tmp-root" 2>/dev/null || true)"
+  [ -z "${tmp_root}" ] || [ ! -e "${tmp_root}" ]
+}
+
 case "${1:-}" in
   prepare)
     shift
@@ -124,7 +164,7 @@ case "${1:-}" in
     trap 'kill -TERM "${owner_pid}" 2>/dev/null || true; wait "${owner_pid}" 2>/dev/null || true' INT TERM EXIT
     for _ in $(seq 1 300); do
       state="$(session_field "${RUN_DIR}" environment_state)"
-      if [ "${state}" = WAITING_FOR_HUMAN ]; then
+      if [ "${state}" = WAITING_FOR_HUMAN ] && [ "$(date +%s)" -lt "$(session_field "${RUN_DIR}" expires_at_epoch)" ]; then
         printf 'run-id=%s\n' "${RUN_ID}"
         cat "${RUN_DIR}/state"
         # Keep this terminal attached. Some launchers reap detached descendants
@@ -162,17 +202,23 @@ case "${1:-}" in
       fi
       exit 0
     fi
-    if [ "${action}" = stop ] && [[ "${state}" = FINISHED || "${state}" = ABORTED || "${state}" = INCOMPLETE ]]; then
-      cat "${run_dir}/state"; exit 0
+    if [ "${action}" = stop ]; then
+      RUN_ID="${run_id}"; RUN_DIR="${run_dir}"
+      BACKEND_PORT="$(session_field "${run_dir}" api_url | sed -n 's@.*127.0.0.1:\([0-9]*\)/api@\1@p')"
+      ORGANIZATION_WEB_PORT="$(cat "${run_dir}/web-port" 2>/dev/null || true)"
+      if [ "$(session_field "${run_dir}" cleanup)" = COMPLETE ]; then
+        completed_cleanup_readback || { echo '[organization-gate] cleanup readback failed' >&2; exit 1; }
+        cat "${run_dir}/state"; exit 0
+      fi
     fi
     owner="$(cat "${run_dir}/owner.pid" 2>/dev/null || true)"
     [[ "${owner}" =~ ^[0-9]+$ ]] || { echo '[organization-gate] owner unavailable; inspect run resources' >&2; exit 1; }
     if ! ps -p "${owner}" -o command= 2>/dev/null | grep -Fq "__serve ${run_id}"; then
       if [ "${action}" = stop ]; then
-        RUN_ID="${run_id}"; RUN_DIR="${run_dir}"
-        BACKEND_PORT="$(session_field "${run_dir}" api_url | sed -n 's@.*127.0.0.1:\([0-9]*\)/api@\1@p')"
-        ORGANIZATION_WEB_PORT="$(cat "${run_dir}/web-port" 2>/dev/null || true)"
-        recover_orphan
+        if ! recover_orphan; then
+          cat "${run_dir}/state"
+          exit 1
+        fi
         cat "${run_dir}/state"
         exit 0
       fi
@@ -195,8 +241,14 @@ case "${1:-}" in
       echo '[organization-gate] cleanup not confirmed; inspect run resources' >&2
       exit 1
     fi
-    cat "${run_dir}/state"
-    exit 0
+    if [ "${action}" = stop ]; then
+      if [ "$(session_field "${run_dir}" cleanup)" != COMPLETE ] || ! completed_cleanup_readback; then
+        echo '[organization-gate] cleanup incomplete; retry exact-run stop' >&2
+        cat "${run_dir}/state"
+        exit 1
+      fi
+    fi
+    cat "${run_dir}/state"; exit 0
     ;;
   __serve)
     RUN_ID="${2:-}"
@@ -221,38 +273,56 @@ BACKEND_PID=""
 
 cleanup() {
   local previous_status=$? cleanup_result=COMPLETE remaining
-  if [ -n "${GATE_TEST_PID}" ]; then
+  if [ -n "${DEADLINE_PID}" ]; then
+    kill "${DEADLINE_PID}" >/dev/null 2>&1 || true
+    wait "${DEADLINE_PID}" >/dev/null 2>&1 || true
+  fi
+  if [ -n "${GATE_TEST_PID}" ] && safe_to_kill test; then
     kill "${GATE_TEST_PID}" >/dev/null 2>&1 || true
     wait "${GATE_TEST_PID}" >/dev/null 2>&1 || true
+    kill -0 "${GATE_TEST_PID}" >/dev/null 2>&1 && cleanup_result=INCOMPLETE
   fi
-  if [ -n "${BROWSER_PID}" ]; then
+  if [ -n "${BROWSER_PID}" ] && safe_to_kill browser; then
     kill "${BROWSER_PID}" >/dev/null 2>&1 || true
     wait "${BROWSER_PID}" >/dev/null 2>&1 || true
     kill -0 "${BROWSER_PID}" >/dev/null 2>&1 && cleanup_result=INCOMPLETE
   fi
-  if [ -n "${WEB_PID}" ]; then
+  if [ -n "${WEB_PID}" ] && safe_to_kill web; then
     kill "${WEB_PID}" >/dev/null 2>&1 || true
     wait "${WEB_PID}" >/dev/null 2>&1 || true
     kill -0 "${WEB_PID}" >/dev/null 2>&1 && cleanup_result=INCOMPLETE
   fi
-  if [ -n "${BACKEND_PID}" ]; then
+  if [ -n "${BACKEND_PID}" ] && safe_to_kill backend; then
     kill "${BACKEND_PID}" >/dev/null 2>&1 || true
     wait "${BACKEND_PID}" >/dev/null 2>&1 || true
     kill -0 "${BACKEND_PID}" >/dev/null 2>&1 && cleanup_result=INCOMPLETE
   fi
-  docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
-  if [ -n "${CONTAINER}" ]; then
-    if remaining="$(docker ps -aq --filter "name=^/${CONTAINER}$" 2>/dev/null)"; then
-      [ -z "${remaining}" ] || cleanup_result=INCOMPLETE
-    else
-      cleanup_result=INCOMPLETE
+  if [ -n "${INTERACTIVE}" ] && ! ownership_evidence_complete; then
+    cleanup_result=INCOMPLETE
+    FAILURE_REASON=ownership_evidence_incomplete
+  fi
+  if [ "${cleanup_result}" = COMPLETE ]; then
+    docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+    if [ -n "${CONTAINER}" ]; then
+      if remaining="$(docker ps -aq --filter "name=^/${CONTAINER}$" 2>/dev/null)"; then
+        [ -z "${remaining}" ] || cleanup_result=INCOMPLETE
+      else
+        cleanup_result=INCOMPLETE
+      fi
     fi
   fi
-  rm -rf "${TMP_ROOT}"
-  [ ! -e "${TMP_ROOT}" ] || cleanup_result=INCOMPLETE
+  if [ "${cleanup_result}" = COMPLETE ]; then
+    rm -rf "${TMP_ROOT}"
+    [ ! -e "${TMP_ROOT}" ] || cleanup_result=INCOMPLETE
+  fi
   unset POSTGRES_PASSWORD APP_DATABASE_PASSWORD JWT_SECRET REFRESH_TOKEN_PEPPER MEDIA_SIGNING_KEY MFA_ENCRYPTION_KEY ADMIN_PASSWORD ORGANIZATION_TEST_DATABASE_URL
   if [ -n "${INTERACTIVE}" ]; then
     if [ -f "${RUN_DIR}/stop" ]; then FINAL_STATE=FINISHED; fi
+    if [ -f "${RUN_DIR}/expired" ]; then
+      FINAL_STATE=INCOMPLETE
+      FAILURE_REASON=lifetime_expired
+    fi
+    [ "${cleanup_result}" = COMPLETE ] || FINAL_STATE=INCOMPLETE
     if [ "${previous_status}" -ne 0 ] && [ -z "${FAILURE_REASON}" ] && [ "${FINAL_STATE}" != FINISHED ]; then
       FAILURE_REASON=unexpected_exit
     fi
@@ -264,11 +334,32 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+if [ -n "${INTERACTIVE}" ]; then
+  supervisor_pid=$$
+  supervisor_start="$(ps -p "${supervisor_pid}" -o lstart= 2>/dev/null | xargs)"
+  [ -n "${supervisor_start}" ] || {
+    FAILURE_REASON=supervisor_identity_unavailable
+    exit 1
+  }
+  (while [ "$(date +%s)" -lt "${EXPIRES_AT}" ]; do
+      [ "$(ps -p "${supervisor_pid}" -o lstart= 2>/dev/null | xargs)" = "${supervisor_start}" ] || exit 0
+      sleep 1
+    done
+    [ "$(ps -p "${supervisor_pid}" -o lstart= 2>/dev/null | xargs)" = "${supervisor_start}" ] || exit 0
+    : >"${RUN_DIR}/expired"; kill -TERM "${supervisor_pid}") &
+  DEADLINE_PID=$!
+fi
 
 fail() {
   FAILURE_REASON="$1"
   printf '[organization-gate] FAIL: %s\n' "$1" >&2
   exit 1
+}
+
+deadline_guard() {
+  if [ -n "${INTERACTIVE}" ] && [ "$(date +%s)" -ge "${EXPIRES_AT}" ]; then
+    fail "interactive gate lifetime expired"
+  fi
 }
 
 # Chromium needs a UTF-8 process locale to preserve Unicode download names.
@@ -406,6 +497,8 @@ GATE_ADMIN_ENV=("${GATE_BASE_ENV[@]}" ADMIN_PASSWORD="${ADMIN_PASSWORD}")
 # then exec the binary so BACKEND_PID is the only writable server process.
 (cd "${ROOT}/backend-go" && "${GATE_BASE_ENV[@]}" go build -o "${TMP_ROOT}/granete-server" ./cmd/server) \
   || fail "backend build failed before launch"
+deadline_guard
+mark_spawn backend
 (cd "${ROOT}/backend-go" && exec "${GATE_SERVER_ENV[@]}" \
   "${TMP_ROOT}/granete-server" >"${TMP_ROOT}/backend.log" 2>&1) &
 BACKEND_PID=$!
@@ -483,12 +576,14 @@ run_prepared_automatic_gate() {
 }
 
 run_prepared_interactive_gate() {
+  deadline_guard
   ENVIRONMENT_STATE=PREPARATION_RUNNING
   AUTOMATED_RESULT=FAIL
   session_state
 
   # Playwright must reuse this exact Vite process; its normal webServer entry
   # would otherwise close the human-facing site when the test finishes.
+  mark_spawn web
   (cd "${ROOT}/apps/web" && exec env -i PATH="${PATH}" HOME="${HOME:-/}" \
     TMPDIR="${TMPDIR:-/tmp}" VITE_API_BASE="http://127.0.0.1:${BACKEND_PORT}/api" \
     node node_modules/vite/bin/vite.js --host 127.0.0.1 \
@@ -503,17 +598,21 @@ run_prepared_interactive_gate() {
   curl -fsS "http://127.0.0.1:${ORGANIZATION_WEB_PORT}" >/dev/null \
     || fail "interactive web server did not become ready"
 
+  mark_spawn test
   (cd "${ROOT}" && exec "${GATE_BROWSER_ENV[@]}" ORGANIZATION_GATE_EXTERNAL_WEB=1 \
     pnpm exec playwright test --config=playwright.organization.config.ts "$@" \
     >"${TMP_ROOT}/automated.log" 2>&1) &
   GATE_TEST_PID=$!
+  remember_process "${GATE_TEST_PID}" test
   wait "${GATE_TEST_PID}" || fail "interactive automated segment failed"
   GATE_TEST_PID=""
   AUTOMATED_RESULT=PASS
+  deadline_guard
 
   profile="${TMP_ROOT}/browser-profile"
   mkdir -m 700 "${profile}"
   ready="${TMP_ROOT}/browser.ready"
+  mark_spawn browser
   (cd "${ROOT}" && exec env -i PATH="${PATH}" HOME="${HOME:-/}" \
     TMPDIR="${TMPDIR:-/tmp}" LANG="${BROWSER_LANG}" \
     ORGANIZATION_GATE_EMAIL="${ORGANIZATION_GATE_EMAIL}" \
@@ -531,6 +630,7 @@ run_prepared_interactive_gate() {
     sleep 1
   done
   [ -f "${ready}" ] || fail "interactive browser did not become ready"
+  deadline_guard
   ENVIRONMENT_STATE=WAITING_FOR_HUMAN
   session_state
   while [ "$(date +%s)" -lt "${EXPIRES_AT}" ]; do

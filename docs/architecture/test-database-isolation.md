@@ -92,6 +92,12 @@ bash scripts/organization-browser-gate.sh stop <run-id>
 `stop` is idempotent and removes the run-owned browser, web server, backend,
 container, and temporary browser profile. The local maximum age is 3,600
 seconds; `ORGANIZATION_GATE_MAX_AGE_SECONDS` may shorten it to 1–3,600 seconds.
+The deadline also applies during preparation: an expired run cannot announce
+`WAITING_FOR_HUMAN`. If cleanup readback is incomplete, `stop` exits nonzero;
+retry `stop` with the same run ID after the transient failure clears. A missing
+spawn ownership record is different: the gate preserves the exact run's
+container and temporary evidence and refuses automatic cleanup until an
+operator verifies those resources. Do not delete by a broad name prefix.
 The ordinary gate command remains automatic and never waits for a human.
 Run state exposes URLs, expiry, automated result, and `host_result=NOT_RUN`,
 but not credentials, DSNs, tokens, or cookies. Do not terminate the attached
