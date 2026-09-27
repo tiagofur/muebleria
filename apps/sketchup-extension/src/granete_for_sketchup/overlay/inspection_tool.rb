@@ -87,12 +87,16 @@ module Granete
           true
         end
 
-        # Esc mirrors the native Select tool (#470 real-host UX): leave the
-        # open editing context one level, or clear the selection at the
-        # model root. The overlay mode itself stays ON (dialog-driven
-        # lifecycle per #470).
-        def onCancel(_reason, view)
-          @manager.escape_naturally
+        # SketchUp's Tool#onCancel carries a REASON: 0 = the user pressed
+        # Escape, 1 = the user re-selected this same tool, 2 = the user ran
+        # Undo while the tool was active. Only a REAL Escape (0) runs the
+        # native escape (leave the open editing context one level, or clear
+        # the selection at the model root); the other reasons must leave
+        # selection, context and overlay exactly as they were — the host
+        # performs its own native behavior. The overlay mode itself stays
+        # ON (dialog-driven lifecycle per #470).
+        def onCancel(reason, view)
+          @manager.escape_naturally if reason.zero?
           view.invalidate if view.respond_to?(:invalidate)
         end
 

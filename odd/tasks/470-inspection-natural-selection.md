@@ -270,6 +270,44 @@ contexto nuevo.
   - Overlay smokes 6/6 PASS (2 corridas tras añadir reintento con render
     forzado en el precondicionado del test B2).
 
+## Ronda 4 — blocker de revisión: onCancel distingue reason (mismo PR)
+
+Revisión independiente sobre `57e0b468`: `InspectionTool#onCancel` ignoraba
+el `reason` del host (0=Esc, 1=re-selección de la tool, 2=Undo) y ejecutaba
+`escape_naturally` para cualquiera — Undo podía cerrar `active_path` o
+limpiar selección; re-seleccionar la tool también.
+
+### Fix (mínimo, sin tocar nada más)
+
+`onCancel(reason, view)` ejecuta `escape_naturally` SÓLO con `reason == 0`
+(RuboCop exige `.zero?`, misma semántica). Para reasons 1/2 el overlay no
+hace nada: ni `close_active`, ni `selection.clear`, ni mutación de
+`active_path`/overlay/manufacturing — el host corre su comportamiento
+nativo.
+
+### Evidencia ronda 4
+
+- RED primero: 2 tests nuevos (`onCancel(1)` / `onCancel(2)` inertes)
+  fallaron contra `57e0b468`; tras el fix, suite verde.
+- Portable: 4 archivos pedidos — inspection_tool 7/12,
+  natural_selection 18/81, manager 16/70; `dialog_manufacturing_inspection`
+  6/16 + 1 error PRE-EXISTENTE al correrlo solo (require-order,
+  `Connection::ModelBinding`; reproduce igual en `57e0b468` sin el fix y
+  pasa dentro de `rake unit`) — fuera de scope del finding.
+- `rake verify` completo PASS: 1229 runs / 9118 assertions + boundary
+  6/4043, rubocop limpio sin disables nuevos, paquete reproducible
+  sha256 0b4e5ed58a81cf13ae35bf2444ad19588daff6b4023069323f0cc4206eb019a4.
+- Host real (HEAD exacto con fix, 0.1.13 instalado):
+  - Navegación 2/2 PASS / 26 aserciones, incluido
+    `test_undo_and_reselect_cancels_are_not_escape_on_the_real_host` (14):
+    Undo REAL (`Sketchup.send_action('editUndo:')`) no cierra el contexto
+    vía overlay ni apaga el modo; la limpieza de selección que produce el
+    Undo es nativa del host (documentado en el test, no se reclama como
+    mutación del overlay); `onCancel(1)`/`onCancel(2)` directos son
+    totalmente inertes; Esc explícito conserva la semántica aprobada;
+    disable devuelve el stack.
+  - Overlay 6/6 PASS / 44 aserciones.
+
 ## Entrega
 
 - Ronda 1: HEAD `9fd3983a` + evidencia `6c156803`. Ronda 2: este commit.

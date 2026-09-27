@@ -279,6 +279,31 @@ class OverlayNaturalSelectionTest < Minitest::Test
     assert_empty @model.selection.to_a
   end
 
+  # Host contract: Tool#onCancel carries a REASON — 0 = the user pressed
+  # Escape, 1 = the user re-selected this same tool, 2 = the user ran Undo
+  # while the tool was active. Only a REAL Escape (0) may run the native
+  # escape; the other reasons must leave selection, editing context and
+  # overlay exactly as they were (the host does its own native behavior).
+  def test_same_tool_reselection_cancel_does_not_touch_selection_or_context
+    @model.active_path = [furniture_root]
+
+    @tool.onCancel(1, @view)
+
+    assert_equal [furniture_root], @model.active_path, 'reason 1 must not close the context'
+    assert_equal [part_by_ref('side-left-01')], @model.selection.to_a, 'reason 1 must not clear the selection'
+    assert @manager.mode_on?
+  end
+
+  def test_undo_cancel_does_not_touch_selection_or_context
+    @model.active_path = [furniture_root]
+
+    @tool.onCancel(2, @view)
+
+    assert_equal [furniture_root], @model.active_path, 'reason 2 (Undo) must not close the context'
+    assert_equal [part_by_ref('side-left-01')], @model.selection.to_a, 'reason 2 (Undo) must not clear the selection'
+    assert @manager.mode_on?
+  end
+
   # Double-click on the instance the first click just selected ENTERS its
   # editing context — the native way back into the furniture.
   def test_double_click_opens_the_context_of_the_selected_instance

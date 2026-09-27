@@ -113,6 +113,74 @@ module Granete
         manager&.disable
       end
 
+      # Host contract of Tool#onCancel reasons on the REAL host: a genuine
+      # host Undo (Cmd/Ctrl+Z → Sketchup.send_action('editUndo:')) and a
+      # same-tool re-selection (reason 1) must NEVER be interpreted as
+      # Escape — context, selection and overlay stay untouched; only an
+      # EXPLICIT Escape (reason 0) runs the approved escape semantics; the
+      # tool stack is handed back on disable.
+      def test_undo_and_reselect_cancels_are_not_escape_on_the_real_host
+        attach_canonical_selection_flow
+        manager = build_manager
+        @flow_manager = manager
+        manager.enable(scope)
+        root = granete_furniture_instances.first
+        part = managed_part('side-left-01')
+        tool = Overlay::InspectionTool.new(manager)
+        view = model.active_view
+
+        # The trap context: furniture open, part selected, overlay ON.
+        model.selection.clear
+        model.selection.add(part)
+        model.active_path = [root]
+
+        # A benign undoable operation, then a REAL host Undo: the host
+        # routes it to the active tool as a cancel. Whatever Undo natively
+        # does to its own operation, the OVERLAY must not escape.
+        model.start_operation('granete-470-undo-probe', true)
+        model.set_attribute('granete_470_probe', 'touched', true)
+        model.commit_operation
+        Sketchup.send_action('editUndo:')
+
+        # Native Undo may drop the selection on its own — that is host
+        # behavior, not an overlay mutation. The OVERLAY-didn't-escape
+        # proof is the editing context surviving plus the mode staying ON.
+        assert_equal 1, (model.active_path || []).length, 'Undo must not close the context via the overlay'
+        assert manager.mode_on?, 'Undo must not disable the overlay'
+
+        # Restore the trap state and prove the TOOL CONTRACT in isolation:
+        # the documented cancel reasons delivered directly to the tool are
+        # completely inert — no context, selection or mode change.
+        manager.select_naturally(part)
+        assert_equal [part], model.selection.to_a
+
+        tool.onCancel(1, view)
+        assert_equal 1, (model.active_path || []).length, 'reason 1 must not close the context'
+        assert_equal [part], model.selection.to_a, 'reason 1 must not clear the selection'
+        assert manager.mode_on?
+
+        tool.onCancel(2, view)
+        assert_equal 1, (model.active_path || []).length, 'reason 2 must not close the context'
+        assert_equal [part], model.selection.to_a, 'reason 2 must not clear the selection'
+        assert manager.mode_on?
+
+        # An EXPLICIT Escape keeps the approved semantics: leave the
+        # context one level (the nested selection drops, natively).
+        tool.onCancel(0, view)
+        assert (model.active_path || []).empty?, 'Escape must still leave the context'
+        assert_empty model.selection.to_a
+        assert manager.mode_on?
+
+        # Hiding the overlay hands the viewport back (stack pop, no
+        # residue, mode off).
+        manager.disable
+        assert_equal 'off', manager.status
+      ensure
+        model.active_path = [] if model.respond_to?(:active_path=) && !(model.active_path || []).empty?
+        model&.selection&.remove_observer(@canonical_observer) if @canonical_observer
+        manager&.disable
+      end
+
       private
 
       def model
