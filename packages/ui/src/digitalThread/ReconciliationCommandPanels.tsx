@@ -149,10 +149,11 @@ export interface PreflightPanelProps {
   readonly preflight: ManufacturingPreflightResult | null;
   readonly loading: boolean;
   readonly error: boolean;
+  readonly frozenBaseBlockerMessage?: string | null;
   readonly onRetry: () => void;
 }
 
-export function PreflightPanel({ preflight, loading, error, onRetry }: PreflightPanelProps): ReactNode {
+export function PreflightPanel({ preflight, loading, error, frozenBaseBlockerMessage, onRetry }: PreflightPanelProps): ReactNode {
   const showIssues = preflight !== null && preflight.status === 'blocked' && preflight.includesDetail;
   return (
     <section className="pd-card pr-panel" data-testid="preflight-panel" aria-labelledby="preflight-title">
@@ -180,10 +181,12 @@ export function PreflightPanel({ preflight, loading, error, onRetry }: Preflight
 
       {error ? (
         <div className="pd-alert pd-alert--error" role="alert" data-testid="preflight-error">
-          No se pudo evaluar el preflight autoritativo de esta revisión.
-          <button type="button" className="btn btn-sm btn-secondary" onClick={onRetry}>
-            Reintentar
-          </button>
+          {frozenBaseBlockerMessage ?? 'No se pudo evaluar el preflight autoritativo de esta revisión.'}
+          {!frozenBaseBlockerMessage && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={onRetry}>
+              Reintentar
+            </button>
+          )}
         </div>
       ) : loading ? (
         <p className="pd-empty-hint">Evaluando el contrato de fabricación de la revisión exacta…</p>

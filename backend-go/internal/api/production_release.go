@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -125,8 +126,9 @@ func respondWithDesignApprovalError(w http.ResponseWriter, err error) {
 		var preflightBlocked *domain.ReleasePreflightBlockedError
 		var commercialBlocked *domain.ReleaseCommercialGateError
 		var resolutionFailure *domain.ReleaseUnitResolutionFailure
+		var frozenBase *domain.FrozenBaseContextError
 		if errors.As(err, &preflightBlocked) || errors.As(err, &commercialBlocked) ||
-			errors.As(err, &resolutionFailure) ||
+			errors.As(err, &resolutionFailure) || errors.As(err, &frozenBase) ||
 			errors.Is(err, storage.ErrReleaseSnapshotResolution) ||
 			errors.Is(err, domain.ErrReleaseQuoteNotAccepted) ||
 			errors.Is(err, domain.ErrQuoteRevisionNotFound) ||
@@ -146,7 +148,11 @@ func respondWithDesignApprovalError(w http.ResponseWriter, err error) {
 // Read-only evaluation of the authoritative release manufacturing preflight
 // over the exact immutable revision — the same verdict createProductionRelease
 // enforces, surfaced so Web can show it WITHOUT a second engine and without
-// attempting a release to discover blockers.
+// attempting a release to discover blockers. The optional body carries the
+// exact QuoteRevision the release would pin (#830): when present, the frozen
+// per-unit base contexts of that accepted quote govern the resolution and the
+// baseline is validated exactly like the release command. No body keeps the
+// quote-less policy; no implicit "latest accepted quote" is ever resolved.
 func (s *Server) HandleDesignRevisionPreflight(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFromRequest(r)
 	if claims == nil {
@@ -164,7 +170,23 @@ func (s *Server) HandleDesignRevisionPreflight(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	result, err := s.Store.EvaluateDesignRevisionPreflight(r.Context(), designID, revisionID)
+	quoteRevisionID := ""
+	if r.Body != nil {
+		var payload openapi.EvaluateDesignRevisionPreflightRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && !errors.Is(err, io.EOF) {
+			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "cuerpo de solicitud inválido", nil)
+			return
+		}
+		if payload.QuoteRevisionId != nil {
+			quoteRevisionID = strings.TrimSpace(*payload.QuoteRevisionId)
+		}
+	}
+	if quoteRevisionID != "" && !isValidUUID(quoteRevisionID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "quoteRevisionId debe ser un UUID válido", nil)
+		return
+	}
+
+	result, err := s.Store.EvaluateDesignRevisionPreflight(r.Context(), designID, revisionID, quoteRevisionID)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrDesignRevisionNotFound):
@@ -172,9 +194,42 @@ func (s *Server) HandleDesignRevisionPreflight(w http.ResponseWriter, r *http.Re
 		case errors.Is(err, domain.ErrInvalidReleaseCommand):
 			respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "IDs inválidos", nil)
 		default:
+			// The exact-quote preflight shares the release command's typed
+			// gate vocabulary (#830): baseline and frozen-authority blockers
+			// surface as structured 409s, never as opaque 500s.
+			var frozen *domain.FrozenBaseContextError
+			if errors.As(err, &frozen) ||
+				errors.Is(err, domain.ErrReleaseQuoteNotAccepted) ||
+				errors.Is(err, domain.ErrQuoteRevisionNotFound) ||
+				errors.Is(err, domain.ErrCrossProjectRelease) {
+				respondWithProductionReleaseError(w, err)
+				return
+			}
 			respondWithInternalError(w, err, "evaluate design revision preflight")
 		}
 		return
+	}
+	if quoteRevisionID != "" {
+		for _, issue := range result.Issues {
+			if issue.Code != domain.PreflightIssueFrozenBaseContext {
+				continue
+			}
+			// Storage represents manufacturing blockers as read-only verdicts.
+			// A missing/malformed quoted authority is different: the caller
+			// cannot proceed with this quote and needs an actionable conflict.
+			details := map[string]any{"blocker": string(domain.PreflightIssueFrozenBaseContext)}
+			if domain.AnyRole(actorRoles(claims), domain.RoleCanReleaseProduction) {
+				if issue.FurnitureInstanceID != "" {
+					details["furnitureInstanceId"] = issue.FurnitureInstanceID
+				}
+				if issue.FurnitureDefinitionID != "" {
+					details["furnitureDefinitionId"] = issue.FurnitureDefinitionID
+				}
+			}
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+				domain.FrozenBaseContextUserMessage, details)
+			return
+		}
 	}
 	// Server-authoritative projection (#502 permissions): every project role
 	// sees the verdict, the business-safe message and the blocked-unit count;
@@ -468,13 +523,13 @@ func (s *Server) HandleProjectProductionReleaseCuttingDemand(w http.ResponseWrit
 
 func toReleaseCuttingDemandDTO(view *storage.ReleaseCuttingDemandView) openapi.ReleaseCuttingDemand {
 	dto := openapi.ReleaseCuttingDemand{
-		ReleaseID:               view.ReleaseID,
-		ReleaseNumber:           int64(view.ReleaseNumber),
-		DesignRevisionID:        view.DesignRevisionID,
-		DesignRevisionNumber:    int64(view.DesignRevisionNumber),
+		ReleaseID:                view.ReleaseID,
+		ReleaseNumber:            int64(view.ReleaseNumber),
+		DesignRevisionID:         view.DesignRevisionID,
+		DesignRevisionNumber:     int64(view.DesignRevisionNumber),
 		ManufacturingFingerprint: view.ManufacturingFingerprint,
-		SchemaVersion:           int64(view.SchemaVersion),
-		Units:                   make([]openapi.ReleaseCuttingDemandUnit, 0, len(view.Units)),
+		SchemaVersion:            int64(view.SchemaVersion),
+		Units:                    make([]openapi.ReleaseCuttingDemandUnit, 0, len(view.Units)),
 	}
 	for _, unit := range view.Units {
 		unitDTO := openapi.ReleaseCuttingDemandUnit{
@@ -625,11 +680,29 @@ func respondWithProductionReleaseError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
 			"La revisión no puede resolverse para fabricación",
 			map[string]any{
-				"blocker":                "release_snapshot_resolution",
-				"furnitureInstanceId":    resolutionFailure.FurnitureInstanceID,
-				"furnitureDefinitionId":  resolutionFailure.FurnitureDefinitionID,
-				"reason":                 resolutionFailure.Reason,
+				"blocker":               "release_snapshot_resolution",
+				"furnitureInstanceId":   resolutionFailure.FurnitureInstanceID,
+				"furnitureDefinitionId": resolutionFailure.FurnitureDefinitionID,
+				"reason":                resolutionFailure.Reason,
 			})
+		return
+	}
+	// #830: a quoted release whose frozen base context cannot govern is an
+	// expected business blocker: one actionable message, the structured cause
+	// and the exact identities — never a 500 and never SQL internals.
+	var frozenBase *domain.FrozenBaseContextError
+	if errors.As(err, &frozenBase) {
+		details := map[string]any{
+			"blocker": frozenBase.Cause,
+		}
+		if frozenBase.FurnitureInstanceID != "" {
+			details["furnitureInstanceId"] = frozenBase.FurnitureInstanceID
+		}
+		if frozenBase.FurnitureDefinitionID != "" {
+			details["furnitureDefinitionId"] = frozenBase.FurnitureDefinitionID
+		}
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			domain.FrozenBaseContextUserMessage, details)
 		return
 	}
 	switch {

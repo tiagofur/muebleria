@@ -166,12 +166,17 @@ const (
 type ManufacturingPreflightIssueCode string
 
 const (
-	PreflightIssueEmptyRevision       ManufacturingPreflightIssueCode = "empty_revision"
-	PreflightIssueDuplicateInstance   ManufacturingPreflightIssueCode = "duplicate_instance"
-	PreflightIssueMissingDefinition   ManufacturingPreflightIssueCode = "missing_definition"
-	PreflightIssueInvalidParameters   ManufacturingPreflightIssueCode = "invalid_parameters"
-	PreflightIssueInvalidMaterialUse  ManufacturingPreflightIssueCode = "invalid_material_choice"
-	PreflightIssueSnapshotResolution  ManufacturingPreflightIssueCode = "release_snapshot_resolution"
+	PreflightIssueEmptyRevision      ManufacturingPreflightIssueCode = "empty_revision"
+	PreflightIssueDuplicateInstance  ManufacturingPreflightIssueCode = "duplicate_instance"
+	PreflightIssueMissingDefinition  ManufacturingPreflightIssueCode = "missing_definition"
+	PreflightIssueInvalidParameters  ManufacturingPreflightIssueCode = "invalid_parameters"
+	PreflightIssueInvalidMaterialUse ManufacturingPreflightIssueCode = "invalid_material_choice"
+	PreflightIssueSnapshotResolution ManufacturingPreflightIssueCode = "release_snapshot_resolution"
+	// PreflightIssueFrozenBaseContext (#830): the release pins an accepted
+	// QuoteRevision whose frozen commercial truth cannot govern base treatment
+	// (missing, malformed/incomplete, or not binding the exact unit). The
+	// remedy is preparing a new modern quote — never refilling history.
+	PreflightIssueFrozenBaseContext ManufacturingPreflightIssueCode = "frozen_base_context"
 )
 
 type ManufacturingPreflightIssue struct {
@@ -423,6 +428,36 @@ func (e *ReleaseUnitResolutionFailure) Error() string {
 	return fmt.Sprintf("la unidad de mueble %s (definición %s) no puede resolverse para fabricación: %s",
 		e.FurnitureInstanceID, e.FurnitureDefinitionID, e.Reason)
 }
+
+// Frozen base context blocker causes (#830) — the structured detail the API
+// exposes; the human-facing remedy is the same for all three.
+const (
+	FrozenBaseContextMissingCause      = "frozen_base_context_missing"
+	FrozenBaseContextInvalidCause      = "frozen_base_context_invalid"
+	FrozenBaseContextUnitMismatchCause = "frozen_base_context_unit_mismatch"
+)
+
+// FrozenBaseContextError is the #830 fail-closed verdict for a quoted release
+// whose exact accepted QuoteRevision cannot govern base treatment: the frozen
+// commercial snapshot or a unit's pricing context is missing, malformed or
+// incomplete, or does not bind the exact physical identity. A quoted release
+// never degrades silently to quote-less behavior; the honest continuation is
+// preparing a new modern quote. Safe for API surfaces: identities and a
+// business reason only.
+type FrozenBaseContextError struct {
+	FurnitureInstanceID   string
+	FurnitureDefinitionID string
+	Cause                 string
+	Reason                string
+}
+
+func (e *FrozenBaseContextError) Error() string {
+	return fmt.Sprintf("el contexto de base congelado de la cotización aceptada no puede gobernar la fabricación (%s): %s", e.Cause, e.Reason)
+}
+
+// FrozenBaseContextUserMessage is the single actionable message the UI/API can
+// show for every frozen-base blocker (#830 §13).
+const FrozenBaseContextUserMessage = "La cotización aceptada no contiene el contexto de base requerido para fabricar. Prepará una nueva cotización antes de liberar."
 
 // EvaluateReleaseCommercialGate applies the §17 reconciliation gate over the
 // exact #393/#394 classification: conflicts block always (no reliable truth),

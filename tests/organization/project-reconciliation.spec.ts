@@ -387,8 +387,11 @@ async function publishRevisionWithItemIds(options: {
     await expect(page.getByTestId(`reconciliation-item-${seeded.instanceIds[2]}`)).toContainText('Cotizado no modelado');
     await expect(page.getByTestId(`reconciliation-item-${seeded.designFirstInstanceId}`)).toContainText('Modelado no cotizado');
 
-    // Authoritative preflight over the exact revision is ready.
-    await expect(page.getByTestId('preflight-status')).toContainText('Listo para fabricación');
+    // Q1 cannot authorize R1: its design-first unit has no frozen quoted
+    // context yet. The exact quoted preflight must show the business remedy,
+    // not claim READY or present a network-only retry.
+    await expect(page.getByTestId('preflight-error')).toContainText('Prepará una nueva cotización antes de liberar');
+    await expect(page.getByTestId('preflight-status')).toHaveCount(0);
 
     // ------------------------------------------------------------------
     // 2. Explicit requote: select the commercial change + design-first unit.

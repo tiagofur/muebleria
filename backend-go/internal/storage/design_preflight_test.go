@@ -19,9 +19,9 @@ func TestEvaluateDesignRevisionPreflight_ReadyParityWithReleaseGate(t *testing.T
 	actorA := fiActorA()
 
 	var result *domain.ManufacturingPreflightResult
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		result, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3)
+		result, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, "")
 		return err
 	})
 	if err != nil {
@@ -77,7 +77,7 @@ func TestEvaluateDesignRevisionPreflight_BlockedParityWithReleaseGate(t *testing
 	// contract (widthMm as a string) — approval is orthogonal to preflight,
 	// so the release gate is what must fail closed.
 	var blockedRevID string
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:   fx.designID,
 			SourceType: domain.DesignRevisionSourceSketchup,
@@ -110,9 +110,9 @@ func TestEvaluateDesignRevisionPreflight_BlockedParityWithReleaseGate(t *testing
 	}
 
 	var result *domain.ManufacturingPreflightResult
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
-		result, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, blockedRevID)
+		result, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, blockedRevID, "")
 		return err
 	})
 	if err != nil {
@@ -161,8 +161,8 @@ func TestEvaluateDesignRevisionPreflight_ExactRevisionFailClosed(t *testing.T) {
 	actorA := fiActorA()
 
 	// Nonexistent revision.
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, "4eeeeeee-0000-0000-0000-00000000000e")
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, "4eeeeeee-0000-0000-0000-00000000000e", "")
 		return err
 	})
 	if !errors.Is(err, domain.ErrDesignRevisionNotFound) {
@@ -171,8 +171,8 @@ func TestEvaluateDesignRevisionPreflight_ExactRevisionFailClosed(t *testing.T) {
 
 	// Foreign design: a valid revision id under a different design id must
 	// answer the uniform 404 — never evaluate someone else's pin.
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, "3ddddddd-0000-0000-0000-00000000000d", fx.revR3)
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, "3ddddddd-0000-0000-0000-00000000000d", fx.revR3, "")
 		return err
 	})
 	if !errors.Is(err, domain.ErrDesignRevisionNotFound) {
@@ -180,8 +180,8 @@ func TestEvaluateDesignRevisionPreflight_ExactRevisionFailClosed(t *testing.T) {
 	}
 
 	// Invalid UUIDs.
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
-		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, "not-uuid", fx.revR3)
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
+		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, "not-uuid", fx.revR3, "")
 		return err
 	})
 	if !errors.Is(err, domain.ErrInvalidReleaseCommand) {
@@ -196,7 +196,7 @@ func TestEvaluateDesignRevisionPreflight_OrgReadScope(t *testing.T) {
 	// A revision on a PRIVATE org-A project: org B has no project
 	// relationship, so RLS hides the revision behind the uniform 404.
 	var privateDesignID, privateRevID string
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		d, err := fx.store.CreateDesign(ctx, storage.CreateDesignCommand{
 			ProjectID:   fiProjectAOnly,
 			Name:        "Org A private design",
@@ -223,8 +223,8 @@ func TestEvaluateDesignRevisionPreflight_OrgReadScope(t *testing.T) {
 		t.Fatalf("publish private revision: %v", err)
 	}
 
-	err = fiTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
-		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, privateDesignID, privateRevID)
+	err = releaseTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, privateDesignID, privateRevID, "")
 		return err
 	})
 	if !errors.Is(err, domain.ErrDesignRevisionNotFound) {

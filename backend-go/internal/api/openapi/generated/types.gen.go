@@ -911,6 +911,10 @@ type ApproveDesignRevisionForProductionRequest struct {
 	QuoteRevisionId string `json:"quoteRevisionId"`
 }
 
+type EvaluateDesignRevisionPreflightRequest struct {
+	QuoteRevisionId *string `json:"quoteRevisionId,omitempty"`
+}
+
 type ManufacturingPreflightStatus string
 
 const (
@@ -934,6 +938,7 @@ const (
 	ManufacturingPreflightIssueCodeInvalidParameters         ManufacturingPreflightIssueCode = "invalid_parameters"
 	ManufacturingPreflightIssueCodeInvalidMaterialChoice     ManufacturingPreflightIssueCode = "invalid_material_choice"
 	ManufacturingPreflightIssueCodeReleaseSnapshotResolution ManufacturingPreflightIssueCode = "release_snapshot_resolution"
+	ManufacturingPreflightIssueCodeFrozenBaseContext         ManufacturingPreflightIssueCode = "frozen_base_context"
 )
 
 type ManufacturingPreflightIssue struct {

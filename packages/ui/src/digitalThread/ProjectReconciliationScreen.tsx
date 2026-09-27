@@ -376,21 +376,38 @@ export function ProjectReconciliationScreen({
 
   // ---- Authoritative preflight (exact revision) --------------------------------
 
+  // #830: when the selected quote is the accepted baseline the release would
+  // pin, the preflight evaluates under that exact quote's frozen base
+  // authority — the same verdict createProductionRelease enforces. Any other
+  // selection (draft/superseded historical comparison) keeps the quote-less
+  // manufacturing verdict; the backend would reject the pair itself.
+  const preflightQuotePin =
+    selectedQuoteRevision?.status === 'accepted' && quoteRevisionId
+      ? quoteRevisionId
+      : null;
   const preflightQuery = useQuery({
     queryKey:
       activeDesignId && designRevisionId
-        ? queryKeys.preflight(activeDesignId, designRevisionId)
+        ? ['project-reconciliation', 'preflight', activeDesignId, designRevisionId, preflightQuotePin]
         : ['project-reconciliation', 'preflight', 'none'],
     queryFn: ({ signal }) =>
       api.evaluateDesignRevisionPreflight(
         token,
         activeDesignId as string,
         designRevisionId as string,
+        preflightQuotePin ? { quoteRevisionId: preflightQuotePin } : {},
         signal,
       ),
     enabled: activeDesignId !== null && designRevisionId !== null,
   });
   const preflight = preflightQuery.data ?? null;
+  const frozenBasePreflightError =
+    preflightQuotePin &&
+    preflightQuery.error instanceof GraneteApiError &&
+    preflightQuery.error.status === 409 &&
+    (preflightQuery.error.payload.details as Record<string, unknown>).blocker === 'frozen_base_context'
+      ? preflightQuery.error.message
+      : null;
 
   // ---- Releases ----------------------------------------------------------------
 
@@ -1294,6 +1311,7 @@ export function ProjectReconciliationScreen({
                   preflight={preflight}
                   loading={preflightQuery.isLoading && designRevisionId !== null}
                   error={preflightQuery.isError && designRevisionId !== null}
+                  frozenBaseBlockerMessage={frozenBasePreflightError}
                   onRetry={() => void preflightQuery.refetch()}
                 />
                 <ApprovalPanel
@@ -1305,7 +1323,7 @@ export function ProjectReconciliationScreen({
                   quoteLabel={quoteLabel}
                   designRevisionLabel={revLabel}
                   pairCommercialBlocked={pairCommercialBlock}
-                  preflightBlocked={preflight ? preflight.status === 'blocked' : null}
+                  preflightBlocked={frozenBasePreflightError ? true : preflight ? preflight.status === 'blocked' : null}
                   submitting={approveSubmitting}
                   error={approveError}
                   onApprove={() => void handleApprove()}
@@ -1315,7 +1333,7 @@ export function ProjectReconciliationScreen({
                   revisionApproved={selectedDesignRevision?.status === 'approved'}
                   quoteAccepted={selectedQuoteRevision?.status === 'accepted'}
                   quoteLabel={quoteLabel}
-                  preflightReady={preflight ? preflight.status === 'ready' : null}
+                  preflightReady={frozenBasePreflightError ? false : preflight ? preflight.status === 'ready' : null}
                   submitting={releaseSubmitting}
                   error={releaseError}
                   preflightIssues={releasePreflightIssues}

@@ -39,6 +39,22 @@ func setupReleaseFixture(t *testing.T) *releaseFixture {
 
 func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *releaseFixture {
 	t.Helper()
+	return setupReleaseFixtureWithOptions(t, releaseFixtureOptions{choices: choices})
+}
+
+// releaseFixtureOptions extends the canonical release fixture: quoteSnapshot
+// overrides the frozen commercial truth frozen beside Q3 (#830 fixtures freeze
+// an explicit per-unit base-mode pricing context); seedCatalog runs extra
+// catalog statements with the admin pool before the flow starts.
+type releaseFixtureOptions struct {
+	choices       map[string]string
+	quoteSnapshot func(items []storage.CreateQuoteRevisionItemCommand) *domain.QuoteCommercialSnapshot
+	seedCatalog   func(t *testing.T, admin *pgxpool.Pool)
+}
+
+func setupReleaseFixtureWithOptions(t *testing.T, opts releaseFixtureOptions) *releaseFixture {
+	t.Helper()
+	choices := opts.choices
 	fx := setupDesignsTestFixture(t)
 	// This release fixture freezes exactly the two units below. Remove the
 	// unrelated shared RLS seed line before Design creation, which now prepares
@@ -59,6 +75,9 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 		multiOrgExec(t, fx.admin, `UPDATE components SET option_roles='{legacy-body}', default_edges='[{"side":"L1","enabled":true}]' WHERE code='RELEASE-PANEL';
 	 INSERT INTO hardware_lines (id,module_id,quantity,option_role,organization_id) VALUES
 	 ('71000000-0000-0000-0000-000000000003','`+fiModuleA+`',1,'custom-hinge','`+rlsOrgA+`');`)
+	}
+	if opts.seedCatalog != nil {
+		opts.seedCatalog(t, fx.admin)
 	}
 	actorA := fiActorA()
 
@@ -102,11 +121,16 @@ func setupReleaseFixtureWithChoices(t *testing.T, choices map[string]string) *re
 				LifecycleStatus:       "active",
 			}
 		}
-		q3, err := createPublishedFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
+		quoteCmd := storage.CreateQuoteRevisionCommand{
 			ProjectID: fiSharedProject,
 			Notes:     "Q3",
+			Status:    "published",
 			Items:     []storage.CreateQuoteRevisionItemCommand{quoteItem(out.fiA), quoteItem(out.fiB)},
-		})
+		}
+		if opts.quoteSnapshot != nil {
+			quoteCmd.CommercialSnapshot = opts.quoteSnapshot(quoteCmd.Items)
+		}
+		q3, err := createFixtureQuoteRevision(ctx, fx.store, quoteCmd)
 		if err != nil {
 			return err
 		}

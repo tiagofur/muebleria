@@ -3166,7 +3166,7 @@
       "post": {
         "operationId": "evaluateDesignRevisionPreflight",
         "summary": "Evaluate the authoritative release manufacturing preflight for an exact DesignRevision (#502 / WEB-DT-3, read-only)",
-        "description": "Runs the exact same authoritative release-scoped manufacturing preflight (#395 / #466: scope production-release-v1) that gates createProductionRelease, as a read-only evaluation over the immutable revision snapshot and the organization catalog. No second engine: identical inputs, identical issue codes, identical verdict the release command will enforce. POST is a read mirroring the reconcileProjectDesign precedent. Does not mutate anything and does not create a release.",
+        "description": "Runs the exact same authoritative release-scoped manufacturing preflight (#395 / #466: scope production-release-v1) that gates createProductionRelease, as a read-only evaluation over the immutable revision snapshot and the organization catalog. No second engine: identical inputs, identical issue codes, identical verdict the release command will enforce. The optional body pins the exact QuoteRevision the release would use (#830): its frozen per-unit base-treatment contexts then govern the resolution — the same authority createProductionRelease consumes, never an implicit 'latest accepted quote'. Without a body the quote-less policy applies. POST is a read mirroring the reconcileProjectDesign precedent. Does not mutate anything and does not create a release.",
         "parameters": [
           {
             "$ref": "#/components/parameters/DesignId"
@@ -3175,6 +3175,16 @@
             "$ref": "#/components/parameters/RevisionId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluateDesignRevisionPreflightRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Authoritative manufacturing preflight result for the exact revision",
@@ -7875,6 +7885,17 @@
           }
         }
       },
+      "EvaluateDesignRevisionPreflightRequest": {
+        "type": "object",
+        "description": "Optional body for evaluateDesignRevisionPreflight (#830): the exact QuoteRevision the release would pin. When present, its frozen per-unit base-treatment contexts govern the manufacturing resolution and the baseline is validated exactly like createProductionRelease. Absent keeps the quote-less policy; no implicit 'latest accepted quote' is ever resolved.",
+        "additionalProperties": false,
+        "properties": {
+          "quoteRevisionId": {
+            "type": "string",
+            "description": "Exact accepted QuoteRevision the previewed release would pin."
+          }
+        }
+      },
       "ManufacturingPreflightStatus": {
         "type": "string",
         "description": "Authoritative release preflight verdict (#395 / #466, scope production-release-v1).",
@@ -7892,14 +7913,15 @@
       },
       "ManufacturingPreflightIssueCode": {
         "type": "string",
-        "description": "Canonical blocker codes of the release manufacturing preflight. No other taxonomy. release_snapshot_resolution (#727): the exact release snapshot would not resolve for manufacturing, with the same verdict the release command enforces.",
+        "description": "Canonical blocker codes of the release manufacturing preflight. No other taxonomy. release_snapshot_resolution (#727): the exact release snapshot would not resolve for manufacturing, with the same verdict the release command enforces. frozen_base_context (#830): the pinned accepted QuoteRevision's frozen commercial truth cannot govern base treatment (missing, malformed/incomplete, or not binding the exact unit); prepare a new modern quote.",
         "enum": [
           "empty_revision",
           "duplicate_instance",
           "missing_definition",
           "invalid_parameters",
           "invalid_material_choice",
-          "release_snapshot_resolution"
+          "release_snapshot_resolution",
+          "frozen_base_context"
         ]
       },
       "ManufacturingPreflightIssue": {

@@ -269,6 +269,7 @@ interface FetchMockOptions {
   reconciliation?: Record<string, ProjectDesignReconciliationResult>;
   reconciliationFail?: boolean;
   preflight?: Record<string, ManufacturingPreflightResult>;
+  preflightResponse?: () => Response;
   releases?: ProductionRelease[];
   requoteResponse?: () => Response;
   approveResponse?: () => Response;
@@ -346,6 +347,7 @@ export function setupFetchMock(options: FetchMockOptions = {}) {
     const preflightRegex = /^\/designs\/([^/]+)\/revisions\/([^/]+)\/preflight$/;
     const preflightMatch = path.match(preflightRegex);
     if (preflightMatch && method === 'POST') {
+      if (options.preflightResponse) return options.preflightResponse();
       const result = preflight[preflightMatch[2]!];
       if (!result) {
         return apiError(404, 'NOT_FOUND', 'revision not found');
@@ -871,6 +873,30 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('preflight-status')).toHaveTextContent('Listo para fabricación');
     });
+  });
+
+  it('quoted frozen-base 409 presents the actionable business blocker, not a retry-only error', async () => {
+    const cleanReconciliation: ProjectDesignReconciliationResult = {
+      ...mockReconciliation,
+      summary: { ...mockReconciliation.summary, conflict: 0 },
+      impact: { ...mockReconciliation.impact, requiresResolution: false, requiresRequote: false },
+    };
+    setupFetchMock({
+      reconciliation: { [`${QUOTE_1_ID}:${REV_1_ID}`]: cleanReconciliation },
+      preflightResponse: () => apiError(
+        409,
+        'CONFLICT',
+        'La cotización aceptada no contiene el contexto de base requerido para fabricar. Prepará una nueva cotización antes de liberar.',
+        { blocker: 'frozen_base_context' },
+      ),
+    });
+    renderScreen({ initialContext: { quoteRevisionId: QUOTE_1_ID, designId: DESIGN_1_ID, designRevisionId: REV_1_ID } });
+
+    await waitFor(() => expect(screen.getByTestId('preflight-error')).toBeVisible());
+    expect(screen.getByTestId('preflight-error')).toHaveTextContent('Prepará una nueva cotización antes de liberar');
+    expect(screen.queryByTestId('preflight-status')).toBeNull();
+    expect(screen.getByTestId('approve-revision-btn')).toBeDisabled();
+    expect(screen.getByTestId('open-release-review-btn')).toBeDisabled();
   });
 
   it('approval: unavailable before published, success only after response, honest failure', async () => {

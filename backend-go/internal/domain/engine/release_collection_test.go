@@ -29,7 +29,7 @@ func releaseCollectionFixture(t *testing.T) ([]domain.DesignRevisionItem, domain
 func TestResolveReleaseCollectionIdentityAndDemand(t *testing.T) {
 	items, catalog := releaseCollectionFixture(t)
 	before, _ := json.Marshal([]any{items, catalog})
-	result, err := ResolveReleaseCollection("revision-2", items, catalog)
+	result, err := ResolveReleaseCollection("revision-2", items, catalog, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestResolveReleaseCollectionIdentityAndDemand(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("assembly or modifying evaluated output mutated source inputs")
 	}
-	reversed, err := ResolveReleaseCollection("revision-2", []domain.DesignRevisionItem{items[1], items[0]}, catalog)
+	reversed, err := ResolveReleaseCollection("revision-2", []domain.DesignRevisionItem{items[1], items[0]}, catalog, nil)
 	if err != nil || reversed.Units[0].FurnitureInstanceID != "unit-2" || !reflect.DeepEqual(reversed.Requirements, want) {
 		t.Fatalf("reordering must preserve physical order and aggregate demand: %+v, %v", reversed, err)
 	}
@@ -93,7 +93,7 @@ func TestResolveReleaseCollectionRejectsWithoutPartialOutput(t *testing.T) {
 			revision := "revision-2"
 			scenario.edit(&revision, &items, &catalog)
 			before, _ := json.Marshal([]any{items, catalog})
-			result, err := ResolveReleaseCollection(revision, items, catalog)
+			result, err := ResolveReleaseCollection(revision, items, catalog, nil)
 			if err == nil || result != nil {
 				t.Fatalf("expected failure with no partial collection, got %+v, %v", result, err)
 			}
@@ -134,7 +134,7 @@ func TestResolveReleaseCollectionBudget(t *testing.T) {
 					}
 				}
 				before, _ := json.Marshal([]any{items, catalog})
-				result, err := ResolveReleaseCollection("revision-2", items, catalog)
+				result, err := ResolveReleaseCollection("revision-2", items, catalog, nil)
 				if over {
 					if result != nil || err == nil || !strings.Contains(err.Error(), "exceeds 10000 work units") {
 						t.Fatalf("expected collection budget rejection, got %+v, %v", result, err)
@@ -169,7 +169,7 @@ func TestResolveReleaseCollectionManufacturingPolicy(t *testing.T) {
 				module.HardwareLines = nil
 			}
 			before, _ := json.Marshal([]any{items, catalog})
-			result, err := ResolveReleaseCollection("revision-2", items, catalog)
+			result, err := ResolveReleaseCollection("revision-2", items, catalog, nil)
 			if hardware {
 				want := []domain.MaterialRequirementLine{{Kind: "herrajes", MaterialID: "hw-perfil", Quantity: 2}}
 				if err != nil || !reflect.DeepEqual(result.Requirements, want) || len(result.Units[0].BOM.BoardParts) != 0 {

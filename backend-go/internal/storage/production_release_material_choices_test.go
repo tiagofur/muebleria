@@ -36,9 +36,9 @@ func TestProductionRelease_SelectedMaterialAuthority(t *testing.T) {
 					multiOrgExec(t, fx.admin, fmt.Sprintf("REVOKE SELECT ON %s FROM granete_app", catalog.table))
 				}
 				var preflight *domain.ManufacturingPreflightResult
-				err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+				err := releaseTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
 					var err error
-					preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3)
+					preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, "")
 					return err
 				})
 				valid := scenario == "valid"
