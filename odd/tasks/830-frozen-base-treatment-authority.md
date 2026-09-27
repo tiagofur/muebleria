@@ -135,13 +135,25 @@ base-mode freeze (that would create a third authority).
       explicit release dimensions; after correcting those fixture inputs,
       the canonical product path passed without a source fix. This was NOT
       an observed product RED.
-- [ ] T10 — RED→GREEN per-command catalog consistency: deterministic
+- [x] T10 — RED→GREEN per-command catalog consistency: deterministic
       two-connection PostgreSQL mutation test (no sleeps/mocks) for preflight,
       production approval and release; make the first two use an equivalent
       consistent snapshot while re-evaluating at each HTTP command boundary.
-- [ ] T11 — RED→GREEN malformed frozen-context API contract: missing and
+      RED: after a READ COMMITTED catalog read, an independent connection
+      removed structure components; preflight returned a blocked verdict and
+      approval returned a resolution blocker instead of rejecting the mixed
+      boundary, whereas release already rejected it. GREEN: all three reject
+      borrowed READ COMMITTED transactions; the same REPEATABLE READ snapshot
+      yields READY, approval and frozen release, and a later command sees the
+      mutation and blocks. No transaction spans HTTP requests.
+- [x] T11 — RED→GREEN malformed frozen-context API contract: missing and
       invalid quoted context return structured, actionable HTTP 409 in
-      preflight, approval and release, never 500 or SQL internals.
+      preflight, approval and release, never 500 or SQL internals. RED: approval
+      mapped typed missing/invalid context to 500; quoted preflight returned
+      200 for its frozen-context BLOCKED verdict; malformed pricing context
+      surfaced as an untyped revision-snapshot error before release authority
+      loading. GREEN: scoped typed normalization, 409 API mapping, and a 409
+      quoted-preflight verdict, with unrelated snapshot errors preserved.
 - [ ] T12 — Exact-HEAD local verification and handoff: V0/V1/V2, relevant
       #826/#727 regressions, OpenAPI drift/generated parity, disposable
       PostgreSQL under runtime RLS, gofmt/vet, `git diff --check`, factory
@@ -155,7 +167,23 @@ base-mode freeze (that would create a third authority).
   -count=1 ./internal/storage` — green, 3 mode subtests, disposable
   PostgreSQL 16 with unprivileged runtime role. Rollback boundary:
   `production_release_canonical_q1_test.go` only (contract proof, no product
-  behavior change).
+  behavior change). Work-unit commit `cb76760187499aad31ee5ad203815423a4a86295`.
+- T10 focused V2: `scripts/backend-test.sh -run '^TestFrozenBaseCommands_'
+  -count=1 ./internal/storage` — green with real two-connection PostgreSQL
+  mutation and runtime RLS role; observed RED preceded the transaction fix.
+- T11 focused V1/V2: `go test ./internal/api/... -count=1` and
+  `scripts/backend-test.sh -run
+  '^TestProductionRelease_FrozenBaseAuthority_LegacyContextFailsClosed$'
+  -count=1 ./internal/storage` — green after observed HTTP 500/200 and typed
+  storage RED. The frozen-context normalization is scoped to quoted failures.
+- Current pure suites: `go test ./internal/domain/engine/...
+  ./internal/domain/... ./internal/api/... -count=1` — green.
+- Current focused storage regressions: `scripts/backend-test.sh -run
+  '^(TestProductionRelease_|TestEvaluateDesignRevisionPreflight_|
+  TestApproveDesignRevision_|TestFrozenBaseCommands_)' -count=1
+  ./internal/storage` — green (42.196s). Full refreshed storage suite pending.
+- Current `go vet ./internal/domain/... ./internal/api/...
+  ./internal/storage/...` — green. `git diff --check` — green.
 - Engine: `go test ./internal/domain/engine/...` green (focused + package).
 - Storage: full serialized suite via `scripts/backend-test.sh ./internal/storage`
   — 572s green against ephemeral postgres:16 (runtime role granete_app,

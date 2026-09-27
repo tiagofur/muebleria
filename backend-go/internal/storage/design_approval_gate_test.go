@@ -22,7 +22,7 @@ func publishRevisionFromWorkingCopy(t *testing.T, fx *releaseFixture, baseRev st
 	t.Helper()
 	actorA := fiActorA()
 	var revID string
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
 			DesignID:    fx.designID,
 			SourceType:  domain.DesignRevisionSourceSketchup,
@@ -74,7 +74,7 @@ func TestApproveDesignRevision_ProductionGateHappyPath(t *testing.T) {
 	// the exact accepted Q3 pinned: gates pass, transition succeeds.
 	revID := publishRevisionFromWorkingCopy(t, fx, fx.revR3, cleanWorkingItems(fx, nil))
 	var approved *domain.DesignRevision
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		approved, err = fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
 			ProjectID:        fx.projectID,
@@ -93,7 +93,7 @@ func TestApproveDesignRevision_ProductionGateHappyPath(t *testing.T) {
 	}
 
 	// Idempotent replay with the same pin keeps returning the approved state.
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
 			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
@@ -117,7 +117,7 @@ func TestApproveDesignRevision_ProductionGateBlocksOnCommercialChange(t *testing
 	// command returns — no bypass via approval.
 	width := 650.0
 	revID := publishRevisionFromWorkingCopy(t, fx, fx.revR3, cleanWorkingItems(fx, &width))
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
 			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
@@ -136,7 +136,7 @@ func TestApproveDesignRevision_ProductionGateBlocksOnCommercialChange(t *testing
 	// without a commercial baseline) still transitions the revision — but the
 	// commercial Digital Thread stays protected at its own boundary: a
 	// quote-pinned release over this revision is rejected by the same gate.
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevision(ctx, storage.ApproveDesignRevisionCommand{
 			DesignID:         fx.designID,
 			DesignRevisionID: revID,
@@ -178,7 +178,7 @@ func TestApproveDesignRevision_ProductionGateBlocksOnPreflight(t *testing.T) {
 		t.Fatalf("tighten catalog contract: %v", err)
 	}
 
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
 			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
@@ -215,7 +215,7 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 
 	// Draft commercial baseline never grounds a production approval.
 	var draftQuoteID string
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		q, err := createFixtureQuoteRevision(ctx, fx.store, storage.CreateQuoteRevisionCommand{
 			ProjectID: fx.projectID,
 			Notes:     "Q4 draft",
@@ -233,7 +233,7 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 	}
 
 	revID := publishRevisionFromWorkingCopy(t, fx, fx.revR3, cleanWorkingItems(fx, nil))
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
 			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
@@ -248,7 +248,7 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 	}
 
 	// Cross-project baseline answers the typed cross-project error.
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
 			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,
@@ -264,7 +264,7 @@ func TestApproveDesignRevision_ProductionGateRejectsNonAcceptedBaseline(t *testi
 
 	// The production command has NO skip mode: an empty pin rejects as an
 	// invalid command before anything runs.
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.ApproveDesignRevisionForProduction(ctx, storage.ApproveDesignRevisionForProductionCommand{
 			ProjectID:        fx.projectID,
 			DesignID:         fx.designID,

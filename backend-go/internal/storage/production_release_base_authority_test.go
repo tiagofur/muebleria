@@ -109,7 +109,7 @@ func TestProductionRelease_FrozenBaseAuthority_QuotedFrozenModeWins(t *testing.T
 	// PARITY: the quoted preflight evaluates the same frozen authority the
 	// release consumes — READY before any release exists.
 	var preflight *domain.ManufacturingPreflightResult
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, fx.quoteQ3)
 		return err
@@ -142,7 +142,7 @@ func TestProductionRelease_FrozenBaseAuthority_QuotedFrozenModeWins(t *testing.T
 	// Frozen BOM evidence (§10): the exact Q → pricing context → resolved BOM
 	// → frozen release snapshot chain, without consulting mutable project state.
 	var snapshot *storage.ReleaseManufacturingSnapshot
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		snapshot, err = fx.store.GetProductionReleaseManufacturingSnapshot(ctx, fx.projectID, p1.Release.ID)
 		return err
@@ -168,7 +168,7 @@ func TestProductionRelease_FrozenBaseAuthority_QuotedFrozenModeWins(t *testing.T
 	// mutated default — and the second release freezes the same zócalo BOM.
 	multiOrgExec(t, fx.admin, `UPDATE modules SET base_mode='legs' WHERE id='`+fiModuleA+`';`)
 	var preflightAfter *domain.ManufacturingPreflightResult
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		preflightAfter, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, fx.quoteQ3)
 		return err
@@ -194,7 +194,7 @@ func TestProductionRelease_FrozenBaseAuthority_QuotedFrozenModeWins(t *testing.T
 		t.Fatalf("re-release under the frozen authority must succeed after catalog mutation: %v", err)
 	}
 	var snapshot2 *storage.ReleaseManufacturingSnapshot
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		snapshot2, err = fx.store.GetProductionReleaseManufacturingSnapshot(ctx, fx.projectID, p2.Release.ID)
 		return err
@@ -219,7 +219,7 @@ func TestProductionRelease_FrozenBaseAuthority_QuotedFrozenModeWins(t *testing.T
 	// retained ZOCLO choice is honestly rejected, never absorbed by the frozen
 	// context of a quote nobody pinned.
 	var quoteLessPreflight *domain.ManufacturingPreflightResult
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		quoteLessPreflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, "")
 		return err
@@ -299,7 +299,7 @@ func TestProductionRelease_FrozenBaseAuthority_LegacyContextFailsClosed(t *testi
 			}
 
 			var preflight *domain.ManufacturingPreflightResult
-			if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+			if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 				var err error
 				preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, fx.quoteQ3)
 				return err
@@ -323,21 +323,16 @@ func TestProductionRelease_FrozenBaseAuthority_LegacyContextFailsClosed(t *testi
 				})
 				return err
 			})
-			// Layer-aware fail-closed contract: a payload that cannot even
-			// parse is rejected by the earlier reconciliation snapshot gate
-			// (typed invalid-revision-snapshot); the parse-valid unit-level
-			// missing context reaches the frozen-base loader and rejects with
-			// the typed #830 blocker. Both are honest BLOCKs — never a silent
-			// fallback to module defaults.
+			// Even when the earlier reconciliation gate parses the frozen
+			// snapshot first, malformed quoted base truth has the same typed
+			// business blocker as a missing unit context, never a generic
+			// invalid-snapshot error that the API could mistake for a 500.
 			var frozen *domain.FrozenBaseContextError
-			if !errors.As(err, &frozen) && !errors.Is(err, domain.ErrInvalidRevisionSnapshot) {
-				t.Fatalf("release must reject fail-closed with a typed blocker, got %T %v", err, err)
+			if !errors.As(err, &frozen) {
+				t.Fatalf("release must reject with a typed frozen-base blocker, got %T %v", err, err)
 			}
-			if errors.As(err, &frozen) && frozen.Cause != scenario.cause {
+			if frozen.Cause != scenario.cause {
 				t.Fatalf("expected frozen cause %s, got %s", scenario.cause, frozen.Cause)
-			}
-			if scenario.cause == domain.FrozenBaseContextMissingCause && !errors.As(err, &frozen) {
-				t.Fatalf("missing (parse-valid) context must surface the frozen-base blocker, got %T %v", err, err)
 			}
 			var releaseCount int
 			if err := fx.admin.QueryRow(context.Background(),
@@ -366,7 +361,7 @@ func TestProductionRelease_FrozenBaseAuthority_UnitMismatchFailsClosed(t *testin
 		t.Fatal(err)
 	}
 	var revR4 string
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		matRes, err := fx.store.MaterializeQuoteLine(ctx, storage.MaterializeQuoteLineCommand{
 			ProjectID: fiSharedProject, QuoteLineID: lineID, ActorUserID: rlsUserA,
 		})
@@ -410,7 +405,7 @@ func TestProductionRelease_FrozenBaseAuthority_UnitMismatchFailsClosed(t *testin
 	}
 
 	var preflight *domain.ManufacturingPreflightResult
-	if err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	if err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		var err error
 		preflight, err = fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, revR4, fx.quoteQ3)
 		return err
@@ -448,7 +443,7 @@ func TestProductionRelease_FrozenBaseAuthority_ForeignQuoteRejected(t *testing.T
 	// A quote from the actor's own org but a DIFFERENT project: the baseline
 	// contract rejects it before any authority is consumed.
 	var foreignQuoteID string
-	err := fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err := releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		instance, err := fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
 			ProjectID: fiProjectAOnly,
 			Origin:    domain.FurnitureInstanceOriginManual,
@@ -473,7 +468,7 @@ func TestProductionRelease_FrozenBaseAuthority_ForeignQuoteRejected(t *testing.T
 	if err != nil {
 		t.Fatalf("create foreign quote: %v", err)
 	}
-	err = fiTx(t, fx.store, actorA, func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, actorA, func(ctx context.Context) error {
 		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, foreignQuoteID)
 		return err
 	})
@@ -485,7 +480,7 @@ func TestProductionRelease_FrozenBaseAuthority_ForeignQuoteRejected(t *testing.T
 	// but its OWN project's quote never grounds org A's revision — the
 	// baseline contract rejects it exactly like the release command would.
 	var orgBQuoteID string
-	err = fiTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
 		instance, err := fx.store.CreateFurnitureInstance(ctx, storage.CreateFurnitureInstanceCommand{
 			ProjectID: fiProjectB,
 			Origin:    domain.FurnitureInstanceOriginManual,
@@ -510,7 +505,7 @@ func TestProductionRelease_FrozenBaseAuthority_ForeignQuoteRejected(t *testing.T
 	if err != nil {
 		t.Fatalf("create org B quote: %v", err)
 	}
-	err = fiTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
+	err = releaseTx(t, fx.store, fiActorB(), func(ctx context.Context) error {
 		_, err := fx.store.EvaluateDesignRevisionPreflight(ctx, fx.designID, fx.revR3, orgBQuoteID)
 		return err
 	})

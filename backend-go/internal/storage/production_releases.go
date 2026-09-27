@@ -363,6 +363,19 @@ func (s *PostgresStore) enforceProductionGates(ctx context.Context, projectOrgID
 	if quoteRevisionID != "" {
 		inputs, err := s.loadReconciliationInputs(ctx, projectID, quoteRevisionID, designRevisionID)
 		if err != nil {
+			// Reconciliation parses the immutable commercial snapshot before
+			// manufacturing loads its per-unit authority. If that parse fails,
+			// classify malformed quoted base truth through the same typed
+			// blocker the preflight/release resolver uses. Preserve errors from
+			// unrelated design snapshots instead of mislabeling them.
+			if errors.Is(err, domain.ErrInvalidRevisionSnapshot) {
+				if _, baseErr := s.loadReleaseBaseAuthority(ctx, quoteRevisionID, items); baseErr != nil {
+					var frozen *domain.FrozenBaseContextError
+					if errors.As(baseErr, &frozen) {
+						return nil, baseErr
+					}
+				}
+			}
 			return nil, err
 		}
 		reconciliation, err := domain.Reconcile(inputs.Quote, inputs.Design)
@@ -428,6 +441,22 @@ func (s *PostgresStore) EvaluateDesignRevisionPreflight(ctx context.Context, des
 	}
 	if quoteRevisionID != "" && !isValidUUID(quoteRevisionID) {
 		return nil, domain.ErrInvalidReleaseCommand
+	}
+	if transactionFromContext(ctx) == nil {
+		actor, ok := TenantActorFromCtx(ctx)
+		if !ok {
+			return nil, ErrInvalidTenantActor
+		}
+		var result *domain.ManufacturingPreflightResult
+		err := s.WithinTenantTx(WithConsistentCatalogTx(ctx), actor, func(txCtx context.Context) error {
+			var err error
+			result, err = s.EvaluateDesignRevisionPreflight(txCtx, designID, revisionID, quoteRevisionID)
+			return err
+		})
+		return result, err
+	}
+	if err := verifyConsistentCatalogTx(ctx, transactionFromContext(ctx)); err != nil {
+		return nil, err
 	}
 
 	// 1. Load the exact revision pinned to its design (cross-design answers

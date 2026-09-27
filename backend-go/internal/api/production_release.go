@@ -126,8 +126,9 @@ func respondWithDesignApprovalError(w http.ResponseWriter, err error) {
 		var preflightBlocked *domain.ReleasePreflightBlockedError
 		var commercialBlocked *domain.ReleaseCommercialGateError
 		var resolutionFailure *domain.ReleaseUnitResolutionFailure
+		var frozenBase *domain.FrozenBaseContextError
 		if errors.As(err, &preflightBlocked) || errors.As(err, &commercialBlocked) ||
-			errors.As(err, &resolutionFailure) ||
+			errors.As(err, &resolutionFailure) || errors.As(err, &frozenBase) ||
 			errors.Is(err, storage.ErrReleaseSnapshotResolution) ||
 			errors.Is(err, domain.ErrReleaseQuoteNotAccepted) ||
 			errors.Is(err, domain.ErrQuoteRevisionNotFound) ||
@@ -207,6 +208,28 @@ func (s *Server) HandleDesignRevisionPreflight(w http.ResponseWriter, r *http.Re
 			respondWithInternalError(w, err, "evaluate design revision preflight")
 		}
 		return
+	}
+	if quoteRevisionID != "" {
+		for _, issue := range result.Issues {
+			if issue.Code != domain.PreflightIssueFrozenBaseContext {
+				continue
+			}
+			// Storage represents manufacturing blockers as read-only verdicts.
+			// A missing/malformed quoted authority is different: the caller
+			// cannot proceed with this quote and needs an actionable conflict.
+			details := map[string]any{"blocker": string(domain.PreflightIssueFrozenBaseContext)}
+			if domain.AnyRole(actorRoles(claims), domain.RoleCanReleaseProduction) {
+				if issue.FurnitureInstanceID != "" {
+					details["furnitureInstanceId"] = issue.FurnitureInstanceID
+				}
+				if issue.FurnitureDefinitionID != "" {
+					details["furnitureDefinitionId"] = issue.FurnitureDefinitionID
+				}
+			}
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+				domain.FrozenBaseContextUserMessage, details)
+			return
+		}
 	}
 	// Server-authoritative projection (#502 permissions): every project role
 	// sees the verdict, the business-safe message and the blocked-unit count;
@@ -500,13 +523,13 @@ func (s *Server) HandleProjectProductionReleaseCuttingDemand(w http.ResponseWrit
 
 func toReleaseCuttingDemandDTO(view *storage.ReleaseCuttingDemandView) openapi.ReleaseCuttingDemand {
 	dto := openapi.ReleaseCuttingDemand{
-		ReleaseID:               view.ReleaseID,
-		ReleaseNumber:           int64(view.ReleaseNumber),
-		DesignRevisionID:        view.DesignRevisionID,
-		DesignRevisionNumber:    int64(view.DesignRevisionNumber),
+		ReleaseID:                view.ReleaseID,
+		ReleaseNumber:            int64(view.ReleaseNumber),
+		DesignRevisionID:         view.DesignRevisionID,
+		DesignRevisionNumber:     int64(view.DesignRevisionNumber),
 		ManufacturingFingerprint: view.ManufacturingFingerprint,
-		SchemaVersion:           int64(view.SchemaVersion),
-		Units:                   make([]openapi.ReleaseCuttingDemandUnit, 0, len(view.Units)),
+		SchemaVersion:            int64(view.SchemaVersion),
+		Units:                    make([]openapi.ReleaseCuttingDemandUnit, 0, len(view.Units)),
 	}
 	for _, unit := range view.Units {
 		unitDTO := openapi.ReleaseCuttingDemandUnit{
@@ -657,10 +680,10 @@ func respondWithProductionReleaseError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
 			"La revisión no puede resolverse para fabricación",
 			map[string]any{
-				"blocker":                "release_snapshot_resolution",
-				"furnitureInstanceId":    resolutionFailure.FurnitureInstanceID,
-				"furnitureDefinitionId":  resolutionFailure.FurnitureDefinitionID,
-				"reason":                 resolutionFailure.Reason,
+				"blocker":               "release_snapshot_resolution",
+				"furnitureInstanceId":   resolutionFailure.FurnitureInstanceID,
+				"furnitureDefinitionId": resolutionFailure.FurnitureDefinitionID,
+				"reason":                resolutionFailure.Reason,
 			})
 		return
 	}
