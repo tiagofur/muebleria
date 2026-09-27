@@ -88,7 +88,7 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
   - Correction boundary: give this scenario one stable exclusive module ID and use it through React selection, quote/design/release assertions, and live-default mutation. Do not overwrite or restore a shared module; keep its edge, material, hardware, and option fixtures on exclusive IDs and isolated catalog writes.
   - Correction acceptance: the focused scenario remains GREEN and `bash scripts/organization-browser-gate.sh` passes the complete disposable-PostgreSQL browser suite without downstream contamination.
 
-- [ ] **642-CI-04 — Own and cancel copy-feedback timers**
+- [x] **642-CI-04 — Own and cancel copy-feedback timers**
   - Add deterministic fake-timer coverage for copy -> pending reset -> unmount -> timer advance, requiring no post-unmount reset callback or unhandled error. Cover replacement of an earlier pending reset when a second copy occurs if it stays within the same focused component contract.
   - Observe the focused lifecycle RED before changing production source. Stop without a product edit if the assertion cannot fail for the diagnosed reason.
   - Give `TechnicalCopyButton` local ownership of its pending timeout, cancel it on unmount and before scheduling another reset, and preserve current copied-label and rejection behavior.
@@ -142,13 +142,16 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 - V0 GREEN: `pnpm --filter @granete/ui typecheck` and `git diff --check` completed successfully.
 - Focused disposable-PostgreSQL V2 GREEN: `bash scripts/organization-browser-gate.sh tests/organization/production-release-discovery.spec.ts` -> `1 passed (10.2s)` and `[organization-gate] PASS`, with matching backend/fixture database identity.
 - Affected-plan readback again selected every job because the ODD artifact is a sensitive/unknown boundary. The required UI, typecheck, diff, and focused organization browser checks ran; unrelated backend, SketchUp, visual, and foundation full gates remain `NOT_RUN` for this bounded CI correction.
+- Work-unit commit: `dfad368a75368f6554c740c4254afe3fbc97d091` (`fix(ui): cancel technical copy reset timers`) contains the lifecycle fix, both deterministic regressions, and the ODD evidence together.
+- Final clean preflight on that work unit: `python3 scripts/factory_preflight.py --require node pnpm --require-clean` -> `PREFLIGHT_OK_NOT_VERIFIED`, `dirty: false`, exact HEAD `dfad368a75368f6554c740c4254afe3fbc97d091`; its `tests: NOT_RUN` field is preflight metadata, not a substitute for the recorded functional checks.
+- Rollback boundary: revert the work-unit commit to remove only `TechnicalCopyButton` timer ownership, its focused lifecycle regressions, and this task's evidence; the earlier #642 dashboard behavior and isolated browser fixture remain independent.
 
 ## Forecast and delivery strategy
 
 - Reviewed candidate authored size is **739 lines** (738 additions, 1 deletion). This remains below 800, so the explicit normal-range policy applies and no slicing evaluation is triggered.
 - Corrected candidate authored size is **765 lines** (764 additions, 1 deletion) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`; it remains below 800, so no slicing evaluation is required.
 - CI correction forecast: approximately **70-110 additional authored lines**, for an expected cumulative total of **835-875**. This enters the 800-1200 evaluation range. The evaluated strategy remains one PR because the lifecycle regression and fix directly restore this same PR's exact-head required UI check; separating them would leave #869 knowingly red and split one atomic correction. No code-golf or artificial split is justified. Stop for a human checkpoint if the actual total exceeds 1200.
-- Actual pre-commit cumulative size is **893 authored lines** (889 additions, 4 deletions) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`. The prior 800-1200 evaluation therefore applies: keep this inseparable exact-head CI repair in PR #869, with no artificial split and no size exception.
+- Final cumulative size is **897 authored lines** (893 additions, 4 deletions) against pinned base `5b93d336b194077ec116a10d9bd7fff9d4ca9658`. The prior 800-1200 evaluation therefore applies: keep this inseparable exact-head CI repair in PR #869, with no artificial split and no size exception.
 - Strategy: **single PR** while the actual authored total remains in the user-authorized normal range.
 - User size policy: **0-800 authored lines is normal; 800-1200 requires evaluation before delivery; over 1200 requires a user checkpoint before continuing or delivery**.
 - The 400-line ODD value remains a planning heuristic only. Do not code-golf, omit proof, or split one coherent root change solely to satisfy it.
@@ -166,7 +169,8 @@ PR `#869` exact-head CI run `36297444946` exposed a separate pre-existing UI lif
 - [x] Work-unit commit created: `5897435fd47c74faca44e4db3b9fe4bfe8088465`.
 - [x] Independent review completed: APPROVED with no blockers at `9682d706b3736ba64356edfe7338e74620879f2c` vs `5b93d336b194077ec116a10d9bd7fff9d4ca9658`.
 - [x] Verification correction completed in work-unit commit `280f7930e60a69cc23f1f32af594679911efa349` (`test(organization): isolate #642 release fixture`): exclusive fixture persisted without shared-module mutation, focused browser passed `1/1`, and the complete disposable-PostgreSQL browser suite passed `93/93`.
+- [x] Exact-head UI timer correction completed in work-unit commit `dfad368a75368f6554c740c4254afe3fbc97d091`: focused Project Designs passed `61/61`, dashboard passed `8/8`, full UI passed `2008/2008` with zero unhandled matches, typecheck/diff/browser passed, and clean preflight confirmed the work unit.
 
 ## Next step
 
-Execute `642-CI-04` under strict TDD, then return the exact clean correction candidate to the parent for fresh review and separately authorized PR update. Do not push from this task.
+Return the exact clean correction candidate to the parent for fresh independent review and separately authorized PR update. Do not push from this task.
