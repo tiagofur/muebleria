@@ -102,6 +102,8 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - V0 GREEN: `pnpm --filter @granete/ui typecheck` and `git diff --check` completed successfully.
 - V0 NOT_RUN: focused Prettier check could not run because `prettier` is not installed (`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL`). No dependency installation was attempted.
 - Affected-plan readback: `python3 scripts/verify_affected.py --base origin/main --plan` conservatively selected all jobs because the ODD artifact is an unknown/sensitive boundary. The exact UI suite, typecheck, and organization browser proof ran; unrelated backend, SketchUp, visual, and foundation full gates remain pending/not run for final handoff selection.
+- Work-unit commit: `5897435fd47c74faca44e4db3b9fe4bfe8088465` (`fix(production): discover canonical release projects`) contains the dashboard behavior, focused unit proof, disposable-PG browser proof, and this execution artifact together.
+- Rollback boundary: revert the work-unit commit to remove only the `ProductionManagerDashboard` shared authority filter, its focused tests, the new browser scenario, and this focused ODD artifact; no queue/station/backend/SketchUp behavior is coupled to it.
 - Production Queue, station screens, physical progression, SketchUp/TestUp, PTX, and warehouse remain `NOT_RUN` and outside this task.
 
 ## Forecast and delivery strategy
@@ -121,9 +123,9 @@ The sibling #398 candidate at `c7760d434bbc0c988c1692de59bb6ab5eb88f607` is inde
 - [x] Historical #398 evidence and sibling worktree preserved as read-only context.
 - [x] Fresh normal-dashboard product RED observed: normal dashboard rendered, but the exact same-ID draft/P1 project row was absent.
 - [x] Product correction implemented: shared canonical release authority drives only dashboard discovery; negative modern/stale no-release paths fail closed.
-- [ ] Work-unit commit created.
+- [x] Work-unit commit created: `5897435fd47c74faca44e4db3b9fe4bfe8088465`.
 - [ ] Independent review completed.
 
 ## Next step
 
-Freeze the verified work unit, create the authorized Conventional Commit with behavior, tests, and this artifact together, then record exact commit/base evidence and stop for parent review. Do not push or create a PR.
+Stop for fresh parent review of the exact candidate against `origin/main@5b93d336b194077ec116a10d9bd7fff9d4ca9658`. Independent review remains pending; do not push or create a PR.
