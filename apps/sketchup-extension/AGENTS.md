@@ -42,6 +42,7 @@ tocan en Phase B.
 | materiales / roles / opciones / defaults de proyecto / swatches | `resources/js/granete-material-roles.js` | `test/js/granete_material_roles_test.js` (vía `test/unit/granete_material_roles_js_test.rb`) |
 | Inspector / selección / mueble / update / delete / routing de materiales | `resources/js/granete-inspector.js` | `test/js/granete_inspector_test.js` (vía `test/unit/granete_inspector_js_test.rb`) |
 | Inspector child: pieza / herraje / aggregate / breadcrumb / #467 / #468 | `resources/js/granete-inspector-child.js` | `test/js/granete_inspector_child_test.js` (vía `test/unit/granete_inspector_child_js_test.rb`) |
+| conexión modelo/proyecto/diseño / pairing / rebind / publicar / validar diseño | `resources/js/granete-model-binding.js` | `test/js/granete_model_binding_test.js` (vía `test/unit/granete_model_binding_js_test.rb`) |
 
 Los harnesses Node que ejecutan `dialog.html` cargan los scripts reales en
 orden de diálogo mediante `test/js/support/dialog_scripts.js` — nunca copies

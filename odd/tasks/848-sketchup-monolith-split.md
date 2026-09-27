@@ -740,6 +740,168 @@ slice (its choices/selection/mutation), Model Binding, Project Furniture.
 - Remaining Phase B modules after C4.6: inspector, model-binding,
   project-furniture.
 
+## C4.8 — granete-model-binding.js (PRE-COMMIT: awaiting owner boundary review)
+
+Started from `main@3375d658da50d9beea0f6cbbd8a7f5cd40a5b636` (post-C4.7),
+branch `refactor/848-dialog-js-model-binding`. Extraction of the Model ↔
+Project/Design Binding domain per the owner's C4.8 brief: binding status/
+view (#388, nine distinct states), manual bind picker + explicit rebind
+review + refresh/adopt, pairing-code entry (#499), publish confirmation/
+orchestration UI (#392/#847), publish availability VIEW (#466 projection
+consumed call-time, never recomputed) and design-wide validation UX (#731).
+Project Furniture (next slice) was NOT started: `lastPfState` and
+`requestProjectFurniture` stay inline-owned and the module receives only
+the temporary `invalidateProjectFurniture` invalidation seam via init.
+
+- **Extracted**: `resources/js/granete-model-binding.js` (866 lines incl.
+  the agent-first header). dialog.html went 3106 → 2376 lines; inline JS
+  2089 → 1345 (binding/publish/validation DOM refs 24 + 3 + 3, the four
+  copy tables, all binding/publish/validation state and render paths, all
+  picker/pairing/publish/validate listeners and the document-keydown
+  Escape disarm moved out). **SIZE GATE: 866 > ~800 hard target → STOP
+  reported per the brief §3/§34/§36.** The candidate keeps the owner
+  #848-specified single module (binding + publish confirm + validación);
+  no second module was invented. Excess groups: binding+pairing ≈ 330,
+  publish confirm/gate/orchestration ≈ 300, validation UX ≈ 190,
+  header/API/plumbing ≈ 46. Owner decides: accept, or approve a
+  responsibility split (C4.7 precedent).
+- **Public API (10)**: `init(deps)` (injects the shared `showToast` and
+  the temporary PF invalidation seam; registers the preflight subscription
+  once), `setStatus` (UI/internal state render — the pre-C4.8
+  `renderModelBindingStatus`), `onResult`, `onPublishProgress`,
+  `onPublishResult`, `onDesignValidationProgress`,
+  `onDesignValidationResult`, `onBindingProjects`, `onBindingDesigns`,
+  `isConnected` (dep-free Configurator accessor — exact pre-C4.8 closure
+  semantics: connection state, not capability). No private rendering
+  helpers exposed; every entry has a real consumer.
+- **Injected deps (2)**: `showToast`, `invalidateProjectFurniture`. The
+  GraneteDialog wrappers delegate with unchanged Ruby-facing names;
+  `onModelBindingStatus` stays a small INLINE cross-domain orchestrator
+  (module `setStatus` → Commercial Projection `setBinding` → Commercial
+  Bootstrap `setBinding` → connected `requestProjectFurniture()`), the
+  documented temporary C4.8 → final Project Furniture seam. Commercial
+  fan-out inside `handleModelBindingResult` (success + failure fail-closed
+  paths) moved verbatim as call-time references — not normalized.
+- **Wiring movements (documented, behavior-preserving)**: (a) the document
+  keydown Escape→`resetPublishConfirm` listener registers at module load
+  instead of mid-inline — same relative order against the other document
+  keydown listeners (account popover, finish-selector modal register
+  earlier; all fire independently on every Escape), namespace guard keeps
+  re-execution from duplicating it; (b) the `window.GraneteState.subscribe("preflight")`
+  registration moved from mid-inline into `init()` behind a one-time
+  guard — init runs inside the same inline bootstrap pass before any
+  preflight slice can be pushed, and the #498 runtime loads AFTER the
+  inline script, so in the real host the subscription stays a no-op
+  exactly as before (asserted by the focused harness: no GraneteState →
+  no subscription; init twice → one subscription).
+- **Move fidelity**: mechanical audit extracted the exact moved segments
+  from git HEAD (DOM refs 1028–1051, keydown 1143–1147, block 1651–2390;
+  714 non-blank lines) and diffed them against the module after
+  normalization. Every non-equal opcode maps to one enumerated
+  transformation: new header/IIFE/guard/deps/API plumbing, `showToast(` →
+  `deps.showToast(`, `lastPfState = null;` → `deps.invalidateProjectFurniture()`
+  (+2 seam comment lines), the subscribe block rehoused in
+  `registerPreflightSubscription()` with the guard, the Escape listener
+  repositioned within the module, and the old "initial unbound render"
+  comment relocated (updated) to the bootstrap call site. Zero
+  copy/condition-order/payload/copy-string differences; badge classes,
+  binding-state order, stale-base arrow, pairing semantics (raw code only
+  in the input, trim before send, empty → no bridge call, success clears,
+  confirmationFailed, invalid keeps value, not-found/unusable clear,
+  `pairing_rebind_requires_new_code` never opens the manual rebind),
+  6000 ms arm timer, separate confirm action, `confirmRebind === true`
+  only on the explicit rebind, exceptions-only validation cards,
+  `validate_design_revision`/`publish_design_revision`/`connect_with_code`
+  payloads all byte-identical.
+- **Preserved quirks (documented, not fixed)**: `fillSelect` with an empty
+  entries array always renders "Sin opciones disponibles" — the passed
+  placeholder ("Cargando proyectos…") never shows (pre-existing; now
+  asserted verbatim); `btn-bootstrap-project` still fetched by id inside
+  the status render; unreachable is a "bound" state showing the saved
+  binding card.
+- **Harness migration**: `test/js/support/dialog_scripts.js` loads the
+  module between inspector and inline; `dialog_publish_test.js` preload
+  chain updated (model-binding after inspector, before the state/preflight
+  preloads — mirroring dialog.html order). Repointed (never deleted)
+  asserts: `granete_material_roles_js_test.rb` (initial render now
+  delegates to `window.GraneteUI.modelBinding.setStatus({ state: "unbound" })`)
+  and `granete_configurator_js_test.rb` (`isModelConnected` accessor now
+  reads the module API). The `granete_configurator_test.js` structural
+  ban on `var modelBindingState` remains valid — the state lives in the
+  model-binding module, not the configurator.
+- **Focused tests**: `test/js/granete_model_binding_test.js` — 46 tests:
+  registration + idempotent re-execution (no duplicated element/document/
+  subscription registrations), exact 10-entry API, init fail-fast (full +
+  partial), all nine binding states with exact copy/badge classes/reason
+  append/base label (R-number, id slice, stale arrow, "sin publicar"
+  fallbacks), isConnected semantics, PF seam invalidation count + no PF
+  state in module (structural), Configurator updateInsertButton seam,
+  picker open/list/no-bridge fallback, project+design listing with status
+  labels and unauthenticated silence, exact connect payloads
+  (confirmRebind false/true), rebind review lifecycle, cancel/refresh/
+  adopt, full pairing matrix, publish arm/confirm/cancel/Escape/6000 ms/
+  double-click protection/disarmed no-op, blocked gate does NOT disable
+  the orchestration (#731), all publicationGate blocked-copy branches,
+  progress steps with detail, success (immutable R + toast + refresh +
+  exceptions cleared), failure error mapping + retry label + validation
+  projection supersede, validation progress/summary singular/plural/
+  exceptions-only/select/navigate/no-runtime degradation, preflight
+  subscription idempotence + non-preflight slices inert + real-host no-op.
+  Ruby side `test/unit/granete_model_binding_js_test.rb` (8 runs, 199
+  assertions): runs the harness + symbol guards (header, module owns the
+  full state/render set with exact 6000/payload/confirmRebind markers,
+  monolith carries no binding implementation symbol, load order inspector →
+  model-binding → inline in dialog.html AND dialog_scripts.js, bootstrap
+  wiring order, wrappers stay thin delegation with the commercial/PF
+  orchestrator intact, lastPfState stays inline-owned, seam wiring
+  asserted).
+- **Verify** (Homebrew `ruby@3.2` 3.2.11, vendored bundle — same libruby
+  linkage note as C4.1–C4.7; no gem or lockfile change): all 29 Node
+  harnesses under test/js green; RuboCop 259 files / 0 offenses; unit
+  suite 1192 runs, 8648 assertions, 0 failures/errors/skips; contract
+  suite 6 runs, 4043 assertions, 0 failures; `git diff --check` clean;
+  `verify_affected --base origin/main --plan` exit 0 (conservatively
+  expanded by the pre-existing untracked `.codex/`, `.github/hooks/`,
+  `plugin-siguiente.md` — not part of this slice); contracts drift +
+  ci/factory unittest suites green. RBZ rebuilt + `package:verify`,
+  sha256 `c433159288a2c89089da3aa5a6bb84ffa33cf4e9ae018fcbb6f836b17ee04ef3`,
+  packages granete-model-binding.js.
+- **Behavior changes: 0** (target). Documented wiring movements above.
+- **Real SketchUp host smoke: NOT_RUN** (same phase-level gate).
+- **Size decision (owner-approved tolerance, NOT a precedent)**: the
+  candidate measures 866 lines against the #848 ~800 target. The owner
+  reviewed and accepted 866 as within the approximate ~800 tolerance
+  (excess ≈ 8%): the module keeps ONE cohesive responsibility (binding +
+  publish confirm + validación, exactly the #848 Phase B boundary), the
+  excess is contract header/DOM refs/copy tables/plumbing rather than new
+  logical complexity, and a split now would introduce an artificial
+  frontier with new bidirectional seams. Contrast with C4.7, where 965
+  lines exposed a REAL natural boundary (furniture vs child Inspector)
+  and the split was therefore approved. No artificial line reduction, no
+  compression, no useful-comment removal, no second module, and no
+  invented size exception beyond this documented owner decision.
+- **Status (owner pre-commit boundary review: APPROVED for
+  publication)**: the ratifications below are recorded BEFORE the commit
+  — this artifact does NOT claim committed/PR-published/CI-green states
+  for its own HEAD (those are future/dynamic remote states): boundary
+  ratified exactly as reported (authority + 4 copy tables + 10-entry
+  public API + 2 injected deps, no rename); Project Furniture seam
+  approved (lastPfState stays inline-owned; the connected reload stays in
+  the inline onModelBindingStatus cross-domain wrapper); Configurator
+  seam approved (module accessor, updateInsertButton call-time);
+  Commercial behavior approved as-is (no normalization, no added
+  Bootstrap fan-out); pairing/rebind byte-semantics approved; publish/
+  validation defenses approved (6000 ms, armed-first click, separate
+  confirm, double-click protection, cancel/Escape disarm, exceptions-only,
+  exact FurnitureInstance identity, navigate region "primary");
+  GraneteState subscription movement to init() approved as a documented
+  wiring movement (same bootstrap pass; real-host no-op preserved;
+  harness-with-preload subscription preserved; one-time guard, no
+  duplicated listeners on re-init); Escape listener in the module approved
+  (one listener, no stopPropagation, no Account/Finish-Selector
+  interaction change). Behavior changes: 0. Real SketchUp host smoke:
+  NOT_RUN. Project Furniture: NOT_STARTED (final Phase B slice).
+
 ## C4.7 — granete-inspector.js + granete-inspector-child.js
 ## (boundary-adjusted; owner-approved)
 
