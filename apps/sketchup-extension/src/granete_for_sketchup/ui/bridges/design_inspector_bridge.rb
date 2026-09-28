@@ -76,7 +76,7 @@ module Granete
           refusal, stored, working = design_inspector_apply_context(payload['designId'].to_s, token)
           return execute_bridge(dialog, 'onDesignDefaultsApplied', refusal.merge('requestId' => request_id)) if refusal
 
-          updated = design_inspector_placer.service.put_working_copy(
+          updated = design_inspector_placer.service.update_working_copy(
             stored.design_id,
             items: working.items,
             expected_working_version: token,

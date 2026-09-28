@@ -205,7 +205,7 @@ module Granete
         bridge.handle_apply_design_defaults(dialog, apply_payload)
 
         payload = dialog.pushed.fetch('onDesignDefaultsApplied')
-        assert_equal 'ok', payload['status']
+        assert_equal 'ok', payload['status'], "apply answered #{payload.inspect}"
         assert_equal WC_VERSION_B, payload['workingVersion'], 'the accepted PUT mints a new token'
         assert_equal({ 'INTERIOR' => 'mat-roble' }, payload['authoringDefaults']['materialChoices'])
 

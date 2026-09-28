@@ -45,9 +45,9 @@ class DesignInspectorBridgeTest < Minitest::Test
       @working_copy
     end
 
-    def put_working_copy(_design_id, items:, expected_working_version:, authoring_defaults:)
-      @calls << [:put_working_copy, { items: items, expected_working_version: expected_working_version,
-                                      authoring_defaults: authoring_defaults }]
+    def update_working_copy(_design_id, items:, expected_working_version:, authoring_defaults:)
+      @calls << [:update_working_copy, { items: items, expected_working_version: expected_working_version,
+                                         authoring_defaults: authoring_defaults }]
       raise @error if @error
 
       Struct.new(:updated_at, :authoring_defaults, keyword_init: true).new(
@@ -189,7 +189,7 @@ class DesignInspectorBridgeTest < Minitest::Test
     assert_equal 'ok', payload['status']
     assert_equal 31, payload['requestId']
     # Exactly one GET (authoritative items) + exactly ONE PUT.
-    assert_equal %i[get_working_copy put_working_copy], recording.calls.map(&:first)
+    assert_equal %i[get_working_copy update_working_copy], recording.calls.map(&:first)
     put = recording.calls.last.last
     assert_equal '2026-09-28T10:00:00.000000Z', put[:expected_working_version]
     assert_equal({ 'materialChoices' => { 'INTERIOR' => 'mat-oak', 'FRENTES' => 'mat-blanco' } },
@@ -240,9 +240,9 @@ class DesignInspectorBridgeTest < Minitest::Test
       @working_copy
     end
 
-    def put_working_copy(_design_id, items:, expected_working_version:, authoring_defaults:)
-      @calls << [:put_working_copy, { items: items, expected_working_version: expected_working_version,
-                                      authoring_defaults: authoring_defaults }]
+    def update_working_copy(_design_id, items:, expected_working_version:, authoring_defaults:)
+      @calls << [:update_working_copy, { items: items, expected_working_version: expected_working_version,
+                                         authoring_defaults: authoring_defaults }]
       Struct.new(:updated_at, :authoring_defaults, keyword_init: true).new(
         updated_at: '2026-09-28T11:00:00.000000Z', authoring_defaults: authoring_defaults
       )
