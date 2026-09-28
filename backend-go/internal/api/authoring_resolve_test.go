@@ -242,6 +242,32 @@ func shelfRelJSON(id, shelfID string) engine.AuthoringRelationship {
 	}
 }
 
+// floorSideOccurrencesJSON is the asymmetric J1 golden cabinet: the right
+// side is inset 18 mm toward the back, so the two floor-side contacts carry
+// different useful overlaps (542 mm on the left, 524 mm on the right).
+func floorSideOccurrencesJSON() []authoringOccurrenceWire {
+	occ := defaultOccurrencesJSON()
+	occ[1] = occurrenceJSON("side-right-01", "st-comp-side-r", []float64{582, 18, 0})
+	return occ
+}
+
+// floorSideRelJSON declares the golden J1-B floor-side relationship: the
+// floor is the source, each side a target with its concrete contact face.
+func floorSideRelJSON(id string, stationCount, startMargin, endMargin float64) engine.AuthoringRelationship {
+	return engine.AuthoringRelationship{
+		RelationshipID: id,
+		Kind:           "floor-side",
+		Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "floor-01", Role: "floor"},
+		Targets: []engine.AuthoringRelationshipAnchor{
+			{ComponentInstanceID: "side-left-01", Role: "side", Face: "front"},
+			{ComponentInstanceID: "side-right-01", Role: "side", Face: "back"},
+		},
+		Parameters: map[string]any{
+			"stationCount": stationCount, "startMarginMm": startMargin, "endMarginMm": endMargin,
+		},
+	}
+}
+
 func postAuthoringResolve(server *Server, token, query string, body any) *httptest.ResponseRecorder {
 	handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
 	raw, _ := json.Marshal(body)
@@ -574,6 +600,73 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 				{HardwarePlacementID: "hp-handle-rotated-01", PlacementKind: "manual", CatalogHardwareID: "hw-handle", HostComponentInstanceID: "door-01",
 					AnchorFace: "front", OffsetMm: []float64{120, 360}, RotationDeg: &domain.HardwareRotationDeg{X: 5, Y: 10, Z: 90}},
 			}
+		})), http.StatusOK),
+
+		// 20. J1-B golden floor-side: asymmetric cabinet, declared target
+		// faces, explicit station pattern → 2 valid contacts, exact station
+		// counts, TECHNICAL_PROFILE_REQUIRED, zero operations.
+		run("20-floor-side-contacts", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = floorSideOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{floorSideRelJSON("rel-floor-sides-01", 3, 30, 50)}
+		})), http.StatusOK),
+
+		// 21. Station count mutation: same cabinet, 4 stations per contact —
+		// the manufacturing fingerprint must move.
+		run("21-floor-side-station-count", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = floorSideOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{floorSideRelJSON("rel-floor-sides-01", 4, 30, 50)}
+		})), http.StatusOK),
+
+		// 22. Margin mutation: same cabinet and count, tighter margins — the
+		// manufacturing fingerprint must move again.
+		run("22-floor-side-margins", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = floorSideOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{floorSideRelJSON("rel-floor-sides-01", 3, 10, 20)}
+		})), http.StatusOK),
+
+		// 23. Reorder invariance: components reversed and relationship
+		// targets reversed — identical joinery semantics and a byte-identical
+		// manufacturing fingerprint to 20.
+		run("23-floor-side-reorder", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			occ := floorSideOccurrencesJSON()
+			reversed := make([]authoringOccurrenceWire, 0, len(occ))
+			for i := len(occ) - 1; i >= 0; i-- {
+				reversed = append(reversed, occ[i])
+			}
+			f.Components = reversed
+			f.Relationships = []engine.AuthoringRelationship{{
+				RelationshipID: "rel-floor-sides-01",
+				Kind:           "floor-side",
+				Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "floor-01", Role: "floor"},
+				Targets: []engine.AuthoringRelationshipAnchor{
+					{ComponentInstanceID: "side-right-01", Role: "side", Face: "back"},
+					{ComponentInstanceID: "side-left-01", Role: "side", Face: "front"},
+				},
+				Parameters: map[string]any{"stationCount": 3, "startMarginMm": 30, "endMarginMm": 50},
+			}}
+		})), http.StatusOK),
+
+		// 24. Joinery-free baseline of the J1 golden cabinet: the same
+		// asymmetric occurrence set with NO relationship — adding floor-side
+		// semantics in 20 must move the fingerprint from here.
+		run("24-floor-side-none", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = floorSideOccurrencesJSON()
+		})), http.StatusOK),
+
+		// 25. Unsupported relationship kind: pure error echo on the wire —
+		// the joinery body stays out of the fingerprint, which must remain
+		// byte-identical to 24 (same cabinet, no joinery semantics).
+		run("25-floor-side-unsupported-kind", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = floorSideOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{{
+				RelationshipID: "rel-top-sides-01",
+				Kind:           "top-side",
+				Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "top-01", Role: "top"},
+				Targets: []engine.AuthoringRelationshipAnchor{
+					{ComponentInstanceID: "side-left-01", Role: "side", Face: "front"},
+					{ComponentInstanceID: "side-right-01", Role: "side", Face: "back"},
+				},
+			}}
 		})), http.StatusOK),
 
 		// Negative proof: derived placement edit blocked (explicit in canonical data via PlacementKind, not encoded only in ID).
