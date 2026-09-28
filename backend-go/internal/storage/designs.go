@@ -50,6 +50,7 @@ type PublishDesignRevisionItemCommand struct {
 	Parameters             map[string]any
 	MaterialChoices        map[string]string
 	MaterialChoiceSources  map[string]domain.DesignMaterialProvenance
+	MaterialChoiceModes    map[string]domain.DesignMaterialChoiceMode
 	PresentationSnapshot   *domain.DesignRevisionPresentationSnapshot
 	Transform              domain.Transform3D
 	RoomID                 string
@@ -71,6 +72,7 @@ type UpdateDesignWorkingCopyItemCommand struct {
 	DefinitionVersion      *int
 	Parameters             map[string]any
 	MaterialChoices        map[string]string
+	MaterialChoiceModes    map[string]domain.DesignMaterialChoiceMode
 	Transform              domain.Transform3D
 	RoomID                 string
 	TechnicalClientLocator *domain.TechnicalClientLocator
@@ -91,8 +93,12 @@ type UpdateDesignWorkingCopyCommand struct {
 	BaseRevisionID         *string
 	ExpectedWorkingVersion *time.Time
 	SourceType             domain.DesignRevisionSourceType
-	Items                  []UpdateDesignWorkingCopyItemCommand
-	ActorUserID            string
+	// AuthoringDefaults follows the #810 caller-merge frontier: nil keeps the
+	// stored Design defaults (the field is not part of this write); non-nil
+	// replaces them wholesale — including an explicit empty block.
+	AuthoringDefaults *domain.DesignAuthoringDefaults
+	Items             []UpdateDesignWorkingCopyItemCommand
+	ActorUserID       string
 }
 
 type ResetDesignWorkingCopyCommand struct {
@@ -399,21 +405,32 @@ const designRevisionColumns = `
 	revision_number, COALESCE(parent_revision_id::text, ''),
 	source_type, status, COALESCE(created_by::text, ''),
 	created_at, COALESCE(approved_by::text, ''), approved_at,
-	COALESCE(created_by_display_name, ''), COALESCE(approved_by_display_name, '')`
+	COALESCE(created_by_display_name, ''), COALESCE(approved_by_display_name, ''),
+	authoring_defaults_snapshot`
 
 func scanDesignRevision(row pgx.Row) (*domain.DesignRevision, error) {
 	var r domain.DesignRevision
+	var rawDefaults []byte
 	if err := row.Scan(
 		&r.ID, &r.OrganizationID, &r.ProjectID, &r.DesignID,
 		&r.RevisionNumber, &r.ParentRevisionID,
 		&r.SourceType, &r.Status, &r.CreatedBy,
 		&r.CreatedAt, &r.ApprovedBy, &r.ApprovedAt,
 		&r.CreatedByDisplayName, &r.ApprovedByDisplayName,
+		&rawDefaults,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignRevisionNotFound
 		}
 		return nil, err
+	}
+	if len(rawDefaults) > 0 && string(rawDefaults) != "null" {
+		var defaults domain.DesignAuthoringDefaults
+		if err := json.Unmarshal(rawDefaults, &defaults); err != nil {
+			return nil, fmt.Errorf("%w: read back authoring defaults snapshot: %v", domain.ErrSerializationFailed, err)
+		}
+		normalized := defaults.Normalize()
+		r.AuthoringDefaultsSnapshot = &normalized
 	}
 	return &r, nil
 }
@@ -421,22 +438,27 @@ func scanDesignRevision(row pgx.Row) (*domain.DesignRevision, error) {
 const designRevisionItemColumns = `
 	id, organization_id, project_id, design_revision_id,
 	furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
-	definition_version, parameters, material_choices, material_choice_sources,
+	definition_version, parameters, material_choices, material_choice_sources, material_choice_modes,
 	transform, COALESCE(room_id, ''), technical_client_locator,
 	created_at, presentation_snapshot`
 
 func scanDesignRevisionItem(row pgx.Row) (*domain.DesignRevisionItem, error) {
 	var item domain.DesignRevisionItem
-	var rawParams, rawMaterials, rawSources, rawTransform, rawPresentation []byte
+	var rawParams, rawMaterials, rawSources, rawModes, rawTransform, rawPresentation []byte
 	var rawLocator []byte
 	if err := row.Scan(
 		&item.ID, &item.OrganizationID, &item.ProjectID, &item.DesignRevisionID,
 		&item.FurnitureInstanceID, &item.FurnitureDefinitionID,
-		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawSources,
+		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawSources, &rawModes,
 		&rawTransform, &item.RoomID, &rawLocator,
 		&item.CreatedAt, &rawPresentation,
 	); err != nil {
 		return nil, err
+	}
+	if len(rawModes) > 0 && string(rawModes) != "null" {
+		if err := json.Unmarshal(rawModes, &item.MaterialChoiceModes); err != nil {
+			return nil, fmt.Errorf("%w: read back material choice modes: %v", domain.ErrSerializationFailed, err)
+		}
 	}
 	if len(rawParams) > 0 {
 		if err := json.Unmarshal(rawParams, &item.Parameters); err != nil {
@@ -486,22 +508,30 @@ func scanDesignRevisionItem(row pgx.Row) (*domain.DesignRevisionItem, error) {
 const designWorkingItemColumns = `
 	id, organization_id, project_id, design_id,
 	furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
-	definition_version, parameters, material_choices, material_choice_sources,
+	definition_version, parameters, material_choices, material_choice_sources, material_choice_modes,
 	transform, COALESCE(room_id, ''), technical_client_locator,
 	created_at, updated_at`
 
 func scanDesignWorkingItem(row pgx.Row) (*domain.DesignWorkingItem, error) {
 	var item domain.DesignWorkingItem
-	var rawParams, rawMaterials, rawSources, rawTransform []byte
+	var rawParams, rawMaterials, rawSources, rawModes, rawTransform []byte
 	var rawLocator []byte
 	if err := row.Scan(
 		&item.ID, &item.OrganizationID, &item.ProjectID, &item.DesignID,
 		&item.FurnitureInstanceID, &item.FurnitureDefinitionID,
-		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawSources,
+		&item.DefinitionVersion, &rawParams, &rawMaterials, &rawSources, &rawModes,
 		&rawTransform, &item.RoomID, &rawLocator,
 		&item.CreatedAt, &item.UpdatedAt,
 	); err != nil {
 		return nil, err
+	}
+	if len(rawModes) > 0 && string(rawModes) != "null" {
+		if err := json.Unmarshal(rawModes, &item.MaterialChoiceModes); err != nil {
+			return nil, fmt.Errorf("%w: read back material choice modes: %v", domain.ErrSerializationFailed, err)
+		}
+	}
+	if item.MaterialChoiceModes == nil {
+		item.MaterialChoiceModes = make(map[string]domain.DesignMaterialChoiceMode)
 	}
 	if len(rawParams) > 0 {
 		if err := json.Unmarshal(rawParams, &item.Parameters); err != nil {
@@ -582,7 +612,7 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 		return nil, err
 	}
 
-	wcBaseRevID, _, err := s.loadWorkingCopyBaseForPublish(ctx, cmd.DesignID)
+	wcBaseRevID, _, authoringDefaults, err := s.loadWorkingCopyBaseForPublish(ctx, cmd.DesignID)
 	if err != nil {
 		return nil, err
 	}
@@ -599,12 +629,20 @@ func (s *PostgresStore) PublishDesignRevision(ctx context.Context, cmd PublishDe
 	if err := s.validateWorkingItemsForPublish(ctx, projectID, itemsToPublish); err != nil {
 		return nil, err
 	}
+	// #784: every newly published item freezes explicit inheritance modes in
+	// strict parity with its materialized choices — no silent synthesis at
+	// the immutability boundary.
+	for _, item := range itemsToPublish {
+		if err := domain.ValidateDesignMaterialChoiceModes(item.MaterialChoices, item.MaterialChoiceModes); err != nil {
+			return nil, fmt.Errorf("%w: item %s", err, item.FurnitureInstanceID)
+		}
+	}
 	if err := s.buildDesignRevisionPresentation(ctx, designOrgID, projectID, itemsToPublish); err != nil {
 		return nil, err
 	}
 
 	rev, err := s.insertDesignRevisionAndItems(ctx, designOrgID, projectID, cmd.DesignID,
-		nextRevisionNum, effectiveParentID, cmd.SourceType, cmd.ActorUserID, itemsToPublish)
+		nextRevisionNum, effectiveParentID, cmd.SourceType, cmd.ActorUserID, authoringDefaults, itemsToPublish)
 	if err != nil {
 		return nil, err
 	}
@@ -656,23 +694,33 @@ func (s *PostgresStore) lockActiveDesignForPublish(ctx context.Context, designID
 
 // loadWorkingCopyBaseForPublish locks the working copy row: the working copy
 // is the sole mutable authoring authority and its base_revision_id is the
-// concurrency authority at publish time.
-func (s *PostgresStore) loadWorkingCopyBaseForPublish(ctx context.Context, designID string) (*string, string, error) {
+// concurrency authority at publish time. The #784 authoring defaults ride the
+// same locked read so the revision snapshot freezes the exact publish-moment
+// defaults atomically with the items.
+func (s *PostgresStore) loadWorkingCopyBaseForPublish(ctx context.Context, designID string) (*string, string, domain.DesignAuthoringDefaults, error) {
 	var wcBaseRevID *string
 	var wcSourceType string
+	var rawDefaults []byte
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT base_revision_id::text, source_type
+		SELECT base_revision_id::text, source_type, authoring_defaults
 		FROM design_working_copies
 		WHERE design_id = $1
 		FOR UPDATE
-	`, designID).Scan(&wcBaseRevID, &wcSourceType)
+	`, designID).Scan(&wcBaseRevID, &wcSourceType, &rawDefaults)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, "manual", nil
+			return nil, "manual", domain.DesignAuthoringDefaults{}.Normalize(), nil
 		}
-		return nil, "", err
+		return nil, "", domain.DesignAuthoringDefaults{}, err
 	}
-	return wcBaseRevID, wcSourceType, nil
+	defaults := domain.DesignAuthoringDefaults{}.Normalize()
+	if len(rawDefaults) > 0 && string(rawDefaults) != "null" {
+		if err := json.Unmarshal(rawDefaults, &defaults); err != nil {
+			return nil, "", domain.DesignAuthoringDefaults{}, fmt.Errorf("%w: read authoring defaults for publish: %v", domain.ErrSerializationFailed, err)
+		}
+		defaults = defaults.Normalize()
+	}
+	return wcBaseRevID, wcSourceType, defaults, nil
 }
 
 // resolveRevisionNumbering enforces the single fail-closed optimistic
@@ -732,7 +780,7 @@ func (s *PostgresStore) resolveRevisionNumbering(ctx context.Context, designID, 
 func (s *PostgresStore) loadWorkingItemsForPublish(ctx context.Context, designID string) ([]PublishDesignRevisionItemCommand, error) {
 	wRows, err := s.db(ctx).Query(ctx, `
 		SELECT furniture_instance_id, COALESCE(furniture_definition_id::text, ''),
-		       definition_version, parameters, material_choices, material_choice_sources,
+		       definition_version, parameters, material_choices, material_choice_sources, material_choice_modes,
 		       transform, COALESCE(room_id, ''), technical_client_locator
 		FROM design_working_items
 		WHERE design_id = $1
@@ -746,11 +794,11 @@ func (s *PostgresStore) loadWorkingItemsForPublish(ctx context.Context, designID
 	var itemsToPublish []PublishDesignRevisionItemCommand
 	for wRows.Next() {
 		var itm PublishDesignRevisionItemCommand
-		var rawP, rawM, rawS, rawT, rawL []byte
+		var rawP, rawM, rawS, rawModes, rawT, rawL []byte
 		var defIDStr string
 		if err := wRows.Scan(
 			&itm.FurnitureInstanceID, &defIDStr,
-			&itm.DefinitionVersion, &rawP, &rawM, &rawS, &rawT,
+			&itm.DefinitionVersion, &rawP, &rawM, &rawS, &rawModes, &rawT,
 			&itm.RoomID, &rawL,
 		); err != nil {
 			return nil, fmt.Errorf("scan working item for publish: %w", err)
@@ -770,6 +818,14 @@ func (s *PostgresStore) loadWorkingItemsForPublish(ctx context.Context, designID
 			if err := json.Unmarshal(rawS, &itm.MaterialChoiceSources); err != nil {
 				return nil, fmt.Errorf("%w: unmarshal working item material_choice_sources: %v", domain.ErrSerializationFailed, err)
 			}
+		}
+		if len(rawModes) > 0 && string(rawModes) != "null" {
+			if err := json.Unmarshal(rawModes, &itm.MaterialChoiceModes); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal working item material_choice_modes: %v", domain.ErrSerializationFailed, err)
+			}
+		}
+		if itm.MaterialChoiceModes == nil {
+			itm.MaterialChoiceModes = make(map[string]domain.DesignMaterialChoiceMode)
 		}
 		if len(rawT) > 0 && string(rawT) != "{}" && string(rawT) != "null" {
 			if err := json.Unmarshal(rawT, &itm.Transform); err != nil {
@@ -861,10 +917,12 @@ func (s *PostgresStore) validateWorkingItemsForPublish(ctx context.Context, proj
 }
 
 // insertDesignRevisionAndItems writes the immutable revision header and its
-// item snapshots with strict serialization checks.
+// item snapshots with strict serialization checks. The header freezes the
+// working copy's #784 authoring defaults; each item freezes its explicit
+// inheritance modes (required for new publishes, in parity with choices).
 func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, designOrgID, projectID, designID string,
 	nextRevisionNum int, effectiveParentID *string, sourceType domain.DesignRevisionSourceType,
-	actorUserID string, itemsToPublish []PublishDesignRevisionItemCommand) (*domain.DesignRevision, error) {
+	actorUserID string, authoringDefaults domain.DesignAuthoringDefaults, itemsToPublish []PublishDesignRevisionItemCommand) (*domain.DesignRevision, error) {
 	var createdBy *string
 	if isValidUUID(actorUserID) {
 		createdBy = &actorUserID
@@ -875,25 +933,41 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 	}
 	createdByDisplayName := actorDisplayName(ctx, s, actorUserID, actorFallback)
 
+	defaultsJSON, err := json.Marshal(authoringDefaults.Normalize())
+	if err != nil {
+		return nil, fmt.Errorf("%w: authoring_defaults_snapshot serialization error: %v", domain.ErrSerializationFailed, err)
+	}
+
 	var rev domain.DesignRevision
-	err := s.db(ctx).QueryRow(ctx, `
+	var rawRevDefaults []byte
+	err = s.db(ctx).QueryRow(ctx, `
 		INSERT INTO design_revisions (
 			organization_id, project_id, design_id, revision_number,
-			parent_revision_id, source_type, status, created_by, created_by_display_name
+			parent_revision_id, source_type, status, created_by, created_by_display_name,
+			authoring_defaults_snapshot
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING `+designRevisionColumns,
 		designOrgID, projectID, designID, nextRevisionNum,
 		effectiveParentID, sourceType, domain.DesignRevisionStatusPublished, createdBy, createdByDisplayName,
+		defaultsJSON,
 	).Scan(
 		&rev.ID, &rev.OrganizationID, &rev.ProjectID, &rev.DesignID,
 		&rev.RevisionNumber, &rev.ParentRevisionID,
 		&rev.SourceType, &rev.Status, &rev.CreatedBy,
 		&rev.CreatedAt, &rev.ApprovedBy, &rev.ApprovedAt,
-		&rev.CreatedByDisplayName, &rev.ApprovedByDisplayName,
+		&rev.CreatedByDisplayName, &rev.ApprovedByDisplayName, &rawRevDefaults,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert design revision: %w", err)
+	}
+	if len(rawRevDefaults) > 0 && string(rawRevDefaults) != "null" {
+		var frozen domain.DesignAuthoringDefaults
+		if err := json.Unmarshal(rawRevDefaults, &frozen); err != nil {
+			return nil, fmt.Errorf("%w: read back authoring defaults snapshot: %v", domain.ErrSerializationFailed, err)
+		}
+		normalized := frozen.Normalize()
+		rev.AuthoringDefaultsSnapshot = &normalized
 	}
 
 	revItems := make([]domain.DesignRevisionItem, 0, len(itemsToPublish))
@@ -925,6 +999,16 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 				return nil, fmt.Errorf("%w: material_choice_sources serialization error: %v", domain.ErrSerializationFailed, err)
 			}
 		}
+		// #784: new publishes REQUIRE explicit inheritance modes — the same
+		// required-snapshot discipline as presentation_snapshot. Legacy
+		// revision items (pre-contract) read NULL and stay NULL forever.
+		if itemCmd.MaterialChoiceModes == nil {
+			return nil, fmt.Errorf("%w: material_choice_modes is required for newly published revision items", domain.ErrSerializationFailed)
+		}
+		modesJSON, err := json.Marshal(itemCmd.MaterialChoiceModes)
+		if err != nil {
+			return nil, fmt.Errorf("%w: material_choice_modes serialization error: %v", domain.ErrSerializationFailed, err)
+		}
 		if itemCmd.PresentationSnapshot == nil {
 			return nil, fmt.Errorf("%w: presentation_snapshot is required for newly published revision items", domain.ErrSerializationFailed)
 		}
@@ -946,23 +1030,23 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 		}
 
 		var insertedItem domain.DesignRevisionItem
-		var rawP, rawM, rawS, rawT, rawL, rawPresentation []byte
+		var rawP, rawM, rawS, rawModes, rawT, rawL, rawPresentation []byte
 		err = s.db(ctx).QueryRow(ctx, `
 			INSERT INTO design_revision_items (
 				organization_id, project_id, design_revision_id,
 				furniture_instance_id, furniture_definition_id, definition_version,
-				parameters, material_choices, material_choice_sources, transform, room_id, technical_client_locator,
+				parameters, material_choices, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
 				presentation_snapshot
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			RETURNING `+designRevisionItemColumns,
 			designOrgID, projectID, rev.ID,
 			itemCmd.FurnitureInstanceID, defID, itemCmd.DefinitionVersion,
-			paramsJSON, materialsJSON, sourcesJSON, transformJSON, itemCmd.RoomID, locatorJSON, presentationJSON,
+			paramsJSON, materialsJSON, sourcesJSON, modesJSON, transformJSON, itemCmd.RoomID, locatorJSON, presentationJSON,
 		).Scan(
 			&insertedItem.ID, &insertedItem.OrganizationID, &insertedItem.ProjectID, &insertedItem.DesignRevisionID,
 			&insertedItem.FurnitureInstanceID, &insertedItem.FurnitureDefinitionID,
-			&insertedItem.DefinitionVersion, &rawP, &rawM, &rawS, &rawT, &insertedItem.RoomID, &rawL,
+			&insertedItem.DefinitionVersion, &rawP, &rawM, &rawS, &rawModes, &rawT, &insertedItem.RoomID, &rawL,
 			&insertedItem.CreatedAt, &rawPresentation,
 		)
 		if err != nil {
@@ -981,6 +1065,11 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 		if len(rawS) > 0 && string(rawS) != "null" {
 			if err := json.Unmarshal(rawS, &insertedItem.MaterialChoiceSources); err != nil {
 				return nil, fmt.Errorf("%w: unmarshal inserted material_choice_sources: %v", domain.ErrSerializationFailed, err)
+			}
+		}
+		if len(rawModes) > 0 && string(rawModes) != "null" {
+			if err := json.Unmarshal(rawModes, &insertedItem.MaterialChoiceModes); err != nil {
+				return nil, fmt.Errorf("%w: unmarshal inserted material_choice_modes: %v", domain.ErrSerializationFailed, err)
 			}
 		}
 		insertedItem.PresentationSnapshot, err = domain.DecodeDesignRevisionPresentationSnapshot(rawPresentation)
@@ -1158,12 +1247,13 @@ func (s *PostgresStore) GetDesignWorkingCopy(ctx context.Context, designID strin
 
 	var wc domain.DesignWorkingCopy
 	var baseRevID *string
+	var rawDefaults []byte
 	row := s.db(ctx).QueryRow(ctx, `
-		SELECT design_id, organization_id, project_id, base_revision_id::text, source_type, updated_at, updated_by
+		SELECT design_id, organization_id, project_id, base_revision_id::text, source_type, updated_at, updated_by, authoring_defaults
 		FROM design_working_copies
 		WHERE design_id = $1
 	`, designID)
-	err := row.Scan(&wc.DesignID, &wc.OrganizationID, &wc.ProjectID, &baseRevID, &wc.SourceType, &wc.UpdatedAt, &wc.UpdatedBy)
+	err := row.Scan(&wc.DesignID, &wc.OrganizationID, &wc.ProjectID, &baseRevID, &wc.SourceType, &wc.UpdatedAt, &wc.UpdatedBy, &rawDefaults)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Check if design exists
@@ -1189,6 +1279,14 @@ func (s *PostgresStore) GetDesignWorkingCopy(ctx context.Context, designID strin
 	} else {
 		wc.BaseRevisionID = baseRevID
 	}
+	if len(rawDefaults) > 0 && string(rawDefaults) != "null" {
+		var defaults domain.DesignAuthoringDefaults
+		if err := json.Unmarshal(rawDefaults, &defaults); err != nil {
+			return nil, fmt.Errorf("%w: read back authoring defaults: %v", domain.ErrSerializationFailed, err)
+		}
+		wc.AuthoringDefaults = defaults.Normalize()
+	}
+	wc.AuthoringDefaults = wc.AuthoringDefaults.Normalize()
 
 	rows, err := s.db(ctx).Query(ctx, `
 		SELECT `+designWorkingItemColumns+`
@@ -1253,6 +1351,14 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 	if cmd.BaseRevisionID != nil && *cmd.BaseRevisionID != "" && !isValidUUID(*cmd.BaseRevisionID) {
 		return nil, domain.ErrInvalidDesignCommand
 	}
+	// #784: Design authoring defaults travel as explicit intent — validated
+	// fail-closed, persisted verbatim (never derived). Changing them never
+	// touches items.
+	if cmd.AuthoringDefaults != nil {
+		if err := domain.ValidateDesignAuthoringDefaults(cmd.AuthoringDefaults.Normalize()); err != nil {
+			return nil, err
+		}
+	}
 
 	if transactionFromContext(ctx) == nil {
 		var res *domain.DesignWorkingCopy
@@ -1316,6 +1422,37 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 		}
 	}
 
+	previousChoices := map[string]map[string]string{}
+	previousSources := map[string]map[string]domain.DesignMaterialProvenance{}
+	previousModes := map[string]map[string]domain.DesignMaterialChoiceMode{}
+	rows, err := s.db(ctx).Query(ctx, `
+		SELECT furniture_instance_id::text, material_choices, material_choice_sources, material_choice_modes
+		FROM design_working_items WHERE design_id = $1
+	`, cmd.DesignID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id string
+		var choicesRaw, sourcesRaw, modesRaw []byte
+		if err := rows.Scan(&id, &choicesRaw, &sourcesRaw, &modesRaw); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		var choices map[string]string
+		var sources map[string]domain.DesignMaterialProvenance
+		var modes map[string]domain.DesignMaterialChoiceMode
+		_ = json.Unmarshal(choicesRaw, &choices)
+		if len(sourcesRaw) > 0 && string(sourcesRaw) != "null" {
+			_ = json.Unmarshal(sourcesRaw, &sources)
+		}
+		if len(modesRaw) > 0 && string(modesRaw) != "null" {
+			_ = json.Unmarshal(modesRaw, &modes)
+		}
+		previousChoices[id], previousSources[id], previousModes[id] = choices, sources, modes
+	}
+	rows.Close()
+
 	// 3. Validate items
 	seenFI := make(map[string]bool)
 	var consumptionCatalog *domain.Catalog
@@ -1347,6 +1484,19 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 		if fiStatus != string(domain.FurnitureInstanceLifecycleActive) {
 			return nil, fmt.Errorf("%w: furniture instance %s has terminal status %s", domain.ErrFurnitureInstanceLifecycleConflict, item.FurnitureInstanceID, fiStatus)
 		}
+		// #784: a PRESENT modes statement is client-authorable intent validated
+		// fail-closed (strict parity — partial statements, unknown modes and
+		// modes without a materialized choice all reject). An ABSENT field is
+		// the legacy writer shape: the persisted lineage is PRESERVED for
+		// unchanged values and only an explicitly changed materialized value
+		// becomes 'override' (owner decision 2026-09-28) — equality detects
+		// whether the legacy writer changed a value, never lineage itself.
+		if item.MaterialChoiceModes == nil {
+			cmd.Items[i].MaterialChoiceModes = domain.MergeLegacyMaterialChoiceModes(
+				item.MaterialChoices, previousChoices[item.FurnitureInstanceID], previousModes[item.FurnitureInstanceID])
+		} else if err := domain.ValidatePresentMaterialChoiceModes(item.MaterialChoices, item.MaterialChoiceModes); err != nil {
+			return nil, fmt.Errorf("%w: item %s", err, item.FurnitureInstanceID)
+		}
 		// #826 converge-at-write boundary (human decision 2026-09-22, revised
 		// from reject after test evidence broke #620/preflight-parity): incoming
 		// choices are intersected with the definition's consumed roles before
@@ -1370,6 +1520,15 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 			}, *consumptionCatalog)
 			if ok {
 				cmd.Items[i].MaterialChoices = filtered
+				// Keep mode parity with the converged choices: a role the
+				// definition does not consume drops its lineage statement too.
+				filteredModes := make(map[string]domain.DesignMaterialChoiceMode, len(filtered))
+				for role, mode := range cmd.Items[i].MaterialChoiceModes {
+					if _, consumed := filtered[role]; consumed {
+						filteredModes[role] = mode
+					}
+				}
+				cmd.Items[i].MaterialChoiceModes = filteredModes
 			}
 		}
 	}
@@ -1378,32 +1537,6 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 	if sourceType == "" {
 		sourceType = domain.DesignRevisionSourceManual
 	}
-
-	previousChoices := map[string]map[string]string{}
-	previousSources := map[string]map[string]domain.DesignMaterialProvenance{}
-	rows, err := s.db(ctx).Query(ctx, `
-		SELECT furniture_instance_id::text, material_choices, material_choice_sources
-		FROM design_working_items WHERE design_id = $1
-	`, cmd.DesignID)
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var id string
-		var choicesRaw, sourcesRaw []byte
-		if err := rows.Scan(&id, &choicesRaw, &sourcesRaw); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		var choices map[string]string
-		var sources map[string]domain.DesignMaterialProvenance
-		_ = json.Unmarshal(choicesRaw, &choices)
-		if len(sourcesRaw) > 0 && string(sourcesRaw) != "null" {
-			_ = json.Unmarshal(sourcesRaw, &sources)
-		}
-		previousChoices[id], previousSources[id] = choices, sources
-	}
-	rows.Close()
 
 	quotedChoices := map[string]map[string]string{}
 	rows, err = s.db(ctx).Query(ctx, `
@@ -1479,6 +1612,10 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 		if err != nil {
 			return nil, fmt.Errorf("%w: material_choice_sources serialization error: %v", domain.ErrSerializationFailed, err)
 		}
+		modesJSON, err := json.Marshal(item.MaterialChoiceModes)
+		if err != nil {
+			return nil, fmt.Errorf("%w: material_choice_modes serialization error: %v", domain.ErrSerializationFailed, err)
+		}
 		transformJSON, err := json.Marshal(item.Transform)
 		if err != nil {
 			return nil, fmt.Errorf("%w: transform serialization error: %v", domain.ErrSerializationFailed, err)
@@ -1496,31 +1633,44 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 			INSERT INTO design_working_items (
 				organization_id, project_id, design_id,
 				furniture_instance_id, furniture_definition_id, definition_version,
-				parameters, material_choices, material_choice_sources, transform, room_id, technical_client_locator,
+				parameters, material_choices, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
 				created_at, updated_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
 		`, designOrgID, projectID, cmd.DesignID,
 			item.FurnitureInstanceID, defID, item.DefinitionVersion,
-			paramsJSON, materialsJSON, sourcesJSON, transformJSON, item.RoomID, locatorJSON,
+			paramsJSON, materialsJSON, sourcesJSON, modesJSON, transformJSON, item.RoomID, locatorJSON,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert working item: %w", err)
 		}
 	}
 
-	// 6. Update design_working_copies
+	// 6. Update design_working_copies. #784: authoring_defaults follow the
+	// same nil-keeps frontier as base_revision_id — a write that omits them
+	// preserves the stored Design defaults; a write that carries them (even
+	// an explicit empty block) replaces them. Items are never derived from or
+	// mutated by defaults.
 	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
 	var baseRevToSet *string = cmd.BaseRevisionID
+	defaultsToSet := domain.DesignAuthoringDefaults{}.Normalize()
+	if cmd.AuthoringDefaults != nil {
+		defaultsToSet = cmd.AuthoringDefaults.Normalize()
+	}
+	defaultsJSON, err := json.Marshal(defaultsToSet)
+	if err != nil {
+		return nil, fmt.Errorf("%w: authoring_defaults serialization error: %v", domain.ErrSerializationFailed, err)
+	}
 	_, err = s.db(ctx).Exec(ctx, `
-		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, updated_at, updated_by)
-		VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, authoring_defaults, updated_at, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
 		ON CONFLICT (design_id) DO UPDATE SET
-			base_revision_id = CASE WHEN $7::boolean THEN EXCLUDED.base_revision_id ELSE design_working_copies.base_revision_id END,
+			base_revision_id = CASE WHEN $8::boolean THEN EXCLUDED.base_revision_id ELSE design_working_copies.base_revision_id END,
 			source_type = EXCLUDED.source_type,
+			authoring_defaults = CASE WHEN $9::boolean THEN EXCLUDED.authoring_defaults ELSE design_working_copies.authoring_defaults END,
 			updated_at = NOW(),
 			updated_by = EXCLUDED.updated_by
-	`, cmd.DesignID, designOrgID, projectID, baseRevToSet, sourceType, actor, cmd.BaseRevisionID != nil)
+	`, cmd.DesignID, designOrgID, projectID, baseRevToSet, sourceType, defaultsJSON, actor, cmd.BaseRevisionID != nil, cmd.AuthoringDefaults != nil)
 	if err != nil {
 		return nil, fmt.Errorf("update design working copy: %w", err)
 	}
@@ -1581,18 +1731,32 @@ func (s *PostgresStore) ResetDesignWorkingCopy(ctx context.Context, cmd ResetDes
 		return nil, err
 	}
 
-	// 2. Verify revision exists for this design
+	// 2. Verify revision exists for this design and read its frozen #784
+	// authoring defaults snapshot (legacy revisions read NULL ⇒ canonical
+	// empty defaults — never the current mutable working defaults).
 	var revSourceType string
+	var rawRevDefaults []byte
 	err = s.db(ctx).QueryRow(ctx, `
-		SELECT source_type
+		SELECT source_type, authoring_defaults_snapshot
 		FROM design_revisions
 		WHERE id = $1 AND design_id = $2
-	`, cmd.RevisionID, cmd.DesignID).Scan(&revSourceType)
+	`, cmd.RevisionID, cmd.DesignID).Scan(&revSourceType, &rawRevDefaults)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignRevisionNotFound
 		}
 		return nil, err
+	}
+	revDefaults := domain.DesignAuthoringDefaults{}.Normalize()
+	if len(rawRevDefaults) > 0 && string(rawRevDefaults) != "null" {
+		if err := json.Unmarshal(rawRevDefaults, &revDefaults); err != nil {
+			return nil, fmt.Errorf("%w: read revision authoring defaults on reset: %v", domain.ErrSerializationFailed, err)
+		}
+		revDefaults = revDefaults.Normalize()
+	}
+	revDefaultsJSON, err := json.Marshal(revDefaults)
+	if err != nil {
+		return nil, fmt.Errorf("%w: revision authoring defaults serialization error: %v", domain.ErrSerializationFailed, err)
 	}
 
 	// 3. Delete existing working items
@@ -1601,17 +1765,26 @@ func (s *PostgresStore) ResetDesignWorkingCopy(ctx context.Context, cmd ResetDes
 		return nil, fmt.Errorf("delete working items on reset: %w", err)
 	}
 
-	// 4. Copy from revision items into working items
+	// 4. Copy from revision items into working items. Legacy revision items
+	// (modes NULL, pre-#784) reset to conservative 'override' for every
+	// materialized role — the same synthesis the migration backfill applied,
+	// materialized once at reset time, never derived from equality.
 	_, err = s.db(ctx).Exec(ctx, `
 		INSERT INTO design_working_items (
 			organization_id, project_id, design_id,
 			furniture_instance_id, furniture_definition_id, definition_version,
-			parameters, material_choices, material_choice_sources, transform, room_id, technical_client_locator,
+			parameters, material_choices, material_choice_sources, material_choice_modes, transform, room_id, technical_client_locator,
 			created_at, updated_at
 		)
 		SELECT organization_id, project_id, $1,
 		       furniture_instance_id, furniture_definition_id, definition_version,
-		       parameters, material_choices, material_choice_sources, transform, room_id, technical_client_locator,
+		       parameters, material_choices, material_choice_sources,
+		       COALESCE(
+		           material_choice_modes,
+		           (SELECT COALESCE(jsonb_object_agg(role, to_jsonb('override'::text)), '{}'::jsonb)
+		            FROM jsonb_object_keys(material_choices) AS role)
+		       ),
+		       transform, room_id, technical_client_locator,
 		       NOW(), NOW()
 		FROM design_revision_items
 		WHERE design_revision_id = $2
@@ -1620,17 +1793,21 @@ func (s *PostgresStore) ResetDesignWorkingCopy(ctx context.Context, cmd ResetDes
 		return nil, fmt.Errorf("copy revision items to working items: %w", err)
 	}
 
-	// 5. Update working copy metadata
+	// 5. Update working copy metadata: base moves to the revision and the
+	// authoring defaults RESTORE from the revision snapshot — a reset that
+	// left current defaults in place would silently mix revision truth with
+	// working intent (#784).
 	actor := nonEmptyOrDefault(cmd.ActorUserID, tenantActorUserID(ctx))
 	_, err = s.db(ctx).Exec(ctx, `
-		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, updated_at, updated_by)
-		VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+		INSERT INTO design_working_copies (design_id, organization_id, project_id, base_revision_id, source_type, authoring_defaults, updated_at, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
 		ON CONFLICT (design_id) DO UPDATE SET
 			base_revision_id = EXCLUDED.base_revision_id,
 			source_type = EXCLUDED.source_type,
+			authoring_defaults = EXCLUDED.authoring_defaults,
 			updated_at = NOW(),
 			updated_by = EXCLUDED.updated_by
-	`, cmd.DesignID, designOrgID, projectID, cmd.RevisionID, revSourceType, actor)
+	`, cmd.DesignID, designOrgID, projectID, cmd.RevisionID, revSourceType, revDefaultsJSON, actor)
 	if err != nil {
 		return nil, fmt.Errorf("update design working copy on reset: %w", err)
 	}

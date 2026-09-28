@@ -517,6 +517,12 @@ effective value = resolved value
 
 Never infer inheritance by comparing two values that happen to be equal.
 
+Ratified #784 semantics (2026-09): the stored lineage (`material_choice_modes` = design |
+override) is the ONLY authority for the badge; `mode=design` means "Design lineage, updatable
+by explicit rollout", NOT "re-resolve against the current default". The furniture keeps its
+materialized choice; the server projects `needsRollout` when it drifts from the current
+Design default (see project-design-digital-thread.md §13).
+
 ### 10.3 Furniture override
 
 A furniture-level change creates an explicit override:

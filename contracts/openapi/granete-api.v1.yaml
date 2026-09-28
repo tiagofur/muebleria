@@ -8268,6 +8268,16 @@
               "type": "string"
             }
           },
+          "material_choice_modes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DesignMaterialChoiceMode"
+            },
+            "description": "#784 inheritance lineage frozen at publish. null marks a LEGACY pre-#784 revision item (never backfilled — immutability); consumers interpret every materialized role of such items conservatively as override."
+          },
           "transform": {
             "$ref": "#/components/schemas/Transform3D"
           },
@@ -8352,6 +8362,17 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "authoring_defaults_snapshot": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DesignAuthoringDefaults"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "#784 Design authoring defaults frozen at publish time. Absent/null marks a LEGACY pre-#784 revision; historical interpretation never consults the current mutable working-copy defaults."
           },
           "items": {
             "type": "array",
@@ -8863,6 +8884,13 @@
             "type": "string",
             "format": "uuid"
           },
+          "material_choice_modes": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DesignMaterialChoiceMode"
+            },
+            "description": "#784 explicit inheritance lineage per role. PRESENT: strict parity keys(modes)==keys(choices); partial statements, unknown modes and modes without a materialized choice reject with 400 — nothing is silently completed. ABSENT (legacy pre-#784 writer): for an existing item the persisted lineage is preserved when the value is unchanged and only an explicitly changed materialized value becomes override (equality detects a value change, never lineage); roles new to the item start override; a brand-new item starts every role as override."
+          },
           "furniture_definition_id": {
             "type": [
               "string",
@@ -8908,6 +8936,7 @@
           "furniture_instance_id",
           "parameters",
           "material_choices",
+          "material_choice_modes",
           "created_at",
           "updated_at"
         ],
@@ -8946,6 +8975,13 @@
               "type": "string"
             }
           },
+          "material_choice_modes": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DesignMaterialChoiceMode"
+            },
+            "description": "#784 per-role inheritance lineage. Explicit client intent persisted verbatim — never derived from value equality. Canonical parity: keys equal material_choices keys."
+          },
           "transform": {
             "$ref": "#/components/schemas/Transform3D"
           },
@@ -8968,6 +9004,31 @@
           }
         }
       },
+      "DesignMaterialChoiceMode": {
+        "type": "string",
+        "enum": [
+          "design",
+          "override"
+        ],
+        "description": "#784 inheritance lineage of one material role: design = belongs to the Design lineage and may be updated by an explicit rollout (NOT a live pointer — the item keeps its materialized choice); override = explicit furniture exception preserved by rollouts."
+      },
+      "DesignAuthoringDefaults": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "materialChoices"
+        ],
+        "properties": {
+          "materialChoices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Preferred inherited choice per material binding role (option group code → material id) for this Design. Roles the definitions do not support are ignored honestly — never coerced or aliased."
+          }
+        },
+        "description": "#784 durable Design-scoped authoring defaults. Canonical empty state is {\"materialChoices\":{}} — never a bare {} nor null. Changing a default never mutates existing items; materialization happens only through the explicit rollout or per-item intent."
+      },
       "DesignWorkingCopy": {
         "type": "object",
         "additionalProperties": false,
@@ -8975,6 +9036,7 @@
           "design_id",
           "project_id",
           "source_type",
+          "authoring_defaults",
           "items",
           "updated_at"
         ],
@@ -8996,6 +9058,9 @@
           },
           "source_type": {
             "$ref": "#/components/schemas/DesignRevisionSourceType"
+          },
+          "authoring_defaults": {
+            "$ref": "#/components/schemas/DesignAuthoringDefaults"
           },
           "items": {
             "type": "array",
@@ -9034,6 +9099,10 @@
           },
           "source_type": {
             "$ref": "#/components/schemas/DesignRevisionSourceType"
+          },
+          "authoring_defaults": {
+            "$ref": "#/components/schemas/DesignAuthoringDefaults",
+            "description": "#784 Design authoring defaults following the #810 caller-merge frontier: omitted preserves the stored defaults; provided replaces them wholesale (including an explicit empty block). Never derived from items and never mutating them."
           },
           "items": {
             "type": "array",
@@ -9123,12 +9192,86 @@
           }
         }
       },
+      "MaterialRoleInheritance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "mode",
+          "applied_material_id",
+          "needs_rollout"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Material binding role (option group code, e.g. FRENTES)."
+          },
+          "mode": {
+            "$ref": "#/components/schemas/DesignMaterialChoiceMode"
+          },
+          "applied_material_id": {
+            "type": "string",
+            "description": "The materialized choice currently applied on the item (#784 lineage is NOT a live pointer — this is what the furniture carries)."
+          },
+          "design_default_material_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Current Design authoring default for the role, when one exists."
+          },
+          "needs_rollout": {
+            "type": "boolean",
+            "description": "mode=design and applied differs from the current Design default: an explicit rollout would change this role. Equality decides up-to-date vs behind only AFTER the stored mode proves lineage — it never decides design vs override."
+          }
+        },
+        "description": "#784 server-side authoritative per-role inheritance projection: the single truth behind Diseño/Personalizado badges and impact review counts."
+      },
+      "DesignRoleInheritanceCount": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "items",
+          "design_backed",
+          "needs_rollout",
+          "design_current",
+          "overridden"
+        ],
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "items": {
+            "type": "integer",
+            "description": "Items materializing this role."
+          },
+          "design_backed": {
+            "type": "integer",
+            "description": "Items whose lineage for this role is design."
+          },
+          "needs_rollout": {
+            "type": "integer",
+            "description": "Design-backed items whose applied value differs from the current Design default (the rollout-affected count)."
+          },
+          "design_current": {
+            "type": "integer",
+            "description": "Design-backed items already carrying the current default."
+          },
+          "overridden": {
+            "type": "integer",
+            "description": "Items with an explicit override for this role (preserved by default rollouts)."
+          }
+        },
+        "description": "#784 per-role impact counts across the working copy. Definition-capability 'unsupported' categorization is a separate catalog-joined consumer concern — never guessed here."
+      },
       "DesignWorkingItemMaterialProvenance": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "furniture_instance_id",
           "roles",
+          "inheritance",
           "reconcilable"
         ],
         "properties": {
@@ -9149,6 +9292,13 @@
               "$ref": "#/components/schemas/MaterialRoleProvenance"
             }
           },
+          "inheritance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MaterialRoleInheritance"
+            },
+            "description": "#784 per-role inheritance projection for every materialized role of this item."
+          },
           "reconcilable": {
             "type": "boolean",
             "description": "True when at least one role is a reconciliation candidate (quoted, missing from the working copy, not alias-governed)."
@@ -9161,12 +9311,24 @@
         "required": [
           "design_id",
           "project_id",
+          "authoring_defaults",
+          "inheritance_summary",
           "items"
         ],
         "properties": {
           "design_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "authoring_defaults": {
+            "$ref": "#/components/schemas/DesignAuthoringDefaults"
+          },
+          "inheritance_summary": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DesignRoleInheritanceCount"
+            },
+            "description": "#784 per-role impact counts across every working item."
           },
           "project_id": {
             "type": "string",

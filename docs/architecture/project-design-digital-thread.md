@@ -713,6 +713,27 @@ Reglas:
 
 La UX canónica vive en `sketchup-designer-workflow.md` y #784.
 
+### Implementación #784 (2026-09, backend contract)
+
+El contrato backend ratificado (OWNER DECISIONS 2026-09-28) persiste el modelo así:
+
+```text
+design_working_copies.authoring_defaults      = {"materialChoices": {role: materialId}}  (durable, Design-scoped)
+design_working_items.material_choice_modes    = {role: design | override}  (linaje client-authorable, verbatim)
+design_revisions.authoring_defaults_snapshot  = freeze del momento de publicar
+design_revision_items.material_choice_modes   = freeze por item
+```
+
+Semántica ratificada (obligatoria; renegociar exige nueva decisión del owner):
+
+- **`mode=design` es linaje, NO un puntero vivo.** El item conserva su `material_choices` materializado; cambiar un default del Design NO reescribe items ni dispara resolves ocultos. Sólo el rollout explícito (#471) o el reset materializan el valor nuevo.
+- **`material_choice_modes` es una dimensión SEPARADA de `material_choice_sources`** (proveniencia comercial/autoral: authored/quoted/unresolved). Sources conserva su significado; jamás se usa para los badges Diseño/Personalizado.
+- **La igualdad nunca infiere herencia.** Sólo decide "al día vs detrás" DESPUÉS de que el mode persistido demostró el linaje: `needsRollout = mode=design AND applied != default vigente` (override ⇒ siempre false). Los items existentes migran conservadoramente a `override` (backfill 000138); los ítems de revisiones pre-#784 leen modes NULL ⇒ override conservador — el pasado inmutable jamás se backfillea.
+- **Go/domain es la única autoridad de composición.** La proyección server-side (`GET …/working-copy/material-provenance`: mode / applied / designDefault / needsRollout + conteos por rol) alimenta badges e impact review; ningún cliente (SketchUp/React) recalcula la herencia por su cuenta. La categoría "unsupported" depende de capabilities de catálogo y se une aparte, sin adivinar.
+- Paridad canónica por item: `keys(material_choice_modes) == keys(material_choices)` — toda elección está materializada y todo rol materializado declara linaje. Un statement parcial de linaje rechaza con 400. La ausencia total (writer legacy) NO colapsa a override: un item existente conserva el linaje persistido cuando el valor no cambió; sólo un valor explícitamente cambiado por un writer legacy se convierte en override (la igualdad detecta el cambio de valor, jamás infiere linaje); roles nuevos y items nuevos parten como override.
+- **Frontera de composición efectiva (explícito):** este contrato backend entrega **persistencia + proyección Go** (defaults durables, modes, needsRollout, conteos). La **composición efectiva definition-aware** (`override || Design default || compatibilidad de FurnitureDefinition → intención efectiva autorizada`) NO está implementada en este slice y es un **follow-up backend/domain requerido antes de #784 R4 (herencia en inserción)**. Ningún cliente (SketchUp/React) puede implementarla localmente — el plugin no puede inventarla en `defaultMaterialChoices(def)`.
+- Tres valores distintos por rol, sin colapsarse: **valor aplicado/materializado** (lo que el mueble lleva hoy), **default vigente del Design** (a qué se rueda) y **needsRollout** (drift proyectado para el impact review).
+
 ---
 
 ## 14. Duplicate identity handling

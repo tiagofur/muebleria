@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "comment": "Shared #624/#810 Ruby-to-Go working-copy boundary. Ruby builds each request from the persisted placement intent; the Go handler decodes the same request through the generated UpdateDesignWorkingCopyRequest. Catalog semver is not an integer Design definition revision and must be omitted, while an authoritative integer is preserved. #810: every PUT carries expected_working_version — the canonical workingVersion token (working-copy updated_at of the caller's last authoritative read) validated under the write lock.",
+  "comment": "Shared #624/#810 Ruby-to-Go working-copy boundary. Ruby builds each request from the persisted placement intent; the Go handler decodes the same request through the generated UpdateDesignWorkingCopyRequest. Catalog semver is not an integer Design definition revision and must be omitted, while an authoritative integer is preserved. #810: every PUT carries expected_working_version — the canonical workingVersion token (working-copy updated_at of the caller's last authoritative read) validated under the write lock. #784: scenarios784 freezes the design-authoring-defaults boundary (authoring_defaults + per-item material_choice_modes). It is consumed by the Go contract test only until the SketchUp Ruby builder emits these fields; then the scenarios join the shared 'scenarios' list.",
   "endpoint": "PUT /api/designs/{designId}/working-copy",
   "scenarios": [
     {
@@ -87,6 +87,97 @@
         "definition_version": "1.0.0",
         "parameters": {},
         "material_choices": {}
+      }
+    ]
+  },
+  "scenarios784": [
+    {
+      "id": "design-backed-inherits-default",
+      "request": {
+        "base_revision_id": "53000000-0000-0000-0000-000000000001",
+        "expected_working_version": "2026-09-21T00:00:00.000000Z",
+        "authoring_defaults": {
+          "materialChoices": {
+            "INTERIOR": "mat-roble",
+            "FRENTES": "mat-blanco"
+          }
+        },
+        "items": [
+          {
+            "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+            "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+            "definition_version": 7,
+            "parameters": {},
+            "material_choices": {
+              "INTERIOR": "mat-roble",
+              "FRENTES": "mat-blanco"
+            },
+            "material_choice_modes": {
+              "INTERIOR": "design",
+              "FRENTES": "design"
+            },
+            "transform": {
+              "translation_mm": [0.0, 0.0, 0.0],
+              "rotation_deg": [0.0, 0.0, 0.0]
+            },
+            "technical_client_locator": {
+              "kind": "sketchup_persistent_id",
+              "value": "4242"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "override-equal-to-default-survives-exact",
+      "request": {
+        "base_revision_id": "53000000-0000-0000-0000-000000000001",
+        "expected_working_version": "2026-09-21T00:00:00.000000Z",
+        "authoring_defaults": {
+          "materialChoices": {
+            "INTERIOR": "mat-roble"
+          }
+        },
+        "items": [
+          {
+            "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+            "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+            "definition_version": 7,
+            "parameters": {},
+            "material_choices": {
+              "INTERIOR": "mat-roble"
+            },
+            "material_choice_modes": {
+              "INTERIOR": "override"
+            },
+            "transform": {
+              "translation_mm": [0.0, 0.0, 0.0],
+              "rotation_deg": [0.0, 0.0, 0.0]
+            },
+            "technical_client_locator": {
+              "kind": "sketchup_persistent_id",
+              "value": "4242"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "invalidModesRequest784": {
+    "base_revision_id": "53000000-0000-0000-0000-000000000001",
+    "expected_working_version": "2026-09-21T00:00:00.000000Z",
+    "items": [
+      {
+        "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+        "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+        "parameters": {},
+        "material_choices": {
+          "INTERIOR": "mat-roble",
+          "FRENTES": "mat-blanco"
+        },
+        "material_choice_modes": {
+          "INTERIOR": "design"
+        }
       }
     ]
   },
