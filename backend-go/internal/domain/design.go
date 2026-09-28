@@ -2,6 +2,9 @@ package domain
 
 import (
 	"errors"
+	"fmt"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -62,6 +65,216 @@ func IsValidDesignRevisionStatus(status DesignRevisionStatus) bool {
 	}
 }
 
+// DesignMaterialChoiceMode is the #784 per-role inheritance lineage of one
+// material choice. It is a dimension SEPARATE from DesignMaterialProvenance
+// (commercial/authorial provenance): mode answers "does this role belong to
+// the Design lineage or is it a furniture exception", provenance answers
+// "where did this value historically come from". mode=design is lineage, NOT
+// a live pointer: the item keeps its materialized choice until an explicit
+// rollout/reset applies the current Design default (OWNER DECISIONS #784,
+// 2026-09-28). Inheritance is never inferred from value equality.
+type DesignMaterialChoiceMode string
+
+const (
+	DesignMaterialChoiceModeDesign   DesignMaterialChoiceMode = "design"
+	DesignMaterialChoiceModeOverride DesignMaterialChoiceMode = "override"
+)
+
+func IsValidDesignMaterialChoiceMode(mode DesignMaterialChoiceMode) bool {
+	switch mode {
+	case DesignMaterialChoiceModeDesign, DesignMaterialChoiceModeOverride:
+		return true
+	default:
+		return false
+	}
+}
+
+// DesignAuthoringDefaults is the durable Design-scoped authoring defaults
+// block (#784). The wrapper is deliberately extensible: hardwareChoices and
+// parameters may join later through their own capability contracts, but this
+// delivery only implements materialChoices. Canonical empty state is
+// {"materialChoices":{}} — never a bare {} nor null.
+type DesignAuthoringDefaults struct {
+	MaterialChoices map[string]string `json:"materialChoices"`
+}
+
+// NormalizeDesignAuthoringDefaults returns the canonical form: a non-nil
+// materialChoices map. It does not validate contents (see
+// ValidateDesignAuthoringDefaults).
+func (d DesignAuthoringDefaults) Normalize() DesignAuthoringDefaults {
+	if d.MaterialChoices == nil {
+		d.MaterialChoices = map[string]string{}
+	}
+	return d
+}
+
+// ValidateDesignAuthoringDefaults enforces the known durable schema
+// fail-closed: role keys and material ids must be non-empty strings. Role
+// names stay free-form option group codes (consistent with material_choices);
+// unknown top-level fields are rejected at the API decode boundary, not here.
+func ValidateDesignAuthoringDefaults(defaults DesignAuthoringDefaults) error {
+	for role, materialID := range defaults.MaterialChoices {
+		if strings.TrimSpace(role) == "" {
+			return fmt.Errorf("%w: authoring defaults carry an empty material role", ErrInvalidDesignCommand)
+		}
+		if strings.TrimSpace(materialID) == "" {
+			return fmt.Errorf("%w: authoring default for role %s carries an empty material id", ErrInvalidDesignCommand, role)
+		}
+	}
+	return nil
+}
+
+// ErrInvalidMaterialChoiceModes marks a violation of the #784 inheritance
+// contract: unknown mode, empty role, or a mode without its materialized
+// choice (key parity — every choice carries an explicit mode and vice versa).
+var ErrInvalidMaterialChoiceModes = errors.New("invalid material choice modes")
+
+// ValidateDesignMaterialChoiceModes enforces the #784 per-item invariants:
+// every mode is known, every role key is non-empty, and keys(material modes)
+// == keys(material choices). Parity is the honest representation: choices are
+// always materialized, so a mode without a value or a value without a lineage
+// statement is a contract violation, never a silent default.
+func ValidateDesignMaterialChoiceModes(choices map[string]string, modes map[string]DesignMaterialChoiceMode) error {
+	for role, mode := range modes {
+		if strings.TrimSpace(role) == "" {
+			return fmt.Errorf("%w: empty material role", ErrInvalidMaterialChoiceModes)
+		}
+		if !IsValidDesignMaterialChoiceMode(mode) {
+			return fmt.Errorf("%w: unknown mode %q for role %s", ErrInvalidMaterialChoiceModes, mode, role)
+		}
+	}
+	for role := range choices {
+		if _, ok := modes[role]; !ok {
+			return fmt.Errorf("%w: role %s carries a materialized choice without an inheritance mode", ErrInvalidMaterialChoiceModes, role)
+		}
+	}
+	for role := range modes {
+		if _, ok := choices[role]; !ok {
+			return fmt.Errorf("%w: role %s carries an inheritance mode without a materialized choice", ErrInvalidMaterialChoiceModes, role)
+		}
+	}
+	return nil
+}
+
+// ValidatePresentMaterialChoiceModes enforces the STRICT wire contract for
+// writers that speak #784 (the modes field is present): every mode known,
+// every role key non-empty, no mode without a materialized choice, no choice
+// without a mode, and the statement may not be empty while choices exist.
+// Partial statements reject; nothing is silently completed or deduplicated.
+func ValidatePresentMaterialChoiceModes(choices map[string]string, modes map[string]DesignMaterialChoiceMode) error {
+	return ValidateDesignMaterialChoiceModes(choices, modes)
+}
+
+// MergeLegacyMaterialChoiceModes applies the pre-#784 writer policy when the
+// modes field is ABSENT from a working-copy item (owner decision 2026-09-28):
+//
+//	incoming choice == persisted choice → PRESERVE the persisted lineage mode
+//	incoming choice != persisted choice → override (a legacy client changing a
+//	                                   materialized value creates an exception)
+//	role new to the item               → override
+//	role removed from choices          → its mode drops with it (parity)
+//
+// Equality is used ONLY to detect whether the legacy writer changed a
+// materialized value; it NEVER infers Design lineage from equality with the
+// Design default — lineage comes exclusively from the already-persisted
+// explicit mode. Without this rule, an unrelated full-replace PUT from an
+// older plugin would silently destroy a design-backed lineage.
+func MergeLegacyMaterialChoiceModes(incoming, persistedChoices map[string]string, persistedModes map[string]DesignMaterialChoiceMode) map[string]DesignMaterialChoiceMode {
+	merged := make(map[string]DesignMaterialChoiceMode, len(incoming))
+	for role := range incoming {
+		if incoming[role] != "" && persistedChoices[role] == incoming[role] {
+			if mode, ok := persistedModes[role]; ok && IsValidDesignMaterialChoiceMode(mode) {
+				merged[role] = mode
+				continue
+			}
+		}
+		merged[role] = DesignMaterialChoiceModeOverride
+	}
+	return merged
+}
+
+// DesignRoleInheritance is the server-side projection of one item/role pair:
+// the authoritative answer for #784 badges and impact review. Applied is the
+// materialized choice; DesignDefault is the current Design default when one
+// exists. NeedsRollout compares the applied value against the current default
+// ONLY AFTER the stored mode proves the design lineage — equality decides
+// up-to-date vs behind, never design vs override (OWNER DECISIONS #784).
+type DesignRoleInheritance struct {
+	Role          string
+	Mode          DesignMaterialChoiceMode
+	AppliedChoice string
+	DesignDefault string
+	NeedsRollout  bool
+}
+
+// EvaluateDesignRoleInheritance is the pure composition rule:
+//
+//	mode=override ⇒ needsRollout=false (rollout preserves overrides);
+//	mode=design   ⇒ needsRollout = applied != current Design default
+//	                (no default ⇒ nothing to roll out).
+func EvaluateDesignRoleInheritance(role string, mode DesignMaterialChoiceMode, appliedChoice, designDefault string) DesignRoleInheritance {
+	out := DesignRoleInheritance{
+		Role:          role,
+		Mode:          mode,
+		AppliedChoice: appliedChoice,
+		DesignDefault: designDefault,
+	}
+	if mode == DesignMaterialChoiceModeDesign && designDefault != "" && appliedChoice != designDefault {
+		out.NeedsRollout = true
+	}
+	return out
+}
+
+// DesignRoleInheritanceCount aggregates one role's inheritance state across
+// every item of a working copy — the exact numbers the #784 impact review
+// shows (linked / needs-rollout / up-to-date / overridden). "Unsupported"
+// (definition does not offer the role) is deliberately NOT computed here: it
+// depends on catalog capabilities, a different authority than this read
+// model; consumers join it separately and never by guessing.
+type DesignRoleInheritanceCount struct {
+	Role          string
+	Items         int
+	DesignBacked  int
+	NeedsRollout  int
+	DesignCurrent int
+	Overridden    int
+}
+
+// SummarizeDesignInheritance folds per-item role projections into per-role
+// counts. Roles are returned sorted for deterministic readbacks.
+func SummarizeDesignInheritance(entries []DesignRoleInheritance) []DesignRoleInheritanceCount {
+	byRole := map[string]*DesignRoleInheritanceCount{}
+	for _, entry := range entries {
+		count, ok := byRole[entry.Role]
+		if !ok {
+			count = &DesignRoleInheritanceCount{Role: entry.Role}
+			byRole[entry.Role] = count
+		}
+		count.Items++
+		switch entry.Mode {
+		case DesignMaterialChoiceModeDesign:
+			count.DesignBacked++
+			if entry.NeedsRollout {
+				count.NeedsRollout++
+			} else {
+				count.DesignCurrent++
+			}
+		case DesignMaterialChoiceModeOverride:
+			count.Overridden++
+		}
+	}
+	roles := make([]string, 0, len(byRole))
+	for role := range byRole {
+		roles = append(roles, role)
+	}
+	sort.Strings(roles)
+	out := make([]DesignRoleInheritanceCount, 0, len(roles))
+	for _, role := range roles {
+		out = append(out, *byRole[role])
+	}
+	return out
+}
+
 var (
 	ErrDesignNotFound                       = errors.New("design not found")
 	ErrDesignRevisionNotFound               = errors.New("design revision not found")
@@ -112,15 +325,20 @@ type TechnicalClientLocator struct {
 
 // DesignRevisionItem represents the authoring snapshot of one physical FurnitureInstance in a revision (digital-thread §9).
 type DesignRevisionItem struct {
-	ID                     string                              `json:"id"`
-	ProjectID              string                              `json:"project_id"`
-	DesignRevisionID       string                              `json:"design_revision_id"`
-	FurnitureInstanceID    string                              `json:"furniture_instance_id"`
-	FurnitureDefinitionID  string                              `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion      *int                                `json:"definition_version,omitempty"`
-	Parameters             map[string]any                      `json:"parameters"`
-	MaterialChoices        map[string]string                   `json:"material_choices"`
-	MaterialChoiceSources  map[string]DesignMaterialProvenance `json:"-"`
+	ID                    string                              `json:"id"`
+	ProjectID             string                              `json:"project_id"`
+	DesignRevisionID      string                              `json:"design_revision_id"`
+	FurnitureInstanceID   string                              `json:"furniture_instance_id"`
+	FurnitureDefinitionID string                              `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion     *int                                `json:"definition_version,omitempty"`
+	Parameters            map[string]any                      `json:"parameters"`
+	MaterialChoices       map[string]string                   `json:"material_choices"`
+	MaterialChoiceSources map[string]DesignMaterialProvenance `json:"-"`
+	// MaterialChoiceModes freezes the #784 inheritance lineage per role.
+	// Nil marks a LEGACY pre-#784 revision item: published before the
+	// contract existed and never backfilled (immutability), read
+	// conservatively as override for every materialized role.
+	MaterialChoiceModes    map[string]DesignMaterialChoiceMode `json:"material_choice_modes,omitempty"`
 	PresentationSnapshot   *DesignRevisionPresentationSnapshot `json:"presentation_snapshot,omitempty"`
 	Transform              *Transform3D                        `json:"transform,omitempty"`
 	RoomID                 string                              `json:"room_id,omitempty"`
@@ -149,6 +367,10 @@ type DesignRevision struct {
 	ApprovedByDisplayName string               `json:"approved_by_display_name,omitempty"`
 	ApprovedAt            *time.Time           `json:"approved_at,omitempty"`
 	Items                 []DesignRevisionItem `json:"items,omitempty"`
+	// AuthoringDefaultsSnapshot freezes the working copy's #784 Design
+	// authoring defaults at publish time. Nil marks a LEGACY revision
+	// published before the contract existed (reads as canonical empty).
+	AuthoringDefaultsSnapshot *DesignAuthoringDefaults `json:"authoring_defaults_snapshot,omitempty"`
 	// Artifacts carries the #392 published artifact metadata (model/manifest/
 	// preview). Nil for legacy artifact-less publishes; readers treat nil as
 	// "no artifacts".
@@ -175,15 +397,19 @@ func ValidateDesignRevisionApproval(status DesignRevisionStatus) error {
 
 // DesignWorkingItem represents a mutable draft item in a design's working copy.
 type DesignWorkingItem struct {
-	ID                     string                              `json:"id"`
-	ProjectID              string                              `json:"project_id"`
-	DesignID               string                              `json:"design_id"`
-	FurnitureInstanceID    string                              `json:"furniture_instance_id"`
-	FurnitureDefinitionID  string                              `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion      *int                                `json:"definition_version,omitempty"`
-	Parameters             map[string]any                      `json:"parameters"`
-	MaterialChoices        map[string]string                   `json:"material_choices"`
-	MaterialChoiceSources  map[string]DesignMaterialProvenance `json:"-"`
+	ID                    string                              `json:"id"`
+	ProjectID             string                              `json:"project_id"`
+	DesignID              string                              `json:"design_id"`
+	FurnitureInstanceID   string                              `json:"furniture_instance_id"`
+	FurnitureDefinitionID string                              `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion     *int                                `json:"definition_version,omitempty"`
+	Parameters            map[string]any                      `json:"parameters"`
+	MaterialChoices       map[string]string                   `json:"material_choices"`
+	MaterialChoiceSources map[string]DesignMaterialProvenance `json:"-"`
+	// MaterialChoiceModes is the #784 per-role inheritance lineage
+	// (design|override), client-authorable intent persisted verbatim —
+	// never derived by equality. Canonical parity: keys == material_choices.
+	MaterialChoiceModes    map[string]DesignMaterialChoiceMode `json:"material_choice_modes,omitempty"`
 	Transform              *Transform3D                        `json:"transform,omitempty"`
 	RoomID                 string                              `json:"room_id,omitempty"`
 	TechnicalClientLocator *TechnicalClientLocator             `json:"technical_client_locator,omitempty"`
@@ -199,9 +425,14 @@ type DesignWorkingCopy struct {
 	ProjectID      string                   `json:"project_id"`
 	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`
 	SourceType     DesignRevisionSourceType `json:"source_type"`
-	Items          []DesignWorkingItem      `json:"items"`
-	UpdatedAt      time.Time                `json:"updated_at"`
-	UpdatedBy      string                   `json:"updated_by,omitempty"`
+	// AuthoringDefaults is the durable Design-scoped authoring defaults
+	// block (#784): the preferred inherited choices for this Design. Changing
+	// a default never mutates existing items — materialization happens only
+	// through the explicit rollout (#471) or per-item intent.
+	AuthoringDefaults DesignAuthoringDefaults `json:"authoring_defaults"`
+	Items             []DesignWorkingItem     `json:"items"`
+	UpdatedAt         time.Time               `json:"updated_at"`
+	UpdatedBy         string                  `json:"updated_by,omitempty"`
 
 	OrganizationID string `json:"-"`
 }
