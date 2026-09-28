@@ -76,10 +76,11 @@ const (
 )
 
 const (
-	FurnitureParameterBindingVersion            = 1
-	FurnitureParameterBindingComponentQuantity  = "componentQuantity"
-	FurnitureParameterBindingComponentCondition = "componentCondition"
-	FurnitureParameterBindingDimensionColumn    = "dimensionColumn"
+	FurnitureParameterBindingVersion               = 1
+	FurnitureParameterBindingComponentQuantity     = "componentQuantity"
+	FurnitureParameterBindingComponentCondition    = "componentCondition"
+	FurnitureParameterBindingDimensionColumn       = "dimensionColumn"
+	FurnitureParameterBindingStructureRelationship = "structureRelationship"
 )
 
 // FurnitureParameterBinding declares the authoritative consumer of a value.
@@ -95,14 +96,36 @@ type FurnitureParameterBinding struct {
 }
 
 type FurnitureParameterRelationshipBinding struct {
-	Kind       string                                 `json:"kind"`
-	SourceRole string                                 `json:"sourceRole"`
+	Kind       string `json:"kind"`
+	SourceRole string `json:"sourceRole"`
+	// SourceFace optionally declares the source contact face; the resolver
+	// verifies it against exact plane coincidence when present.
+	SourceFace string                                 `json:"sourceFace,omitempty"`
 	Targets    []FurnitureParameterRelationshipTarget `json:"targets"`
+	// Station declares the construction-fixed station margins for kinds that
+	// plan stations; the station COUNT always comes from the parameter value.
+	Station *FurnitureRelationshipStationMargins `json:"station,omitempty"`
 }
 
 type FurnitureParameterRelationshipTarget struct {
 	ComponentID string `json:"componentId"`
 	Role        string `json:"role"`
+	// Face is the declared contact face on the target board (required for
+	// face-verified kinds such as floor-side).
+	Face string `json:"face,omitempty"`
+}
+
+// FurnitureRelationshipStationMargins carries construction-declared station
+// margins (mm) for structure relationships.
+type FurnitureRelationshipStationMargins struct {
+	StartMarginMm float64 `json:"startMarginMm,omitempty"`
+	EndMarginMm   float64 `json:"endMarginMm,omitempty"`
+}
+
+// FurnitureRelationshipAnchorFaces is the closed face vocabulary for
+// construction-declared relationship anchors.
+var FurnitureRelationshipAnchorFaces = map[string]bool{
+	"top": true, "bottom": true, "left": true, "right": true, "front": true, "back": true,
 }
 
 type FurnitureParameterDefinition struct {
@@ -500,8 +523,61 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 		if b.ComponentID != "" || b.Relationship != nil {
 			add("binding", "dimensionColumn cannot target composition")
 		}
+	case FurnitureParameterBindingStructureRelationship:
+		if definition.Type != FurnitureParameterTypeNumber || !definition.Integer {
+			add("binding.kind", "structureRelationship requires an integer number parameter (the station count)")
+		}
+		if strings.TrimSpace(b.ComponentID) == "" {
+			add("binding.componentId", "is required for structureRelationship (the source component)")
+		}
+		if b.Dimension != "" {
+			add("binding.dimension", "is not allowed for structureRelationship")
+		}
+		if b.Relationship == nil {
+			add("binding.relationship", "is required for structureRelationship")
+			return
+		}
+		if strings.TrimSpace(b.Relationship.Kind) == "" {
+			add("binding.relationship.kind", "is required")
+		}
+		if strings.TrimSpace(b.Relationship.SourceRole) == "" {
+			add("binding.relationship.sourceRole", "is required")
+		}
+		if b.Relationship.SourceFace != "" && !FurnitureRelationshipAnchorFaces[b.Relationship.SourceFace] {
+			add("binding.relationship.sourceFace", "must be one of the six concrete board faces")
+		}
+		if len(b.Relationship.Targets) == 0 {
+			add("binding.relationship.targets", "must contain at least one target")
+		}
+		seenTargets := map[string]bool{}
+		for _, target := range b.Relationship.Targets {
+			if strings.TrimSpace(target.ComponentID) == "" || strings.TrimSpace(target.Role) == "" {
+				add("binding.relationship.targets", "componentId and role are required")
+			}
+			// Two targets on the same component can never both resolve to
+			// distinct participants; ambiguity never selects silently.
+			if seenTargets[target.ComponentID] {
+				add("binding.relationship.targets", "each target must reference a distinct component")
+			}
+			seenTargets[target.ComponentID] = true
+			// Face-verified kinds (floor-side today) resolve contacts through
+			// declared faces; a target without one can never verify.
+			if b.Relationship.Kind == "floor-side" && !FurnitureRelationshipAnchorFaces[target.Face] {
+				add("binding.relationship.targets", "floor-side targets must declare one concrete contact face")
+			}
+			if target.Face != "" && !FurnitureRelationshipAnchorFaces[target.Face] {
+				add("binding.relationship.targets", "target face must be one of the six concrete board faces")
+			}
+		}
+		if station := b.Relationship.Station; station != nil {
+			if station.StartMarginMm < 0 || station.EndMarginMm < 0 ||
+				math.IsNaN(station.StartMarginMm) || math.IsNaN(station.EndMarginMm) ||
+				math.IsInf(station.StartMarginMm, 0) || math.IsInf(station.EndMarginMm, 0) {
+				add("binding.relationship.station", "margins must be finite and nonnegative")
+			}
+		}
 	default:
-		add("binding.kind", "must be componentQuantity, componentCondition, or dimensionColumn")
+		add("binding.kind", "must be componentQuantity, componentCondition, dimensionColumn, or structureRelationship")
 	}
 }
 
@@ -622,18 +698,38 @@ func ValidateModuleFurnitureParameterConsumers(module Module, catalog Catalog) [
 	}
 	for _, definition := range module.ParameterDefinitions {
 		binding := definition.Binding
-		if binding == nil || (binding.Kind != FurnitureParameterBindingComponentQuantity && binding.Kind != FurnitureParameterBindingComponentCondition) {
+		if binding == nil || (binding.Kind != FurnitureParameterBindingComponentQuantity && binding.Kind != FurnitureParameterBindingComponentCondition && binding.Kind != FurnitureParameterBindingStructureRelationship) {
 			continue
 		}
-		if directEntries[binding.ComponentID] != 1 || allEntries[binding.ComponentID] != 1 {
+		if binding.Kind == FurnitureParameterBindingStructureRelationship {
+			// The structure relationship only READS the composition to find
+			// its participants: any single unambiguous entry (direct or
+			// structural) is a valid source, direct placement is not required.
+			if allEntries[binding.ComponentID] != 1 {
+				issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.componentId", Message: "must reference exactly one unambiguous component entry in the module composition"})
+			}
+		} else if directEntries[binding.ComponentID] != 1 || allEntries[binding.ComponentID] != 1 {
 			issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.componentId", Message: "must reference exactly one unambiguous component entry placed directly on the module"})
 		}
 		if binding.Relationship == nil {
 			continue
 		}
+		seenTargetComponents := map[string]bool{}
 		for _, target := range binding.Relationship.Targets {
 			if allEntries[target.ComponentID] != 1 || occurrences[target.ComponentID] != 1 {
 				issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "must reference exactly one unambiguous component occurrence in the module composition"})
+			}
+			if binding.Kind == FurnitureParameterBindingStructureRelationship {
+				// Two targets on the same component can never both resolve to
+				// distinct participants; ambiguity never selects silently.
+				if seenTargetComponents[target.ComponentID] {
+					issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "each target must reference a distinct component"})
+				}
+				seenTargetComponents[target.ComponentID] = true
+				// Face-verified kinds resolve contacts through declared faces.
+				if binding.Relationship.Kind == "floor-side" && !FurnitureRelationshipAnchorFaces[target.Face] {
+					issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "floor-side targets must declare one concrete contact face"})
+				}
 			}
 		}
 	}

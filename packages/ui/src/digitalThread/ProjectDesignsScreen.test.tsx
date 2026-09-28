@@ -847,7 +847,9 @@ describe('ProjectDesignsScreen (#501 / WEB-DT-2)', () => {
     await screen.findByRole('heading', { level: 2, name: /Revisión R3/i });
     await user.click(screen.getByTestId('download-artifact-manifest'));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    // Scoped by testid: the #875 joinery panel may surface its own alert
+    // beside this one (each error keeps its own live region).
+    expect(await screen.findByTestId('artifact-access-error-popup-blocked')).toHaveTextContent(
       'El navegador bloqueó la nueva pestaña.',
     );
     expect(

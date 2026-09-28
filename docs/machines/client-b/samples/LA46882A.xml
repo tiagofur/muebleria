@@ -1,0 +1,401 @@
+<KDTPanelFormat>
+  <PANEL>
+    <PanelLength>1320</PanelLength>
+    <PanelWidth>400</PanelWidth>
+    <PanelThickness>16.5</PanelThickness>
+    <PanelName>Lateral Izquierda</PanelName>
+    <PanelOutline>
+      <Vertex>
+        <X1>1320</X1>
+        <Y1>400</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>1320</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>400</Y1>
+        <Bulge>0</Bulge>
+        <Banding>2</Banding>
+        <Description>AlignmentFace</Description>
+        <BandingColor>rgb(255,0,0)</BandingColor>
+        <DescriptionColor>rgb(255,0,0)</DescriptionColor>
+      </Vertex>
+    </PanelOutline>
+  </PANEL>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>1232.47</X1>
+    <Y1>52</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>1232.47</X1>
+    <Y1>20</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>1060.62</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>10</Depth>
+    <X1>996.62</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>932.62</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>1060.62</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>10</Depth>
+    <X1>996.62</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>932.62</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>734.75</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>10</Depth>
+    <X1>670.75</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>734.75</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>606.75</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>10</Depth>
+    <X1>670.75</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>606.75</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>519.98</X1>
+    <Y1>52</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>519.98</X1>
+    <Y1>20</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>408.88</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>408.88</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>10</Depth>
+    <X1>344.88</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>10</Depth>
+    <X1>344.88</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>280.88</X1>
+    <Y1>82</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>280.88</X1>
+    <Y1>344.5</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>107.48</X1>
+    <Y1>52</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12</Depth>
+    <X1>107.48</X1>
+    <Y1>20</Y1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>1311.76</X1>
+    <Y1>37</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>1311.76</X1>
+    <Y1>314</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>1251</X1>
+    <Y1>391.74</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>857</X1>
+    <Y1>391.74</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>463</X1>
+    <Y1>391.74</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>69</X1>
+    <Y1>391.74</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>8.24</X1>
+    <Y1>37</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>8.24</X1>
+    <Y1>314</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+</KDTPanelFormat>
+<!--AUTHOR: Copyright ® Promob Software Solutions
+Promob Studio Start KVA
+Promob: 5.60.47.2
+3DE Render - 2.2.1 - Activated
+Build Closet - 5.5.0.6 - Activated
+New Revest - 1.8.6 - Activated
+Plugin Builder - 1.60.50.5 - Activated
+Plugin Builder Budget - 1.60.50.0 - Activated
+Plugin Cut Pro - 1.60.50.0 - Activated
+Plugin Flexdrill 1200 - 1.60.50.0 - Activated
+Plugin New Promob - 1.0.0 - Activated
+-->

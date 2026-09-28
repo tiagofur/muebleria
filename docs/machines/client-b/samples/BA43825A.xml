@@ -1,0 +1,203 @@
+<KDTPanelFormat>
+  <PANEL>
+    <PanelLength>769</PanelLength>
+    <PanelWidth>604.5</PanelWidth>
+    <PanelThickness>15.5</PanelThickness>
+    <PanelName>Base Inferior</PanelName>
+    <PanelOutline>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>604.5</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>769</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>769</X1>
+        <Y1>604.5</Y1>
+        <Bulge>0</Bulge>
+        <Banding>2</Banding>
+        <Description>AlignmentFace</Description>
+        <BandingColor>rgb(255,0,0)</BandingColor>
+        <DescriptionColor>rgb(255,0,0)</DescriptionColor>
+      </Vertex>
+    </PanelOutline>
+  </PANEL>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>2</Quadrant>
+    <X1>0</X1>
+    <Y1>37</Y1>
+    <Z1>7.74</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>2</Quadrant>
+    <X1>0</X1>
+    <Y1>286</Y1>
+    <Z1>7.74</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>2</Quadrant>
+    <X1>0</X1>
+    <Y1>535</Y1>
+    <Z1>7.74</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>1</Quadrant>
+    <X1>769</X1>
+    <Y1>37</Y1>
+    <Z1>7.74</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>1</Quadrant>
+    <X1>769</X1>
+    <Y1>286</Y1>
+    <Z1>7.74</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>1</Quadrant>
+    <X1>769</X1>
+    <Y1>535</Y1>
+    <Z1>7.74</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>40</Depth>
+    <Quadrant>4</Quadrant>
+    <X1>324.5</X1>
+    <Y1>0</Y1>
+    <Z1>7.5</Z1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>40</Depth>
+    <Quadrant>4</Quadrant>
+    <X1>444.5</X1>
+    <Y1>0</Y1>
+    <Z1>7.5</Z1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>3</Quadrant>
+    <X1>69</X1>
+    <Y1>604.5</Y1>
+    <Z1>7.76</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>3</Quadrant>
+    <X1>385</X1>
+    <Y1>604.5</Y1>
+    <Z1>7.76</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>3</Quadrant>
+    <X1>700</X1>
+    <Y1>604.5</Y1>
+    <Z1>7.76</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+</KDTPanelFormat>
+<!--AUTHOR: Copyright ® Promob Software Solutions
+Promob Studio Start KVA
+Promob: 5.60.46.6
+3DE Render - 2.2.0 - Activated
+Build Closet - 5.5.0.6 - Activated
+New Revest - 1.8.6 - Activated
+Plugin Builder - 1.60.46.2 - Activated
+Plugin Builder Budget - 1.60.46.0 - Activated
+Plugin Cut Pro - 1.60.46.0 - Activated
+Plugin Flexdrill 1200 - 1.60.46.0 - Activated
+Plugin New Promob - 1.0.0 - Activated
+-->

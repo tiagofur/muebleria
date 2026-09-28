@@ -1,0 +1,115 @@
+<KDTPanelFormat>
+  <PANEL>
+    <PanelLength>768.5</PanelLength>
+    <PanelWidth>497</PanelWidth>
+    <PanelThickness>18.5</PanelThickness>
+    <PanelName>Panel Puerta Inferior Bisagra Total Fregadero</PanelName>
+    <PanelOutline>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>497</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>768.5</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>768.5</X1>
+        <Y1>497</Y1>
+        <Bulge>0</Bulge>
+        <Banding>2</Banding>
+        <Description>AlignmentFace</Description>
+        <BandingColor>rgb(255,0,0)</BandingColor>
+        <DescriptionColor>rgb(255,0,0)</DescriptionColor>
+      </Vertex>
+    </PanelOutline>
+  </PANEL>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>11</Depth>
+    <X1>622.5</X1>
+    <Y1>28</Y1>
+    <Diameter>10</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12.5</Depth>
+    <X1>598.5</X1>
+    <Y1>22</Y1>
+    <Diameter>35</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>11</Depth>
+    <X1>574.5</X1>
+    <Y1>28</Y1>
+    <Diameter>10</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>11</Depth>
+    <X1>130</X1>
+    <Y1>28</Y1>
+    <Diameter>10</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>12.5</Depth>
+    <X1>106</X1>
+    <Y1>22</Y1>
+    <Diameter>35</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>11</Depth>
+    <X1>82</X1>
+    <Y1>28</Y1>
+    <Diameter>10</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+</KDTPanelFormat>
+<!--AUTHOR: Copyright ® Promob Software Solutions
+Promob Studio Start KVA
+Promob: 5.60.46.6
+3DE Render - 2.2.0 - Activated
+Build Closet - 5.5.0.6 - Activated
+New Revest - 1.8.6 - Activated
+Plugin Builder - 1.60.46.2 - Activated
+Plugin Builder Budget - 1.60.46.0 - Activated
+Plugin Cut Pro - 1.60.46.0 - Activated
+Plugin Flexdrill 1200 - 1.60.46.0 - Activated
+Plugin New Promob - 1.0.0 - Activated
+-->

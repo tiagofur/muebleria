@@ -1,0 +1,166 @@
+<KDTPanelFormat>
+  <PANEL>
+    <PanelLength>817</PanelLength>
+    <PanelWidth>600</PanelWidth>
+    <PanelThickness>16.5</PanelThickness>
+    <PanelName>Base Inferior</PanelName>
+    <PanelOutline>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>600</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>817</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>817</X1>
+        <Y1>600</Y1>
+        <Bulge>0</Bulge>
+        <Banding>2</Banding>
+        <Description>AlignmentFace</Description>
+        <BandingColor>rgb(255,0,0)</BandingColor>
+        <DescriptionColor>rgb(255,0,0)</DescriptionColor>
+      </Vertex>
+    </PanelOutline>
+  </PANEL>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>2</Quadrant>
+    <X1>0</X1>
+    <Y1>37</Y1>
+    <Z1>8.24</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>2</Quadrant>
+    <X1>0</X1>
+    <Y1>284</Y1>
+    <Z1>8.24</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>2</Quadrant>
+    <X1>0</X1>
+    <Y1>531</Y1>
+    <Z1>8.24</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>1</Quadrant>
+    <X1>817</X1>
+    <Y1>37</Y1>
+    <Z1>8.24</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>1</Quadrant>
+    <X1>817</X1>
+    <Y1>284</Y1>
+    <Z1>8.24</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>2</TypeNo>
+    <TypeName>Horizontal Hole</TypeName>
+    <Depth>36</Depth>
+    <Quadrant>1</Quadrant>
+    <X1>817</X1>
+    <Y1>531</Y1>
+    <Z1>8.24</Z1>
+    <Diameter>5</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+    <IntervalZ>0</IntervalZ>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>69</X1>
+    <Y1>591.74</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>409</X1>
+    <Y1>591.74</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+  <CAD>
+    <TypeNo>1</TypeNo>
+    <TypeName>Vertical Hole</TypeName>
+    <Depth>21.81</Depth>
+    <X1>748</X1>
+    <Y1>591.74</Y1>
+    <Diameter>8</Diameter>
+    <HoleNo>1</HoleNo>
+    <IntervalX>0</IntervalX>
+    <IntervalY>0</IntervalY>
+  </CAD>
+</KDTPanelFormat>
+<!--AUTHOR: Copyright ® Promob Software Solutions
+Promob Studio Start KVA
+Promob: 5.60.47.2
+3DE Render - 2.2.1 - Activated
+Build Closet - 5.5.0.6 - Activated
+New Revest - 1.8.6 - Activated
+Plugin Builder - 1.60.50.5 - Activated
+Plugin Builder Budget - 1.60.50.0 - Activated
+Plugin Cut Pro - 1.60.50.0 - Activated
+Plugin Flexdrill 1200 - 1.60.50.0 - Activated
+Plugin New Promob - 1.0.0 - Activated
+-->

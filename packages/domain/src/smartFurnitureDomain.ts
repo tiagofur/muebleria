@@ -176,16 +176,22 @@ export type ParameterType = "number" | "string" | "boolean" | "enum";
 
 export interface FurnitureParameterBinding {
   readonly version: number;
-  readonly kind: "componentQuantity" | "componentCondition" | "dimensionColumn";
+  readonly kind: "componentQuantity" | "componentCondition" | "dimensionColumn" | "structureRelationship";
   readonly componentId?: string;
   readonly dimension?: "widthMm" | "heightMm" | "depthMm";
   readonly relationship?: {
     readonly kind: string;
     readonly sourceRole: string;
+    readonly sourceFace?: string;
     readonly targets: readonly {
       readonly componentId: string;
       readonly role: string;
+      readonly face?: string;
     }[];
+    readonly station?: {
+      readonly startMarginMm?: number;
+      readonly endMarginMm?: number;
+    };
   };
 }
 
