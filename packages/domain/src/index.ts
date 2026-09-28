@@ -925,6 +925,14 @@ export {
   type RigidFrame,
 } from './neutralMachiningGeometry';
 
+// --- Synthetic, non-fabricable bore geometry (#879 B2b-a) ---
+export {
+  evaluateNeutralBoreGeometry,
+  type NeutralBoreGeometryInput,
+  type NeutralBoreGeometryReason,
+  type NeutralBoreGeometryResult,
+} from './neutralBoreGeometry';
+
 // --- Machine output selection (#591 / WEB-MFG-2) ---
 export {
   machineOutputBlockerMessageEs,
