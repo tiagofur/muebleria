@@ -2833,11 +2833,13 @@ func (s *Server) HandleMe(w http.ResponseWriter, r *http.Request) {
 
 // HandleSketchupProfile is the extension's current-session identity read.
 // Unlike /auth/me it never lists the account's other organizations or roles.
+// Org-less device sessions (no active membership yet) still get their account
+// identity, with the organization block omitted.
 func (s *Server) HandleSketchupProfile(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(UserContextKey).(*auth.Claims)
 	if !ok || claims == nil || claims.Client != auth.ExtensionClient ||
 		authTransportFromClaims(claims) != openapi.AuthTransportSketchup ||
-		claims.OrgID == "" || claims.Support != nil {
+		claims.Support != nil {
 		respondWithError(w, http.StatusForbidden, "SketchUp session required")
 		return
 	}
@@ -2846,17 +2848,20 @@ func (s *Server) HandleSketchupProfile(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "invalid token")
 		return
 	}
-	m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
-	if err != nil || m == nil || m.ID != claims.MembershipID || m.Organization.ID != claims.OrgID ||
-		m.Organization.Status != domain.OrganizationStatusActive {
-		respondWithError(w, http.StatusUnauthorized, "invalid token")
-		return
-	}
-	respondWithJSON(w, http.StatusOK, openapi.SketchupProfileResponse{
+	resp := openapi.SketchupProfileResponse{
 		User: openapi.SketchupProfileUser{Name: u.Name, Email: u.Email},
-		Organization: openapi.SketchupProfileOrganization{
-			ID: claims.OrgID, License: toOpenAPIOrganization(m.Organization).License,
-		},
-		SessionScope: openapi.SketchupProfileScope{OrganizationID: claims.OrgID},
-	})
+	}
+	if claims.OrgID != "" {
+		m, err := s.Store.GetActiveMembership(r.Context(), claims.UserID, claims.OrgID)
+		if err != nil || m == nil || m.ID != claims.MembershipID || m.Organization.ID != claims.OrgID ||
+			m.Organization.Status != domain.OrganizationStatusActive {
+			respondWithError(w, http.StatusUnauthorized, "invalid token")
+			return
+		}
+		resp.Organization = &openapi.SketchupProfileOrganization{
+			ID: claims.OrgID, Name: m.Organization.Name, License: toOpenAPIOrganization(m.Organization).License,
+		}
+		resp.SessionScope = &openapi.SketchupProfileScope{OrganizationID: claims.OrgID}
+	}
+	respondWithJSON(w, http.StatusOK, resp)
 }

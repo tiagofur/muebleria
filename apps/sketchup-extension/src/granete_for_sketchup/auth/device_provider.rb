@@ -328,14 +328,23 @@ module Granete
           false
         end
 
+        # #883: the visible account identity is ALWAYS the server-confirmed
+        # profile of the exact device session. The endpoint is read live on
+        # each status update — token claims are never surfaced as a visible
+        # identity, nothing identity-shaped is persisted, and any failure
+        # (network, revoked device, expired/changed membership) yields nil
+        # so the panel degrades to its unknown state instead of showing a
+        # stale identity. Org-less sessions (selection phase) get their user
+        # block with no organization.
         def status
-          state = read_value(KEY_SESSION_STATE, nil)
-          state = parse_stored_state(state) if state.is_a?(String)
+          profile = fetch_current_profile if configured?
+          organization = profile && profile['organization']
           {
             'state' => configured? ? 'logged_in' : 'logged_out',
             'server_url' => stored_server_url.to_s,
-            'user' => state&.dig('user'),
-            'license' => state&.dig('license')
+            'user' => profile && profile['user'],
+            'license' => profile && organization && organization['license'],
+            'organization' => organization && { 'name' => organization['name'] }
           }
         end
 
@@ -406,12 +415,18 @@ module Granete
           end
         end
 
-        def parse_stored_state(raw)
-          return raw unless raw.is_a?(String)
-          return nil if raw.strip.empty?
-
-          JSON.parse(raw)
-        rescue JSON::ParserError
+        # Server-confirmed identity read for #883. Failures return nil —
+        # they must clear the display, never fall back to a cached or
+        # inferred identity.
+        def fetch_current_profile
+          response = @transport.request(
+            { 'method' => 'GET', 'path' => '/auth/sketchup/profile' },
+            authorization_header: authorization_header
+          )
+          body = response['body']
+          response['status'] == 200 && body.is_a?(Hash) ? body : nil
+        rescue Transport::RequestError, Transport::NotConfiguredError => e
+          @logger&.error('session_profile_failed', error: e)
           nil
         end
 

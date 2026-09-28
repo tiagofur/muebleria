@@ -75,6 +75,8 @@
               <div class="card-title">Sesión del Taller</div>
               <div class="kv-row"><span class="k">Usuario</span><span class="v" id="session-user-name">--</span></div>
               <div class="kv-row"><span class="k">Email</span><span class="v" id="session-user-email">--</span></div>
+              <!-- #883: sólo con sesión con taller; usuarios sin organización no ven la fila -->
+              <div class="kv-row" id="session-org-row" style="display: none;"><span class="k">Taller</span><span class="v" id="session-org-name">--</span></div>
               <div class="kv-row"><span class="k">Servidor</span><span class="v" id="session-server">--</span></div>
               <div class="kv-row"><span class="k">Licencia</span><span class="v" id="session-license">--</span></div>
               <button id="btn-logout" class="btn btn-secondary" style="margin-top: var(--space-2);">Cerrar sesión</button>

@@ -32,8 +32,8 @@ class DeviceProviderTest < Minitest::Test
       @responses[path] = { 'status' => status, 'body' => body }
     end
 
-    def request(command)
-      @requests << command
+    def request(command, authorization_header: nil)
+      @requests << command.merge('authorization_header' => authorization_header)
       response = @responses[command['path']]
       return { 'status' => 500, 'body' => {} } unless response
 
@@ -176,6 +176,88 @@ class DeviceProviderTest < Minitest::Test
     assert_equal 2, token_requests.length, 'expired access token must re-mint from the device secret'
   end
 
+  # #883: the visible identity comes from the live profile endpoint of the
+  # exact device session — never from token claims or persisted state.
+  def test_status_hydrates_server_confirmed_identity
+    exchange_and_mint
+    @transport.respond_with('/auth/sketchup/profile', 200,
+                            'user' => { 'name' => 'Ana Carpintera', 'email' => 'ana@taller.local' },
+                            'organization' => {
+                              'id' => 'org-1', 'name' => 'Taller Muebles Sur',
+                              'license' => { 'plan' => 'pro', 'status' => 'active' }
+                            })
+
+    status = @provider.status
+
+    assert_equal 'logged_in', status['state']
+    assert_equal({ 'name' => 'Ana Carpintera', 'email' => 'ana@taller.local' }, status['user'])
+    assert_equal({ 'plan' => 'pro', 'status' => 'active' }, status['license'])
+    assert_equal({ 'name' => 'Taller Muebles Sur' }, status['organization'])
+    profile_request = @transport.requests.find { |r| r['path'] == '/auth/sketchup/profile' }
+    refute_nil profile_request, 'status must read the server-confirmed profile'
+    assert_equal 'GET', profile_request['method']
+    assert_equal "Bearer #{valid_jwt}", profile_request['authorization_header']
+    # Nothing identity-shaped is persisted: the session file keeps only
+    # non-sensitive connection state.
+    on_disk = File.exist?(@store_path) ? File.read(@store_path) : ''
+    refute_includes on_disk, 'Ana Carpintera'
+    refute_includes on_disk, 'Taller Muebles Sur'
+  end
+
+  def test_status_orgless_session_returns_user_without_organization
+    exchange_and_mint
+    @transport.respond_with('/auth/sketchup/profile', 200,
+                            'user' => { 'name' => 'Diseñador Independiente', 'email' => 'solo@free.local' })
+
+    status = @provider.status
+
+    assert_equal 'logged_in', status['state']
+    assert_equal({ 'name' => 'Diseñador Independiente', 'email' => 'solo@free.local' }, status['user'])
+    assert_nil status['organization']
+    assert_nil status['license']
+  end
+
+  def test_status_profile_failure_clears_identity_instead_of_showing_stale
+    exchange_and_mint
+    @transport.respond_with('/auth/sketchup/profile', 200,
+                            'user' => { 'name' => 'Ana', 'email' => 'ana@taller.local' },
+                            'organization' => { 'name' => 'Taller', 'license' => { 'plan' => 'pro' } })
+    assert_equal 'Ana', @provider.status['user']['name']
+
+    @transport.respond_with('/auth/sketchup/profile', 401, 'error' => 'invalid token')
+
+    status = @provider.status
+
+    assert_equal 'logged_in', status['state']
+    assert_nil status['user']
+    assert_nil status['license']
+    assert_nil status['organization']
+  end
+
+  def test_status_network_error_degrades_identity_without_raising
+    exchange_and_mint
+    def @transport.request(command, **_kwargs)
+      if command['path'] == '/auth/sketchup/profile'
+        raise Granete::SketchUpExtension::Transport::RequestError, 'connection refused'
+      end
+
+      { 'status' => 200, 'body' => {} }
+    end
+
+    status = @provider.status
+
+    assert_equal 'logged_in', status['state']
+    assert_nil status['user']
+  end
+
+  def test_status_logged_out_never_reads_profile
+    status = @provider.status
+
+    assert_equal 'logged_out', status['state']
+    assert_nil status['user']
+    assert_nil(@transport.requests.find { |r| r['path'] == '/auth/sketchup/profile' })
+  end
+
   def test_logout_clears_secret_and_access
     @transport.respond_with('/auth/devices/exchange', 200, 'device_secret' => "dev-1:#{'a1' * 32}")
     @transport.respond_with('/auth/devices/token', 200, 'access_token' => valid_jwt)
@@ -303,6 +385,12 @@ class DeviceProviderTest < Minitest::Test
   end
 
   private
+
+  def exchange_and_mint
+    @transport.respond_with('/auth/devices/exchange', 200, 'device_secret' => "dev-1:#{'a1' * 32}")
+    @transport.respond_with('/auth/devices/token', 200, 'access_token' => valid_jwt)
+    @provider.exchange_enrollment('enr-1')
+  end
 
   # Minimal JWT shapes: only the exp claim matters to the provider.
   def expired_jwt

@@ -277,7 +277,8 @@ module Granete
             'message' => "Biblioteca del taller conectada (#{license['plan'] || 'sin plan'}).",
             'server_url' => session_status['server_url'],
             'user' => session_status['user'],
-            'license' => license
+            'license' => license,
+            'organization' => session_status['organization']
           }
         elsif transport.configured? && auth_provider.configured?
           {
