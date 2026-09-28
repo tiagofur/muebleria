@@ -152,6 +152,9 @@
 
   function hideInspectorViews() {
     inspectorEmpty.style.display = "none";
+    // #784 R1: the Design Inspector leaves the lane with every non-null
+    // selection, exactly like the other views.
+    if (window.GraneteUI.designInspector) window.GraneteUI.designInspector.hide();
     inspectorUnmanaged.style.display = "none";
     inspectorActive.style.display = "none";
     inspectorBatchView.style.display = "none";
@@ -167,6 +170,14 @@
     hideInspectorViews();
 
     if (!context) {
+      // #784 R1: no selection + bound Design → the Design Inspector owns
+      // the lane (durable authoring defaults, read-only). Unbound keeps
+      // the legacy empty state.
+      var designInspector = window.GraneteUI.designInspector;
+      if (designInspector && designInspector.handleNoSelection()) {
+        renderManufacturingCard(null);
+        return;
+      }
       inspectorEmpty.style.display = "block";
       renderManufacturingCard(null);
       return;
@@ -908,6 +919,9 @@
     // roles context payload fallback; inline manufacturing/preflight
     // runtime adapters). Dep-free: they only read module state.
     getSelectedContext: function () { return selectedContext; },
+    // #784 R1: repaint through the single routing (binding changes that
+    // arrive while the lane is empty re-render via this seam).
+    rerender: function () { renderInspector(); },
     getDefinition: function () { return inspectorDef; },
     getMaterialsCard: function () { return inspectorMaterialsCard; },
     setHardwareCatalog: setHardwareCatalog,

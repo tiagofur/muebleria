@@ -113,13 +113,14 @@ function runDialog() {
   const preflightSource = fs.readFileSync(path.join(resources, 'granete-preflight-review.js'), 'utf8');
   const sandbox = buildSandbox();
   vm.createContext(sandbox);
-  const { media, account, library, configurator, finishSelector, materialRoles, inspectorChild, inspector, modelBinding, projectFurniture, paramForm, inline } = dialogSources();
+  const { media, account, library, configurator, finishSelector, designInspector, materialRoles, inspectorChild, inspector, modelBinding, projectFurniture, paramForm, inline } = dialogSources();
   vm.runInContext(media, sandbox, { filename: 'granete-media.js' });
   vm.runInContext(account, sandbox, { filename: 'granete-account.js' });
   vm.runInContext(library, sandbox, { filename: 'granete-library.js' });
   vm.runInContext(configurator, sandbox, { filename: 'granete-configurator.js' });
   vm.runInContext(finishSelector, sandbox, { filename: 'granete-finish-selector.js' });
   vm.runInContext(materialRoles, sandbox, { filename: 'granete-material-roles.js' });
+  vm.runInContext(designInspector, sandbox, { filename: 'granete-design-inspector.js' });
   vm.runInContext(inspectorChild, sandbox, { filename: 'granete-inspector-child.js' });
   vm.runInContext(inspector, sandbox, { filename: 'granete-inspector.js' });
   vm.runInContext(modelBinding, sandbox, { filename: 'granete-model-binding.js' });

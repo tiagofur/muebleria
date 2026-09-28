@@ -498,6 +498,28 @@
           </div>
 
           <!-- #471 R1: batch inspector de lectura — tripartito común/mixto/no-aplica -->
+          <!-- #784 R1: Design Inspector (read-only). No selection + bound
+               Design shows the durable authoring defaults from the working
+               copy (never the session projectDefaultMaterials). Rendering
+               lives in js/granete-design-inspector.js. -->
+          <div id="inspector-design-view" class="card" style="display: none;">
+            <div class="card-header-row">
+              <div>
+                <h2 style="font-size: var(--text-md); margin: 0;">Diseño</h2>
+                <p id="design-inspector-design-name" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0;"></p>
+              </div>
+              <div class="badges-column">
+                <span class="status-badge pending">Lectura</span>
+              </div>
+            </div>
+            <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-2) 0 0;">
+              Proyecto: <span id="design-inspector-project-name"></span>
+            </p>
+            <p class="presets-block-label" style="margin-top: var(--space-3);">Acabados del diseño</p>
+            <div id="design-inspector-body"></div>
+            <button id="design-inspector-retry" class="btn" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
+          </div>
+
           <div id="inspector-batch-view" class="card" style="display: none;">
             <div class="card-header-row">
               <div>
@@ -1025,6 +1047,10 @@
          render time. The module must be registered before
          materialRoles.init (which wires its read-only Inspector
          accessors) and never renders before init. -->
+    <!-- #784 R1: the Design Inspector read module (durable authoring
+         defaults lane). Loads BEFORE granete-inspector.js, whose
+         no-selection routing delegates here. -->
+    <script src="js/granete-design-inspector.js"></script>
     <script src="js/granete-inspector.js"></script>
 
     <!-- #848 Phase B C4.8: model binding module under window.GraneteUI.
@@ -1245,6 +1271,9 @@
           // exactly as before; the module alone never triggers them.
           onModelBindingStatus: function (status) {
             window.GraneteUI.modelBinding.setStatus(status);
+            // #784 R1: the Design Inspector follows the binding identity
+            // (a design switch invalidates its cached defaults).
+            window.GraneteUI.designInspector.onBindingStatus(status);
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(status);
             if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.setBinding(status);
             if (status && status.state === "connected") window.GraneteUI.projectFurniture.requestProjectFurniture();
@@ -1268,6 +1297,11 @@
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.receiveQuote(result);
           },
           onModelBindingResult: function (result) { window.GraneteUI.modelBinding.onResult(result); },
+          // #784 R1: Design Inspector read answers (requestId-correlated;
+          // late/foreign responses are discarded inside the module).
+          onDesignDefaults: function (payload) {
+            window.GraneteUI.designInspector.onDesignDefaults(payload);
+          },
           onDeleteResult: function (result) {
             window.GraneteUI.inspector.onDeleteResult(result);
           },
@@ -1556,6 +1590,26 @@
         // through the inspector module since #848 C4.7) that feed the
         // selector context payload fallback. Wired before the
         // configurator and finish selector, which consume its API below.
+        // #784 R1: the Design Inspector read module. Role labels resolve
+        // through the catalog definitions' materialRoles (OptionGroup
+        // names); the canonical role key is the presentable fallback —
+        // never an alias. The rerender seam lets binding changes repaint
+        // the no-selection lane through the inspector's single routing.
+        window.GraneteUI.designInspector.init({
+          materialById: window.GraneteUI.materialRoles.materialById,
+          getRoleLabel: function (role) {
+            var definitions = window.GraneteUI.library.getDefinitions();
+            for (var i = 0; i < definitions.length; i++) {
+              var roles = (definitions[i] && definitions[i].materialRoles) || [];
+              for (var j = 0; j < roles.length; j++) {
+                if (roles[j] && roles[j].role === role && roles[j].label) return roles[j].label;
+              }
+            }
+            return role;
+          },
+          rerenderInspector: function () { window.GraneteUI.inspector.rerender(); }
+        });
+
         window.GraneteUI.materialRoles.init({
           icon: icon,
           getInspectorMaterialsCard: function () { return window.GraneteUI.inspector.getMaterialsCard(); },
