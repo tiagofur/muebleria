@@ -92,7 +92,7 @@ promoted to installed-machine evidence. #352 owns field validation.
     independent numeric positive/negative Vitest, typecheck, affected plan,
     diff check, and clean preflight. Branch `codex/879-bhx-b2b-geometry` from
     B2a merge commit `98d6d9491a388555549f2a6ba1f981a734f0284d`.
-  - [ ] **B2b-b — Supported-setup coverage.** Consume B2b-a geometry and
+  - [x] **B2b-b — Supported-setup coverage.** Consume B2b-a geometry and
     B2a frames in the explicit per-occurrence planner. Preserve integrity
     blockers, immutable manifest snapshots, fail-closed null inputs, setup
     support, and receiver-unknown non-fabricable output. Strict TDD,
@@ -223,7 +223,7 @@ promoted to installed-machine evidence. #352 owns field validation.
   src/neutralMachiningPlan.test.ts`; full runner is
   `pnpm --filter @granete/domain test`. RED is required before planner source.
   B2b-a review/CI and parent-owned PR publication remain pending.
-- B2b-b implementation checkpoint before commit: the pure planner consumes
+- B2b-b implementation checkpoint: the pure planner consumes
   B2b-a `evaluateNeutralBoreGeometry` and B2a setup envelopes/rigid frames;
   it never writes native bytes or infers installed capabilities. Every
   required entry yields one assigned or blocked record; assigned records bind
@@ -238,9 +238,15 @@ promoted to installed-machine evidence. #352 owns field validation.
   other gates. Runtime receiver/host harness: N/A for pure offline planning;
   V2 receiver/physical `NOT_RUN`. Rollback removes only the planner module,
   its tests/public export, and B2b-b checkpoint; prior geometry remains.
+  Work-unit commit `19ad24e962eb59e1267a00d63520ef098395271f` on frozen
+  B2b-a base `c07197b5463cf7ac8b872e4985e9ec2b48560b96` contains 686
+  additions and 4 deletions (690 authored lines), including 301 production
+  lines. `git show --check --oneline HEAD` passed. Clean preflight reported
+  `PREFLIGHT_OK_NOT_VERIFIED` and ran no tests. The 451–750 size exception is
+  conditional on independent reviewer cohesion confirmation, not self-granted.
   Independent exact-HEAD review, CI, size exception, and PR are parent-owned
   and pending; this local checkpoint claims none of them.
-- Next: commit and hand off the local B2b-b candidate without changing
-  B2b-a. Parent reviews/publishes B2b-a first, then B2b-b rebases onto its
+- Next: hand off the local B2b-b candidate without changing B2b-a. Parent
+  reviews/publishes B2b-a first, then B2b-b rebases onto its
   merged main before fresh exact-HEAD review/CI. Native output and receiver
   validation remain pending.
