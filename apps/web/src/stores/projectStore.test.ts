@@ -154,6 +154,7 @@ beforeEach(() => {
 
 afterEach(() => {
   useUiStore.getState().disposeUi();
+  useWorkspaceStore.setState({ session: null, activeOrg: null, workspaceSeq: 0 });
   vi.restoreAllMocks();
 });
 
@@ -249,6 +250,52 @@ describe('projectStore — createProject (cross-store customers)', () => {
     // No new customers added to catalogStore.
     const customers = getCatalogStoreState().catalog?.customers;
     expect(customers).toEqual(cat.customers ?? []);
+  });
+
+  it('skips catalog persistence for an unchanged customer but saves a new customer', () => {
+    const saveCatalog = vi.fn(async (_catalog: Catalog) => {});
+    ensureCatalogStore({
+      newId: () => 'cat-id',
+      saveCatalog,
+      getAuthToken: () => null,
+      getSession: () => 'guest',
+      getDraftProjectsCount: () => 0,
+      baseUrl: 'http://test/api',
+    });
+    const catalog: Catalog = {
+      ...seedCatalog(),
+      customers: [{ id: 'existing-cust', name: 'Existing Customer', active: true }],
+    };
+    getCatalogStoreState().setCatalog(catalog);
+    useWorkspaceStore.setState({ session: 'guest', activeOrg: null, workspaceSeq: 0 });
+
+    const { deps, createdProjects } = makeDeps();
+    const store = createProjectStore({ deps });
+    store.getState().createProject(
+      { ...projectDraft, customerId: 'existing-cust', customerName: '' },
+      catalog,
+      { id: 'user-1' },
+    );
+
+    expect(createdProjects).toHaveLength(1);
+    expect(createdProjects[0]?.customerId).toBe('existing-cust');
+    expect(saveCatalog).not.toHaveBeenCalled();
+
+    store.getState().createProject(projectDraft, catalog, { id: 'user-1' });
+
+    expect(createdProjects).toHaveLength(2);
+    expect(saveCatalog).toHaveBeenCalledTimes(1);
+    expect(saveCatalog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customers: expect.arrayContaining([
+          expect.objectContaining({ name: 'New Customer' }),
+        ]),
+      }),
+    );
+    const savedCustomer = saveCatalog.mock.calls[0]?.[0].customers?.find(
+      (customer) => customer.name === 'New Customer',
+    );
+    expect(createdProjects[1]?.customerId).toBe(savedCustomer?.id);
   });
 
   it('#738 review — guest-born projects carry the POSITIVE pre-DT signal; server sessions wait for the server projection', () => {

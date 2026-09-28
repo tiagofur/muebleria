@@ -923,8 +923,11 @@ export function createProjectStore(options: InternalOptions) {
         return;
       }
 
-      // F062 bug fix: persist customers via catalogStore (catalogStore owns catalog).
-      getCatalogStoreState().upsertCustomers(resolved.customers);
+      // Persist only a newly created customer. Re-saving an unchanged list
+      // rewrites the entire catalog during unrelated draft quote creation.
+      if (resolved.customers.length > (catalog.customers ?? []).length) {
+        getCatalogStoreState().upsertCustomers(resolved.customers);
+      }
 
       set({ projects: [...get().projects, project] });
 
