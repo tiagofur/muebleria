@@ -910,6 +910,21 @@ export {
   type ResolvedMachiningJob,
 } from './machineOutput';
 
+// --- Symbolic six-face machining geometry (#879 B2a) ---
+export {
+  invertRigidFrame,
+  isProperRigidFrame,
+  pieceToSetupFrame,
+  setupEnvelopeMm,
+  transformDirection,
+  transformPoint,
+  validPieceDimensions,
+  type MachiningFace,
+  type PieceDimensions3,
+  type Point3,
+  type RigidFrame,
+} from './neutralMachiningGeometry';
+
 // --- Machine output selection (#591 / WEB-MFG-2) ---
 export {
   machineOutputBlockerMessageEs,

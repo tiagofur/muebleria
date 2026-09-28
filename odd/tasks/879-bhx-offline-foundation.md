@@ -23,19 +23,23 @@ promoted to installed-machine evidence. #352 owns field validation.
 ## Delivery and verification policy
 
 - Delivery strategy: `auto-chain`; chain strategy: `stacked-to-main`. Planned
-  slices: B1 evidence/contract, then B2 neutral executable foundation. Each
-  slice targets `main` in order and has its own review/CI before any merge.
+  slices: B1 evidence/contract, B2a neutral six-face frame geometry, then
+  B2b synthetic operation coverage. Each slice targets `main` in order and
+  has its own review/CI before any merge. B2b waits for B2a review and
+  delivery; neither B2 slice changes the authorized product scope.
   The parent/leader owns push, PR, and merge; none is implied by this file.
-- Forecast: B1 about 100–180 authored changed lines; B2 about 350–550,
-  approximately 450–730 total. The ~400-line work-unit heuristic guides
-  cohesive slicing, not code-golf or test omission. Reassess actual counts
-  before the next commit; the owner's overnight exception limit is 750 lines
-  per PR and about 400 production lines only when a clean split is impossible.
+- Forecast after independent review: B2a about 220–300 authored lines;
+  B2b about 450–600. A frame-only PR and a coverage PR will not both fit
+  under 400 lines, but they are distinct deliverable behaviors. A standalone
+  validation-only slice would be an artificial public contract with no
+  candidate consumer; B2b may use the owner's conditional ≤750/~400-production
+  exception after its actual count and cohesion are checked. Do not code-golf
+  or omit tests/docs to fit a budget.
 - TDD: strict **enabled** by the session's `gentle-ai:strict-tdd-mode` directive.
   B1 is passive documentation, so RED/GREEN/REFACTOR and executable runners
-  are not applicable. B2 requires observed RED → GREEN → REFACTOR using the
-  repository runners `pnpm --filter @granete/domain test` and/or
-  `pnpm --filter @granete/excel test` (their `package.json` scripts run Vitest).
+  are not applicable. B2a and B2b each require observed RED → GREEN →
+  REFACTOR using `pnpm --filter @granete/domain test` (Vitest), with focused
+  `pnpm --filter @granete/domain exec vitest run <test-file>` runs as needed.
 - RDD state/review: not assumed. The leader determines the current native
   switch and obtains a fresh independent review of each exact candidate.
 
@@ -55,19 +59,31 @@ promoted to installed-machine evidence. #352 owns field validation.
   --plan`, proportional documentation checks, and clean final preflight.
   Route: delegated direct; evidence spans the dossier, issue, BHX contract,
   architecture, and current profile/adapter/domain seams (>4 files).
-- [ ] **B2 — Neutral offline setup and coverage candidate.** Evolve the
-  existing neutral seam only as needed for explicit synthetic per-piece
-  operations; model six-face piece→setup→candidate-frame transforms and
-  inverse without DXF mirroring or nesting `rotated`. Account for every
-  required operation as assigned to a supported setup or blocked with a
-  specific reason; produce a non-fabricable manifest candidate and
-  `NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED` when the exact receiver is unknown.
-  Acceptance: focused geometry, inverse, coverage, unsupported-face/tool,
-  deterministic identity, and missing-evidence tests; no native program or
-  field claim. Checks: observed strict TDD, focused Vitest, relevant
-  typecheck/contract checks, affected-check plan, V0 readback, and V2
-  `NOT_RUN` for the physical receiver. Route: delegated direct, one writer;
-  implementation plan must be refined against the current B1 boundary.
+- [ ] **B2a — Neutral rigid-frame and setup-envelope geometry.** In a pure
+  domain module, define right-handed six-face piece→setup rotations, explicit
+  setup→symbolic-candidate transforms, point/direction mapping, inverse, and
+  oriented setup-space envelope for asymmetric rectangular pieces. Reject
+  non-finite/degenerate dimensions and reflected, scaled, or sheared frames;
+  never reuse DXF mirroring, nesting `rotated`, machine-native axes, or
+  installed BHX capabilities. Acceptance: independent expected coordinates
+  and oriented extents for all six faces, inverse round-trip, determinant +1,
+  reflection rejection, non-default second-frame transform. Checks: observed
+  strict TDD RED/GREEN/REFACTOR, focused/full domain Vitest, domain typecheck,
+  `git diff --check`, affected-check plan, clean preflight; receiver/physical
+  V2 `NOT_RUN`. Route: delegated direct sole writer on
+  `codex/879-bhx-b2a`, based on B1 merge commit.
+- [ ] **B2b — Synthetic operation coverage candidate.** Consume B2a frames
+  from explicit per-occurrence synthetic operations. Check entry face/point,
+  axis, bore fit, and blind/through travel against ray/box exit distance;
+  conservatively block angled drilling until swept-bore semantics exist.
+  Assign each required operation exactly once to an explicitly supported
+  synthetic setup or return a specific blocker, including oriented bounds,
+  clearance, tool/requirement, malformed/missing/duplicate identities and
+  incomplete resolution. Always return a non-fabricable manifest candidate
+  with `NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED`, no native bytes/filename or
+  physical claim. Checks: separate strict TDD, focused/full domain Vitest,
+  typecheck, affected plan, clean preflight; receiver V2 `NOT_RUN`. Route:
+  delegated direct sole writer only after B2a review/delivery decision.
 
 ## Progress and evidence
 
@@ -114,11 +130,28 @@ promoted to installed-machine evidence. #352 owns field validation.
   the new base but again selected all gates because the ODD path is unknown;
   it did not execute those gates. No executable or receiver checks were
   rerun for this passive-document correction.
-- B2: not started. No neutral planner, native serializer, or machine proof
-  claimed by this task file.
-- Next: refresh the full Engram mirror at
-  `odd/879-bhx-offline-foundation/tasks` and hand the final rebased B1 HEAD
-  to the leader for fresh independent review and exact-HEAD CI/PR decisions.
-  B2 starts only after
-  reconciling its input seam and this document; field-evidence blockers remain
-  explicit.
+- B1 delivery readback: PR #888 merged as
+  `b38284e370b4d8e06e94a78c47afe537745eddab` on 2026-09-28; its final
+  source HEAD `48bbb1612cd0b1133b28adc68991de64ae95ecf9` is an ancestor
+  of current `origin/main`. B2a starts from this merge commit.
+- B2 split rationale: the local one-slice B2 candidate at `e06cc917`
+  (retained on `codex/879-bhx-b2`, never pushed) was rejected by independent
+  review on exact base `b38284e3`. Its setup limit compared unrotated piece
+  dimensions to rotated setup capacity, and its drill geometry accepted blind
+  travel beyond stock or through travel short of exit. It is not delivery
+  evidence. Two coherent work units replace that candidate; tests and docs
+  stay with the behavior they verify.
+- B2a implementation checkpoint before commit: a separate pure domain module
+  now provides six right-handed rotations, inverse, point/direction mapping,
+  and setup-frame envelopes; no machining operation, profile, adapter, or
+  native output is present. Strict TDD RED: focused Vitest failed to load the
+  missing `neutralMachiningGeometry` module. GREEN: focused Vitest passed
+  9/9; REFACTOR: shared rotated-box calculation without behavior change,
+  then focused 9/9 and domain typecheck passed. The full domain suite passed
+  115 files/1,636 tests. `git diff --check` passed. The affected-check plan
+  selected all gates conservatively because the ODD path is unknown; it ran
+  none of those gates. Receiver/import/physical V2: `NOT_RUN`. Exact commit,
+  final clean preflight, and independent review remain pending.
+- Next: commit B2a with its tests and this evidence, rerun checks on the
+  frozen candidate, record its commit identity, and hand the exact HEAD/base
+  to the parent. B2b, native output, and receiver validation remain pending.
