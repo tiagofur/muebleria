@@ -59,7 +59,7 @@ promoted to installed-machine evidence. #352 owns field validation.
   --plan`, proportional documentation checks, and clean final preflight.
   Route: delegated direct; evidence spans the dossier, issue, BHX contract,
   architecture, and current profile/adapter/domain seams (>4 files).
-- [ ] **B2a — Neutral rigid-frame and setup-envelope geometry.** In a pure
+- [x] **B2a — Neutral rigid-frame and setup-envelope geometry.** In a pure
   domain module, define right-handed six-face piece→setup rotations, explicit
   setup→symbolic-candidate transforms, point/direction mapping, inverse, and
   oriented setup-space envelope for asymmetric rectangular pieces. Reject
@@ -150,8 +150,17 @@ promoted to installed-machine evidence. #352 owns field validation.
   then focused 9/9 and domain typecheck passed. The full domain suite passed
   115 files/1,636 tests. `git diff --check` passed. The affected-check plan
   selected all gates conservatively because the ODD path is unknown; it ran
-  none of those gates. Receiver/import/physical V2: `NOT_RUN`. Exact commit,
-  final clean preflight, and independent review remain pending.
-- Next: commit B2a with its tests and this evidence, rerun checks on the
-  frozen candidate, record its commit identity, and hand the exact HEAD/base
-  to the parent. B2b, native output, and receiver validation remain pending.
+  none of those gates. Receiver/import/physical V2: `NOT_RUN`. Work-unit
+  commit `a2fcbe07e97ad0d59838fbedbaf30319a1b3ca9d` on base
+  `b38284e370b4d8e06e94a78c47afe537745eddab` contains geometry, tests,
+  public export, and this ODD checkpoint: 322 additions + 31 deletions =
+  353 authored lines, including 147 production lines. On that exact commit,
+  focused 9/9, full domain 115 files/1,636 tests, domain typecheck, and
+  `git show --check` passed. Clean preflight returned
+  `PREFLIGHT_OK_NOT_VERIFIED`; remote `main` still matched the base.
+  Runtime harness: N/A because B2a is pure symbolic geometry with no
+  receiver or host boundary. Rollback removes only its module, tests, public
+  export, and B2a checkpoint; B1 remains intact. Fresh independent review
+  and exact-HEAD CI/publication remain parent-owned and pending.
+- Next: mirror this completed B2a task and hand exact HEAD/base to the parent.
+  B2b, native output, and receiver validation remain pending.
