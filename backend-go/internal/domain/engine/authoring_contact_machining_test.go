@@ -49,6 +49,15 @@ func TestJ1PairedContactOperations(t *testing.T) {
 			}
 		}
 	}
+	t.Run("escaped identity parity", func(t *testing.T) {
+		contact := resolution.Contacts[0]
+		contact.RelationshipID = "rel<>&\u2028\u2029"
+		got := deriveResolvedContactOperationsForContact(contact, plans.Plans[0], f.Boards, f.StationSpecs[0], f.OperationRecipes[0])
+		want := `j1:["rel\u003c\u003e\u0026\u2028\u2029","floor-left","floor-1",0,"synthetic-j1","test-1","pilot","test-1","pilot"]`
+		if len(got.Issues) != 0 || len(got.Operations) == 0 || got.Operations[0].OperationID != want {
+			t.Fatalf("escaped identity parity failed: got %+v, want %q", got, want)
+		}
+	})
 	moved := readJ1ContactFixture(t)
 	for i := range moved.Boards {
 		moved.Boards[i].Translation[0] += 73

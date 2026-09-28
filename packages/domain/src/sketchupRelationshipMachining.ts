@@ -843,9 +843,16 @@ export function deriveResolvedContactOperationsForContact(
   spec: StationSpec,
   recipe: ContactOperationRecipe,
 ): ContactOperationResult {
+  if (!contact || !plan || !Array.isArray(boards) || !spec || !recipe) {
+    return { operations: [], issues: [{ code: 'OPERATION_INPUT_INVALID', message: 'OPERATION_INPUT_INVALID', severity: 'error' }] };
+  }
   const fail = (code: string): ContactOperationResult => ({
     operations: [], issues: [{ code, message: code, severity: 'error', entityId: contact.contactId }],
   });
+  if (!Array.isArray(plan.stations) || plan.stations.some((station) => !station) ||
+      !contact.frame?.originAssemblyMm || !contact.frame.axisAssembly || !contact.frame.normalAssembly ||
+      !Array.isArray(contact.overlapMm)) return fail('OPERATION_PLAN_INVALID');
+  if (boards.some((board) => !board)) return fail('OPERATION_PARTICIPANT_INVALID');
   const id = contact.contactId;
   if (!id?.trim() || !contact.relationshipId?.trim() || !contact.participantA?.trim() ||
       !contact.participantB?.trim() || plan.contactId !== id || spec.contactId !== id || recipe.contactId !== id) {
@@ -868,7 +875,9 @@ export function deriveResolvedContactOperationsForContact(
   if (!recipe.technicalProfileId?.trim() || !recipe.technicalProfileRevision?.trim()) {
     return fail('TECHNICAL_PROFILE_REQUIRED');
   }
-  if (!recipe.rules?.length) return fail('OPERATION_RULE_INVALID');
+  if (!Array.isArray(recipe.rules) || !recipe.rules.length || recipe.rules.some((rule) => !rule)) {
+    return fail('OPERATION_RULE_INVALID');
+  }
   const ruleIds = new Set<string>();
   const roleSet = new Set(recipe.rules.map((rule) => rule.participantRole));
   if (!roleSet.has('A') || !roleSet.has('B')) return fail('OPERATION_PARTICIPANT_RULE_MISSING');

@@ -90,6 +90,8 @@ A1a behavior commit after clean rebase: `1e11972bea2ae9a59580e5f7166d885489a2feb
 
 A1a parity correction before review: a third same-participant test rule with ID `Z-copy` exposed TS locale-aware `localeCompare` ordering versus Go bytewise ordering; TS RED expected `pilot, Z-copy, counterbore` but got `pilot, counterbore, Z-copy`, while Go already passed. TS now uses explicit codepoint comparison. Focused TS 54/54, Go engine, and domain typecheck are GREEN; broad checks listed above covered the prior behavior HEAD and require exact-head CI/readback after this correction. No productive wiring or B work was introduced.
 
+Fresh A1a review found two fail-closed/parity gaps before publication. TS RED threw on top-level null inputs and a null rule; Go zero-value inputs return issues. A TS RED identity test showed `JSON.stringify` diverging from Go `json.Marshal` on `<`, `>`, `&`, U+2028 and U+2029; the same exact expected ID passed Go. TS now rejects malformed decoded inputs structurally and uses Go-compatible escaped JSON identity. Focused TS 56/56, Go engine/API golden, and domain typecheck are GREEN before correction commit; full exact-head checks, fresh review, CI, and publication remain pending.
+
 A1a's next independent review found two exact parity gaps at `23e7a1eb27b31931ad189778d65fcb8e5919c733`: UTF-16 `<` sorts U+1F600 before U+E000 in TS, while Go UTF-8 sorts U+E000 first; the shared fixture tests stripped/zeroed `operationId` instead of comparing full expected IDs. The owner authorized the genuine preceding A1-id contract/order slice to keep corrected A1a under the 750-line PR cap without code golf or proof cuts. A1a and A1b stay unchecked and unpublished pending this dependency.
 
 ## A1b isolated collection work — 2026-09-28

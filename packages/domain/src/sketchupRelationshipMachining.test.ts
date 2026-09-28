@@ -251,6 +251,29 @@ describe('J1-A1a paired operations for one exact contact', () => {
       .map((operation) => operation.provenance.ruleId)).toEqual(['pilot', 'Z-copy', 'counterbore']);
   });
 
+  it('uses the same escaped operation identity as Go for unrestricted string IDs', () => {
+    const contact = { ...resolved.contacts[0]!, relationshipId: 'rel<>&\u2028\u2029' };
+    const result = derive(0, recipes[0]!, planned.plans[0]!, fixture.boards,
+      contactFixture.stationSpecs[0]!, contact);
+    expect(result.issues).toEqual([]);
+    expect(result.operations[0]!.operationId).toBe(
+      'j1:["rel\\u003c\\u003e\\u0026\\u2028\\u2029","floor-left","floor-1",0,"synthetic-j1","test-1","pilot","test-1","pilot"]');
+  });
+
+  it('returns structured errors instead of throwing for malformed decoded inputs', () => {
+    const args = [resolved.contacts[0]!, planned.plans[0]!, fixture.boards,
+      contactFixture.stationSpecs[0]!, recipes[0]!] as const;
+    for (const index of [0, 1, 2, 3, 4]) {
+      const invalid: unknown[] = [...args];
+      invalid[index] = null;
+      const result = deriveResolvedContactOperationsForContact(...invalid as Parameters<typeof deriveResolvedContactOperationsForContact>);
+      expect(result.operations, String(index)).toEqual([]);
+      expect(result.issues.map((issue) => issue.code), String(index)).toContain('OPERATION_INPUT_INVALID');
+    }
+    expect(derive(0, { ...recipes[0]!, rules: [null] as unknown as ContactOperationRecipe['rules'] })
+      .issues.map((issue) => issue.code)).toContain('OPERATION_RULE_INVALID');
+  });
+
   it('fails closed for invalid identity, rule, technical profile, geometry, and noncanonical plans', () => {
     const left = recipes[0]!;
     const plan = planned.plans[0]!;
