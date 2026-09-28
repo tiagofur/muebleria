@@ -89,6 +89,15 @@
   var inspectorActive = document.getElementById("inspector-active-view");
   var inspectorUnmanaged = document.getElementById("inspector-unmanaged-view");
   var inspectorMultiNote = document.getElementById("inspector-multi-note");
+  var inspectorBatchView = document.getElementById("inspector-batch-view");
+  var inspectorBatchTitle = document.getElementById("inspector-batch-title");
+  var inspectorBatchCountBadge = document.getElementById("inspector-batch-count-badge");
+  var inspectorBatchSummary = document.getElementById("inspector-batch-summary");
+  var inspectorBatchExcluded = document.getElementById("inspector-batch-excluded");
+  var inspectorBatchRolesCard = document.getElementById("inspector-batch-roles-card");
+  var inspectorBatchRoles = document.getElementById("inspector-batch-roles");
+  var inspectorBatchParamsCard = document.getElementById("inspector-batch-params-card");
+  var inspectorBatchParams = document.getElementById("inspector-batch-params");
   var inspectorName = document.getElementById("inspector-furniture-name");
   var inspectorRepresentationWarning = document.getElementById("inspector-representation-warning");
   var inspectorEditBlocker = document.getElementById("inspector-edit-blocker");
@@ -145,6 +154,7 @@
     inspectorEmpty.style.display = "none";
     inspectorUnmanaged.style.display = "none";
     inspectorActive.style.display = "none";
+    inspectorBatchView.style.display = "none";
     // The child view (part/hardware/aggregate) and its context reference
     // belong to the child module: it leaves the lane here on every
     // top-level re-render.
@@ -158,6 +168,12 @@
 
     if (!context) {
       inspectorEmpty.style.display = "block";
+      renderManufacturingCard(null);
+      return;
+    }
+
+    if (context.kind === "batch") {
+      renderBatchInspector(context);
       renderManufacturingCard(null);
       return;
     }
@@ -195,6 +211,136 @@
        (context.kind === "furniture" && deps.capabilityEnabled(context, "canInspectManufacturing")));
     card.style.display = eligible ? "block" : "none";
     if (window.GraneteManufacturing) window.GraneteManufacturing.render();
+  }
+
+  // ------------------------------------------------------------------
+  // #471 R1: batch inspector de lectura. Tripartito honesto por control
+  // compartido (AC §16): común → valor; mixto → "Mixto"; no soportado por
+  // todos → "No aplica a N" con conteo. El lote afectado es el conjunto
+  // de muebles administrados; el Apply explícito llega con R2. Nada de
+  // manufactura se calcula aquí: los datos ya son los contextos
+  // autoritativos publicados por el resolver Ruby.
+  // ------------------------------------------------------------------
+  function renderBatchInspector(context) {
+    inspectorBatchView.style.display = "block";
+    var members = context.furniture || [];
+
+    inspectorBatchTitle.textContent = members.length + " muebles en el lote";
+    inspectorBatchCountBadge.textContent = members.length + " muebles";
+    inspectorBatchSummary.textContent =
+      "La edición por lote aplicará a los " + members.length + " muebles administrados de la selección.";
+
+    var excluded = context.excluded || [];
+    if (excluded.length > 0) {
+      inspectorBatchExcluded.style.display = "block";
+      inspectorBatchExcluded.textContent =
+        excluded.length + " fuera del lote: " +
+        excluded.map(function (entry) { return entry.reason; }).join("; ") + ".";
+    } else {
+      inspectorBatchExcluded.style.display = "none";
+    }
+
+    renderBatchRoles(members);
+    renderBatchParams(members);
+  }
+
+  function batchMaterialLabel(materialId) {
+    var roles = window.GraneteUI.materialRoles;
+    var mat = roles && typeof roles.materialById === "function" ? roles.materialById(materialId) : null;
+    return mat && (mat.name || mat.code) ? (mat.name || mat.code) : (materialId || "--");
+  }
+
+  function batchRow(label, value, muted) {
+    var row = document.createElement("div");
+    row.className = "kv-row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = label;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    if (muted) v.style.color = "var(--text-muted)";
+    row.appendChild(k);
+    row.appendChild(v);
+    return row;
+  }
+
+  function batchCommonValue(values) {
+    var first = values[0];
+    var present = first !== undefined && first !== null && first !== "";
+    if (!present) return null;
+    for (var i = 1; i < values.length; i++) {
+      if (values[i] !== first) return null;
+    }
+    return first;
+  }
+
+  function renderBatchRoles(members) {
+    inspectorBatchRoles.innerHTML = "";
+    var seen = [];
+    members.forEach(function (m) {
+      var def = m.definition || {};
+      (def.materialRoles || []).forEach(function (r) {
+        if (seen.indexOf(r.role) === -1) seen.push(r.role);
+      });
+    });
+    if (seen.length === 0) {
+      inspectorBatchRolesCard.style.display = "none";
+      return;
+    }
+    inspectorBatchRolesCard.style.display = "block";
+    seen.forEach(function (role) {
+      var supported = members.filter(function (m) {
+        var def = m.definition || {};
+        return (def.materialRoles || []).some(function (r) { return r.role === role; });
+      });
+      if (supported.length < members.length) {
+        inspectorBatchRoles.appendChild(
+          batchRow(role, "No aplica a " + (members.length - supported.length), true));
+        return;
+      }
+      var values = members.map(function (m) { return (m.materialChoices || {})[role]; });
+      var common = batchCommonValue(values);
+      if (common !== null) {
+        inspectorBatchRoles.appendChild(batchRow(role, batchMaterialLabel(common), false));
+      } else {
+        inspectorBatchRoles.appendChild(batchRow(role, "Mixto", true));
+      }
+    });
+  }
+
+  function renderBatchParams(members) {
+    inspectorBatchParams.innerHTML = "";
+    var seen = [];
+    members.forEach(function (m) {
+      var def = m.definition || {};
+      (def.parameters || []).forEach(function (p) {
+        if (seen.indexOf(p.name) === -1) seen.push(p.name);
+      });
+    });
+    if (seen.length === 0) {
+      inspectorBatchParamsCard.style.display = "none";
+      return;
+    }
+    inspectorBatchParamsCard.style.display = "block";
+    seen.forEach(function (name) {
+      var supported = members.filter(function (m) {
+        var def = m.definition || {};
+        return (def.parameters || []).some(function (p) { return p.name === name; });
+      });
+      if (supported.length < members.length) {
+        inspectorBatchParams.appendChild(
+          batchRow(name, "No aplica a " + (members.length - supported.length), true));
+        return;
+      }
+      var values = members.map(function (m) { return (m.parameters || {})[name]; });
+      var common = batchCommonValue(values);
+      if (common !== null) {
+        inspectorBatchParams.appendChild(batchRow(name, String(common), false));
+      } else {
+        inspectorBatchParams.appendChild(batchRow(name, "Mixto", true));
+      }
+    });
   }
 
   function renderFurnitureInspector(context) {

@@ -10,6 +10,7 @@ require_relative '../../src/granete_for_sketchup/selection/selection_context'
 require_relative '../../src/granete_for_sketchup/selection/capability_policy'
 require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
+require_relative '../../src/granete_for_sketchup/selection/batch_context'
 require_relative '../../src/granete_for_sketchup/observers/selection_observer'
 
 class SelectionObserverTest < Minitest::Test

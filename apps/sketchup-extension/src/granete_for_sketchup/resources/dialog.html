@@ -497,6 +497,28 @@
             </p>
           </div>
 
+          <!-- #471 R1: batch inspector de lectura — tripartito común/mixto/no-aplica -->
+          <div id="inspector-batch-view" class="card" style="display: none;">
+            <div class="card-header-row">
+              <div>
+                <h2 id="inspector-batch-title" style="font-size: var(--text-md); margin: 0;">--</h2>
+              </div>
+              <div class="badges-column">
+                <span id="inspector-batch-count-badge" class="status-badge pending">Lote</span>
+              </div>
+            </div>
+            <p id="inspector-batch-summary" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 var(--space-2);">--</p>
+            <p id="inspector-batch-excluded" class="subhead" style="display: none; font-size: var(--text-xs); margin: 0 0 var(--space-2); color: var(--warning-700);"></p>
+            <div id="inspector-batch-roles-card">
+              <p class="presets-block-label">Materiales por rol</p>
+              <div id="inspector-batch-roles"></div>
+            </div>
+            <div id="inspector-batch-params-card" style="margin-top: var(--space-3);">
+              <p class="presets-block-label">Parámetros compartidos</p>
+              <div id="inspector-batch-params"></div>
+            </div>
+          </div>
+
           <div id="inspector-active-view" style="display: none;">
             <div class="card">
               <div class="card-header-row">

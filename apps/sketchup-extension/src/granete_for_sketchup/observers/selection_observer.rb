@@ -44,8 +44,40 @@ module Granete
         private
 
         def handle_selection(selection)
-          context = resolve(selection&.first, selection: selection)
+          context = resolve_selection(selection)
           @on_selection_change.call(context&.to_payload)
+        end
+
+        # #471: a multi-selection of two or more managed furniture resolves
+        # to a BatchContext — a SET of semantic identities, never
+        # selection.first authority. Any other multi-selection keeps the
+        # historical single-context payload of the first entity (with its
+        # honest selectionCount), so existing lanes do not change.
+        def resolve_selection(selection)
+          entities = selection_entities(selection)
+          return nil if entities.empty?
+          unless entities.length >= Selection::BatchContext::BATCH_MINIMUM
+            return resolve(entities.first, selection: selection)
+          end
+
+          contexts = entities.map { |entity| @resolver.resolve(entity) }.compact
+          furniture_contexts = contexts.select { |context| context.kind == 'furniture' }
+          members = furniture_contexts.uniq(&:identity_key)
+          unless members.length >= Selection::BatchContext::BATCH_MINIMUM
+            return resolve(entities.first, selection: selection)
+          end
+
+          Selection::BatchContext.new(
+            members: members,
+            others: contexts - furniture_contexts,
+            selection_count: entities.length
+          )
+        end
+
+        def selection_entities(selection)
+          return [] unless selection
+
+          selection.respond_to?(:to_a) ? selection.to_a : []
         end
 
         def selection_count(selection)

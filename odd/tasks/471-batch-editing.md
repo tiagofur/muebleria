@@ -113,3 +113,21 @@ Delivery: PR `Refs #471 / Delivery: partial|complete` según cobertura del DoD
 - Sin cálculo client de BOM/impacto manufactura; impacto = conteos de
   compatibilidad desde definiciones/resolve, nunca manufactura.
 - Sin scopes durables ni UI que los sugiera persistidos.
+
+## Registro R1 (2026-09-28)
+
+- Implementado: `selection/batch_context.rb` (SET de identidades, origen
+  enchufable 'selection', exclusión con razón, dedup por identity_key,
+  capabilities por intersección con conteo de deniers), observer
+  `resolve_selection` (≥2 muebles → batch; cualquier otra multi-selección
+  conserva el payload single histórico), carril JS `inspector-batch-view`
+  con tripartito común/mixto/no-aplica para roles y parámetros.
+- Tests: `selection_batch_test.rb` 6/6 (batch payload, exclusión honesta,
+  fallback single, constructor fail-closed, dedup legado, intersección con
+  deniers); observer 6/6 intacto; inspector JS 29/29 (carril propio,
+  tripartito roles/params, nota de excluidos).
+- Gates: `bundle exec rake verify` — 0 ofensas, 1240 runs/9174 assertions
+  + 6 runs/4079 assertions, 0 failures.
+- Nota honesta: el catálogo local de test no define materialRoles, por lo
+  que canBatchEditMaterialRoles niega con "2 de 2" en esos fixtures — la
+  capability real depende del catálogo conectado.

@@ -380,6 +380,157 @@ test('selection: multi-selection shows the multi note and fail-closes mutations'
   assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'), 'no update under multi-selection');
 });
 
+// --- #471 R1: batch inspector de lectura ---------------------------------
+
+function batchMember(overrides) {
+  return Object.assign({
+    kind: 'furniture',
+    furnitureInstanceRef: 'furn-1',
+    furnitureDefinitionId: 'kitchen-base-standard',
+    display: { name: 'Mueble' },
+    definition: {
+      parameters: [{ name: 'widthMm', type: 'number', defaultValue: 600 }],
+      materialRoles: [
+        { role: 'FRONT', optionIds: ['mat-roble', 'mat-blanco'] },
+        { role: 'BODY', optionIds: ['mat-blanco'] }
+      ]
+    },
+    parameters: { widthMm: 600 },
+    materialChoices: { FRONT: 'mat-roble', BODY: 'mat-blanco' },
+    capabilities: { canEditParameters: { supported: true }, canEditMaterialRoles: { supported: true } }
+  }, overrides || {});
+}
+
+function batchContext(members, excluded) {
+  return {
+    kind: 'batch',
+    origin: 'selection',
+    furniture: members,
+    excluded: excluded || [],
+    capabilities: {
+      canBatchEditParameters: { supported: true, reason: null },
+      canBatchEditMaterialRoles: { supported: true, reason: null }
+    },
+    selectionCount: (members || []).length + (excluded || []).length
+  };
+}
+
+function batchRows(containerId, sandbox) {
+  return el(sandbox, containerId).children.map((row) => ({
+    label: row.children[0].textContent,
+    value: row.children[1].textContent
+  }));
+}
+
+test('batch: renders its own lane with summary and hides the single-furniture views', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(batchContext([
+    batchMember(),
+    batchMember({ furnitureInstanceRef: 'furn-2', parameters: { widthMm: 900 },
+                  materialChoices: { FRONT: 'mat-blanco', BODY: 'mat-blanco' } })
+  ]));
+  assert(visible(el(sandbox, 'inspector-batch-view')), 'batch view visible');
+  assert(!visible(el(sandbox, 'inspector-active-view')), 'furniture view hidden');
+  assert(!visible(el(sandbox, 'inspector-empty-state')), 'empty state hidden');
+  assert.strictEqual(el(sandbox, 'inspector-batch-title').textContent, '2 muebles en el lote');
+  assert(el(sandbox, 'inspector-batch-summary').textContent.indexOf('2 muebles') !== -1,
+    'summary names the affected count');
+  assert(!visible(el(sandbox, 'inspector-batch-excluded')), 'no excluded note without exclusions');
+});
+
+test('batch: roles triage is honest — common value, mixed, and not-applicable-with-count', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(batchContext([
+    batchMember(),
+    // Same BODY everywhere, different FRONT, and a third member without BODY.
+    batchMember({ furnitureInstanceRef: 'furn-2', materialChoices: { FRONT: 'mat-blanco', BODY: 'mat-blanco' } }),
+    batchMember({
+      furnitureInstanceRef: 'furn-3',
+      definition: {
+        parameters: [{ name: 'widthMm', type: 'number', defaultValue: 600 }],
+        materialRoles: [{ role: 'FRONT', optionIds: ['mat-roble'] }]
+      },
+      materialChoices: { FRONT: 'mat-roble' }
+    })
+  ]));
+
+  const byRole = {};
+  batchRows('inspector-batch-roles', sandbox).forEach((r) => { byRole[r.label] = r.value; });
+  assert.strictEqual(byRole.FRONT, 'Mixto', 'differing choices render as mixed, never an arbitrary first value');
+  assert.strictEqual(byRole.BODY, 'No aplica a 1', 'a role a member lacks names the count it does not apply to');
+  assert.strictEqual(byRole.SIDE, undefined, 'roles nobody supports are not invented');
+
+  // The pure common case: every member shares the same choice.
+  api.onSelectionChange(batchContext([
+    batchMember(),
+    batchMember({ furnitureInstanceRef: 'furn-2' })
+  ]));
+  const common = batchRows('inspector-batch-roles', sandbox).find((r) => r.label === 'BODY');
+  assert(common && common.value === 'Material mat-blanco',
+    'common choice renders the resolved material name');
+});
+
+test('batch: params triage mirrors the roles honesty and excluded entities get a reason', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(batchContext([
+    batchMember({
+      definition: {
+        parameters: [{ name: 'widthMm', type: 'number', defaultValue: 600 },
+                     { name: 'shelfCount', type: 'number', defaultValue: 2 }],
+        materialRoles: [
+          { role: 'FRONT', optionIds: ['mat-roble', 'mat-blanco'] },
+          { role: 'BODY', optionIds: ['mat-blanco'] }
+        ]
+      },
+      parameters: { widthMm: 600, shelfCount: 3 }
+    }),
+    batchMember({
+      furnitureInstanceRef: 'furn-2',
+      parameters: { widthMm: 900, shelfCount: 3 },
+      definition: {
+        parameters: [
+          { name: 'widthMm', type: 'number', defaultValue: 600 },
+          { name: 'shelfCount', type: 'number', defaultValue: 2 },
+          { name: 'doorCount', type: 'number', defaultValue: 2 }
+        ],
+        materialRoles: [{ role: 'FRONT', optionIds: ['mat-roble'] }]
+      },
+      materialChoices: { FRONT: 'mat-roble' }
+    })
+  ], [{ kind: 'unmanaged', reason: 'geometría no gestionada por Granete' }]));
+
+  const params = {};
+  batchRows('inspector-batch-params', sandbox).forEach((r) => { params[r.label] = r.value; });
+  assert.strictEqual(params.widthMm, 'Mixto', 'differing parameter values render as mixed');
+  assert.strictEqual(params.shelfCount, '3', 'common parameter value renders exactly');
+  assert.strictEqual(params.doorCount, 'No aplica a 1',
+    'a parameter only some definitions declare names the count it does not apply to');
+  assert(visible(el(sandbox, 'inspector-batch-excluded')), 'excluded note visible');
+  assert(el(sandbox, 'inspector-batch-excluded').textContent.indexOf('geometría no gestionada') !== -1,
+    'the excluded reason is shown, never a silent skip');
+});
+
 test('furniture: definition direct identity, param state, summary and materials render', () => {
   const renderCalls = [];
   const sandbox = buildModuleSandbox({
