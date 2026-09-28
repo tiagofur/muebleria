@@ -301,6 +301,10 @@ describe('J1-A1a paired operations for one exact contact', () => {
         rule.participantRole === 'B' ? { ...rule, axis: [0, 1, 0] as const } : rule) }), 'OPERATION_GEOMETRY_INVALID'],
       ['excess depth', derive(0, { ...left, rules: left.rules.map((rule) =>
         rule.participantRole === 'B' ? { ...rule, depthMm: 19 } : rule) }), 'OPERATION_GEOMETRY_INVALID'],
+      ['oblique swept-cylinder edge breach', derive(0, { ...left, rules: left.rules.map((rule) =>
+        rule.participantRole === 'B' ? { ...rule, offsetMm: [-50, 18, 0] as const,
+          axis: [-0.7, -Math.sqrt(0.51), 0] as const, diameterMm: 12, depthMm: 10 } : rule) }),
+      'OPERATION_GEOMETRY_INVALID'],
       ['nonfinite diameter', derive(0, { ...left, rules: left.rules.map((rule) =>
         rule.participantRole === 'B' ? { ...rule, diameterMm: Infinity } : rule) }), 'OPERATION_RULE_INVALID'],
       ['edge breach', derive(0, { ...left, rules: left.rules.map((rule) =>

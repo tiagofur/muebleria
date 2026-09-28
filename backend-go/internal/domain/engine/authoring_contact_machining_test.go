@@ -107,6 +107,12 @@ func TestJ1PairedContactNegatives(t *testing.T) {
 		{"excess depth", "OPERATION_GEOMETRY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
 			r.Rules[1].DepthMm = 19
 		}},
+		{"oblique swept-cylinder edge breach", "OPERATION_GEOMETRY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules[1].OffsetMm = [3]float64{-50, 18, 0}
+			r.Rules[1].Axis = [3]float64{-0.7, -math.Sqrt(0.51), 0}
+			r.Rules[1].DiameterMm = 12
+			r.Rules[1].DepthMm = 10
+		}},
 		{"nonfinite diameter", "OPERATION_RULE_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
 			r.Rules[1].DiameterMm = math.Inf(1)
 		}},

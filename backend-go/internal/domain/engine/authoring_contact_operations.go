@@ -156,7 +156,8 @@ func deriveResolvedContactOperationsForContact(contact ResolvedContact, plan Sta
 				valid = valid && finite(value) && value >= -1e-6 && value <= dims[i]+1e-6 &&
 					value+rule.DepthMm*axisLocal[i] >= -1e-6 && value+rule.DepthMm*axisLocal[i] <= dims[i]+1e-6
 				if i != faceAxis {
-					valid = valid && value >= radius-1e-6 && value <= dims[i]-radius+1e-6
+					// Endpoint checks alone do not bound an oblique bore's swept cylinder.
+					valid = valid && axisLocal[i] == 0 && value >= radius-1e-6 && value <= dims[i]-radius+1e-6
 				}
 			}
 			if !valid {

@@ -914,6 +914,8 @@ export function deriveResolvedContactOperationsForContact(
       const radius = rule.diameterMm / 2;
       if (!centerLocal.every((value, i) => Number.isFinite(value) && value >= -1e-6 && value <= dims[i]! + 1e-6) ||
           Math.abs(centerLocal[faceAxis]! - (high ? dims[faceAxis]! : 0)) > 1e-6 ||
+          // Endpoint checks alone do not bound the swept cylinder of an oblique bore.
+          axisLocal.some((component, i) => i !== faceAxis && component !== 0) ||
           (high ? axisLocal[faceAxis]! >= -1e-6 : axisLocal[faceAxis]! <= 1e-6) ||
           dims.some((dimension, i) => i !== faceAxis && (centerLocal[i]! < radius - 1e-6 || centerLocal[i]! > dimension - radius + 1e-6)) ||
           !centerLocal.every((value, i) => value + rule.depthMm * axisLocal[i]! >= -1e-6 &&
