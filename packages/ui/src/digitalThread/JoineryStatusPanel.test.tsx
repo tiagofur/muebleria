@@ -24,6 +24,10 @@ const floorSideStatus = (): JoineryRelationshipStatus => ({
       { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 3 },
       { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 3 },
     ],
+    stationDistances: [
+      { contactId: 'rel-floor-sides-01:side-left-01', distancesMm: [30, 261, 492] },
+      { contactId: 'rel-floor-sides-01:side-right-01', distancesMm: [30, 252, 474] },
+    ],
   },
   blockers: ['TECHNICAL_PROFILE_REQUIRED'],
 });
@@ -44,11 +48,11 @@ describe('joineryDiagnosticsModel', () => {
   it('keeps invalid contacts and unsupported relationships distinguishable', () => {
     const invalid = { ...floorSideStatus(), stage: 'CONTACT_INVALID' as const,
       contacts: [{ contactId: 'rel-floor-sides-01:side-left-01', status: 'INVALID' as const, issueCodes: ['CONTACT_FACE_REQUIRED'] }],
-      stations: { status: 'NOT_PLANNED' as const, issueCodes: [], stationCounts: [] },
+      stations: { status: 'NOT_PLANNED' as const, issueCodes: [], stationCounts: [], stationDistances: [] },
       blockers: ['CONTACT_FACE_REQUIRED'] } satisfies JoineryRelationshipStatus;
     const unsupported = { ...floorSideStatus(), relationshipId: 'rel-x', kind: 'mystery',
       stage: 'RELATIONSHIP_UNSUPPORTED' as const, contacts: [],
-      stations: { status: 'NOT_PLANNED' as const, issueCodes: [], stationCounts: [] },
+      stations: { status: 'NOT_PLANNED' as const, issueCodes: [], stationCounts: [], stationDistances: [] },
       blockers: ['RELATIONSHIP_INVALID'] } satisfies JoineryRelationshipStatus;
     const model = joineryDiagnosticsModel([invalid, unsupported], new Map());
     expect(model[0]?.stageLabel).toBe('Contacto inválido');
