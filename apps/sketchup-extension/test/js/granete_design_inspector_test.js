@@ -76,7 +76,21 @@ function createSandbox() {
   const registry = {};
   const document = {
     getElementById: (id) => (registry[id] = registry[id] || createMockElement(id)),
-    createElement: (tagName) => createMockElement('', String(tagName).toUpperCase())
+    // Real-DOM behavior: a created element becomes findable by id once it
+    // carries one (R2 change buttons are created dynamically per role).
+    createElement: (tagName) => {
+      const el = createMockElement('', String(tagName).toUpperCase());
+      let currentId = '';
+      Object.defineProperty(el, 'id', {
+        get: () => currentId,
+        set: (v) => {
+          if (currentId && registry[currentId] === el) delete registry[currentId];
+          currentId = String(v);
+          if (currentId) registry[currentId] = el;
+        }
+      });
+      return el;
+    }
   };
   const sketchupCalls = [];
   const sandbox = {
@@ -91,7 +105,8 @@ function createSandbox() {
     Date,
     setTimeout: (fn) => fn(),
     sketchup: {
-      get_design_defaults: (payload) => { sketchupCalls.push(['get_design_defaults', JSON.parse(payload)]); }
+      get_design_defaults: (payload) => { sketchupCalls.push(['get_design_defaults', JSON.parse(payload)]); },
+      apply_design_defaults: (payload) => { sketchupCalls.push(['apply_design_defaults', JSON.parse(payload)]); }
     }
   };
   sandbox.window.sketchup = sandbox.sketchup;
@@ -367,6 +382,194 @@ function run() {
     assert.strictEqual(mod.handleNoSelection(), true);
     assert.strictEqual(ctx.view().style.display, 'block');
     assert.ok(ctx.body().textContent.includes('Arauco Blanco Frosty'), 'cached ready state renders');
+  });
+
+  // --- R2: pending draft + footer + one PUT -------------------------------
+  function initModuleR2(ctx) {
+    ctx.sandbox.window.GraneteUI.designInspector.init({
+      getRoleLabel: (role) => ({ INTERIOR: 'Interior', FRENTES: 'Frentes' }[role] || role),
+      materialById: (id) => MATERIALS[id],
+      rerenderInspector: () => {},
+      getRoleCandidates: (role) => (role === 'INTERIOR' ? ['mat-oak', 'mat-white'] : ['mat-white', 'mat-oak']),
+      openMaterialPicker: (roleEntry, initialId, onApply) => { ctx.picker = { roleEntry, initialId, onApply }; }
+    });
+  }
+
+  function readyState(ctx) {
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    mod.onBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p-1', designId: 'd-a', projectName: 'Cocina López', designName: 'Principal',
+        workingVersion: '2026-09-28T10:00:00Z' }
+    });
+    assert.strictEqual(mod.handleNoSelection(), true);
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      workingVersion: '2026-09-28T10:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white', FRENTES: 'mat-oak' } } });
+    return mod;
+  }
+
+  test('R2: picking a material creates a pending draft and shows the footer', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    // Row action opens the picker for the role with the current value.
+    const changeBtn = ctx.document.getElementById('design-inspector-change-INTERIOR');
+    assert.ok(changeBtn, 'each default row carries a change affordance');
+    changeBtn.click();
+    assert.ok(ctx.picker, 'picker opens');
+    assert.strictEqual(ctx.picker.roleEntry.role, 'INTERIOR');
+    assert.strictEqual(ctx.picker.initialId, 'mat-white');
+    // The pick lands in the DRAFT, never straight in the backend.
+    ctx.picker.onApply('mat-oak');
+    assert.ok(ctx.body().textContent.includes('Roble Natural'), 'the draft value renders');
+    assert.ok(ctx.body().textContent.includes('→'), 'old → new is visible');
+    const footer = ctx.document.getElementById('design-inspector-footer');
+    assert.strictEqual(footer.style.display, 'block');
+    assert.ok(ctx.document.getElementById('design-inspector-pending').textContent.includes('1 cambio pendiente'));
+    // Nothing crossed the bridge yet: zero writes while drafting.
+    assert.ok(ctx.sketchupCalls.every((c) => c[0] !== 'apply_design_defaults'));
+  });
+
+  test('R2: Descartar clears the draft without any write', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    assert.ok(ctx.document.getElementById('design-inspector-pending').textContent.includes('1 cambio pendiente'));
+    ctx.document.getElementById('design-inspector-discard').click();
+    assert.strictEqual(ctx.document.getElementById('design-inspector-footer').style.display, 'none');
+    assert.ok(ctx.body().textContent.includes('Roble Natural'), 'durable value back on screen');
+    assert.ok(!ctx.body().textContent.includes('→'));
+    assert.ok(ctx.sketchupCalls.every((c) => c[0] === 'get_design_defaults'), 'discard is read-only');
+  });
+
+  test('R2: Aplicar issues exactly ONE apply_design_defaults PUT with V1 + merged defaults', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak');
+    ctx.document.getElementById('design-inspector-apply').click();
+
+    const applies = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults');
+    assert.strictEqual(applies.length, 1, 'exactly one apply call');
+    const payload = applies[0][1];
+    assert.strictEqual(payload.designId, 'd-a');
+    assert.strictEqual(payload.expectedWorkingVersion, '2026-09-28T10:00:00Z');
+    assert.deepStrictEqual(payload.authoringDefaults.materialChoices, { INTERIOR: 'mat-oak', FRENTES: 'mat-oak' },
+      'the merged durable ∪ draft block');
+    // The draft clears only on the confirmed answer.
+    assert.ok(ctx.document.getElementById('design-inspector-pending').textContent.includes('1 cambio pendiente'));
+    // Successful answer: new workingVersion cached, draft cleared, no reopen games.
+    mod.onDesignDefaultsApplied({ requestId: payload.requestId, status: 'ok', designId: 'd-a',
+      workingVersion: '2026-09-28T11:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-oak', FRENTES: 'mat-oak' } } });
+    assert.strictEqual(ctx.document.getElementById('design-inspector-footer').style.display, 'none');
+    assert.ok(ctx.body().textContent.includes('Roble Natural'));
+  });
+
+  test('R2: a conflict answer keeps the honest state without fake success', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payload = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+    mod.onDesignDefaultsApplied({ requestId: payload.requestId, status: 'conflict', reason: 'el diseño cambió en el servidor' });
+    assert.ok(ctx.body().textContent.includes('cambió en el servidor'), 'honest conflict message');
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, true,
+      'no repeat apply against a stale token');
+  });
+
+  // --- FINAL REVIEW R2 BLOCKER: the draft is PINNED to the working-copy
+  //     version it started on. An external V2 never silently rebases it.
+  test('external V2 read does not rebase the draft; Apply rides V1 and fails honestly', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx); // V1 with INTERIOR=mat-white
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak'); // draft starts on V1
+    // An EXPLICIT refresh brings V2 from the server (another writer).
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      workingVersion: '2026-09-28T12:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-roble-server', FRENTES: 'mat-oak' } } });
+    // The draft stays on its V1 base: the rendered "old" value is still the
+    // V1 base, not the server's V2 value, and the pending footer survives.
+    assert.ok(ctx.body().textContent.includes('→'), 'draft still rendered');
+    assert.ok(ctx.body().textContent.includes('Arauco Blanco Frosty'), 'old value stays the V1 base');
+    assert.ok(!ctx.body().textContent.includes('mat-roble-server'.replace('-', ' ')), 'no silent rebase');
+    assert.ok(ctx.document.getElementById('design-inspector-footer').style.display === 'block' ||
+              ctx.body().textContent.includes('cambió en el servidor'), 'stale draft is honestly flagged');
+    // Apply rides V1 — NEVER the observed V2.
+    ctx.document.getElementById('design-inspector-apply').click();
+    const applies = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults');
+    assert.strictEqual(applies.length, 1);
+    assert.strictEqual(applies[0][1].expectedWorkingVersion, '2026-09-28T10:00:00Z',
+      'Apply sends draftBaseVersion (V1), not the refreshed V2');
+    assert.deepStrictEqual(applies[0][1].authoringDefaults.materialChoices,
+      { INTERIOR: 'mat-oak', FRENTES: 'mat-oak' }, 'the merged block still comes from the V1 base');
+    // The bridge honestly refuses (V1 vs server V2): draft preserved.
+    mod.onDesignDefaultsApplied({ requestId: applies[0][1].requestId, status: 'conflict',
+      reason: 'el diseño cambió en el servidor' });
+    assert.ok(ctx.document.getElementById('design-inspector-pending').textContent.includes('cambió en el servidor'));
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, true);
+    ctx.sketchupCalls.forEach((c) => { if (c[0] === 'apply_design_defaults') { /* the one attempt */ } });
+    assert.strictEqual(ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults').length, 1, 'no write loop');
+  });
+
+  test('same-version refresh while dirty preserves the draft without rebasing', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    const callsBefore = ctx.sketchupCalls.length;
+    // Another read of the SAME version: the draft survives untouched.
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      workingVersion: '2026-09-28T10:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white', FRENTES: 'mat-oak' } } });
+    assert.strictEqual(ctx.document.getElementById('design-inspector-pending').textContent.includes('1 cambio pendiente'),
+      true, 'draft preserved');
+    // While dirty, the lane does NOT silently re-read (suppressed).
+    mod.handleNoSelection();
+    assert.strictEqual(ctx.sketchupCalls.length, callsBefore, 'no silent refresh while a draft is pending');
+  });
+
+  test('applied-ok opens a fresh base on the new version', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payload = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+    mod.onDesignDefaultsApplied({ requestId: payload.requestId, status: 'ok', designId: 'd-a',
+      workingVersion: '2026-09-28T11:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-oak', FRENTES: 'mat-oak' } } });
+    // A new edit now rides the NEW version.
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const second = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[1];
+    assert.strictEqual(second[1].expectedWorkingVersion, '2026-09-28T11:00:00Z',
+      'the next draft is based on V2');
   });
 
   // --- error state with retry ---------------------------------------------

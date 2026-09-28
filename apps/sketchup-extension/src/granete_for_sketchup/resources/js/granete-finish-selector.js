@@ -150,9 +150,11 @@
     // mueble — la elección acompaña a la próxima inserción.
     var scopeFurnitureLabel = document.getElementById("selector-scope-furniture-label");
     if (scopeFurnitureLabel) {
+      // #784 R2: the Design Inspector opens the picker with contextKind
+      // "design" — the pick edits the LOCAL pending draft, not a furniture.
       scopeFurnitureLabel.textContent = contextKind === "inspector"
         ? "Aplicar a este mueble"
-        : "Aplicar a esta configuración";
+        : (contextKind === "design" ? "Aplicar al Diseño" : "Aplicar a esta configuración");
     }
     selectorSearchInput.value = "";
     selectorSearchClear.style.display = "none";
