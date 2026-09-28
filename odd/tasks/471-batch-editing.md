@@ -177,3 +177,19 @@ Delivery: PR `Refs #471 / Delivery: partial|complete` según cobertura del DoD
   originales, fallo de resolve de un miembro → 0 operaciones) +
   `testup-ci-471.yml`. Ejecución: requiere RBZ del branch instalado con
   SketchUp CERRADO (trap restore-on-exit).
+
+## Registro R4b — V2 host real PASS (2026-09-28)
+
+- Ejecutado TestUp-CI contra SketchUp 2026 real (arm64, Ruby 3.2.2) con la
+  0.1.15 del branch instalada (RBZ 25b4a16a…, fail-closed checks del setup
+  incluidos): `TC_BatchMutationSmoke` **3/3 PASS, 26 assertions, 0
+  failures/errors** (progress/host_smoke_471_testup_ci.json, seed 35065).
+  - mixed 3-furniture selection → BatchContext real (8 assertions);
+  - batch apply: 1 start + 1 commit, 3 applied, UN editUndo: restaura
+    shelfCounts 1/2/3 propios + identidades (11 assertions);
+  - member resolve failure → 0 operaciones, metadata intacta (7).
+- Backup 0.1.14 en muebles-worktrees/backups/granete-0.1.14-20260928/; la
+  0.1.15 queda instalada para pruebas interactivas del owner.
+- Pendiente explícito para #784 (su rollout consume este primitivo):
+  conteos compatible/afectados/con-override/no-soportados del rollout y
+  preservación de overrides por defecto en ese flujo.
