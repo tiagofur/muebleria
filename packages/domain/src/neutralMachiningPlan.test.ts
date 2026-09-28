@@ -344,4 +344,26 @@ describe('neutral synthetic machining coverage (#879 B2b)', () => {
       candidateAxisIntoPiece: { x: 0, y: 1, z: 0 },
     });
   });
+  it('fails closed on null and undefined planner input without throwing', () => {
+    for (const malformed of [null, undefined]) {
+      const candidate = planNeutralMachining(malformed as unknown as NeutralMachiningInput);
+      expect(candidate.kind).toBe('neutral-offline-candidate');
+      expect(candidate.nonFabricable).toBe(true);
+      expect(candidate.complete).toBe(false);
+      expect(candidate.coverage).toEqual([]);
+      for (const blocker of ['SYNTHETIC_SOURCE_REQUIRED', 'UPSTREAM_RESOLUTION_INCOMPLETE',
+        'INVALID_PIECE_DIMENSIONS', 'NO_REQUIRED_OPERATIONS', 'NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED']) {
+        expect(candidate.blockers, String(malformed)).toContain(blocker);
+      }
+    }
+  });
+
+  it('marks complete only when every required operation is assigned exactly once', () => {
+    expect(planNeutralMachining(input()).complete).toBe(true);
+    expect(planNeutralMachining({ ...input(), requiredOperationIds: ['drill-1', 'drill-2'],
+      operations: [operation('drill-1'), operation('drill-2')] }).complete).toBe(true);
+    expect(planNeutralMachining({ ...input(), setups: [] }).complete).toBe(false);
+    expect(planNeutralMachining({ ...input(), requiredOperationIds: ['drill-1', 'drill-1'] })
+      .complete).toBe(false);
+  });
 });

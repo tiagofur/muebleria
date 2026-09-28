@@ -71,7 +71,9 @@ function rayBoxExitMm(entry: Point3, axis: Point3, dimensions: PieceDimensions3)
 }
 
 /** Proves neutral straight-bore geometry only; never setup support or fabricability. */
-export function evaluateNeutralBoreGeometry(input: NeutralBoreGeometryInput): NeutralBoreGeometryResult {
+export function evaluateNeutralBoreGeometry(suppliedInput: NeutralBoreGeometryInput): NeutralBoreGeometryResult {
+  // A null/undefined root reports every malformed-field reason instead of throwing.
+  const input = suppliedInput ?? ({} as NeutralBoreGeometryInput);
   const reasons: NeutralBoreGeometryReason[] = [];
   const result = (rayExitMm?: number): NeutralBoreGeometryResult => Object.freeze({
     kind: 'neutral-bore-geometry', nonFabricable: true,

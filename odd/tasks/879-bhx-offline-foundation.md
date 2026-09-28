@@ -250,3 +250,11 @@ promoted to installed-machine evidence. #352 owns field validation.
   reviews/publishes B2b-a first, then B2b-b rebases onto its
   merged main before fresh exact-HEAD review/CI. Native output and receiver
   validation remain pending.
+
+## B2b-b publication reconciliation — 2026-09-28 (GLM writer)
+
+B2b-a merged to main as PR #890 (`de2fd1b5`). The preserved coverage candidate (`24bb060c`, built on the frozen B2b-a base) cherry-picked cleanly onto `de2fd1b5` as `feat/879-bhx-b2b-b` (planner + tests + exports + ODD; 693 authored additions), then the two outstanding review blockers were closed with strict TDD on top:
+
+- RED observed for `planNeutralMachining(null)`/`(undefined)` (TypeError at `input.source`), for the missing `complete` flag, and for `evaluateNeutralBoreGeometry(null)` (TypeError). GREEN: a root-null coerced empty record drives every integrity blocker (no throw), the candidate now exposes `complete === true` only when every required operation is assigned exactly once (empty/duplicate/blocked required sets stay false), and the B2b-a geometry seam returns a structured non-fabricable result for null/undefined roots. Existing deep-freeze/no-alias manifest proofs unchanged and still green.
+- Focused Vitest 37/37, full domain 1,676/1,676, and domain typecheck pass on this worktree. `NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED` remains an unconditional blocker; no native output, receiver capability, or machine claim was added.
+- Fresh exact-HEAD independent review, CI/Publication, and PR remain the gates; the size stays under the owner's ≤950 authorization. Native program generation stays out of scope pending real receiver data.

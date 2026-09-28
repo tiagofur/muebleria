@@ -99,6 +99,8 @@ export interface NeutralMachiningCandidate {
   readonly source: NeutralMachiningInput['source'];
   readonly coverage: readonly NeutralOperationCoverage[];
   readonly blockers: readonly NeutralMachiningBlocker[];
+  /** True only when every required operation is assigned exactly once. */
+  readonly complete: boolean;
 }
 
 const EPSILON = 1e-9;
@@ -215,7 +217,9 @@ function setupReasons(op: SyntheticDrillOperation, setup: SyntheticMachiningSetu
 }
 
 /** Complete per-required-entry accounting; successful geometry is never a fabrication claim. */
-export function planNeutralMachining(input: NeutralMachiningInput): NeutralMachiningCandidate {
+export function planNeutralMachining(suppliedInput: NeutralMachiningInput): NeutralMachiningCandidate {
+  // A null/undefined root drives every integrity blocker instead of throwing.
+  const input = suppliedInput ?? ({} as NeutralMachiningInput);
   const integrityReasons: NeutralMachiningBlocker[] = [];
   const source = input.source;
   if (source?.kind !== 'synthetic-fixture' || !validId(source.fixtureId)
@@ -281,10 +285,13 @@ export function planNeutralMachining(input: NeutralMachiningInput): NeutralMachi
     ...integrityReasons,
     ...coverage.flatMap((record) => record.reasons),
   ]));
+  const complete = coverage.length > 0
+    && coverage.every((record) => record.status === 'ASSIGNED_TO_SUPPORTED_SETUP');
   return Object.freeze({
     kind: 'neutral-offline-candidate', nonFabricable: true,
     source: source == null ? source : Object.freeze({ ...source }),
     coverage: frozenCoverage,
     blockers,
+    complete,
   });
 }
