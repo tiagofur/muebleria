@@ -189,7 +189,7 @@
     "/auth/sketchup/profile": {
       "get": {
         "operationId": "getSketchupProfile",
-        "description": "Current SketchUp bearer only. Returns no other memberships, roles, support context, or session credentials.",
+        "description": "Current SketchUp bearer only. Returns no other memberships, roles, support context, or session credentials. Org-scoped sessions include organization and session_scope; org-less sessions (no active membership) omit them.",
         "responses": {
           "200": {
             "description": "Current SketchUp identity and organization license",
@@ -5391,7 +5391,7 @@
       "SketchupProfileResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["user", "organization", "session_scope"],
+        "required": ["user"],
         "properties": {
           "user": { "$ref": "#/components/schemas/SketchupProfileUser" },
           "organization": { "$ref": "#/components/schemas/SketchupProfileOrganization" },
@@ -5410,9 +5410,10 @@
       "SketchupProfileOrganization": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "license"],
+        "required": ["id", "name", "license"],
         "properties": {
           "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string" },
           "license": { "$ref": "#/components/schemas/License" }
         }
       },

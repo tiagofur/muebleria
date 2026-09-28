@@ -338,6 +338,39 @@ test('setStatus distinguishes configured / no-session pills and inactive license
   assert.strictEqual(el(sb, 'session-license').style.color, 'var(--danger-600)');
 });
 
+// #883: the taller shows by its server-confirmed name — never an ID — and
+// disappears entirely for org-less sessions (solo users, selection phase)
+// or when the identity read failed.
+test('setStatus shows the taller row by organization name when scoped', () => {
+  const sb = runModule();
+  sb.window.GraneteUI.account.setStatus({
+    state: 'logged_in',
+    server_url: 'https://taller.granete.com/api',
+    user: { name: 'Ana', email: 'ana@taller.com' },
+    organization: { name: 'Taller Muebles Sur' },
+    license: { plan: 'pro', status: 'active' }
+  });
+  assert(visible(el(sb, 'session-org-row')), 'org-scoped session shows the taller row');
+  assert.strictEqual(el(sb, 'session-org-name').textContent, 'Taller Muebles Sur');
+
+  sb.window.GraneteUI.account.setStatus({
+    state: 'logged_in',
+    user: { name: 'Diseñador Independiente', email: 'solo@free.local' }
+  });
+  assert(!visible(el(sb, 'session-org-row')), 'org-less session hides the taller row');
+  assert.strictEqual(el(sb, 'session-user-name').textContent, 'Diseñador Independiente',
+    'org-less session still shows the account identity');
+
+  sb.window.GraneteUI.account.setStatus({
+    state: 'logged_in',
+    user: { name: 'Ana', email: 'ana@taller.com' },
+    organization: { name: 'Taller Muebles Sur' }
+  });
+  sb.window.GraneteUI.account.setStatus({ state: 'logged_in' });
+  assert(!visible(el(sb, 'session-org-row')), 'a failed identity read hides the taller row');
+  assert.strictEqual(el(sb, 'session-user-name').textContent, '--');
+});
+
 // --- enrollment lifecycle ---
 
 test('login click without a server shows the error and never calls Ruby', () => {

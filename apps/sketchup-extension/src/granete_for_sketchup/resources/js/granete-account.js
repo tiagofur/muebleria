@@ -52,6 +52,8 @@
   var enrollCountdownInterval = null;
   var sessionUserName = document.getElementById("session-user-name");
   var sessionUserEmail = document.getElementById("session-user-email");
+  var sessionOrgRow = document.getElementById("session-org-row");
+  var sessionOrgName = document.getElementById("session-org-name");
   var sessionServer = document.getElementById("session-server");
   var sessionLicense = document.getElementById("session-license");
 
@@ -124,6 +126,21 @@
     }
   }
 
+  // #883: el taller se muestra por su nombre server-confirmado, nunca por
+  // ID. Sin organización (usuarios únicos / selección pendiente) la fila
+  // desaparece — no es un valor desconocido, es un estado legítimo.
+  function renderSessionOrganization(organization) {
+    if (!sessionOrgRow) return;
+    var name = organization && organization.name;
+    if (name) {
+      sessionOrgName.textContent = String(name);
+      sessionOrgRow.style.display = "";
+    } else {
+      sessionOrgName.textContent = "--";
+      sessionOrgRow.style.display = "none";
+    }
+  }
+
   function setStatus(status) {
     status = status || {};
     if (status.heading) connectionHeading.textContent = String(status.heading);
@@ -150,6 +167,7 @@
       var user = status.user || {};
       sessionUserName.textContent = user.name || "--";
       sessionUserEmail.textContent = user.email || "--";
+      renderSessionOrganization(status.organization);
       sessionServer.textContent = status.server_url || "--";
       renderSessionLicense(status.license);
     }

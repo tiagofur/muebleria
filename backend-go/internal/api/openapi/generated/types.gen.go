@@ -183,9 +183,9 @@ type MeResponse struct {
 }
 
 type SketchupProfileResponse struct {
-	User         SketchupProfileUser         `json:"user"`
-	Organization SketchupProfileOrganization `json:"organization"`
-	SessionScope SketchupProfileScope        `json:"session_scope"`
+	User         SketchupProfileUser          `json:"user"`
+	Organization *SketchupProfileOrganization `json:"organization,omitempty"`
+	SessionScope *SketchupProfileScope        `json:"session_scope,omitempty"`
 }
 
 type SketchupProfileUser struct {
@@ -195,6 +195,7 @@ type SketchupProfileUser struct {
 
 type SketchupProfileOrganization struct {
 	ID      string  `json:"id"`
+	Name    string  `json:"name"`
 	License License `json:"license"`
 }
 

@@ -86,8 +86,8 @@ func TestSketchupProfileReturnsOnlyCurrentSessionIdentity(t *testing.T) {
 		t.Fatalf("profile user must expose only own name/email: %v", user)
 	}
 	organization, ok := body["organization"].(map[string]any)
-	if !ok || len(organization) != 2 || organization["id"] != "org-1" {
-		t.Fatalf("profile organization must be current scope only: %v", organization)
+	if !ok || len(organization) != 3 || organization["id"] != "org-1" || organization["name"] != "Taller taller-uno" {
+		t.Fatalf("profile organization must be current scope name only: %v", organization)
 	}
 	if _, ok := organization["license"].(map[string]any); !ok {
 		t.Fatalf("current organization license missing: %v", organization)
@@ -140,6 +140,41 @@ func TestSketchupProfileReturnsOnlyCurrentSessionIdentity(t *testing.T) {
 	}
 	if rec := serve("/api/auth/sketchup/profile", expiredToken); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expired credential profile status = %d", rec.Code)
+	}
+}
+
+// #883: org-less device sessions (solo/independent accounts, Free-tier
+// testers, or multi-membership users mid selection) must still read their
+// server-confirmed identity — with no organization block to display.
+func TestSketchupProfileOrglessSessionReturnsIdentityWithoutOrganization(t *testing.T) {
+	server, _ := loginTestServer(t)
+	orglessToken, err := auth.GenerateLegacyExtensionToken("u1", "u@example.com", auth.TokenContext{}, server.JWTSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/auth/sketchup/profile", nil)
+	req.Header.Set("Authorization", "Bearer "+orglessToken)
+	RegisterRoutes(server).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("org-less profile status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	user, ok := body["user"].(map[string]any)
+	if !ok || len(user) != 2 || user["name"] != "U" || user["email"] != "u@example.com" {
+		t.Fatalf("org-less profile must confirm account identity: %v", body)
+	}
+	if body["organization"] != nil {
+		t.Fatalf("org-less profile must omit organization: %v", body["organization"])
+	}
+	if body["session_scope"] != nil {
+		t.Fatalf("org-less profile must omit session_scope: %v", body["session_scope"])
+	}
+	if cache := rec.Header().Get("Cache-Control"); cache != "no-store" {
+		t.Fatalf("org-less profile cache control = %q, want no-store", cache)
 	}
 }
 
