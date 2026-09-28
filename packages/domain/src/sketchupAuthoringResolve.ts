@@ -1163,8 +1163,11 @@ export function authoringResolveFingerprint(input: {
     operations,
   };
   if (input.joineryStatuses !== undefined && input.joineryStatuses.length > 0) {
-    canonical.joineryStatuses = input.joineryStatuses
-      .map((status) => ({ sort: status.relationshipId, body: status }))
+    // RELATIONSHIP_UNSUPPORTED bodies carry no manufacturing semantics.
+    const bodies = input.joineryStatuses
+      .filter((status) => status.stage !== 'RELATIONSHIP_UNSUPPORTED')
+      .map((status) => ({ sort: status.relationshipId, body: status }));
+    if (bodies.length > 0) canonical.joineryStatuses = bodies
       .sort((a, b) => compareUtf8(a.sort, b.sort))
       .map((entry) => entry.body);
   }

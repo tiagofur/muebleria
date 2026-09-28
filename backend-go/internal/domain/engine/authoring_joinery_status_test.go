@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -64,6 +65,34 @@ func TestFloorSideJoineryReachesProfileRequired(t *testing.T) {
 	if !found {
 		t.Fatalf("TECHNICAL_PROFILE_REQUIRED issue missing: %+v", collected)
 	}
+}
+
+func TestFloorSideJoineryTerminalStatusShape(t *testing.T) {
+	var collected []domain.ContractIssue
+	status := deriveFloorSideJoinery(j1bRelationship(), j1bBoards(), &collected)
+	raw, err := json.Marshal(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), ":null") {
+		t.Fatalf("terminal status must not emit null collections: %s", raw)
+	}
+}
+
+func TestFloorSideJoinerySourceFaceCodeReported(t *testing.T) {
+	rel := j1bRelationship()
+	rel.Source.Face = "diagonal"
+	var collected []domain.ContractIssue
+	status := deriveFloorSideJoinery(rel, j1bBoards(), &collected)
+	if status.Stage != JoineryContactInvalid {
+		t.Fatalf("stage = %s", status.Stage)
+	}
+	for _, code := range append(append([]string{}, status.Blockers...), status.Contacts[0].IssueCodes...) {
+		if code == "CONTACT_FACE_REQUIRED" {
+			return
+		}
+	}
+	t.Fatalf("CONTACT_FACE_REQUIRED missing from status: %+v", status)
 }
 
 func TestFloorSideJoineryNegatives(t *testing.T) {
@@ -141,11 +170,20 @@ func TestFloorSideJoineryFingerprintMovesWithSemantics(t *testing.T) {
 	if !strings.HasPrefix(a, "sha256-") {
 		t.Fatalf("fingerprint format = %q", a)
 	}
-	reordered := []JoineryRelationshipStatus{changed()[0], base()[0]}
-	// Reordering relationship statuses must not change the hash of one status
-	// set; two different single-status sets already proved sensitivity above.
-	c := authoringManufacturingFingerprint(empty, boards, nil, nil, nil, reordered)
-	if c == a || c == b {
-		t.Fatalf("unexpected collision: %q %q %q", a, b, c)
+	// Reordering two distinct-relationship statuses must not change the hash.
+	first := base()
+	var collected []domain.ContractIssue
+	relRight := j1bRelationship()
+	relRight.RelationshipID = "rel-floor-sides-02"
+	relRight.Parameters["stationCount"] = float64(4)
+	first = append(first, deriveFloorSideJoinery(relRight, j1bBoards(), &collected))
+	second := []JoineryRelationshipStatus{first[1], first[0]}
+	x := authoringManufacturingFingerprint(empty, boards, nil, nil, nil, first)
+	y := authoringManufacturingFingerprint(empty, boards, nil, nil, nil, second)
+	if x != y {
+		t.Fatalf("status order must not move the fingerprint: %q vs %q", x, y)
+	}
+	if x == a {
+		t.Fatal("adding a second relationship must move the fingerprint")
 	}
 }

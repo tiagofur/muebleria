@@ -130,9 +130,10 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 		return contactBoard, anchor.Face, true
 	}
 
+	sourceBefore := len(*issues)
 	sourceBoard, _, ok := boardFor(relationship.Source, "source")
 	if !ok {
-		return failContacts("RELATIONSHIP_ORPHANED")
+		return failContacts((*issues)[sourceBefore].Code)
 	}
 	boards := []ContactBoard{sourceBoard}
 	intents := make([]ExplicitContact, 0, len(relationship.Targets))
@@ -208,7 +209,7 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 	}
 	return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 		Stage: JoineryTechnicalProfileMissing, Contacts: validContacts(),
-		Stations: JoineryStationPlanStatus{Status: "PLANNED", StationCounts: counts},
+		Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{}, StationCounts: counts},
 		Blockers: []string{"TECHNICAL_PROFILE_REQUIRED"}}
 }
 

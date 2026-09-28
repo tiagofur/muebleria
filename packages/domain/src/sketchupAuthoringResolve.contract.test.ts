@@ -460,3 +460,34 @@ describe('#477 shared authoring resolve contract fixture', () => {
     expect(new Set(shelves.map((shelf) => shelf.componentInstanceId)).size).toBe(2);
   });
 });
+
+describe('authoringResolveFingerprint joinery statuses (J1-B)', () => {
+  const base = {
+    relationshipId: 'rel-floor-sides-01', kind: 'floor-side', stage: 'TECHNICAL_PROFILE_REQUIRED',
+    contacts: [{ contactId: 'rel-floor-sides-01:side-left-01', status: 'VALID', issueCodes: [] }],
+    stations: { status: 'PLANNED', issueCodes: [], stationCounts: [{ contactId: 'rel-floor-sides-01:side-left-01', stationCount: 3 }] },
+    blockers: ['TECHNICAL_PROFILE_REQUIRED'],
+  };
+  const boards = [{ id: 'b1', defId: 'd1', role: 'floor', lengthMm: 564, widthMm: 570, thicknessMm: 18 }];
+
+  test('leaves the hash byte-identical when statuses are absent, empty, or unsupported', () => {
+    const without = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [] });
+    const empty = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [], joineryStatuses: [] });
+    const unsupported = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [],
+      joineryStatuses: [{ ...base, relationshipId: 'rel-x', stage: 'RELATIONSHIP_UNSUPPORTED' }] });
+    expect(empty).toBe(without);
+    expect(unsupported).toBe(without);
+  });
+
+  test('moves with semantics and ignores reordering', () => {
+    const a = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [], joineryStatuses: [base] });
+    const changed = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [],
+      joineryStatuses: [{ ...base, stations: { ...base.stations, stationCounts: [{ contactId: 'rel-floor-sides-01:side-left-01', stationCount: 4 }] } }] });
+    const other = { ...base, relationshipId: 'rel-floor-sides-02' };
+    const ordered = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [], joineryStatuses: [base, other] });
+    const reversed = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [], joineryStatuses: [other, base] });
+    expect(a).not.toBe(changed);
+    expect(ordered).toBe(reversed);
+    expect(ordered).not.toBe(a);
+  });
+});

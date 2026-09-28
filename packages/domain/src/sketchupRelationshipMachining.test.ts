@@ -544,7 +544,10 @@ describe('J1-B productive floor-side resolver states', () => {
       ['rel-floor-sides-01:side-right-01', 'VALID'],
     ]);
     expect(status?.stations.status).toBe('PLANNED');
-    expect(status?.stations.stationCounts).toHaveLength(2);
+    expect(status?.stations.stationCounts).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 3 },
+      { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 3 },
+    ]);
     expect(status?.blockers).toEqual(['TECHNICAL_PROFILE_REQUIRED']);
     expect(result.issues.map((issue) => issue.code)).toContain('TECHNICAL_PROFILE_REQUIRED');
     expect(result.derivedMachiningOperations

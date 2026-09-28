@@ -616,9 +616,13 @@ func authoringManufacturingFingerprint(
 
 	// Joinery states join the manufacturing identity only when a J1-tracked
 	// relationship exists, so their absence leaves every stored fingerprint
-	// byte-identical (release continuity).
+	// byte-identical (release continuity). RELATIONSHIP_UNSUPPORTED bodies
+	// carry no manufacturing semantics (pure error echo) and stay out.
 	joineryBodies := make([]any, 0, len(joineryStatuses))
 	for _, status := range joineryStatuses {
+		if status.Stage == JoineryRelationshipUnsupported {
+			continue
+		}
 		joineryBodies = append(joineryBodies, map[string]any{
 			"sort": status.RelationshipID,
 			"body": map[string]any{
