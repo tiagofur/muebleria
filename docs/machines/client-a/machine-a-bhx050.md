@@ -7,6 +7,48 @@
 > Base estructural: [`docs/templates/machine-dossier-template.md`](../../templates/machine-dossier-template.md).
 > Checklist de recolección: [`intake-checklist.md`](./intake-checklist.md).
 
+## B1. Estado del contrato y matriz de evidencia
+
+**Decisión actual:** la identidad WEEKE/HOMAG BHX 050 está confirmada por el
+owner a partir del cliente, pero no hay contrato del receptor ni capacidades
+equipadas confirmadas. `CONFIRMED_CLIENT` se limita a esa identidad reportada;
+la placa sanitizada sigue pendiente y la procedencia original `OWNER_CONFIRMED`
+de §1 no se convierte en prueba de campo. `PUBLIC_REFERENCE_ONLY` describe
+productos de HOMAG, nunca esta instalación. `UNKNOWN_FIELD_REQUIRED` bloquea
+solamente el consumidor que necesita el dato; ninguna ausencia se rellena por
+semejanza de modelo.
+
+| field | source | status | required_for | blocker |
+|---|---|---|---|---|
+| Familia y modelo BHX 050 | Confirmación del owner desde Client A (§1); placa pendiente | `CONFIRMED_CLIENT` | Identidad del dossier | No autoriza capacidades ni compatibilidad física |
+| Producto woodWOP | [HOMAG woodWOP](https://www.homag.com/en/product-detail/software/work-preparation/cnc-programming-software-woodwop) | `PUBLIC_REFERENCE_ONLY` | Preguntas sobre software y operaciones | No identifica la versión instalada ni la gramática aceptada |
+| Variante de almacenamiento MPRXE | [HOMAG MPRXE](https://docs.homag.cloud/docs/en/neues-speicherformat-mprxe) | `PUBLIC_REFERENCE_ONLY` | Comparación de variantes, no selección | No demuestra que este receptor admita MPRXE, MPRX o MPR |
+| Controlador y versión/build exactos | Ninguna captura de placa/pantalla (§2; [checklist](./intake-checklist.md)) | `UNKNOWN_FIELD_REQUIRED` | Revisión del perfil de instalación, import/readback | Perfil operativo exacto no identificable |
+| Software de máquina y versión/build exactos | Ninguna captura de versión (§2; [checklist](./intake-checklist.md)) | `UNKNOWN_FIELD_REQUIRED` | Perfil de compatibilidad y receptor OEM | No asociar una muestra a la versión instalada |
+| Formato nativo aceptado, versión y gramática/macros | Ningún programa aceptado y sanitizado ni especificación primaria aplicable (§3) | `UNKNOWN_FIELD_REQUIRED` | Adapter nativo y lector independiente | `NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED`; no emitir MPR/MPRX/MPRXE |
+| Encoding, decimales y fin de línea | Ninguna muestra aceptada de bytes (§3) | `UNKNOWN_FIELD_REQUIRED` | Serialización exacta | Bytes no verificables para el receptor |
+| Unidades | Sin readback del programa aceptado (§3) | `UNKNOWN_FIELD_REQUIRED` | Escala de coordenadas y profundidad nativas | No convertir milímetros a unidades del receptor por suposición |
+| Ejes, signos y origen | Sin programa/readback que localice puntos y direcciones (§3–§4.2) | `UNKNOWN_FIELD_REQUIRED` | Transformación montaje→marco nativo | Mapeo geométrico nativo bloqueado |
+| Caras accesibles y convención de carga | Sin confirmación del operador ni readback (§3–§4.3) | `UNKNOWN_FIELD_REQUIRED` | Asignación de operaciones a montajes | Ninguna cara se declara mecanizable por el nombre BHX |
+| Herramientas equipadas, IDs y alcances | Sin captura de configuración del cabezal (§4.3–§4.5) | `UNKNOWN_FIELD_REQUIRED` | Selección/validación de operación | Diámetro, profundidad, ranurado y fresado no habilitados |
+| Pinzas y zonas de exclusión | Sin configuración de sujeción (§4.6) | `UNKNOWN_FIELD_REQUIRED` | Validación de accesibilidad y holgura | No declarar montaje seguro ni calcular zonas libres |
+| Límites de tamaño y espesor | Sin límites de esta instalación (§4.6) | `UNKNOWN_FIELD_REQUIRED` | Preflight físico de pieza | No aceptar dimensiones por fichas de otra generación |
+| Reorientación y montajes múltiples | Sin procedimiento del operador ni muestra/readback (§4.2, §4.7) | `UNKNOWN_FIELD_REQUIRED` | Plan físico de varias caras | Cara no accesible exige montaje confirmado o bloqueo |
+| Transferencia, selección y etiqueta | Sin flujo sanitizado del operador (§4.1, §4.7) | `UNKNOWN_FIELD_REQUIRED` | B3 entrega/importación y vínculo a pieza | Sin escritura automática ni claim de ejecución |
+| Nombres de archivo y referencias externas | Sin muestra aceptada que cubra ambos (§3) | `UNKNOWN_FIELD_REQUIRED` | Manifest y programa nativo | No fijar 8.3, truncado o subprogramas por intuición |
+
+**Frontera B2:** una foundation neutral puede avanzar con operaciones y fixtures
+sintéticos explícitos, transformaciones y cobertura que bloqueen lo no
+soportado. No puede producir un programa nativo ni afirmar compatibilidad BHX.
+El [perfil BHX](../../../packages/excel/src/machines/profiles.ts) declara cero
+capabilities y el perfil MPR no tiene dimensiones evidenciadas; el
+[adapter MPR](../../../packages/excel/src/machines/woodWopMprAdapter.ts) devuelve
+`SERIALIZER_NOT_IMPLEMENTED`. La proyección 2D/heurística por nombre de
+[`partDrilling.ts`](../../../packages/domain/src/partDrilling.ts) tampoco es
+verdad CNC. `NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED` es un bloqueo del plan B1/B2,
+no un código de error ya implementado. La importación/readback y la prueba
+física permanecen bajo #352 y en estado `NOT_TESTED`.
+
 ## 1. Identidad de la máquina
 
 | Campo | Valor | Procedencia |
@@ -39,8 +81,8 @@ valor adivinado.
 | `operatingEnvironment` | `FIELD_VERIFICATION_REQUIRED` (SO/entorno del equipo de control; sin hostnames ni IPs) | missing |
 
 Regla (#351): **versiones de software distintas ⇒ perfiles distintos.** El
-`MachineProfile` de `machine-a` sólo puede publicarse con estos valores
-confirmados en campo.
+perfil de identidad `machine-a` actual no declara capabilities; una revisión
+operativa que las habilite requiere estos valores confirmados en campo.
 
 ## 3. Contrato de entrada/salida
 
@@ -135,30 +177,27 @@ Al confirmarse capacidades, se traducen a `MachineCapability` con constraints
 en mm (`granete.drilling`, `granete.panel-geometry` como semillas vigentes) —
 sin infierir nada por marca.
 
-## 5. Referencias públicas — `PUBLIC_REFERENCE_ONLY`
+## 5. Referencias oficiales — `PUBLIC_REFERENCE_ONLY`
 
 > Estas referencias describen la **familia** de producto, no esta máquina
 > concreta. Pueden orientar las preguntas del checklist pero **jamás** llenan
-> los campos de §1–§4 ni promueven el estado `NOT_TESTED`. Se excluyen
-> afirmaciones de revendedores como peso de validación.
+> los campos de §1–§4 ni promueven el estado `NOT_TESTED`.
 
-- El BHX 050 es un centro de mecanizado CNC **vertical** compacto para piezas
-  de panel de la familia HOMAG (ex-WEEKE); datos técnicos de terceros de 2017
-  mencionan longitudes de pieza de trabajo de 200–2.500 mm y ancho desde
-  70 mm — [WOOD TEC PEDIA: HOMAG BHX 050](https://wtp.hoechsmann.com/en/lexikon/34303/homag_bhx_050).
-- La programación de la serie BHX se asocia a la familia **woodWOP** de HOMAG
-  (foro de fabricante discute programación woodWOP para la serie) —
-  [HOMAG Forum](https://forum.homag.com/forum/index.php?thread/10500-bhx-500-programming-solutions/)
-  y [HOMAG — WEEKE brand](https://www.homag.com/en/weeke).
-- Implicación sólo orientativa: el checklist debe confirmar versión exacta de
-  woodWOP/software de control y el formato de programa aceptado (p. ej. MPR)
-  **de esta máquina**. Cualquier similitud con lo público no es evidencia.
+- [HOMAG woodWOP](https://www.homag.com/en/product-detail/software/work-preparation/cnc-programming-software-woodwop)
+  describe programación visual de perforaciones y otras operaciones, con
+  simulación woodMotion opcional. No aporta la gramática ni acredita la versión
+  o las opciones instaladas en Client A.
+- [HOMAG MPRXE](https://docs.homag.cloud/docs/en/neues-speicherformat-mprxe)
+  describe una variante de almacenamiento. Su existencia no demuestra que
+  `machine-a` admita MPRXE, MPRX o MPR. woodWOP/MPR sigue siendo un objetivo a
+  contrastar, no un formato confirmado; no escoger la variante por novedad.
 
-## 6. Fixture de validación futura — documentado, NO implementado
+## 6. Fixture de validación futura — documentado, NO implementado en B1
 
-> Primer fixture de validación segura. Se documenta aquí por #352; su
-> implementación (adapter + artifact + readback) pertenece a #351/#348 y
-> permanece bloqueada.
+> Primer fixture de validación segura. #879 B2 puede implementar sólo la
+> foundation offline neutral con datos sintéticos explícitos. El adapter
+> nativo y el readback de esta instalación requieren antes el contrato exacto
+> del receptor; la validación de campo sigue en #352.
 
 Fixture propuesto: `fixture-bhx050-v1` (nombre se congela con
 revision/fingerprint al implementarse).
@@ -190,6 +229,8 @@ Restricciones:
 - el import no es éxito sólo porque el archivo abre: el readback verifica
   unidades, cantidades, dimensiones, orientación y parámetros (estándar #348);
 - sin adapter MPR/woodWOP implementado en este PR.
+- B2 puede probar operaciones neutrales sintéticas sin snapshot liberado de
+  cliente; la salida productiva sigue requiriendo release y perfil exactos.
 
 ## 7. Sign-off del operador (para #348, cuando corresponda)
 
