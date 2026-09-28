@@ -4,8 +4,11 @@
 //   designId + names, render copies only — the binding authority stays in
 //   js/granete-model-binding.js), the durable authoring defaults payload
 //   (from the DesignInspectorBridge get_design_defaults read), the
-//   request correlation token and the honest render states
-//   (loading / ready / empty defaults / unknown material / error+retry)
+//   request correlation token, the presentation-only laneActive guard
+//   (hide() relinquishes the lane; render() is a no-op while inactive —
+//   responses only refresh the cache, never reopen the view) and the
+//   honest render states (loading / ready / empty defaults / unknown
+//   material / error+retry)
 //
 // Does NOT own:
 // - the material catalog or role labels (injected: materialById,
@@ -39,7 +42,13 @@
     status: "idle", // idle | loading | ready | error
     defaults: {},   // role -> material id (durable authoring_defaults)
     workingVersion: null,
-    requestId: 0
+    requestId: 0,
+    // Presentation-only lane guard (#784 R1 final review): true while the
+    // no-selection lane BELONGS to the Design Inspector. hide() relinquishes
+    // it (Furniture/Child/Batch own the Inspector then) and render() becomes
+    // a no-op — late answers only refresh the cache, they never reopen the
+    // view. handleNoSelection() re-claims it.
+    laneActive: false
   };
 
   var view = null;
@@ -152,7 +161,7 @@
   }
 
   function render() {
-    if (!elements() || !state.connected) return;
+    if (!state.laneActive || !elements() || !state.connected) return;
     designNameEl.textContent = state.designName || "";
     projectNameEl.textContent = state.projectName || "";
     renderBody();
@@ -160,6 +169,7 @@
   }
 
   function hide() {
+    state.laneActive = false;
     if (!elements()) return;
     view.style.display = "none";
   }
@@ -205,6 +215,7 @@
         hide();
         return false;
       }
+      state.laneActive = true;
       if (state.status === "ready") {
         requestDefaults(false); // silent refresh, keeps rendered values
       } else {

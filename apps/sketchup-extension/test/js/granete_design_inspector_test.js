@@ -319,6 +319,56 @@ function run() {
     assert.ok(!ctx.body().textContent.includes('Arauco'), 'no A residue');
   });
 
+  // --- FINAL REVIEW ronda 2: the Design view must NEVER reopen after the
+  //     lane was relinquished (hide()) — responses only update the cache.
+  test('ready answer after hide() updates the cache but never reopens the view', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    assert.strictEqual(mod.handleNoSelection(), true);
+    const request = ctx.sketchupCalls[0][1];
+    // The user selects furniture: the lane is relinquished (hide()).
+    mod.hide();
+    assert.strictEqual(ctx.view().style.display, 'none');
+    // The in-flight answer lands while inactive: cache only, view stays hidden.
+    mod.onDesignDefaults({ requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } } });
+    assert.strictEqual(ctx.view().style.display, 'none', 'a ready response must never reopen the relinquished lane');
+    assert.ok(!ctx.body().textContent.includes('Arauco'), 'no render side effect while inactive');
+  });
+
+  test('error answer after hide() stays hidden too', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.hide();
+    mod.onDesignDefaults({ requestId: request.requestId, designId: 'd-a', status: 'error', reason: 'backend' });
+    assert.strictEqual(ctx.view().style.display, 'none', 'an error response must never reopen the lane');
+  });
+
+  test('later handleNoSelection renders the cached state normally', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.hide();
+    mod.onDesignDefaults({ requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } } });
+    assert.strictEqual(ctx.view().style.display, 'none');
+
+    // The selection clears: the lane returns and the CACHED ready state
+    // renders immediately (silent refresh may re-validate in background).
+    assert.strictEqual(mod.handleNoSelection(), true);
+    assert.strictEqual(ctx.view().style.display, 'block');
+    assert.ok(ctx.body().textContent.includes('Arauco Blanco Frosty'), 'cached ready state renders');
+  });
+
   // --- error state with retry ---------------------------------------------
   test('failed load shows the error state and Reintentar re-requests read-only', () => {
     const ctx = createSandbox();
