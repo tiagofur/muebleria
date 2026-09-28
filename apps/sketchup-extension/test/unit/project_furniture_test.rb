@@ -1180,6 +1180,36 @@ class ProjectFurnitureTest < Minitest::Test
     assert_nil plain.display_material_choices
   end
 
+  # #784 R1: the durable Design authoring defaults travel on the working
+  # copy header. The parser must keep them (fail-closed on malformed
+  # shapes), normalize absence to the canonical empty map, and never touch
+  # the verbatim workingVersion token.
+  def test_working_copy_authoring_defaults_parse_canonical_and_fail_closed
+    body = working_copy_body([])
+    body['authoring_defaults'] = { 'materialChoices' => { 'INTERIOR' => 'mat-white' } }
+    parsed = PF::Contract::WorkingCopyContract.parse_working_copy!(body)
+    assert_equal({ 'INTERIOR' => 'mat-white' }, parsed.authoring_defaults)
+    assert_equal '2026-09-03T00:00:00Z', parsed.updated_at
+
+    canonical = PF::Contract::WorkingCopyContract.parse_working_copy!(working_copy_body([]))
+    assert_equal({}, canonical.authoring_defaults, 'absent defaults parse as canonical empty map')
+
+    malformed = [
+      { 'authoring_defaults' => [] },
+      { 'authoring_defaults' => { 'materialChoices' => [] } },
+      { 'authoring_defaults' => { 'materialChoices' => { 'INTERIOR' => 18 } } },
+      { 'authoring_defaults' => { 'materialChoices' => { '' => 'mat-white' } } },
+      { 'authoring_defaults' => { 'hardwareChoices' => {} } }
+    ]
+    malformed.each do |override|
+      body = working_copy_body([])
+      body.merge!(override)
+      assert_raises(PF::Contract::ContractError, "must reject #{override.inspect}") do
+        PF::Contract::WorkingCopyContract.parse_working_copy!(body)
+      end
+    end
+  end
+
   def test_transform_contract_conversions
     identity = PF::TransformContract.from_host(Geom::Transformation.new)
     assert_equal({ 'translation_mm' => [0.0, 0.0, 0.0], 'rotation_deg' => [0.0, 0.0, 0.0] }, identity)
