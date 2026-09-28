@@ -160,6 +160,9 @@ type DerivedHardwarePlacement struct {
 type AuthoringMachining struct {
 	Operations                []ResolvedMachiningOperation `json:"operations"`
 	DerivedHardwarePlacements []DerivedHardwarePlacement   `json:"derivedHardwarePlacements"`
+	// JoineryStatuses carries the J1-B per-relationship resolution states
+	// (#874); absent when no joinery-tracked relationship is declared.
+	JoineryStatuses []JoineryRelationshipStatus `json:"joineryStatuses,omitempty"`
 	// ManufacturingFingerprint covers the FULL manufacturing identity —
 	// resolved boards (dimensions + selected materials), manual hardware
 	// placements, derived placements and machining operations — so any
@@ -249,6 +252,7 @@ func deriveAuthoringMachining(
 	issues := []domain.ContractIssue{}
 	operations := []ResolvedMachiningOperation{}
 	derived := []DerivedHardwarePlacement{}
+	joineryStatuses := []JoineryRelationshipStatus{}
 
 	boardIndex := make(map[string]*layoutBoard, len(boards))
 	for i := range boards {
@@ -256,7 +260,11 @@ func deriveAuthoringMachining(
 	}
 
 	for _, relationship := range relationships {
-		deriveRelationshipOperations(relationship, boardIndex, catalog, &derived, &operations, &issues)
+		if relationship.Kind == "floor-side" {
+			joineryStatuses = append(joineryStatuses, deriveFloorSideJoinery(relationship, boardIndex, &issues))
+			continue
+		}
+		deriveRelationshipOperations(relationship, boardIndex, catalog, &derived, &operations, &issues, &joineryStatuses)
 	}
 	for _, placement := range placements {
 		deriveManualPlacementMachining(placement, catalog, &operations, &issues)
@@ -267,6 +275,7 @@ func deriveAuthoringMachining(
 	return AuthoringMachining{
 		Operations:                operations,
 		DerivedHardwarePlacements: derived,
+		JoineryStatuses:           joineryStatuses,
 	}, issues
 }
 
@@ -277,6 +286,7 @@ func deriveRelationshipOperations(
 	derived *[]DerivedHardwarePlacement,
 	operations *[]ResolvedMachiningOperation,
 	issues *[]domain.ContractIssue,
+	joineryStatuses *[]JoineryRelationshipStatus,
 ) {
 	path := fmt.Sprintf("furniture.relationships[relationshipId=%s]", relationship.RelationshipID)
 	addIssue := func(code, message, remediation string, details map[string]any) {
@@ -290,6 +300,14 @@ func deriveRelationshipOperations(
 		addIssue("RELATIONSHIP_INVALID",
 			fmt.Sprintf("no rule registered for relationship kind %s", relationship.Kind),
 			"Use a relationship kind the manufacturing catalog resolves (v1: shelf-support).", nil)
+		*joineryStatuses = append(*joineryStatuses, JoineryRelationshipStatus{
+			RelationshipID: relationship.RelationshipID, Kind: relationship.Kind,
+			Stage:    JoineryRelationshipUnsupported,
+			Contacts: []JoineryContactStatus{},
+			Stations: JoineryStationPlanStatus{Status: "NOT_PLANNED", IssueCodes: []string{},
+				StationCounts: []JoineryStationPlanCount{}},
+			Blockers: []string{"RELATIONSHIP_INVALID"},
+		})
 		return
 	}
 
@@ -518,6 +536,7 @@ func authoringManufacturingFingerprint(
 	placements []effectivePlacementForMachining,
 	derived []DerivedHardwarePlacement,
 	operations []ResolvedMachiningOperation,
+	joineryStatuses []JoineryRelationshipStatus,
 ) string {
 	catalogComponentByBoard := make(map[string]string, len(boards))
 	for i := range boards {
@@ -595,18 +614,42 @@ func authoringManufacturingFingerprint(
 		})
 	}
 
-	return fingerprintBodiesHash(boardBodies, placementBodies, placementCanonical, operationCanonical)
+	// Joinery states join the manufacturing identity only when a J1-tracked
+	// relationship exists, so their absence leaves every stored fingerprint
+	// byte-identical (release continuity). RELATIONSHIP_UNSUPPORTED bodies
+	// carry no manufacturing semantics (pure error echo) and stay out.
+	joineryBodies := make([]any, 0, len(joineryStatuses))
+	for _, status := range joineryStatuses {
+		if status.Stage == JoineryRelationshipUnsupported {
+			continue
+		}
+		joineryBodies = append(joineryBodies, map[string]any{
+			"sort": status.RelationshipID,
+			"body": map[string]any{
+				"relationshipId": status.RelationshipID,
+				"kind":           status.Kind,
+				"stage":          status.Stage,
+				"contacts":       status.Contacts,
+				"stations":       status.Stations,
+				"blockers":       status.Blockers,
+			},
+		})
+	}
+	return fingerprintBodiesHash(boardBodies, placementBodies, placementCanonical, operationCanonical, joineryBodies)
 }
 
 // fingerprintBodiesHash marshals the sorted canonical bodies and hashes them.
 // map[string]any trees marshal with sorted keys and JS-compatible number
 // formatting, matching the TS canonicalize byte-for-byte on the fixture.
-func fingerprintBodiesHash(boardBodies, placementBodies, placementCanonical, operationCanonical []any) string {
+func fingerprintBodiesHash(boardBodies, placementBodies, placementCanonical, operationCanonical, joineryBodies []any) string {
 	canonical := map[string]any{
 		"boards":                    sortedBodies(boardBodies),
 		"manualPlacements":          sortedBodies(placementBodies),
 		"derivedHardwarePlacements": sortedBodies(placementCanonical),
 		"operations":                sortedBodies(operationCanonical),
+	}
+	if len(joineryBodies) > 0 {
+		canonical["joineryStatuses"] = sortedBodies(joineryBodies)
 	}
 	raw, err := json.Marshal(canonical)
 	if err != nil {

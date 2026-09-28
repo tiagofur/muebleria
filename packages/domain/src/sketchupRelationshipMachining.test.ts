@@ -489,6 +489,131 @@ describe('J1-A1b reconciled contact operation collection', () => {
   });
 });
 
+type WritableAnchor = { componentInstanceId: string; role: string; face?: string };
+type WritableRelationship = {
+  relationshipId: string; kind: string;
+  source: WritableAnchor; targets: WritableAnchor[]; parameters?: Record<string, number | string | boolean>;
+};
+
+describe('J1-B productive floor-side resolver states', () => {
+  const AXIS_Z = [0, 0, Math.SQRT1_2, Math.SQRT1_2] as const;
+  // 120° about (1,1,1)/√3: local X(depth)→+Y, Y(thickness)→+Z, Z(length)→+X.
+  const CYCLIC: [number, number, number, number] = [0.5, 0.5, 0.5, 0.5];
+  const floorSideEnvelope = (mutate?: (relationship: WritableRelationship) => void) =>
+    mutateCabinetEnvelope((envelope) => {
+      const assembly = envelope.assemblies[0]!;
+      // Sides placed as physical lateral panels: local X(depth 570)→+Y, Y(thickness 18)→−X, Z(height)→+Z.
+      for (const side of assembly.components ?? []) {
+        if (side.componentInstanceId === 'side-left-01') side.transform.translationMm[0] = 18;
+        if (side.componentInstanceId === 'side-right-01') side.transform.translationMm[0] = 600;
+        if (side.componentInstanceId.startsWith('side-')) {
+          side.transform.rotationQuaternion = [0, 0, Math.SQRT1_2, Math.SQRT1_2] as [number, number, number, number];
+        }
+      }
+      assembly.components = [...(assembly.components ?? []), {
+        componentDefinitionId: 'definition-shelf',
+        componentInstanceId: 'floor-01',
+        role: 'floor',
+        transform: { frame: 'assembly', translationMm: [18, 0, 0],
+          rotationQuaternion: CYCLIC, scale: [1, 1, 1] },
+      }];
+      const relationship = {
+        relationshipId: 'rel-floor-sides-01',
+        kind: 'floor-side',
+        source: { componentInstanceId: 'floor-01', role: 'floor-edge' },
+        targets: [
+          { componentInstanceId: 'side-left-01', role: 'inside-face', face: 'back' },
+          { componentInstanceId: 'side-right-01', role: 'inside-face', face: 'front' },
+        ],
+        parameters: { stationCount: 3, startMarginMm: 40, endMarginMm: 40 },
+      };
+      mutate?.(relationship);
+      assembly.relationships = [...(assembly.relationships ?? []), relationship];
+    });
+
+  it('reaches TECHNICAL_PROFILE_REQUIRED with valid contacts and planned stations, emitting no operations', () => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, floorSideEnvelope(), cabinetCatalog);
+    if (response.status !== 'accepted' || response.authoringSnapshot === undefined) {
+      throw new Error(`fixture envelope was not accepted: ${JSON.stringify(response.issues)}`);
+    }
+    const result = deriveRelationshipMachining(response.authoringSnapshot, cabinetJoineryCatalog);
+    const status = result.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01');
+    expect(status?.stage).toBe('TECHNICAL_PROFILE_REQUIRED');
+    expect(status?.contacts.map((contact) => [contact.contactId, contact.status])).toEqual([
+      ['rel-floor-sides-01:side-left-01', 'VALID'],
+      ['rel-floor-sides-01:side-right-01', 'VALID'],
+    ]);
+    expect(status?.stations.status).toBe('PLANNED');
+    expect(status?.stations.stationCounts).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 3 },
+      { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 3 },
+    ]);
+    expect(status?.blockers).toEqual(['TECHNICAL_PROFILE_REQUIRED']);
+    expect(result.issues.map((issue) => issue.code)).toContain('TECHNICAL_PROFILE_REQUIRED');
+    expect(result.derivedMachiningOperations
+      .filter((operation) => operation.provenance.sourceKind === 'relationship'
+        && operation.provenance.relationshipId === 'rel-floor-sides-01')).toEqual([]);
+  });
+
+  it('reports RELATIONSHIP_UNSUPPORTED structurally for unregistered kinds', () => {
+    const result = resolveFrom((envelope) => {
+      (envelope.assemblies[0]!.relationships ?? [])[0]!.kind = 'mystery-joint';
+    });
+    const status = result.joineryStatuses.find((item) => item.kind === 'mystery-joint');
+    expect(status?.stage).toBe('RELATIONSHIP_UNSUPPORTED');
+    expect(status?.blockers).toContain('RELATIONSHIP_INVALID');
+    expect(result.issues.map((issue) => issue.code)).toContain('RELATIONSHIP_INVALID');
+  });
+
+  it('fails contacts closed when an anchor face is missing', () => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE,
+      floorSideEnvelope((relationship) => { delete (relationship.targets[0] as WritableAnchor).face; }), cabinetCatalog);
+    const result = deriveRelationshipMachining(response.authoringSnapshot!, cabinetJoineryCatalog);
+    const status = result.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01');
+    expect(status?.stage).toBe('CONTACT_INVALID');
+    expect(status?.blockers).toContain('CONTACT_FACE_REQUIRED');
+  });
+
+  it('fails stations closed on a non-integer or sub-two station count', () => {
+    for (const stationCount of [1, 2.5, Number.NaN]) {
+      const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE,
+        floorSideEnvelope((relationship) => { relationship.parameters = { stationCount }; }),
+        cabinetCatalog);
+      const result = deriveRelationshipMachining(response.authoringSnapshot!, cabinetJoineryCatalog);
+      const status = result.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01');
+      expect(status?.stage, String(stationCount)).toBe('STATION_INVALID');
+      expect(status?.blockers, String(stationCount)).toContain('STATION_PATTERN_INVALID');
+      expect(status?.contacts.every((contact) => contact.status === 'VALID'), String(stationCount)).toBe(true);
+    }
+  });
+
+  it('blocks contacts when panels do not physically touch', () => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE,
+      floorSideEnvelope((relationship) => {
+        const sideRight = relationship.targets[1]!;
+        sideRight.componentInstanceId = 'side-left-01';
+      }), cabinetCatalog);
+    const result = deriveRelationshipMachining(response.authoringSnapshot!, cabinetJoineryCatalog);
+    const status = result.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01');
+    expect(status?.stage).toBe('CONTACT_INVALID');
+    expect(status?.stations.status).toBe('NOT_PLANNED');
+    expect(result.derivedMachiningOperations
+      .filter((operation) => operation.provenance.sourceKind === 'relationship'
+        && operation.provenance.relationshipId === 'rel-floor-sides-01')).toEqual([]);
+  });
+
+  it('leaves shelf-support operations structurally identical beside a floor-side relationship', () => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, floorSideEnvelope(), cabinetCatalog);
+    const withFloor = deriveRelationshipMachining(response.authoringSnapshot!, cabinetJoineryCatalog);
+    expect(opIdsByRelationship(withFloor, 'rel-shelf-01')).toEqual(opIdsByRelationship(acceptedResolve(), 'rel-shelf-01'));
+  });
+
+  const acceptedResolve = (): RelationshipMachiningResult => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, cloneCabinetEnvelope(), cabinetCatalog);
+    return deriveRelationshipMachining(response.authoringSnapshot!, cabinetJoineryCatalog);
+  };
+});
+
 describe('canonical case 1 — move a shelf', () => {
   it('moves only the moved relationship machining; unrelated stays structurally identical', () => {
     const before = deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog);

@@ -39,6 +39,38 @@ export interface RelationshipMachiningResult {
   readonly derivedMachiningOperations: readonly ResolvedRelationshipOperation[];
   readonly issues: readonly ContractIssue[];
   readonly bomFingerprint: string;
+  /** J1-B per-relationship joinery resolution states (#874); absent kinds are absent. */
+  readonly joineryStatuses: readonly JoineryRelationshipStatus[];
+}
+
+/** Canonical resolution stages a declared relationship can occupy (#874 J1-B). */
+export type JoineryResolutionStage =
+  | 'RELATIONSHIP_UNSUPPORTED'
+  | 'CONTACT_INVALID'
+  | 'STATION_INVALID'
+  | 'TECHNICAL_PROFILE_REQUIRED'
+  | 'MACHINING_INVALID'
+  | 'MACHINING_READY';
+
+export interface JoineryContactStatus {
+  readonly contactId: string;
+  readonly status: 'VALID' | 'INVALID';
+  readonly issueCodes: readonly string[];
+}
+
+export interface JoineryStationPlanStatus {
+  readonly status: 'NOT_PLANNED' | 'PLANNED' | 'INVALID';
+  readonly issueCodes: readonly string[];
+  readonly stationCounts: readonly { readonly contactId: string; readonly stationCount: number }[];
+}
+
+export interface JoineryRelationshipStatus {
+  readonly relationshipId: string;
+  readonly kind: string;
+  readonly stage: JoineryResolutionStage;
+  readonly contacts: readonly JoineryContactStatus[];
+  readonly stations: JoineryStationPlanStatus;
+  readonly blockers: readonly string[];
 }
 
 export interface RelationshipMachiningDiff {
@@ -54,6 +86,8 @@ interface ComponentIndexEntry {
   readonly componentDefinitionId: StableEntityId;
   readonly transform: {
     readonly translationMm: readonly [number, number, number];
+    readonly rotationQuaternion: readonly [number, number, number, number];
+    readonly scale: readonly [number, number, number];
   };
 }
 
@@ -65,10 +99,12 @@ export function deriveRelationshipMachining(
   const operations: ResolvedRelationshipOperation[] = [];
   const placements: DerivedHardwarePlacement[] = [];
 
+  const joineryStatuses: JoineryRelationshipStatus[] = [];
   for (const assembly of snapshot.assemblies) {
     const components = indexComponents(assembly);
     for (const relationship of assembly.relationships ?? []) {
-      deriveRelationshipOperations(assembly, relationship, components, catalog, placements, operations, issues);
+      deriveRelationshipOperations(assembly, relationship, components, catalog,
+        placements, operations, issues, joineryStatuses);
     }
     for (const placement of assembly.hardwarePlacements ?? []) {
       deriveManualPlacement(assembly, placement, components, catalog, placements, operations, issues);
@@ -80,6 +116,7 @@ export function deriveRelationshipMachining(
     derivedMachiningOperations: operations,
     issues,
     bomFingerprint: relationshipBomFingerprint(placements, operations),
+    joineryStatuses,
   };
 }
 
@@ -91,8 +128,14 @@ function deriveRelationshipOperations(
   placements: DerivedHardwarePlacement[],
   operations: ResolvedRelationshipOperation[],
   issues: ContractIssue[],
+  joineryStatuses: JoineryRelationshipStatus[],
 ): void {
   const path = `assemblies[assemblyId=${assembly.assemblyId}].relationships[relationshipId=${relationship.relationshipId}]`;
+
+  if (relationship.kind === 'floor-side') {
+    deriveFloorSideJoinery(relationship, components, catalog, issues, joineryStatuses);
+    return;
+  }
 
   if (relationship.kind !== 'shelf-support') {
     issues.push({
@@ -102,6 +145,12 @@ function deriveRelationshipOperations(
       entityId: relationship.relationshipId,
       path,
       remediation: 'Use a relationship kind the manufacturing catalog resolves (v1: shelf-support).',
+    });
+    joineryStatuses.push({
+      relationshipId: relationship.relationshipId, kind: relationship.kind,
+      stage: 'RELATIONSHIP_UNSUPPORTED', contacts: [],
+      stations: { status: 'NOT_PLANNED', issueCodes: [], stationCounts: [] },
+      blockers: ['RELATIONSHIP_INVALID'],
     });
     return;
   }
@@ -350,6 +399,182 @@ function deriveManualPlacement(
   // Manual hardware placements do not produce DerivedHardwarePlacement (only relationships/joints do).
 }
 
+/** Orthonormal board basis from a normalized (x, y, z, w) placement quaternion. */
+function quaternionBasis(q: readonly [number, number, number, number]):
+  { readonly x: Vec3; readonly y: Vec3; readonly z: Vec3 } | null {
+  const [x, y, z, w] = q;
+  if (![x, y, z, w].every(Number.isFinite) || Math.abs(x * x + y * y + z * z + w * w - 1) > 1e-6) return null;
+  return {
+    x: [1 - 2 * (y * y + z * z), 2 * (x * y + z * w), 2 * (x * z - y * w)],
+    y: [2 * (x * y - z * w), 1 - 2 * (x * x + z * z), 2 * (y * z + x * w)],
+    z: [2 * (x * z + y * w), 2 * (y * z - x * w), 1 - 2 * (x * x + y * y)],
+  };
+}
+
+const FLOOR_FACES: readonly ContactFace[] = ['top', 'bottom', 'left', 'right', 'front', 'back'];
+
+/** Exact plane coincidence (1e-6) between B's declared face and exactly one A face. */
+function coincidentFaceA(a: ContactBoard, b: ContactBoard, faceB: ContactFace): ContactFace | 'AMBIGUOUS' | null {
+  const surfaceB = contactSurface(b, faceB);
+  const matches: ContactFace[] = [];
+  for (const faceA of FLOOR_FACES) {
+    const surfaceA = contactSurface(a, faceA);
+    if (Math.abs(contactDot(surfaceA.normal, contactNegate(surfaceB.normal)) - 1) > 1e-6) continue;
+    const delta = contactDelta(surfaceA.corners[0]!, surfaceB.corners[0]!);
+    if (Math.abs(contactDot(delta, surfaceB.normal)) <= 1e-6) matches.push(faceA);
+  }
+  if (matches.length === 1) return matches[0]!;
+  return matches.length > 1 ? 'AMBIGUOUS' : null;
+}
+
+/**
+ * J1-B productive floor↔side resolution (#874): explicit anchors and geometry
+ * drive the A0a/A0b foundation; without a verified production technical
+ * profile the relationship can only occupy TECHNICAL_PROFILE_REQUIRED — no
+ * synthetic recipe is ever fabricated here.
+ */
+function deriveFloorSideJoinery(
+  relationship: PartRelationshipIntent,
+  components: ReadonlyMap<StableEntityId, ComponentIndexEntry>,
+  catalog: SketchUpJoineryCatalog,
+  issues: ContractIssue[],
+  joineryStatuses: JoineryRelationshipStatus[],
+): void {
+  const status = (stage: JoineryResolutionStage, contacts: readonly JoineryContactStatus[],
+    stations: JoineryStationPlanStatus, blockers: readonly string[]): void => {
+    joineryStatuses.push({ relationshipId: relationship.relationshipId, kind: relationship.kind,
+      stage, contacts, stations, blockers });
+  };
+  const contactIds = relationship.targets.map((anchor) => `${relationship.relationshipId}:${anchor.componentInstanceId}`);
+  const failContacts = (codes: readonly string[]): void => {
+    status('CONTACT_INVALID', contactIds.map((contactId) => ({ contactId, status: 'INVALID', issueCodes: codes })),
+      { status: 'NOT_PLANNED', issueCodes: [], stationCounts: [] }, codes);
+  };
+  const pushIssue = (code: string, message: string, remediation: string): void => {
+    issues.push({ code, message, severity: 'error', entityId: relationship.relationshipId, remediation });
+  };
+
+  const boards: ContactBoard[] = [];
+  const anchorGeometry = (anchor: PartRelationshipIntent['source'], anchorKind: string): boolean => {
+    const component = components.get(anchor.componentInstanceId);
+    if (component === undefined) {
+      pushIssue('RELATIONSHIP_ORPHANED',
+        `${anchorKind} anchor references componentInstanceId ${anchor.componentInstanceId} that is not part of this assembly`,
+        'Anchor the relationship to a component instance present in the snapshot.');
+      return false;
+    }
+    if (anchorKind === 'target'
+        && (anchor.face === undefined || !FLOOR_FACES.includes(anchor.face as ContactFace))) {
+      pushIssue('CONTACT_FACE_REQUIRED',
+        `${anchorKind} anchor must declare one concrete contact face (${anchor.componentInstanceId})`,
+        'Declare the physical contact face on every floor-side target; proximity never infers a union.');
+      return false;
+    }
+    if (anchorKind === 'source' && anchor.face !== undefined
+        && !FLOOR_FACES.includes(anchor.face as ContactFace)) {
+      pushIssue('CONTACT_FACE_REQUIRED',
+        'source anchor declares a face outside the six concrete board faces',
+        'Declare a top/bottom/left/right/front/back source face or omit it for exact plane verification.');
+      return false;
+    }
+    const geometry = catalog.componentGeometry[component.componentDefinitionId];
+    if (geometry === undefined) {
+      pushIssue('CATALOG_REFERENCE_MISSING',
+        `no geometry for componentDefinitionId ${component.componentDefinitionId}`,
+        'Ensure the component definition exists in the active joinery catalog.');
+      return false;
+    }
+    const basis = quaternionBasis(component.transform.rotationQuaternion);
+    if (basis === null || component.transform.scale.some((value) => value !== 1)) {
+      pushIssue('TRANSFORM_INVALID',
+        `component ${component.componentInstanceId} placement is not a rigid unit-scale frame`,
+        'Transport a normalized quaternion and unit scale for every floor-side participant.');
+      return false;
+    }
+    boards.push({
+      occurrenceId: component.componentInstanceId,
+      widthMm: geometry.widthMm, thicknessMm: geometry.thicknessMm, lengthMm: geometry.lengthMm,
+      translationMm: component.transform.translationMm, basis,
+    });
+    return true;
+  };
+
+  if (!anchorGeometry(relationship.source, 'source')) {
+    failContacts(['RELATIONSHIP_ORPHANED', 'CONTACT_FACE_REQUIRED', 'CATALOG_REFERENCE_MISSING', 'TRANSFORM_INVALID']
+      .filter((code) => issues.some((issue) => issue.entityId === relationship.relationshipId && issue.code === code)));
+    return;
+  }
+  const contacts: ExplicitContact[] = [];
+  for (const [index, anchor] of relationship.targets.entries()) {
+    const before = issues.length;
+    if (!anchorGeometry(anchor, 'target')) {
+      failContacts(issues.slice(before).map((issue) => issue.code));
+      return;
+    }
+    const sourceBoard = boards[0]!;
+    const targetBoard = boards[boards.length - 1]!;
+    const derivedFaceA = coincidentFaceA(sourceBoard, targetBoard, anchor.face as ContactFace);
+    if (derivedFaceA === null || derivedFaceA === 'AMBIGUOUS'
+        || (relationship.source.face !== undefined && relationship.source.face !== derivedFaceA)) {
+      pushIssue('CONTACT_FACE_REQUIRED',
+        `declared target face does not coincide with exactly one face of ${relationship.source.componentInstanceId}`,
+        'Anchor floor-side contacts on faces that physically coincide; proximity never infers a union.');
+      failContacts(['CONTACT_FACE_REQUIRED']);
+      return;
+    }
+    contacts.push({
+      relationshipId: relationship.relationshipId, contactId: contactIds[index]!,
+      participantA: relationship.source.componentInstanceId, participantB: anchor.componentInstanceId,
+      faceA: derivedFaceA, faceB: anchor.face as ContactFace,
+    });
+  }
+
+  const resolution = resolveExplicitContacts({ boards, contacts, requiredContactIds: contactIds });
+  if (resolution.issues.length > 0) {
+    for (const issue of resolution.issues) issues.push(issue);
+    failContacts([...new Set(resolution.issues.map((issue) => issue.code))]);
+    return;
+  }
+
+  const parameters = relationship.parameters ?? {};
+  const count = parameters.stationCount;
+  const start: unknown = parameters.startMarginMm ?? 0;
+  const end: unknown = parameters.endMarginMm ?? 0;
+  const validMargin = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 2
+      || !validMargin(start) || !validMargin(end)) {
+    pushIssue('STATION_PATTERN_INVALID',
+      'floor-side station pattern needs an integer stationCount >= 2 and finite nonnegative margins',
+      'Declare stationCount (>= 2) and optional nonnegative start/end margins on the relationship.');
+    status('STATION_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+      { status: 'INVALID', issueCodes: ['STATION_PATTERN_INVALID'], stationCounts: [] },
+      ['STATION_PATTERN_INVALID']);
+    return;
+  }
+  const specs = contactIds.map((contactId) =>
+    ({ contactId, count, startMarginMm: start as number, endMarginMm: end as number }));
+  const planned = planResolvedContactStations(resolution, boards, specs);
+  if (planned.issues.length > 0) {
+    for (const issue of planned.issues) issues.push(issue);
+    status('STATION_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+      { status: 'INVALID', issueCodes: [...new Set(planned.issues.map((issue) => issue.code))], stationCounts: [] },
+      [...new Set(planned.issues.map((issue) => issue.code))]);
+    return;
+  }
+
+  // No verified production technical profile exists for floor-side yet; that
+  // is the honest terminal state, never a synthetic fallback (#874 §J4).
+  pushIssue('TECHNICAL_PROFILE_REQUIRED',
+    `floor-side relationship ${relationship.relationshipId} has no verified production technical profile`,
+    'Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.');
+  status('TECHNICAL_PROFILE_REQUIRED',
+    contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+    { status: 'PLANNED', issueCodes: [],
+      stationCounts: planned.plans.map((plan) => ({ contactId: plan.contactId, stationCount: plan.stations.length })) },
+    ['TECHNICAL_PROFILE_REQUIRED']);
+}
+
 function pushOperation(
   operations: ResolvedRelationshipOperation[],
   operationId: string,
@@ -393,7 +618,11 @@ function indexComponents(assembly: DesignAssembly): ReadonlyMap<StableEntityId, 
       assemblyId: assembly.assemblyId,
       componentInstanceId: component.componentInstanceId,
       componentDefinitionId: component.componentDefinitionId,
-      transform: { translationMm: component.transform.translationMm },
+      transform: {
+        translationMm: component.transform.translationMm,
+        rotationQuaternion: component.transform.rotationQuaternion,
+        scale: component.transform.scale,
+      },
     });
   }
   return index;
