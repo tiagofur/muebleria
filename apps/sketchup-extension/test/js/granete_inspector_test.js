@@ -189,6 +189,11 @@ function buildModuleSandbox(overrides) {
           mutationCalls.push({ action: 'submitUpdate', payload, ctx });
           return 'submitted';
         },
+        submitBatchUpdate: (items) => {
+          mutationCalls.push({ action: 'submitBatchUpdate', items });
+          return 'sent';
+        },
+        phase: () => 'idle',
         submitHardwarePlacementUpdate: (val, ctx) => {
           mutationCalls.push({ action: 'submitHardwarePlacementUpdate', val, ctx });
           return 'submitted';
@@ -401,15 +406,16 @@ function batchMember(overrides) {
   }, overrides || {});
 }
 
-function batchContext(members, excluded) {
+function batchContext(members, excluded, editable) {
+  var supported = { supported: !!editable, reason: editable ? null : '2 de 2 muebles no admiten esta edición' };
   return {
     kind: 'batch',
     origin: 'selection',
     furniture: members,
     excluded: excluded || [],
     capabilities: {
-      canBatchEditParameters: { supported: true, reason: null },
-      canBatchEditMaterialRoles: { supported: true, reason: null }
+      canBatchEditParameters: supported,
+      canBatchEditMaterialRoles: supported
     },
     selectionCount: (members || []).length + (excluded || []).length
   };
@@ -454,6 +460,7 @@ test('batch: roles triage is honest — common value, mixed, and not-applicable-
   runModule(sandbox);
   initDeps(sandbox);
   const api = sandbox.window.GraneteUI.inspector;
+  // Read-only mode (batch capability denied): the triage renders as text.
   api.onSelectionChange(batchContext([
     batchMember(),
     // Same BODY everywhere, different FRONT, and a third member without BODY.
@@ -466,7 +473,7 @@ test('batch: roles triage is honest — common value, mixed, and not-applicable-
       },
       materialChoices: { FRONT: 'mat-roble' }
     })
-  ]));
+  ], [], false));
 
   const byRole = {};
   batchRows('inspector-batch-roles', sandbox).forEach((r) => { byRole[r.label] = r.value; });
@@ -478,7 +485,7 @@ test('batch: roles triage is honest — common value, mixed, and not-applicable-
   api.onSelectionChange(batchContext([
     batchMember(),
     batchMember({ furnitureInstanceRef: 'furn-2' })
-  ]));
+  ], [], false));
   const common = batchRows('inspector-batch-roles', sandbox).find((r) => r.label === 'BODY');
   assert(common && common.value === 'Material mat-blanco',
     'common choice renders the resolved material name');
@@ -518,7 +525,7 @@ test('batch: params triage mirrors the roles honesty and excluded entities get a
       },
       materialChoices: { FRONT: 'mat-roble' }
     })
-  ], [{ kind: 'unmanaged', reason: 'geometría no gestionada por Granete' }]));
+  ], [{ kind: 'unmanaged', reason: 'geometría no gestionada por Granete' }], false));
 
   const params = {};
   batchRows('inspector-batch-params', sandbox).forEach((r) => { params[r.label] = r.value; });
@@ -529,6 +536,84 @@ test('batch: params triage mirrors the roles honesty and excluded entities get a
   assert(visible(el(sandbox, 'inspector-batch-excluded')), 'excluded note visible');
   assert(el(sandbox, 'inspector-batch-excluded').textContent.indexOf('geometría no gestionada') !== -1,
     'the excluded reason is shown, never a silent skip');
+});
+
+// --- #471 R2: editable batch Apply --------------------------------------
+
+function batchSelects(sandbox) {
+  return el(sandbox, 'inspector-batch-roles').children.map((row) => ({
+    label: row.children[0].textContent,
+    select: row.children[1].children[0]
+  })).filter((r) => r.select && String(r.select.tagName).toLowerCase() === 'select');
+}
+
+test('batch apply: roles become selects whose options are the intersection across members', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(batchContext([
+    batchMember(),
+    batchMember({ furnitureInstanceRef: 'furn-2', materialChoices: { FRONT: 'mat-blanco', BODY: 'mat-blanco' } })
+  ], [], true));
+
+  const selects = batchSelects(sandbox);
+  const front = selects.find((s) => s.label === 'FRONT');
+  const body = selects.find((s) => s.label === 'BODY');
+  assert(front && body, 'editable capability renders shared roles as selectors');
+  const frontOptions = front.select.children.map((o) => o.value);
+  assert.deepStrictEqual(frontOptions, ['', 'mat-roble', 'mat-blanco'],
+    'options are the intersection of both members, plus the mixed placeholder');
+  assert.strictEqual(front.select.children[0].textContent, 'Mixto',
+    'a mixed role starts on the Mixto placeholder');
+  assert.strictEqual(body.select.value, 'mat-blanco',
+    'a common role starts preselected');
+  assert(!visible(el(sandbox, 'inspector-batch-footer')), 'footer hidden until a role is chosen');
+
+  front.select.value = 'mat-roble';
+  front.select.dispatchEvent({ type: 'change' });
+  assert(visible(el(sandbox, 'inspector-batch-footer')), 'choosing a role shows the footer');
+  assert(el(sandbox, 'inspector-batch-pending').textContent.indexOf('1 rol a aplicar') !== -1,
+    'the footer counts the pending roles');
+  assert.strictEqual(el(sandbox, 'btn-batch-apply').textContent, 'Aplicar a 2 muebles',
+    'the Apply button names the affected count');
+
+  el(sandbox, 'btn-batch-apply').click();
+  const submit = sandbox.__mutation.find((c) => c.action === 'submitBatchUpdate');
+  assert(submit, 'Apply rides GraneteMutation.submitBatchUpdate');
+  // JSON round-trip: the items were built in the sandbox realm, the
+  // expected literal in the test realm — deepStrictEqual compares
+  // prototypes across realms.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(submit.items)), [
+    { instanceId: 'furn-1', definitionId: 'kitchen-base-standard',
+      parameters: { widthMm: 600 }, materialChoices: { FRONT: 'mat-roble' } },
+    { instanceId: 'furn-2', definitionId: 'kitchen-base-standard',
+      parameters: { widthMm: 600 }, materialChoices: { FRONT: 'mat-roble' } }
+  ], 'one complete per-member intent: current parameters + only the chosen roles');
+});
+
+test('batch apply: one honest all-or-nothing outcome per result', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onBatchUpdateResult({ success: true, applied: 2, total: 2 });
+  const successToast = sandbox.__toastCalls.find((t) => t.type === 'success');
+  assert(successToast && successToast.msg.indexOf('2 muebles') !== -1,
+    'success names the applied count');
+
+  api.onBatchUpdateResult({ success: false, applied: 0, total: 2, error: 'lote abortado' });
+  const errorToast = sandbox.__toastCalls.filter((t) => t.type === 'error').pop();
+  assert(errorToast && errorToast.msg.indexOf('Ningún mueble cambió') !== -1,
+    'failure states honestly that nothing was applied');
 });
 
 test('furniture: definition direct identity, param state, summary and materials render', () => {

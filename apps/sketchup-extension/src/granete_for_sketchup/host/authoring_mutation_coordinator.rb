@@ -66,6 +66,38 @@ module Granete
           complete(command, request_context, result, command_message_id: command_message_id)
         end
 
+        # #471: ONE user batch command = N authoritative resolves BEFORE any
+        # host mutation, then ONE journal operation applying every accepted
+        # rebuild. All-or-nothing with a single coherent undo (AC §16 /
+        # DW §17): a resolve failure touches nothing, a stale member blocks
+        # the whole batch, and an apply failure aborts the one operation so
+        # the previous valid state survives. The UI gets ONE outcome — it
+        # can never report N applied when fewer succeeded.
+        def execute_batch(commands, command_message_id: nil)
+          first = commands.first
+          return duplicate_outcome(first) if busy?
+
+          @interaction_state.transition!('editing_intent')
+          @interaction_state.transition!('resolving')
+          request_contexts = commands.map do
+            identity = MessageIdentity.allocate
+            { message_id: identity[:message_id], idempotency_key: identity[:idempotency_key] }
+          end
+          @pending = { command: first, context: request_contexts.first }
+          @pending_request_context = request_contexts.first
+          log_event('batch_mutation_resolving', first, request_contexts.first,
+                    size: commands.length)
+
+          results = []
+          commands.each_with_index do |command, index|
+            result = resolve_batch_member(command, request_contexts[index])
+            return result if result.is_a?(MutationOutcome)
+
+            results << result
+          end
+          complete_batch(commands, request_contexts, results, command_message_id: command_message_id)
+        end
+
         # Async pair (late-response proof + future #467/#468 flows): parks
         # the command at `resolving` with allocated correlation and returns
         # the request context. The response MUST come back through
@@ -254,6 +286,126 @@ module Granete
           raise AtomicityViolationError,
                 'una mutación aceptada debe ser exactamente UNA operación SketchUp ' \
                 "(starts=#{journal.started_count} commits=#{journal.committed_count})"
+        end
+
+        # One member of a batch resolve. Failure attributes the member ref —
+        # the batch is one command, so the whole batch stops here having
+        # touched nothing on the host.
+        def resolve_batch_member(command, request_context)
+          result = command.resolve_intent(request_context)
+          unless result.respond_to?(:accepted?) && result.accepted?
+            issues = result.respond_to?(:issues) ? result.issues : []
+            raise Library::AuthoringResolveError.new(
+              'el resolve no devolvió un resultado aceptado',
+              status: 422,
+              issues: issues
+            )
+          end
+          result
+        rescue *RESOLVE_ERROR_CLASSES => e
+          category = ErrorTaxonomy.category_for(e)
+          outcome_name = case category
+                         when 'network_unavailable', 'authentication', 'license_capability' then 'unavailable'
+                         when 'stale_conflict' then 'stale'
+                         else 'rejected'
+                         end
+          @interaction_state.transition!(outcome_name)
+          log_event("batch_mutation_#{outcome_name}", command, request_context,
+                    category: category, error: e.message)
+          finish_with(
+            build_outcome(command, outcome_name, category: category,
+                                                 reason: "lote detenido en #{batch_member_ref(command)}: #{e.message}",
+                                                 issues: issues_of(e), request_context: request_context)
+          )
+        end
+
+        # Batch completion: every member context must still be valid, then
+        # ONE journal operation carries every accepted rebuild — the single
+        # coherent undo of the whole user action.
+        def complete_batch(commands, request_contexts, results, command_message_id: nil)
+          _ = command_message_id
+          stale = batch_stale_member(commands)
+          if stale
+            command, index = stale
+            @interaction_state.transition!('stale')
+            return finish_with(
+              build_outcome(command, 'stale', category: 'stale_conflict',
+                                              reason: "el contexto de #{batch_member_ref(command)} " \
+                                                      'cambió durante el resolve del lote',
+                                              request_context: request_contexts[index])
+            )
+          end
+
+          @interaction_state.transition!('applying_host_mutation')
+          journal = OperationJournal.new(@model_provider.call)
+          begin
+            applied = apply_batch_members(commands, results, journal)
+            post_commit_batch(commands, request_contexts, results, journal)
+            finish_with(
+              build_outcome(commands.first, 'committed',
+                            result: { 'batch' => true, 'applied' => applied.length, 'items' => applied },
+                            request_context: request_contexts.first, resolved: results.first)
+            )
+          rescue MutationCommand::ApplyRefused => e
+            finish_aborted_batch(commands, request_contexts, journal,
+                                 category: 'invalid_authoring_input',
+                                 reason: "lote rechazado: #{e.message}", event: 'refused')
+          rescue StandardError => e
+            finish_aborted_batch(commands, request_contexts, journal,
+                                 category: 'host_apply_failure',
+                                 reason: "lote abortado: #{e.message}", event: 'host_apply_failed',
+                                 error: e.message)
+          end
+        end
+
+        # Applies every accepted rebuild inside the ONE journal operation.
+        def apply_batch_members(commands, results, journal)
+          journal.start_operation("Granete · Editar lote (#{commands.length} muebles)", true)
+          applied = commands.each_with_index.map do |command, index|
+            command.apply_accepted_state(results[index], journal.host_context)
+          end
+          journal.commit_operation
+          verify_atomicity!(journal)
+          applied
+        end
+
+        # Post-commit work rides each member exactly as a single mutation
+        # would: selection restore and preflight invalidation per target.
+        def post_commit_batch(commands, request_contexts, results, journal)
+          commands.each_with_index do |command, index|
+            restore_selection(command, results[index])
+            invalidate_preflight(command, results[index], request_contexts[index])
+          end
+          @interaction_state.transition!('committed')
+          log_event('batch_mutation_committed', commands.first, request_contexts.first,
+                    host_operations: journal.started_count, members: commands.length)
+        end
+
+        # One abort path for refusal and host failure: the journal aborts
+        # the single operation, so the previous valid state survives.
+        def finish_aborted_batch(commands, request_contexts, journal, category:, reason:, event:, error: nil)
+          journal.abort_if_open!
+          @interaction_state.transition!('aborted')
+          log_event("batch_mutation_#{event}", commands.first, request_contexts.first,
+                    reason: reason, error: error)
+          finish_with(
+            build_outcome(commands.first, 'aborted', category: category, reason: reason,
+                                                     request_context: request_contexts.first)
+          )
+        end
+
+        # First member whose exact semantic context no longer holds, with
+        # its index — nil when the whole batch is still valid.
+        def batch_stale_member(commands)
+          commands.each_with_index do |command, index|
+            return [command, index] unless command.context_still_valid?
+          end
+          nil
+        end
+
+        def batch_member_ref(command)
+          command.semantic_target['furnitureInstanceRef'] ||
+            command.semantic_target['furnitureInstanceId'] || 'miembro'
         end
 
         def restore_selection(command, result)

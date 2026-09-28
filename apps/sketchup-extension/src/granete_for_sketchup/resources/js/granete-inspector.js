@@ -214,16 +214,20 @@
   }
 
   // ------------------------------------------------------------------
-  // #471 R1: batch inspector de lectura. Tripartito honesto por control
-  // compartido (AC §16): común → valor; mixto → "Mixto"; no soportado por
-  // todos → "No aplica a N" con conteo. El lote afectado es el conjunto
-  // de muebles administrados; el Apply explícito llega con R2. Nada de
-  // manufactura se calcula aquí: los datos ya son los contextos
-  // autoritativos publicados por el resolver Ruby.
+  // #471 R1/R2: batch inspector. Tripartito honesto por control compartido
+  // (AC §16): común → valor; mixto → "Mixto"; no soportado por todos →
+  // "No aplica a N" con conteo. R2 vuelve editables los roles soportados
+  // por TODOS los miembros: las opciones son la INTERSECCIÓN de los
+  // grupos de cada definición (una opción inválida para un miembro
+  // bloquearía el lote entero), y el Apply envía una intención completa
+  // por mueble que el backend re-resuelve — nada de manufactura aquí.
   // ------------------------------------------------------------------
+  var batchSelections = {};
+
   function renderBatchInspector(context) {
     inspectorBatchView.style.display = "block";
     var members = context.furniture || [];
+    batchSelections = {};
 
     inspectorBatchTitle.textContent = members.length + " muebles en el lote";
     inspectorBatchCountBadge.textContent = members.length + " muebles";
@@ -240,8 +244,9 @@
       inspectorBatchExcluded.style.display = "none";
     }
 
-    renderBatchRoles(members);
+    renderBatchRoles(members, context);
     renderBatchParams(members);
+    updateBatchFooter(members, context);
   }
 
   function batchMaterialLabel(materialId) {
@@ -275,7 +280,51 @@
     return first;
   }
 
-  function renderBatchRoles(members) {
+  // La intersección de opciones válidas: una elección que un miembro no
+  // admite haría fallar SU resolve y, con lote atómico, al lote entero.
+  function batchRoleOptionIds(members, role) {
+    var sets = members.map(function (m) {
+      var def = m.definition || {};
+      var entry = (def.materialRoles || []).filter(function (r) { return r.role === role; })[0];
+      return entry ? (entry.optionIds || []) : null;
+    });
+    if (sets.indexOf(null) !== -1) return [];
+    var roles = window.GraneteUI.materialRoles;
+    var resolvable = function (id) {
+      return !roles || typeof roles.materialById !== "function" || roles.materialById(id);
+    };
+    return sets.reduce(function (acc, ids) {
+      return acc.filter(function (id) { return ids.indexOf(id) !== -1 && resolvable(id); });
+    });
+  }
+
+  function batchRoleSelect(role, optionIds, common) {
+    var select = document.createElement("select");
+    select.className = "input";
+    select.style.width = "100%";
+    var placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = common ? "--" : "Mixto";
+    select.appendChild(placeholder);
+    optionIds.forEach(function (id) {
+      var opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = batchMaterialLabel(id);
+      select.appendChild(opt);
+    });
+    if (common && optionIds.indexOf(common) !== -1) select.value = common;
+    select.addEventListener("change", function () {
+      if (select.value) {
+        batchSelections[role] = select.value;
+      } else {
+        delete batchSelections[role];
+      }
+      updateBatchFooter(selectedContext && selectedContext.furniture || [], selectedContext);
+    });
+    return select;
+  }
+
+  function renderBatchRoles(members, context) {
     inspectorBatchRoles.innerHTML = "";
     var seen = [];
     members.forEach(function (m) {
@@ -289,6 +338,9 @@
       return;
     }
     inspectorBatchRolesCard.style.display = "block";
+    var editable = context && context.capabilities &&
+      context.capabilities.canBatchEditMaterialRoles &&
+      context.capabilities.canBatchEditMaterialRoles.supported;
     seen.forEach(function (role) {
       var supported = members.filter(function (m) {
         var def = m.definition || {};
@@ -301,10 +353,24 @@
       }
       var values = members.map(function (m) { return (m.materialChoices || {})[role]; });
       var common = batchCommonValue(values);
-      if (common !== null) {
-        inspectorBatchRoles.appendChild(batchRow(role, batchMaterialLabel(common), false));
+      var optionIds = batchRoleOptionIds(members, role);
+      if (editable && optionIds.length > 0) {
+        var row = document.createElement("div");
+        row.className = "kv-row";
+        var k = document.createElement("span");
+        k.className = "k";
+        k.textContent = role;
+        var v = document.createElement("span");
+        v.className = "v";
+        v.appendChild(batchRoleSelect(role, optionIds, common));
+        row.appendChild(k);
+        row.appendChild(v);
+        inspectorBatchRoles.appendChild(row);
+      } else if (optionIds.length === 0) {
+        inspectorBatchRoles.appendChild(batchRow(role, "Sin opción común", true));
       } else {
-        inspectorBatchRoles.appendChild(batchRow(role, "Mixto", true));
+        inspectorBatchRoles.appendChild(
+          batchRow(role, common !== null ? batchMaterialLabel(common) : "Mixto", common === null));
       }
     });
   }
@@ -341,6 +407,64 @@
         inspectorBatchParams.appendChild(batchRow(name, "Mixto", true));
       }
     });
+  }
+
+  function updateBatchFooter(members, context) {
+    var footer = document.getElementById("inspector-batch-footer");
+    if (!footer) return;
+    var pending = Object.keys(batchSelections).length;
+    var editable = context && context.capabilities &&
+      context.capabilities.canBatchEditMaterialRoles &&
+      context.capabilities.canBatchEditMaterialRoles.supported;
+    if (!editable || pending === 0) {
+      footer.style.display = "none";
+      return;
+    }
+    footer.style.display = "block";
+    document.getElementById("inspector-batch-pending").textContent =
+      pending + (pending === 1 ? " rol a aplicar" : " roles a aplicar") +
+      " en " + (members.length || (context.furniture || []).length) + " muebles";
+    var btn = document.getElementById("btn-batch-apply");
+    btn.textContent = "Aplicar a " + (members.length || (context.furniture || []).length) + " muebles";
+    btn.disabled = window.GraneteMutation && typeof window.GraneteMutation.phase === "function" &&
+      window.GraneteMutation.phase() === "applying_host_mutation";
+  }
+
+  // #471 R2: el Apply arma UNA intención completa por mueble (parametros
+  // actuales + roles elegidos; Ruby mergea con los choices persistidos de
+  // cada entidad) y la envía como un solo comando todo-o-nada.
+  function applyBatchSelections() {
+    var context = selectedContext;
+    if (!context || context.kind !== "batch") return;
+    var members = context.furniture || [];
+    var chosen = batchSelections;
+    if (Object.keys(chosen).length === 0 || members.length === 0) return;
+
+    var items = members.map(function (m) {
+      return {
+        instanceId: m.furnitureInstanceRef,
+        definitionId: m.furnitureDefinitionId,
+        parameters: m.parameters || {},
+        materialChoices: chosen
+      };
+    });
+    var result = window.GraneteMutation.submitBatchUpdate(items);
+    if (result === "busy") {
+      deps.showToast("error", "Ya hay una mutación en curso.");
+    } else if (result === "unavailable") {
+      deps.showToast("error", "La edición por lote no está disponible fuera de SketchUp.");
+    }
+  }
+
+  function onBatchUpdateResult(result) {
+    var success = !!(result && result.success);
+    if (success) {
+      deps.showToast("success", "✓ Lote aplicado a " + (result.applied || 0) + " muebles.");
+    } else {
+      // All-or-nothing: nothing was applied — the copy says so honestly.
+      deps.showToast("error", "El lote no se aplicó: " + ((result && result.error) || "error desconocido") +
+        " Ningún mueble cambió.");
+    }
   }
 
   function renderFurnitureInspector(context) {
@@ -419,6 +543,13 @@
     }
 
     updateInspectorSummary();
+  }
+
+  // #471 R2: the batch Apply button lives in the batch view; it is wired
+  // once here and reads the CURRENT selectedContext at click time.
+  var btnBatchApply = document.getElementById("btn-batch-apply");
+  if (btnBatchApply) {
+    btnBatchApply.addEventListener("click", applyBatchSelections);
   }
 
   btnUpdate.addEventListener("click", function () {
@@ -648,6 +779,7 @@
     init: function (injected) { deps = injected || {}; },
     onSelectionChange: onSelectionChange,
     onUpdateResult: onUpdateResult,
+    onBatchUpdateResult: onBatchUpdateResult,
     onDeleteResult: onDeleteResult,
     onMaterialChoiceApplied: onMaterialChoiceApplied,
     activateInspectorTab: activateInspectorTab,

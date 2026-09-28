@@ -131,3 +131,28 @@ Delivery: PR `Refs #471 / Delivery: partial|complete` según cobertura del DoD
 - Nota honesta: el catálogo local de test no define materialRoles, por lo
   que canBatchEditMaterialRoles niega con "2 de 2" en esos fixtures — la
   capability real depende del catálogo conectado.
+
+## Registro R2 (2026-09-28)
+
+- Implementado: `AuthoringMutationCoordinator#execute_batch` (N resolves con
+  MessageIdentity propia ANTES de mutar host; UNA journal operation con
+  verify_atomicity para todos los rebuilds; helpers apply_batch_members /
+  post_commit_batch / finish_aborted_batch / batch_stale_member), bridge
+  `execute_coordinated_batch_update` (items → N comandos por el camino
+  per-item exacto; miembro faltante → rechazo total pre-host), callback
+  `update_furniture_batch`, `GraneteMutation.submitBatchUpdate`, carril JS
+  editable (selectores con INTERSECCIÓN de opciones entre miembros,
+  placeholder Mixto, común preseleccionado), footer "N roles a aplicar" +
+  botón "Aplicar a N muebles", `onBatchUpdateResult` honesto
+  (todo-o-nada: el fallo dice "Ningún mueble cambió"). Observer:
+  `resolve_selection` público; `check_current_selection` republica el
+  payload completo (batch incluido) — arregla también el sync inicial.
+- Tests: `authoring_batch_mutation_test.rb` 6/6 (commit 3-miembros-1-op,
+  resolve-fail miembro 2 → 0 operaciones, apply-fail → 1 start+1 abort+0
+  commit, refuse, stale bloquea todo, busy soft-cancel); inspector JS
+  31/31 (+2: intersección/payload exacto por JSON realm-safe, outcome
+  honesto).
+- Gates: `bundle exec rake verify` — 0 ofensas, 1246 runs/9213 assertions
+  + 6 runs/4079 assertions, 0 failures.
+- Trampa registrada: deepStrictEqual cruzando realms del sandbox vm →
+  comparar vía JSON.parse(JSON.stringify(...)).

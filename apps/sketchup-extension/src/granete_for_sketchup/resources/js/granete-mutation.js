@@ -150,6 +150,24 @@
       return "sent";
     },
 
+    // #471 batch Apply: ONE user command over N complete per-item intents.
+    // The Ruby coordinator runs the all-or-nothing pipeline (N resolves
+    // before any host mutation, one journal operation, one undo) and
+    // answers through onBatchUpdateResult. Same return contract as
+    // submitUpdate: "sent" | "busy" | "unavailable".
+    submitBatchUpdate: function (items) {
+      if (isBusy()) return "busy";
+      var host = window.sketchup;
+      if (!host || typeof host.update_furniture_batch !== "function") return "unavailable";
+      if (!Array.isArray(items) || items.length === 0) return "unavailable";
+
+      setPhase("editing_intent", { target: { batch: items.length } });
+      setPhase("resolving", { target: { batch: items.length } });
+      pendingMessageId = window.GraneteBridge ? window.GraneteBridge.nextMessageId() : null;
+      host.update_furniture_batch(JSON.stringify({ messageId: pendingMessageId, items: items }));
+      return "sent";
+    },
+
     submitHardwarePlacementUpdate: function (offsetMm, selectedContext) {
       if (isBusy()) return "busy";
       var host = window.sketchup;

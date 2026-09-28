@@ -41,18 +41,11 @@ module Granete
           context
         end
 
-        private
-
-        def handle_selection(selection)
-          context = resolve_selection(selection)
-          @on_selection_change.call(context&.to_payload)
-        end
-
-        # #471: a multi-selection of two or more managed furniture resolves
-        # to a BatchContext — a SET of semantic identities, never
-        # selection.first authority. Any other multi-selection keeps the
-        # historical single-context payload of the first entity (with its
-        # honest selectionCount), so existing lanes do not change.
+        # Full-selection resolution (#471): a multi-selection of managed
+        # furniture yields the BatchContext; anything else degrades to the
+        # first entity's single context with its honest selectionCount.
+        # Public: the dialog's initial sync and post-mutation refresh
+        # re-publish the same payload the live observer would send.
         def resolve_selection(selection)
           entities = selection_entities(selection)
           return nil if entities.empty?
@@ -72,6 +65,13 @@ module Granete
             others: contexts - furniture_contexts,
             selection_count: entities.length
           )
+        end
+
+        private
+
+        def handle_selection(selection)
+          context = resolve_selection(selection)
+          @on_selection_change.call(context&.to_payload)
         end
 
         def selection_entities(selection)

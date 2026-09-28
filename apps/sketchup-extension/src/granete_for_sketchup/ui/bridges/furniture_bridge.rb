@@ -50,6 +50,13 @@ module Granete
           execute_coordinated_update(dialog, payload, command_message_id: payload['messageId'])
         end
 
+        # #471: the batch Apply. One user command over N complete per-item
+        # intents — the coordinator runs the all-or-nothing pipeline.
+        def handle_update_batch(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          execute_coordinated_batch_update(dialog, payload, command_message_id: payload['messageId'])
+        end
+
         # A selector changes one role, while the server must resolve the whole
         # furniture with the complete accepted authoring intent. Preserve every
         # persisted role that was not included in this edit; never make an omitted

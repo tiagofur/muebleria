@@ -38,7 +38,10 @@ module Granete
 
         def check_current_selection(dialog)
           selection = (@observed_model || active_model)&.selection
-          context = @selection_observer.resolve(selection&.first, selection: selection)
+          # Full-selection resolution (#471): a multi-selection of managed
+          # furniture republishes the BatchContext, exactly as the live
+          # observer would — never just the first entity.
+          context = @selection_observer.resolve_selection(selection)
           execute_bridge(dialog, 'onSelectionChange', context && context.to_payload)
         end
 
