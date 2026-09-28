@@ -292,6 +292,12 @@ Cambiar un default no reescribe silenciosamente los muebles existentes. "Aplicar
 
 Una revisión publicada congela los valores efectivos por item; manufacturing/release nunca depende del default mutable actual.
 
+Implementación #784 (2026-09): `mode=design` es **linaje, no un puntero vivo** — el item
+conserva su valor materializado hasta el rollout/reset explícito; el servidor proyecta
+`needsRollout` (applied ≠ default vigente) para el impact review. Tres valores distintos por
+rol, nunca colapsados: aplicado, default vigente del Design, y drift proyectado. Ver
+`project-design-digital-thread.md` §13.
+
 ---
 
 ## 9. Edición paramétrica in-place
