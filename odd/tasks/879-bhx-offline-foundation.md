@@ -23,17 +23,18 @@ promoted to installed-machine evidence. #352 owns field validation.
 ## Delivery and verification policy
 
 - Delivery strategy: `auto-chain`; chain strategy: `stacked-to-main`. Planned
-  slices: B1 evidence/contract, B2a neutral six-face frame geometry, then
-  B2b synthetic operation coverage. Each slice targets `main` in order and
+  slices: B1 evidence/contract, B2a neutral six-face frame geometry, B2b-a
+  bore/face geometry, then B2b-b synthetic operation coverage. Each slice targets `main` in order and
   has its own review/CI before any merge. B2b waits for B2a review and
   delivery; neither B2 slice changes the authorized product scope.
   The parent/leader owns push, PR, and merge; none is implied by this file.
 - Forecast after independent review: B2a about 220–300 authored lines;
-  B2b about 450–600. A frame-only PR and a coverage PR will not both fit
+  B2b-a about 180–280 and B2b-b about 500–700. A frame-only PR and a coverage PR will not both fit
   under 400 lines, but they are distinct deliverable behaviors. A standalone
-  validation-only slice would be an artificial public contract with no
-  candidate consumer; B2b may use the owner's conditional ≤750/~400-production
-  exception after its actual count and cohesion are checked. Do not code-golf
+  validation-only planner facade would be unsafe; B2b-a is pure geometry and
+  exposes no planner/assignment. Under owner Round 2, 451–750 authored lines
+  may receive a conditional size exception after reviewer cohesion confirmation;
+  >750 must split coherently. Do not code-golf
   or omit tests/docs to fit a budget.
 - TDD: strict **enabled** by the session's `gentle-ai:strict-tdd-mode` directive.
   B1 is passive documentation, so RED/GREEN/REFACTOR and executable runners
@@ -84,6 +85,20 @@ promoted to installed-machine evidence. #352 owns field validation.
   physical claim. Checks: separate strict TDD, focused/full domain Vitest,
   typecheck, affected plan, clean preflight; receiver V2 `NOT_RUN`. Route:
   delegated direct sole writer only after B2a review/delivery decision.
+  - [x] **B2b-a — Pure bore/face geometry.** From explicit synthetic numeric
+    inputs, return a non-fabricable validity result for six-face entry,
+    normal inward unit axis, face bore fit, and blind/through ray-box exit.
+    No planner, assignment, receiver capability, or native output. Check
+    independent numeric positive/negative Vitest, typecheck, affected plan,
+    diff check, and clean preflight. Branch `codex/879-bhx-b2b-geometry` from
+    B2a merge commit `98d6d9491a388555549f2a6ba1f981a734f0284d`.
+  - [ ] **B2b-b — Supported-setup coverage.** Consume B2b-a geometry and
+    B2a frames in the explicit per-occurrence planner. Preserve integrity
+    blockers, immutable manifest snapshots, fail-closed null inputs, setup
+    support, and receiver-unknown non-fabricable output. Strict TDD,
+    focused/full domain Vitest, typecheck, affected plan, diff check, clean
+    preflight; V2 `NOT_RUN`. Branch from B2b-a HEAD, then rebase onto its
+    eventual main merge before publication.
 
 ## Progress and evidence
 
@@ -162,5 +177,36 @@ promoted to installed-machine evidence. #352 owns field validation.
   receiver or host boundary. Rollback removes only its module, tests, public
   export, and B2a checkpoint; B1 remains intact. Fresh independent review
   and exact-HEAD CI/publication remain parent-owned and pending.
-- Next: mirror this completed B2a task and hand exact HEAD/base to the parent.
-  B2b, native output, and receiver validation remain pending.
+- B2b reslice decision: the preserved local `codex/879-bhx-b2b` candidate
+  reached `2e0e2901652f92d62d81d6b304af70b78628d3bc` plus uncommitted
+  RED/GREEN corrections. Independent review found mutable manifest aliases
+  and null-input throws; the corrected accumulated branch exceeded the
+  owner's Round 2 hard 750-authored-line limit. Do not publish that branch.
+  B2b-a supplies only pure geometric validity with no planner or assignment
+  facade; B2b-b consumes it for complete coverage. This is a technical split
+  within approved B2, not native output or physical proof.
+- B2a delivery readback: PR #889 merged at main commit
+  `98d6d9491a388555549f2a6ba1f981a734f0284d`; B2b-a starts from that
+  exact base and does not alter B2a geometry.
+- B2b-a implementation checkpoint: pure `neutralBoreGeometry.ts` exports a
+  non-fabricable numeric validity result and ray/box exit distance, never a
+  setup assignment or machine program. Independent tests cover all six faces,
+  exact normal exits, face/edge bore fit, blind/through boundaries, angled
+  rejection, malformed values, and frozen result metadata. Strict TDD RED:
+  focused Vitest could not load the absent module; a subsequent RED observed
+  six unfrozen-result failures. GREEN/REFACTOR: focused 10/10, full domain
+  116 files/1,646 tests, domain typecheck, and `git diff --check` passed.
+  The affected-check plan selected all gates conservatively because this ODD
+  path is unknown; it executed none. Runtime receiver/host harness: N/A for
+  pure geometry; V2 receiver/physical `NOT_RUN`. Rollback removes only this
+  geometry module/test, its public export, and this B2b-a checkpoint, leaving
+  B1/B2a intact. Work-unit commit
+  `85ebadc232e1d9e8561dfcb5df0cde1eab6fc3c1` on exact base
+  `98d6d9491a388555549f2a6ba1f981a734f0284d` contains 263 additions
+  and 8 deletions (271 authored lines), including 132 production lines.
+  `git show --check --oneline HEAD` passed; clean preflight returned
+  `PREFLIGHT_OK_NOT_VERIFIED` and ran no tests. Independent review and CI are
+  pending and parent-owned; this source work unit has no planner API.
+- Next: independent exact-HEAD B2b-a review and parent-owned delivery, then
+  B2b-b coverage from the accepted geometry base. Native output and receiver
+  validation remain pending.
