@@ -594,6 +594,16 @@ function contactSurface(b: ContactBoard, face: ContactFace): { corners: Vec3[]; 
   return { corners, normal: high ? normal : contactNegate(normal) };
 }
 
+/** Unicode scalar order matches Go's UTF-8 order for valid contact IDs. */
+const compareContactIds = (a: string, b: string): number => {
+  const left = Array.from(a, (character) => character.codePointAt(0)!);
+  const right = Array.from(b, (character) => character.codePointAt(0)!);
+  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
+    if (left[index] !== right[index]) return left[index]! - right[index]!;
+  }
+  return left.length - right.length;
+};
+
 /** Resolve only declared occurrence contacts; A0b will plan stations in this frame. */
 export function resolveExplicitContacts(input: ContactResolutionInput): ContactResolutionResult {
   const contacts: ResolvedContact[] = [];
@@ -610,7 +620,7 @@ export function resolveExplicitContacts(input: ContactResolutionInput): ContactR
   for (const id of input.requiredContactIds) {
     if (!input.contacts.some((contact) => contact.contactId === id)) fail(id, 'CONTACT_REQUIRED_MISSING');
   }
-  for (const intent of [...input.contacts].sort((a, b) => a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0)) {
+  for (const intent of [...input.contacts].sort((a, b) => compareContactIds(a.contactId, b.contactId))) {
     if (seen.has(intent.contactId)) continue;
     seen.add(intent.contactId);
     if (contactCounts.get(intent.contactId)! > 1) { fail(intent.contactId, 'CONTACT_AMBIGUOUS'); continue; }
@@ -709,8 +719,7 @@ export function planResolvedContactStations(
   for (const contact of resolution.contacts) contactCounts.set(contact.contactId, (contactCounts.get(contact.contactId) ?? 0) + 1);
   for (const spec of specs) if (!contactCounts.has(spec.contactId)) fail(spec.contactId, 'STATION_CONTACT_UNKNOWN');
 
-  for (const contact of [...resolution.contacts].sort((a, b) =>
-    a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0)) {
+  for (const contact of [...resolution.contacts].sort((a, b) => compareContactIds(a.contactId, b.contactId))) {
     const id = contact.contactId;
     if (contactCounts.get(id) !== 1) { fail(id, 'STATION_CONTACT_AMBIGUOUS'); continue; }
     if (!specCounts.has(id)) { fail(id, 'STATION_SPEC_MISSING'); continue; }
@@ -751,4 +760,67 @@ export function planResolvedContactStations(
     if (stations.length === spec.count) plans.push({ contactId: id, stations });
   }
   return issues.length ? { plans: [], issues } : { plans, issues: [] };
+}
+
+/** Explicit, versioned technical input; no catalog lookup or synthetic default is supplied here. */
+export interface ContactOperationRule {
+  readonly ruleId: string;
+  readonly ruleRevision: string;
+  readonly participantRole: 'A' | 'B';
+  readonly operationRole: string;
+  readonly entryFace: ContactFace;
+  /** Components along contact axis, contact normal, and axis × normal. */
+  readonly offsetMm: Vec3;
+  readonly axis: Vec3;
+  readonly diameterMm: number;
+  readonly depthMm: number;
+}
+
+export interface ContactOperationRecipe {
+  readonly contactId: string;
+  readonly recipeId: string;
+  readonly recipeRevision: string;
+  readonly technicalProfileId: string;
+  readonly technicalProfileRevision: string;
+  readonly rules: readonly ContactOperationRule[];
+}
+
+export interface ContactOperationProvenance {
+  readonly sourceKind: 'relationship';
+  readonly relationshipId: string;
+  readonly contactId: string;
+  readonly participantId: string;
+  readonly participantRole: 'A' | 'B';
+  readonly stationIndex: number;
+  readonly recipeId: string;
+  readonly recipeRevision: string;
+  readonly ruleId: string;
+  readonly ruleRevision: string;
+  readonly operationRole: string;
+}
+
+export interface NeutralContactOperation {
+  readonly operationId: string;
+  readonly provenance: ContactOperationProvenance;
+  readonly technicalProfileId: string;
+  readonly technicalProfileRevision: string;
+  readonly entryFace: ContactFace;
+  readonly centerLocalMm: Vec3;
+  readonly axisLocal: Vec3;
+  readonly diameterMm: number;
+  readonly depthMm: number;
+}
+
+export interface ContactOperationResult {
+  readonly operations: readonly NeutralContactOperation[];
+  readonly issues: readonly ContractIssue[];
+}
+
+/** Stable nine-field identity for neutral J1 operations, independent of geometry serialization. */
+export function contactOperationId(provenance: ContactOperationProvenance): string {
+  const parts = [provenance.relationshipId, provenance.contactId, provenance.participantId,
+    provenance.stationIndex, provenance.recipeId, provenance.recipeRevision, provenance.ruleId,
+    provenance.ruleRevision, provenance.operationRole];
+  return `j1:${JSON.stringify(parts).replace(/[<>&\u2028\u2029]/g,
+    value => `\\u${value.charCodeAt(0).toString(16).padStart(4, '0')}`)}`;
 }

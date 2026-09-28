@@ -37,6 +37,23 @@ func TestJ1StationPlans(t *testing.T) {
 	}
 }
 
+func TestJ1UnicodeContactAndStationOrder(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	ids := []string{"😀", "\uE000"}
+	for i := range f.Contacts {
+		f.Contacts[i].ContactID = ids[i]
+		f.StationSpecs[i].ContactID = ids[i]
+	}
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, ids)
+	if len(resolved.Issues) != 0 || len(resolved.Contacts) != 2 || resolved.Contacts[0].ContactID != "\uE000" || resolved.Contacts[1].ContactID != "😀" {
+		t.Fatalf("Unicode scalar contact order diverged: %+v", resolved)
+	}
+	planned := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	if len(planned.Issues) != 0 || len(planned.Plans) != 2 || planned.Plans[0].ContactID != "\uE000" || planned.Plans[1].ContactID != "😀" {
+		t.Fatalf("Unicode scalar station order diverged: %+v", planned)
+	}
+}
+
 func TestJ1StationRigidFramesAndOccurrences(t *testing.T) {
 	f := readJ1ContactFixture(t)
 	for _, tc := range []struct {

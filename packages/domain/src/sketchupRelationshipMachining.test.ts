@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import contactFixture from '../../../contracts/j1ContactMachining.contract.json';
+import identityFixture from '../../../contracts/j1ContactOperationIdentity.contract.json';
 
 import {
   cabinetCatalog,
@@ -12,6 +13,7 @@ import { cabinetJoineryCatalog } from './__fixtures__/sketchupJoineryCatalogFixt
 import {
   resolveExplicitContacts,
   planResolvedContactStations,
+  contactOperationId,
   deriveRelationshipMachining,
   diffRelationshipMachining,
   isFingerprintStale,
@@ -19,6 +21,7 @@ import {
   type RelationshipMachiningResult,
   type ContactResolutionInput,
   type StationSpec,
+  type ContactOperationProvenance,
 } from './sketchupRelationshipMachining';
 import { applyAuthoringEnvelope, EMPTY_AUTHORING_STATE } from './sketchupAuthoringExchange';
 import type { AuthoringEnvelopeV1, ReadonlyAuthoringSnapshot } from './sketchupAuthoringSchema';
@@ -100,6 +103,18 @@ describe('J1-A0b neutral station plans', () => {
   const plan = (boards = fixture.boards, resolution = resolved(), specs: readonly StationSpec[] = contactFixture.stationSpecs) =>
     planResolvedContactStations(resolution, boards, specs);
 
+  it('orders contact and station IDs by Unicode scalar value across runtimes', () => {
+    const ids = ['😀', '\uE000'];
+    const contacts = fixture.contacts.map((contact, index) => ({ ...contact, contactId: ids[index]! }));
+    const specs = contactFixture.stationSpecs.map((spec, index) => ({ ...spec, contactId: ids[index]! }));
+    const resolution = resolveExplicitContacts({ ...fixture, contacts, requiredContactIds: ids });
+    expect(resolution.issues).toEqual([]);
+    expect(resolution.contacts.map((contact) => contact.contactId)).toEqual(['\uE000', '😀']);
+    const planned = planResolvedContactStations(resolution, fixture.boards, specs);
+    expect(planned.issues).toEqual([]);
+    expect(planned.plans.map((item) => item.contactId)).toEqual(['\uE000', '😀']);
+  });
+
   it('uses one exact plan and independently asserted assembly and both local coordinates', () => {
     expect(plan()).toEqual({ plans: contactFixture.expectedStationPlans, issues: [] });
   });
@@ -168,6 +183,23 @@ describe('J1-A0b neutral station plans', () => {
       expect(result.plans).toEqual([]);
       expect(result.issues.map((issue) => issue.code)).toContain(code);
     }
+  });
+});
+
+describe('J1-A1-id neutral operation identity', () => {
+  it('matches the shared nine-field codec including JSON escape-sensitive IDs', () => {
+    for (const item of identityFixture.cases) {
+      expect(contactOperationId(item.provenance as ContactOperationProvenance)).toBe(item.operationId);
+    }
+  });
+
+  it('changes identity when any of the nine dependent fields changes', () => {
+    const base = identityFixture.cases[0]!.provenance as ContactOperationProvenance;
+    const fields = ['relationshipId', 'contactId', 'participantId', 'stationIndex', 'recipeId',
+      'recipeRevision', 'ruleId', 'ruleRevision', 'operationRole'] as const;
+    const ids = fields.map((field) => contactOperationId({ ...base,
+      [field]: field === 'stationIndex' ? 1 : `${base[field]}!` }));
+    expect(new Set([contactOperationId(base), ...ids]).size).toBe(fields.length + 1);
   });
 });
 

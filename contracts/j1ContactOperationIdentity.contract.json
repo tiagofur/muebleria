@@ -1,0 +1,19 @@
+{
+  "schema": "granete.j1-contact-operation-identity.test.v1",
+  "description": "Canonical neutral identity only; no machining geometry or production recipe.",
+  "cases": [
+    {
+      "provenance": { "sourceKind": "relationship", "relationshipId": "rel", "contactId": "contact",
+        "participantId": "participant", "participantRole": "A", "stationIndex": 0,
+        "recipeId": "recipe", "recipeRevision": "r1", "ruleId": "rule", "ruleRevision": "v1", "operationRole": "pilot" },
+      "operationId": "j1:[\"rel\",\"contact\",\"participant\",0,\"recipe\",\"r1\",\"rule\",\"v1\",\"pilot\"]"
+    },
+    {
+      "provenance": { "sourceKind": "relationship", "relationshipId": "rel<", "contactId": "contact>",
+        "participantId": "part&", "participantRole": "B", "stationIndex": 2,
+        "recipeId": "recipe\u2028", "recipeRevision": "rev\u2029", "ruleId": "rule😀",
+        "ruleRevision": "v1", "operationRole": "counterbore" },
+      "operationId": "j1:[\"rel\\u003c\",\"contact\\u003e\",\"part\\u0026\",2,\"recipe\\u2028\",\"rev\\u2029\",\"rule😀\",\"v1\",\"counterbore\"]"
+    }
+  ]
+}
