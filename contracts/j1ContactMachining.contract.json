@@ -21,5 +21,20 @@
     { "contactId": "floor-right", "relationshipId": "rel-floor-right", "participantA": "floor-1", "participantB": "side-right-1",
       "faceA": "top", "faceB": "front", "overlapMm": [0, 450],
       "frame": { "originAssemblyMm": [582, 80, 27], "axisAssembly": [0, 1, 0], "normalAssembly": [1, 0, 0] } }
+  ],
+  "stationSpecs": [
+    { "contactId": "floor-left", "count": 3, "startMarginMm": 30, "endMarginMm": 50 },
+    { "contactId": "floor-right", "count": 2, "startMarginMm": 40, "endMarginMm": 60 }
+  ],
+  "expectedStationPlans": [
+    { "contactId": "floor-left", "stations": [
+      { "distanceMm": 30, "assemblyPointMm": [18, 60, 27], "participantALocalMm": [30, 9, 0], "participantBLocalMm": [500, 18, 27] },
+      { "distanceMm": 240, "assemblyPointMm": [18, 270, 27], "participantALocalMm": [240, 9, 0], "participantBLocalMm": [290, 18, 27] },
+      { "distanceMm": 450, "assemblyPointMm": [18, 480, 27], "participantALocalMm": [450, 9, 0], "participantBLocalMm": [80, 18, 27] }
+    ] },
+    { "contactId": "floor-right", "stations": [
+      { "distanceMm": 40, "assemblyPointMm": [582, 120, 27], "participantALocalMm": [90, 9, 564], "participantBLocalMm": [40, 18, 27] },
+      { "distanceMm": 390, "assemblyPointMm": [582, 470, 27], "participantALocalMm": [440, 9, 564], "participantBLocalMm": [390, 18, 27] }
+    ] }
   ]
 }

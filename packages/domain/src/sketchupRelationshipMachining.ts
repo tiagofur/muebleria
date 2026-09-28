@@ -658,3 +658,97 @@ export function resolveExplicitContacts(input: ContactResolutionInput): ContactR
   }
   return { contacts, issues };
 }
+
+/** Neutral station policy. A single station needs an explicit anchor, not supplied by A0b. */
+export interface StationSpec {
+  readonly contactId: string;
+  readonly count: number;
+  readonly startMarginMm: number;
+  readonly endMarginMm: number;
+}
+
+export interface ContactStation {
+  readonly distanceMm: number;
+  readonly assemblyPointMm: Vec3;
+  readonly participantALocalMm: Vec3;
+  readonly participantBLocalMm: Vec3;
+}
+
+export interface StationPlan {
+  readonly contactId: string;
+  readonly stations: readonly ContactStation[];
+}
+
+export interface StationPlanResult {
+  readonly plans: readonly StationPlan[];
+  readonly issues: readonly ContractIssue[];
+}
+
+const contactToLocal = (board: ContactBoard, point: Vec3): Vec3 => {
+  const delta = contactDelta(point, board.translationMm);
+  return [contactDot(delta, board.basis.x), contactDot(delta, board.basis.y), contactDot(delta, board.basis.z)];
+};
+
+/** Plan once in the declared contact frame, then invert that same point into each occurrence. */
+export function planResolvedContactStations(
+  resolution: ContactResolutionResult,
+  boards: readonly ContactBoard[],
+  specs: readonly StationSpec[],
+): StationPlanResult {
+  if (resolution.issues.length) return { plans: [], issues: resolution.issues };
+  const plans: StationPlan[] = [];
+  const issues: ContractIssue[] = [];
+  const fail = (id: string, code: string): void => {
+    issues.push({ code, message: code, severity: 'error', entityId: id });
+  };
+  const boardCounts = new Map<string, number>();
+  for (const board of boards) boardCounts.set(board.occurrenceId, (boardCounts.get(board.occurrenceId) ?? 0) + 1);
+  const specCounts = new Map<string, number>();
+  for (const spec of specs) specCounts.set(spec.contactId, (specCounts.get(spec.contactId) ?? 0) + 1);
+  const contactCounts = new Map<string, number>();
+  for (const contact of resolution.contacts) contactCounts.set(contact.contactId, (contactCounts.get(contact.contactId) ?? 0) + 1);
+  for (const spec of specs) if (!contactCounts.has(spec.contactId)) fail(spec.contactId, 'STATION_CONTACT_UNKNOWN');
+
+  for (const contact of [...resolution.contacts].sort((a, b) =>
+    a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0)) {
+    const id = contact.contactId;
+    if (contactCounts.get(id) !== 1) { fail(id, 'STATION_CONTACT_AMBIGUOUS'); continue; }
+    if (!specCounts.has(id)) { fail(id, 'STATION_SPEC_MISSING'); continue; }
+    if (specCounts.get(id) !== 1) { fail(id, 'STATION_SPEC_AMBIGUOUS'); continue; }
+    const spec = specs.find((item) => item.contactId === id)!;
+    if (!Number.isSafeInteger(spec.count) || spec.count < 2) { fail(id, 'STATION_COUNT_INVALID'); continue; }
+    if (![spec.startMarginMm, spec.endMarginMm].every(Number.isFinite) ||
+        spec.startMarginMm < 0 || spec.endMarginMm < 0) { fail(id, 'STATION_MARGIN_INVALID'); continue; }
+    const [lo, hi] = contact.overlapMm;
+    const { originAssemblyMm: origin, axisAssembly: axis, normalAssembly: normal } = contact.frame;
+    if (![lo, hi, ...origin, ...axis, ...normal].every(Number.isFinite) || lo !== 0 || hi <= 0 ||
+        Math.abs(contactDot(axis, axis) - 1) > 1e-6 || Math.abs(contactDot(normal, normal) - 1) > 1e-6 ||
+        Math.abs(contactDot(axis, normal)) > 1e-6) { fail(id, 'STATION_FRAME_INVALID'); continue; }
+    const first = lo + spec.startMarginMm;
+    const last = hi - spec.endMarginMm;
+    if (!Number.isFinite(first) || !Number.isFinite(last) || first >= last || first < lo || last > hi) {
+      fail(id, 'STATION_SPAN_INVALID'); continue;
+    }
+    const a = boards.find((board) => board.occurrenceId === contact.participantA);
+    const b = boards.find((board) => board.occurrenceId === contact.participantB);
+    if (!a || !b || a === b || boardCounts.get(a.occurrenceId) !== 1 || boardCounts.get(b.occurrenceId) !== 1 ||
+        !contactFrameValid(a) || !contactFrameValid(b)) { fail(id, 'STATION_PARTICIPANT_INVALID'); continue; }
+    const stations: ContactStation[] = [];
+    for (let index = 0; index < spec.count; index += 1) {
+      const distanceMm = index === spec.count - 1 ? last : first + index * (last - first) / (spec.count - 1);
+      const assemblyPointMm = contactScale(origin, axis, distanceMm);
+      const participantALocalMm = contactToLocal(a, assemblyPointMm);
+      const participantBLocalMm = contactToLocal(b, assemblyPointMm);
+      const inBounds = (board: ContactBoard, local: Vec3): boolean =>
+        local.every((value, coordinate) => Number.isFinite(value) && value >= -1e-6 && value <= contactSize(board)[coordinate]! + 1e-6) &&
+        contactDelta(contactToAssembly(board, local), assemblyPointMm).every((delta) => Math.abs(delta) <= 1e-6);
+      if (!Number.isFinite(distanceMm) || distanceMm < lo || distanceMm > hi ||
+          !inBounds(a, participantALocalMm) || !inBounds(b, participantBLocalMm)) {
+        fail(id, 'STATION_POINT_INVALID'); break;
+      }
+      stations.push({ distanceMm, assemblyPointMm, participantALocalMm, participantBLocalMm });
+    }
+    if (stations.length === spec.count) plans.push({ contactId: id, stations });
+  }
+  return issues.length ? { plans: [], issues } : { plans, issues: [] };
+}
