@@ -88,3 +88,23 @@ func TestJ1ContactNegatives(t *testing.T) {
 		})
 	}
 }
+
+func TestJ1ConflictingSameIDContactsOmitted(t *testing.T) {
+	fixture := readJ1ContactFixture(t)
+	conflicting := fixture.Contacts[0]
+	conflicting.ParticipantB = "side-right-1"
+	conflicting.FaceA = "top"
+	for _, duplicates := range [][]ExplicitContact{
+		{fixture.Contacts[0], conflicting}, {conflicting, fixture.Contacts[0]},
+	} {
+		intents := append(duplicates, fixture.Contacts[1])
+		result := resolveExplicitContacts(fixture.Boards, intents, fixture.RequiredContactIDs)
+		found := false
+		for _, issue := range result.Issues {
+			found = found || issue.Code == "CONTACT_AMBIGUOUS"
+		}
+		if !found || !reflect.DeepEqual(result.Contacts, fixture.Expected[1:]) {
+			t.Fatalf("conflicting contact must be omitted in both orders: %+v", result)
+		}
+	}
+}

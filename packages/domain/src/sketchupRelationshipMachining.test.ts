@@ -277,6 +277,15 @@ describe('J1-A explicit occurrence contacts', () => {
     expect(resolveExplicitContacts(changed)).toEqual(resolveExplicitContacts(fixture));
   });
 
+  it('omits every conflicting same-ID contact regardless of input order', () => {
+    const conflicting = { ...fixture.contacts[0]!, participantB: 'side-right-1', faceA: 'top' as const };
+    for (const duplicates of [[fixture.contacts[0]!, conflicting], [conflicting, fixture.contacts[0]!]]) {
+      const result = resolveExplicitContacts({ ...fixture, contacts: [...duplicates, fixture.contacts[1]!] });
+      expect(result.issues.map((issue) => issue.code)).toContain('CONTACT_AMBIGUOUS');
+      expect(result.contacts).toEqual([contactFixture.expected[1]]);
+    }
+  });
+
   it.each([
     ['required contact missing', 'CONTACT_REQUIRED_MISSING', (f: typeof contactFixture) => { f.contacts.pop(); }],
     ['participant missing', 'CONTACT_PARTICIPANT_MISSING', (f: typeof contactFixture) => { f.contacts[0]!.participantB = 'ghost'; }],

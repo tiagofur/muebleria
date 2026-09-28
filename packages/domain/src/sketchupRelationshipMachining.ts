@@ -599,6 +599,10 @@ export function resolveExplicitContacts(input: ContactResolutionInput): ContactR
   const issues: ContractIssue[] = [];
   const boards = new Map(input.boards.map((board) => [board.occurrenceId, board]));
   const seen = new Set<string>();
+  const contactCounts = new Map<string, number>();
+  for (const contact of input.contacts) {
+    contactCounts.set(contact.contactId, (contactCounts.get(contact.contactId) ?? 0) + 1);
+  }
   const fail = (id: string, code: string): void => {
     issues.push({ code, message: code, severity: 'error', entityId: id });
   };
@@ -606,12 +610,13 @@ export function resolveExplicitContacts(input: ContactResolutionInput): ContactR
     if (!input.contacts.some((contact) => contact.contactId === id)) fail(id, 'CONTACT_REQUIRED_MISSING');
   }
   for (const intent of [...input.contacts].sort((a, b) => a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0)) {
+    if (seen.has(intent.contactId)) continue;
+    seen.add(intent.contactId);
+    if (contactCounts.get(intent.contactId)! > 1) { fail(intent.contactId, 'CONTACT_AMBIGUOUS'); continue; }
     if (!intent.contactId.trim() || !intent.relationshipId.trim() ||
         !intent.participantA.trim() || !intent.participantB.trim()) {
       fail(intent.contactId, 'CONTACT_IDENTITY_INVALID'); continue;
     }
-    if (seen.has(intent.contactId)) { fail(intent.contactId, 'CONTACT_AMBIGUOUS'); continue; }
-    seen.add(intent.contactId);
     const a = boards.get(intent.participantA);
     const b = boards.get(intent.participantB);
     if (!a || !b || a.occurrenceId === b.occurrenceId) { fail(intent.contactId, 'CONTACT_PARTICIPANT_MISSING'); continue; }

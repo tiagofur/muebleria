@@ -842,18 +842,25 @@ func resolveExplicitContacts(boards []ContactBoard, intents []ExplicitContact, r
 	}
 	ordered := append([]ExplicitContact(nil), intents...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].ContactID < ordered[j].ContactID })
+	contactCounts := map[string]int{}
+	for _, intent := range intents {
+		contactCounts[intent.ContactID]++
+	}
 	seen := map[string]bool{}
 	for _, intent := range ordered {
+		if seen[intent.ContactID] {
+			continue
+		}
+		seen[intent.ContactID] = true
+		if contactCounts[intent.ContactID] > 1 {
+			fail(intent.ContactID, "CONTACT_AMBIGUOUS")
+			continue
+		}
 		if strings.TrimSpace(intent.ContactID) == "" || strings.TrimSpace(intent.RelationshipID) == "" ||
 			strings.TrimSpace(intent.ParticipantA) == "" || strings.TrimSpace(intent.ParticipantB) == "" {
 			fail(intent.ContactID, "CONTACT_IDENTITY_INVALID")
 			continue
 		}
-		if seen[intent.ContactID] {
-			fail(intent.ContactID, "CONTACT_AMBIGUOUS")
-			continue
-		}
-		seen[intent.ContactID] = true
 		a, aOK := byID[intent.ParticipantA]
 		b, bOK := byID[intent.ParticipantB]
 		if !aOK || !bOK || a.OccurrenceID == b.OccurrenceID {
