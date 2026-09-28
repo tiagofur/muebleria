@@ -30,10 +30,12 @@ class GraneteDesignInspectorJsTest < Minitest::Test
 
     result = JSON.parse(stdout)
     assert_equal true, result['success']
-    assert_operator result['testsPassed'], :>=, 8,
-                    'design inspector harness must keep covering the 8 R1 RED cases: bound render, ' \
+    assert_operator result['testsPassed'], :>=, 11,
+                    'design inspector harness must keep covering the 11 R1 RED cases: bound render, ' \
                     'empty defaults, unbound fallback, selection transitions, design switch, ' \
-                    'late-response discard, unknown material and error+retry'
+                    'late-response discard, unknown material, error+retry AND the final-review ' \
+                    'fail-closed cases (current stale_binding/unbound wipe the rendered design ' \
+                    'immediately without re-fetch loops; recovery via onBindingStatus)'
   end
 
   def test_module_exists_with_ownership_header

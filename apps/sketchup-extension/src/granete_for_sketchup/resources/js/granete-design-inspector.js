@@ -230,11 +230,23 @@
         state.status = "error";
         render();
       } else if (payload.status === "unbound" || payload.status === "stale_binding") {
-        // The model is no longer bound to the requested design: drop the
-        // cached payload; the next binding status re-establishes truth.
+        // The model is no longer bound to the requested design. FAIL CLOSED
+        // immediately: the rendered values of the previous design can never
+        // stay on screen. Clear the cached identity AND defaults (the
+        // stale_binding's own designId is NEVER adopted here —
+        // onModelBindingStatus is the only binding authority), mark
+        // disconnected, hide the view and rerender the Inspector into the
+        // safe empty/binding lane. No authority means no re-fetch either.
+        state.connected = false;
+        state.designId = null;
+        state.projectId = null;
+        state.projectName = "";
+        state.designName = "";
         state.defaults = {};
         state.workingVersion = null;
         state.status = "idle";
+        hide();
+        if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
       }
     },
 

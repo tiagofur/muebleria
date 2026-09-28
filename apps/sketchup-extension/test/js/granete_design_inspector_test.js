@@ -258,6 +258,67 @@ function run() {
     assert.ok(!ctx.body().textContent.includes('Arauco'), 'no silent fallback to another material');
   });
 
+  // --- FINAL REVIEW BLOCKER: current unbound/stale_binding must fail closed
+  //     IMMEDIATELY — the previous design's values can never stay on screen.
+  test('current stale_binding wipes the rendered design and falls to the safe lane without loops', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    assert.strictEqual(mod.handleNoSelection(), true);
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } } });
+    assert.ok(ctx.body().textContent.includes('Arauco Blanco Frosty'), 'A defaults visible first');
+
+    // The CURRENT request answers stale_binding: A must disappear NOW.
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, status: 'stale_binding', designId: 'd-other' });
+    assert.strictEqual(ctx.view().style.display, 'none', 'the design view hides immediately');
+    assert.strictEqual(mod.handleNoSelection(), false, 'no authority: the safe empty lane takes over');
+    const callsAfter = ctx.sketchupCalls.length;
+    mod.handleNoSelection();
+    assert.strictEqual(ctx.sketchupCalls.length, callsAfter, 'no re-fetch loop from the stale answer');
+  });
+
+  test('current unbound wipes the rendered design immediately', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    assert.strictEqual(mod.handleNoSelection(), true);
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } } });
+    assert.strictEqual(ctx.view().style.display, 'block');
+
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, status: 'unbound' });
+    assert.strictEqual(ctx.view().style.display, 'none', 'the design view hides immediately');
+    assert.strictEqual(mod.handleNoSelection(), false);
+  });
+
+  test('after a fail-closed answer, onBindingStatus(B) loads B normally', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } } });
+    mod.onDesignDefaults({ requestId: ctx.sketchupCalls[0][1].requestId, status: 'unbound' });
+    assert.strictEqual(mod.handleNoSelection(), false);
+
+    // The binding authority re-establishes truth with design B.
+    mod.onBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p-1', designId: 'd-b', projectName: 'Cocina López', designName: 'Alternativa' }
+    });
+    assert.strictEqual(mod.handleNoSelection(), true, 'B takes the lane again');
+    const requestB = ctx.sketchupCalls[ctx.sketchupCalls.length - 1][1];
+    assert.strictEqual(requestB.designId, 'd-b');
+    mod.onDesignDefaults({ requestId: requestB.requestId, designId: 'd-b', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-oak' } } });
+    assert.ok(ctx.body().textContent.includes('Roble Natural'), 'B renders after recovery');
+    assert.ok(!ctx.body().textContent.includes('Arauco'), 'no A residue');
+  });
+
   // --- error state with retry ---------------------------------------------
   test('failed load shows the error state and Reintentar re-requests read-only', () => {
     const ctx = createSandbox();
