@@ -242,6 +242,15 @@ describe('J1-A1a paired operations for one exact contact', () => {
     }
   });
 
+  it('orders multiple rules for one participant by stable codepoint IDs in both runtimes', () => {
+    const extra = { ...recipes[0]!.rules[1]!, ruleId: 'Z-copy', operationRole: 'counterbore-alt',
+      offsetMm: [0, 18, 10] as const };
+    const result = derive(0, { ...recipes[0]!, rules: [...recipes[0]!.rules, extra] });
+    expect(result.issues).toEqual([]);
+    expect(result.operations.filter((operation) => operation.provenance.stationIndex === 0)
+      .map((operation) => operation.provenance.ruleId)).toEqual(['pilot', 'Z-copy', 'counterbore']);
+  });
+
   it('fails closed for invalid identity, rule, technical profile, geometry, and noncanonical plans', () => {
     const left = recipes[0]!;
     const plan = planned.plans[0]!;

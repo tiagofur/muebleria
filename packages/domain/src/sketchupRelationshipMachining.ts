@@ -891,7 +891,8 @@ export function deriveResolvedContactOperationsForContact(
     contactScale(contactScale(contactScale([0, 0, 0], along, components[0]), normal, components[1]), cross, components[2]);
   const operations: NeutralContactOperation[] = [];
   const rules = [...recipe.rules].sort((x, y) =>
-    x.participantRole.localeCompare(y.participantRole) || x.ruleId.localeCompare(y.ruleId));
+    x.participantRole < y.participantRole ? -1 : x.participantRole > y.participantRole ? 1 :
+      x.ruleId < y.ruleId ? -1 : x.ruleId > y.ruleId ? 1 : 0);
   for (const [stationIndex, station] of stations.entries()) {
     for (const rule of rules) {
       const board = rule.participantRole === 'A' ? a[0]! : b[0]!;

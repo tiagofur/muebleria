@@ -142,6 +142,25 @@ func TestJ1PairedContactNegatives(t *testing.T) {
 	}
 }
 
+func TestJ1PairedContactRuleOrder(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	recipe := f.OperationRecipes[0]
+	extra := recipe.Rules[1]
+	extra.RuleID, extra.OperationRole = "Z-copy", "counterbore-alt"
+	extra.OffsetMm = [3]float64{0, 18, 10}
+	recipe.Rules = append(recipe.Rules, extra)
+	got := deriveResolvedContactOperationsForContact(resolved.Contacts[0], plans.Plans[0], f.Boards, f.StationSpecs[0], recipe)
+	if len(got.Issues) != 0 || len(got.Operations) != 9 {
+		t.Fatalf("expected ordered complete operation set, got %+v", got)
+	}
+	if got.Operations[0].Provenance.RuleID != "pilot" || got.Operations[1].Provenance.RuleID != "Z-copy" ||
+		got.Operations[2].Provenance.RuleID != "counterbore" {
+		t.Fatalf("rule order must use codepoint IDs, got %+v", got.Operations[:3])
+	}
+}
+
 func TestJ1StationPlans(t *testing.T) {
 	f := readJ1ContactFixture(t)
 	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
