@@ -12,7 +12,9 @@
 //
 // Does NOT own:
 // - the material catalog or role labels (injected: materialById,
-//   getRoleLabel single implementations), the binding truth, the selection
+//   getRoleLabel, optional getMaterials for the picker's catalog-wide
+//   fallback of roles no definition offers — presentation only), the
+//   binding truth, the selection
 //   truth (js/granete-inspector.js routes the no-selection lane here), any
 //   write surface (R1 is READ: the only bridge call it may issue is
 //   get_design_defaults; working-copy PUTs/host mutations never happen)
@@ -184,7 +186,14 @@
       changeBtn.className = "btn design-insp-change";
       changeBtn.textContent = "Cambiar";
       changeBtn.addEventListener("click", function () {
-        var roleEntry = { role: role, label: label, optionIds: deps.getRoleCandidates(role) };
+        var candidates = deps.getRoleCandidates(role);
+        if ((!candidates || candidates.length === 0) && hasDeps(["getMaterials"])) {
+          // #784 R2 P2: a role no definition offers falls back to the whole
+          // catalog — SOLO presentation/picker; the backend stays the
+          // authority for what is valid.
+          candidates = deps.getMaterials().map(function (material) { return material.id; });
+        }
+        var roleEntry = { role: role, label: label, optionIds: candidates };
         deps.openMaterialPicker(roleEntry, drafted || materialId, function (pickedId) {
           if (!pickedId || pickedId === materialId) {
             delete state.draft[role];
@@ -207,6 +216,15 @@
       row.appendChild(changeBtn);
     }
     return row;
+  }
+
+  // ANY real binding change (design switch or unbound) invalidates every
+  // in-flight request — reads AND applies. A late answer of the previous
+  // design can never pass the requestId correlation again, so it can never
+  // run a fail-closed, show a conflict or alter the new design's state.
+  function invalidateBindingRequests() {
+    state.requestId += 1;
+    state.applyInFlight = false;
   }
 
   function pendingCount() {
@@ -371,12 +389,8 @@
         state.draftBase = null;
         state.draftStale = false;
         state.conflict = null;
-        if (state.applyInFlight) {
-          // Invalidate the in-flight request: its late answer can never
-          // touch the (now authority-less) inspector.
-          state.requestId += 1;
-          state.applyInFlight = false;
-        }
+        // The authority is gone: every in-flight request is dead.
+        invalidateBindingRequests();
       } else {
         state.designId = binding.designId;
         state.projectId = binding.projectId || null;
@@ -390,11 +404,8 @@
           state.draftBase = null;
           state.draftStale = false;
           state.conflict = null;
-          if (state.applyInFlight) {
-            // Same for a design switch: A's in-flight apply is dead.
-            state.requestId += 1;
-            state.applyInFlight = false;
-          }
+          // A design switch kills every in-flight request of the old one.
+          invalidateBindingRequests();
         }
       }
       if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
