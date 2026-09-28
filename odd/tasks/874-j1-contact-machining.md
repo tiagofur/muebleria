@@ -58,7 +58,7 @@ The shared synthetic geometry fixture now independently asserts contact-local fl
 
 A0a authored changed-line categories (current base diff, additions + deletions, including the issue task document): production **338** (Go 195, TS 143); tests **237** (Go 151, TS 86); shared fixture **25**; ODD/docs **65**; total **665**. The owner-approved `size:exception` applies only to this A0a slice. Metadata-only commits do not change behavior or proof.
 
-A0a behavior work-unit commit: `996d3b1bf467a671111a5f700117ad1c4ed57818`; review-correction work-unit commit: `09b2797d980794886fab512234a1129d826bed50`.
+A0a behavior work-unit commit: `996d3b1bf467a671111a5f700117ad1c4ed57818`; ambiguity correction: `09b2797d980794886fab512234a1129d826bed50`; contact-local overlap correction: `d437cf4deabcc801e2a2b987926208b832087cd1`.
 
 Fresh independent review found duplicate contact IDs were reported ambiguous but the first matching contact still resolved, making the result input-order dependent. A consolidated correction added TS and Go RED tests with conflicting same-ID participants in both orders: TS 1 failed/35 passed; Go `TestJ1ConflictingSameIDContactsOmitted` failed while returning `floor-left`. Both resolvers now count IDs before resolution, emit one `CONTACT_AMBIGUOUS`, omit every candidate for that ID, and retain the unrelated `floor-right` contact. Focused TS 36/36, Go engine/golden and domain typecheck GREEN before correction commit. Final exact-HEAD checks are reported in the writer handoff; fresh reviewer readback and CI remain pending.
 
