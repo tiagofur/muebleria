@@ -123,13 +123,18 @@ module Granete
           # the canonical #810 workingVersion token — the verbatim updated_at
           # of the caller's last authoritative read — validated server-side
           # under the write lock (409 VERSION_CONFLICT on mismatch).
-          def update_working_copy(design_id, items:, expected_working_version:, base_revision_id: nil, source_type: nil)
+          def update_working_copy(design_id, items:, expected_working_version:, authoring_defaults: nil,
+                                  base_revision_id: nil, source_type: nil)
             unless expected_working_version.is_a?(String) && !expected_working_version.strip.empty?
               raise ArgumentError, 'expected_working_version es obligatorio (token workingVersion #810)'
             end
 
             payload = { 'items' => items.map(&:to_contract_h),
                         'expected_working_version' => expected_working_version }
+            # #784 R2: the durable Design authoring defaults ride the same
+            # #810 frontier. Omitted (nil) keeps the stored defaults
+            # (legacy nil-keeps); a provided block replaces them wholesale.
+            payload['authoring_defaults'] = authoring_defaults if authoring_defaults
             payload['base_revision_id'] = base_revision_id if base_revision_id
             payload['source_type'] = source_type if source_type
             body = request(:put, "/designs/#{design_id}/working-copy", payload)

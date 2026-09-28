@@ -35,8 +35,16 @@
               "FRENTE": "mat-roble"
             },
             "transform": {
-              "translation_mm": [0.0, 0.0, 0.0],
-              "rotation_deg": [0.0, 0.0, 0.0]
+              "translation_mm": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ]
             },
             "technical_client_locator": {
               "kind": "sketchup_persistent_id",
@@ -65,8 +73,16 @@
             "parameters": {},
             "material_choices": {},
             "transform": {
-              "translation_mm": [0.0, 0.0, 0.0],
-              "rotation_deg": [0.0, 0.0, 0.0]
+              "translation_mm": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ]
             },
             "technical_client_locator": {
               "kind": "sketchup_persistent_id",
@@ -117,8 +133,16 @@
               "FRENTES": "design"
             },
             "transform": {
-              "translation_mm": [0.0, 0.0, 0.0],
-              "rotation_deg": [0.0, 0.0, 0.0]
+              "translation_mm": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ]
             },
             "technical_client_locator": {
               "kind": "sketchup_persistent_id",
@@ -151,8 +175,56 @@
               "INTERIOR": "override"
             },
             "transform": {
-              "translation_mm": [0.0, 0.0, 0.0],
-              "rotation_deg": [0.0, 0.0, 0.0]
+              "translation_mm": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "technical_client_locator": {
+              "kind": "sketchup_persistent_id",
+              "value": "4242"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "apply-design-defaults-preserving-items",
+      "request": {
+        "base_revision_id": "53000000-0000-0000-0000-000000000001",
+        "expected_working_version": "2026-09-28T10:00:00.000000Z",
+        "authoring_defaults": {
+          "materialChoices": {
+            "INTERIOR": "mat-roble",
+            "FRENTES": "mat-blanco"
+          }
+        },
+        "items": [
+          {
+            "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+            "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+            "definition_version": 7,
+            "parameters": {},
+            "material_choices": {
+              "INTERIOR": "mat-blanco"
+            },
+            "transform": {
+              "translation_mm": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ]
             },
             "technical_client_locator": {
               "kind": "sketchup_persistent_id",
