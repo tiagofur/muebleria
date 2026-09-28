@@ -8,7 +8,7 @@
 import { CircleAlert, CheckCircle2, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import type { JoineryRelationshipStatus } from '@granete/domain';
+import type { FingerprintJoineryStatus } from '@granete/domain';
 
 export const JOINERY_STAGE_LABELS_ES: Record<string, string> = {
   RELATIONSHIP_UNSUPPORTED: 'Relación no soportada',
@@ -42,7 +42,7 @@ export interface JoineryRelationshipDiagnostics {
  * operation counts; exported for tests and future consumers (#875).
  */
 export function joineryDiagnosticsModel(
-  statuses: readonly JoineryRelationshipStatus[],
+  statuses: readonly FingerprintJoineryStatus[],
   relationshipOperationCounts: ReadonlyMap<string, number>,
 ): readonly JoineryRelationshipDiagnostics[] {
   return statuses.map((status) => ({
@@ -64,7 +64,7 @@ export function joineryDiagnosticsModel(
 }
 
 export interface JoineryStatusPanelProps {
-  readonly joineryStatuses: readonly JoineryRelationshipStatus[] | null;
+  readonly joineryStatuses: readonly FingerprintJoineryStatus[] | null;
   readonly relationshipOperationCounts?: ReadonlyMap<string, number>;
   readonly loading?: boolean;
   readonly error?: boolean;

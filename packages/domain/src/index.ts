@@ -1486,11 +1486,13 @@ export {
   SKETCHUP_AUTHORING_RESOLVE_SCHEMA_VERSION,
   authoringResolveFingerprint,
   isAuthoringResolveIssueCode,
+  parseAuthoringResolveResponse,
   validateAuthoringResolveRequest,
   type AuthoringComponentOccurrenceV1,
   type AuthoringFurnitureIntentV1,
   type AuthoringHardwarePlacementV1,
   type FingerprintBoard,
+  type FingerprintJoineryStatus,
   type FingerprintPlacement,
   type AuthoringOccurrenceTransformV1,
   type AuthoringResolveIssueCode,
@@ -1503,6 +1505,19 @@ export {
   type ResolvedMachiningV1,
   type ResolvedPreflightV1,
 } from './sketchupAuthoringResolve';
+
+// #875 web authoring-resolve adapter (request builder + fail-closed projection).
+export {
+  WEB_AUTHORING_RESOLVE_CLIENT,
+  WEB_AUTHORING_RESOLVE_CLIENT_VERSION,
+  WEB_AUTHORING_RESOLVE_HOST,
+  WebAuthoringResolveError,
+  buildWebAuthoringResolveRequest,
+  projectJoineryFromResolveResponse,
+  validateWebAuthoringResolveRequest,
+  type WebAuthoringResolveInput,
+  type WebJoineryProjection,
+} from './webAuthoringResolve';
 
 // Smart Parametric Furniture Library (#349, #350, ADR-0002)
 export * from "./smartFurnitureDomain";

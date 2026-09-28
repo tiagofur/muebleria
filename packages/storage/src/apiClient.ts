@@ -1,5 +1,10 @@
 import { GraneteApiError, GraneteNetworkError, parseApiError } from './apiErrors';
 import {
+  type AuthoringResolveRequestV1,
+  type AuthoringResolveResponseV1,
+  parseAuthoringResolveResponse,
+} from '@granete/domain';
+import {
   parseGenerated,
   parseGeneratedArray,
   type HardwareAssetRepresentation,
@@ -137,5 +142,46 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       throw new GraneteApiError(response.status, payload);
     }
     return parseGenerated<HardwareAssetUploadStaged>('HardwareAssetUploadStaged', value);
+  }
+
+  /**
+   * #875: content-addressed workshop catalog revision (the resolve request's
+   * catalogRevision pin). Reads GET /api/furniture/definitions' revisionId.
+   */
+  async getFurnitureCatalogRevision(token: string, signal?: AbortSignal): Promise<string> {
+    const value = await this.request<{ revisionId?: string }>('GET', '/furniture/definitions', {
+      token,
+      signal,
+    });
+    if (typeof value?.revisionId !== 'string' || value.revisionId.length === 0) {
+      throw new GraneteApiError(502, {
+        code: 'INTERNAL_ERROR' as const,
+        message: 'Workshop catalog response carries no revisionId',
+        fieldErrors: {},
+        requestId: '',
+        retryable: true,
+        details: {},
+      });
+    }
+    return value.revisionId;
+  }
+
+  /**
+   * #875: POST the canonical authoring resolve (the same endpoint the
+   * SketchUp extension consumes; deliberately not OpenAPI-modeled — the
+   * response is golden-pinned). The envelope is validated fail-closed via
+   * the domain contract before it reaches any screen.
+   */
+  async resolveFurnitureAuthoring(
+    token: string,
+    request: AuthoringResolveRequestV1,
+    signal?: AbortSignal,
+  ): Promise<AuthoringResolveResponseV1> {
+    const value = await this.request<unknown>('POST', '/furniture/authoring/resolve', {
+      token,
+      body: request,
+      signal,
+    });
+    return parseAuthoringResolveResponse(value, request);
   }
 }

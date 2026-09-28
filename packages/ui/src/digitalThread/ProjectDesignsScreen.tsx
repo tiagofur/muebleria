@@ -53,6 +53,7 @@ import { resolveDesignArtifactUrl } from './designArtifactUrl';
 import { SketchUpPairingModal } from './SketchUpPairingModal';
 import { RevisionSnapshotItemsPanel } from './RevisionSnapshotItemsPanel';
 import { DesignWorkingMaterialsPanel } from './DesignWorkingMaterialsPanel';
+import { JoineryResolveSection, type JoineryResolveItem } from './JoineryResolveSection';
 import './digitalThread.css';
 
 /**
@@ -513,6 +514,21 @@ export function ProjectDesignsScreen({
   });
 
   const workingCopy = workingCopyQuery.data ?? null;
+
+  // #875: content-addressed catalog revision pin for the authoring resolve
+  // (cached per session; a stale pin surfaces as a structured server error
+  // with retry, never silently resolved against moved truth).
+  const catalogRevisionQuery = useQuery({
+    queryKey: ['furniture-catalog-revision'],
+    queryFn: ({ signal }) => api.getFurnitureCatalogRevision(token, signal),
+    staleTime: Infinity,
+  });
+  const joineryItems: readonly JoineryResolveItem[] = (workingCopy?.items ?? []).map((item) => ({
+    id: item.id,
+    furnitureDefinitionId: item.furniture_definition_id ?? '',
+    parameters: item.parameters,
+    materialChoices: item.material_choices,
+  })).filter((item) => item.furnitureDefinitionId !== '');
   // #641: only a successful 404 is honest absence; any other failure of the
   // working-copy request is a visible, actionable error (never a hidden banner).
   const workingCopyAbsent = workingCopyQuery.isSuccess && workingCopyQuery.data === null;
@@ -1134,6 +1150,24 @@ export function ProjectDesignsScreen({
                   canMutate={canMutate}
                   queryKeys={queryKeys}
                   catalogMaterials={catalogMaterials}
+                />
+              )}
+
+              {/* #875 — Construcción y uniones: estados joinery resueltos por el
+                  motor canónico de Go para cada mueble del borrador. React sólo
+                  arma el request y muestra la respuesta; nunca resuelve
+                  contactos ni calcula maquinado. */}
+              {activeDesignId && (
+                <JoineryResolveSection
+                  designId={activeDesignId}
+                  catalogRevision={catalogRevisionQuery.data ?? null}
+                  revisionLoading={catalogRevisionQuery.isPending}
+                  revisionError={catalogRevisionQuery.isError}
+                  onRevisionRetry={() => void catalogRevisionQuery.refetch()}
+                  items={joineryItems}
+                  resolve={(tokenValue, request, signal) =>
+                    api.resolveFurnitureAuthoring(tokenValue, request, signal)}
+                  token={token}
                 />
               )}
 

@@ -18,9 +18,9 @@ export type SchemaIdentityV1 = {
 };
 
 export type AuthoringSource = {
-  readonly client: 'granete-for-sketchup';
+  readonly client: 'granete-for-sketchup' | 'granete-web';
   readonly clientVersion: string;
-  readonly host: 'sketchup';
+  readonly host: 'sketchup' | 'web';
   readonly hostVersion: string;
 };
 
