@@ -432,7 +432,11 @@
     } else if (contract.type === "boolean") {
       input = document.createElement("input");
       input.type = "checkbox";
+      // #471 tri-state: true+true -> checked; false+false -> unchecked;
+      // mixed -> indeterminate. An unchecked box must never be readable as
+      // "false" when the real state is mixed.
       if (common === true) input.checked = true;
+      if (common === null) input.indeterminate = true;
     } else {
       input = document.createElement("input");
       input.className = "input";
@@ -446,11 +450,18 @@
       else input.placeholder = "Mixto";
     }
     input.addEventListener("change", function () {
-      var raw = input.type === "checkbox" ? input.checked : input.value;
-      if (raw === "" || raw === null || raw === undefined) {
-        delete batchParamEdits[name];
+      if (input.type === "checkbox") {
+        // Resolving the tri-state records exactly the boolean chosen; an
+        // untouched indeterminate box never fires change and sends nothing.
+        input.indeterminate = false;
+        batchParamEdits[name] = input.checked;
       } else {
-        batchParamEdits[name] = contract.type === "number" ? Number(raw) : raw;
+        var raw = input.value;
+        if (raw === "" || raw === null || raw === undefined) {
+          delete batchParamEdits[name];
+        } else {
+          batchParamEdits[name] = contract.type === "number" ? Number(raw) : raw;
+        }
       }
       updateBatchFooter(selectedContext && selectedContext.furniture || [], selectedContext);
     });

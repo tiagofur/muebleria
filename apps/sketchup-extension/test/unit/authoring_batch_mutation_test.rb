@@ -46,6 +46,19 @@ class AuthoringBatchMutationTest < Minitest::Test
     end
   end
 
+  # Builds a coordinator with a custom selection restorer for wiring proofs.
+  def coordinator_with(restorer)
+    replacement = HOST::AuthoringMutationCoordinator.new(
+      model_provider: -> { @model },
+      logger: Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new),
+      selection_restorer: restorer,
+      preflight_tracker: HOST::PreflightTracker.new
+    )
+    # Keep @coordinator intact for other tests; the block's value is the
+    # method's value.
+    yield replacement
+  end
+
   def batch_command(ref, resolve: golden_resolve('02-move-shelf'), apply_mode: :commit,
                     context_valid: -> { true })
     FIXTURE.build_command(
@@ -139,6 +152,33 @@ class AuthoringBatchMutationTest < Minitest::Test
     assert_includes outcome.reason, 'inst-b'
     assert model.operations.empty?, 'a stale batch never opens a host operation'
     assert_equal 'idle', coordinator.state
+  end
+
+  def test_batch_restore_is_one_restore_many_call_with_every_target
+    calls = []
+    batch_restorer = Class.new do
+      def initialize(calls)
+        @calls = calls
+      end
+
+      def restore_many(targets)
+        @calls << [:restore_many, targets]
+        %w[r-a r-b]
+      end
+
+      def restore(_target)
+        @calls << [:restore_single]
+        nil
+      end
+    end.new(calls)
+    coordinator_with(batch_restorer) do |coordinator|
+      outcome = coordinator.execute_batch([batch_command('inst-a'), batch_command('inst-b')])
+
+      assert outcome.committed?
+      assert_equal [[:restore_many,
+                     [{ 'furnitureInstanceRef' => 'inst-a' }, { 'furnitureInstanceRef' => 'inst-b' }]]],
+                   calls, 'exactly ONE restore_many carrying every target — no per-member restores'
+    end
   end
 
   def test_second_batch_while_busy_is_soft_cancelled

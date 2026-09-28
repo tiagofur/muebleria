@@ -96,6 +96,10 @@ module Granete
       def test_batch_apply_one_operation_and_one_undo_restores_every_member
         entities = place_batch([1, 2, 3])
         original_refs = entities.map { |e| metadata_store.read(e).dig('identity', 'instanceRef') }
+        # The user flow under test: SELECT the whole batch, then Apply.
+        # (Placement assist leaves only the last placed furniture
+        # selected — the batch must be explicitly selected first.)
+        select_all(entities)
 
         commands = entities.map { |entity| build_command(entity, shelf_count: 3) }
         starts_before = @transaction_observer.starts
@@ -115,6 +119,18 @@ module Granete
                        'every member received the shared edit'
         end
 
+        # Review blocker 1: the Apply must PRESERVE the whole
+        # multi-selection — the Inspector stays in batch mode instead of
+        # collapsing to the last restored member.
+        assert_equal 3, model.selection.length, 'the whole batch stays selected after Apply'
+        payload = resolve_selection_payload
+        assert_equal 'batch', payload['kind'], 'post-Apply selection resolves to a BatchContext'
+        assert_equal 3, payload['furniture'].length
+        post_refs = payload['furniture'].map { |f| f['furnitureInstanceRef'] }.sort
+        assert_equal original_refs.sort, post_refs, 'the same three semantic identities stay selected'
+        assert payload['furniture'].all? { |f| f['parameters']['shelfCount'] == 3 },
+               'the published contexts carry the applied value'
+
         # ONE undo step restores the previous mixed state of all three.
         Sketchup.send_action('editUndo:')
         restored = granete_furniture_instances
@@ -123,6 +139,12 @@ module Granete
         assert_equal [1, 2, 3], restored_counts, 'one undo restores each member to its own previous value'
         restored_refs = restored.map { |e| metadata_store.read(e).dig('identity', 'instanceRef') }.sort
         assert_equal original_refs.sort, restored_refs, 'identities survive the whole batch cycle'
+        # Post-undo selection honestly reflects whatever the host kept:
+        # when it still holds several members it MUST resolve to batch.
+        return unless model.selection.length >= 2
+
+        assert_equal 'batch', resolve_selection_payload['kind'],
+                     'a surviving multi-selection still resolves to batch after undo'
       end
 
       # C. Resolve failure on the second member: zero operations, everyone intact

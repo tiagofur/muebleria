@@ -72,13 +72,8 @@ module Granete
         def execute_coordinated_batch_update(dialog, payload, command_message_id: nil)
           items = payload['items'].is_a?(Array) ? payload['items'] : []
           commands = items.map { |item| build_update_command(item, nil) }
-          outcome = if !items.empty? && commands.none?(&:nil?)
-                      mutation_coordinator.execute_batch(commands.compact, command_message_id: command_message_id)
-                    else
-                      Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
-                                                reason: 'algún mueble del lote no se encontró (definición o instancia)',
-                                                semantic_target: {})
-                    end.with_mutation_name('batch_update_furniture')
+          outcome = batch_outcome_for(items, commands, command_message_id)
+                    .with_mutation_name('batch_update_furniture')
           legacy = { 'success' => outcome.committed?,
                      'applied' => outcome.committed? ? outcome.result['applied'] : 0,
                      'total' => items.length,
@@ -99,6 +94,25 @@ module Granete
                                          .with_mutation_name('batch_update_furniture')
           push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
           outcome
+        end
+
+        # Builds the batch outcome: contract violations and unbuildable
+        # members reject BEFORE any resolve or host mutation — never a
+        # silent dedup or partial application.
+        def batch_outcome_for(items, commands, command_message_id)
+          reason = Host::BatchItemsContract.validate(items)
+          if reason
+            return Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
+                                             reason: reason, semantic_target: {})
+          end
+          if items.empty? || commands.any?(&:nil?)
+            return Host::MutationOutcome.new(
+              outcome: 'rejected', category: 'invalid_authoring_input',
+              reason: 'algún mueble del lote no se encontró (definición o instancia)', semantic_target: {}
+            )
+          end
+
+          mutation_coordinator.execute_batch(commands.compact, command_message_id: command_message_id)
         end
 
         def execute_coordinated_hardware_update(dialog, payload, semantic_target: nil, command_message_id: nil)

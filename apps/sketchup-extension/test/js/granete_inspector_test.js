@@ -683,6 +683,66 @@ test('batch params: editable only with a common contract — range intersection,
     'a disjoint range renders the honest no-common-contract note, not an input');
 });
 
+test('batch boolean: true+false is indeterminate, common values are exact, user resolution records the choice', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+
+  const render = (a, b) => {
+    const def = (v) => ({
+      parameters: [{ name: 'softClose', type: 'boolean', defaultValue: v }]
+    });
+    api.onSelectionChange(batchContext([
+      batchMember({ definition: def(a), parameters: { softClose: a } }),
+      batchMember({ furnitureInstanceRef: 'furn-2', definition: def(b), parameters: { softClose: b } })
+    ], [], true));
+    return batchInputs(sandbox).find((i) => i.label === 'softClose');
+  };
+
+  // Common true: checked, resolved.
+  const commonTrue = render(true, true);
+  assert(commonTrue, 'boolean renders an input');
+  assert.strictEqual(commonTrue.input.checked, true, 'true+true -> checked');
+  assert(!commonTrue.input.indeterminate, 'true+true -> not indeterminate');
+
+  // Common false: unchecked, resolved — never confused with mixed.
+  const commonFalse = render(false, false);
+  assert.strictEqual(commonFalse.input.checked, false, 'false+false -> unchecked');
+  assert(!commonFalse.input.indeterminate, 'false+false -> not indeterminate');
+
+  // Mixed: indeterminate tri-state, no edit recorded, footer hidden.
+  const mixed = render(true, false);
+  assert(mixed.input.indeterminate === true, 'true+false -> indeterminate');
+  assert.strictEqual(mixed.input.checked, false, 'visual base state carries no claim');
+  assert(!visible(el(sandbox, 'inspector-batch-footer')), 'an untouched mixed boolean edits nothing');
+
+  // User resolves mixed -> true.
+  mixed.input.checked = true;
+  mixed.input.dispatchEvent({ type: 'change' });
+  assert(!mixed.input.indeterminate, 'resolving clears indeterminate');
+  el(sandbox, 'btn-batch-apply').click();
+  let submit = sandbox.__mutation.find((c) => c.action === 'submitBatchUpdate');
+  assert(submit, 'Apply rides submitBatchUpdate');
+  let softClose = submit.items.map((i) => i.parameters.softClose);
+  assert(softClose.every((v) => v === true), 'the chosen true applies to every member');
+
+  // User resolves mixed -> false.
+  sandbox.__mutation.length = 0;
+  const mixedAgain = render(true, false);
+  mixedAgain.input.checked = false;
+  mixedAgain.input.dispatchEvent({ type: 'change' });
+  assert(!mixedAgain.input.indeterminate, 'resolving to false also clears indeterminate');
+  el(sandbox, 'btn-batch-apply').click();
+  submit = sandbox.__mutation.find((c) => c.action === 'submitBatchUpdate');
+  softClose = submit.items.map((i) => i.parameters.softClose);
+  assert(softClose.every((v) => v === false), 'the chosen false applies to every member');
+});
+
 test('batch params: an edit merges into the per-member intent with current parameters', () => {
   const sandbox = buildModuleSandbox({
     GraneteUI: {

@@ -369,11 +369,15 @@ module Granete
           applied
         end
 
-        # Post-commit work rides each member exactly as a single mutation
-        # would: selection restore and preflight invalidation per target.
+        # Post-commit work: preflight invalidation rides each member
+        # exactly as a single mutation would, but the SELECTION is restored
+        # as one batch — restore_many locates every member by semantic
+        # identity (rebuilds replace wrappers) with ONE clear, so the
+        # multi-selection survives the Apply instead of collapsing to the
+        # last restored member.
         def post_commit_batch(commands, request_contexts, results, journal)
+          restore_batch_selection(commands)
           commands.each_with_index do |command, index|
-            restore_selection(command, results[index])
             invalidate_preflight(command, results[index], request_contexts[index])
           end
           @interaction_state.transition!('committed')
@@ -392,6 +396,25 @@ module Granete
             build_outcome(commands.first, 'aborted', category: category, reason: reason,
                                                      request_context: request_contexts.first)
           )
+        end
+
+        # #471: one cohesive batch restore. A restorer that knows how to
+        # re-select many targets (Host::SelectionRestore#restore_many)
+        # keeps the WHOLE selection; a legacy callable restorer falls back
+        # to per-member restores. View state only: a restore failure never
+        # fails the committed batch.
+        def restore_batch_selection(commands)
+          targets = commands.map(&:semantic_target)
+          if @selection_restorer.respond_to?(:restore_many)
+            restored = @selection_restorer.restore_many(targets)
+            @logger&.debug('batch_selection_restore_skipped') if restored.nil? || restored.empty?
+            restored
+          else
+            commands.map { |command| restore_selection(command, nil) }
+          end
+        rescue StandardError => e
+          @logger&.warn('batch_selection_restore_failed', error: e)
+          nil
         end
 
         # First member whose exact semantic context no longer holds, with

@@ -84,6 +84,7 @@ module Granete
         selection/capability_policy
         selection/resolver
         selection/batch_context
+        host/batch_items_contract
         observers/selection_observer
         observers/entities_observer
         tools/internal_component_move_tool

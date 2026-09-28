@@ -193,3 +193,34 @@ Delivery: PR `Refs #471 / Delivery: partial|complete` según cobertura del DoD
 - Pendiente explícito para #784 (su rollout consume este primitivo):
   conteos compatible/afectados/con-override/no-soportados del rollout y
   preservación de overrides por defecto en ese flujo.
+
+## Registro ronda de revisión PR #887 (2026-09-28)
+
+- **Blocker 1 (selección colapsada post-Apply) FIXED**: RED test primero
+  (`restore_many` NoMethodError), luego `SelectionRestore#restore_many`
+  (UNA selección.clear, localización por identidad semántica —jamás
+  persistent_id/nombre/posición—, subset honesto si falta un miembro,
+  jamás falla el commit) + `restore_batch_selection` en el coordinador
+  (una sola llamada restore_many; fallback a restores per-miembro para
+  restorers legacy). El smoke extendido reveló además un gap del PROPIO
+  test: nunca seleccionaba los 3 muebles antes del Apply (la asistencia
+  de colocación deja sólo el último) — corregido con `select_all`
+  explícito (el flujo del reviewer lo exige).
+- **Blocker 2 (boolean mixed ≡ false) FIXED**: tri-state real —
+  true+true→checked, false+false→unchecked, mixto→`indeterminate=true`;
+  resolver el mixto graba exactamente el boolean elegido; un
+  indeterminate intacto no envía nada. 5 casos JS cubiertos.
+- **Hardening**: `Host::BatchItemsContract` — items Array no vacío,
+  identidad y definitionId presentes, identidades semánticas ÚNICAS
+  (A,A,B → rechazo explícito 'el lote contiene la misma identidad más de
+  una vez' ANTES de resolver/aplicar; namespaces id/ref separados).
+- **Ratificación**: issuecomment-5863801538 en #471 — las filas de
+  aceptación del rollout #784 quedan delegadas a #784 por decisión del
+  owner; Closes #471/complete es honesto.
+- Gates: suites focales 6+6+7+9+4 Ruby y 34 JS 0 failures; rake verify
+  0 ofensas 1253+6 runs 0 failures. **Smoke host real re-ejecutado sobre
+  el HEAD exacto: 3/3 PASS, 32 assertions** (post-Apply selección=3,
+  BatchContext con mismas 3 identidades, un Undo restaura valores
+  propios). Boolean host smoke: NOT_EXERCISED (fixture local sin
+  parámetro boolean; cobertura JS/unit). RBZ de pruebas reconstruido
+  (94e6aeb4…) e instalado.

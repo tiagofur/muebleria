@@ -24,10 +24,9 @@ module Granete
           model = @model_provider.call
           return nil unless model.respond_to?(:selection)
 
-          root = locate_furniture_root(model, semantic_target)
-          return nil unless root
+          target = locate_target(model, semantic_target)
+          return nil unless target
 
-          target = locate_child(root, semantic_target) || root
           select(model, target)
           target
         rescue StandardError => e
@@ -35,7 +34,35 @@ module Granete
           nil
         end
 
+        # #471 batch restore: ONE clear, then every target located by the
+        # SAME semantic identity rules as #restore (rebuilds legitimately
+        # replace wrappers, so identity — never persistent_id, entityID,
+        # name or position — is the only locator). View state only: a
+        # member that cannot be located is skipped with a warn and never
+        # fails the committed batch; the honest subset is re-selected.
+        def restore_many(semantic_targets)
+          model = @model_provider.call
+          return [] unless model.respond_to?(:selection)
+
+          targets = Array(semantic_targets).filter_map { |target| locate_target(model, target) }
+          return [] if targets.empty?
+
+          model.selection.clear
+          targets.each { |target| model.selection.add(target) }
+          targets
+        rescue StandardError => e
+          @logger&.warn('batch_selection_restore_failed', error: e)
+          []
+        end
+
         private
+
+        def locate_target(model, semantic_target)
+          root = locate_furniture_root(model, semantic_target)
+          return nil unless root
+
+          locate_child(root, semantic_target) || root
+        end
 
         def locate_furniture_root(model, target)
           if target['furnitureInstanceId'] && model.respond_to?(:entities)
