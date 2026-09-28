@@ -182,7 +182,7 @@ class ApplicationTest < Minitest::Test
       confirm_placement_instance
       connect_model connect_with_code create_project_furniture delete_selected_furniture dialog_ready
       emit_initial_quote enroll
-      get_catalog get_commercial_projection get_model_binding get_project_furniture insert_furniture
+      get_catalog get_commercial_projection get_design_defaults get_model_binding get_project_furniture insert_furniture
       list_binding_designs list_binding_projects list_bootstrap_customers logout
       manufacturing_inspection open_external_url open_material_selector
       place_furniture_instance poll_enrollment preflight_review prepare_hardware_mount publish_design_revision
