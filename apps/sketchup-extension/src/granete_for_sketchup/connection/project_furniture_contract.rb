@@ -17,7 +17,10 @@ module Granete
           # updated_at is kept as the VERBATIM server string: it is the
           # canonical workingVersion token every write must echo back as
           # expected_working_version (#810).
+          # authoring_defaults is the durable Design-scoped defaults block
+          # (#784): {role => material id}, canonical empty map when absent.
           WorkingCopy = Struct.new(:design_id, :project_id, :base_revision_id, :items, :updated_at,
+                                   :authoring_defaults,
                                    keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
                                 :display_name, :display_dimensions, :display_material_choices,
@@ -132,8 +135,34 @@ module Granete
               WorkingCopy.new(
                 design_id: body['design_id'], project_id: body['project_id'],
                 base_revision_id: base, updated_at: updated_at,
+                authoring_defaults: parse_authoring_defaults!(body['authoring_defaults']),
                 items: body['items'].map { |entry| parse_working_item!(entry) }
               )
+            end
+
+            # #784 durable Design authoring defaults. Only the known wrapper
+            # is accepted (materialChoices; hardware/parameters stay out
+            # until a real capability contract exists) — unknown top-level
+            # keys reject instead of guessing. Absence is the canonical
+            # empty map; Ruby never recalculates or completes defaults.
+            def self.parse_authoring_defaults!(raw)
+              return {} if raw.nil?
+
+              raise ContractError, 'authoring_defaults inválidos' unless raw.is_a?(Hash)
+              unless (raw.keys - ['materialChoices']).empty?
+                raise ContractError,
+                      "authoring_defaults con claves desconocidas: #{(raw.keys - ['materialChoices']).inspect}"
+              end
+
+              choices = raw['materialChoices']
+              return {} if choices.nil?
+              unless choices.is_a?(Hash) &&
+                     choices.keys.all? { |role| role.is_a?(String) && !role.strip.empty? } &&
+                     choices.values.all?(String)
+                raise ContractError, 'materialChoices de authoring_defaults inválidos'
+              end
+
+              choices
             end
 
             def self.parse_working_item!(entry)
