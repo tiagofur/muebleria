@@ -41,7 +41,7 @@ promoted to installed-machine evidence. #352 owns field validation.
 
 ## Actionable tasks
 
-- [ ] **B1 — Existing dossier and evidence matrix.** Reconcile the confirmed
+- [x] **B1 — Existing dossier and evidence matrix.** Reconcile the confirmed
   BHX 050 identity with still-unknown controller/software version, native
   format/grammar, encoding, units, axes/origin, faces, tools, clamps, limits,
   setup/reorientation, and transfer workflow. For each, record source,
@@ -71,13 +71,29 @@ promoted to installed-machine evidence. #352 owns field validation.
 
 ## Progress and evidence
 
-- B1: in progress. Initial worktree and `origin/main` both
-  `90cc2bdcc5220efb9c97df48fbefc9479cdf8228`; preflight
-  `PREFLIGHT_OK_NOT_VERIFIED` and clean before edits. Work-unit commit,
-  V0 checks, independent review, and CI: pending.
+- B1: documentary BHX01 outcome observed in the existing Client A dossier.
+  Accepted rationale: the owner-reported machine identity stays separate from
+  missing receiver grammar, setup, and capability evidence; official HOMAG
+  product references remain public context, not installation proof.
+  Work-unit commit `73a2415d1e41d9453daae3304acbf9ed13a150c6` on base
+  `90cc2bdcc5220efb9c97df48fbefc9479cdf8228` changed 147 additions and
+  23 deletions (170 authored lines). B1 PR slice is this work unit plus this
+  evidence-only tracking commit; exact final HEAD is recorded at handoff.
+  V0: `git diff --check`, `git diff --cached --check`, and
+  `git show --check --oneline HEAD` passed; 12 required matrix fields and 12
+  Markdown links had zero missing local targets. Both official HOMAG links
+  were read directly. `python3 scripts/verify_affected.py --base origin/main
+  --plan` succeeded but conservatively selected all gates because the new
+  ODD path is unknown to the selector; that plan is not a test result.
+  `python3 scripts/factory_preflight.py --require-clean` reported a clean
+  worktree and `PREFLIGHT_OK_NOT_VERIFIED` after the work-unit commit.
+  V1: N/A for passive documentation. V2 receiver/physical proof: `NOT_RUN`
+  under #352, with no compatibility claim. Independent review and exact-HEAD
+  CI: pending. RDD assessment: leader-owned, pending.
 - B2: not started. No neutral planner, native serializer, or machine proof
   claimed by this task file.
-- Next: complete B1, commit its cohesive work unit, mirror this full document
-  to Engram topic `odd/879-bhx-offline-foundation/tasks`, then hand the exact
-  B1 candidate to the leader. B2 starts only after reconciling its input seam
-  and this document; the existing field-evidence blockers remain explicit.
+- Next: refresh the full Engram mirror at
+  `odd/879-bhx-offline-foundation/tasks` and hand the exact B1 HEAD to the
+  leader for independent review and CI/PR decisions. B2 starts only after
+  reconciling its input seam and this document; field-evidence blockers remain
+  explicit.
