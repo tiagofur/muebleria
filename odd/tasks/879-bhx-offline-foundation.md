@@ -200,7 +200,13 @@ promoted to installed-machine evidence. #352 owns field validation.
   path is unknown; it executed none. Runtime receiver/host harness: N/A for
   pure geometry; V2 receiver/physical `NOT_RUN`. Rollback removes only this
   geometry module/test, its public export, and this B2b-a checkpoint, leaving
-  B1/B2a intact. Work-unit commit and clean preflight follow this checkpoint.
+  B1/B2a intact. Work-unit commit
+  `85ebadc232e1d9e8561dfcb5df0cde1eab6fc3c1` on exact base
+  `98d6d9491a388555549f2a6ba1f981a734f0284d` contains 263 additions
+  and 8 deletions (271 authored lines), including 132 production lines.
+  `git show --check --oneline HEAD` passed; clean preflight returned
+  `PREFLIGHT_OK_NOT_VERIFIED` and ran no tests. Independent review and CI are
+  pending and parent-owned; this source work unit has no planner API.
 - Next: independent exact-HEAD B2b-a review and parent-owned delivery, then
   B2b-b coverage from the accepted geometry base. Native output and receiver
   validation remain pending.
