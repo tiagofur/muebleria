@@ -80,4 +80,14 @@ describe('neutral bore geometry (#879 B2b-a)', () => {
       entryFace: 'diagonal' as MachiningFace,
     }).reasons).toContain('INVALID_ENTRY_FACE');
   });
+  it('returns a structured non-fabricable result for null and undefined input', () => {
+    for (const malformed of [null, undefined]) {
+      const result = evaluateNeutralBoreGeometry(malformed as unknown as NeutralBoreGeometryInput);
+      expect(result.kind).toBe('neutral-bore-geometry');
+      expect(result.nonFabricable).toBe(true);
+      expect(result.geometricallyValid).toBe(false);
+      expect(result.reasons).toContain('SYNTHETIC_SOURCE_REQUIRED');
+      expect(result.reasons).toContain('INVALID_PIECE_DIMENSIONS');
+    }
+  });
 });

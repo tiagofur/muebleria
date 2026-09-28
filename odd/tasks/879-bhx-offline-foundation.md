@@ -92,13 +92,19 @@ promoted to installed-machine evidence. #352 owns field validation.
     independent numeric positive/negative Vitest, typecheck, affected plan,
     diff check, and clean preflight. Branch `codex/879-bhx-b2b-geometry` from
     B2a merge commit `98d6d9491a388555549f2a6ba1f981a734f0284d`.
-  - [ ] **B2b-b — Supported-setup coverage.** Consume B2b-a geometry and
+  - [x] **B2b-b — Supported-setup coverage.** Consume B2b-a geometry and
     B2a frames in the explicit per-occurrence planner. Preserve integrity
     blockers, immutable manifest snapshots, fail-closed null inputs, setup
     support, and receiver-unknown non-fabricable output. Strict TDD,
     focused/full domain Vitest, typecheck, affected plan, diff check, clean
-    preflight; V2 `NOT_RUN`. Branch from B2b-a HEAD, then rebase onto its
-    eventual main merge before publication.
+    preflight; V2 `NOT_RUN`. Branch `codex/879-bhx-b2b-coverage` from frozen
+    B2b-a HEAD `c07197b5463cf7ac8b872e4985e9ec2b48560b96`, then rebase
+    onto its eventual main merge before publication. Test every required-entry
+    accounting and operation/source identity, malformed/null fixtures,
+    deterministic setup selection, oriented envelope, face/axis/tool/key/
+    clearance support, transformed candidate coordinates, and caller-mutation
+    isolation. The planner must call the B2b-a evaluator rather than duplicate
+    its geometry rules; no setup assignment is valid on geometry failure.
 
 ## Progress and evidence
 
@@ -207,6 +213,48 @@ promoted to installed-machine evidence. #352 owns field validation.
   `git show --check --oneline HEAD` passed; clean preflight returned
   `PREFLIGHT_OK_NOT_VERIFIED` and ran no tests. Independent review and CI are
   pending and parent-owned; this source work unit has no planner API.
-- Next: independent exact-HEAD B2b-a review and parent-owned delivery, then
-  B2b-b coverage from the accepted geometry base. Native output and receiver
+- B2b-b start checkpoint: separate clean managed worktree at frozen B2b-a
+  HEAD `c07197b5463cf7ac8b872e4985e9ec2b48560b96`; first branch remains
+  untouched. The preserved combined `codex/879-bhx-b2b` branch is recovery
+  context, not a deliverable. B2b-b is one cohesive coverage behavior:
+  splitting identity, setup eligibility, and manifest assignment into separate
+  public PRs would expose an unchecked planner contract. Strict TDD runner is
+  `pnpm --filter @granete/domain exec vitest run
+  src/neutralMachiningPlan.test.ts`; full runner is
+  `pnpm --filter @granete/domain test`. RED is required before planner source.
+  B2b-a review/CI and parent-owned PR publication remain pending.
+- B2b-b implementation checkpoint: the pure planner consumes
+  B2b-a `evaluateNeutralBoreGeometry` and B2a setup envelopes/rigid frames;
+  it never writes native bytes or infers installed capabilities. Every
+  required entry yields one assigned or blocked record; assigned records bind
+  deep-frozen operation/source/frame snapshots, and the whole candidate is
+  frozen. Setup candidates with malformed capability entries are blocked even
+  when another entry matches. Strict TDD RED: focused Vitest failed to load
+  the absent planner module; later tests observed two failures for mutable
+  manifests/null collections and one for malformed extra setup capability.
+  GREEN/REFACTOR: focused Vitest 24/24, full domain 117 files/1,670 tests,
+  domain typecheck, and `git diff --check` passed. The affected-check plan
+  selected all gates because the ODD path is unknown; it ran none of those
+  other gates. Runtime receiver/host harness: N/A for pure offline planning;
+  V2 receiver/physical `NOT_RUN`. Rollback removes only the planner module,
+  its tests/public export, and B2b-b checkpoint; prior geometry remains.
+  Work-unit commit `19ad24e962eb59e1267a00d63520ef098395271f` on frozen
+  B2b-a base `c07197b5463cf7ac8b872e4985e9ec2b48560b96` contains 686
+  additions and 4 deletions (690 authored lines), including 301 production
+  lines. `git show --check --oneline HEAD` passed. Clean preflight reported
+  `PREFLIGHT_OK_NOT_VERIFIED` and ran no tests. The 451–750 size exception is
+  conditional on independent reviewer cohesion confirmation, not self-granted.
+  Independent exact-HEAD review, CI, size exception, and PR are parent-owned
+  and pending; this local checkpoint claims none of them.
+- Next: hand off the local B2b-b candidate without changing B2b-a. Parent
+  reviews/publishes B2b-a first, then B2b-b rebases onto its
+  merged main before fresh exact-HEAD review/CI. Native output and receiver
   validation remain pending.
+
+## B2b-b publication reconciliation — 2026-09-28 (GLM writer)
+
+B2b-a merged to main as PR #890 (`de2fd1b5`). The preserved coverage candidate (`24bb060c`, built on the frozen B2b-a base) cherry-picked cleanly onto `de2fd1b5` as `feat/879-bhx-b2b-b` (planner + tests + exports + ODD; 693 authored additions), then the two outstanding review blockers were closed with strict TDD on top:
+
+- RED observed for `planNeutralMachining(null)`/`(undefined)` (TypeError at `input.source`), for the missing `complete` flag, and for `evaluateNeutralBoreGeometry(null)` (TypeError). GREEN: a root-null coerced empty record drives every integrity blocker (no throw), the candidate now exposes `complete === true` only when every required operation is assigned exactly once (empty/duplicate/blocked required sets stay false), and the B2b-a geometry seam returns a structured non-fabricable result for null/undefined roots. Existing deep-freeze/no-alias manifest proofs unchanged and still green.
+- Focused Vitest 37/37, full domain 1,676/1,676, and domain typecheck pass on this worktree. `NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED` remains an unconditional blocker; no native output, receiver capability, or machine claim was added.
+- Fresh exact-HEAD independent review, CI/Publication, and PR remain the gates; the size stays under the owner's ≤950 authorization. Native program generation stays out of scope pending real receiver data.
