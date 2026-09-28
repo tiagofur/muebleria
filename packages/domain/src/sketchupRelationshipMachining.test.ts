@@ -277,6 +277,38 @@ describe('J1-A explicit occurrence contacts', () => {
     expect(resolveExplicitContacts(changed)).toEqual(resolveExplicitContacts(fixture));
   });
 
+  it('keeps contact-frame overlaps local under a global translation', () => {
+    const delta = [73, -41, 19] as const;
+    const neighbor = { ...fixture.boards[1]!, occurrenceId: 'unanchored-neighbor' };
+    const translated = { ...fixture, boards: [...fixture.boards, neighbor].map((board) => ({
+      ...board,
+      translationMm: board.translationMm.map((value, index) => value + delta[index]!) as [number, number, number],
+    })) };
+    const result = resolveExplicitContacts(translated);
+    expect(result.issues).toEqual([]);
+    expect(result.contacts.map((contact) => contact.contactId)).toEqual(['floor-left', 'floor-right']);
+    expect(result.contacts).toEqual([
+      { ...contactFixture.expected[0], frame: { ...contactFixture.expected[0]!.frame, originAssemblyMm: [91, -11, 46] } },
+      { ...contactFixture.expected[1], frame: { ...contactFixture.expected[1]!.frame, originAssemblyMm: [655, 39, 46] } },
+    ]);
+  });
+
+  it('rotates physical frames without changing local overlap lengths', () => {
+    const rotate = ([x, y, z]: readonly [number, number, number]): [number, number, number] =>
+      [y === 0 ? 0 : -y, x, z];
+    const rotated = { ...fixture, boards: fixture.boards.map((board) => ({
+      ...board,
+      translationMm: rotate(board.translationMm),
+      basis: { x: rotate(board.basis.x), y: rotate(board.basis.y), z: rotate(board.basis.z) },
+    })) };
+    const result = resolveExplicitContacts(rotated);
+    expect(result.issues).toEqual([]);
+    expect(result.contacts).toEqual([
+      { ...contactFixture.expected[0], frame: { originAssemblyMm: [-30, 18, 27], axisAssembly: [-1, 0, 0], normalAssembly: [0, -1, 0] } },
+      { ...contactFixture.expected[1], frame: { originAssemblyMm: [-80, 582, 27], axisAssembly: [-1, 0, 0], normalAssembly: [0, 1, 0] } },
+    ]);
+  });
+
   it('omits every conflicting same-ID contact regardless of input order', () => {
     const conflicting = { ...fixture.contacts[0]!, participantB: 'side-right-1', faceA: 'top' as const };
     for (const duplicates of [[fixture.contacts[0]!, conflicting], [conflicting, fixture.contacts[0]!]]) {

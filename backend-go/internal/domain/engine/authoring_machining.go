@@ -753,6 +753,7 @@ type ResolvedContact struct {
 		AxisAssembly     [3]float64 `json:"axisAssembly"`
 		NormalAssembly   [3]float64 `json:"normalAssembly"`
 	} `json:"frame"`
+	// OverlapMm is measured from the frame origin along its axis.
 	OverlapMm [2]float64 `json:"overlapMm"`
 }
 
@@ -912,7 +913,7 @@ func resolveExplicitContacts(boards []ContactBoard, intents []ExplicitContact, r
 		}
 		origin := contactAdd(contactAdd(ac[0], a.Basis.X, start-dot3(ac[0], a.Basis.X)),
 			a.Basis.Y, (crossStart+crossEnd)/2-dot3(ac[0], a.Basis.Y))
-		resolved := ResolvedContact{ExplicitContact: intent, OverlapMm: [2]float64{start, end}}
+		resolved := ResolvedContact{ExplicitContact: intent, OverlapMm: [2]float64{0, end - start}}
 		resolved.Frame.OriginAssemblyMm, resolved.Frame.AxisAssembly, resolved.Frame.NormalAssembly = origin, a.Basis.X, an
 		result.Contacts = append(result.Contacts, resolved)
 	}

@@ -548,6 +548,7 @@ export interface ContactResolutionInput {
 
 export interface ResolvedContact extends ExplicitContact {
   readonly frame: { readonly originAssemblyMm: Vec3; readonly axisAssembly: Vec3; readonly normalAssembly: Vec3 };
+  /** Useful interval measured from frame.originAssemblyMm along frame.axisAssembly. */
   readonly overlapMm: readonly [number, number];
 }
 
@@ -653,7 +654,7 @@ export function resolveExplicitContacts(input: ContactResolutionInput): ContactR
     const origin = contactScale(contactScale(corner, axis, start - contactDot(corner, axis)),
       across, (crossStart + crossEnd) / 2 - contactDot(corner, across));
     contacts.push({ ...intent, frame: { originAssemblyMm: origin, axisAssembly: axis, normalAssembly: sa.normal },
-      overlapMm: [start, end] });
+      overlapMm: [0, end - start] });
   }
   return { contacts, issues };
 }

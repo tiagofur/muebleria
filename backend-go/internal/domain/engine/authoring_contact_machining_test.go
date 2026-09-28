@@ -46,6 +46,47 @@ func TestJ1ExplicitContacts(t *testing.T) {
 	}
 }
 
+func TestJ1RigidTranslationPreservesLocalOverlap(t *testing.T) {
+	fixture := readJ1ContactFixture(t)
+	delta := [3]float64{73, -41, 19}
+	neighbor := fixture.Boards[1]
+	neighbor.OccurrenceID = "unanchored-neighbor"
+	fixture.Boards = append(fixture.Boards, neighbor)
+	for i := range fixture.Boards {
+		for axis := range delta {
+			fixture.Boards[i].Translation[axis] += delta[axis]
+		}
+	}
+	want := append([]ResolvedContact(nil), fixture.Expected...)
+	want[0].Frame.OriginAssemblyMm = [3]float64{91, -11, 46}
+	want[1].Frame.OriginAssemblyMm = [3]float64{655, 39, 46}
+	result := resolveExplicitContacts(fixture.Boards, fixture.Contacts, fixture.RequiredContactIDs)
+	if len(result.Issues) != 0 || !reflect.DeepEqual(result.Contacts, want) {
+		t.Fatalf("translated contacts must retain IDs, axes, normals, and local intervals without unanchored neighbors: got=%+v want=%+v", result, want)
+	}
+}
+
+func TestJ1RigidRotationPreservesLocalOverlap(t *testing.T) {
+	fixture := readJ1ContactFixture(t)
+	rotate := func(v [3]float64) [3]float64 { return [3]float64{-v[1], v[0], v[2]} }
+	for i := range fixture.Boards {
+		board := &fixture.Boards[i]
+		board.Translation = rotate(board.Translation)
+		board.Basis.X = rotate(board.Basis.X)
+		board.Basis.Y = rotate(board.Basis.Y)
+		board.Basis.Z = rotate(board.Basis.Z)
+	}
+	want := append([]ResolvedContact(nil), fixture.Expected...)
+	want[0].Frame.OriginAssemblyMm, want[0].Frame.AxisAssembly, want[0].Frame.NormalAssembly =
+		[3]float64{-30, 18, 27}, [3]float64{-1, 0, 0}, [3]float64{0, -1, 0}
+	want[1].Frame.OriginAssemblyMm, want[1].Frame.AxisAssembly, want[1].Frame.NormalAssembly =
+		[3]float64{-80, 582, 27}, [3]float64{-1, 0, 0}, [3]float64{0, 1, 0}
+	result := resolveExplicitContacts(fixture.Boards, fixture.Contacts, fixture.RequiredContactIDs)
+	if len(result.Issues) != 0 || !reflect.DeepEqual(result.Contacts, want) {
+		t.Fatalf("rotation must transform frames while retaining local intervals: got=%+v want=%+v", result, want)
+	}
+}
+
 func TestJ1ContactNegatives(t *testing.T) {
 	cases := []struct {
 		name, code string

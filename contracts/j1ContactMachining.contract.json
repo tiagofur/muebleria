@@ -16,10 +16,10 @@
   "requiredContactIds": ["floor-left", "floor-right"],
   "expected": [
     { "contactId": "floor-left", "relationshipId": "rel-floor-left", "participantA": "floor-1", "participantB": "side-left-1",
-      "faceA": "bottom", "faceB": "front", "overlapMm": [30, 530],
+      "faceA": "bottom", "faceB": "front", "overlapMm": [0, 500],
       "frame": { "originAssemblyMm": [18, 30, 27], "axisAssembly": [0, 1, 0], "normalAssembly": [-1, 0, 0] } },
     { "contactId": "floor-right", "relationshipId": "rel-floor-right", "participantA": "floor-1", "participantB": "side-right-1",
-      "faceA": "top", "faceB": "front", "overlapMm": [80, 530],
+      "faceA": "top", "faceB": "front", "overlapMm": [0, 450],
       "frame": { "originAssemblyMm": [582, 80, 27], "axisAssembly": [0, 1, 0], "normalAssembly": [1, 0, 0] } }
   ]
 }
