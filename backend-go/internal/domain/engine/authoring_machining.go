@@ -724,3 +724,198 @@ func detectHoleCollisions(operations []ResolvedMachiningOperation, issues *[]dom
 		}
 	}
 }
+
+// J1-A0a contact resolution stays with the #356 authoring machining owner.
+// Productive relationship resolution does not select or invoke it yet.
+type ContactBoard struct {
+	// OccurrenceID identifies one concrete board, never a component definition.
+	OccurrenceID string      `json:"occurrenceId"`
+	WidthMm      float64     `json:"widthMm"`
+	ThicknessMm  float64     `json:"thicknessMm"`
+	LengthMm     float64     `json:"lengthMm"`
+	Translation  [3]float64  `json:"translationMm"`
+	Basis        LayoutBasis `json:"basis"`
+}
+
+type ExplicitContact struct {
+	RelationshipID string `json:"relationshipId"`
+	ContactID      string `json:"contactId"`
+	ParticipantA   string `json:"participantA"`
+	ParticipantB   string `json:"participantB"`
+	FaceA          string `json:"faceA"`
+	FaceB          string `json:"faceB"`
+}
+
+type ResolvedContact struct {
+	ExplicitContact
+	Frame struct {
+		OriginAssemblyMm [3]float64 `json:"originAssemblyMm"`
+		AxisAssembly     [3]float64 `json:"axisAssembly"`
+		NormalAssembly   [3]float64 `json:"normalAssembly"`
+	} `json:"frame"`
+	// OverlapMm is measured from the frame origin along its axis.
+	OverlapMm [2]float64 `json:"overlapMm"`
+}
+
+type ContactResolutionResult struct {
+	Contacts []ResolvedContact      `json:"contacts"`
+	Issues   []domain.ContractIssue `json:"issues"`
+}
+
+func contactAdd(a, b [3]float64, n float64) [3]float64 {
+	return [3]float64{a[0] + n*b[0], a[1] + n*b[1], a[2] + n*b[2]}
+}
+func contactDelta(a, b [3]float64) [3]float64 {
+	return [3]float64{a[0] - b[0], a[1] - b[1], a[2] - b[2]}
+}
+func (b ContactBoard) valid() bool {
+	if b.WidthMm <= 0 || b.ThicknessMm <= 0 || b.LengthMm <= 0 ||
+		!isFiniteVec3(b.Translation) || math.IsNaN(b.WidthMm) || math.IsInf(b.WidthMm, 0) ||
+		math.IsNaN(b.ThicknessMm) || math.IsInf(b.ThicknessMm, 0) ||
+		math.IsNaN(b.LengthMm) || math.IsInf(b.LengthMm, 0) {
+		return false
+	}
+	return validateLayoutBasis(b.Basis) == nil
+}
+func (b ContactBoard) toAssembly(p [3]float64) [3]float64 {
+	return contactAdd(contactAdd(contactAdd(b.Translation, b.Basis.X, p[0]), b.Basis.Y, p[1]), b.Basis.Z, p[2])
+}
+func (b ContactBoard) surface(face string) ([][3]float64, [3]float64) {
+	dims := [3]float64{b.WidthMm, b.ThicknessMm, b.LengthMm}
+	axes := [3][3]float64{b.Basis.X, b.Basis.Y, b.Basis.Z}
+	axis, high := 2, face == "top"
+	if face == "left" || face == "right" {
+		axis, high = 0, face == "right"
+	}
+	if face == "front" || face == "back" {
+		axis, high = 1, face == "front"
+	}
+	other := []int{}
+	for i := 0; i < 3; i++ {
+		if i != axis {
+			other = append(other, i)
+		}
+	}
+	corners := make([][3]float64, 4)
+	for i := range corners {
+		var local [3]float64
+		if high {
+			local[axis] = dims[axis]
+		}
+		if i&1 != 0 {
+			local[other[0]] = dims[other[0]]
+		}
+		if i&2 != 0 {
+			local[other[1]] = dims[other[1]]
+		}
+		corners[i] = b.toAssembly(local)
+	}
+	if !high {
+		return corners, negVec3(axes[axis])
+	}
+	return corners, axes[axis]
+}
+
+// resolveExplicitContacts validates only declared occurrence contacts and
+// returns their directed frames and useful overlaps for A0b station planning.
+func resolveExplicitContacts(boards []ContactBoard, intents []ExplicitContact, required []string) ContactResolutionResult {
+	result := ContactResolutionResult{Contacts: []ResolvedContact{}, Issues: []domain.ContractIssue{}}
+	byID := map[string]ContactBoard{}
+	counts := map[string]int{}
+	for _, board := range boards {
+		byID[board.OccurrenceID] = board
+		counts[board.OccurrenceID]++
+	}
+	fail := func(id, code string) {
+		result.Issues = append(result.Issues, domain.ContractIssue{Code: code, Message: code,
+			Severity: domain.IssueSeverityError, EntityID: id})
+	}
+	for _, id := range required {
+		found := false
+		for _, intent := range intents {
+			if intent.ContactID == id {
+				found = true
+			}
+		}
+		if !found {
+			fail(id, "CONTACT_REQUIRED_MISSING")
+		}
+	}
+	ordered := append([]ExplicitContact(nil), intents...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].ContactID < ordered[j].ContactID })
+	contactCounts := map[string]int{}
+	for _, intent := range intents {
+		contactCounts[intent.ContactID]++
+	}
+	seen := map[string]bool{}
+	for _, intent := range ordered {
+		if seen[intent.ContactID] {
+			continue
+		}
+		seen[intent.ContactID] = true
+		if contactCounts[intent.ContactID] > 1 {
+			fail(intent.ContactID, "CONTACT_AMBIGUOUS")
+			continue
+		}
+		if strings.TrimSpace(intent.ContactID) == "" || strings.TrimSpace(intent.RelationshipID) == "" ||
+			strings.TrimSpace(intent.ParticipantA) == "" || strings.TrimSpace(intent.ParticipantB) == "" {
+			fail(intent.ContactID, "CONTACT_IDENTITY_INVALID")
+			continue
+		}
+		a, aOK := byID[intent.ParticipantA]
+		b, bOK := byID[intent.ParticipantB]
+		if !aOK || !bOK || a.OccurrenceID == b.OccurrenceID {
+			fail(intent.ContactID, "CONTACT_PARTICIPANT_MISSING")
+			continue
+		}
+		if counts[a.OccurrenceID] != 1 || counts[b.OccurrenceID] != 1 {
+			fail(intent.ContactID, "CONTACT_AMBIGUOUS")
+			continue
+		}
+		if !a.valid() || !b.valid() {
+			fail(intent.ContactID, "CONTACT_FRAME_INVALID")
+			continue
+		}
+		if (intent.FaceA != "bottom" && intent.FaceA != "top") || (intent.FaceB != "front" && intent.FaceB != "back") {
+			fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
+			continue
+		}
+		ac, an := a.surface(intent.FaceA)
+		bc, bn := b.surface(intent.FaceB)
+		if math.Abs(dot3(an, bn)+1) > 1e-6 || math.Abs(dot3(contactDelta(ac[0], bc[0]), an)) > 1e-6 {
+			fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
+			continue
+		}
+		if math.Abs(math.Abs(dot3(a.Basis.X, b.Basis.X))-1) > 1e-6 ||
+			math.Abs(math.Abs(dot3(a.Basis.Y, b.Basis.Z))-1) > 1e-6 {
+			fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
+			continue
+		}
+		overlap := func(direction [3]float64) (float64, float64) {
+			alo, ahi, blo, bhi := math.Inf(1), math.Inf(-1), math.Inf(1), math.Inf(-1)
+			for _, p := range ac {
+				v := dot3(p, direction)
+				alo = math.Min(alo, v)
+				ahi = math.Max(ahi, v)
+			}
+			for _, p := range bc {
+				v := dot3(p, direction)
+				blo = math.Min(blo, v)
+				bhi = math.Max(bhi, v)
+			}
+			return math.Max(alo, blo), math.Min(ahi, bhi)
+		}
+		start, end := overlap(a.Basis.X)
+		crossStart, crossEnd := overlap(a.Basis.Y)
+		if end-start <= 1e-6 || crossEnd-crossStart <= 1e-6 {
+			fail(intent.ContactID, "CONTACT_NO_OVERLAP")
+			continue
+		}
+		origin := contactAdd(contactAdd(ac[0], a.Basis.X, start-dot3(ac[0], a.Basis.X)),
+			a.Basis.Y, (crossStart+crossEnd)/2-dot3(ac[0], a.Basis.Y))
+		resolved := ResolvedContact{ExplicitContact: intent, OverlapMm: [2]float64{0, end - start}}
+		resolved.Frame.OriginAssemblyMm, resolved.Frame.AxisAssembly, resolved.Frame.NormalAssembly = origin, a.Basis.X, an
+		result.Contacts = append(result.Contacts, resolved)
+	}
+	return result
+}
