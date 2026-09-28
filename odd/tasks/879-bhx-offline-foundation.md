@@ -77,8 +77,9 @@ promoted to installed-machine evidence. #352 owns field validation.
   product references remain public context, not installation proof.
   Work-unit commit `73a2415d1e41d9453daae3304acbf9ed13a150c6` on base
   `90cc2bdcc5220efb9c97df48fbefc9479cdf8228` changed 147 additions and
-  23 deletions (170 authored lines). B1 PR slice is this work unit plus this
-  evidence-only tracking commit; exact final HEAD is recorded at handoff.
+  23 deletions (170 authored lines). The original B1 PR slice included this
+  work unit and an evidence-only tracking commit; the rebased identities are
+  recorded below.
   V0: `git diff --check`, `git diff --cached --check`, and
   `git show --check --oneline HEAD` passed; 12 required matrix fields and 12
   Markdown links had zero missing local targets. Both official HOMAG links
@@ -89,11 +90,30 @@ promoted to installed-machine evidence. #352 owns field validation.
   worktree and `PREFLIGHT_OK_NOT_VERIFIED` after the work-unit commit.
   V1: N/A for passive documentation. V2 receiver/physical proof: `NOT_RUN`
   under #352, with no compatibility claim. Independent review and exact-HEAD
-  CI: pending. RDD assessment: leader-owned, pending.
+  CI for the current candidate: pending. RDD assessment: leader-owned.
+- Rebase checkpoint: `git fetch origin main` confirmed the new base
+  `8b33610ec1d6c5f152474108e8d9a7b904145095`; the branch was clean and
+  its remote tracking ref still matched the old HEAD before rebase. Rebase
+  from historical base `90cc2bdcc5220efb9c97df48fbefc9479cdf8228`
+  completed without conflicts. `git range-diff` mapped the B1 work unit
+  `73a2415d` → `715e55e5` and evidence commit `db173461` → `94a53711`
+  with `=` for both; dossier and ODD file blob IDs were unchanged at the
+  rebased two-commit HEAD `94a53711d524f4d2a61eb48cd28a97c775be25ea`.
+  This checkpoint changes only this task artifact. Any review or CI for the
+  old `db173461`/`90cc2bdc` pins does not prove the rebased candidate;
+  fresh exact-HEAD review and CI are required before delivery. The leader
+  owns remote update and publication; no writer push occurred. Rebased V0:
+  `git diff --check origin/main...HEAD` passed, all 12 Markdown links still
+  resolve locally, and `factory_preflight.py --require-clean` reported a
+  clean tree. `verify_affected.py --base origin/main --plan` succeeded on
+  the new base but again selected all gates because the ODD path is unknown;
+  it did not execute those gates. No executable or receiver checks were
+  rerun for this passive-document correction.
 - B2: not started. No neutral planner, native serializer, or machine proof
   claimed by this task file.
 - Next: refresh the full Engram mirror at
-  `odd/879-bhx-offline-foundation/tasks` and hand the exact B1 HEAD to the
-  leader for independent review and CI/PR decisions. B2 starts only after
+  `odd/879-bhx-offline-foundation/tasks` and hand the final rebased B1 HEAD
+  to the leader for fresh independent review and exact-HEAD CI/PR decisions.
+  B2 starts only after
   reconciling its input seam and this document; field-evidence blockers remain
   explicit.
