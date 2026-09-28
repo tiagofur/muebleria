@@ -515,3 +515,140 @@ function fnv1aHex(value: string): string {
   }
   return `fnv1a-${hash.toString(16).padStart(8, '0')}`;
 }
+
+// J1-A0a contact resolution lives beside the #356 relationship owner. Productive
+// relationship resolution does not select or invoke this foundation yet.
+type Vec3 = readonly [number, number, number];
+type ContactFace = HoleDefinition['face'];
+
+export interface ContactBoard {
+  /** Concrete board occurrence, never a component definition ID. */
+  readonly occurrenceId: string;
+  readonly widthMm: number;
+  readonly thicknessMm: number;
+  readonly lengthMm: number;
+  readonly translationMm: Vec3;
+  readonly basis: { readonly x: Vec3; readonly y: Vec3; readonly z: Vec3 };
+}
+
+export interface ExplicitContact {
+  readonly relationshipId: string;
+  readonly contactId: string;
+  readonly participantA: string;
+  readonly participantB: string;
+  readonly faceA: ContactFace;
+  readonly faceB: ContactFace;
+}
+
+export interface ContactResolutionInput {
+  readonly boards: readonly ContactBoard[];
+  readonly contacts: readonly ExplicitContact[];
+  readonly requiredContactIds: readonly string[];
+}
+
+export interface ResolvedContact extends ExplicitContact {
+  readonly frame: { readonly originAssemblyMm: Vec3; readonly axisAssembly: Vec3; readonly normalAssembly: Vec3 };
+  readonly overlapMm: readonly [number, number];
+}
+
+export interface ContactResolutionResult {
+  readonly contacts: readonly ResolvedContact[];
+  readonly issues: readonly ContractIssue[];
+}
+
+const contactDot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const contactDelta = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const contactScale = (a: Vec3, b: Vec3, n: number): Vec3 => [a[0] + n * b[0], a[1] + n * b[1], a[2] + n * b[2]];
+const contactNegate = (v: Vec3): Vec3 => v.map((value) => value === 0 ? 0 : -value) as unknown as Vec3;
+const contactSize = (b: ContactBoard): Vec3 => [b.widthMm, b.thicknessMm, b.lengthMm];
+
+function contactFrameValid(b: ContactBoard): boolean {
+  const { x, y, z } = b.basis;
+  const values = [...b.translationMm, ...contactSize(b), ...x, ...y, ...z];
+  if (!values.every(Number.isFinite) || contactSize(b).some((size) => size <= 0)) return false;
+  const cross: Vec3 = [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
+  return Math.abs(contactDot(x, x) - 1) < 1e-6 && Math.abs(contactDot(y, y) - 1) < 1e-6 &&
+    Math.abs(contactDot(z, z) - 1) < 1e-6 && Math.abs(contactDot(x, y)) < 1e-6 &&
+    Math.abs(contactDot(x, z)) < 1e-6 && Math.abs(contactDot(y, z)) < 1e-6 &&
+    Math.abs(contactDot(cross, z) - 1) < 1e-6;
+}
+
+function contactToAssembly(b: ContactBoard, p: Vec3): Vec3 {
+  return contactScale(contactScale(contactScale(b.translationMm, b.basis.x, p[0]), b.basis.y, p[1]), b.basis.z, p[2]);
+}
+
+function contactSurface(b: ContactBoard, face: ContactFace): { corners: Vec3[]; normal: Vec3 } {
+  const dims = contactSize(b);
+  const axis = face === 'left' || face === 'right' ? 0 : face === 'front' || face === 'back' ? 1 : 2;
+  const high = face === 'right' || face === 'front' || face === 'top';
+  const other = ([0, 1, 2] as const).filter((index) => index !== axis);
+  const corners = [0, 1, 2, 3].map((index): Vec3 => {
+    const p = [0, 0, 0];
+    p[axis] = high ? dims[axis]! : 0;
+    p[other[0]!] = index & 1 ? dims[other[0]!]! : 0;
+    p[other[1]!] = index & 2 ? dims[other[1]!]! : 0;
+    return contactToAssembly(b, p as unknown as Vec3);
+  });
+  const normal = [b.basis.x, b.basis.y, b.basis.z][axis]!;
+  return { corners, normal: high ? normal : contactNegate(normal) };
+}
+
+/** Resolve only declared occurrence contacts; A0b will plan stations in this frame. */
+export function resolveExplicitContacts(input: ContactResolutionInput): ContactResolutionResult {
+  const contacts: ResolvedContact[] = [];
+  const issues: ContractIssue[] = [];
+  const boards = new Map(input.boards.map((board) => [board.occurrenceId, board]));
+  const seen = new Set<string>();
+  const fail = (id: string, code: string): void => {
+    issues.push({ code, message: code, severity: 'error', entityId: id });
+  };
+  for (const id of input.requiredContactIds) {
+    if (!input.contacts.some((contact) => contact.contactId === id)) fail(id, 'CONTACT_REQUIRED_MISSING');
+  }
+  for (const intent of [...input.contacts].sort((a, b) => a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0)) {
+    if (!intent.contactId.trim() || !intent.relationshipId.trim() ||
+        !intent.participantA.trim() || !intent.participantB.trim()) {
+      fail(intent.contactId, 'CONTACT_IDENTITY_INVALID'); continue;
+    }
+    if (seen.has(intent.contactId)) { fail(intent.contactId, 'CONTACT_AMBIGUOUS'); continue; }
+    seen.add(intent.contactId);
+    const a = boards.get(intent.participantA);
+    const b = boards.get(intent.participantB);
+    if (!a || !b || a.occurrenceId === b.occurrenceId) { fail(intent.contactId, 'CONTACT_PARTICIPANT_MISSING'); continue; }
+    if (input.boards.filter((board) => board.occurrenceId === a.occurrenceId || board.occurrenceId === b.occurrenceId).length !== 2) {
+      fail(intent.contactId, 'CONTACT_AMBIGUOUS'); continue;
+    }
+    if (!contactFrameValid(a) || !contactFrameValid(b)) { fail(intent.contactId, 'CONTACT_FRAME_INVALID'); continue; }
+    if (!['bottom', 'top'].includes(intent.faceA) || !['front', 'back'].includes(intent.faceB)) {
+      fail(intent.contactId, 'CONTACT_FACE_INCOMPATIBLE'); continue;
+    }
+    const sa = contactSurface(a, intent.faceA);
+    const sb = contactSurface(b, intent.faceB);
+    if (Math.abs(contactDot(sa.normal, sb.normal) + 1) > 1e-6 ||
+        Math.abs(contactDot(contactDelta(sa.corners[0]!, sb.corners[0]!), sa.normal)) > 1e-6) {
+      fail(intent.contactId, 'CONTACT_FACE_INCOMPATIBLE'); continue;
+    }
+    const axis = a.basis.x;
+    const across = a.basis.y;
+    if (Math.abs(Math.abs(contactDot(axis, b.basis.x)) - 1) > 1e-6 ||
+        Math.abs(Math.abs(contactDot(across, b.basis.z)) - 1) > 1e-6) {
+      fail(intent.contactId, 'CONTACT_FACE_INCOMPATIBLE'); continue;
+    }
+    const overlap = (direction: Vec3): readonly [number, number] => {
+      const pa = sa.corners.map((p) => contactDot(p, direction));
+      const pb = sb.corners.map((p) => contactDot(p, direction));
+      return [Math.max(Math.min(...pa), Math.min(...pb)), Math.min(Math.max(...pa), Math.max(...pb))];
+    };
+    const [start, end] = overlap(axis);
+    const [crossStart, crossEnd] = overlap(across);
+    if (end - start <= 1e-6 || crossEnd - crossStart <= 1e-6) {
+      fail(intent.contactId, 'CONTACT_NO_OVERLAP'); continue;
+    }
+    const corner = sa.corners[0]!;
+    const origin = contactScale(contactScale(corner, axis, start - contactDot(corner, axis)),
+      across, (crossStart + crossEnd) / 2 - contactDot(corner, across));
+    contacts.push({ ...intent, frame: { originAssemblyMm: origin, axisAssembly: axis, normalAssembly: sa.normal },
+      overlapMm: [start, end] });
+  }
+  return { contacts, issues };
+}

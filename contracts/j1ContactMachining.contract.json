@@ -1,0 +1,25 @@
+{
+  "schema": "granete.j1-contact-machining.test.v1",
+  "description": "Synthetic contact geometry only; no production recipe or machining claim.",
+  "boards": [
+    { "occurrenceId": "floor-1", "widthMm": 500, "thicknessMm": 18, "lengthMm": 564,
+      "translationMm": [18, 30, 18], "basis": { "x": [0, 1, 0], "y": [0, 0, 1], "z": [1, 0, 0] } },
+    { "occurrenceId": "side-left-1", "widthMm": 560, "thicknessMm": 18, "lengthMm": 720,
+      "translationMm": [0, 560, 0], "basis": { "x": [0, -1, 0], "y": [1, 0, 0], "z": [0, 0, 1] } },
+    { "occurrenceId": "side-right-1", "widthMm": 480, "thicknessMm": 18, "lengthMm": 720,
+      "translationMm": [600, 80, 0], "basis": { "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1] } }
+  ],
+  "contacts": [
+    { "relationshipId": "rel-floor-left", "contactId": "floor-left", "participantA": "floor-1", "participantB": "side-left-1", "faceA": "bottom", "faceB": "front" },
+    { "relationshipId": "rel-floor-right", "contactId": "floor-right", "participantA": "floor-1", "participantB": "side-right-1", "faceA": "top", "faceB": "front" }
+  ],
+  "requiredContactIds": ["floor-left", "floor-right"],
+  "expected": [
+    { "contactId": "floor-left", "relationshipId": "rel-floor-left", "participantA": "floor-1", "participantB": "side-left-1",
+      "faceA": "bottom", "faceB": "front", "overlapMm": [30, 530],
+      "frame": { "originAssemblyMm": [18, 30, 27], "axisAssembly": [0, 1, 0], "normalAssembly": [-1, 0, 0] } },
+    { "contactId": "floor-right", "relationshipId": "rel-floor-right", "participantA": "floor-1", "participantB": "side-right-1",
+      "faceA": "top", "faceB": "front", "overlapMm": [80, 530],
+      "frame": { "originAssemblyMm": [582, 80, 27], "axisAssembly": [0, 1, 0], "normalAssembly": [1, 0, 0] } }
+  ]
+}

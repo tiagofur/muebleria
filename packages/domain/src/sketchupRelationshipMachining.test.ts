@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import contactFixture from '../../../contracts/j1ContactMachining.contract.json';
 
 import {
   cabinetCatalog,
@@ -9,11 +10,13 @@ import {
 } from './__fixtures__/sketchupAuthoringCabinet';
 import { cabinetJoineryCatalog } from './__fixtures__/sketchupJoineryCatalogFixture';
 import {
+  resolveExplicitContacts,
   deriveRelationshipMachining,
   diffRelationshipMachining,
   isFingerprintStale,
   provenanceKey,
   type RelationshipMachiningResult,
+  type ContactResolutionInput,
 } from './sketchupRelationshipMachining';
 import { applyAuthoringEnvelope, EMPTY_AUTHORING_STATE } from './sketchupAuthoringExchange';
 import type { AuthoringEnvelopeV1, ReadonlyAuthoringSnapshot } from './sketchupAuthoringSchema';
@@ -257,5 +260,47 @@ describe('post-release staleness', () => {
 
     expect(isFingerprintStale(released, moved)).toBe(true);
     expect(isFingerprintStale(released, released)).toBe(false);
+  });
+});
+
+describe('J1-A explicit occurrence contacts', () => {
+  const fixture = contactFixture as unknown as ContactResolutionInput;
+  it('resolves independently asserted directed frames and asymmetric useful overlaps', () => {
+    const result = resolveExplicitContacts(fixture);
+    expect(result.issues).toEqual([]);
+    expect(result.contacts).toEqual(contactFixture.expected);
+  });
+
+  it('ignores unanchored neighbors and input order', () => {
+    const other = { ...fixture.boards[1]!, occurrenceId: 'unrelated-neighbor' };
+    const changed = { ...fixture, boards: [other, ...fixture.boards].reverse(), contacts: [...fixture.contacts].reverse() };
+    expect(resolveExplicitContacts(changed)).toEqual(resolveExplicitContacts(fixture));
+  });
+
+  it.each([
+    ['required contact missing', 'CONTACT_REQUIRED_MISSING', (f: typeof contactFixture) => { f.contacts.pop(); }],
+    ['participant missing', 'CONTACT_PARTICIPANT_MISSING', (f: typeof contactFixture) => { f.contacts[0]!.participantB = 'ghost'; }],
+    ['ambiguous contact', 'CONTACT_AMBIGUOUS', (f: typeof contactFixture) => { f.contacts.push({ ...f.contacts[0]! }); }],
+    ['ambiguous occurrence', 'CONTACT_AMBIGUOUS', (f: typeof contactFixture) => { f.boards.push({ ...f.boards[0]! }); }],
+    ['no useful overlap', 'CONTACT_NO_OVERLAP', (f: typeof contactFixture) => { f.boards[2]!.translationMm = [600, 600, 0]; }],
+    ['incompatible face', 'CONTACT_FACE_INCOMPATIBLE', (f: typeof contactFixture) => { f.contacts[1]!.faceB = 'back'; }],
+    ['separated planes', 'CONTACT_FACE_INCOMPATIBLE', (f: typeof contactFixture) => { f.boards[2]!.translationMm = [601, 80, 0]; }],
+    ['invalid local basis', 'CONTACT_FRAME_INVALID', (f: typeof contactFixture) => { f.boards[1]!.basis.x = [0, 0, 0]; }],
+    ['skewed contact face', 'CONTACT_FACE_INCOMPATIBLE', (f: typeof contactFixture) => {
+      f.boards[1]!.basis.x = [0, -Math.SQRT1_2, Math.SQRT1_2];
+      f.boards[1]!.basis.z = [0, Math.SQRT1_2, Math.SQRT1_2];
+    }],
+    ['blank contact identity', 'CONTACT_IDENTITY_INVALID', (f: typeof contactFixture) => { f.contacts[0]!.contactId = ''; }],
+    ['blank relationship identity', 'CONTACT_IDENTITY_INVALID', (f: typeof contactFixture) => { f.contacts[0]!.relationshipId = ''; }],
+    ['blank occurrence identity', 'CONTACT_IDENTITY_INVALID', (f: typeof contactFixture) => {
+      f.boards[0]!.occurrenceId = '';
+      f.contacts[0]!.participantA = '';
+      f.contacts[1]!.participantA = '';
+    }],
+  ] as const)('fails structured for %s', (_name, code, mutate) => {
+    const changed = structuredClone(contactFixture);
+    mutate(changed);
+    const result = resolveExplicitContacts(changed as unknown as ContactResolutionInput);
+    expect(result.issues.map((issue) => issue.code)).toContain(code);
   });
 });
