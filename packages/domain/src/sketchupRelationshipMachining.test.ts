@@ -355,13 +355,27 @@ describe('J1-A1b reconciled contact operation collection', () => {
     return deriveResolvedContactOperations(resolution, plans, input.boards, specs, rules);
   };
 
+  it('orders collection output by Unicode scalar contact IDs across runtimes', () => {
+    const ids = ['\uE000', '\u{1F600}'] as const;
+    const rename = <T extends { contactId: string }>(item: T, index: number): T =>
+      ({ ...item, contactId: ids[index]! });
+    const input = { ...fixture,
+      contacts: fixture.contacts.map((contact, index) => rename(contact, index)),
+      requiredContactIds: [...ids] };
+    const specs = contactFixture.stationSpecs.map((spec, index) => rename(spec, index));
+    const rules = recipes.map((recipe, index) => rename(recipe, index));
+    const result = resolve(input as typeof fixture, specs, rules);
+    expect(result.issues).toEqual([]);
+    expect([...new Set(result.operations.map((operation) => operation.provenance.contactId))])
+      .toEqual(['\uE000', '\u{1F600}']);
+  });
+
   it('combines only complete sets in stable order with exact provenance and no duplicate IDs', () => {
     const result = resolve();
     expect(result.issues).toEqual([]);
-    expect(result.operations.map(({ operationId, ...operation }) => {
-      expect(operationId).not.toBe('');
-      return operation;
-    })).toEqual(contactFixture.expectedOperations);
+    expect(result.operations.map((operation) => operation.operationId)).toEqual(
+      contactFixture.expectedOperations.map((operation) => operation.operationId));
+    expect(result.operations).toEqual(contactFixture.expectedOperations);
     expect(new Set(result.operations.map((operation) => operation.operationId)).size).toBe(10);
     expect(deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog).issues).toEqual([]);
   });

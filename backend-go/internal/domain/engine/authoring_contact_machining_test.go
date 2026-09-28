@@ -89,10 +89,9 @@ func TestJ1OperationCollection(t *testing.T) {
 	}
 	for i, op := range base.Operations {
 		want := f.ExpectedOperations[i]
-		if op.OperationID == "" {
-			t.Fatalf("missing operation ID at %d", i)
+		if op.OperationID != want.OperationID {
+			t.Fatalf("operation ID at %d: got %q want %q", i, op.OperationID, want.OperationID)
 		}
-		op.OperationID = ""
 		if !reflect.DeepEqual(op, want) {
 			t.Fatalf("operation %d: got %+v want %+v", i, op, want)
 		}
@@ -146,6 +145,32 @@ func TestJ1OperationCollection(t *testing.T) {
 			t.Fatalf("duplicate ID or changed occurrence-local position: %+v", op)
 		}
 		ids[op.OperationID] = true
+	}
+}
+
+func TestJ1OperationCollectionUnicodeOrder(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	ids := []string{"\uE000", "\U0001F600"}
+	for i := range f.Contacts {
+		f.Contacts[i].ContactID = ids[i]
+		f.StationSpecs[i].ContactID = ids[i]
+		f.OperationRecipes[i].ContactID = ids[i]
+	}
+	f.RequiredContactIDs = ids
+	resolution := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolution, f.Boards, f.StationSpecs)
+	collection := deriveResolvedContactOperations(resolution, plans, f.Boards, f.StationSpecs, f.OperationRecipes)
+	if len(collection.Issues) != 0 {
+		t.Fatalf("expected complete collection, got %+v", collection)
+	}
+	seen := []string{}
+	for _, op := range collection.Operations {
+		if len(seen) == 0 || seen[len(seen)-1] != op.Provenance.ContactID {
+			seen = append(seen, op.Provenance.ContactID)
+		}
+	}
+	if len(seen) != 2 || seen[0] != "\uE000" || seen[1] != "\U0001F600" {
+		t.Fatalf("Unicode scalar contact order diverged: %v", seen)
 	}
 }
 

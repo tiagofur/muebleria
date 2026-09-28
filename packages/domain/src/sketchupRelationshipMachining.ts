@@ -974,7 +974,7 @@ export function deriveResolvedContactOperations(
   const operations: NeutralContactOperation[] = [];
   const invalidRelationships = new Set<string>();
   for (const contact of [...resolution.contacts].sort((a, b) =>
-    a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0)) {
+    compareUnicodeScalarIds(a.contactId, b.contactId))) {
     const id = contact.contactId;
     const error = contacts.get(id) !== 1 ? 'OPERATION_CONTACT_AMBIGUOUS' :
       plans.get(id) !== 1 || policies.get(id) !== 1 ? 'OPERATION_PLAN_INVALID' :
