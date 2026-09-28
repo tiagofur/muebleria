@@ -18,10 +18,15 @@ module Granete
       class BatchContext
         BATCH_MINIMUM = 2
 
-        # Batch operation → the per-member capability it intersects.
+        # Batch operation → the per-member capability it intersects. The
+        # hardware slice (#471 R4) is declared honestly: it stays denied
+        # while the per-furniture canEditHighLevelHardware is fail-closed
+        # off — when the #468 furniture-level config surface turns it on,
+        # the batch operation follows without further wiring.
         OPERATIONS = {
           'canBatchEditMaterialRoles' => 'canEditMaterialRoles',
-          'canBatchEditParameters' => 'canEditParameters'
+          'canBatchEditParameters' => 'canEditParameters',
+          'canBatchEditHighLevelHardware' => 'canEditHighLevelHardware'
         }.freeze
 
         EXCLUSION_REASONS = {

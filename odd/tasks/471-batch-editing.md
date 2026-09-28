@@ -156,3 +156,24 @@ Delivery: PR `Refs #471 / Delivery: partial|complete` según cobertura del DoD
   + 6 runs/4079 assertions, 0 failures.
 - Trampa registrada: deepStrictEqual cruzando realms del sandbox vm →
   comparar vía JSON.parse(JSON.stringify(...)).
+
+## Registro R3 + R4a (2026-09-28)
+
+- R3: parámetros compartidos editables con contrato de compatibilidad
+  (`batchParamContract`: declarado por TODAS las definiciones + mismo tipo
+  + intersección de rango no vacía / opciones comunes para enum; disjunto
+  → "sin rango común" fail-closed). Inputs number/text/checkbox/select,
+  placeholder "Mixto", merge por miembro (params actuales + edits como
+  números), footer cuenta roles+params juntos ("N cambios a aplicar").
+- R4a: `canBatchEditHighLevelHardware` declarado honestamente en
+  BatchContext (intersección de canEditHighLevelHardware) — hoy denegado
+  porque la capability por-mueble está fail-closed off; cuando #468 la
+  habilite, el batch la sigue sin wiring adicional.
+- Tests: inspector JS 33/33 (+2 R3: contrato/intersección/payload
+  combinado), batch Ruby 6/6 (+hardware denial). rake verify PASS
+  (0 ofensas, 1246+6 runs).
+- R4b preparado: `test/testup/TC_BatchMutationSmoke.rb` (3 muebles mixtos
+  1/2/3, BatchContext real, 1 operación, 1 undo restaura los tres valores
+  originales, fallo de resolve de un miembro → 0 operaciones) +
+  `testup-ci-471.yml`. Ejecución: requiere RBZ del branch instalado con
+  SketchUp CERRADO (trap restore-on-exit).

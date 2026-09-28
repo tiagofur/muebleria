@@ -223,11 +223,13 @@
   // por mueble que el backend re-resuelve — nada de manufactura aquí.
   // ------------------------------------------------------------------
   var batchSelections = {};
+  var batchParamEdits = {};
 
   function renderBatchInspector(context) {
     inspectorBatchView.style.display = "block";
     var members = context.furniture || [];
     batchSelections = {};
+    batchParamEdits = {};
 
     inspectorBatchTitle.textContent = members.length + " muebles en el lote";
     inspectorBatchCountBadge.textContent = members.length + " muebles";
@@ -245,7 +247,7 @@
     }
 
     renderBatchRoles(members, context);
-    renderBatchParams(members);
+    renderBatchParams(members, context);
     updateBatchFooter(members, context);
   }
 
@@ -375,7 +377,87 @@
     });
   }
 
-  function renderBatchParams(members) {
+  // #471 R3: compatible shared parameters. A parameter is batch-editable
+  // only when EVERY member definition declares it with the SAME type and a
+  // non-empty intersection of range/options (AC §148-180: the resolver
+  // selects behavior from the binding; incompatible contracts fail closed,
+  // never coerced). The authoritative validation stays server-side.
+  function batchParamContract(members, name) {
+    var decls = members.map(function (m) {
+      var def = m.definition || {};
+      return (def.parameters || []).filter(function (p) { return p.name === name; })[0] || null;
+    });
+    if (decls.indexOf(null) !== -1) return null;
+    var types = {};
+    decls.forEach(function (d) { types[d.type || "string"] = true; });
+    var typeKeys = Object.keys(types);
+    if (typeKeys.length !== 1) return { unsupported: "tipos distintos entre definiciones" };
+    var type = typeKeys[0];
+    if (type === "number") {
+      var mins = decls.map(function (d) { return d.min; }).filter(function (v) { return v !== undefined; });
+      var maxs = decls.map(function (d) { return d.max; }).filter(function (v) { return v !== undefined; });
+      var min = mins.length ? Math.max.apply(null, mins) : undefined;
+      var max = maxs.length ? Math.min.apply(null, maxs) : undefined;
+      if (min !== undefined && max !== undefined && min > max) return { unsupported: "sin rango común" };
+      return { type: "number", min: min, max: max };
+    }
+    if (type === "enum") {
+      var sets = decls.map(function (d) { return d.options || []; });
+      var common = sets.reduce(function (acc, opts) {
+        return acc.filter(function (o) { return opts.indexOf(o) !== -1; });
+      });
+      if (common.length === 0) return { unsupported: "sin opciones comunes" };
+      return { type: "enum", options: common };
+    }
+    return { type: type };
+  }
+
+  function batchParamInput(name, contract, common) {
+    var input;
+    if (contract.type === "enum") {
+      input = document.createElement("select");
+      input.className = "input";
+      input.style.width = "100%";
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = common ? "--" : "Mixto";
+      input.appendChild(placeholder);
+      contract.options.forEach(function (value) {
+        var opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = String(value);
+        input.appendChild(opt);
+      });
+      if (common !== null && contract.options.indexOf(common) !== -1) input.value = common;
+    } else if (contract.type === "boolean") {
+      input = document.createElement("input");
+      input.type = "checkbox";
+      if (common === true) input.checked = true;
+    } else {
+      input = document.createElement("input");
+      input.className = "input";
+      input.type = contract.type === "number" ? "number" : "text";
+      input.style.width = "100%";
+      if (contract.type === "number") {
+        if (contract.min !== undefined) input.min = String(contract.min);
+        if (contract.max !== undefined) input.max = String(contract.max);
+      }
+      if (common !== null) input.value = String(common);
+      else input.placeholder = "Mixto";
+    }
+    input.addEventListener("change", function () {
+      var raw = input.type === "checkbox" ? input.checked : input.value;
+      if (raw === "" || raw === null || raw === undefined) {
+        delete batchParamEdits[name];
+      } else {
+        batchParamEdits[name] = contract.type === "number" ? Number(raw) : raw;
+      }
+      updateBatchFooter(selectedContext && selectedContext.furniture || [], selectedContext);
+    });
+    return input;
+  }
+
+  function renderBatchParams(members, context) {
     inspectorBatchParams.innerHTML = "";
     var seen = [];
     members.forEach(function (m) {
@@ -389,6 +471,9 @@
       return;
     }
     inspectorBatchParamsCard.style.display = "block";
+    var editable = context && context.capabilities &&
+      context.capabilities.canBatchEditParameters &&
+      context.capabilities.canBatchEditParameters.supported;
     seen.forEach(function (name) {
       var supported = members.filter(function (m) {
         var def = m.definition || {};
@@ -399,9 +484,26 @@
           batchRow(name, "No aplica a " + (members.length - supported.length), true));
         return;
       }
+      var contract = batchParamContract(members, name);
       var values = members.map(function (m) { return (m.parameters || {})[name]; });
       var common = batchCommonValue(values);
-      if (common !== null) {
+      if (contract && contract.unsupported) {
+        inspectorBatchParams.appendChild(batchRow(name, contract.unsupported, true));
+        return;
+      }
+      if (editable && contract) {
+        var row = document.createElement("div");
+        row.className = "kv-row";
+        var k = document.createElement("span");
+        k.className = "k";
+        k.textContent = name;
+        var v = document.createElement("span");
+        v.className = "v";
+        v.appendChild(batchParamInput(name, contract, common));
+        row.appendChild(k);
+        row.appendChild(v);
+        inspectorBatchParams.appendChild(row);
+      } else if (common !== null) {
         inspectorBatchParams.appendChild(batchRow(name, String(common), false));
       } else {
         inspectorBatchParams.appendChild(batchRow(name, "Mixto", true));
@@ -412,20 +514,22 @@
   function updateBatchFooter(members, context) {
     var footer = document.getElementById("inspector-batch-footer");
     if (!footer) return;
-    var pending = Object.keys(batchSelections).length;
-    var editable = context && context.capabilities &&
-      context.capabilities.canBatchEditMaterialRoles &&
-      context.capabilities.canBatchEditMaterialRoles.supported;
-    if (!editable || pending === 0) {
+    var caps = (context && context.capabilities) || {};
+    var rolesEditable = caps.canBatchEditMaterialRoles && caps.canBatchEditMaterialRoles.supported;
+    var paramsEditable = caps.canBatchEditParameters && caps.canBatchEditParameters.supported;
+    var pending = (rolesEditable ? Object.keys(batchSelections).length : 0) +
+      (paramsEditable ? Object.keys(batchParamEdits).length : 0);
+    if (pending === 0) {
       footer.style.display = "none";
       return;
     }
     footer.style.display = "block";
+    var count = members.length || (context.furniture || []).length;
     document.getElementById("inspector-batch-pending").textContent =
-      pending + (pending === 1 ? " rol a aplicar" : " roles a aplicar") +
-      " en " + (members.length || (context.furniture || []).length) + " muebles";
+      pending + (pending === 1 ? " cambio a aplicar" : " cambios a aplicar") +
+      " en " + count + " muebles";
     var btn = document.getElementById("btn-batch-apply");
-    btn.textContent = "Aplicar a " + (members.length || (context.furniture || []).length) + " muebles";
+    btn.textContent = "Aplicar a " + count + " muebles";
     btn.disabled = window.GraneteMutation && typeof window.GraneteMutation.phase === "function" &&
       window.GraneteMutation.phase() === "applying_host_mutation";
   }
@@ -438,13 +542,19 @@
     if (!context || context.kind !== "batch") return;
     var members = context.furniture || [];
     var chosen = batchSelections;
-    if (Object.keys(chosen).length === 0 || members.length === 0) return;
+    var paramEdits = batchParamEdits;
+    var pendingRoles = Object.keys(chosen).length;
+    var pendingParams = Object.keys(paramEdits).length;
+    if ((pendingRoles + pendingParams) === 0 || members.length === 0) return;
 
     var items = members.map(function (m) {
       return {
         instanceId: m.furnitureInstanceRef,
         definitionId: m.furnitureDefinitionId,
-        parameters: m.parameters || {},
+        // One complete per-member intent: current parameters overridden by
+        // the batch edits, current choices overridden by the chosen roles
+        // (Ruby merges with each entity's persisted materialChoices).
+        parameters: Object.assign({}, m.parameters || {}, paramEdits),
         materialChoices: chosen
       };
     });

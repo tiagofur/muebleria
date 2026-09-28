@@ -58,6 +58,11 @@ class SelectionBatchTest < Minitest::Test
     material_roles = payload['capabilities']['canBatchEditMaterialRoles']
     refute material_roles['supported']
     assert_includes material_roles['reason'], '2 de 2'
+    # #471 R4: the hardware batch operation is declared and honestly denied
+    # while the per-furniture high-level hardware capability stays off.
+    hardware = payload['capabilities']['canBatchEditHighLevelHardware']
+    refute hardware['supported']
+    assert_includes hardware['reason'], '2 de 2'
   end
 
   def test_mixed_selection_excludes_non_furniture_with_honest_reason

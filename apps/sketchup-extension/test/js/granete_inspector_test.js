@@ -577,8 +577,8 @@ test('batch apply: roles become selects whose options are the intersection acros
   front.select.value = 'mat-roble';
   front.select.dispatchEvent({ type: 'change' });
   assert(visible(el(sandbox, 'inspector-batch-footer')), 'choosing a role shows the footer');
-  assert(el(sandbox, 'inspector-batch-pending').textContent.indexOf('1 rol a aplicar') !== -1,
-    'the footer counts the pending roles');
+  assert(el(sandbox, 'inspector-batch-pending').textContent.indexOf('1 cambio a aplicar') !== -1,
+    'the footer counts the pending change');
   assert.strictEqual(el(sandbox, 'btn-batch-apply').textContent, 'Aplicar a 2 muebles',
     'the Apply button names the affected count');
 
@@ -614,6 +614,121 @@ test('batch apply: one honest all-or-nothing outcome per result', () => {
   const errorToast = sandbox.__toastCalls.filter((t) => t.type === 'error').pop();
   assert(errorToast && errorToast.msg.indexOf('Ningún mueble cambió') !== -1,
     'failure states honestly that nothing was applied');
+});
+
+// --- #471 R3: compatible shared parameters -------------------------------
+
+function batchInputs(sandbox) {
+  return el(sandbox, 'inspector-batch-params').children.map((row) => ({
+    label: row.children[0].textContent,
+    input: row.children[1].children[0]
+  })).filter((r) => r.input && String(r.input.tagName).toLowerCase() === 'input');
+}
+
+test('batch params: editable only with a common contract — range intersection, mixed placeholder', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(batchContext([
+    batchMember({
+      definition: {
+        parameters: [
+          { name: 'widthMm', type: 'number', defaultValue: 600, min: 300, max: 1200 },
+          { name: 'shelfCount', type: 'number', defaultValue: 2, min: 1, max: 6 }
+        ],
+        materialRoles: []
+      },
+      parameters: { widthMm: 600, shelfCount: 2 }
+    }),
+    batchMember({
+      furnitureInstanceRef: 'furn-2',
+      definition: {
+        parameters: [
+          { name: 'widthMm', type: 'number', defaultValue: 900, min: 500, max: 1000 }
+        ],
+        materialRoles: []
+      },
+      parameters: { widthMm: 900 }
+    })
+  ], [], true));
+
+  const inputs = batchInputs(sandbox);
+  const width = inputs.find((i) => i.label === 'widthMm');
+  assert(width, 'a parameter declared by every member with the same type renders an input');
+  assert.strictEqual(width.input.min, '500', 'min is the strictest lower bound across members');
+  assert.strictEqual(width.input.max, '1000', 'max is the narrowest upper bound across members');
+  assert.strictEqual(width.input.value, '', 'a mixed value starts empty');
+  assert.strictEqual(width.input.placeholder, 'Mixto', 'mixed parameters say so in the placeholder');
+
+  const shelf = inputs.find((i) => i.label === 'shelfCount');
+  assert(!shelf, 'a parameter only one definition declares is not editable');
+
+  // A disjoint range contract has no honest common value: fail closed.
+  api.onSelectionChange(batchContext([
+    batchMember({
+      definition: { parameters: [{ name: 'widthMm', type: 'number', defaultValue: 600, min: 300, max: 500 }] }
+    }),
+    batchMember({
+      furnitureInstanceRef: 'furn-2',
+      definition: { parameters: [{ name: 'widthMm', type: 'number', defaultValue: 900, min: 700, max: 1000 }] }
+    })
+  ], [], true));
+  const rows = batchRows('inspector-batch-params', sandbox).filter((r) => r.label === 'widthMm');
+  assert(rows.length === 1 && rows[0].value === 'sin rango común',
+    'a disjoint range renders the honest no-common-contract note, not an input');
+});
+
+test('batch params: an edit merges into the per-member intent with current parameters', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(batchContext([
+    batchMember({
+      definition: {
+        parameters: [{ name: 'widthMm', type: 'number', defaultValue: 600, min: 300, max: 1200 }],
+        materialRoles: [{ role: 'FRONT', optionIds: ['mat-roble', 'mat-blanco'] }]
+      },
+      parameters: { widthMm: 600, shelfCount: 4 }
+    }),
+    batchMember({
+      furnitureInstanceRef: 'furn-2',
+      definition: {
+        parameters: [{ name: 'widthMm', type: 'number', defaultValue: 600, min: 300, max: 1200 }],
+        materialRoles: [{ role: 'FRONT', optionIds: ['mat-roble', 'mat-blanco'] }]
+      },
+      parameters: { widthMm: 900 }
+    })
+  ], [], true));
+
+  const width = batchInputs(sandbox).find((i) => i.label === 'widthMm');
+  width.input.value = '800';
+  width.input.dispatchEvent({ type: 'change' });
+  const front = batchSelects(sandbox).find((s) => s.label === 'FRONT');
+  front.select.value = 'mat-roble';
+  front.select.dispatchEvent({ type: 'change' });
+
+  assert(el(sandbox, 'inspector-batch-pending').textContent.indexOf('2 cambios a aplicar') !== -1,
+    'the footer counts roles and parameters together');
+
+  el(sandbox, 'btn-batch-apply').click();
+  const submit = sandbox.__mutation.find((c) => c.action === 'submitBatchUpdate');
+  assert(submit, 'Apply rides GraneteMutation.submitBatchUpdate');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(submit.items)), [
+    { instanceId: 'furn-1', definitionId: 'kitchen-base-standard',
+      parameters: { widthMm: 800, shelfCount: 4 }, materialChoices: { FRONT: 'mat-roble' } },
+    { instanceId: 'furn-2', definitionId: 'kitchen-base-standard',
+      parameters: { widthMm: 800 }, materialChoices: { FRONT: 'mat-roble' } }
+  ], 'each member keeps its own untouched parameters and receives the shared edits as numbers');
 });
 
 test('furniture: definition direct identity, param state, summary and materials render', () => {
