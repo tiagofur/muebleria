@@ -20,7 +20,9 @@ function test(name, fn) {
   try {
     fn();
   } catch (err) {
+    err.stack = `[${name}] ${err.stack}`;
     err.message = `[${name}] ${err.message}`;
+    console.error(`FAILING: ${name}`);
     throw err;
   }
   testsPassed += 1;
@@ -570,6 +572,114 @@ function run() {
     const second = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[1];
     assert.strictEqual(second[1].expectedWorkingVersion, '2026-09-28T11:00:00Z',
       'the next draft is based on V2');
+  });
+
+  // --- FINAL REVIEW #900: the Apply race boundary --------------------------
+  test('R2 race: two rapid Apply clicks issue exactly ONE apply request', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak');
+    ctx.document.getElementById('design-inspector-apply').click();
+    ctx.document.getElementById('design-inspector-apply').click();
+    ctx.document.getElementById('design-inspector-apply').click();
+    const applies = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults');
+    assert.strictEqual(applies.length, 1, 'one user Apply = exactly one apply request');
+    // The button is disabled while the apply is in flight.
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, true);
+    // Success releases the guard: a NEW draft can apply again.
+    mod.onDesignDefaultsApplied({ requestId: applies[0][1].requestId, status: 'ok', designId: 'd-a',
+      workingVersion: '2026-09-28T11:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-oak', FRENTES: 'mat-oak' } } });
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, false);
+  });
+
+  test('R2 race: switching designs invalidates the in-flight answer of the old design', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payloadA = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+
+    // The binding changes to Design B while the A apply is in flight.
+    mod.onBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p-1', designId: 'd-b', projectName: 'Cocina López', designName: 'Alternativa',
+        workingVersion: '2026-09-28T13:00:00Z' }
+    });
+    assert.strictEqual(mod.handleNoSelection(), true);
+    const requestB = ctx.sketchupCalls.filter((c) => c[0] === 'get_design_defaults').slice(-1)[0][1];
+    assert.strictEqual(requestB.designId, 'd-b');
+    // B's ready answer establishes its own base.
+    mod.onDesignDefaults({ requestId: requestB.requestId, designId: 'd-b', status: 'ready',
+      workingVersion: '2026-09-28T13:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white', FRENTES: 'mat-oak' } } });
+
+    // The late A answer must be FULLY ignored: no conflict/error, no state
+    // change inside B's inspector, and B's own apply stays enabled.
+    mod.onDesignDefaultsApplied({ requestId: payloadA.requestId, status: 'conflict',
+      reason: 'el diseño cambió en el servidor' });
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, false,
+      'a foreign late answer must not disable B');
+    assert.ok(!ctx.body().textContent.includes('cambió en el servidor'), 'no foreign conflict message');
+
+    // B still applies normally.
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const applies = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults');
+    assert.strictEqual(applies.length, 2);
+    assert.strictEqual(applies[1][1].designId, 'd-b');
+  });
+
+  test('R2 race: conflict releases the in-flight guard and preserves the draft', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payload = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+    mod.onDesignDefaultsApplied({ requestId: payload.requestId, status: 'conflict',
+      reason: 'el diseño cambió en el servidor' });
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, true,
+      'a real conflict disables repeat-apply against the stale token');
+    assert.ok(ctx.document.getElementById('design-inspector-pending').textContent.includes('cambió en el servidor'));
+    // The draft survives per the contract; Descartar re-enables a fresh start.
+    ctx.document.getElementById('design-inspector-discard').click();
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, false);
+    assert.strictEqual(ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults').length, 1,
+      'discard never writes');
+  });
+
+  test('R2 race: the no-bridge fallback releases the in-flight guard', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-INTERIOR').click();
+    ctx.picker.onApply('mat-oak');
+    // Remove the bridge: the fallback path must still release the guard.
+    ctx.sandbox.window.sketchup.apply_design_defaults = undefined;
+    ctx.document.getElementById('design-inspector-apply').click();
+    assert.strictEqual(ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults').length, 0);
+    assert.ok(ctx.body().textContent.includes('Granete no está disponible'), 'honest fallback message');
+    // Guard released: a restored bridge can apply again.
+    ctx.sandbox.window.sketchup.apply_design_defaults =
+      (payload) => ctx.sketchupCalls.push(['apply_design_defaults', JSON.parse(payload)]);
+    ctx.document.getElementById('design-inspector-apply').click();
+    assert.strictEqual(ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults').length, 1,
+      'the guard released allows a new apply');
   });
 
   // --- error state with retry ---------------------------------------------

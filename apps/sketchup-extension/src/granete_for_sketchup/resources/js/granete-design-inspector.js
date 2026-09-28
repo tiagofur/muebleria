@@ -61,7 +61,11 @@
     // it only flags draftStale so the user sees the honest divergence (the
     // bridge remains the authority that refuses a stale token).
     draftBase: null,
-    draftStale: false
+    draftStale: false,
+    // #784 R2 final review: one user Apply = exactly one apply request.
+    // True from applyDraft() until its correlated answer (or the no-bridge
+    // fallback) lands; a binding switch invalidates the in-flight request.
+    applyInFlight: false
   };
 
   var view = null;
@@ -220,7 +224,11 @@
     var visible = state.laneActive && state.connected &&
       (pending > 0 || !!conflict);
     footerEl.style.display = visible ? "block" : "none";
-    if (!visible) return;
+    if (!visible) {
+      // A hidden footer must not leave a stale disabled state behind.
+      applyEl.disabled = false;
+      return;
+    }
     if (conflict) {
       pendingEl.textContent = conflict;
       applyEl.disabled = true;
@@ -229,7 +237,8 @@
       applyEl.disabled = false;
     } else {
       pendingEl.textContent = pending === 1 ? "1 cambio pendiente" : pending + " cambios pendientes";
-      applyEl.disabled = false;
+      // #784 R2 final review: Aplicar disabled while the apply is in flight.
+      applyEl.disabled = state.applyInFlight;
     }
   }
 
@@ -295,6 +304,7 @@
     state.draft = {};
     state.draftBase = null;
     state.draftStale = false;
+    state.conflict = null; // a fresh start after a deliberate discard
     render();
   }
 
@@ -309,6 +319,7 @@
   // (onDesignDefaultsApplied) clears the draft only on success.
   function applyDraft() {
     requireDeps();
+    if (state.applyInFlight) return; // one user Apply = one request
     var pending = pendingCount();
     if (pending === 0 || !state.connected) return;
     // #784 R2 final review: the Apply token is the DRAFT BASE version —
@@ -322,6 +333,8 @@
     for (var draftRole in state.draft) merged[draftRole] = state.draft[draftRole];
     state.requestId += 1;
     state.conflict = null;
+    state.applyInFlight = true;
+    render(); // Aplicar disabled immediately
     var payload = {
       requestId: state.requestId,
       designId: state.designId,
@@ -331,6 +344,7 @@
     if (window.sketchup && typeof window.sketchup.apply_design_defaults === "function") {
       window.sketchup.apply_design_defaults(JSON.stringify(payload));
     } else {
+      state.applyInFlight = false;
       state.conflict = "Granete no está disponible en este momento.";
       render();
     }
@@ -357,6 +371,12 @@
         state.draftBase = null;
         state.draftStale = false;
         state.conflict = null;
+        if (state.applyInFlight) {
+          // Invalidate the in-flight request: its late answer can never
+          // touch the (now authority-less) inspector.
+          state.requestId += 1;
+          state.applyInFlight = false;
+        }
       } else {
         state.designId = binding.designId;
         state.projectId = binding.projectId || null;
@@ -370,6 +390,11 @@
           state.draftBase = null;
           state.draftStale = false;
           state.conflict = null;
+          if (state.applyInFlight) {
+            // Same for a design switch: A's in-flight apply is dead.
+            state.requestId += 1;
+            state.applyInFlight = false;
+          }
         }
       }
       if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
@@ -453,7 +478,11 @@
     // draft and shows the honest reason (no fake success); the
     // unbound/stale_binding shapes fail closed exactly like the reads.
     onDesignDefaultsApplied: function (payload) {
+      // Foreign/late answers (a switched or unbound binding invalidates the
+      // requestId) are fully ignored — they can never touch the current
+      // inspector's state or release its guard.
       if (!payload || payload.requestId !== state.requestId) return;
+      state.applyInFlight = false;
       if (payload.status === "ok") {
         if (!state.connected || payload.designId !== state.designId) return;
         state.defaults = (payload.authoringDefaults && payload.authoringDefaults.materialChoices) || {};
