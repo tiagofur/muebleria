@@ -103,9 +103,11 @@ promoted to installed-machine evidence. #352 owns field validation.
   old `db173461`/`90cc2bdc` pins does not prove the rebased candidate;
   fresh exact-HEAD review and CI are required before delivery. The leader
   owns remote update and publication; no writer push occurred. Rebased V0:
-  `git diff --check origin/main...HEAD` passed, all 12 Markdown links still
-  resolve locally, and `factory_preflight.py --require-clean` reported a
-  clean tree. `verify_affected.py --base origin/main --plan` succeeded on
+  `git diff --check origin/main...HEAD` passed; all 7 local Markdown link
+  targets resolve. The other 5 link occurrences are external URLs, not
+  local-path checks; the two distinct official HOMAG URLs were opened during
+  B1. `factory_preflight.py --require-clean` reported a clean tree.
+  `verify_affected.py --base origin/main --plan` succeeded on
   the new base but again selected all gates because the ODD path is unknown;
   it did not execute those gates. No executable or receiver checks were
   rerun for this passive-document correction.
