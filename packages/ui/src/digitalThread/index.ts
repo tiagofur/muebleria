@@ -79,3 +79,13 @@ export {
   QUOTE_SOURCE_TYPE_LABELS,
   RECONCILIATION_STATUS_LABELS,
 } from './reconciliationWorkspace';
+
+export {
+  JOINERY_PRODUCTION_LABELS_ES,
+  JOINERY_STAGE_LABELS_ES,
+  JoineryStatusPanel,
+  joineryDiagnosticsModel,
+  shortContactLabel,
+  type JoineryRelationshipDiagnostics,
+  type JoineryStatusPanelProps,
+} from './JoineryStatusPanel';
