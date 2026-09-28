@@ -31,10 +31,35 @@ func toMaterialRoleProvenanceDTO(role engine.MaterialRoleProvenance) openapi.Mat
 	return dto
 }
 
+func toMaterialRoleInheritanceDTO(entry domain.DesignRoleInheritance) openapi.MaterialRoleInheritance {
+	dto := openapi.MaterialRoleInheritance{
+		Role:              entry.Role,
+		Mode:              openapi.DesignMaterialChoiceMode(entry.Mode),
+		AppliedMaterialID: entry.AppliedChoice,
+		NeedsRollout:      entry.NeedsRollout,
+	}
+	if entry.DesignDefault != "" {
+		dto.DesignDefaultMaterialID = &entry.DesignDefault
+	}
+	return dto
+}
+
+func toDesignRoleInheritanceCountDTO(count domain.DesignRoleInheritanceCount) openapi.DesignRoleInheritanceCount {
+	return openapi.DesignRoleInheritanceCount{
+		Role:          count.Role,
+		Items:         int64(count.Items),
+		DesignBacked:  int64(count.DesignBacked),
+		NeedsRollout:  int64(count.NeedsRollout),
+		DesignCurrent: int64(count.DesignCurrent),
+		Overridden:    int64(count.Overridden),
+	}
+}
+
 func toDesignWorkingItemMaterialProvenanceDTO(item storage.DesignWorkingItemMaterialProvenance) openapi.DesignWorkingItemMaterialProvenance {
 	dto := openapi.DesignWorkingItemMaterialProvenance{
 		FurnitureInstanceID: item.FurnitureInstanceID,
 		Roles:               make([]openapi.MaterialRoleProvenance, 0, len(item.Roles)),
+		Inheritance:         make([]openapi.MaterialRoleInheritance, 0, len(item.Inheritance)),
 		Reconcilable:        item.Reconcilable,
 	}
 	if item.FurnitureDefinitionID != "" {
@@ -43,14 +68,25 @@ func toDesignWorkingItemMaterialProvenanceDTO(item storage.DesignWorkingItemMate
 	for _, role := range item.Roles {
 		dto.Roles = append(dto.Roles, toMaterialRoleProvenanceDTO(role))
 	}
+	for _, entry := range item.Inheritance {
+		dto.Inheritance = append(dto.Inheritance, toMaterialRoleInheritanceDTO(entry))
+	}
 	return dto
 }
 
 func toDesignWorkingCopyMaterialProvenanceDTO(prov storage.DesignWorkingCopyMaterialProvenance) openapi.DesignWorkingCopyMaterialProvenance {
 	dto := openapi.DesignWorkingCopyMaterialProvenance{
-		DesignID:  prov.DesignID,
-		ProjectID: prov.ProjectID,
-		Items:     make([]openapi.DesignWorkingItemMaterialProvenance, 0, len(prov.Items)),
+		DesignID:          prov.DesignID,
+		ProjectID:         prov.ProjectID,
+		AuthoringDefaults: toDesignAuthoringDefaultsDTO(prov.AuthoringDefaults),
+		InheritanceSummary: func() []openapi.DesignRoleInheritanceCount {
+			out := make([]openapi.DesignRoleInheritanceCount, 0, len(prov.InheritanceSummary))
+			for _, count := range prov.InheritanceSummary {
+				out = append(out, toDesignRoleInheritanceCountDTO(count))
+			}
+			return out
+		}(),
+		Items: make([]openapi.DesignWorkingItemMaterialProvenance, 0, len(prov.Items)),
 	}
 	if !prov.WorkingCopyUpdatedAt.IsZero() {
 		updatedAt := prov.WorkingCopyUpdatedAt.UTC().Format(time.RFC3339Nano)

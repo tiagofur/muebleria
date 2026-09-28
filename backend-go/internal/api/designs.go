@@ -41,6 +41,10 @@ func toDesignRevisionItemDTO(item domain.DesignRevisionItem) openapi.DesignRevis
 		CreatedAt:           item.CreatedAt.UTC().Format(time.RFC3339Nano),
 		DescriptorState:     openapi.DesignRevisionDescriptorState(domain.DesignRevisionDescriptorStateFor(item.PresentationSnapshot)),
 	}
+	if item.MaterialChoiceModes != nil {
+		modes := toDesignMaterialChoiceModesDTO(item.MaterialChoiceModes)
+		dto.MaterialChoiceModes = &modes
+	}
 	if item.PresentationSnapshot != nil {
 		dto.PresentationSnapshot = toDesignRevisionPresentationDTO(*item.PresentationSnapshot)
 	}
@@ -108,6 +112,11 @@ func toDesignRevisionDTO(rev domain.DesignRevision) openapi.DesignRevision {
 	for _, item := range rev.Items {
 		dto.Items = append(dto.Items, toDesignRevisionItemDTO(item))
 	}
+	// #784: frozen publish-moment authoring defaults; nil on legacy revisions.
+	if rev.AuthoringDefaultsSnapshot != nil {
+		defaults := toDesignAuthoringDefaultsDTO(*rev.AuthoringDefaultsSnapshot)
+		dto.AuthoringDefaultsSnapshot = &defaults
+	}
 	// #392: published artifact metadata (nil = legacy artifact-less publish).
 	if rev.Artifacts != nil {
 		dto.Artifacts = make([]openapi.DesignRevisionArtifact, 0, len(rev.Artifacts))
@@ -151,6 +160,19 @@ func optionalString(value string) *string {
 	return &value
 }
 
+func toDesignAuthoringDefaultsDTO(defaults domain.DesignAuthoringDefaults) openapi.DesignAuthoringDefaults {
+	normalized := defaults.Normalize()
+	return openapi.DesignAuthoringDefaults{MaterialChoices: normalized.MaterialChoices}
+}
+
+func toDesignMaterialChoiceModesDTO(modes map[string]domain.DesignMaterialChoiceMode) map[string]openapi.DesignMaterialChoiceMode {
+	out := make(map[string]openapi.DesignMaterialChoiceMode, len(modes))
+	for role, mode := range modes {
+		out[role] = openapi.DesignMaterialChoiceMode(mode)
+	}
+	return out
+}
+
 func toDesignWorkingCopyItemDTO(item domain.DesignWorkingItem) openapi.DesignWorkingCopyItem {
 	dto := openapi.DesignWorkingCopyItem{
 		ID:                  item.ID,
@@ -158,6 +180,7 @@ func toDesignWorkingCopyItemDTO(item domain.DesignWorkingItem) openapi.DesignWor
 		FurnitureInstanceID: item.FurnitureInstanceID,
 		Parameters:          item.Parameters,
 		MaterialChoices:     item.MaterialChoices,
+		MaterialChoiceModes: toDesignMaterialChoiceModesDTO(item.MaterialChoiceModes),
 		CreatedAt:           item.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:           item.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
@@ -194,11 +217,12 @@ func toDesignWorkingCopyItemDTO(item domain.DesignWorkingItem) openapi.DesignWor
 
 func toDesignWorkingCopyDTO(wc domain.DesignWorkingCopy) openapi.DesignWorkingCopy {
 	dto := openapi.DesignWorkingCopy{
-		DesignID:   wc.DesignID,
-		ProjectID:  wc.ProjectID,
-		SourceType: openapi.DesignRevisionSourceType(wc.SourceType),
-		UpdatedAt:  wc.UpdatedAt.UTC().Format(time.RFC3339Nano),
-		Items:      make([]openapi.DesignWorkingCopyItem, 0, len(wc.Items)),
+		DesignID:          wc.DesignID,
+		ProjectID:         wc.ProjectID,
+		SourceType:        openapi.DesignRevisionSourceType(wc.SourceType),
+		AuthoringDefaults: toDesignAuthoringDefaultsDTO(wc.AuthoringDefaults),
+		UpdatedAt:         wc.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		Items:             make([]openapi.DesignWorkingCopyItem, 0, len(wc.Items)),
 	}
 	if wc.BaseRevisionID != nil && *wc.BaseRevisionID != "" {
 		dto.BaseRevisionID = wc.BaseRevisionID
@@ -224,6 +248,10 @@ func respondWithDesignError(w http.ResponseWriter, err error) {
 		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, err.Error(), nil)
 	case errors.Is(err, domain.ErrInvalidParentRevision):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "La revisión padre es inválida o no pertenece a este diseño", nil)
+	case errors.Is(err, domain.ErrInvalidDesignCommand):
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
+	case errors.Is(err, domain.ErrInvalidMaterialChoiceModes):
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
 	case errors.Is(err, domain.ErrDuplicateFurnitureInstanceInRevision):
 		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "Una unidad física (FurnitureInstance) no puede aparecer más de una vez en la misma revisión", nil)
 	case errors.Is(err, domain.ErrCrossProjectFurnitureInstance):
@@ -547,10 +575,28 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 				respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "furniture_instance_id inválido en uno de los items", nil)
 				return
 			}
+			// #784 wire policy at the boundary: a PRESENT modes statement is
+			// validated strictly (unknown modes, modes without a materialized
+			// choice and PARTIAL statements reject with 400 before reaching
+			// the store). An ABSENT field is the legacy writer shape — it
+			// stays nil here and the storage layer preserves persisted
+			// lineage for unchanged values (owner decision 2026-09-28).
+			var modes map[string]domain.DesignMaterialChoiceMode
+			if item.MaterialChoiceModes != nil {
+				modes = make(map[string]domain.DesignMaterialChoiceMode, len(item.MaterialChoiceModes))
+				for role, mode := range item.MaterialChoiceModes {
+					modes[role] = domain.DesignMaterialChoiceMode(mode)
+				}
+				if err := domain.ValidatePresentMaterialChoiceModes(item.MaterialChoices, modes); err != nil {
+					respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
+					return
+				}
+			}
 			cmdItem := storage.UpdateDesignWorkingCopyItemCommand{
 				FurnitureInstanceID: fiID,
 				Parameters:          item.Parameters,
 				MaterialChoices:     item.MaterialChoices,
+				MaterialChoiceModes: modes,
 			}
 			if item.FurnitureDefinitionID != nil {
 				defID := strings.TrimSpace(*item.FurnitureDefinitionID)
@@ -586,11 +632,22 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 			items = append(items, cmdItem)
 		}
 
+		// #784: omitted authoring_defaults preserve the stored Design
+		// defaults (nil-keeps frontier); provided replaces them wholesale.
+		var authoringDefaults *domain.DesignAuthoringDefaults
+		if body.AuthoringDefaults != nil {
+			defaults := domain.DesignAuthoringDefaults{
+				MaterialChoices: body.AuthoringDefaults.MaterialChoices,
+			}
+			authoringDefaults = &defaults
+		}
+
 		wc, err := s.Store.UpdateDesignWorkingCopy(r.Context(), storage.UpdateDesignWorkingCopyCommand{
 			DesignID:               designID,
 			BaseRevisionID:         baseRevID,
 			ExpectedWorkingVersion: expectedWorkingVersion,
 			SourceType:             sourceType,
+			AuthoringDefaults:      authoringDefaults,
 			Items:                  items,
 			ActorUserID:            claims.UserID,
 		})

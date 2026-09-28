@@ -1030,36 +1030,38 @@ type TechnicalClientLocator struct {
 }
 
 type DesignRevisionItem struct {
-	ID                     string                              `json:"id"`
-	DesignRevisionID       string                              `json:"design_revision_id"`
-	FurnitureInstanceID    string                              `json:"furniture_instance_id"`
-	FurnitureDefinitionID  *string                             `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion      *int64                              `json:"definition_version,omitempty"`
-	Parameters             map[string]any                      `json:"parameters"`
-	MaterialChoices        map[string]string                   `json:"material_choices"`
-	Transform              *Transform3D                        `json:"transform,omitempty"`
-	RoomID                 *string                             `json:"room_id,omitempty"`
-	TechnicalClientLocator *TechnicalClientLocator             `json:"technical_client_locator,omitempty"`
-	CreatedAt              string                              `json:"created_at"`
-	DescriptorState        DesignRevisionDescriptorState       `json:"descriptor_state"`
-	PresentationSnapshot   *DesignRevisionPresentationSnapshot `json:"presentation_snapshot,omitempty"`
+	ID                     string                               `json:"id"`
+	DesignRevisionID       string                               `json:"design_revision_id"`
+	FurnitureInstanceID    string                               `json:"furniture_instance_id"`
+	FurnitureDefinitionID  *string                              `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion      *int64                               `json:"definition_version,omitempty"`
+	Parameters             map[string]any                       `json:"parameters"`
+	MaterialChoices        map[string]string                    `json:"material_choices"`
+	MaterialChoiceModes    *map[string]DesignMaterialChoiceMode `json:"material_choice_modes,omitempty"`
+	Transform              *Transform3D                         `json:"transform,omitempty"`
+	RoomID                 *string                              `json:"room_id,omitempty"`
+	TechnicalClientLocator *TechnicalClientLocator              `json:"technical_client_locator,omitempty"`
+	CreatedAt              string                               `json:"created_at"`
+	DescriptorState        DesignRevisionDescriptorState        `json:"descriptor_state"`
+	PresentationSnapshot   *DesignRevisionPresentationSnapshot  `json:"presentation_snapshot,omitempty"`
 }
 
 type DesignRevision struct {
-	ID                    string                   `json:"id"`
-	DesignID              string                   `json:"design_id"`
-	RevisionNumber        int64                    `json:"revision_number"`
-	ParentRevisionID      *string                  `json:"parent_revision_id,omitempty"`
-	SourceType            DesignRevisionSourceType `json:"source_type"`
-	Status                DesignRevisionStatus     `json:"status"`
-	CreatedBy             *string                  `json:"created_by,omitempty"`
-	CreatedAt             string                   `json:"created_at"`
-	ApprovedBy            *string                  `json:"approved_by,omitempty"`
-	ApprovedAt            *string                  `json:"approved_at,omitempty"`
-	Items                 []DesignRevisionItem     `json:"items"`
-	Artifacts             []DesignRevisionArtifact `json:"artifacts,omitempty"`
-	CreatedByDisplayName  *string                  `json:"created_by_display_name,omitempty"`
-	ApprovedByDisplayName *string                  `json:"approved_by_display_name,omitempty"`
+	ID                        string                   `json:"id"`
+	DesignID                  string                   `json:"design_id"`
+	RevisionNumber            int64                    `json:"revision_number"`
+	ParentRevisionID          *string                  `json:"parent_revision_id,omitempty"`
+	SourceType                DesignRevisionSourceType `json:"source_type"`
+	Status                    DesignRevisionStatus     `json:"status"`
+	CreatedBy                 *string                  `json:"created_by,omitempty"`
+	CreatedAt                 string                   `json:"created_at"`
+	ApprovedBy                *string                  `json:"approved_by,omitempty"`
+	ApprovedAt                *string                  `json:"approved_at,omitempty"`
+	AuthoringDefaultsSnapshot *DesignAuthoringDefaults `json:"authoring_defaults_snapshot,omitempty"`
+	Items                     []DesignRevisionItem     `json:"items"`
+	Artifacts                 []DesignRevisionArtifact `json:"artifacts,omitempty"`
+	CreatedByDisplayName      *string                  `json:"created_by_display_name,omitempty"`
+	ApprovedByDisplayName     *string                  `json:"approved_by_display_name,omitempty"`
 }
 
 type CreateProductionReleaseRequest struct {
@@ -1160,45 +1162,60 @@ type ReleaseCuttingDemandPiece struct {
 }
 
 type PublishDesignRevisionItem struct {
-	FurnitureInstanceID    string                  `json:"furniture_instance_id"`
-	FurnitureDefinitionID  *string                 `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion      *int64                  `json:"definition_version,omitempty"`
-	Parameters             map[string]any          `json:"parameters,omitempty"`
-	MaterialChoices        map[string]string       `json:"material_choices,omitempty"`
-	Transform              *Transform3D            `json:"transform,omitempty"`
-	RoomID                 *string                 `json:"room_id,omitempty"`
-	TechnicalClientLocator *TechnicalClientLocator `json:"technical_client_locator,omitempty"`
+	FurnitureInstanceID    string                              `json:"furniture_instance_id"`
+	MaterialChoiceModes    map[string]DesignMaterialChoiceMode `json:"material_choice_modes,omitempty"`
+	FurnitureDefinitionID  *string                             `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion      *int64                              `json:"definition_version,omitempty"`
+	Parameters             map[string]any                      `json:"parameters,omitempty"`
+	MaterialChoices        map[string]string                   `json:"material_choices,omitempty"`
+	Transform              *Transform3D                        `json:"transform,omitempty"`
+	RoomID                 *string                             `json:"room_id,omitempty"`
+	TechnicalClientLocator *TechnicalClientLocator             `json:"technical_client_locator,omitempty"`
 }
 
 type DesignWorkingCopyItem struct {
-	ID                     string                  `json:"id"`
-	DesignID               string                  `json:"design_id"`
-	FurnitureInstanceID    string                  `json:"furniture_instance_id"`
-	FurnitureDefinitionID  *string                 `json:"furniture_definition_id,omitempty"`
-	DefinitionVersion      *int64                  `json:"definition_version,omitempty"`
-	Parameters             map[string]any          `json:"parameters"`
-	MaterialChoices        map[string]string       `json:"material_choices"`
-	Transform              *Transform3D            `json:"transform,omitempty"`
-	RoomID                 *string                 `json:"room_id,omitempty"`
-	TechnicalClientLocator *TechnicalClientLocator `json:"technical_client_locator,omitempty"`
-	CreatedAt              string                  `json:"created_at"`
-	UpdatedAt              string                  `json:"updated_at"`
+	ID                     string                              `json:"id"`
+	DesignID               string                              `json:"design_id"`
+	FurnitureInstanceID    string                              `json:"furniture_instance_id"`
+	FurnitureDefinitionID  *string                             `json:"furniture_definition_id,omitempty"`
+	DefinitionVersion      *int64                              `json:"definition_version,omitempty"`
+	Parameters             map[string]any                      `json:"parameters"`
+	MaterialChoices        map[string]string                   `json:"material_choices"`
+	MaterialChoiceModes    map[string]DesignMaterialChoiceMode `json:"material_choice_modes"`
+	Transform              *Transform3D                        `json:"transform,omitempty"`
+	RoomID                 *string                             `json:"room_id,omitempty"`
+	TechnicalClientLocator *TechnicalClientLocator             `json:"technical_client_locator,omitempty"`
+	CreatedAt              string                              `json:"created_at"`
+	UpdatedAt              string                              `json:"updated_at"`
+}
+
+type DesignMaterialChoiceMode string
+
+const (
+	DesignMaterialChoiceModeDesign   DesignMaterialChoiceMode = "design"
+	DesignMaterialChoiceModeOverride DesignMaterialChoiceMode = "override"
+)
+
+type DesignAuthoringDefaults struct {
+	MaterialChoices map[string]string `json:"materialChoices"`
 }
 
 type DesignWorkingCopy struct {
-	DesignID       string                   `json:"design_id"`
-	ProjectID      string                   `json:"project_id"`
-	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`
-	SourceType     DesignRevisionSourceType `json:"source_type"`
-	Items          []DesignWorkingCopyItem  `json:"items"`
-	UpdatedAt      string                   `json:"updated_at"`
-	UpdatedBy      *string                  `json:"updated_by,omitempty"`
+	DesignID          string                   `json:"design_id"`
+	ProjectID         string                   `json:"project_id"`
+	BaseRevisionID    *string                  `json:"base_revision_id,omitempty"`
+	SourceType        DesignRevisionSourceType `json:"source_type"`
+	AuthoringDefaults DesignAuthoringDefaults  `json:"authoring_defaults"`
+	Items             []DesignWorkingCopyItem  `json:"items"`
+	UpdatedAt         string                   `json:"updated_at"`
+	UpdatedBy         *string                  `json:"updated_by,omitempty"`
 }
 
 type UpdateDesignWorkingCopyRequest struct {
 	BaseRevisionID         *string                     `json:"base_revision_id,omitempty"`
 	ExpectedWorkingVersion string                      `json:"expected_working_version"`
 	SourceType             *DesignRevisionSourceType   `json:"source_type,omitempty"`
+	AuthoringDefaults      *DesignAuthoringDefaults    `json:"authoring_defaults,omitempty"`
 	Items                  []PublishDesignRevisionItem `json:"items"`
 }
 
@@ -1229,15 +1246,35 @@ type MaterialRoleProvenance struct {
 	Provenance      MaterialProvenanceStatus `json:"provenance"`
 }
 
+type MaterialRoleInheritance struct {
+	Role                    string                   `json:"role"`
+	Mode                    DesignMaterialChoiceMode `json:"mode"`
+	AppliedMaterialID       string                   `json:"applied_material_id"`
+	DesignDefaultMaterialID *string                  `json:"design_default_material_id,omitempty"`
+	NeedsRollout            bool                     `json:"needs_rollout"`
+}
+
+type DesignRoleInheritanceCount struct {
+	Role          string `json:"role"`
+	Items         int64  `json:"items"`
+	DesignBacked  int64  `json:"design_backed"`
+	NeedsRollout  int64  `json:"needs_rollout"`
+	DesignCurrent int64  `json:"design_current"`
+	Overridden    int64  `json:"overridden"`
+}
+
 type DesignWorkingItemMaterialProvenance struct {
-	FurnitureInstanceID   string                   `json:"furniture_instance_id"`
-	FurnitureDefinitionID *string                  `json:"furniture_definition_id,omitempty"`
-	Roles                 []MaterialRoleProvenance `json:"roles"`
-	Reconcilable          bool                     `json:"reconcilable"`
+	FurnitureInstanceID   string                    `json:"furniture_instance_id"`
+	FurnitureDefinitionID *string                   `json:"furniture_definition_id,omitempty"`
+	Roles                 []MaterialRoleProvenance  `json:"roles"`
+	Inheritance           []MaterialRoleInheritance `json:"inheritance"`
+	Reconcilable          bool                      `json:"reconcilable"`
 }
 
 type DesignWorkingCopyMaterialProvenance struct {
 	DesignID             string                                `json:"design_id"`
+	AuthoringDefaults    DesignAuthoringDefaults               `json:"authoring_defaults"`
+	InheritanceSummary   []DesignRoleInheritanceCount          `json:"inheritance_summary"`
 	ProjectID            string                                `json:"project_id"`
 	WorkingCopyUpdatedAt *string                               `json:"working_copy_updated_at,omitempty"`
 	Items                []DesignWorkingItemMaterialProvenance `json:"items"`

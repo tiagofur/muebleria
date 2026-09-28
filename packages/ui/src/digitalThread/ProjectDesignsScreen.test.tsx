@@ -65,6 +65,7 @@ const mockWorkingCopy: DesignWorkingCopy = {
   project_id: PROJECT_ID,
   base_revision_id: REV_3_ID,
   source_type: 'sketchup',
+  authoring_defaults: { materialChoices: {} },
   updated_at: '2026-09-04T09:00:00Z',
   items: [
     {
@@ -73,6 +74,7 @@ const mockWorkingCopy: DesignWorkingCopy = {
       furniture_instance_id: INSTANCE_1_ID,
       parameters: { width: 950 },
       material_choices: {},
+      material_choice_modes: {},
       created_at: '2026-09-04T09:00:00Z',
       updated_at: '2026-09-04T09:00:00Z',
     },
@@ -457,6 +459,8 @@ function setupFetchMock(options: FetchMockOptions = {}) {
       const provenance = options.materialProvenanceByDesign?.[dId] ?? {
         design_id: dId,
         project_id: PROJECT_ID,
+        authoring_defaults: { materialChoices: {} },
+        inheritance_summary: [],
         working_copy_updated_at: null,
         items: [],
       };
@@ -2080,6 +2084,8 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
         [DESIGN_1_ID]: {
           design_id: DESIGN_1_ID,
           project_id: PROJECT_ID,
+          authoring_defaults: { materialChoices: {} },
+          inheritance_summary: [],
           working_copy_updated_at: '2026-09-14T10:00:00.123456Z',
           items: [
             {
@@ -2089,6 +2095,7 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
               roles: [
                 { role: 'FRENTES', quoted_choice: 'c0000000-0000-4000-8000-0000000000bb', provenance: 'quoted_missing_from_working' },
               ],
+              inheritance: [],
             },
           ],
         },

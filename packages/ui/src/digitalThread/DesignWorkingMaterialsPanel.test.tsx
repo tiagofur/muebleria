@@ -42,6 +42,8 @@ function provenancePayload(items: unknown[], updatedAt: string | null = WORKING_
   return {
     design_id: DESIGN_ID,
     project_id: PROJECT_ID,
+    authoring_defaults: { materialChoices: {} },
+    inheritance_summary: [],
     working_copy_updated_at: updatedAt,
     items,
   };
@@ -53,6 +55,7 @@ const CANDIDATE_ITEM = {
   furniture_instance_id: UNIT_ID,
   furniture_definition_id: null,
   reconcilable: true,
+  inheritance: [],
   roles: [
     {
       role: 'FRENTES',
@@ -72,6 +75,7 @@ const AUTHORED_ONLY_ITEM = {
   furniture_instance_id: AUTHORED_ONLY_UNIT_ID,
   furniture_definition_id: null,
   reconcilable: false,
+  inheritance: [],
   roles: [
     {
       role: 'FRENTES',

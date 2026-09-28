@@ -17,8 +17,96 @@ type workingCopyContractFixture struct {
 		ID      string          `json:"id"`
 		Request json.RawMessage `json:"request"`
 	} `json:"scenarios"`
+	Scenarios784 []struct {
+		ID      string          `json:"id"`
+		Request json.RawMessage `json:"request"`
+	} `json:"scenarios784"`
 	InvalidRequest             json.RawMessage `json:"invalidRequest"`
+	InvalidModesRequest784     json.RawMessage `json:"invalidModesRequest784"`
 	MissingPreconditionRequest json.RawMessage `json:"missingPreconditionRequest"`
+}
+
+// TestWorkingCopyContractFixture_DesignDefaultsAcceptedByGeneratedGoHandler
+// freezes the #784 half of the shared boundary: design-level
+// authoring_defaults and per-item material_choice_modes decode through the
+// generated request and reach the working-copy command verbatim. These
+// scenarios live beside (not inside) the Ruby-built list until the SketchUp
+// builder emits the fields; the Go side already accepts them.
+func TestWorkingCopyContractFixture_DesignDefaultsAcceptedByGeneratedGoHandler(t *testing.T) {
+	fixture := loadWorkingCopyContractFixture(t)
+	if len(fixture.Scenarios784) == 0 {
+		t.Fatal("fixture must carry scenarios784")
+	}
+	for _, scenario := range fixture.Scenarios784 {
+		t.Run(scenario.ID, func(t *testing.T) {
+			store := &stubStore{}
+			srv := &Server{Store: store}
+			req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
+				string(scenario.Request), string(domain.RoleAdmin))
+			rr := httptest.NewRecorder()
+
+			srv.HandleDesignWorkingCopy(rr, req)
+
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
+			}
+			cmd := store.updateDesignWorkingCopyCmd
+			if cmd == nil || len(cmd.Items) != 1 {
+				t.Fatal("request must reach the working-copy command with one item")
+			}
+			if cmd.AuthoringDefaults == nil {
+				t.Fatal("authoring_defaults must reach the command")
+			}
+			wantDefaults := map[string]string{"INTERIOR": "mat-roble"}
+			if scenario.ID == "design-backed-inherits-default" {
+				wantDefaults["FRENTES"] = "mat-blanco"
+			}
+			if got := cmd.AuthoringDefaults.MaterialChoices; len(got) != len(wantDefaults) {
+				t.Fatalf("authoring defaults = %v, want %v", got, wantDefaults)
+			}
+			for role, material := range wantDefaults {
+				if cmd.AuthoringDefaults.MaterialChoices[role] != material {
+					t.Fatalf("authoring default %s = %q, want %q", role, cmd.AuthoringDefaults.MaterialChoices[role], material)
+				}
+			}
+			item := cmd.Items[0]
+			if len(item.MaterialChoiceModes) == 0 {
+				t.Fatal("material_choice_modes must reach the command")
+			}
+			if scenario.ID == "override-equal-to-default-survives-exact" &&
+				item.MaterialChoiceModes["INTERIOR"] != domain.DesignMaterialChoiceModeOverride {
+				t.Fatalf("INTERIOR mode = %q, want override (equality with the default must never flip lineage)", item.MaterialChoiceModes["INTERIOR"])
+			}
+			if scenario.ID == "design-backed-inherits-default" &&
+				item.MaterialChoiceModes["INTERIOR"] != domain.DesignMaterialChoiceModeDesign {
+				t.Fatalf("INTERIOR mode = %q, want design", item.MaterialChoiceModes["INTERIOR"])
+			}
+		})
+	}
+}
+
+// TestWorkingCopyContractFixture_PartialModesRejected: a PARTIAL lineage
+// statement (some roles carry modes while others do not) is ambiguous and
+// never reaches the store — 400 is part of the #784 boundary.
+func TestWorkingCopyContractFixture_PartialModesRejected(t *testing.T) {
+	fixture := loadWorkingCopyContractFixture(t)
+	if len(fixture.InvalidModesRequest784) == 0 {
+		t.Fatal("fixture must carry invalidModesRequest784")
+	}
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
+		string(fixture.InvalidModesRequest784), string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+
+	srv.HandleDesignWorkingCopy(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.updateDesignWorkingCopyCmd != nil {
+		t.Fatal("partial lineage statement must never reach the working-copy command")
+	}
 }
 
 func loadWorkingCopyContractFixture(t *testing.T) workingCopyContractFixture {
