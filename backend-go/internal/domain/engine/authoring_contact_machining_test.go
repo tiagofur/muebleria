@@ -76,6 +76,221 @@ func TestJ1PairedContactOperations(t *testing.T) {
 	}
 }
 
+func TestJ1OperationCollection(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	derive := func(f j1ContactFixture) ContactOperationResult {
+		contacts := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+		plans := planResolvedContactStations(contacts, f.Boards, f.StationSpecs)
+		return deriveResolvedContactOperations(contacts, plans, f.Boards, f.StationSpecs, f.OperationRecipes)
+	}
+	base := derive(f)
+	if len(base.Issues) != 0 || len(base.Operations) != len(f.ExpectedOperations) {
+		t.Fatalf("expected complete operation collection, got %+v", base)
+	}
+	for i, op := range base.Operations {
+		want := f.ExpectedOperations[i]
+		if op.OperationID == "" {
+			t.Fatalf("missing operation ID at %d", i)
+		}
+		op.OperationID = ""
+		if !reflect.DeepEqual(op, want) {
+			t.Fatalf("operation %d: got %+v want %+v", i, op, want)
+		}
+	}
+	f.OperationRecipes[0].RecipeRevision = "test-2"
+	revised := derive(f)
+	if len(revised.Issues) != 0 || !reflect.DeepEqual(revised.Operations[6:], base.Operations[6:]) ||
+		revised.Operations[0].OperationID == base.Operations[0].OperationID {
+		t.Fatalf("recipe revision changed unrelated contact or failed to update dependent IDs: %+v", revised)
+	}
+	f = readJ1ContactFixture(t)
+	f.Contacts, f.RequiredContactIDs, f.StationSpecs, f.OperationRecipes =
+		f.Contacts[1:], []string{"floor-right"}, f.StationSpecs[1:], f.OperationRecipes[1:]
+	remaining := derive(f)
+	if len(remaining.Issues) != 0 || !reflect.DeepEqual(remaining.Operations, base.Operations[6:]) {
+		t.Fatalf("contact deletion left orphan operations: %+v", remaining)
+	}
+	f = readJ1ContactFixture(t)
+	for _, board := range f.Boards {
+		copy := board
+		copy.OccurrenceID = "second:" + board.OccurrenceID
+		copy.Translation[0] += 1000
+		f.Boards = append(f.Boards, copy)
+	}
+	for _, contact := range f.Contacts {
+		copy := contact
+		copy.RelationshipID, copy.ContactID = "second:"+contact.RelationshipID, "second:"+contact.ContactID
+		copy.ParticipantA, copy.ParticipantB = "second:"+contact.ParticipantA, "second:"+contact.ParticipantB
+		f.Contacts = append(f.Contacts, copy)
+	}
+	for _, spec := range f.StationSpecs {
+		copy := spec
+		copy.ContactID = "second:" + spec.ContactID
+		f.StationSpecs = append(f.StationSpecs, copy)
+	}
+	for _, recipe := range f.OperationRecipes {
+		copy := recipe
+		copy.ContactID = "second:" + recipe.ContactID
+		f.OperationRecipes = append(f.OperationRecipes, copy)
+	}
+	slices.Reverse(f.Boards)
+	slices.Reverse(f.Contacts)
+	doubled := derive(f)
+	if len(doubled.Issues) != 0 || len(doubled.Operations) != 20 ||
+		!reflect.DeepEqual(doubled.Operations[:10], base.Operations) {
+		t.Fatalf("same-definition occurrences mixed collection results: %+v", doubled)
+	}
+	ids := map[string]bool{}
+	for i, op := range doubled.Operations {
+		if ids[op.OperationID] || (i >= 10 && op.CenterLocalMm != base.Operations[i-10].CenterLocalMm) {
+			t.Fatalf("duplicate ID or changed occurrence-local position: %+v", op)
+		}
+		ids[op.OperationID] = true
+	}
+}
+
+func TestJ1OperationCollectionNegatives(t *testing.T) {
+	cases := []struct {
+		name, code string
+		change     func(*j1ContactFixture, *ContactResolutionResult, *StationPlanResult)
+		remaining  int
+	}{
+		{"missing plan", "OPERATION_PLAN_INVALID", func(_ *j1ContactFixture, _ *ContactResolutionResult, p *StationPlanResult) { p.Plans = p.Plans[1:] }, 4},
+		{"duplicate plan", "OPERATION_PLAN_INVALID", func(_ *j1ContactFixture, _ *ContactResolutionResult, p *StationPlanResult) {
+			p.Plans = append(p.Plans, p.Plans[0])
+		}, 4},
+		{"missing spec", "OPERATION_PLAN_INVALID", func(f *j1ContactFixture, _ *ContactResolutionResult, _ *StationPlanResult) {
+			f.StationSpecs = f.StationSpecs[1:]
+		}, 4},
+		{"duplicate spec", "OPERATION_PLAN_INVALID", func(f *j1ContactFixture, _ *ContactResolutionResult, _ *StationPlanResult) {
+			f.StationSpecs = append(f.StationSpecs, f.StationSpecs[0])
+		}, 4},
+		{"missing recipe", "OPERATION_RECIPE_REQUIRED", func(f *j1ContactFixture, _ *ContactResolutionResult, _ *StationPlanResult) {
+			f.OperationRecipes = f.OperationRecipes[1:]
+		}, 4},
+		{"duplicate recipe", "OPERATION_RECIPE_AMBIGUOUS", func(f *j1ContactFixture, _ *ContactResolutionResult, _ *StationPlanResult) {
+			f.OperationRecipes = append(f.OperationRecipes, f.OperationRecipes[0])
+		}, 4},
+		{"tampered plan", "OPERATION_PLAN_INVALID", func(_ *j1ContactFixture, _ *ContactResolutionResult, p *StationPlanResult) {
+			p.Plans[0].Stations[1].ParticipantBLocalMm = [3]float64{}
+		}, 4},
+		{"unknown plan", "OPERATION_CONTACT_UNKNOWN", func(_ *j1ContactFixture, _ *ContactResolutionResult, p *StationPlanResult) {
+			ghost := p.Plans[0]
+			ghost.ContactID = "ghost"
+			p.Plans = append(p.Plans, ghost)
+		}, 0},
+		{"unknown recipe", "OPERATION_CONTACT_UNKNOWN", func(f *j1ContactFixture, _ *ContactResolutionResult, _ *StationPlanResult) {
+			ghost := f.OperationRecipes[0]
+			ghost.ContactID = "ghost"
+			f.OperationRecipes = append(f.OperationRecipes, ghost)
+		}, 0},
+		{"unknown spec", "OPERATION_CONTACT_UNKNOWN", func(f *j1ContactFixture, _ *ContactResolutionResult, _ *StationPlanResult) {
+			ghost := f.StationSpecs[0]
+			ghost.ContactID = "ghost"
+			f.StationSpecs = append(f.StationSpecs, ghost)
+		}, 0},
+		{"invalid identity", "OPERATION_IDENTITY_INVALID", func(_ *j1ContactFixture, r *ContactResolutionResult, _ *StationPlanResult) {
+			r.Contacts[0].RelationshipID = ""
+		}, 4},
+		{"duplicate contact", "OPERATION_CONTACT_AMBIGUOUS", func(_ *j1ContactFixture, r *ContactResolutionResult, _ *StationPlanResult) {
+			r.Contacts = append(r.Contacts, r.Contacts[0])
+		}, 4},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := readJ1ContactFixture(t)
+			resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+			plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+			tc.change(&f, &resolved, &plans)
+			got := deriveResolvedContactOperations(resolved, plans, f.Boards, f.StationSpecs, f.OperationRecipes)
+			found := false
+			for _, issue := range got.Issues {
+				found = found || issue.Code == tc.code
+			}
+			if !found || len(got.Operations) != tc.remaining {
+				t.Fatalf("expected %s and %d surviving operations, got %+v", tc.code, tc.remaining, got)
+			}
+			for _, op := range got.Operations {
+				if op.Provenance.ContactID != "floor-right" {
+					t.Fatalf("failed contact leaked operations: %+v", op)
+				}
+			}
+		})
+	}
+	f := readJ1ContactFixture(t)
+	for i := range f.Contacts {
+		f.Contacts[i].RelationshipID = "rel-both"
+	}
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	plans.Plans[0].Stations = nil
+	got := deriveResolvedContactOperations(resolved, plans, f.Boards, f.StationSpecs, f.OperationRecipes)
+	if len(got.Operations) != 0 || len(got.Issues) == 0 || got.Issues[0].Code != "OPERATION_PLAN_INVALID" {
+		t.Fatalf("failed contact should invalidate entire shared relationship: %+v", got)
+	}
+}
+
+func TestJ1OperationCollectionDuplicateGeometry(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	copyContact := f.Contacts[0]
+	copyContact.ContactID, copyContact.RelationshipID = "floor-left-copy", "rel-floor-left-copy"
+	f.Contacts = append(f.Contacts, copyContact)
+	copySpec := f.StationSpecs[0]
+	copySpec.ContactID = copyContact.ContactID
+	f.StationSpecs = append(f.StationSpecs, copySpec)
+	copyRecipe := f.OperationRecipes[0]
+	copyRecipe.ContactID = copyContact.ContactID
+	f.OperationRecipes = append(f.OperationRecipes, copyRecipe)
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	got := deriveResolvedContactOperations(resolved, plans, f.Boards, f.StationSpecs, f.OperationRecipes)
+	if len(got.Issues) == 0 || got.Issues[0].Code != "OPERATION_GEOMETRY_DUPLICATE" || len(got.Operations) != 4 {
+		t.Fatalf("duplicate physical geometry should leave only independent contact: %+v", got)
+	}
+	for _, op := range got.Operations {
+		if op.Provenance.ContactID != "floor-right" {
+			t.Fatalf("duplicate physical operation leaked: %+v", op)
+		}
+	}
+	base := readJ1ContactFixture(t)
+	resolved = resolveExplicitContacts(base.Boards, base.Contacts, base.RequiredContactIDs)
+	plans = planResolvedContactStations(resolved, base.Boards, base.StationSpecs)
+	contacts, contactPlans, policies, recipes := []ResolvedContact{}, []StationPlan{}, []StationSpec{}, []ContactOperationRecipe{}
+	for index, id := range []string{"a-left", "b-left", "c-left"} {
+		contact := resolved.Contacts[0]
+		contact.ContactID, contact.RelationshipID = id, "rel-"+id
+		contacts = append(contacts, contact)
+		plan := plans.Plans[0]
+		plan.ContactID = id
+		contactPlans = append(contactPlans, plan)
+		spec := base.StationSpecs[0]
+		spec.ContactID = id
+		policies = append(policies, spec)
+		recipe := base.OperationRecipes[0]
+		recipe.ContactID = id
+		recipe.Rules = append([]ContactOperationRule(nil), recipe.Rules...)
+		if index == 1 {
+			recipe.Rules[1].OffsetMm = [3]float64{0, 18, 10}
+		} else if index == 2 {
+			recipe.Rules[0].OffsetMm = [3]float64{5, 0, 0}
+		}
+		recipes = append(recipes, recipe)
+	}
+	resolved.Contacts = append(contacts, resolved.Contacts[1])
+	plans.Plans = append(contactPlans, plans.Plans[1])
+	policies = append(policies, base.StationSpecs[1])
+	recipes = append(recipes, base.OperationRecipes[1])
+	independent := deriveResolvedContactOperations(resolved, plans, base.Boards, policies, recipes)
+	if len(independent.Operations) != 10 {
+		t.Fatalf("only colliding relationships should be removed: %+v", independent)
+	}
+	for _, op := range independent.Operations {
+		if op.Provenance.ContactID != "c-left" && op.Provenance.ContactID != "floor-right" {
+			t.Fatalf("unrelated contact was removed or colliding operation leaked: %+v", op)
+		}
+	}
+}
+
 func TestJ1PairedContactNegatives(t *testing.T) {
 	cases := []struct {
 		name, code string

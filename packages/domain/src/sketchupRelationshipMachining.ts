@@ -946,3 +946,66 @@ export function deriveResolvedContactOperationsForContact(
   if (new Set(geometryKeys).size !== geometryKeys.length) return fail('OPERATION_GEOMETRY_DUPLICATE');
   return { operations, issues: [] };
 }
+
+/** Reconcile exact contact inputs without accepting orphan or partial relationship machining. */
+export function deriveResolvedContactOperations(
+  resolution: ContactResolutionResult,
+  stationPlans: StationPlanResult,
+  boards: readonly ContactBoard[],
+  specs: readonly StationSpec[],
+  recipes: readonly ContactOperationRecipe[],
+): ContactOperationResult {
+  if (resolution.issues.length || stationPlans.issues.length) {
+    return { operations: [], issues: [...resolution.issues, ...stationPlans.issues] };
+  }
+  const counts = (ids: readonly string[]): Map<string, number> => {
+    const result = new Map<string, number>();
+    for (const id of ids) result.set(id, (result.get(id) ?? 0) + 1);
+    return result;
+  };
+  const contacts = counts(resolution.contacts.map((contact) => contact.contactId));
+  const plans = counts(stationPlans.plans.map((plan) => plan.contactId));
+  const policies = counts(specs.map((spec) => spec.contactId));
+  const rules = counts(recipes.map((recipe) => recipe.contactId));
+  if ([...plans.keys(), ...policies.keys(), ...rules.keys()].some((id) => !contacts.has(id))) {
+    return { operations: [], issues: [{ code: 'OPERATION_CONTACT_UNKNOWN', message: 'OPERATION_CONTACT_UNKNOWN', severity: 'error' }] };
+  }
+  const issues: ContractIssue[] = [];
+  const operations: NeutralContactOperation[] = [];
+  const invalidRelationships = new Set<string>();
+  for (const contact of [...resolution.contacts].sort((a, b) =>
+    a.contactId < b.contactId ? -1 : a.contactId > b.contactId ? 1 : 0)) {
+    const id = contact.contactId;
+    const error = contacts.get(id) !== 1 ? 'OPERATION_CONTACT_AMBIGUOUS' :
+      plans.get(id) !== 1 || policies.get(id) !== 1 ? 'OPERATION_PLAN_INVALID' :
+        rules.get(id) !== 1 ? rules.has(id) ? 'OPERATION_RECIPE_AMBIGUOUS' : 'OPERATION_RECIPE_REQUIRED' : null;
+    if (error) {
+      issues.push({ code: error, message: error, severity: 'error', entityId: id });
+      invalidRelationships.add(contact.relationshipId);
+      continue;
+    }
+    const result = deriveResolvedContactOperationsForContact(contact,
+      stationPlans.plans.find((plan) => plan.contactId === id)!, boards,
+      specs.find((spec) => spec.contactId === id)!, recipes.find((recipe) => recipe.contactId === id)!);
+    if (result.issues.length) invalidRelationships.add(contact.relationshipId);
+    issues.push(...result.issues);
+    operations.push(...result.operations);
+  }
+  const geometryOwners = new Map<string, string>();
+  for (const operation of operations) {
+    if (invalidRelationships.has(operation.provenance.relationshipId)) continue;
+    const key = JSON.stringify([operation.provenance.participantId, operation.entryFace,
+      operation.centerLocalMm, operation.axisLocal, operation.diameterMm, operation.depthMm]);
+    const previous = geometryOwners.get(key);
+    if (previous !== undefined && !invalidRelationships.has(previous)) {
+      invalidRelationships.add(previous);
+      invalidRelationships.add(operation.provenance.relationshipId);
+      issues.push({ code: 'OPERATION_GEOMETRY_DUPLICATE', message: 'OPERATION_GEOMETRY_DUPLICATE', severity: 'error' });
+    } else geometryOwners.set(key, operation.provenance.relationshipId);
+  }
+  const kept = operations.filter((operation) => !invalidRelationships.has(operation.provenance.relationshipId));
+  if (new Set(kept.map((operation) => operation.operationId)).size !== kept.length) {
+    return { operations: [], issues: [...issues, { code: 'OPERATION_ID_AMBIGUOUS', message: 'OPERATION_ID_AMBIGUOUS', severity: 'error' }] };
+  }
+  return { operations: kept, issues };
+}

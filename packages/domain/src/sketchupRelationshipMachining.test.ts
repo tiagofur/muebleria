@@ -15,6 +15,7 @@ import {
   planResolvedContactStations,
   contactOperationId,
   deriveResolvedContactOperationsForContact,
+  deriveResolvedContactOperations,
   deriveRelationshipMachining,
   diffRelationshipMachining,
   isFingerprintStale,
@@ -342,6 +343,135 @@ describe('J1-A1a paired operations for one exact contact', () => {
       expect(result.issues.map((issue) => issue.code), name).toContain(code);
       expect(result.operations, name).toEqual([]);
     }
+  });
+});
+
+describe('J1-A1b reconciled contact operation collection', () => {
+  const fixture = contactFixture as unknown as ContactResolutionInput;
+  const recipes = contactFixture.operationRecipes as unknown as ContactOperationRecipe[];
+  const resolve = (input = fixture, specs = contactFixture.stationSpecs, rules: readonly ContactOperationRecipe[] = recipes) => {
+    const resolution = resolveExplicitContacts(input);
+    const plans = planResolvedContactStations(resolution, input.boards, specs);
+    return deriveResolvedContactOperations(resolution, plans, input.boards, specs, rules);
+  };
+
+  it('combines only complete sets in stable order with exact provenance and no duplicate IDs', () => {
+    const result = resolve();
+    expect(result.issues).toEqual([]);
+    expect(result.operations.map(({ operationId, ...operation }) => {
+      expect(operationId).not.toBe('');
+      return operation;
+    })).toEqual(contactFixture.expectedOperations);
+    expect(new Set(result.operations.map((operation) => operation.operationId)).size).toBe(10);
+    expect(deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog).issues).toEqual([]);
+  });
+
+  it('isolates recipe changes, contact deletion, and same-definition occurrences', () => {
+    const original = resolve();
+    const revised = resolve(fixture, contactFixture.stationSpecs, recipes.map((recipe) =>
+      recipe.contactId === 'floor-left' ? { ...recipe, recipeRevision: 'test-2' } : recipe));
+    expect(revised.issues).toEqual([]);
+    expect(revised.operations.filter((operation) => operation.provenance.contactId === 'floor-right'))
+      .toEqual(original.operations.filter((operation) => operation.provenance.contactId === 'floor-right'));
+    expect(revised.operations.filter((operation) => operation.provenance.contactId === 'floor-left').map((operation) => operation.operationId))
+      .not.toEqual(original.operations.filter((operation) => operation.provenance.contactId === 'floor-left').map((operation) => operation.operationId));
+    const remaining = { ...fixture, contacts: fixture.contacts.slice(1), requiredContactIds: ['floor-right'] };
+    expect(resolve(remaining, contactFixture.stationSpecs.slice(1), recipes.slice(1)).operations)
+      .toEqual(original.operations.filter((operation) => operation.provenance.contactId === 'floor-right'));
+
+    const secondBoards = fixture.boards.map((board) => ({ ...board, occurrenceId: `second:${board.occurrenceId}`,
+      translationMm: [board.translationMm[0] + 1000, board.translationMm[1], board.translationMm[2]] as const }));
+    const secondContacts = fixture.contacts.map((contact) => ({ ...contact, relationshipId: `second:${contact.relationshipId}`,
+      contactId: `second:${contact.contactId}`, participantA: `second:${contact.participantA}`, participantB: `second:${contact.participantB}` }));
+    const allBoards = [...secondBoards, ...fixture.boards].reverse();
+    const allContacts = [...secondContacts, ...fixture.contacts].reverse();
+    const allSpecs = [...contactFixture.stationSpecs,
+      ...contactFixture.stationSpecs.map((spec) => ({ ...spec, contactId: `second:${spec.contactId}` }))];
+    const allRecipes = [...recipes, ...recipes.map((recipe) => ({ ...recipe, contactId: `second:${recipe.contactId}` }))];
+    const doubled = resolve({ boards: allBoards, contacts: allContacts, requiredContactIds: [] }, allSpecs, allRecipes);
+    expect(doubled.issues).toEqual([]);
+    expect(doubled.operations).toHaveLength(20);
+    expect(doubled.operations.slice(0, 10)).toEqual(original.operations);
+    expect(new Set(doubled.operations.map((operation) => operation.operationId)).size).toBe(20);
+    expect(doubled.operations.slice(10).map((operation) => operation.centerLocalMm))
+      .toEqual(original.operations.map((operation) => operation.centerLocalMm));
+  });
+
+  it('rejects missing, duplicate, orphan, and tampered collection inputs without leaking failed sets', () => {
+    const resolution = resolveExplicitContacts(fixture);
+    const plans = planResolvedContactStations(resolution, fixture.boards, contactFixture.stationSpecs);
+    const run = (candidatePlans = plans, specs = contactFixture.stationSpecs,
+      rules: readonly ContactOperationRecipe[] = recipes, contacts = resolution) =>
+      deriveResolvedContactOperations(contacts, candidatePlans, fixture.boards, specs, rules);
+    const cases = [
+      ['missing plan', run({ plans: plans.plans.slice(1), issues: [] }), 'OPERATION_PLAN_INVALID', 4],
+      ['duplicate plan', run({ plans: [...plans.plans, plans.plans[0]!], issues: [] }), 'OPERATION_PLAN_INVALID', 4],
+      ['missing spec', run(plans, contactFixture.stationSpecs.slice(1)), 'OPERATION_PLAN_INVALID', 4],
+      ['duplicate spec', run(plans, [...contactFixture.stationSpecs, contactFixture.stationSpecs[0]!]), 'OPERATION_PLAN_INVALID', 4],
+      ['missing recipe', run(plans, contactFixture.stationSpecs, recipes.slice(1)), 'OPERATION_RECIPE_REQUIRED', 4],
+      ['duplicate recipe', run(plans, contactFixture.stationSpecs, [...recipes, recipes[0]!]), 'OPERATION_RECIPE_AMBIGUOUS', 4],
+      ['tampered plan', run({ plans: [{ ...plans.plans[0]!, stations: plans.plans[0]!.stations.map((station, i) => i === 1 ?
+        { ...station, participantBLocalMm: [0, 0, 0] as const } : station) }, plans.plans[1]!], issues: [] }),
+        'OPERATION_PLAN_INVALID', 4],
+      ['unknown plan', run({ plans: [...plans.plans, { ...plans.plans[0]!, contactId: 'ghost' }], issues: [] }),
+        'OPERATION_CONTACT_UNKNOWN', 0],
+      ['unknown recipe', run(plans, contactFixture.stationSpecs, [...recipes, { ...recipes[0]!, contactId: 'ghost' }]),
+        'OPERATION_CONTACT_UNKNOWN', 0],
+      ['unknown spec', run(plans, [...contactFixture.stationSpecs, { ...contactFixture.stationSpecs[0]!, contactId: 'ghost' }]),
+        'OPERATION_CONTACT_UNKNOWN', 0],
+      ['invalid identity', run(plans, contactFixture.stationSpecs, recipes,
+        { contacts: [{ ...resolution.contacts[0]!, relationshipId: '' }, resolution.contacts[1]!], issues: [] }),
+        'OPERATION_IDENTITY_INVALID', 4],
+      ['duplicate contact', run(plans, contactFixture.stationSpecs, recipes,
+        { contacts: [...resolution.contacts, resolution.contacts[0]!], issues: [] }), 'OPERATION_CONTACT_AMBIGUOUS', 4],
+    ] as const;
+    for (const [name, result, code, surviving] of cases) {
+      expect(result.issues.map((issue) => issue.code), name).toContain(code);
+      expect(result.operations, name).toHaveLength(surviving);
+      expect(result.operations.every((operation) => operation.provenance.contactId === 'floor-right'), name).toBe(true);
+    }
+  });
+
+  it('invalidates an entire shared relationship when either contact fails', () => {
+    const resolution = resolveExplicitContacts(fixture);
+    const sameRelationship = { contacts: resolution.contacts.map((contact) =>
+      ({ ...contact, relationshipId: 'rel-both' })), issues: [] };
+    const plans = planResolvedContactStations(sameRelationship, fixture.boards, contactFixture.stationSpecs);
+    const tampered = { plans: [{ ...plans.plans[0]!, stations: [] }, plans.plans[1]!], issues: [] };
+    const result = deriveResolvedContactOperations(sameRelationship, tampered, fixture.boards,
+      contactFixture.stationSpecs, recipes);
+    expect(result.issues.map((issue) => issue.code)).toContain('OPERATION_PLAN_INVALID');
+    expect(result.operations).toEqual([]);
+  });
+
+  it('does not double emit identical physical drilling from distinct contact IDs', () => {
+    const duplicate = { ...fixture.contacts[0]!, contactId: 'floor-left-copy', relationshipId: 'rel-floor-left-copy' };
+    const input = { ...fixture, contacts: [...fixture.contacts, duplicate] };
+    const specs = [...contactFixture.stationSpecs,
+      { ...contactFixture.stationSpecs[0]!, contactId: duplicate.contactId }];
+    const withCopy = [...recipes, { ...recipes[0]!, contactId: duplicate.contactId }];
+    const result = resolve(input, specs, withCopy);
+    expect(result.issues.map((issue) => issue.code)).toContain('OPERATION_GEOMETRY_DUPLICATE');
+    expect(result.operations.map((operation) => operation.provenance.contactId))
+      .toEqual(['floor-right', 'floor-right', 'floor-right', 'floor-right']);
+
+    const resolved = resolveExplicitContacts(fixture);
+    const planned = planResolvedContactStations(resolved, fixture.boards, contactFixture.stationSpecs);
+    const ids = ['a-left', 'b-left', 'c-left'];
+    const contacts = ids.map((id) => ({ ...resolved.contacts[0]!, contactId: id, relationshipId: `rel-${id}` }));
+    const policy = ids.map((id) => ({ ...contactFixture.stationSpecs[0]!, contactId: id }));
+    const contactPlans = ids.map((id) => ({ ...planned.plans[0]!, contactId: id }));
+    const rules = ids.map((id, index) => ({ ...recipes[0]!, contactId: id, rules: recipes[0]!.rules.map((rule) =>
+      index === 1 && rule.participantRole === 'B' ? { ...rule, offsetMm: [0, 18, 10] as const } :
+        index === 2 && rule.participantRole === 'A' ? { ...rule, offsetMm: [5, 0, 0] as const } : rule) }));
+    const independent = deriveResolvedContactOperations(
+      { contacts: [...contacts, resolved.contacts[1]!], issues: [] },
+      { plans: [...contactPlans, planned.plans[1]!], issues: [] }, fixture.boards,
+      [...policy, contactFixture.stationSpecs[1]!], [...rules, recipes[1]!]);
+    expect(independent.issues.map((issue) => issue.code)).toContain('OPERATION_GEOMETRY_DUPLICATE');
+    expect(independent.operations).toHaveLength(10);
+    expect(new Set(independent.operations.map((operation) => operation.provenance.contactId)))
+      .toEqual(new Set(['c-left', 'floor-right']));
   });
 });
 
