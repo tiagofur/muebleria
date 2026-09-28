@@ -97,8 +97,14 @@ promoted to installed-machine evidence. #352 owns field validation.
     blockers, immutable manifest snapshots, fail-closed null inputs, setup
     support, and receiver-unknown non-fabricable output. Strict TDD,
     focused/full domain Vitest, typecheck, affected plan, diff check, clean
-    preflight; V2 `NOT_RUN`. Branch from B2b-a HEAD, then rebase onto its
-    eventual main merge before publication.
+    preflight; V2 `NOT_RUN`. Branch `codex/879-bhx-b2b-coverage` from frozen
+    B2b-a HEAD `c07197b5463cf7ac8b872e4985e9ec2b48560b96`, then rebase
+    onto its eventual main merge before publication. Test every required-entry
+    accounting and operation/source identity, malformed/null fixtures,
+    deterministic setup selection, oriented envelope, face/axis/tool/key/
+    clearance support, transformed candidate coordinates, and caller-mutation
+    isolation. The planner must call the B2b-a evaluator rather than duplicate
+    its geometry rules; no setup assignment is valid on geometry failure.
 
 ## Progress and evidence
 
@@ -207,6 +213,34 @@ promoted to installed-machine evidence. #352 owns field validation.
   `git show --check --oneline HEAD` passed; clean preflight returned
   `PREFLIGHT_OK_NOT_VERIFIED` and ran no tests. Independent review and CI are
   pending and parent-owned; this source work unit has no planner API.
-- Next: independent exact-HEAD B2b-a review and parent-owned delivery, then
-  B2b-b coverage from the accepted geometry base. Native output and receiver
+- B2b-b start checkpoint: separate clean managed worktree at frozen B2b-a
+  HEAD `c07197b5463cf7ac8b872e4985e9ec2b48560b96`; first branch remains
+  untouched. The preserved combined `codex/879-bhx-b2b` branch is recovery
+  context, not a deliverable. B2b-b is one cohesive coverage behavior:
+  splitting identity, setup eligibility, and manifest assignment into separate
+  public PRs would expose an unchecked planner contract. Strict TDD runner is
+  `pnpm --filter @granete/domain exec vitest run
+  src/neutralMachiningPlan.test.ts`; full runner is
+  `pnpm --filter @granete/domain test`. RED is required before planner source.
+  B2b-a review/CI and parent-owned PR publication remain pending.
+- B2b-b implementation checkpoint before commit: the pure planner consumes
+  B2b-a `evaluateNeutralBoreGeometry` and B2a setup envelopes/rigid frames;
+  it never writes native bytes or infers installed capabilities. Every
+  required entry yields one assigned or blocked record; assigned records bind
+  deep-frozen operation/source/frame snapshots, and the whole candidate is
+  frozen. Setup candidates with malformed capability entries are blocked even
+  when another entry matches. Strict TDD RED: focused Vitest failed to load
+  the absent planner module; later tests observed two failures for mutable
+  manifests/null collections and one for malformed extra setup capability.
+  GREEN/REFACTOR: focused Vitest 24/24, full domain 117 files/1,670 tests,
+  domain typecheck, and `git diff --check` passed. The affected-check plan
+  selected all gates because the ODD path is unknown; it ran none of those
+  other gates. Runtime receiver/host harness: N/A for pure offline planning;
+  V2 receiver/physical `NOT_RUN`. Rollback removes only the planner module,
+  its tests/public export, and B2b-b checkpoint; prior geometry remains.
+  Independent exact-HEAD review, CI, size exception, and PR are parent-owned
+  and pending; this local checkpoint claims none of them.
+- Next: commit and hand off the local B2b-b candidate without changing
+  B2b-a. Parent reviews/publishes B2b-a first, then B2b-b rebases onto its
+  merged main before fresh exact-HEAD review/CI. Native output and receiver
   validation remain pending.

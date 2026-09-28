@@ -933,6 +933,17 @@ export {
   type NeutralBoreGeometryResult,
 } from './neutralBoreGeometry';
 
+// --- Synthetic, non-fabricable per-operation setup coverage (#879 B2b-b) ---
+export {
+  planNeutralMachining,
+  type NeutralMachiningInput,
+  type SyntheticDrillOperation,
+  type SyntheticMachiningSetup,
+  type NeutralMachiningBlocker,
+  type NeutralOperationCoverage,
+  type NeutralMachiningCandidate,
+} from './neutralMachiningPlan';
+
 // --- Machine output selection (#591 / WEB-MFG-2) ---
 export {
   machineOutputBlockerMessageEs,
