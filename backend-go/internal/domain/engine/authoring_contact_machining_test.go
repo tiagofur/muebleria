@@ -122,7 +122,7 @@ func TestJ1StationNegatives(t *testing.T) {
 		{"bad basis", "STATION_PARTICIPANT_INVALID", func(f *j1ContactFixture) { f.Boards[0].Basis.X = [3]float64{} }},
 		{"bad interval", "STATION_FRAME_INVALID", func(f *j1ContactFixture) { f.Expected[0].OverlapMm = [2]float64{0, math.Inf(1)} }},
 		{"station out of bounds", "STATION_POINT_INVALID", func(f *j1ContactFixture) { f.Expected[0].OverlapMm = [2]float64{0, 900} }},
-		{"inverse mismatch", "STATION_POINT_INVALID", func(f *j1ContactFixture) { f.Expected[0].Frame.OriginAssemblyMm = [3]float64{19, 30, 27} }},
+		{"inverse mismatch", "STATION_POINT_INVALID", func(f *j1ContactFixture) { f.Boards[1].Basis.X = [3]float64{0, -1, 9e-7} }},
 		{"A0a ambiguity", "CONTACT_AMBIGUOUS", func(f *j1ContactFixture) { f.Contacts = append(f.Contacts, f.Contacts[0]) }},
 	}
 	for _, tc := range cases {
@@ -130,7 +130,7 @@ func TestJ1StationNegatives(t *testing.T) {
 			f := readJ1ContactFixture(t)
 			resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
 			tc.change(&f)
-			if tc.name == "bad interval" || tc.name == "station out of bounds" || tc.name == "inverse mismatch" {
+			if tc.name == "bad interval" || tc.name == "station out of bounds" {
 				resolved.Contacts[0] = f.Expected[0]
 			}
 			if tc.name == "A0a ambiguity" {

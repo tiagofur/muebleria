@@ -160,7 +160,7 @@ describe('J1-A0b neutral station plans', () => {
       [resolved(), fixture.boards.map((b, i) => i === 0 ? { ...b, basis: { ...b.basis, x: [0, 0, 0] as [number, number, number] } } : b), contactFixture.stationSpecs, 'STATION_PARTICIPANT_INVALID'],
       [{ contacts: [{ ...resolved().contacts[0]!, overlapMm: [0, Infinity] as const }], issues: [] }, fixture.boards, contactFixture.stationSpecs, 'STATION_FRAME_INVALID'],
       [{ contacts: [{ ...resolved().contacts[0]!, overlapMm: [0, 900] as const }], issues: [] }, fixture.boards, contactFixture.stationSpecs, 'STATION_POINT_INVALID'],
-      [{ contacts: [{ ...resolved().contacts[0]!, frame: { ...resolved().contacts[0]!.frame, originAssemblyMm: [19, 30, 27] as const } }], issues: [] }, fixture.boards, contactFixture.stationSpecs, 'STATION_POINT_INVALID'],
+      [resolved(), fixture.boards.map((b, i) => i === 1 ? { ...b, basis: { ...b.basis, x: [0, -1, 9e-7] as [number, number, number] } } : b), contactFixture.stationSpecs, 'STATION_POINT_INVALID'],
       [resolveExplicitContacts({ ...fixture, contacts: [...fixture.contacts, fixture.contacts[0]!] }), fixture.boards, contactFixture.stationSpecs, 'CONTACT_AMBIGUOUS'],
     ] as const;
     for (const [resolution, boards, specs, code] of cases) {
