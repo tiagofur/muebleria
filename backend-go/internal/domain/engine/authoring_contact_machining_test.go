@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"reflect"
 	"slices"
@@ -9,10 +10,142 @@ import (
 )
 
 type j1ContactFixture struct {
-	Boards             []ContactBoard    `json:"boards"`
-	Contacts           []ExplicitContact `json:"contacts"`
-	RequiredContactIDs []string          `json:"requiredContactIds"`
-	Expected           []ResolvedContact `json:"expected"`
+	Boards               []ContactBoard    `json:"boards"`
+	Contacts             []ExplicitContact `json:"contacts"`
+	RequiredContactIDs   []string          `json:"requiredContactIds"`
+	Expected             []ResolvedContact `json:"expected"`
+	StationSpecs         []StationSpec     `json:"stationSpecs"`
+	ExpectedStationPlans []StationPlan     `json:"expectedStationPlans"`
+}
+
+func TestJ1StationPlans(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	result := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	if len(result.Issues) != 0 || !reflect.DeepEqual(result.Plans, f.ExpectedStationPlans) {
+		t.Fatalf("shared independent station distances/assembly/both locals: got=%+v want=%+v", result, f.ExpectedStationPlans)
+	}
+	neighbor := f.Boards[1]
+	neighbor.OccurrenceID = "unanchored-neighbor"
+	boards := append(f.Boards, neighbor)
+	slices.Reverse(boards)
+	contacts := append([]ExplicitContact(nil), f.Contacts...)
+	slices.Reverse(contacts)
+	reordered := planResolvedContactStations(resolveExplicitContacts(boards, contacts, f.RequiredContactIDs), boards, f.StationSpecs)
+	if !reflect.DeepEqual(reordered, result) {
+		t.Fatalf("reorder/neighbor changed stations: %+v", reordered)
+	}
+}
+
+func TestJ1StationRigidFramesAndOccurrences(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	for _, tc := range []struct {
+		name      string
+		transform func([3]float64) [3]float64
+	}{
+		{"translation", func(v [3]float64) [3]float64 { return [3]float64{v[0] + 73, v[1] - 41, v[2] + 19} }},
+		{"rotation", func(v [3]float64) [3]float64 { return [3]float64{-v[1], v[0], v[2]} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			boards := append([]ContactBoard(nil), f.Boards...)
+			zero := tc.transform([3]float64{})
+			for i := range boards {
+				b := &boards[i]
+				b.Translation = tc.transform(b.Translation)
+				b.Basis.X = contactDelta(tc.transform(b.Basis.X), zero)
+				b.Basis.Y = contactDelta(tc.transform(b.Basis.Y), zero)
+				b.Basis.Z = contactDelta(tc.transform(b.Basis.Z), zero)
+			}
+			result := planResolvedContactStations(resolveExplicitContacts(boards, f.Contacts, f.RequiredContactIDs), boards, f.StationSpecs)
+			if len(result.Issues) != 0 || len(result.Plans) != len(f.ExpectedStationPlans) {
+				t.Fatalf("rigid frame: %+v", result)
+			}
+			for i, p := range result.Plans {
+				for j, s := range p.Stations {
+					want := f.ExpectedStationPlans[i].Stations[j]
+					if s.DistanceMm != want.DistanceMm || s.ParticipantALocalMm != want.ParticipantALocalMm || s.ParticipantBLocalMm != want.ParticipantBLocalMm || s.AssemblyPointMm != tc.transform(want.AssemblyPointMm) {
+						t.Fatalf("station changed: %+v want transformed %+v", s, want)
+					}
+				}
+			}
+		})
+	}
+	boards := append([]ContactBoard(nil), f.Boards...)
+	contacts := append([]ExplicitContact(nil), f.Contacts...)
+	specs := append([]StationSpec(nil), f.StationSpecs...)
+	for _, b := range f.Boards {
+		b.OccurrenceID = "second:" + b.OccurrenceID
+		b.Translation[0] += 1000
+		boards = append(boards, b)
+	}
+	for _, c := range f.Contacts {
+		c.RelationshipID = "second:" + c.RelationshipID
+		c.ContactID = "second:" + c.ContactID
+		c.ParticipantA = "second:" + c.ParticipantA
+		c.ParticipantB = "second:" + c.ParticipantB
+		contacts = append(contacts, c)
+	}
+	for _, s := range f.StationSpecs {
+		s.ContactID = "second:" + s.ContactID
+		specs = append(specs, s)
+	}
+	result := planResolvedContactStations(resolveExplicitContacts(boards, contacts, nil), boards, specs)
+	if len(result.Issues) != 0 || len(result.Plans) != 4 {
+		t.Fatalf("separate occurrence plans: %+v", result)
+	}
+	for i, p := range result.Plans[2:] {
+		for j, s := range p.Stations {
+			want := f.ExpectedStationPlans[i].Stations[j]
+			want.AssemblyPointMm[0] += 1000
+			if s.DistanceMm != want.DistanceMm || s.AssemblyPointMm != want.AssemblyPointMm || s.ParticipantALocalMm != want.ParticipantALocalMm || s.ParticipantBLocalMm != want.ParticipantBLocalMm {
+				t.Fatalf("second occurrence mixed: %+v", s)
+			}
+		}
+	}
+}
+
+func TestJ1StationNegatives(t *testing.T) {
+	cases := []struct {
+		name, code string
+		change     func(*j1ContactFixture)
+	}{
+		{"zero count", "STATION_COUNT_INVALID", func(f *j1ContactFixture) { f.StationSpecs[0].Count = 0 }},
+		{"single without anchor", "STATION_COUNT_INVALID", func(f *j1ContactFixture) { f.StationSpecs[0].Count = 1 }},
+		{"negative count", "STATION_COUNT_INVALID", func(f *j1ContactFixture) { f.StationSpecs[0].Count = -1 }},
+		{"negative margin", "STATION_MARGIN_INVALID", func(f *j1ContactFixture) { f.StationSpecs[0].StartMarginMm = -1 }},
+		{"nonfinite margin", "STATION_MARGIN_INVALID", func(f *j1ContactFixture) { f.StationSpecs[0].EndMarginMm = math.NaN() }},
+		{"consumed span", "STATION_SPAN_INVALID", func(f *j1ContactFixture) { f.StationSpecs[0].StartMarginMm = 250; f.StationSpecs[0].EndMarginMm = 250 }},
+		{"beyond span", "STATION_SPAN_INVALID", func(f *j1ContactFixture) { f.StationSpecs[0].StartMarginMm = 501 }},
+		{"missing policy", "STATION_SPEC_MISSING", func(f *j1ContactFixture) { f.StationSpecs = f.StationSpecs[1:] }},
+		{"duplicate policy", "STATION_SPEC_AMBIGUOUS", func(f *j1ContactFixture) { f.StationSpecs = append(f.StationSpecs, f.StationSpecs[0]) }},
+		{"missing participant", "STATION_PARTICIPANT_INVALID", func(f *j1ContactFixture) { f.Boards = f.Boards[1:] }},
+		{"bad basis", "STATION_PARTICIPANT_INVALID", func(f *j1ContactFixture) { f.Boards[0].Basis.X = [3]float64{} }},
+		{"bad interval", "STATION_FRAME_INVALID", func(f *j1ContactFixture) { f.Expected[0].OverlapMm = [2]float64{0, math.Inf(1)} }},
+		{"station out of bounds", "STATION_POINT_INVALID", func(f *j1ContactFixture) { f.Expected[0].OverlapMm = [2]float64{0, 900} }},
+		{"inverse mismatch", "STATION_POINT_INVALID", func(f *j1ContactFixture) { f.Boards[1].Basis.X = [3]float64{0, -1, 9e-7} }},
+		{"A0a ambiguity", "CONTACT_AMBIGUOUS", func(f *j1ContactFixture) { f.Contacts = append(f.Contacts, f.Contacts[0]) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := readJ1ContactFixture(t)
+			resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+			tc.change(&f)
+			if tc.name == "bad interval" || tc.name == "station out of bounds" {
+				resolved.Contacts[0] = f.Expected[0]
+			}
+			if tc.name == "A0a ambiguity" {
+				resolved = resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+			}
+			result := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+			found := false
+			for _, issue := range result.Issues {
+				found = found || issue.Code == tc.code
+			}
+			if !found || len(result.Plans) != 0 {
+				t.Fatalf("want fail-closed %s: %+v", tc.code, result)
+			}
+		})
+	}
 }
 
 func readJ1ContactFixture(t *testing.T) j1ContactFixture {

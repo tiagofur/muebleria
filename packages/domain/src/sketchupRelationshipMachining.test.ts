@@ -11,12 +11,14 @@ import {
 import { cabinetJoineryCatalog } from './__fixtures__/sketchupJoineryCatalogFixture';
 import {
   resolveExplicitContacts,
+  planResolvedContactStations,
   deriveRelationshipMachining,
   diffRelationshipMachining,
   isFingerprintStale,
   provenanceKey,
   type RelationshipMachiningResult,
   type ContactResolutionInput,
+  type StationSpec,
 } from './sketchupRelationshipMachining';
 import { applyAuthoringEnvelope, EMPTY_AUTHORING_STATE } from './sketchupAuthoringExchange';
 import type { AuthoringEnvelopeV1, ReadonlyAuthoringSnapshot } from './sketchupAuthoringSchema';
@@ -88,6 +90,83 @@ describe('deriveRelationshipMachining — base resolution', () => {
         expect(hole.face).toBe('front');
       }
       expect(op.detail.holes.every((hole) => hole.xMm > 0 && hole.xMm < 570)).toBe(true);
+    }
+  });
+});
+
+describe('J1-A0b neutral station plans', () => {
+  const fixture = contactFixture as unknown as ContactResolutionInput;
+  const resolved = () => resolveExplicitContacts(fixture);
+  const plan = (boards = fixture.boards, resolution = resolved(), specs: readonly StationSpec[] = contactFixture.stationSpecs) =>
+    planResolvedContactStations(resolution, boards, specs);
+
+  it('uses one exact plan and independently asserted assembly and both local coordinates', () => {
+    expect(plan()).toEqual({ plans: contactFixture.expectedStationPlans, issues: [] });
+  });
+
+  it('preserves distances and both local coordinates through translation and rotation', () => {
+    const check = (transform: (v: readonly number[]) => [number, number, number]) => {
+      const boards = fixture.boards.map((board) => ({ ...board, translationMm: transform(board.translationMm),
+        basis: { x: transform(board.basis.x).map((n, i) => n - transform([0, 0, 0])[i]!) as [number, number, number],
+          y: transform(board.basis.y).map((n, i) => n - transform([0, 0, 0])[i]!) as [number, number, number],
+          z: transform(board.basis.z).map((n, i) => n - transform([0, 0, 0])[i]!) as [number, number, number] } }));
+      const neighbor = { ...boards[1]!, occurrenceId: 'unanchored-neighbor' };
+      const actual = plan([neighbor, ...boards].reverse(), resolveExplicitContacts({ ...fixture, boards: [...boards, neighbor], contacts: [...fixture.contacts].reverse() }));
+      expect(actual.issues).toEqual([]);
+      expect(actual.plans).toEqual(contactFixture.expectedStationPlans.map((expected) => ({ ...expected,
+        stations: expected.stations.map((station) => ({ ...station, assemblyPointMm: transform(station.assemblyPointMm) })) })));
+    };
+    check(([x, y, z]) => [x! + 73, y! - 41, z! + 19]);
+    check(([x, y, z]) => [y === 0 ? 0 : -y!, x!, z!]);
+  });
+
+  it('keeps same-definition occurrences in two cabinets separate', () => {
+    const offset = 1000;
+    const secondBoards = fixture.boards.map((b) => ({ ...b, occurrenceId: `second:${b.occurrenceId}`,
+      translationMm: [b.translationMm[0] + offset, b.translationMm[1], b.translationMm[2]] as [number, number, number] }));
+    const secondContacts = fixture.contacts.map((c) => ({ ...c, contactId: `second:${c.contactId}`,
+      relationshipId: `second:${c.relationshipId}`, participantA: `second:${c.participantA}`, participantB: `second:${c.participantB}` }));
+    const resolution = resolveExplicitContacts({ boards: [...fixture.boards, ...secondBoards], contacts: [...fixture.contacts, ...secondContacts], requiredContactIds: [] });
+    const specs = [...contactFixture.stationSpecs, ...contactFixture.stationSpecs.map((s) => ({ ...s, contactId: `second:${s.contactId}` }))];
+    const result = plan([...fixture.boards, ...secondBoards], resolution, specs);
+    expect(result.issues).toEqual([]);
+    expect(result.plans).toHaveLength(4);
+    expect(result.plans.slice(0, 2)).toEqual(contactFixture.expectedStationPlans);
+    expect(result.plans.slice(2)).toEqual(contactFixture.expectedStationPlans.map((p) => ({ contactId: `second:${p.contactId}`,
+      stations: p.stations.map((s) => ({ ...s, assemblyPointMm: [s.assemblyPointMm[0]! + offset, s.assemblyPointMm[1], s.assemblyPointMm[2]] })) })));
+  });
+
+  it.each([
+    ['zero count', { count: 0 }, 'STATION_COUNT_INVALID'],
+    ['single without anchor', { count: 1 }, 'STATION_COUNT_INVALID'],
+    ['fractional count', { count: 2.5 }, 'STATION_COUNT_INVALID'],
+    ['nonfinite count', { count: Infinity }, 'STATION_COUNT_INVALID'],
+    ['negative margin', { startMarginMm: -1 }, 'STATION_MARGIN_INVALID'],
+    ['nonfinite margin', { endMarginMm: NaN }, 'STATION_MARGIN_INVALID'],
+    ['consumed span', { startMarginMm: 250, endMarginMm: 250 }, 'STATION_SPAN_INVALID'],
+    ['beyond span', { startMarginMm: 501 }, 'STATION_SPAN_INVALID'],
+  ] as const)('fails closed for %s', (_name, changed, code) => {
+    const specs = contactFixture.stationSpecs.map((s, i) => i === 0 ? { ...s, ...changed } : s);
+    const result = plan(fixture.boards, resolved(), specs);
+    expect(result.plans).toEqual([]);
+    expect(result.issues.map((issue) => issue.code)).toContain(code);
+  });
+
+  it('rejects missing or duplicate policies, bad participant frame, corrupt interval, and A0a issues without partial plans', () => {
+    const cases = [
+      [resolved(), fixture.boards, contactFixture.stationSpecs.slice(1), 'STATION_SPEC_MISSING'],
+      [resolved(), fixture.boards, [...contactFixture.stationSpecs, contactFixture.stationSpecs[0]!], 'STATION_SPEC_AMBIGUOUS'],
+      [resolved(), fixture.boards.slice(1), contactFixture.stationSpecs, 'STATION_PARTICIPANT_INVALID'],
+      [resolved(), fixture.boards.map((b, i) => i === 0 ? { ...b, basis: { ...b.basis, x: [0, 0, 0] as [number, number, number] } } : b), contactFixture.stationSpecs, 'STATION_PARTICIPANT_INVALID'],
+      [{ contacts: [{ ...resolved().contacts[0]!, overlapMm: [0, Infinity] as const }], issues: [] }, fixture.boards, contactFixture.stationSpecs, 'STATION_FRAME_INVALID'],
+      [{ contacts: [{ ...resolved().contacts[0]!, overlapMm: [0, 900] as const }], issues: [] }, fixture.boards, contactFixture.stationSpecs, 'STATION_POINT_INVALID'],
+      [resolved(), fixture.boards.map((b, i) => i === 1 ? { ...b, basis: { ...b.basis, x: [0, -1, 9e-7] as [number, number, number] } } : b), contactFixture.stationSpecs, 'STATION_POINT_INVALID'],
+      [resolveExplicitContacts({ ...fixture, contacts: [...fixture.contacts, fixture.contacts[0]!] }), fixture.boards, contactFixture.stationSpecs, 'CONTACT_AMBIGUOUS'],
+    ] as const;
+    for (const [resolution, boards, specs, code] of cases) {
+      const result = plan(boards, resolution, specs);
+      expect(result.plans).toEqual([]);
+      expect(result.issues.map((issue) => issue.code)).toContain(code);
     }
   });
 });

@@ -919,3 +919,157 @@ func resolveExplicitContacts(boards []ContactBoard, intents []ExplicitContact, r
 	}
 	return result
 }
+
+// StationSpec is neutral policy; one station needs an explicit anchor not supplied here.
+type StationSpec struct {
+	ContactID     string  `json:"contactId"`
+	Count         int     `json:"count"`
+	StartMarginMm float64 `json:"startMarginMm"`
+	EndMarginMm   float64 `json:"endMarginMm"`
+}
+
+type ContactStation struct {
+	DistanceMm          float64    `json:"distanceMm"`
+	AssemblyPointMm     [3]float64 `json:"assemblyPointMm"`
+	ParticipantALocalMm [3]float64 `json:"participantALocalMm"`
+	ParticipantBLocalMm [3]float64 `json:"participantBLocalMm"`
+}
+
+type StationPlan struct {
+	ContactID string           `json:"contactId"`
+	Stations  []ContactStation `json:"stations"`
+}
+
+type StationPlanResult struct {
+	Plans  []StationPlan          `json:"plans"`
+	Issues []domain.ContractIssue `json:"issues"`
+}
+
+func (b ContactBoard) toLocal(point [3]float64) [3]float64 {
+	delta := contactDelta(point, b.Translation)
+	return [3]float64{dot3(delta, b.Basis.X), dot3(delta, b.Basis.Y), dot3(delta, b.Basis.Z)}
+}
+
+// planResolvedContactStations plans once in the declared contact frame, then
+// inverts each assembly point into both concrete occurrence-local frames.
+func planResolvedContactStations(resolution ContactResolutionResult, boards []ContactBoard, specs []StationSpec) StationPlanResult {
+	result := StationPlanResult{Plans: []StationPlan{}, Issues: []domain.ContractIssue{}}
+	if len(resolution.Issues) != 0 {
+		result.Issues = resolution.Issues
+		return result
+	}
+	fail := func(id, code string) {
+		result.Issues = append(result.Issues, domain.ContractIssue{Code: code, Message: code,
+			Severity: domain.IssueSeverityError, EntityID: id})
+	}
+	boardCounts := map[string]int{}
+	boardByID := map[string]ContactBoard{}
+	for _, board := range boards {
+		boardCounts[board.OccurrenceID]++
+		boardByID[board.OccurrenceID] = board
+	}
+	specCounts := map[string]int{}
+	specByID := map[string]StationSpec{}
+	for _, spec := range specs {
+		specCounts[spec.ContactID]++
+		specByID[spec.ContactID] = spec
+	}
+	contactCounts := map[string]int{}
+	for _, contact := range resolution.Contacts {
+		contactCounts[contact.ContactID]++
+	}
+	for _, spec := range specs {
+		if contactCounts[spec.ContactID] == 0 {
+			fail(spec.ContactID, "STATION_CONTACT_UNKNOWN")
+		}
+	}
+	contacts := append([]ResolvedContact(nil), resolution.Contacts...)
+	sort.Slice(contacts, func(i, j int) bool { return contacts[i].ContactID < contacts[j].ContactID })
+	for _, contact := range contacts {
+		id := contact.ContactID
+		if contactCounts[id] != 1 {
+			fail(id, "STATION_CONTACT_AMBIGUOUS")
+			continue
+		}
+		if specCounts[id] == 0 {
+			fail(id, "STATION_SPEC_MISSING")
+			continue
+		}
+		if specCounts[id] != 1 {
+			fail(id, "STATION_SPEC_AMBIGUOUS")
+			continue
+		}
+		spec := specByID[id]
+		if spec.Count < 2 {
+			fail(id, "STATION_COUNT_INVALID")
+			continue
+		}
+		if math.IsNaN(spec.StartMarginMm) || math.IsInf(spec.StartMarginMm, 0) || spec.StartMarginMm < 0 ||
+			math.IsNaN(spec.EndMarginMm) || math.IsInf(spec.EndMarginMm, 0) || spec.EndMarginMm < 0 {
+			fail(id, "STATION_MARGIN_INVALID")
+			continue
+		}
+		lo, hi := contact.OverlapMm[0], contact.OverlapMm[1]
+		origin, axis, normal := contact.Frame.OriginAssemblyMm, contact.Frame.AxisAssembly, contact.Frame.NormalAssembly
+		if math.IsNaN(lo) || math.IsInf(lo, 0) || math.IsNaN(hi) || math.IsInf(hi, 0) || lo != 0 || hi <= 0 ||
+			!isFiniteVec3(origin) || !isFiniteVec3(axis) || !isFiniteVec3(normal) ||
+			math.Abs(dot3(axis, axis)-1) > 1e-6 || math.Abs(dot3(normal, normal)-1) > 1e-6 ||
+			math.Abs(dot3(axis, normal)) > 1e-6 {
+			fail(id, "STATION_FRAME_INVALID")
+			continue
+		}
+		first, last := lo+spec.StartMarginMm, hi-spec.EndMarginMm
+		if math.IsNaN(first) || math.IsInf(first, 0) || math.IsNaN(last) || math.IsInf(last, 0) ||
+			first >= last || first < lo || last > hi {
+			fail(id, "STATION_SPAN_INVALID")
+			continue
+		}
+		a, aOK := boardByID[contact.ParticipantA]
+		b, bOK := boardByID[contact.ParticipantB]
+		if !aOK || !bOK || a.OccurrenceID == b.OccurrenceID || boardCounts[a.OccurrenceID] != 1 ||
+			boardCounts[b.OccurrenceID] != 1 || !a.valid() || !b.valid() {
+			fail(id, "STATION_PARTICIPANT_INVALID")
+			continue
+		}
+		plan := StationPlan{ContactID: id, Stations: []ContactStation{}}
+		for index := 0; index < spec.Count; index++ {
+			distance := first + float64(index)*(last-first)/float64(spec.Count-1)
+			if index == spec.Count-1 {
+				distance = last
+			}
+			point := contactAdd(origin, axis, distance)
+			localA, localB := a.toLocal(point), b.toLocal(point)
+			validPoint := func(board ContactBoard, local [3]float64) bool {
+				dims := [3]float64{board.WidthMm, board.ThicknessMm, board.LengthMm}
+				if !isFiniteVec3(local) {
+					return false
+				}
+				for i, value := range local {
+					if value < -1e-6 || value > dims[i]+1e-6 {
+						return false
+					}
+				}
+				for _, delta := range contactDelta(board.toAssembly(local), point) {
+					if math.Abs(delta) > 1e-6 {
+						return false
+					}
+				}
+				return true
+			}
+			if math.IsNaN(distance) || math.IsInf(distance, 0) || distance < lo || distance > hi ||
+				!validPoint(a, localA) || !validPoint(b, localB) {
+				fail(id, "STATION_POINT_INVALID")
+				break
+			}
+			plan.Stations = append(plan.Stations, ContactStation{DistanceMm: distance,
+				AssemblyPointMm: point, ParticipantALocalMm: localA, ParticipantBLocalMm: localB})
+		}
+		if len(plan.Stations) == spec.Count {
+			result.Plans = append(result.Plans, plan)
+		}
+	}
+	if len(result.Issues) != 0 {
+		result.Plans = []StationPlan{}
+	}
+	return result
+}
