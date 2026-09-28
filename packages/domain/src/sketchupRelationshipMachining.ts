@@ -594,8 +594,8 @@ function contactSurface(b: ContactBoard, face: ContactFace): { corners: Vec3[]; 
   return { corners, normal: high ? normal : contactNegate(normal) };
 }
 
-/** Unicode scalar order matches Go's UTF-8 order for valid contact IDs. */
-const compareContactIds = (a: string, b: string): number => {
+/** Unicode scalar order matches Go's UTF-8 order for valid contact and rule IDs. */
+const compareUnicodeScalarIds = (a: string, b: string): number => {
   const left = Array.from(a, (character) => character.codePointAt(0)!);
   const right = Array.from(b, (character) => character.codePointAt(0)!);
   for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
@@ -620,7 +620,7 @@ export function resolveExplicitContacts(input: ContactResolutionInput): ContactR
   for (const id of input.requiredContactIds) {
     if (!input.contacts.some((contact) => contact.contactId === id)) fail(id, 'CONTACT_REQUIRED_MISSING');
   }
-  for (const intent of [...input.contacts].sort((a, b) => compareContactIds(a.contactId, b.contactId))) {
+  for (const intent of [...input.contacts].sort((a, b) => compareUnicodeScalarIds(a.contactId, b.contactId))) {
     if (seen.has(intent.contactId)) continue;
     seen.add(intent.contactId);
     if (contactCounts.get(intent.contactId)! > 1) { fail(intent.contactId, 'CONTACT_AMBIGUOUS'); continue; }
@@ -719,7 +719,7 @@ export function planResolvedContactStations(
   for (const contact of resolution.contacts) contactCounts.set(contact.contactId, (contactCounts.get(contact.contactId) ?? 0) + 1);
   for (const spec of specs) if (!contactCounts.has(spec.contactId)) fail(spec.contactId, 'STATION_CONTACT_UNKNOWN');
 
-  for (const contact of [...resolution.contacts].sort((a, b) => compareContactIds(a.contactId, b.contactId))) {
+  for (const contact of [...resolution.contacts].sort((a, b) => compareUnicodeScalarIds(a.contactId, b.contactId))) {
     const id = contact.contactId;
     if (contactCounts.get(id) !== 1) { fail(id, 'STATION_CONTACT_AMBIGUOUS'); continue; }
     if (!specCounts.has(id)) { fail(id, 'STATION_SPEC_MISSING'); continue; }
@@ -901,7 +901,7 @@ export function deriveResolvedContactOperationsForContact(
   const operations: NeutralContactOperation[] = [];
   const rules = [...recipe.rules].sort((x, y) =>
     x.participantRole < y.participantRole ? -1 : x.participantRole > y.participantRole ? 1 :
-      x.ruleId < y.ruleId ? -1 : x.ruleId > y.ruleId ? 1 : 0);
+      compareUnicodeScalarIds(x.ruleId, y.ruleId));
   for (const [stationIndex, station] of stations.entries()) {
     for (const rule of rules) {
       const board = rule.participantRole === 'A' ? a[0]! : b[0]!;

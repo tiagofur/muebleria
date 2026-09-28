@@ -219,10 +219,7 @@ describe('J1-A1a paired operations for one exact contact', () => {
       [1, contactFixture.expectedOperations.slice(6)]] as const) {
       const result = derive(index);
       expect(result.issues).toEqual([]);
-      expect(result.operations.map(({ operationId, ...operation }) => {
-        expect(operationId).not.toBe('');
-        return operation;
-      })).toEqual(expected);
+      expect(result.operations).toEqual(expected);
       expect(new Set(result.operations.map((operation) => operation.operationId)).size).toBe(expected.length);
     }
     expect(deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog).issues).toEqual([]);
@@ -249,6 +246,17 @@ describe('J1-A1a paired operations for one exact contact', () => {
     expect(result.issues).toEqual([]);
     expect(result.operations.filter((operation) => operation.provenance.stationIndex === 0)
       .map((operation) => operation.provenance.ruleId)).toEqual(['pilot', 'Z-copy', 'counterbore']);
+  });
+
+  it('orders supplementary and BMP rule IDs by Unicode scalar value', () => {
+    const original = recipes[0]!;
+    const base = original.rules[1]!;
+    const supplementary = { ...base, ruleId: '😀', operationRole: 'supplementary', offsetMm: [0, 18, 10] as const };
+    const bmp = { ...base, ruleId: '\uE000', operationRole: 'bmp', offsetMm: [0, 18, 20] as const };
+    const result = derive(0, { ...original, rules: [...original.rules, supplementary, bmp] });
+    expect(result.issues).toEqual([]);
+    expect(result.operations.filter((operation) => operation.provenance.stationIndex === 0)
+      .map((operation) => operation.provenance.ruleId)).toEqual(['pilot', 'counterbore', '\uE000', '😀']);
   });
 
   it('uses the same escaped operation identity as Go for unrestricted string IDs', () => {

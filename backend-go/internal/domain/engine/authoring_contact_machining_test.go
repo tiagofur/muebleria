@@ -43,7 +43,6 @@ func TestJ1PairedContactOperations(t *testing.T) {
 				t.Fatalf("missing or duplicate operation identity: %+v", operation)
 			}
 			ids[operation.OperationID] = true
-			operation.OperationID = ""
 			if !reflect.DeepEqual(operation, want[i]) {
 				t.Fatalf("contact %d operation %d: got %+v want %+v", index, i, operation, want[i])
 			}
@@ -167,6 +166,31 @@ func TestJ1PairedContactRuleOrder(t *testing.T) {
 	if got.Operations[0].Provenance.RuleID != "pilot" || got.Operations[1].Provenance.RuleID != "Z-copy" ||
 		got.Operations[2].Provenance.RuleID != "counterbore" {
 		t.Fatalf("rule order must use codepoint IDs, got %+v", got.Operations[:3])
+	}
+}
+
+func TestJ1PairedContactUnicodeRuleOrder(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	recipe := f.OperationRecipes[0]
+	for _, item := range []struct {
+		id, role string
+		offset   float64
+	}{{"😀", "supplementary", 10}, {"\uE000", "bmp", 20}} {
+		rule := recipe.Rules[1]
+		rule.RuleID, rule.OperationRole, rule.OffsetMm = item.id, item.role, [3]float64{0, 18, item.offset}
+		recipe.Rules = append(recipe.Rules, rule)
+	}
+	got := deriveResolvedContactOperationsForContact(resolved.Contacts[0], plans.Plans[0], f.Boards, f.StationSpecs[0], recipe)
+	if len(got.Issues) != 0 || len(got.Operations) != 12 {
+		t.Fatalf("expected complete Unicode rule set, got %+v", got)
+	}
+	want := []string{"pilot", "counterbore", "\uE000", "😀"}
+	for i, ruleID := range want {
+		if got.Operations[i].Provenance.RuleID != ruleID {
+			t.Fatalf("Unicode scalar rule order: got %+v want %+v", got.Operations[:4], want)
+		}
 	}
 }
 
