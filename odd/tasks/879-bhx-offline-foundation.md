@@ -81,9 +81,12 @@ promoted to installed-machine evidence. #352 owns field validation.
   work unit and an evidence-only tracking commit; the rebased identities are
   recorded below.
   V0: `git diff --check`, `git diff --cached --check`, and
-  `git show --check --oneline HEAD` passed; 12 required matrix fields and 12
-  Markdown links had zero missing local targets. Both official HOMAG links
-  were read directly. `python3 scripts/verify_affected.py --base origin/main
+  `git show --check --oneline HEAD` passed. All mandated B1 categories are
+  represented in the dossier's 16-row matrix. Across the dossier and this
+  task file, all 7 local Markdown link occurrences resolve; 5 external
+  occurrences comprise two distinct official HOMAG URLs repeated in the
+  dossier plus the issue URL. Both official HOMAG URLs were opened directly.
+  `python3 scripts/verify_affected.py --base origin/main
   --plan` succeeded but conservatively selected all gates because the new
   ODD path is unknown to the selector; that plan is not a test result.
   `python3 scripts/factory_preflight.py --require-clean` reported a clean
