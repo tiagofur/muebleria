@@ -41,11 +41,43 @@ module Granete
           context
         end
 
+        # Full-selection resolution (#471): a multi-selection of managed
+        # furniture yields the BatchContext; anything else degrades to the
+        # first entity's single context with its honest selectionCount.
+        # Public: the dialog's initial sync and post-mutation refresh
+        # re-publish the same payload the live observer would send.
+        def resolve_selection(selection)
+          entities = selection_entities(selection)
+          return nil if entities.empty?
+          unless entities.length >= Selection::BatchContext::BATCH_MINIMUM
+            return resolve(entities.first, selection: selection)
+          end
+
+          contexts = entities.map { |entity| @resolver.resolve(entity) }.compact
+          furniture_contexts = contexts.select { |context| context.kind == 'furniture' }
+          members = furniture_contexts.uniq(&:identity_key)
+          unless members.length >= Selection::BatchContext::BATCH_MINIMUM
+            return resolve(entities.first, selection: selection)
+          end
+
+          Selection::BatchContext.new(
+            members: members,
+            others: contexts - furniture_contexts,
+            selection_count: entities.length
+          )
+        end
+
         private
 
         def handle_selection(selection)
-          context = resolve(selection&.first, selection: selection)
+          context = resolve_selection(selection)
           @on_selection_change.call(context&.to_payload)
+        end
+
+        def selection_entities(selection)
+          return [] unless selection
+
+          selection.respond_to?(:to_a) ? selection.to_a : []
         end
 
         def selection_count(selection)

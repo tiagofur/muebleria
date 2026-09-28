@@ -89,6 +89,15 @@
   var inspectorActive = document.getElementById("inspector-active-view");
   var inspectorUnmanaged = document.getElementById("inspector-unmanaged-view");
   var inspectorMultiNote = document.getElementById("inspector-multi-note");
+  var inspectorBatchView = document.getElementById("inspector-batch-view");
+  var inspectorBatchTitle = document.getElementById("inspector-batch-title");
+  var inspectorBatchCountBadge = document.getElementById("inspector-batch-count-badge");
+  var inspectorBatchSummary = document.getElementById("inspector-batch-summary");
+  var inspectorBatchExcluded = document.getElementById("inspector-batch-excluded");
+  var inspectorBatchRolesCard = document.getElementById("inspector-batch-roles-card");
+  var inspectorBatchRoles = document.getElementById("inspector-batch-roles");
+  var inspectorBatchParamsCard = document.getElementById("inspector-batch-params-card");
+  var inspectorBatchParams = document.getElementById("inspector-batch-params");
   var inspectorName = document.getElementById("inspector-furniture-name");
   var inspectorRepresentationWarning = document.getElementById("inspector-representation-warning");
   var inspectorEditBlocker = document.getElementById("inspector-edit-blocker");
@@ -145,6 +154,7 @@
     inspectorEmpty.style.display = "none";
     inspectorUnmanaged.style.display = "none";
     inspectorActive.style.display = "none";
+    inspectorBatchView.style.display = "none";
     // The child view (part/hardware/aggregate) and its context reference
     // belong to the child module: it leaves the lane here on every
     // top-level re-render.
@@ -158,6 +168,12 @@
 
     if (!context) {
       inspectorEmpty.style.display = "block";
+      renderManufacturingCard(null);
+      return;
+    }
+
+    if (context.kind === "batch") {
+      renderBatchInspector(context);
       renderManufacturingCard(null);
       return;
     }
@@ -195,6 +211,381 @@
        (context.kind === "furniture" && deps.capabilityEnabled(context, "canInspectManufacturing")));
     card.style.display = eligible ? "block" : "none";
     if (window.GraneteManufacturing) window.GraneteManufacturing.render();
+  }
+
+  // ------------------------------------------------------------------
+  // #471 R1/R2: batch inspector. Tripartito honesto por control compartido
+  // (AC §16): común → valor; mixto → "Mixto"; no soportado por todos →
+  // "No aplica a N" con conteo. R2 vuelve editables los roles soportados
+  // por TODOS los miembros: las opciones son la INTERSECCIÓN de los
+  // grupos de cada definición (una opción inválida para un miembro
+  // bloquearía el lote entero), y el Apply envía una intención completa
+  // por mueble que el backend re-resuelve — nada de manufactura aquí.
+  // ------------------------------------------------------------------
+  var batchSelections = {};
+  var batchParamEdits = {};
+
+  function renderBatchInspector(context) {
+    inspectorBatchView.style.display = "block";
+    var members = context.furniture || [];
+    batchSelections = {};
+    batchParamEdits = {};
+
+    inspectorBatchTitle.textContent = members.length + " muebles en el lote";
+    inspectorBatchCountBadge.textContent = members.length + " muebles";
+    inspectorBatchSummary.textContent =
+      "La edición por lote aplicará a los " + members.length + " muebles administrados de la selección.";
+
+    var excluded = context.excluded || [];
+    if (excluded.length > 0) {
+      inspectorBatchExcluded.style.display = "block";
+      inspectorBatchExcluded.textContent =
+        excluded.length + " fuera del lote: " +
+        excluded.map(function (entry) { return entry.reason; }).join("; ") + ".";
+    } else {
+      inspectorBatchExcluded.style.display = "none";
+    }
+
+    renderBatchRoles(members, context);
+    renderBatchParams(members, context);
+    updateBatchFooter(members, context);
+  }
+
+  function batchMaterialLabel(materialId) {
+    var roles = window.GraneteUI.materialRoles;
+    var mat = roles && typeof roles.materialById === "function" ? roles.materialById(materialId) : null;
+    return mat && (mat.name || mat.code) ? (mat.name || mat.code) : (materialId || "--");
+  }
+
+  function batchRow(label, value, muted) {
+    var row = document.createElement("div");
+    row.className = "kv-row";
+    var k = document.createElement("span");
+    k.className = "k";
+    k.textContent = label;
+    var v = document.createElement("span");
+    v.className = "v";
+    v.textContent = value;
+    if (muted) v.style.color = "var(--text-muted)";
+    row.appendChild(k);
+    row.appendChild(v);
+    return row;
+  }
+
+  function batchCommonValue(values) {
+    var first = values[0];
+    var present = first !== undefined && first !== null && first !== "";
+    if (!present) return null;
+    for (var i = 1; i < values.length; i++) {
+      if (values[i] !== first) return null;
+    }
+    return first;
+  }
+
+  // La intersección de opciones válidas: una elección que un miembro no
+  // admite haría fallar SU resolve y, con lote atómico, al lote entero.
+  function batchRoleOptionIds(members, role) {
+    var sets = members.map(function (m) {
+      var def = m.definition || {};
+      var entry = (def.materialRoles || []).filter(function (r) { return r.role === role; })[0];
+      return entry ? (entry.optionIds || []) : null;
+    });
+    if (sets.indexOf(null) !== -1) return [];
+    var roles = window.GraneteUI.materialRoles;
+    var resolvable = function (id) {
+      return !roles || typeof roles.materialById !== "function" || roles.materialById(id);
+    };
+    return sets.reduce(function (acc, ids) {
+      return acc.filter(function (id) { return ids.indexOf(id) !== -1 && resolvable(id); });
+    });
+  }
+
+  function batchRoleSelect(role, optionIds, common) {
+    var select = document.createElement("select");
+    select.className = "input";
+    select.style.width = "100%";
+    var placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = common ? "--" : "Mixto";
+    select.appendChild(placeholder);
+    optionIds.forEach(function (id) {
+      var opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = batchMaterialLabel(id);
+      select.appendChild(opt);
+    });
+    if (common && optionIds.indexOf(common) !== -1) select.value = common;
+    select.addEventListener("change", function () {
+      if (select.value) {
+        batchSelections[role] = select.value;
+      } else {
+        delete batchSelections[role];
+      }
+      updateBatchFooter(selectedContext && selectedContext.furniture || [], selectedContext);
+    });
+    return select;
+  }
+
+  function renderBatchRoles(members, context) {
+    inspectorBatchRoles.innerHTML = "";
+    var seen = [];
+    members.forEach(function (m) {
+      var def = m.definition || {};
+      (def.materialRoles || []).forEach(function (r) {
+        if (seen.indexOf(r.role) === -1) seen.push(r.role);
+      });
+    });
+    if (seen.length === 0) {
+      inspectorBatchRolesCard.style.display = "none";
+      return;
+    }
+    inspectorBatchRolesCard.style.display = "block";
+    var editable = context && context.capabilities &&
+      context.capabilities.canBatchEditMaterialRoles &&
+      context.capabilities.canBatchEditMaterialRoles.supported;
+    seen.forEach(function (role) {
+      var supported = members.filter(function (m) {
+        var def = m.definition || {};
+        return (def.materialRoles || []).some(function (r) { return r.role === role; });
+      });
+      if (supported.length < members.length) {
+        inspectorBatchRoles.appendChild(
+          batchRow(role, "No aplica a " + (members.length - supported.length), true));
+        return;
+      }
+      var values = members.map(function (m) { return (m.materialChoices || {})[role]; });
+      var common = batchCommonValue(values);
+      var optionIds = batchRoleOptionIds(members, role);
+      if (editable && optionIds.length > 0) {
+        var row = document.createElement("div");
+        row.className = "kv-row";
+        var k = document.createElement("span");
+        k.className = "k";
+        k.textContent = role;
+        var v = document.createElement("span");
+        v.className = "v";
+        v.appendChild(batchRoleSelect(role, optionIds, common));
+        row.appendChild(k);
+        row.appendChild(v);
+        inspectorBatchRoles.appendChild(row);
+      } else if (optionIds.length === 0) {
+        inspectorBatchRoles.appendChild(batchRow(role, "Sin opción común", true));
+      } else {
+        inspectorBatchRoles.appendChild(
+          batchRow(role, common !== null ? batchMaterialLabel(common) : "Mixto", common === null));
+      }
+    });
+  }
+
+  // #471 R3: compatible shared parameters. A parameter is batch-editable
+  // only when EVERY member definition declares it with the SAME type and a
+  // non-empty intersection of range/options (AC §148-180: the resolver
+  // selects behavior from the binding; incompatible contracts fail closed,
+  // never coerced). The authoritative validation stays server-side.
+  function batchParamContract(members, name) {
+    var decls = members.map(function (m) {
+      var def = m.definition || {};
+      return (def.parameters || []).filter(function (p) { return p.name === name; })[0] || null;
+    });
+    if (decls.indexOf(null) !== -1) return null;
+    var types = {};
+    decls.forEach(function (d) { types[d.type || "string"] = true; });
+    var typeKeys = Object.keys(types);
+    if (typeKeys.length !== 1) return { unsupported: "tipos distintos entre definiciones" };
+    var type = typeKeys[0];
+    if (type === "number") {
+      var mins = decls.map(function (d) { return d.min; }).filter(function (v) { return v !== undefined; });
+      var maxs = decls.map(function (d) { return d.max; }).filter(function (v) { return v !== undefined; });
+      var min = mins.length ? Math.max.apply(null, mins) : undefined;
+      var max = maxs.length ? Math.min.apply(null, maxs) : undefined;
+      if (min !== undefined && max !== undefined && min > max) return { unsupported: "sin rango común" };
+      return { type: "number", min: min, max: max };
+    }
+    if (type === "enum") {
+      var sets = decls.map(function (d) { return d.options || []; });
+      var common = sets.reduce(function (acc, opts) {
+        return acc.filter(function (o) { return opts.indexOf(o) !== -1; });
+      });
+      if (common.length === 0) return { unsupported: "sin opciones comunes" };
+      return { type: "enum", options: common };
+    }
+    return { type: type };
+  }
+
+  function batchParamInput(name, contract, common) {
+    var input;
+    if (contract.type === "enum") {
+      input = document.createElement("select");
+      input.className = "input";
+      input.style.width = "100%";
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = common ? "--" : "Mixto";
+      input.appendChild(placeholder);
+      contract.options.forEach(function (value) {
+        var opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = String(value);
+        input.appendChild(opt);
+      });
+      if (common !== null && contract.options.indexOf(common) !== -1) input.value = common;
+    } else if (contract.type === "boolean") {
+      input = document.createElement("input");
+      input.type = "checkbox";
+      // #471 tri-state: true+true -> checked; false+false -> unchecked;
+      // mixed -> indeterminate. An unchecked box must never be readable as
+      // "false" when the real state is mixed.
+      if (common === true) input.checked = true;
+      if (common === null) input.indeterminate = true;
+    } else {
+      input = document.createElement("input");
+      input.className = "input";
+      input.type = contract.type === "number" ? "number" : "text";
+      input.style.width = "100%";
+      if (contract.type === "number") {
+        if (contract.min !== undefined) input.min = String(contract.min);
+        if (contract.max !== undefined) input.max = String(contract.max);
+      }
+      if (common !== null) input.value = String(common);
+      else input.placeholder = "Mixto";
+    }
+    input.addEventListener("change", function () {
+      if (input.type === "checkbox") {
+        // Resolving the tri-state records exactly the boolean chosen; an
+        // untouched indeterminate box never fires change and sends nothing.
+        input.indeterminate = false;
+        batchParamEdits[name] = input.checked;
+      } else {
+        var raw = input.value;
+        if (raw === "" || raw === null || raw === undefined) {
+          delete batchParamEdits[name];
+        } else {
+          batchParamEdits[name] = contract.type === "number" ? Number(raw) : raw;
+        }
+      }
+      updateBatchFooter(selectedContext && selectedContext.furniture || [], selectedContext);
+    });
+    return input;
+  }
+
+  function renderBatchParams(members, context) {
+    inspectorBatchParams.innerHTML = "";
+    var seen = [];
+    members.forEach(function (m) {
+      var def = m.definition || {};
+      (def.parameters || []).forEach(function (p) {
+        if (seen.indexOf(p.name) === -1) seen.push(p.name);
+      });
+    });
+    if (seen.length === 0) {
+      inspectorBatchParamsCard.style.display = "none";
+      return;
+    }
+    inspectorBatchParamsCard.style.display = "block";
+    var editable = context && context.capabilities &&
+      context.capabilities.canBatchEditParameters &&
+      context.capabilities.canBatchEditParameters.supported;
+    seen.forEach(function (name) {
+      var supported = members.filter(function (m) {
+        var def = m.definition || {};
+        return (def.parameters || []).some(function (p) { return p.name === name; });
+      });
+      if (supported.length < members.length) {
+        inspectorBatchParams.appendChild(
+          batchRow(name, "No aplica a " + (members.length - supported.length), true));
+        return;
+      }
+      var contract = batchParamContract(members, name);
+      var values = members.map(function (m) { return (m.parameters || {})[name]; });
+      var common = batchCommonValue(values);
+      if (contract && contract.unsupported) {
+        inspectorBatchParams.appendChild(batchRow(name, contract.unsupported, true));
+        return;
+      }
+      if (editable && contract) {
+        var row = document.createElement("div");
+        row.className = "kv-row";
+        var k = document.createElement("span");
+        k.className = "k";
+        k.textContent = name;
+        var v = document.createElement("span");
+        v.className = "v";
+        v.appendChild(batchParamInput(name, contract, common));
+        row.appendChild(k);
+        row.appendChild(v);
+        inspectorBatchParams.appendChild(row);
+      } else if (common !== null) {
+        inspectorBatchParams.appendChild(batchRow(name, String(common), false));
+      } else {
+        inspectorBatchParams.appendChild(batchRow(name, "Mixto", true));
+      }
+    });
+  }
+
+  function updateBatchFooter(members, context) {
+    var footer = document.getElementById("inspector-batch-footer");
+    if (!footer) return;
+    var caps = (context && context.capabilities) || {};
+    var rolesEditable = caps.canBatchEditMaterialRoles && caps.canBatchEditMaterialRoles.supported;
+    var paramsEditable = caps.canBatchEditParameters && caps.canBatchEditParameters.supported;
+    var pending = (rolesEditable ? Object.keys(batchSelections).length : 0) +
+      (paramsEditable ? Object.keys(batchParamEdits).length : 0);
+    if (pending === 0) {
+      footer.style.display = "none";
+      return;
+    }
+    footer.style.display = "block";
+    var count = members.length || (context.furniture || []).length;
+    document.getElementById("inspector-batch-pending").textContent =
+      pending + (pending === 1 ? " cambio a aplicar" : " cambios a aplicar") +
+      " en " + count + " muebles";
+    var btn = document.getElementById("btn-batch-apply");
+    btn.textContent = "Aplicar a " + count + " muebles";
+    btn.disabled = window.GraneteMutation && typeof window.GraneteMutation.phase === "function" &&
+      window.GraneteMutation.phase() === "applying_host_mutation";
+  }
+
+  // #471 R2: el Apply arma UNA intención completa por mueble (parametros
+  // actuales + roles elegidos; Ruby mergea con los choices persistidos de
+  // cada entidad) y la envía como un solo comando todo-o-nada.
+  function applyBatchSelections() {
+    var context = selectedContext;
+    if (!context || context.kind !== "batch") return;
+    var members = context.furniture || [];
+    var chosen = batchSelections;
+    var paramEdits = batchParamEdits;
+    var pendingRoles = Object.keys(chosen).length;
+    var pendingParams = Object.keys(paramEdits).length;
+    if ((pendingRoles + pendingParams) === 0 || members.length === 0) return;
+
+    var items = members.map(function (m) {
+      return {
+        instanceId: m.furnitureInstanceRef,
+        definitionId: m.furnitureDefinitionId,
+        // One complete per-member intent: current parameters overridden by
+        // the batch edits, current choices overridden by the chosen roles
+        // (Ruby merges with each entity's persisted materialChoices).
+        parameters: Object.assign({}, m.parameters || {}, paramEdits),
+        materialChoices: chosen
+      };
+    });
+    var result = window.GraneteMutation.submitBatchUpdate(items);
+    if (result === "busy") {
+      deps.showToast("error", "Ya hay una mutación en curso.");
+    } else if (result === "unavailable") {
+      deps.showToast("error", "La edición por lote no está disponible fuera de SketchUp.");
+    }
+  }
+
+  function onBatchUpdateResult(result) {
+    var success = !!(result && result.success);
+    if (success) {
+      deps.showToast("success", "✓ Lote aplicado a " + (result.applied || 0) + " muebles.");
+    } else {
+      // All-or-nothing: nothing was applied — the copy says so honestly.
+      deps.showToast("error", "El lote no se aplicó: " + ((result && result.error) || "error desconocido") +
+        " Ningún mueble cambió.");
+    }
   }
 
   function renderFurnitureInspector(context) {
@@ -273,6 +664,13 @@
     }
 
     updateInspectorSummary();
+  }
+
+  // #471 R2: the batch Apply button lives in the batch view; it is wired
+  // once here and reads the CURRENT selectedContext at click time.
+  var btnBatchApply = document.getElementById("btn-batch-apply");
+  if (btnBatchApply) {
+    btnBatchApply.addEventListener("click", applyBatchSelections);
   }
 
   btnUpdate.addEventListener("click", function () {
@@ -502,6 +900,7 @@
     init: function (injected) { deps = injected || {}; },
     onSelectionChange: onSelectionChange,
     onUpdateResult: onUpdateResult,
+    onBatchUpdateResult: onBatchUpdateResult,
     onDeleteResult: onDeleteResult,
     onMaterialChoiceApplied: onMaterialChoiceApplied,
     activateInspectorTab: activateInspectorTab,

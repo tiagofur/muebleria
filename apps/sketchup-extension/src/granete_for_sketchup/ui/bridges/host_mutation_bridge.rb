@@ -63,6 +63,58 @@ module Granete
           outcome
         end
 
+        # #471: one user batch command. Each item rides the exact per-item
+        # update path (persisted materialChoices merge, per-item resolve,
+        # per-item rebuild); the coordinator executes them as ONE
+        # all-or-nothing batch with a single undo. A missing member
+        # (definition or entity not found) rejects the whole batch BEFORE
+        # any host mutation — no partial application.
+        def execute_coordinated_batch_update(dialog, payload, command_message_id: nil)
+          items = payload['items'].is_a?(Array) ? payload['items'] : []
+          commands = items.map { |item| build_update_command(item, nil) }
+          outcome = batch_outcome_for(items, commands, command_message_id)
+                    .with_mutation_name('batch_update_furniture')
+          legacy = { 'success' => outcome.committed?,
+                     'applied' => outcome.committed? ? outcome.result['applied'] : 0,
+                     'total' => items.length,
+                     'error' => outcome.committed? ? nil : outcome.reason }
+          execute_bridge(dialog, 'onBatchUpdateResult', legacy)
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          # Committed rebuilds rewrote member metadata: republish the SAME
+          # full-selection payload the live observer would send so the
+          # batch inspector refreshes from authoritative state.
+          check_current_selection(dialog) if outcome.committed? && respond_to?(:check_current_selection)
+          outcome
+        rescue StandardError => e
+          @logger.error('furniture_batch_update_failed', error: e)
+          execute_bridge(dialog, 'onBatchUpdateResult', { 'success' => false, 'applied' => 0,
+                                                          'total' => 0, 'error' => e.message })
+          outcome = Host::MutationOutcome.new(outcome: 'aborted', category: 'host_apply_failure',
+                                              reason: e.message, semantic_target: {})
+                                         .with_mutation_name('batch_update_furniture')
+          push_mutation_outcome(dialog, outcome, in_reply_to: command_message_id)
+          outcome
+        end
+
+        # Builds the batch outcome: contract violations and unbuildable
+        # members reject BEFORE any resolve or host mutation — never a
+        # silent dedup or partial application.
+        def batch_outcome_for(items, commands, command_message_id)
+          reason = Host::BatchItemsContract.validate(items)
+          if reason
+            return Host::MutationOutcome.new(outcome: 'rejected', category: 'invalid_authoring_input',
+                                             reason: reason, semantic_target: {})
+          end
+          if items.empty? || commands.any?(&:nil?)
+            return Host::MutationOutcome.new(
+              outcome: 'rejected', category: 'invalid_authoring_input',
+              reason: 'algún mueble del lote no se encontró (definición o instancia)', semantic_target: {}
+            )
+          end
+
+          mutation_coordinator.execute_batch(commands.compact, command_message_id: command_message_id)
+        end
+
         def execute_coordinated_hardware_update(dialog, payload, semantic_target: nil, command_message_id: nil)
           command = build_hardware_update_command(payload, semantic_target)
           overlay_mutation_started(command&.semantic_target || semantic_target)

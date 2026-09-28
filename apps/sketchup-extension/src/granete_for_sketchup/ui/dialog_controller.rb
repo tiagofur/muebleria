@@ -232,7 +232,7 @@ module Granete
           dialog.add_action_callback('dialog_ready') { handle_dialog_ready(dialog) }
           dialog.add_action_callback('get_catalog') { send_catalog(dialog) }
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
-          dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
+          register_furniture_callbacks(dialog)
           register_authoring_callbacks(dialog)
           dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
           dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
@@ -252,6 +252,13 @@ module Granete
           # session credential itself never crosses into the dialog.
           dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
           register_selection_context_menu
+        end
+
+        # The per-furniture update callbacks: the single edit and the #471
+        # batch Apply ride the same coordinated mutation pipeline.
+        def register_furniture_callbacks(dialog)
+          dialog.add_action_callback('update_furniture') { |_c, p| handle_update(dialog, p) }
+          dialog.add_action_callback('update_furniture_batch') { |_c, p| handle_update_batch(dialog, p) }
         end
 
         # Native reachability for the designer's right click (UX review

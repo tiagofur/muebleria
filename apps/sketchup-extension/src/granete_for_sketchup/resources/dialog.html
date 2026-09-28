@@ -497,6 +497,33 @@
             </p>
           </div>
 
+          <!-- #471 R1: batch inspector de lectura — tripartito común/mixto/no-aplica -->
+          <div id="inspector-batch-view" class="card" style="display: none;">
+            <div class="card-header-row">
+              <div>
+                <h2 id="inspector-batch-title" style="font-size: var(--text-md); margin: 0;">--</h2>
+              </div>
+              <div class="badges-column">
+                <span id="inspector-batch-count-badge" class="status-badge pending">Lote</span>
+              </div>
+            </div>
+            <p id="inspector-batch-summary" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 var(--space-2);">--</p>
+            <p id="inspector-batch-excluded" class="subhead" style="display: none; font-size: var(--text-xs); margin: 0 0 var(--space-2); color: var(--warning-700);"></p>
+            <div id="inspector-batch-roles-card">
+              <p class="presets-block-label">Materiales por rol</p>
+              <div id="inspector-batch-roles"></div>
+            </div>
+            <div id="inspector-batch-params-card" style="margin-top: var(--space-3);">
+              <p class="presets-block-label">Parámetros compartidos</p>
+              <div id="inspector-batch-params"></div>
+            </div>
+            <!-- #471 R2: Apply explícito del lote — todo-o-nada, un undo -->
+            <div id="inspector-batch-footer" style="display: none; margin-top: var(--space-3);">
+              <p id="inspector-batch-pending" class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);"></p>
+              <button id="btn-batch-apply" class="btn btn-primary" style="width: 100%;">Aplicar al lote</button>
+            </div>
+          </div>
+
           <div id="inspector-active-view" style="display: none;">
             <div class="card">
               <div class="card-header-row">
@@ -1333,6 +1360,12 @@
           // payloads.
           onUpdateResult: function (result) {
             window.GraneteUI.inspector.onUpdateResult(result);
+          },
+
+          // #471: one outcome for the whole batch — all-or-nothing, so the
+          // toast can never claim N applied when fewer succeeded.
+          onBatchUpdateResult: function (result) {
+            window.GraneteUI.inspector.onBatchUpdateResult(result);
           },
 
           onSelectionChange: function (context) {

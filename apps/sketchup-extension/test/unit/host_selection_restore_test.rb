@@ -95,4 +95,64 @@ class HostSelectionRestoreTest < Minitest::Test
     assert_nil @restore.restore('furnitureInstanceRef' => 'whatever')
     refute_includes @model.selection.items, plain
   end
+
+  # --- #471: batch selection restore ----------------------------------------
+  # Counts clear/add through the stub selection observers so the tests can
+  # prove restore_many clears the selection exactly ONCE.
+  class RestoreEventObserver
+    attr_reader :events
+
+    def initialize
+      @events = []
+    end
+
+    def onSelectionCleared(_selection)
+      @events << :cleared
+    end
+
+    def onSelectionBulkChange(_selection)
+      @events << :bulk
+    end
+  end
+
+  def test_restore_many_reselects_every_rebuilt_furniture_by_semantic_identity
+    %w[inst-a inst-b inst-c].each { |ref| furniture_with_children(ref) }
+
+    # Rebuild simulation: fresh top-level entities carry the SAME semantic
+    # refs — restore_many must locate them by identity, never by wrapper.
+    rebuilt = %w[inst-a inst-b inst-c].map do |ref|
+      definition = @model.definitions.add("Granete · Mueble · #{ref}-rebuild")
+      entity = @model.active_entities.add_instance(definition, Geom::Transformation.identity)
+      Granete::SketchUpExtension::Model::MetadataWriter.write_furniture(
+        @store, entity, ref, { 'furniture_definition_id' => 'def-1' }, {}
+      )
+      entity
+    end
+    @model.active_entities.erase_entities(@model.active_entities.instances.reject { |entity| rebuilt.include?(entity) })
+
+    observer = RestoreEventObserver.new
+    @model.selection.add_observer(observer)
+
+    targets = %w[inst-a inst-b inst-c].map { |ref| { 'furnitureInstanceRef' => ref } }
+    restored = @restore.restore_many(targets)
+
+    assert_equal 3, restored.length, 'every valid member is restored'
+    by_ref = ->(entity) { @store.read(entity).dig('identity', 'instanceRef') }
+    assert_equal rebuilt.sort_by(&by_ref), restored.sort_by(&by_ref),
+                 'restored targets are the REBUILT entities located by semantic identity'
+    assert_equal 3, @model.selection.length, 'the whole batch stays selected'
+    assert_equal %w[inst-a inst-b inst-c], @model.selection.items.map(&by_ref).sort
+    assert_equal 1, observer.events.count(:cleared), 'selection.clear happens exactly ONCE'
+  end
+
+  def test_restore_many_skips_missing_members_without_failing_the_commit
+    a = furniture_with_children('inst-a')
+    furniture_with_children('inst-b')
+
+    targets = [{ 'furnitureInstanceRef' => 'inst-a' }, { 'furnitureInstanceRef' => 'inst-gone' }]
+    restored = @restore.restore_many(targets)
+
+    assert_equal [a], restored, 'only locatable members are restored — honest subset'
+    assert_equal [a], @model.selection.items
+  end
 end
