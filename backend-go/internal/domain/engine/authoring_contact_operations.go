@@ -192,3 +192,104 @@ func deriveResolvedContactOperationsForContact(contact ResolvedContact, plan Sta
 	}
 	return result
 }
+
+// deriveResolvedContactOperations reconciles complete singular results and
+// removes every operation of a relationship if any of its contacts fails.
+func deriveResolvedContactOperations(resolution ContactResolutionResult, plans StationPlanResult,
+	boards []ContactBoard, specs []StationSpec, recipes []ContactOperationRecipe) ContactOperationResult {
+	result := ContactOperationResult{Operations: []NeutralContactOperation{}, Issues: []domain.ContractIssue{}}
+	if len(resolution.Issues) != 0 || len(plans.Issues) != 0 {
+		result.Issues = append(result.Issues, resolution.Issues...)
+		result.Issues = append(result.Issues, plans.Issues...)
+		return result
+	}
+	contactCounts, planCounts, specCounts, recipeCounts := map[string]int{}, map[string]int{}, map[string]int{}, map[string]int{}
+	planByID, specByID, recipeByID := map[string]StationPlan{}, map[string]StationSpec{}, map[string]ContactOperationRecipe{}
+	for _, contact := range resolution.Contacts {
+		contactCounts[contact.ContactID]++
+	}
+	for _, plan := range plans.Plans {
+		planCounts[plan.ContactID]++
+		planByID[plan.ContactID] = plan
+	}
+	for _, spec := range specs {
+		specCounts[spec.ContactID]++
+		specByID[spec.ContactID] = spec
+	}
+	for _, recipe := range recipes {
+		recipeCounts[recipe.ContactID]++
+		recipeByID[recipe.ContactID] = recipe
+	}
+	for _, counts := range []map[string]int{planCounts, specCounts, recipeCounts} {
+		for id := range counts {
+			if contactCounts[id] == 0 {
+				result.Issues = append(result.Issues, domain.ContractIssue{Code: "OPERATION_CONTACT_UNKNOWN",
+					Message: "OPERATION_CONTACT_UNKNOWN", Severity: domain.IssueSeverityError})
+				return result
+			}
+		}
+	}
+	contacts := append([]ResolvedContact(nil), resolution.Contacts...)
+	sort.Slice(contacts, func(i, j int) bool { return contacts[i].ContactID < contacts[j].ContactID })
+	invalidRelationships := map[string]bool{}
+	fail := func(contact ResolvedContact, code string) {
+		result.Issues = append(result.Issues, domain.ContractIssue{Code: code, Message: code,
+			Severity: domain.IssueSeverityError, EntityID: contact.ContactID})
+		invalidRelationships[contact.RelationshipID] = true
+	}
+	for _, contact := range contacts {
+		id := contact.ContactID
+		switch {
+		case contactCounts[id] != 1:
+			fail(contact, "OPERATION_CONTACT_AMBIGUOUS")
+			continue
+		case planCounts[id] != 1 || specCounts[id] != 1:
+			fail(contact, "OPERATION_PLAN_INVALID")
+			continue
+		case recipeCounts[id] == 0:
+			fail(contact, "OPERATION_RECIPE_REQUIRED")
+			continue
+		case recipeCounts[id] != 1:
+			fail(contact, "OPERATION_RECIPE_AMBIGUOUS")
+			continue
+		}
+		paired := deriveResolvedContactOperationsForContact(contact, planByID[id], boards, specByID[id], recipeByID[id])
+		if len(paired.Issues) != 0 {
+			invalidRelationships[contact.RelationshipID] = true
+		}
+		result.Issues = append(result.Issues, paired.Issues...)
+		result.Operations = append(result.Operations, paired.Operations...)
+	}
+	kept := []NeutralContactOperation{}
+	ids := map[string]bool{}
+	geometryOwners := map[string]string{}
+	for _, operation := range result.Operations {
+		if invalidRelationships[operation.Provenance.RelationshipID] {
+			continue
+		}
+		key, _ := json.Marshal([]any{operation.Provenance.ParticipantID, operation.EntryFace,
+			operation.CenterLocalMm, operation.AxisLocal, operation.DiameterMm, operation.DepthMm})
+		if previous, found := geometryOwners[string(key)]; found && !invalidRelationships[previous] {
+			invalidRelationships[previous], invalidRelationships[operation.Provenance.RelationshipID] = true, true
+			result.Issues = append(result.Issues, domain.ContractIssue{Code: "OPERATION_GEOMETRY_DUPLICATE",
+				Message: "OPERATION_GEOMETRY_DUPLICATE", Severity: domain.IssueSeverityError})
+		} else {
+			geometryOwners[string(key)] = operation.Provenance.RelationshipID
+		}
+	}
+	for _, operation := range result.Operations {
+		if invalidRelationships[operation.Provenance.RelationshipID] {
+			continue
+		}
+		if ids[operation.OperationID] {
+			result.Issues = append(result.Issues, domain.ContractIssue{Code: "OPERATION_ID_AMBIGUOUS",
+				Message: "OPERATION_ID_AMBIGUOUS", Severity: domain.IssueSeverityError})
+			result.Operations = []NeutralContactOperation{}
+			return result
+		}
+		ids[operation.OperationID] = true
+		kept = append(kept, operation)
+	}
+	result.Operations = kept
+	return result
+}
