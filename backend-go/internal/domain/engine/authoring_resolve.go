@@ -291,7 +291,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	if plan.active {
 		input.Relationships = pruneRemovedAnchorRelationships(input.Relationships, boards)
 	}
-	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, boards, input.Relationships)
+	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, input.EvaluatedParameters, boards, input.Relationships)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
 
@@ -409,7 +409,7 @@ func validateBoundOccurrenceCounts(module domain.Module, values map[string]any, 
 	}
 }
 
-func materializeBoundRelationships(definitions []domain.FurnitureParameterDefinition, boards []layoutBoard, authored []AuthoringRelationship) []AuthoringRelationship {
+func materializeBoundRelationships(definitions []domain.FurnitureParameterDefinition, values map[string]any, boards []layoutBoard, authored []AuthoringRelationship) []AuthoringRelationship {
 	result := append([]AuthoringRelationship(nil), authored...)
 	has := map[string]bool{}
 	for _, relationship := range result {
@@ -421,31 +421,100 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 	}
 	for _, definition := range definitions {
 		binding := definition.Binding
-		if binding == nil || binding.Kind != domain.FurnitureParameterBindingComponentQuantity || binding.Relationship == nil {
+		if binding == nil || binding.Relationship == nil {
 			continue
 		}
-		for index, source := range byComponent[binding.ComponentID] {
-			key := binding.Relationship.Kind + "\x00" + source.id
-			if has[key] {
-				continue
-			}
-			targets := make([]AuthoringRelationshipAnchor, 0, len(binding.Relationship.Targets))
-			for _, target := range binding.Relationship.Targets {
-				candidates := byComponent[target.ComponentID]
-				if len(candidates) == 0 {
+		switch binding.Kind {
+		case domain.FurnitureParameterBindingComponentQuantity:
+			for index, source := range byComponent[binding.ComponentID] {
+				key := binding.Relationship.Kind + "\x00" + source.id
+				if has[key] {
 					continue
 				}
-				targets = append(targets, AuthoringRelationshipAnchor{ComponentInstanceID: candidates[0].id, Role: target.Role})
+				targets := make([]AuthoringRelationshipAnchor, 0, len(binding.Relationship.Targets))
+				for _, target := range binding.Relationship.Targets {
+					candidates := byComponent[target.ComponentID]
+					if len(candidates) == 0 {
+						continue
+					}
+					targets = append(targets, AuthoringRelationshipAnchor{ComponentInstanceID: candidates[0].id, Role: target.Role})
+				}
+				result = append(result, AuthoringRelationship{
+					RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1), Kind: binding.Relationship.Kind,
+					Source: AuthoringRelationshipAnchor{ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole}, Targets: targets,
+				})
+				has[key] = true
 			}
-			result = append(result, AuthoringRelationship{
-				RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1), Kind: binding.Relationship.Kind,
-				Source: AuthoringRelationshipAnchor{ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole}, Targets: targets,
-			})
-			has[key] = true
+		case domain.FurnitureParameterBindingStructureRelationship:
+			// The station count is the parameter's own value (defaults
+			// included); unusable values materialize nothing rather than a
+			// fabricated pattern. Authored equivalents win by kind+source.
+			count, ok := structureStationCount(definition, values)
+			if !ok {
+				continue
+			}
+			for index, source := range byComponent[binding.ComponentID] {
+				key := binding.Relationship.Kind + "\x00" + source.id
+				if has[key] {
+					continue
+				}
+				usedTargets := map[string]bool{}
+				targets := make([]AuthoringRelationshipAnchor, 0, len(binding.Relationship.Targets))
+				for _, target := range binding.Relationship.Targets {
+					var candidate *layoutBoard
+					for i := range byComponent[target.ComponentID] {
+						if !usedTargets[byComponent[target.ComponentID][i].id] {
+							candidate = &byComponent[target.ComponentID][i]
+							break
+						}
+					}
+					if candidate == nil {
+						continue
+					}
+					usedTargets[candidate.id] = true
+					targets = append(targets, AuthoringRelationshipAnchor{
+						ComponentInstanceID: candidate.id, Role: target.Role, Face: target.Face,
+					})
+				}
+				if len(targets) == 0 {
+					continue
+				}
+				parameters := map[string]any{"stationCount": count}
+				if binding.Relationship.Station != nil {
+					parameters["startMarginMm"] = binding.Relationship.Station.StartMarginMm
+					parameters["endMarginMm"] = binding.Relationship.Station.EndMarginMm
+				}
+				sourceAnchor := AuthoringRelationshipAnchor{
+					ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole,
+					Face: binding.Relationship.SourceFace,
+				}
+				result = append(result, AuthoringRelationship{
+					RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1),
+					Kind:           binding.Relationship.Kind,
+					Source:         sourceAnchor, Targets: targets, Parameters: parameters,
+				})
+				has[key] = true
+			}
 		}
 	}
 	sort.SliceStable(result, func(i, j int) bool { return result[i].RelationshipID < result[j].RelationshipID })
 	return result
+}
+
+// structureStationCount reads the station count a structureRelationship
+// parameter contributes: the evaluated value when present, the definition
+// default otherwise. Only finite integers >= 2 are usable station counts.
+func structureStationCount(definition domain.FurnitureParameterDefinition, values map[string]any) (float64, bool) {
+	value, present := values[definition.Name]
+	if !present {
+		value = definition.DefaultValue
+	}
+	count, ok := value.(float64)
+	if !ok || count != math.Trunc(count) || count < 2 ||
+		math.IsNaN(count) || math.IsInf(count, 0) {
+		return 0, false
+	}
+	return count, true
 }
 
 // validateOccurrenceRanges keeps position validity server-authoritative

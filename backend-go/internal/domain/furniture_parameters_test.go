@@ -481,3 +481,91 @@ func hasDefinitionIssueField(issues []FurnitureParameterDefinitionIssue, field s
 	}
 	return false
 }
+
+func structureRelationshipDefinition() FurnitureParameterDefinition {
+	return FurnitureParameterDefinition{
+		Name: "baseJointStations", Label: "Fijaciones base por unión", Type: FurnitureParameterTypeNumber,
+		DefaultValue: float64(3), Required: true, Integer: true, Unit: FurnitureParameterUnitCount,
+		Category: FurnitureParameterCategoryConfiguration,
+		Binding: &FurnitureParameterBinding{
+			Version: 1, Kind: FurnitureParameterBindingStructureRelationship, ComponentID: "comp-base",
+			Relationship: &FurnitureParameterRelationshipBinding{
+				Kind: "floor-side", SourceRole: "floor-edge",
+				Targets: []FurnitureParameterRelationshipTarget{
+					{ComponentID: "comp-side", Role: "inside-face", Face: "back"},
+					{ComponentID: "comp-side-r", Role: "inside-face", Face: "front"},
+				},
+				Station: &FurnitureRelationshipStationMargins{StartMarginMm: 40, EndMarginMm: 40},
+			},
+		},
+	}
+}
+
+func TestStructureRelationshipBindingValidation(t *testing.T) {
+	valid := structureRelationshipDefinition()
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{valid}); len(issues) != 0 {
+		t.Fatalf("valid structureRelationship rejected: %+v", issues)
+	}
+
+	boolean := structureRelationshipDefinition()
+	boolean.Type = FurnitureParameterTypeBoolean
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{boolean}); !hasDefinitionIssueField(issues, "binding.kind") {
+		t.Fatalf("boolean structureRelationship accepted: %+v", issues)
+	}
+
+	noRelationship := structureRelationshipDefinition()
+	noRelationship.Binding.Relationship = nil
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{noRelationship}); !hasDefinitionIssueField(issues, "binding.relationship") {
+		t.Fatalf("structureRelationship without relationship accepted: %+v", issues)
+	}
+
+	faceless := structureRelationshipDefinition()
+	faceless.Binding.Relationship.Targets[0].Face = ""
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{faceless}); !hasDefinitionIssueField(issues, "binding.relationship.targets") {
+		t.Fatalf("floor-side target without a declared face accepted: %+v", issues)
+	}
+
+	badFace := structureRelationshipDefinition()
+	badFace.Binding.Relationship.Targets[1].Face = "diagonal"
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{badFace}); !hasDefinitionIssueField(issues, "binding.relationship.targets") {
+		t.Fatalf("target face outside the six board faces accepted: %+v", issues)
+	}
+
+	badSourceFace := structureRelationshipDefinition()
+	badSourceFace.Binding.Relationship.SourceFace = "inner"
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{badSourceFace}); !hasDefinitionIssueField(issues, "binding.relationship.sourceFace") {
+		t.Fatalf("source face outside the six board faces accepted: %+v", issues)
+	}
+
+	negativeMargin := structureRelationshipDefinition()
+	negativeMargin.Binding.Relationship.Station.EndMarginMm = -1
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{negativeMargin}); !hasDefinitionIssueField(issues, "binding.relationship.station") {
+		t.Fatalf("negative station margin accepted: %+v", issues)
+	}
+
+	dimension := structureRelationshipDefinition()
+	dimension.Binding.Dimension = "widthMm"
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{dimension}); !hasDefinitionIssueField(issues, "binding.dimension") {
+		t.Fatalf("structureRelationship with dimension accepted: %+v", issues)
+	}
+}
+
+func TestStructureRelationshipModuleConsumersMustBeUnambiguous(t *testing.T) {
+	definition := structureRelationshipDefinition()
+	module := Module{
+		ParameterDefinitions: []FurnitureParameterDefinition{definition},
+		Components:           []ComponentInstance{{ComponentID: "comp-base", Quantity: 1}},
+		StructureID:          "structure",
+	}
+	catalog := Catalog{Structures: []Structure{{ID: "structure", Components: []ComponentInstance{
+		{ComponentID: "comp-side", Quantity: 1}, {ComponentID: "comp-side-r", Quantity: 1},
+	}}}}
+	if issues := ValidateModuleFurnitureParameterConsumers(module, catalog); len(issues) != 0 {
+		t.Fatalf("unambiguous composition rejected: %+v", issues)
+	}
+
+	catalog.Structures[0].Components[0].Quantity = 2
+	if issues := ValidateModuleFurnitureParameterConsumers(module, catalog); !hasDefinitionIssueField(issues, "binding.relationship.targets") {
+		t.Fatalf("ambiguous relationship target accepted: %+v", issues)
+	}
+}
