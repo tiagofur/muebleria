@@ -14,6 +14,7 @@ import {
   resolveExplicitContacts,
   planResolvedContactStations,
   contactOperationId,
+  deriveResolvedContactOperationsForContact,
   deriveRelationshipMachining,
   diffRelationshipMachining,
   isFingerprintStale,
@@ -22,6 +23,7 @@ import {
   type ContactResolutionInput,
   type StationSpec,
   type ContactOperationProvenance,
+  type ContactOperationRecipe,
 } from './sketchupRelationshipMachining';
 import { applyAuthoringEnvelope, EMPTY_AUTHORING_STATE } from './sketchupAuthoringExchange';
 import type { AuthoringEnvelopeV1, ReadonlyAuthoringSnapshot } from './sketchupAuthoringSchema';
@@ -200,6 +202,85 @@ describe('J1-A1-id neutral operation identity', () => {
     const ids = fields.map((field) => contactOperationId({ ...base,
       [field]: field === 'stationIndex' ? 1 : `${base[field]}!` }));
     expect(new Set([contactOperationId(base), ...ids]).size).toBe(fields.length + 1);
+  });
+});
+
+describe('J1-A1a paired operations for one exact contact', () => {
+  const fixture = contactFixture as unknown as ContactResolutionInput;
+  const recipes = contactFixture.operationRecipes as unknown as ContactOperationRecipe[];
+  const resolved = resolveExplicitContacts(fixture);
+  const planned = planResolvedContactStations(resolved, fixture.boards, contactFixture.stationSpecs);
+  const derive = (index: number, recipe = recipes[index]!, plan = planned.plans[index]!,
+    boards = fixture.boards, spec = contactFixture.stationSpecs[index]!, contact = resolved.contacts[index]!) =>
+    deriveResolvedContactOperationsForContact(contact, plan, boards, spec, recipe);
+
+  it('emits complete complementary operations for each exact floor-side contact', () => {
+    for (const [index, expected] of [[0, contactFixture.expectedOperations.slice(0, 6)],
+      [1, contactFixture.expectedOperations.slice(6)]] as const) {
+      const result = derive(index);
+      expect(result.issues).toEqual([]);
+      expect(result.operations.map(({ operationId, ...operation }) => {
+        expect(operationId).not.toBe('');
+        return operation;
+      })).toEqual(expected);
+      expect(new Set(result.operations.map((operation) => operation.operationId)).size).toBe(expected.length);
+    }
+    expect(deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog).issues).toEqual([]);
+  });
+
+  it('keeps local machining invariant under rigid translation of the same occurrence', () => {
+    const movedBoards = fixture.boards.map((board) => ({ ...board,
+      translationMm: [board.translationMm[0] + 73, board.translationMm[1] - 41,
+        board.translationMm[2] + 19] as const }));
+    const moved = resolveExplicitContacts({ ...fixture, boards: movedBoards });
+    const movedPlans = planResolvedContactStations(moved, movedBoards, contactFixture.stationSpecs);
+    for (const index of [0, 1]) {
+      const result = deriveResolvedContactOperationsForContact(moved.contacts[index]!, movedPlans.plans[index]!,
+        movedBoards, contactFixture.stationSpecs[index]!, recipes[index]!);
+      expect(result.issues).toEqual([]);
+      expect(result.operations).toEqual(derive(index).operations);
+    }
+  });
+
+  it('fails closed for invalid identity, rule, technical profile, geometry, and noncanonical plans', () => {
+    const left = recipes[0]!;
+    const plan = planned.plans[0]!;
+    const corruptMiddle = { ...plan, stations: plan.stations.map((station, i) => i === 1 ?
+      { ...station, distanceMm: 241, assemblyPointMm: [18, 271, 27] as const,
+        participantALocalMm: [241, 9, 0] as const, participantBLocalMm: [289, 18, 27] as const } : station) };
+    const cases = [
+      ['profile missing', derive(0, { ...left, technicalProfileId: '' }), 'TECHNICAL_PROFILE_REQUIRED'],
+      ['recipe revision missing', derive(0, { ...left, recipeRevision: '' }), 'OPERATION_RECIPE_INVALID'],
+      ['participant rule missing', derive(0, { ...left, rules: left.rules.slice(0, 1) }), 'OPERATION_PARTICIPANT_RULE_MISSING'],
+      ['duplicate rule', derive(0, { ...left, rules: [...left.rules, left.rules[0]!] }), 'OPERATION_RULE_INVALID'],
+      ['duplicate machining with distinct rule IDs', derive(0, { ...left, rules: [...left.rules,
+        { ...left.rules[1]!, ruleId: 'counterbore-copy' }] }), 'OPERATION_GEOMETRY_DUPLICATE'],
+      ['wrong entry face', derive(0, { ...left, rules: left.rules.map((rule) =>
+        rule.participantRole === 'B' ? { ...rule, entryFace: 'front' as const } : rule) }), 'OPERATION_GEOMETRY_INVALID'],
+      ['outward axis', derive(0, { ...left, rules: left.rules.map((rule) =>
+        rule.participantRole === 'B' ? { ...rule, axis: [0, 1, 0] as const } : rule) }), 'OPERATION_GEOMETRY_INVALID'],
+      ['excess depth', derive(0, { ...left, rules: left.rules.map((rule) =>
+        rule.participantRole === 'B' ? { ...rule, depthMm: 19 } : rule) }), 'OPERATION_GEOMETRY_INVALID'],
+      ['nonfinite diameter', derive(0, { ...left, rules: left.rules.map((rule) =>
+        rule.participantRole === 'B' ? { ...rule, diameterMm: Infinity } : rule) }), 'OPERATION_RULE_INVALID'],
+      ['edge breach', derive(0, { ...left, rules: left.rules.map((rule) =>
+        rule.participantRole === 'B' ? { ...rule, diameterMm: 60 } : rule) }), 'OPERATION_GEOMETRY_INVALID'],
+      ['nonuniform station', derive(0, left, corruptMiddle), 'OPERATION_PLAN_INVALID'],
+      ['missing station point', derive(0, left, { ...plan, stations: plan.stations.map((station, i) => i === 0 ?
+        { ...station, assemblyPointMm: null as unknown as [number, number, number] } : station) }), 'OPERATION_PLAN_INVALID'],
+      ['shifted endpoint', derive(0, left, { ...plan, stations: plan.stations.map((station, i) => i === 0 ?
+        { ...station, distanceMm: 31, assemblyPointMm: [18, 61, 27] as const,
+          participantALocalMm: [31, 9, 0] as const, participantBLocalMm: [499, 18, 27] as const } : station) }),
+        'OPERATION_PLAN_INVALID'],
+      ['wrong plan identity', derive(0, left, { ...plan, contactId: 'floor-right' }), 'OPERATION_IDENTITY_INVALID'],
+      ['duplicate occurrence', derive(0, left, plan, [...fixture.boards, fixture.boards[0]!]), 'OPERATION_PARTICIPANT_INVALID'],
+      ['missing relationship', derive(0, left, plan, fixture.boards, contactFixture.stationSpecs[0]!,
+        { ...resolved.contacts[0]!, relationshipId: '' }), 'OPERATION_IDENTITY_INVALID'],
+    ] as const;
+    for (const [name, result, code] of cases) {
+      expect(result.issues.map((issue) => issue.code), name).toContain(code);
+      expect(result.operations, name).toEqual([]);
+    }
   });
 });
 

@@ -824,3 +824,107 @@ export function contactOperationId(provenance: ContactOperationProvenance): stri
   return `j1:${JSON.stringify(parts).replace(/[<>&\u2028\u2029]/g,
     value => `\\u${value.charCodeAt(0).toString(16).padStart(4, '0')}`)}`;
 }
+
+const contactCross = (a: Vec3, b: Vec3): Vec3 =>
+  [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const contactNear = (a: Vec3, b: Vec3): boolean =>
+  Array.isArray(a) && a.length === 3 && a.every((value, index) =>
+    Number.isFinite(value) && Math.abs(value - b[index]!) <= 1e-6);
+const contactClean = (v: Vec3): Vec3 => v.map((n) => Math.abs(n) < 1e-9 ? 0 : n) as unknown as Vec3;
+const contactFaceAxis = (face: ContactFace): readonly [number, boolean] =>
+  face === 'left' || face === 'right' ? [0, face === 'right'] :
+    face === 'front' || face === 'back' ? [1, face === 'front'] : [2, face === 'top'];
+
+/** Derive one complete paired operation set; no multi-contact collection is accepted here. */
+export function deriveResolvedContactOperationsForContact(
+  contact: ResolvedContact,
+  plan: StationPlan,
+  boards: readonly ContactBoard[],
+  spec: StationSpec,
+  recipe: ContactOperationRecipe,
+): ContactOperationResult {
+  const fail = (code: string): ContactOperationResult => ({
+    operations: [], issues: [{ code, message: code, severity: 'error', entityId: contact.contactId }],
+  });
+  const id = contact.contactId;
+  if (!id?.trim() || !contact.relationshipId?.trim() || !contact.participantA?.trim() ||
+      !contact.participantB?.trim() || plan.contactId !== id || spec.contactId !== id || recipe.contactId !== id) {
+    return fail('OPERATION_IDENTITY_INVALID');
+  }
+  const a = boards.filter((board) => board.occurrenceId === contact.participantA);
+  const b = boards.filter((board) => board.occurrenceId === contact.participantB);
+  if (a.length !== 1 || b.length !== 1 || a[0] === b[0]) return fail('OPERATION_PARTICIPANT_INVALID');
+  const authoritative = planResolvedContactStations({ contacts: [contact], issues: [] }, boards, [spec]);
+  const stations = authoritative.plans[0]?.stations;
+  if (authoritative.issues.length || !stations || plan.stations.length !== stations.length ||
+      plan.stations.some((station, index) => {
+        const expected = stations[index]!;
+        return station.distanceMm !== expected.distanceMm ||
+          !contactNear(station.assemblyPointMm, expected.assemblyPointMm) ||
+          !contactNear(station.participantALocalMm, expected.participantALocalMm) ||
+          !contactNear(station.participantBLocalMm, expected.participantBLocalMm);
+      })) return fail('OPERATION_PLAN_INVALID');
+  if (!recipe.recipeId?.trim() || !recipe.recipeRevision?.trim()) return fail('OPERATION_RECIPE_INVALID');
+  if (!recipe.technicalProfileId?.trim() || !recipe.technicalProfileRevision?.trim()) {
+    return fail('TECHNICAL_PROFILE_REQUIRED');
+  }
+  if (!recipe.rules?.length) return fail('OPERATION_RULE_INVALID');
+  const ruleIds = new Set<string>();
+  const roleSet = new Set(recipe.rules.map((rule) => rule.participantRole));
+  if (!roleSet.has('A') || !roleSet.has('B')) return fail('OPERATION_PARTICIPANT_RULE_MISSING');
+  const validVector = (vector: Vec3): boolean =>
+    Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
+  for (const rule of recipe.rules) {
+    if (!rule?.ruleId?.trim() || !rule.ruleRevision?.trim() || !rule.operationRole?.trim() ||
+        ruleIds.has(rule.ruleId) || !['A', 'B'].includes(rule.participantRole) ||
+        !['top', 'bottom', 'left', 'right', 'front', 'back'].includes(rule.entryFace) ||
+        !validVector(rule.offsetMm) || !validVector(rule.axis) ||
+        !Number.isFinite(rule.diameterMm) || !Number.isFinite(rule.depthMm) ||
+        Math.abs(contactDot(rule.axis, rule.axis) - 1) > 1e-6 || rule.diameterMm <= 0 || rule.depthMm <= 0) {
+      return fail('OPERATION_RULE_INVALID');
+    }
+    ruleIds.add(rule.ruleId);
+  }
+  const { axisAssembly: along, normalAssembly: normal } = contact.frame;
+  const cross = contactCross(along, normal);
+  const project = (components: Vec3): Vec3 =>
+    contactScale(contactScale(contactScale([0, 0, 0], along, components[0]), normal, components[1]), cross, components[2]);
+  const operations: NeutralContactOperation[] = [];
+  const rules = [...recipe.rules].sort((x, y) =>
+    x.participantRole.localeCompare(y.participantRole) || x.ruleId.localeCompare(y.ruleId));
+  for (const [stationIndex, station] of stations.entries()) {
+    for (const rule of rules) {
+      const board = rule.participantRole === 'A' ? a[0]! : b[0]!;
+      const centerLocal = contactToLocal(board, contactScale(station.assemblyPointMm, project(rule.offsetMm), 1));
+      const directionAssembly = project(rule.axis);
+      const axisLocal: Vec3 = [contactDot(directionAssembly, board.basis.x),
+        contactDot(directionAssembly, board.basis.y), contactDot(directionAssembly, board.basis.z)];
+      const dims = contactSize(board);
+      const [faceAxis, high] = contactFaceAxis(rule.entryFace);
+      const radius = rule.diameterMm / 2;
+      if (!centerLocal.every((value, i) => Number.isFinite(value) && value >= -1e-6 && value <= dims[i]! + 1e-6) ||
+          Math.abs(centerLocal[faceAxis]! - (high ? dims[faceAxis]! : 0)) > 1e-6 ||
+          (high ? axisLocal[faceAxis]! >= -1e-6 : axisLocal[faceAxis]! <= 1e-6) ||
+          dims.some((dimension, i) => i !== faceAxis && (centerLocal[i]! < radius - 1e-6 || centerLocal[i]! > dimension - radius + 1e-6)) ||
+          !centerLocal.every((value, i) => value + rule.depthMm * axisLocal[i]! >= -1e-6 &&
+            value + rule.depthMm * axisLocal[i]! <= dims[i]! + 1e-6)) return fail('OPERATION_GEOMETRY_INVALID');
+      const provenance = { sourceKind: 'relationship' as const, relationshipId: contact.relationshipId, contactId: id,
+        participantId: board.occurrenceId, participantRole: rule.participantRole, stationIndex,
+        recipeId: recipe.recipeId, recipeRevision: recipe.recipeRevision, ruleId: rule.ruleId,
+        ruleRevision: rule.ruleRevision, operationRole: rule.operationRole };
+      operations.push({ operationId: contactOperationId(provenance),
+        provenance, technicalProfileId: recipe.technicalProfileId, technicalProfileRevision: recipe.technicalProfileRevision,
+        entryFace: rule.entryFace, centerLocalMm: contactClean(centerLocal), axisLocal: contactClean(axisLocal),
+        diameterMm: rule.diameterMm, depthMm: rule.depthMm });
+    }
+  }
+  if (new Set(operations.map((operation) => operation.operationId)).size !== operations.length) {
+    return fail('OPERATION_ID_AMBIGUOUS');
+  }
+  const geometryKeys = operations.map((operation) => JSON.stringify([
+    operation.provenance.participantId, operation.entryFace, operation.centerLocalMm,
+    operation.axisLocal, operation.diameterMm, operation.depthMm,
+  ]));
+  if (new Set(geometryKeys).size !== geometryKeys.length) return fail('OPERATION_GEOMETRY_DUPLICATE');
+  return { operations, issues: [] };
+}
