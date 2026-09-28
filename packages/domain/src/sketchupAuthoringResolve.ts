@@ -243,6 +243,8 @@ export type ResolvedMachiningV1 = {
   readonly operations: readonly ResolvedMachiningOperationV1[];
   readonly derivedHardwarePlacements: readonly DerivedHardwarePlacement[];
   readonly manufacturingFingerprint: string;
+  /** J1-B per-relationship joinery states (#874); absent when none declared. */
+  readonly joineryStatuses?: readonly FingerprintJoineryStatus[];
 };
 
 /**
@@ -912,6 +914,22 @@ function validateResolvedMachining(
   if (!Array.isArray(machining.operations) || !Array.isArray(machining.derivedHardwarePlacements)) {
     problems.push('resolved.machining arrays are required'); return;
   }
+  if (machining.joineryStatuses !== undefined) {
+    if (!Array.isArray(machining.joineryStatuses)) {
+      problems.push('resolved.machining.joineryStatuses must be an array when present');
+    } else {
+      for (const [index, value] of machining.joineryStatuses.entries()) {
+        const status = asRecord(value);
+        const path = `resolved.machining.joineryStatuses[${index}]`;
+        if (!status || !isBoundedString(status.relationshipId) || !isBoundedString(status.kind)
+          || !isBoundedString(status.stage) || !Array.isArray(status.contacts)
+          || !Array.isArray(status.blockers) || !status.blockers.every(isBoundedString)
+          || typeof status.stations !== 'object' || status.stations === null) {
+          problems.push(`${path} is invalid`);
+        }
+      }
+    }
+  }
   for (const [index, item] of machining.operations.entries()) {
     const operation = asRecord(item);
     const path = `resolved.machining.operations[${index}]`;
@@ -1083,6 +1101,8 @@ export function authoringResolveFingerprint(input: {
     readonly provenance: Record<string, unknown>;
     readonly holes: readonly ResolveHoleV1[];
   }[];
+  /** J1-B joinery states (#874); absent leaves the hash byte-identical. */
+  readonly joineryStatuses?: readonly FingerprintJoineryStatus[];
 }): string {
   const boards = input.boards
     .map((board) => {
@@ -1136,12 +1156,33 @@ export function authoringResolveFingerprint(input: {
     .sort((a, b) => compareUtf8(a.sort, b.sort))
     .map((entry) => entry.body);
 
-  return `sha256-${sha256Hex(new TextEncoder().encode(canonicalizeJson({
+  const canonical: Record<string, unknown> = {
     boards,
     manualPlacements,
     derivedHardwarePlacements: derived,
     operations,
-  })))}`;
+  };
+  if (input.joineryStatuses !== undefined && input.joineryStatuses.length > 0) {
+    canonical.joineryStatuses = input.joineryStatuses
+      .map((status) => ({ sort: status.relationshipId, body: status }))
+      .sort((a, b) => compareUtf8(a.sort, b.sort))
+      .map((entry) => entry.body);
+  }
+  return `sha256-${sha256Hex(new TextEncoder().encode(canonicalizeJson(canonical)))}`;
+}
+
+/** Joinery status shape hashed into the manufacturing fingerprint (J1-B). */
+export interface FingerprintJoineryStatus {
+  readonly relationshipId: string;
+  readonly kind: string;
+  readonly stage: string;
+  readonly contacts: readonly { readonly contactId: string; readonly status: string; readonly issueCodes: readonly string[] }[];
+  readonly stations: {
+    readonly status: string;
+    readonly issueCodes: readonly string[];
+    readonly stationCounts: readonly { readonly contactId: string; readonly stationCount: number }[];
+  };
+  readonly blockers: readonly string[];
 }
 
 function canonicalizeJson(value: unknown): string {

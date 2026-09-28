@@ -83,12 +83,12 @@ type AuthoringRelationship struct {
 // name/type as domain.HardwarePlacement.RotationDeg) but no handedness:
 // fields without resolution semantics are still not accepted (#668 F6).
 type AuthoringManualPlacement struct {
-	HardwarePlacementID     string     `json:"hardwarePlacementId"`
-	PlacementKind           string     `json:"placementKind,omitempty"`
-	CatalogHardwareID       string     `json:"catalogHardwareId"`
-	HostComponentInstanceID string     `json:"hostComponentInstanceId"`
-	AnchorFace              string     `json:"anchorFace"`
-	OffsetMm                [2]float64 `json:"offsetMm"`
+	HardwarePlacementID     string                      `json:"hardwarePlacementId"`
+	PlacementKind           string                      `json:"placementKind,omitempty"`
+	CatalogHardwareID       string                      `json:"catalogHardwareId"`
+	HostComponentInstanceID string                      `json:"hostComponentInstanceId"`
+	AnchorFace              string                      `json:"anchorFace"`
+	OffsetMm                [2]float64                  `json:"offsetMm"`
 	RotationDeg             *domain.HardwareRotationDeg `json:"rotationDeg,omitempty"`
 }
 
@@ -307,7 +307,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	machining, machiningIssues := deriveAuthoringMachining(boards, input.Relationships, machiningForPlacements, input.Catalog)
 	manufacturing = append(manufacturing, machiningIssues...)
 	machining.ManufacturingFingerprint = authoringManufacturingFingerprint(
-		layout, boards, machiningForPlacements, machining.DerivedHardwarePlacements, machining.Operations)
+		layout, boards, machiningForPlacements, machining.DerivedHardwarePlacements, machining.Operations, machining.JoineryStatuses)
 
 	// 7. Normalized snapshot (stateless receipt).
 	normalized := buildNormalizedIntent(input, layout, boards, effectivePlacements)

@@ -1011,11 +1011,11 @@ func TestRelationshipParametersRejectNonScalarJSON(t *testing.T) {
 func TestFingerprintIsSHA256OverUTF8CanonicalJSON(t *testing.T) {
 	a := fingerprintBodiesHash(
 		[]any{map[string]any{"sort": "puerta-á", "body": map[string]any{"id": "puerta-á"}}},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	b := fingerprintBodiesHash(
 		[]any{map[string]any{"sort": "puerta-a", "body": map[string]any{"id": "puerta-a"}}},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	if len(a) != len("sha256-")+64 || a[:len("sha256-")] != "sha256-" {
 		t.Fatalf("fingerprint format = %q", a)
