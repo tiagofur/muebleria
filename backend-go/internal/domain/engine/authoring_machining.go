@@ -305,7 +305,7 @@ func deriveRelationshipOperations(
 			Stage:    JoineryRelationshipUnsupported,
 			Contacts: []JoineryContactStatus{},
 			Stations: JoineryStationPlanStatus{Status: "NOT_PLANNED", IssueCodes: []string{},
-				StationCounts: []JoineryStationPlanCount{}},
+				StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}},
 			Blockers: []string{"RELATIONSHIP_INVALID"},
 		})
 		return
@@ -618,10 +618,53 @@ func authoringManufacturingFingerprint(
 	// relationship exists, so their absence leaves every stored fingerprint
 	// byte-identical (release continuity). RELATIONSHIP_UNSUPPORTED bodies
 	// carry no manufacturing semantics (pure error echo) and stay out.
+	// Bodies are map trees (not structs) and every list is keyed by
+	// contactId, so both runtimes marshal identical bytes and the DECLARED
+	// target order never moves the manufacturing identity.
 	joineryBodies := make([]any, 0, len(joineryStatuses))
 	for _, status := range joineryStatuses {
 		if status.Stage == JoineryRelationshipUnsupported {
 			continue
+		}
+		contacts := append([]JoineryContactStatus(nil), status.Contacts...)
+		sort.Slice(contacts, func(i, j int) bool { return contacts[i].ContactID < contacts[j].ContactID })
+		contactBodies := make([]any, 0, len(contacts))
+		for _, contact := range contacts {
+			issueCodes := contact.IssueCodes
+			if issueCodes == nil {
+				issueCodes = []string{}
+			}
+			contactBodies = append(contactBodies, map[string]any{
+				"contactId": contact.ContactID, "status": contact.Status, "issueCodes": issueCodes,
+			})
+		}
+		counts := append([]JoineryStationPlanCount(nil), status.Stations.StationCounts...)
+		sort.Slice(counts, func(i, j int) bool { return counts[i].ContactID < counts[j].ContactID })
+		countBodies := make([]any, 0, len(counts))
+		for _, count := range counts {
+			countBodies = append(countBodies, map[string]any{
+				"contactId": count.ContactID, "stationCount": count.StationCount,
+			})
+		}
+		distances := append([]JoineryStationDistances(nil), status.Stations.StationDistances...)
+		sort.Slice(distances, func(i, j int) bool { return distances[i].ContactID < distances[j].ContactID })
+		distanceBodies := make([]any, 0, len(distances))
+		for _, distance := range distances {
+			values := distance.DistancesMm
+			if values == nil {
+				values = []float64{}
+			}
+			distanceBodies = append(distanceBodies, map[string]any{
+				"contactId": distance.ContactID, "distancesMm": values,
+			})
+		}
+		stationIssueCodes := status.Stations.IssueCodes
+		if stationIssueCodes == nil {
+			stationIssueCodes = []string{}
+		}
+		blockers := status.Blockers
+		if blockers == nil {
+			blockers = []string{}
 		}
 		joineryBodies = append(joineryBodies, map[string]any{
 			"sort": status.RelationshipID,
@@ -629,9 +672,14 @@ func authoringManufacturingFingerprint(
 				"relationshipId": status.RelationshipID,
 				"kind":           status.Kind,
 				"stage":          status.Stage,
-				"contacts":       status.Contacts,
-				"stations":       status.Stations,
-				"blockers":       status.Blockers,
+				"contacts":       contactBodies,
+				"stations": map[string]any{
+					"status":           status.Stations.Status,
+					"issueCodes":       stationIssueCodes,
+					"stationCounts":    countBodies,
+					"stationDistances": distanceBodies,
+				},
+				"blockers": blockers,
 			},
 		})
 	}

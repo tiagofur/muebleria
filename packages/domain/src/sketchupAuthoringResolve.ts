@@ -99,6 +99,28 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'HARDWARE_DERIVED_EDIT',
   'HARDWARE_INCOMPATIBLE',
   'DRILLING_CONFLICT',
+  // J1 joinery chain (#874): contact/station verification and planning
+  // codes a floor-side relationship can surface on the resolve wire.
+  'CONTACT_FACE_REQUIRED',
+  'CONTACT_REQUIRED_MISSING',
+  'CONTACT_AMBIGUOUS',
+  'CONTACT_IDENTITY_INVALID',
+  'CONTACT_PARTICIPANT_MISSING',
+  'CONTACT_FRAME_INVALID',
+  'CONTACT_FACE_INCOMPATIBLE',
+  'CONTACT_NO_OVERLAP',
+  'STATION_PATTERN_INVALID',
+  'STATION_CONTACT_UNKNOWN',
+  'STATION_CONTACT_AMBIGUOUS',
+  'STATION_SPEC_MISSING',
+  'STATION_SPEC_AMBIGUOUS',
+  'STATION_COUNT_INVALID',
+  'STATION_MARGIN_INVALID',
+  'STATION_FRAME_INVALID',
+  'STATION_SPAN_INVALID',
+  'STATION_PARTICIPANT_INVALID',
+  'STATION_POINT_INVALID',
+  'TECHNICAL_PROFILE_REQUIRED',
 ] as const;
 
 export type AuthoringResolveIssueCode = (typeof AUTHORING_RESOLVE_ISSUE_CODES)[number];
@@ -210,6 +232,16 @@ export type ResolvedLayoutWireV1 = {
     readonly materialClearcoat?: number;
     readonly materialGrain?: boolean;
     readonly transform: { readonly translationMm: readonly [number, number, number] };
+    /** Resolved board-local pose (origin + right-handed axis basis) in the
+     *  furniture frame — the geometry authority joinery parity consumes. */
+    readonly localTransform?: {
+      readonly translationMm: readonly [number, number, number];
+      readonly basis: {
+        readonly x: readonly [number, number, number];
+        readonly y: readonly [number, number, number];
+        readonly z: readonly [number, number, number];
+      };
+    };
   }[];
   readonly hardware: readonly {
     readonly placementId: string;
@@ -926,6 +958,17 @@ function validateResolvedMachining(
           || !Array.isArray(status.blockers) || !status.blockers.every(isBoundedString)
           || typeof status.stations !== 'object' || status.stations === null) {
           problems.push(`${path} is invalid`);
+          continue;
+        }
+        const distances = (status.stations as Record<string, unknown>).stationDistances;
+        if (distances !== undefined
+          && (!Array.isArray(distances) || !distances.every((entry) => {
+            const record = asRecord(entry);
+            return record !== null && record !== undefined && isBoundedString(record.contactId)
+              && Array.isArray(record.distancesMm)
+              && record.distancesMm.every((distance) => isFiniteNumber(distance) && distance >= 0);
+          }))) {
+          problems.push(`${path}.stations.stationDistances is invalid`);
         }
       }
     }
@@ -1164,9 +1207,22 @@ export function authoringResolveFingerprint(input: {
   };
   if (input.joineryStatuses !== undefined && input.joineryStatuses.length > 0) {
     // RELATIONSHIP_UNSUPPORTED bodies carry no manufacturing semantics.
+    // Contacts and station counts are keyed by contactId, so the declared
+    // target order never moves the manufacturing identity.
     const bodies = input.joineryStatuses
       .filter((status) => status.stage !== 'RELATIONSHIP_UNSUPPORTED')
-      .map((status) => ({ sort: status.relationshipId, body: status }));
+      .map((status) => ({
+        sort: status.relationshipId,
+        body: {
+          ...status,
+          contacts: [...status.contacts].sort((a, b) => compareUtf8(a.contactId, b.contactId)),
+          stations: {
+            ...status.stations,
+            stationCounts: [...status.stations.stationCounts].sort((a, b) => compareUtf8(a.contactId, b.contactId)),
+            stationDistances: [...(status.stations.stationDistances ?? [])].sort((a, b) => compareUtf8(a.contactId, b.contactId)),
+          },
+        },
+      }));
     if (bodies.length > 0) canonical.joineryStatuses = bodies
       .sort((a, b) => compareUtf8(a.sort, b.sort))
       .map((entry) => entry.body);
@@ -1184,6 +1240,10 @@ export interface FingerprintJoineryStatus {
     readonly status: string;
     readonly issueCodes: readonly string[];
     readonly stationCounts: readonly { readonly contactId: string; readonly stationCount: number }[];
+    readonly stationDistances?: readonly {
+      readonly contactId: string;
+      readonly distancesMm: readonly number[];
+    }[];
   };
   readonly blockers: readonly string[];
 }

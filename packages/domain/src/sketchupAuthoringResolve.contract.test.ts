@@ -124,7 +124,46 @@ function fixtureJoineryCatalog(fixture: FixtureFile): SketchUpJoineryCatalog {
   };
 }
 
-/** Rebuild the authoring snapshot the Go resolver acted on, from the wire. */
+/**
+ * Exact quaternion of an axis-aligned signed basis (the only shape the
+ * resolved layout publishes): the standard matrix→quaternion conversion, so
+ * the TS engine receives the same rigid pose Go's boardLocalPose produced.
+ */
+function basisToQuaternion(basis: {
+  readonly x: readonly number[];
+  readonly y: readonly number[];
+  readonly z: readonly number[];
+}): [number, number, number, number] {
+  const R = [
+    [basis.x[0]!, basis.y[0]!, basis.z[0]!],
+    [basis.x[1]!, basis.y[1]!, basis.z[1]!],
+    [basis.x[2]!, basis.y[2]!, basis.z[2]!],
+  ];
+  const trace = R[0]![0]! + R[1]![1]! + R[2]![2]!;
+  let q: [number, number, number, number];
+  if (trace > 0) {
+    const s = Math.sqrt(trace + 1) * 2;
+    q = [(R[2]![1]! - R[1]![2]!) / s, (R[0]![2]! - R[2]![0]!) / s, (R[1]![0]! - R[0]![1]!) / s, s / 4];
+  } else if (R[0]![0]! > R[1]![1]! && R[0]![0]! > R[2]![2]!) {
+    const s = Math.sqrt(1 + R[0]![0]! - R[1]![1]! - R[2]![2]!) * 2;
+    q = [s / 4, (R[0]![1]! + R[1]![0]!) / s, (R[0]![2]! + R[2]![0]!) / s, (R[2]![1]! - R[1]![2]!) / s];
+  } else if (R[1]![1]! > R[2]![2]!) {
+    const s = Math.sqrt(1 + R[1]![1]! - R[0]![0]! - R[2]![2]!) * 2;
+    q = [(R[0]![1]! + R[1]![0]!) / s, s / 4, (R[1]![2]! + R[2]![1]!) / s, (R[0]![2]! - R[2]![0]!) / s];
+  } else {
+    const s = Math.sqrt(1 + R[2]![2]! - R[0]![0]! - R[1]![1]!) * 2;
+    q = [(R[0]![2]! + R[2]![0]!) / s, (R[1]![2]! + R[2]![1]!) / s, s / 4, (R[1]![0]! - R[0]![1]!) / s];
+  }
+  const norm = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+  return [q[0]! / norm, q[1]! / norm, q[2]! / norm, q[3]! / norm];
+}
+
+/**
+ * Rebuild the authoring snapshot the Go resolver acted on, from the wire.
+ * The board pose is the RESOLVED localTransform (the same rigid frame the
+ * SketchUp runtime transports as the instance quaternion): joinery parity
+ * consumes the geometry authority, not a synthesized identity frame.
+ */
 function snapshotFromScenario(scenario: FixtureCase): ReadonlyAuthoringSnapshot {
   const resolved = scenario.response.resolved;
   if (!resolved || !scenario.response.normalizedSnapshot) {
@@ -142,8 +181,12 @@ function snapshotFromScenario(scenario: FixtureCase): ReadonlyAuthoringSnapshot 
       role: component.role ?? '',
       transform: {
         frame: 'assembly' as const,
-        translationMm: [...component.transform.translationMm] as [number, number, number],
-        rotationQuaternion: [0, 0, 0, 1] as [number, number, number, number],
+        translationMm: component.localTransform
+          ? ([...component.localTransform.translationMm] as [number, number, number])
+          : ([...component.transform.translationMm] as [number, number, number]),
+        rotationQuaternion: component.localTransform
+          ? basisToQuaternion(component.localTransform.basis)
+          : ([0, 0, 0, 1] as [number, number, number, number]),
         scale: [1, 1, 1] as [number, number, number],
       },
     })),
@@ -186,6 +229,12 @@ describe('#477 shared authoring resolve contract fixture', () => {
       'neg-query-parameter',
       'neg-adhoc-body-parameter',
       'neg-duplicate-occurrence-id',
+      '20-floor-side-contacts',
+      '21-floor-side-station-count',
+      '22-floor-side-margins',
+      '23-floor-side-reorder',
+      '24-floor-side-none',
+      '25-floor-side-unsupported-kind',
     ]) {
       expect(ids).toContain(required);
     }
@@ -401,8 +450,21 @@ describe('#477 shared authoring resolve contract fixture', () => {
         })),
         derivedHardwarePlacements: machining.derivedHardwarePlacements,
         operations: machining.operations,
+        joineryStatuses: machining.joineryStatuses,
       });
       expect(fingerprint, scenario.id).toBe(machining.manufacturingFingerprint);
+
+      // J1-B cross-runtime parity: the TS twin must derive the same joinery
+      // states from the wire-resolved geometry the Go resolver published.
+      const wireJoinery = machining.joineryStatuses ?? [];
+      if (wireJoinery.length > 0 || result.joineryStatuses.length > 0) {
+        const byRelationship = (statuses: readonly { readonly relationshipId: string }[]) =>
+          [...statuses].sort((a, b) => a.relationshipId.localeCompare(b.relationshipId));
+        expect(
+          byRelationship(result.joineryStatuses).map((status) => canonicalize(status)),
+          scenario.id,
+        ).toEqual(byRelationship(wireJoinery).map((status) => canonicalize(status)));
+      }
     }
   });
 
@@ -458,6 +520,112 @@ describe('#477 shared authoring resolve contract fixture', () => {
     );
     expect(shelves.length).toBe(2);
     expect(new Set(shelves.map((shelf) => shelf.componentInstanceId)).size).toBe(2);
+  });
+});
+
+describe('J1 golden floor-side cross-runtime parity (#874)', () => {
+  const fixture = loadFixture();
+  const byId = new Map(fixture.scenarios.map((scenario) => [scenario.id, scenario]));
+  const machiningOf = (id: string) => byId.get(id)!.response.resolved!.machining;
+  const joineryOf = (id: string) => machiningOf(id).joineryStatuses!;
+  const fingerprintOf = (id: string) => machiningOf(id).manufacturingFingerprint;
+
+  test('golden cabinet resolves two valid floor-side contacts with exact stations and the honest blocker', () => {
+    const status = joineryOf('20-floor-side-contacts');
+    expect(status).toHaveLength(1);
+    expect(status[0]).toMatchObject({
+      relationshipId: 'rel-floor-sides-01',
+      kind: 'floor-side',
+      stage: 'TECHNICAL_PROFILE_REQUIRED',
+      blockers: ['TECHNICAL_PROFILE_REQUIRED'],
+    });
+    expect(status[0]!.contacts).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', status: 'VALID', issueCodes: [] },
+      { contactId: 'rel-floor-sides-01:side-right-01', status: 'VALID', issueCodes: [] },
+    ]);
+    expect(status[0]!.stations.status).toBe('PLANNED');
+    expect(status[0]!.stations.stationCounts).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 3 },
+      { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 3 },
+    ]);
+    // Independently expected positions: the asymmetric cabinet leaves the
+    // left contact a 542 mm useful overlap ([0,542] from its frame origin)
+    // and the right contact 524 mm ([18,542]); stationCount 3 with margins
+    // 30/50 plans 30/261/492 and 30/252/474 respectively.
+    expect(status[0]!.stations.stationDistances).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', distancesMm: [30, 261, 492] },
+      { contactId: 'rel-floor-sides-01:side-right-01', distancesMm: [30, 252, 474] },
+    ]);
+  });
+
+  test('the floor-side relationship emits zero productive operations beside the joinery-free baseline', () => {
+    // The cabinet's operations are the parameter-driven shelf-support
+    // machining and the definition's manual door hardware; declaring the
+    // floor-side joinery adds none — TECHNICAL_PROFILE_REQUIRED stays at
+    // zero operations, never a synthetic recipe.
+    expect(machiningOf('20-floor-side-contacts').operations).toEqual(machiningOf('24-floor-side-none').operations);
+    for (const operation of machiningOf('20-floor-side-contacts').operations) {
+      expect(operation.provenance.sourceKind === 'relationship'
+        ? operation.provenance.relationshipId
+        : 'manual', operation.operationId).not.toBe('rel-floor-sides-01');
+    }
+  });
+
+  test('mutations move the manufacturing fingerprint; reorder and error echoes do not', () => {
+    // stationCount 3 → 4 changes counts and positions
+    expect(fingerprintOf('20-floor-side-contacts')).not.toBe(fingerprintOf('21-floor-side-station-count'));
+    expect(joineryOf('21-floor-side-station-count')[0]!.stations.stationCounts)
+      .toEqual([
+        { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 4 },
+        { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 4 },
+      ]);
+    // margins 30/50 → 10/20 move the station positions (left span [10,522],
+    // right span [28,522] = distances 10/266/522 and 10/257/504 from origin)
+    expect(fingerprintOf('20-floor-side-contacts')).not.toBe(fingerprintOf('22-floor-side-margins'));
+    expect(joineryOf('22-floor-side-margins')[0]!.stations.stationDistances).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', distancesMm: [10, 266, 522] },
+      { contactId: 'rel-floor-sides-01:side-right-01', distancesMm: [10, 257, 504] },
+    ]);
+    // declaring the joinery at all moves the identity vs the same cabinet
+    // without relationships
+    expect(fingerprintOf('20-floor-side-contacts')).not.toBe(fingerprintOf('24-floor-side-none'));
+    // input reorder (components and targets) keeps it byte-identical
+    expect(fingerprintOf('20-floor-side-contacts')).toBe(fingerprintOf('23-floor-side-reorder'));
+    // an unsupported relationship kind is a pure error echo: excluded
+    expect(fingerprintOf('24-floor-side-none')).toBe(fingerprintOf('25-floor-side-unsupported-kind'));
+  });
+
+  test('the unsupported kind is an honest structured state, never a joinery identity', () => {
+    expect(joineryOf('25-floor-side-unsupported-kind')).toEqual([
+      {
+        relationshipId: 'rel-top-sides-01',
+        kind: 'top-side',
+        stage: 'RELATIONSHIP_UNSUPPORTED',
+        contacts: [],
+        stations: { status: 'NOT_PLANNED', issueCodes: [], stationCounts: [], stationDistances: [] },
+        blockers: ['RELATIONSHIP_INVALID'],
+      },
+    ]);
+  });
+
+  test('TS recomputation reproduces every golden joinery state from the wire', () => {
+    const catalog = fixtureJoineryCatalog(fixture);
+    for (const id of [
+      '20-floor-side-contacts',
+      '21-floor-side-station-count',
+      '22-floor-side-margins',
+      '23-floor-side-reorder',
+      '24-floor-side-none',
+      '25-floor-side-unsupported-kind',
+    ]) {
+      const scenario = byId.get(id)!;
+      const result = deriveRelationshipMachining(snapshotFromScenario(scenario), catalog);
+      const wire = scenario.response.resolved!.machining.joineryStatuses ?? [];
+      const sortById = (statuses: readonly { readonly relationshipId: string }[]) =>
+        [...statuses].sort((a, b) => a.relationshipId.localeCompare(b.relationshipId));
+      expect(sortById(result.joineryStatuses).map((status) => canonicalize(status)), id)
+        .toEqual(sortById(wire).map((status) => canonicalize(status)));
+    }
   });
 });
 

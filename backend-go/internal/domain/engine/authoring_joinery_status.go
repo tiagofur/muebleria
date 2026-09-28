@@ -27,14 +27,24 @@ type JoineryContactStatus struct {
 }
 
 type JoineryStationPlanStatus struct {
-	Status        string                    `json:"status"`
-	IssueCodes    []string                  `json:"issueCodes"`
-	StationCounts []JoineryStationPlanCount `json:"stationCounts"`
+	Status           string                    `json:"status"`
+	IssueCodes       []string                  `json:"issueCodes"`
+	StationCounts    []JoineryStationPlanCount `json:"stationCounts"`
+	StationDistances []JoineryStationDistances `json:"stationDistances"`
 }
 
 type JoineryStationPlanCount struct {
 	ContactID    string `json:"contactId"`
 	StationCount int    `json:"stationCount"`
+}
+
+// JoineryStationDistances publishes the planned station positions along the
+// contact axis (mm from the frame origin). They are manufacturing truth: the
+// fingerprint hashes them, so margin or geometry changes move the identity
+// even when the count stays the same.
+type JoineryStationDistances struct {
+	ContactID   string    `json:"contactId"`
+	DistancesMm []float64 `json:"distancesMm"`
 }
 
 type JoineryRelationshipStatus struct {
@@ -83,7 +93,7 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 	for _, anchor := range relationship.Targets {
 		contactIDs = append(contactIDs, fmt.Sprintf("%s:%s", relationshipID, anchor.ComponentInstanceID))
 	}
-	notPlanned := JoineryStationPlanStatus{Status: "NOT_PLANNED", IssueCodes: []string{}, StationCounts: []JoineryStationPlanCount{}}
+	notPlanned := JoineryStationPlanStatus{Status: "NOT_PLANNED", IssueCodes: []string{}, StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}}
 	failContacts := func(codes ...string) JoineryRelationshipStatus {
 		contacts := make([]JoineryContactStatus, 0, len(contactIDs))
 		for _, contactID := range contactIDs {
@@ -182,7 +192,7 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 			"Declare stationCount (>= 2) and optional nonnegative start/end margins on the relationship.")
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 			Stage: JoineryStationInvalid, Contacts: validContacts(),
-			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: []string{"STATION_PATTERN_INVALID"}},
+			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: []string{"STATION_PATTERN_INVALID"}, StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}},
 			Blockers: []string{"STATION_PATTERN_INVALID"}}
 	}
 	specs := make([]StationSpec, 0, len(contactIDs))
@@ -195,7 +205,7 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 		codes := uniqueIssueCodes(planned.Issues)
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 			Stage: JoineryStationInvalid, Contacts: validContacts(),
-			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: codes}, Blockers: codes}
+			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: codes, StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}}, Blockers: codes}
 	}
 
 	// No verified production technical profile exists for floor-side yet; the
@@ -204,12 +214,18 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 		fmt.Sprintf("floor-side relationship %s has no verified production technical profile", relationshipID),
 		"Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.")
 	counts := make([]JoineryStationPlanCount, 0, len(planned.Plans))
+	distances := make([]JoineryStationDistances, 0, len(planned.Plans))
 	for _, plan := range planned.Plans {
 		counts = append(counts, JoineryStationPlanCount{ContactID: plan.ContactID, StationCount: len(plan.Stations)})
+		planDistances := make([]float64, 0, len(plan.Stations))
+		for _, station := range plan.Stations {
+			planDistances = append(planDistances, station.DistanceMm)
+		}
+		distances = append(distances, JoineryStationDistances{ContactID: plan.ContactID, DistancesMm: planDistances})
 	}
 	return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 		Stage: JoineryTechnicalProfileMissing, Contacts: validContacts(),
-		Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{}, StationCounts: counts},
+		Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{}, StationCounts: counts, StationDistances: distances},
 		Blockers: []string{"TECHNICAL_PROFILE_REQUIRED"}}
 }
 

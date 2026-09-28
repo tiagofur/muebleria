@@ -62,6 +62,12 @@ export interface JoineryStationPlanStatus {
   readonly status: 'NOT_PLANNED' | 'PLANNED' | 'INVALID';
   readonly issueCodes: readonly string[];
   readonly stationCounts: readonly { readonly contactId: string; readonly stationCount: number }[];
+  /** Planned station positions along the contact axis (mm from the frame
+   *  origin); manufacturing truth the fingerprint tracks (#874). */
+  readonly stationDistances: readonly {
+    readonly contactId: string;
+    readonly distancesMm: readonly number[];
+  }[];
 }
 
 export interface JoineryRelationshipStatus {
@@ -149,7 +155,7 @@ function deriveRelationshipOperations(
     joineryStatuses.push({
       relationshipId: relationship.relationshipId, kind: relationship.kind,
       stage: 'RELATIONSHIP_UNSUPPORTED', contacts: [],
-      stations: { status: 'NOT_PLANNED', issueCodes: [], stationCounts: [] },
+      stations: { status: 'NOT_PLANNED', issueCodes: [], stationCounts: [], stationDistances: [] },
       blockers: ['RELATIONSHIP_INVALID'],
     });
     return;
@@ -448,7 +454,7 @@ function deriveFloorSideJoinery(
   const contactIds = relationship.targets.map((anchor) => `${relationship.relationshipId}:${anchor.componentInstanceId}`);
   const failContacts = (codes: readonly string[]): void => {
     status('CONTACT_INVALID', contactIds.map((contactId) => ({ contactId, status: 'INVALID', issueCodes: codes })),
-      { status: 'NOT_PLANNED', issueCodes: [], stationCounts: [] }, codes);
+      { status: 'NOT_PLANNED', issueCodes: [], stationCounts: [], stationDistances: [] }, codes);
   };
   const pushIssue = (code: string, message: string, remediation: string): void => {
     issues.push({ code, message, severity: 'error', entityId: relationship.relationshipId, remediation });
@@ -548,7 +554,7 @@ function deriveFloorSideJoinery(
       'floor-side station pattern needs an integer stationCount >= 2 and finite nonnegative margins',
       'Declare stationCount (>= 2) and optional nonnegative start/end margins on the relationship.');
     status('STATION_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
-      { status: 'INVALID', issueCodes: ['STATION_PATTERN_INVALID'], stationCounts: [] },
+      { status: 'INVALID', issueCodes: ['STATION_PATTERN_INVALID'], stationCounts: [], stationDistances: [] },
       ['STATION_PATTERN_INVALID']);
     return;
   }
@@ -558,7 +564,7 @@ function deriveFloorSideJoinery(
   if (planned.issues.length > 0) {
     for (const issue of planned.issues) issues.push(issue);
     status('STATION_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
-      { status: 'INVALID', issueCodes: [...new Set(planned.issues.map((issue) => issue.code))], stationCounts: [] },
+      { status: 'INVALID', issueCodes: [...new Set(planned.issues.map((issue) => issue.code))], stationCounts: [], stationDistances: [] },
       [...new Set(planned.issues.map((issue) => issue.code))]);
     return;
   }
@@ -571,7 +577,11 @@ function deriveFloorSideJoinery(
   status('TECHNICAL_PROFILE_REQUIRED',
     contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
     { status: 'PLANNED', issueCodes: [],
-      stationCounts: planned.plans.map((plan) => ({ contactId: plan.contactId, stationCount: plan.stations.length })) },
+      stationCounts: planned.plans.map((plan) => ({ contactId: plan.contactId, stationCount: plan.stations.length })),
+      stationDistances: planned.plans.map((plan) => ({
+        contactId: plan.contactId,
+        distancesMm: plan.stations.map((station) => station.distanceMm),
+      })) },
     ['TECHNICAL_PROFILE_REQUIRED']);
 }
 
