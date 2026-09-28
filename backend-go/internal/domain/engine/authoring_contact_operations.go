@@ -70,6 +70,9 @@ func deriveResolvedContactOperationsForContact(contact ResolvedContact, plan Sta
 	if aCount != 1 || bCount != 1 || contact.ParticipantA == contact.ParticipantB {
 		return fail("OPERATION_PARTICIPANT_INVALID")
 	}
+	if !a.valid() || !b.valid() {
+		return fail("OPERATION_PARTICIPANT_INVALID")
+	}
 	authoritative := planResolvedContactStations(ContactResolutionResult{Contacts: []ResolvedContact{contact}},
 		boards, []StationSpec{spec})
 	if len(authoritative.Issues) != 0 || len(authoritative.Plans) != 1 ||

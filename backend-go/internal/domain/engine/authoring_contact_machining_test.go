@@ -137,6 +137,9 @@ func TestJ1PairedContactNegatives(t *testing.T) {
 		{"duplicate occurrence", "OPERATION_PARTICIPANT_INVALID", func(f *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
 			f.Boards = append(f.Boards, f.Boards[0])
 		}},
+		{"null decoded basis", "OPERATION_PARTICIPANT_INVALID", func(f *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
+			f.Boards[1].Basis = LayoutBasis{}
+		}},
 		{"missing relationship", "OPERATION_IDENTITY_INVALID", func(_ *j1ContactFixture, c *ResolvedContact, _ *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
 			c.RelationshipID = ""
 		}},
@@ -153,6 +156,26 @@ func TestJ1PairedContactNegatives(t *testing.T) {
 				t.Fatalf("expected %s with no partial operations, got %+v", tc.code, got)
 			}
 		})
+	}
+}
+
+func TestJ1MalformedContactVectorsRejectedByGoDecoder(t *testing.T) {
+	var nullBasis ContactBoard
+	if err := json.Unmarshal([]byte(`{"basis":null}`), &nullBasis); err != nil || nullBasis.Basis != (LayoutBasis{}) {
+		t.Fatalf("Go decoder did not produce an invalid zero basis from null: %+v, %v", nullBasis, err)
+	}
+	for _, payload := range []string{`{"frame":{"originAssemblyMm":1}}`, `{"frame":{"axisAssembly":1}}`,
+		`{"frame":{"normalAssembly":1}}`} {
+		var contact ResolvedContact
+		if err := json.Unmarshal([]byte(payload), &contact); err == nil {
+			t.Fatalf("Go decoder accepted malformed contact vector: %s", payload)
+		}
+	}
+	for _, payload := range []string{`{"translationMm":1}`, `{"basis":{"x":1}}`} {
+		var board ContactBoard
+		if err := json.Unmarshal([]byte(payload), &board); err == nil {
+			t.Fatalf("Go decoder accepted malformed participant vector: %s", payload)
+		}
 	}
 }
 

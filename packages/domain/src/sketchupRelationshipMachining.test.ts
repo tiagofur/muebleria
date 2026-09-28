@@ -280,6 +280,23 @@ describe('J1-A1a paired operations for one exact contact', () => {
     }
     expect(derive(0, { ...recipes[0]!, rules: [null] as unknown as ContactOperationRecipe['rules'] })
       .issues.map((issue) => issue.code)).toContain('OPERATION_RULE_INVALID');
+    for (const field of ['originAssemblyMm', 'axisAssembly', 'normalAssembly'] as const) {
+      const contact = { ...args[0], frame: { ...args[0].frame, [field]: 1 } };
+      const result = derive(0, args[4], args[1], args[2], args[3],
+        contact as unknown as typeof args[0]);
+      expect(result.operations, field).toEqual([]);
+      expect(result.issues.map((issue) => issue.code), field).toContain('OPERATION_PLAN_INVALID');
+    }
+    for (const [field, value] of [['translationMm', 1], ['translationMm', null],
+      ['basis', null], ['basis.x', 1]] as const) {
+      const board = { ...args[2][1]!, ...(field === 'basis.x' ?
+        { basis: { ...args[2][1]!.basis, x: value } } : { [field]: value }) };
+      const boards = args[2].map((item, index) => index === 1 ? board : item);
+      const result = derive(0, args[4], args[1], boards as unknown as typeof args[2]);
+      expect(result.operations, `${field}=${value}`).toEqual([]);
+      expect(result.issues.map((issue) => issue.code), `${field}=${value}`)
+        .toContain('OPERATION_PARTICIPANT_INVALID');
+    }
   });
 
   it('fails closed for invalid identity, rule, technical profile, geometry, and noncanonical plans', () => {

@@ -849,9 +849,12 @@ export function deriveResolvedContactOperationsForContact(
   const fail = (code: string): ContactOperationResult => ({
     operations: [], issues: [{ code, message: code, severity: 'error', entityId: contact.contactId }],
   });
+  const validVector = (vector: unknown): vector is Vec3 =>
+    Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
   if (!Array.isArray(plan.stations) || plan.stations.some((station) => !station) ||
-      !contact.frame?.originAssemblyMm || !contact.frame.axisAssembly || !contact.frame.normalAssembly ||
-      !Array.isArray(contact.overlapMm)) return fail('OPERATION_PLAN_INVALID');
+      !validVector(contact.frame?.originAssemblyMm) || !validVector(contact.frame?.axisAssembly) ||
+      !validVector(contact.frame?.normalAssembly) || !Array.isArray(contact.overlapMm) ||
+      contact.overlapMm.length !== 2 || !contact.overlapMm.every(Number.isFinite)) return fail('OPERATION_PLAN_INVALID');
   if (boards.some((board) => !board)) return fail('OPERATION_PARTICIPANT_INVALID');
   const id = contact.contactId;
   if (!id?.trim() || !contact.relationshipId?.trim() || !contact.participantA?.trim() ||
@@ -861,6 +864,11 @@ export function deriveResolvedContactOperationsForContact(
   const a = boards.filter((board) => board.occurrenceId === contact.participantA);
   const b = boards.filter((board) => board.occurrenceId === contact.participantB);
   if (a.length !== 1 || b.length !== 1 || a[0] === b[0]) return fail('OPERATION_PARTICIPANT_INVALID');
+  const validParticipant = (board: ContactBoard): boolean =>
+    validVector(board.translationMm) && !!board.basis &&
+    validVector(board.basis.x) && validVector(board.basis.y) && validVector(board.basis.z) &&
+    contactFrameValid(board);
+  if (!validParticipant(a[0]!) || !validParticipant(b[0]!)) return fail('OPERATION_PARTICIPANT_INVALID');
   const authoritative = planResolvedContactStations({ contacts: [contact], issues: [] }, boards, [spec]);
   const stations = authoritative.plans[0]?.stations;
   if (authoritative.issues.length || !stations || plan.stations.length !== stations.length ||
@@ -881,8 +889,6 @@ export function deriveResolvedContactOperationsForContact(
   const ruleIds = new Set<string>();
   const roleSet = new Set(recipe.rules.map((rule) => rule.participantRole));
   if (!roleSet.has('A') || !roleSet.has('B')) return fail('OPERATION_PARTICIPANT_RULE_MISSING');
-  const validVector = (vector: Vec3): boolean =>
-    Array.isArray(vector) && vector.length === 3 && vector.every(Number.isFinite);
   for (const rule of recipe.rules) {
     if (!rule?.ruleId?.trim() || !rule.ruleRevision?.trim() || !rule.operationRole?.trim() ||
         ruleIds.has(rule.ruleId) || !['A', 'B'].includes(rule.participantRole) ||
