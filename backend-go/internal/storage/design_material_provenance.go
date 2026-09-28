@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -32,6 +33,12 @@ type DesignWorkingItemMaterialProvenance struct {
 	// Roles carries one entry per role in the union of the working and quoted
 	// choices, classified by the pure engine classifier.
 	Roles []engine.MaterialRoleProvenance
+	// Inheritance is the #784 authoritative per-role projection: mode read
+	// from the persisted lineage statement (never derived by equality),
+	// applied = the materialized choice, design default = the current
+	// Design-level authoring default for the role. This is the single server
+	// truth behind Diseño/Personalizado badges and the impact review.
+	Inheritance []domain.DesignRoleInheritance
 	// Reconcilable is true when at least one role is a reconciliation
 	// candidate (quoted, missing from the working copy, not alias-governed).
 	Reconcilable bool
@@ -43,7 +50,16 @@ type DesignWorkingCopyMaterialProvenance struct {
 	DesignID             string
 	ProjectID            string
 	WorkingCopyUpdatedAt time.Time
-	Items                []DesignWorkingItemMaterialProvenance
+	// AuthoringDefaults is the current Design-level durable defaults block
+	// (#784) — the "current Design default" every Inheritance entry resolves
+	// its drift against.
+	AuthoringDefaults domain.DesignAuthoringDefaults
+	// InheritanceSummary folds every item's role projections into the exact
+	// per-role impact counts (linked / needs-rollout / up-to-date /
+	// overridden). Catalog-dependent "unsupported" categorization is a
+	// separate consumer concern, never guessed here.
+	InheritanceSummary []domain.DesignRoleInheritanceCount
+	Items              []DesignWorkingItemMaterialProvenance
 }
 
 // quotedOptionChoicesForInstance loads the board choices (option group code →
@@ -99,12 +115,13 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 	// to the tenant reads as not found (fail-closed, like GetDesignWorkingCopy).
 	var projectID string
 	var workingUpdatedAt time.Time
+	var rawDefaults []byte
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT wc.project_id, wc.updated_at
+		SELECT wc.project_id, wc.updated_at, wc.authoring_defaults
 		FROM design_working_copies wc
 		JOIN designs d ON d.id = wc.design_id
 		WHERE wc.design_id = $1
-	`, designID).Scan(&projectID, &workingUpdatedAt)
+	`, designID).Scan(&projectID, &workingUpdatedAt, &rawDefaults)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Design with no working-copy row yet: honest empty read model.
@@ -117,12 +134,20 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 				return nil, dErr
 			}
 			return &DesignWorkingCopyMaterialProvenance{
-				DesignID:  designID,
-				ProjectID: projID,
-				Items:     []DesignWorkingItemMaterialProvenance{},
+				DesignID:          designID,
+				ProjectID:         projID,
+				AuthoringDefaults: domain.DesignAuthoringDefaults{}.Normalize(),
+				Items:             []DesignWorkingItemMaterialProvenance{},
 			}, nil
 		}
 		return nil, err
+	}
+	defaults := domain.DesignAuthoringDefaults{}.Normalize()
+	if len(rawDefaults) > 0 && string(rawDefaults) != "null" {
+		if err := json.Unmarshal(rawDefaults, &defaults); err != nil {
+			return nil, fmt.Errorf("%w: authoring_defaults del working copy", domain.ErrSerializationFailed)
+		}
+		defaults = defaults.Normalize()
 	}
 
 	// One snapshot query joins every working item with its current quoted
@@ -132,6 +157,7 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 		SELECT dwi.furniture_instance_id::text,
 		       COALESCE(dwi.furniture_definition_id::text, ''),
 		       dwi.material_choices,
+		       dwi.material_choice_modes,
 		       quoted.option_choices
 		FROM design_working_items dwi
 		LEFT JOIN LATERAL (
@@ -158,18 +184,26 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 		DesignID:             designID,
 		ProjectID:            projectID,
 		WorkingCopyUpdatedAt: workingUpdatedAt,
+		AuthoringDefaults:    defaults,
 		Items:                []DesignWorkingItemMaterialProvenance{},
 	}
+	allInheritance := []domain.DesignRoleInheritance{}
 	for rows.Next() {
 		var instanceID, definitionID string
-		var materialsJSON, optionsJSON []byte
-		if err := rows.Scan(&instanceID, &definitionID, &materialsJSON, &optionsJSON); err != nil {
+		var materialsJSON, modesJSON, optionsJSON []byte
+		if err := rows.Scan(&instanceID, &definitionID, &materialsJSON, &modesJSON, &optionsJSON); err != nil {
 			return nil, err
 		}
 		working := map[string]string{}
 		if len(materialsJSON) > 0 && string(materialsJSON) != "null" {
 			if err := json.Unmarshal(materialsJSON, &working); err != nil {
 				return nil, fmt.Errorf("%w: material_choices del working item", domain.ErrSerializationFailed)
+			}
+		}
+		modes := map[string]domain.DesignMaterialChoiceMode{}
+		if len(modesJSON) > 0 && string(modesJSON) != "null" {
+			if err := json.Unmarshal(modesJSON, &modes); err != nil {
+				return nil, fmt.Errorf("%w: material_choice_modes del working item", domain.ErrSerializationFailed)
 			}
 		}
 		quoted := map[string]string{}
@@ -179,10 +213,24 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 			}
 		}
 		roles := engine.ClassifyMaterialRoleProvenance(working, quoted)
+		// #784 projection: one deterministic entry per materialized role, mode
+		// read from the persisted statement, drift computed by the pure rule.
+		roleNames := make([]string, 0, len(modes))
+		for role := range modes {
+			roleNames = append(roleNames, role)
+		}
+		sort.Strings(roleNames)
+		inheritance := make([]domain.DesignRoleInheritance, 0, len(roleNames))
+		for _, role := range roleNames {
+			inheritance = append(inheritance, domain.EvaluateDesignRoleInheritance(
+				role, modes[role], working[role], defaults.MaterialChoices[role],
+			))
+		}
 		entry := DesignWorkingItemMaterialProvenance{
 			FurnitureInstanceID:   instanceID,
 			FurnitureDefinitionID: definitionID,
 			Roles:                 roles,
+			Inheritance:           inheritance,
 		}
 		for _, role := range roles {
 			if role.Provenance == engine.MaterialProvenanceQuotedMissingFromWorking {
@@ -191,8 +239,13 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 			}
 		}
 		out.Items = append(out.Items, entry)
+		allInheritance = append(allInheritance, inheritance...)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out.InheritanceSummary = domain.SummarizeDesignInheritance(allInheritance)
+	return out, nil
 }
 
 // ReconcileDesignWorkingMaterialsCommand targets ONE exact furniture instance
@@ -415,20 +468,30 @@ func (s *PostgresStore) ReconcileDesignWorkingMaterials(ctx context.Context, cmd
 		return nil, fmt.Errorf("%w: material_choices: %v", domain.ErrSerializationFailed, err)
 	}
 	quotedSources := make(map[string]domain.DesignMaterialProvenance, len(filled))
+	filledModes := make(map[string]domain.DesignMaterialChoiceMode, len(filled))
 	for role := range filled {
 		quotedSources[role] = domain.DesignMaterialProvenanceQuoted
+		// #784: a quote-filled role is an explicit materialization from the
+		// commercial authority, not Design lineage — it carries 'override'
+		// explicitly so stored parity (modes == choices) always holds.
+		filledModes[role] = domain.DesignMaterialChoiceModeOverride
 	}
 	quotedSourcesJSON, err := json.Marshal(quotedSources)
 	if err != nil {
 		return nil, fmt.Errorf("%w: material_choice_sources: %v", domain.ErrSerializationFailed, err)
 	}
+	filledModesJSON, err := json.Marshal(filledModes)
+	if err != nil {
+		return nil, fmt.Errorf("%w: material_choice_modes: %v", domain.ErrSerializationFailed, err)
+	}
 	if _, err := s.db(ctx).Exec(ctx, `
 		UPDATE design_working_items
 		SET material_choices = $1,
 		    material_choice_sources = COALESCE(material_choice_sources, '{}'::jsonb) || $4::jsonb,
+		    material_choice_modes = COALESCE(material_choice_modes, '{}'::jsonb) || $5::jsonb,
 		    updated_at = NOW()
 		WHERE design_id = $2 AND furniture_instance_id = $3
-	`, mergedJSON, cmd.DesignID, cmd.FurnitureInstanceID, quotedSourcesJSON); err != nil {
+	`, mergedJSON, cmd.DesignID, cmd.FurnitureInstanceID, quotedSourcesJSON, filledModesJSON); err != nil {
 		return nil, fmt.Errorf("reconcile working item materials: %w", err)
 	}
 

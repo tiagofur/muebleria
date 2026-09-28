@@ -161,7 +161,7 @@ func (s *PostgresStore) PrepareDesignPublish(ctx context.Context, cmd PrepareDes
 
 	// Fail-closed base concurrency, same authority as publish (#387 §16): the
 	// working-copy base must be current and the manifest base must agree.
-	wcBaseRevID, _, err := s.loadWorkingCopyBaseForPublish(ctx, cmd.DesignID)
+	wcBaseRevID, _, _, err := s.loadWorkingCopyBaseForPublish(ctx, cmd.DesignID)
 	if err != nil {
 		return nil, err
 	}
@@ -544,7 +544,7 @@ func (s *PostgresStore) FinalizeDesignPublish(ctx context.Context, cmd FinalizeD
 
 	// 4. Fail-closed base concurrency re-check (race between prepare and
 	// finalize is rejected here, never rebased).
-	wcBaseRevID, _, err := s.loadWorkingCopyBaseForPublish(ctx, cmd.DesignID)
+	wcBaseRevID, _, authoringDefaults, err := s.loadWorkingCopyBaseForPublish(ctx, cmd.DesignID)
 	if err != nil {
 		return nil, err
 	}
@@ -572,7 +572,7 @@ func (s *PostgresStore) FinalizeDesignPublish(ctx context.Context, cmd FinalizeD
 	// 6. Publish the immutable revision through the shared #387 core.
 	rev, err := s.insertDesignRevisionAndItems(ctx, designOrgID, projectID, cmd.DesignID,
 		nextRevisionNum, effectiveParentID, domain.DesignRevisionSourceSketchup,
-		nonEmptyOrDefault(session.CreatedBy, cmd.ActorUserID), workingItems)
+		nonEmptyOrDefault(session.CreatedBy, cmd.ActorUserID), authoringDefaults, workingItems)
 	if err != nil {
 		return nil, err
 	}
