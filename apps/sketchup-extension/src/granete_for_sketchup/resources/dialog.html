@@ -518,6 +518,15 @@
             <p class="presets-block-label" style="margin-top: var(--space-3);">Acabados del diseño</p>
             <div id="design-inspector-body"></div>
             <button id="design-inspector-retry" class="btn" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
+            <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
+                 PUT with the client token; items and item modes untouched) -->
+            <div id="design-inspector-footer" style="display: none; margin-top: var(--space-3);">
+              <p id="design-inspector-pending" class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);"></p>
+              <div style="display: flex; gap: var(--space-2);">
+                <button id="design-inspector-discard" class="btn" style="flex: 1;">Descartar</button>
+                <button id="design-inspector-apply" class="btn btn-primary" style="flex: 1;">Aplicar</button>
+              </div>
+            </div>
           </div>
 
           <div id="inspector-batch-view" class="card" style="display: none;">
@@ -1302,6 +1311,10 @@
           onDesignDefaults: function (payload) {
             window.GraneteUI.designInspector.onDesignDefaults(payload);
           },
+          // #784 R2: the apply answer (correlated like the reads).
+          onDesignDefaultsApplied: function (payload) {
+            window.GraneteUI.designInspector.onDesignDefaultsApplied(payload);
+          },
           onDeleteResult: function (result) {
             window.GraneteUI.inspector.onDeleteResult(result);
           },
@@ -1607,7 +1620,30 @@
             }
             return role;
           },
-          rerenderInspector: function () { window.GraneteUI.inspector.rerender(); }
+          rerenderInspector: function () { window.GraneteUI.inspector.rerender(); },
+          // #784 R2: candidate materials for a Design-level role — the union
+          // of the catalog definitions' curated options for that role; a
+          // role no definition offers falls back to the whole catalog
+          // (presentation only: the backend stays the authority).
+          getRoleCandidates: function (role) {
+            var ids = [];
+            var definitions = window.GraneteUI.library.getDefinitions();
+            for (var i = 0; i < definitions.length; i++) {
+              var roles = (definitions[i] && definitions[i].materialRoles) || [];
+              for (var j = 0; j < roles.length; j++) {
+                if (roles[j] && roles[j].role === role) {
+                  var options = roles[j].optionIds || [];
+                  for (var k = 0; k < options.length; k++) {
+                    if (ids.indexOf(options[k]) === -1) ids.push(options[k]);
+                  }
+                }
+              }
+            }
+            return ids;
+          },
+          openMaterialPicker: function (roleEntry, initialId, onApply) {
+            window.GraneteUI.finishSelector.open(roleEntry, initialId, onApply, 'design');
+          }
         });
 
         window.GraneteUI.materialRoles.init({

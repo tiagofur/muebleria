@@ -3,6 +3,7 @@
 require 'json'
 require_relative '../test_helper'
 require_relative '../../src/granete_for_sketchup/connection/model_binding'
+require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_inspector_bridge'
 
@@ -43,6 +44,16 @@ class DesignInspectorBridgeTest < Minitest::Test
 
       @working_copy
     end
+
+    def update_working_copy(_design_id, items:, expected_working_version:, authoring_defaults:)
+      @calls << [:update_working_copy, { items: items, expected_working_version: expected_working_version,
+                                         authoring_defaults: authoring_defaults }]
+      raise @error if @error
+
+      Struct.new(:updated_at, :authoring_defaults, keyword_init: true).new(
+        updated_at: '2026-09-28T11:00:00.000000Z', authoring_defaults: authoring_defaults
+      )
+    end
   end
 
   class FakePlacer
@@ -64,6 +75,7 @@ class DesignInspectorBridgeTest < Minitest::Test
   end
 
   WorkingStub = Struct.new(:updated_at, :authoring_defaults, keyword_init: true)
+  WorkingStubWithItems = Struct.new(:updated_at, :authoring_defaults, :items, keyword_init: true)
 
   attr_reader :bridge, :dialog, :service
 
@@ -93,6 +105,14 @@ class DesignInspectorBridgeTest < Minitest::Test
                                  })
     model = FakeModel.new(binding_json)
     @bridge.define_singleton_method(:active_model) { model }
+  end
+
+  def apply_request(request_id, token, choices = {})
+    JSON.generate({
+                    'requestId' => request_id, 'designId' => DESIGN_A,
+                    'expectedWorkingVersion' => token,
+                    'authoringDefaults' => { 'materialChoices' => choices }
+                  })
   end
 
   def pushed_payloads
@@ -134,6 +154,99 @@ class DesignInspectorBridgeTest < Minitest::Test
     assert_equal 'stale_binding', payload['status']
     assert_equal DESIGN_A, payload['designId']
     assert_empty @service.calls, 'never fetch a working copy for a foreign design'
+  end
+
+  # --- R2: apply design defaults — ONE working-copy PUT, items verbatim ---
+  def test_apply_builds_one_put_with_token_merged_defaults_and_verbatim_items
+    with_model_bound_to(DESIGN_A)
+    WorkingStub.new(
+      updated_at: '2026-09-28T10:00:00.000000Z',
+      authoring_defaults: { 'INTERIOR' => 'mat-white' }
+    )
+    working_item = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::WorkingItem.new(
+      furniture_instance_id: '51000000-0000-0000-0000-0000000000f1',
+      parameters: { 'widthMm' => 600 },
+      material_choices: { 'INTERIOR' => 'mat-white' }
+    )
+    working_with_items = WorkingStubWithItems.new(
+      updated_at: '2026-09-28T10:00:00.000000Z',
+      authoring_defaults: { 'INTERIOR' => 'mat-white' },
+      items: [working_item]
+    )
+    recording = RecordingService.new(working_with_items)
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(recording))
+
+    merged_block = { 'INTERIOR' => 'mat-oak', 'FRENTES' => 'mat-blanco' }
+    apply_request = JSON.generate({
+                                    'requestId' => 31, 'designId' => DESIGN_A,
+                                    'expectedWorkingVersion' => '2026-09-28T10:00:00.000000Z',
+                                    'authoringDefaults' => { 'materialChoices' => merged_block }
+                                  })
+    @bridge.handle_apply_design_defaults(@dialog, apply_request)
+
+    payload = pushed_payloads.fetch(0)
+    assert_equal 'onDesignDefaultsApplied', @dialog.scripts.first[/window\.(\w+)/, 1]
+    assert_equal 'ok', payload['status']
+    assert_equal 31, payload['requestId']
+    # Exactly one GET (authoritative items) + exactly ONE PUT.
+    assert_equal %i[get_working_copy update_working_copy], recording.calls.map(&:first)
+    put = recording.calls.last.last
+    assert_equal '2026-09-28T10:00:00.000000Z', put[:expected_working_version]
+    assert_equal({ 'materialChoices' => { 'INTERIOR' => 'mat-oak', 'FRENTES' => 'mat-blanco' } },
+                 put[:authoring_defaults], 'the durable block travels with its canonical wrapper')
+    # Items travel VERBATIM (the parsed structs, untouched — the service
+    # serializes them through the shared to_contract_h contract, which
+    # carries no modes key, so the backend preserves the persisted lineage
+    # for unchanged values via the legacy merge).
+    assert_equal [working_item], put[:items]
+    assert_nil working_item.to_contract_h['material_choice_modes']
+  end
+
+  def test_apply_with_a_stale_token_answers_conflict_without_writing
+    with_model_bound_to(DESIGN_A)
+    recording = RecordingService.new(WorkingStub.new(
+                                       updated_at: '2026-09-28T12:00:00.000000Z', authoring_defaults: {}
+                                     ))
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(recording))
+
+    @bridge.handle_apply_design_defaults(@dialog,
+                                         apply_request(32, '2026-09-28T10:00:00.000000Z', 'INTERIOR' => 'mat-oak'))
+
+    payload = pushed_payloads.fetch(0)
+    assert_equal 'conflict', payload['status']
+    assert_equal 32, payload['requestId']
+    assert_equal [:get_working_copy], recording.calls.map(&:first), 'a stale token never reaches a PUT'
+  end
+
+  def test_apply_unbound_answers_without_touching_the_service
+    model = FakeModel.new(nil)
+    @bridge.define_singleton_method(:active_model) { model }
+    @bridge.handle_apply_design_defaults(@dialog, apply_request(33, '2026-09-28T10:00:00.000000Z'))
+    assert_equal 'unbound', pushed_payloads.fetch(0)['status']
+    assert_empty @service.calls
+  end
+
+  # Scripted service recording both reads and writes.
+  class RecordingService
+    attr_reader :calls
+
+    def initialize(working_copy)
+      @working_copy = working_copy
+      @calls = []
+    end
+
+    def get_working_copy(design_id)
+      @calls << [:get_working_copy, design_id]
+      @working_copy
+    end
+
+    def update_working_copy(_design_id, items:, expected_working_version:, authoring_defaults:)
+      @calls << [:update_working_copy, { items: items, expected_working_version: expected_working_version,
+                                         authoring_defaults: authoring_defaults }]
+      Struct.new(:updated_at, :authoring_defaults, keyword_init: true).new(
+        updated_at: '2026-09-28T11:00:00.000000Z', authoring_defaults: authoring_defaults
+      )
+    end
   end
 
   def test_service_failure_answers_error_without_inventing_defaults

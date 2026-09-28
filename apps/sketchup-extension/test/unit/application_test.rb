@@ -177,7 +177,8 @@ class ApplicationTest < Minitest::Test
     first_dialog = @application.open_dialog
 
     expected_callbacks = %w[
-      adopt_binding_base authoring_mutation begin_catalog_placement_preview begin_placement_preview
+      adopt_binding_base apply_design_defaults authoring_mutation
+      begin_catalog_placement_preview begin_placement_preview
       bootstrap_project_design cancel_placement_instance close_dialog component_viewport_move
       confirm_placement_instance
       connect_model connect_with_code create_project_furniture delete_selected_furniture dialog_ready

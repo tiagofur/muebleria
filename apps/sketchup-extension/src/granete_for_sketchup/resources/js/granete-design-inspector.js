@@ -48,7 +48,24 @@
     // it (Furniture/Child/Batch own the Inspector then) and render() becomes
     // a no-op — late answers only refresh the cache, they never reopen the
     // view. handleNoSelection() re-claims it.
-    laneActive: false
+    laneActive: false,
+    // #784 R2: the LOCAL pending draft (role -> material id). It never
+    // touches the backend until the explicit Aplicar — one PUT with the
+    // client's workingVersion token; the draft clears only on a confirmed
+    // answer. Descartar clears it read-only.
+    draft: {},
+    // #784 R2 final review: the draft is PINNED to the working-copy
+    // version it started on. draftBase = {version, defaults} captured at
+    // the first pending edit; the render and the Apply token both ride
+    // that base. An external newer read NEVER silently rebases the draft —
+    // it only flags draftStale so the user sees the honest divergence (the
+    // bridge remains the authority that refuses a stale token).
+    draftBase: null,
+    draftStale: false,
+    // #784 R2 final review: one user Apply = exactly one apply request.
+    // True from applyDraft() until its correlated answer (or the no-bridge
+    // fallback) lands; a binding switch invalidates the in-flight request.
+    applyInFlight: false
   };
 
   var view = null;
@@ -56,6 +73,10 @@
   var designNameEl = null;
   var projectNameEl = null;
   var retryEl = null;
+  var footerEl = null;
+  var pendingEl = null;
+  var discardEl = null;
+  var applyEl = null;
 
   function elements() {
     if (!view) {
@@ -64,10 +85,24 @@
       designNameEl = document.getElementById("design-inspector-design-name");
       projectNameEl = document.getElementById("design-inspector-project-name");
       retryEl = document.getElementById("design-inspector-retry");
+      footerEl = document.getElementById("design-inspector-footer");
+      pendingEl = document.getElementById("design-inspector-pending");
+      discardEl = document.getElementById("design-inspector-discard");
+      applyEl = document.getElementById("design-inspector-apply");
       if (retryEl) {
         retryEl.addEventListener("click", function () {
           requestDefaults(true);
           render();
+        });
+      }
+      if (discardEl) {
+        discardEl.addEventListener("click", function () {
+          discardDraft();
+        });
+      }
+      if (applyEl) {
+        applyEl.addEventListener("click", function () {
+          applyDraft();
         });
       }
     }
@@ -81,6 +116,10 @@
     if (missing.length > 0) {
       throw new Error("GraneteUI.designInspector.init is required before use; missing deps: " + missing.join(", "));
     }
+  }
+
+  function hasDeps(names) {
+    return names.every(function (name) { return typeof deps[name] === "function"; });
   }
 
   // The ONLY bridge call of R1: a read. Correlation = monotonically growing
@@ -99,29 +138,108 @@
     }
   }
 
-  function renderRow(role, materialId) {
+  function materialName(materialId) {
     var material = deps.materialById(materialId);
+    return material && material.name ? material.name : null;
+  }
+
+  function renderRow(role, materialId) {
     var label = deps.getRoleLabel(role);
-    var value = material && material.name
-      ? material.name
-      : null;
     var row = document.createElement("div");
     row.className = "design-insp-row";
     var roleEl = document.createElement("span");
     roleEl.className = "design-insp-role";
     roleEl.textContent = label;
+
     var valueEl = document.createElement("span");
     valueEl.className = "design-insp-value";
-    if (value) {
-      valueEl.textContent = value;
+    var drafted = state.draft[role];
+    var baseChoices = (state.draftBase && state.draftBase.defaults) || state.defaults;
+    if (drafted && drafted !== baseChoices[role]) {
+      // #784 R2: pending edit renders honestly as old → new, where the
+      // "old" is the DRAFT BASE value (never a silently rebased one).
+      var from = materialName(baseChoices[role]) || baseChoices[role];
+      var to = materialName(drafted) || drafted;
+      valueEl.textContent = from + " → " + to;
+      valueEl.title = drafted;
+      valueEl.className = "design-insp-value design-insp-draft";
     } else {
-      valueEl.textContent = "Material no disponible en el catálogo actual";
-      valueEl.title = materialId;
-      valueEl.className = "design-insp-value design-insp-unavailable";
+      var value = materialName(materialId);
+      if (value) {
+        valueEl.textContent = value;
+      } else {
+        valueEl.textContent = "Material no disponible en el catálogo actual";
+        valueEl.title = materialId;
+        valueEl.className = "design-insp-value design-insp-unavailable";
+      }
     }
     row.appendChild(roleEl);
     row.appendChild(valueEl);
+
+    // #784 R2: the per-role change affordance opens the shared material
+    // picker; the pick lands in the LOCAL draft, never in the backend.
+    if (hasDeps(["getRoleCandidates", "openMaterialPicker"])) {
+      var changeBtn = document.createElement("button");
+      changeBtn.id = "design-inspector-change-" + role;
+      changeBtn.className = "btn design-insp-change";
+      changeBtn.textContent = "Cambiar";
+      changeBtn.addEventListener("click", function () {
+        var roleEntry = { role: role, label: label, optionIds: deps.getRoleCandidates(role) };
+        deps.openMaterialPicker(roleEntry, drafted || materialId, function (pickedId) {
+          if (!pickedId || pickedId === materialId) {
+            delete state.draft[role];
+          } else {
+            state.draft[role] = pickedId;
+          }
+          if (pendingCount() > 0 && !state.draftBase) {
+            // First pending edit pins the draft to the current version.
+            state.draftBase = { version: state.workingVersion, defaults: shallowCopy(state.defaults) };
+            state.draftStale = false;
+          }
+          if (pendingCount() === 0) {
+            // The draft dissolved back to the durable state: drop the base.
+            state.draftBase = null;
+            state.draftStale = false;
+          }
+          render();
+        });
+      });
+      row.appendChild(changeBtn);
+    }
     return row;
+  }
+
+  function pendingCount() {
+    var count = 0;
+    for (var role in state.draft) {
+      if (state.defaults[role] !== state.draft[role]) count += 1;
+    }
+    return count;
+  }
+
+  function renderFooter() {
+    if (!footerEl) return;
+    var pending = pendingCount();
+    var conflict = state.conflict;
+    var visible = state.laneActive && state.connected &&
+      (pending > 0 || !!conflict);
+    footerEl.style.display = visible ? "block" : "none";
+    if (!visible) {
+      // A hidden footer must not leave a stale disabled state behind.
+      applyEl.disabled = false;
+      return;
+    }
+    if (conflict) {
+      pendingEl.textContent = conflict;
+      applyEl.disabled = true;
+    } else if (state.draftStale) {
+      pendingEl.textContent = "El diseño cambió en el servidor; tus cambios quedaron sobre la versión anterior.";
+      applyEl.disabled = false;
+    } else {
+      pendingEl.textContent = pending === 1 ? "1 cambio pendiente" : pending + " cambios pendientes";
+      // #784 R2 final review: Aplicar disabled while the apply is in flight.
+      applyEl.disabled = state.applyInFlight;
+    }
   }
 
   function renderBody() {
@@ -142,6 +260,12 @@
       return;
     }
     if (retryEl) retryEl.style.display = "none";
+    if (state.conflict) {
+      var conflictNote = document.createElement("p");
+      conflictNote.className = "design-insp-state design-insp-error";
+      conflictNote.textContent = state.conflict;
+      bodyEl.appendChild(conflictNote);
+    }
 
     var roles = Object.keys(state.defaults).sort();
     if (roles.length === 0) {
@@ -165,6 +289,7 @@
     designNameEl.textContent = state.designName || "";
     projectNameEl.textContent = state.projectName || "";
     renderBody();
+    renderFooter();
     view.style.display = "block";
   }
 
@@ -172,6 +297,57 @@
     state.laneActive = false;
     if (!elements()) return;
     view.style.display = "none";
+  }
+
+  // #784 R2: Descartar is read-only — it clears the LOCAL draft only.
+  function discardDraft() {
+    state.draft = {};
+    state.draftBase = null;
+    state.draftStale = false;
+    state.conflict = null; // a fresh start after a deliberate discard
+    render();
+  }
+
+  function shallowCopy(map) {
+    var copy = {};
+    for (var key in map) copy[key] = map[key];
+    return copy;
+  }
+
+  // #784 R2: Aplicar — exactly ONE working-copy PUT with the client's
+  // workingVersion token and the merged durable ∪ draft block. The answer
+  // (onDesignDefaultsApplied) clears the draft only on success.
+  function applyDraft() {
+    requireDeps();
+    if (state.applyInFlight) return; // one user Apply = one request
+    var pending = pendingCount();
+    if (pending === 0 || !state.connected) return;
+    // #784 R2 final review: the Apply token is the DRAFT BASE version —
+    // the working copy state the pending edits were made against — never
+    // a silently refreshed newer version.
+    var token = (state.draftBase && state.draftBase.version) || state.workingVersion;
+    if (!token) return;
+    var merged = {};
+    var baseChoices = (state.draftBase && state.draftBase.defaults) || state.defaults;
+    for (var role in baseChoices) merged[role] = baseChoices[role];
+    for (var draftRole in state.draft) merged[draftRole] = state.draft[draftRole];
+    state.requestId += 1;
+    state.conflict = null;
+    state.applyInFlight = true;
+    render(); // Aplicar disabled immediately
+    var payload = {
+      requestId: state.requestId,
+      designId: state.designId,
+      expectedWorkingVersion: token,
+      authoringDefaults: { materialChoices: merged }
+    };
+    if (window.sketchup && typeof window.sketchup.apply_design_defaults === "function") {
+      window.sketchup.apply_design_defaults(JSON.stringify(payload));
+    } else {
+      state.applyInFlight = false;
+      state.conflict = "Granete no está disponible en este momento.";
+      render();
+    }
   }
 
   return window.GraneteUI.designInspector = {
@@ -191,6 +367,16 @@
         state.defaults = {};
         state.workingVersion = null;
         state.status = "idle";
+        state.draft = {};
+        state.draftBase = null;
+        state.draftStale = false;
+        state.conflict = null;
+        if (state.applyInFlight) {
+          // Invalidate the in-flight request: its late answer can never
+          // touch the (now authority-less) inspector.
+          state.requestId += 1;
+          state.applyInFlight = false;
+        }
       } else {
         state.designId = binding.designId;
         state.projectId = binding.projectId || null;
@@ -200,6 +386,15 @@
           state.defaults = {};
           state.workingVersion = null;
           state.status = "idle";
+          state.draft = {};
+          state.draftBase = null;
+          state.draftStale = false;
+          state.conflict = null;
+          if (state.applyInFlight) {
+            // Same for a design switch: A's in-flight apply is dead.
+            state.requestId += 1;
+            state.applyInFlight = false;
+          }
         }
       }
       if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
@@ -216,6 +411,13 @@
         return false;
       }
       state.laneActive = true;
+      if (pendingCount() > 0) {
+        // #784 R2 final review: a pending draft is pinned to its base
+        // version — silent refreshes are SUPPRESSED so the working copy
+        // can never drift under the draft before Apply.
+        render();
+        return true;
+      }
       if (state.status === "ready") {
         requestDefaults(false); // silent refresh, keeps rendered values
       } else {
@@ -233,9 +435,18 @@
       if (payload.status === "ready") {
         if (!state.connected || payload.designId !== state.designId) return;
         var choices = (payload.authoringDefaults && payload.authoringDefaults.materialChoices) || {};
+        if (state.draftBase && payload.workingVersion !== state.draftBase.version) {
+          // A pinned draft exists and the server moved on: the draft is
+          // NEVER rebased. Keep the base as the on-screen truth, flag the
+          // divergence honestly; the bridge refuses a stale token at Apply.
+          state.draftStale = true;
+          render();
+          return;
+        }
         state.defaults = choices;
         state.workingVersion = payload.workingVersion || null;
         state.status = "ready";
+        state.conflict = null;
         render();
       } else if (payload.status === "error") {
         state.status = "error";
@@ -255,6 +466,47 @@
         state.designName = "";
         state.defaults = {};
         state.workingVersion = null;
+        state.status = "idle";
+        hide();
+        if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
+      }
+    },
+
+    // #784 R2: the apply answer. Correlated like the reads — a late or
+    // foreign answer never touches the draft. ok refreshes the cached
+    // defaults + workingVersion and clears the draft; conflict keeps the
+    // draft and shows the honest reason (no fake success); the
+    // unbound/stale_binding shapes fail closed exactly like the reads.
+    onDesignDefaultsApplied: function (payload) {
+      // Foreign/late answers (a switched or unbound binding invalidates the
+      // requestId) are fully ignored — they can never touch the current
+      // inspector's state or release its guard.
+      if (!payload || payload.requestId !== state.requestId) return;
+      state.applyInFlight = false;
+      if (payload.status === "ok") {
+        if (!state.connected || payload.designId !== state.designId) return;
+        state.defaults = (payload.authoringDefaults && payload.authoringDefaults.materialChoices) || {};
+        state.workingVersion = payload.workingVersion || state.workingVersion;
+        state.draft = {};
+        state.draftBase = null;
+        state.draftStale = false;
+        state.conflict = null;
+        render();
+      } else if (payload.status === "conflict" || payload.status === "error") {
+        state.conflict = payload.reason || "No se pudo aplicar el cambio.";
+        render();
+      } else if (payload.status === "unbound" || payload.status === "stale_binding") {
+        state.connected = false;
+        state.designId = null;
+        state.projectId = null;
+        state.projectName = "";
+        state.designName = "";
+        state.defaults = {};
+        state.workingVersion = null;
+        state.draft = {};
+        state.draftBase = null;
+        state.draftStale = false;
+        state.conflict = null;
         state.status = "idle";
         hide();
         if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();

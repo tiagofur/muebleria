@@ -182,6 +182,45 @@ module Granete
                      'absence parses as the canonical empty map')
       end
 
+      # G. R2 apply: the bridge re-reads the authoritative copy (freshness
+      #    gate on the client token) and issues exactly ONE PUT carrying the
+      #    merged defaults plus the current items VERBATIM and WITHOUT modes
+      #    (the backend preserves the persisted lineage). Zero host ops.
+      def test_apply_issues_one_put_with_token_defaults_and_verbatim_items
+        bind_model_to(DESIGN_A)
+        transport = ScriptedTransport.new
+        transport.stub_working_copy(DESIGN_A, WC_VERSION_A,
+                                    'authoring_defaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-blanco' } },
+                                    'items' => [transport.working_item_body(FI_1)])
+
+        starts_before = @transaction_observer.starts
+        commits_before = @transaction_observer.commits
+        dialog = CaptureDialog.new
+        bridge = inspector_bridge(transport)
+        apply_payload = JSON.generate(
+          { 'requestId' => 41, 'designId' => DESIGN_A,
+            'expectedWorkingVersion' => WC_VERSION_A,
+            'authoringDefaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-roble' } } }
+        )
+        bridge.handle_apply_design_defaults(dialog, apply_payload)
+
+        payload = dialog.pushed.fetch('onDesignDefaultsApplied')
+        assert_equal 'ok', payload['status'], "apply answered #{payload.inspect}"
+        assert_equal WC_VERSION_B, payload['workingVersion'], 'the accepted PUT mints a new token'
+        assert_equal({ 'INTERIOR' => 'mat-roble' }, payload['authoringDefaults']['materialChoices'])
+
+        puts = transport.requests.select { |request| request['method'] == 'PUT' }
+        assert_equal 1, puts.length, 'exactly ONE working-copy PUT'
+        put_body = puts.first['body']
+        assert_equal WC_VERSION_A, put_body['expected_working_version']
+        assert_equal({ 'materialChoices' => { 'INTERIOR' => 'mat-roble' } }, put_body['authoring_defaults'])
+        assert_equal([FI_1], put_body['items'].map { |item| item['furniture_instance_id'] })
+        assert_nil put_body['items'].first['material_choice_modes'],
+                   'items travel without modes: the backend preserves the persisted lineage'
+        assert_equal 0, @transaction_observer.starts - starts_before, 'the apply starts ZERO host operations'
+        assert_equal 0, @transaction_observer.commits - commits_before
+      end
+
       # F. Whole-smoke zero mutation: no working-copy PUT ever crossed the
       #    scripted frontier (this is the last test TestUp runs in file
       #    order; the shared transport instance accumulates every request).
@@ -342,15 +381,39 @@ module Granete
           respond(:get, "/designs/#{design_id}/working-copy", 200, body)
         end
 
+        # The #810 scripted semantics: an accepted PUT mints the new token
+        # and becomes the next authoritative GET (applied defaults included).
         def request(payload, authorization_header: nil)
           _ = authorization_header
           method = payload['method'].to_s.upcase
           path = payload['path']
           @requests << { 'method' => method, 'path' => path, 'body' => payload['body'] }
+          if method == 'PUT' && path =~ %r{\A/designs/[0-9a-f-]+/working-copy\z}
+            body = (payload['body'] || {}).dup
+            body['design_id'] ||= DESIGN_A
+            body['project_id'] ||= PROJECT_ID
+            body['base_revision_id'] ||= REVISION_R1
+            body['source_type'] ||= 'sketchup'
+            body['items'] ||= []
+            body['updated_at'] = WC_VERSION_B
+            @routes[['GET', path]] = { 'status' => 200, 'body' => body }
+            return { 'status' => 200, 'body' => body }
+          end
+
           route = @routes[[method, path]]
           return route if route
 
           { 'status' => 404, 'body' => { 'code' => 'not_found' } }
+        end
+
+        def working_item_body(fi_id)
+          {
+            'furniture_instance_id' => fi_id,
+            'furniture_definition_id' => DEFINITION_ID,
+            'parameters' => { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560, 'shelfCount' => 1 },
+            'material_choices' => {},
+            'transform' => { 'translation_mm' => [0.0, 0.0, 0.0], 'rotation_deg' => [0.0, 0.0, 0.0] }
+          }
         end
       end
 

@@ -58,7 +58,8 @@ func TestWorkingCopyContractFixture_DesignDefaultsAcceptedByGeneratedGoHandler(t
 				t.Fatal("authoring_defaults must reach the command")
 			}
 			wantDefaults := map[string]string{"INTERIOR": "mat-roble"}
-			if scenario.ID == "design-backed-inherits-default" {
+			switch scenario.ID {
+			case "design-backed-inherits-default", "apply-design-defaults-preserving-items":
 				wantDefaults["FRENTES"] = "mat-blanco"
 			}
 			if got := cmd.AuthoringDefaults.MaterialChoices; len(got) != len(wantDefaults) {
@@ -70,7 +71,13 @@ func TestWorkingCopyContractFixture_DesignDefaultsAcceptedByGeneratedGoHandler(t
 				}
 			}
 			item := cmd.Items[0]
-			if len(item.MaterialChoiceModes) == 0 {
+			if scenario.ID == "apply-design-defaults-preserving-items" {
+				// The R2 apply carries items VERBATIM without modes: the
+				// backend legacy merge preserves the persisted lineage.
+				if item.MaterialChoiceModes != nil {
+					t.Fatal("the apply scenario must not carry item modes")
+				}
+			} else if len(item.MaterialChoiceModes) == 0 {
 				t.Fatal("material_choice_modes must reach the command")
 			}
 			if scenario.ID == "override-equal-to-default-survives-exact" &&
