@@ -10,12 +10,217 @@ import (
 )
 
 type j1ContactFixture struct {
-	Boards               []ContactBoard    `json:"boards"`
-	Contacts             []ExplicitContact `json:"contacts"`
-	RequiredContactIDs   []string          `json:"requiredContactIds"`
-	Expected             []ResolvedContact `json:"expected"`
-	StationSpecs         []StationSpec     `json:"stationSpecs"`
-	ExpectedStationPlans []StationPlan     `json:"expectedStationPlans"`
+	Boards               []ContactBoard            `json:"boards"`
+	Contacts             []ExplicitContact         `json:"contacts"`
+	RequiredContactIDs   []string                  `json:"requiredContactIds"`
+	Expected             []ResolvedContact         `json:"expected"`
+	StationSpecs         []StationSpec             `json:"stationSpecs"`
+	ExpectedStationPlans []StationPlan             `json:"expectedStationPlans"`
+	OperationRecipes     []ContactOperationRecipe  `json:"operationRecipes"`
+	ExpectedOperations   []NeutralContactOperation `json:"expectedOperations"`
+}
+
+func TestJ1PairedContactOperations(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolution := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolution, f.Boards, f.StationSpecs)
+	if len(resolution.Issues) != 0 || len(plans.Issues) != 0 {
+		t.Fatalf("invalid shared fixture: %+v %+v", resolution.Issues, plans.Issues)
+	}
+	for index := range resolution.Contacts {
+		got := deriveResolvedContactOperationsForContact(resolution.Contacts[index], plans.Plans[index],
+			f.Boards, f.StationSpecs[index], f.OperationRecipes[index])
+		want := f.ExpectedOperations[:6]
+		if index == 1 {
+			want = f.ExpectedOperations[6:]
+		}
+		if len(got.Issues) != 0 || len(got.Operations) != len(want) {
+			t.Fatalf("contact %d should produce complete paired operations: %+v", index, got)
+		}
+		ids := map[string]bool{}
+		for i, operation := range got.Operations {
+			if operation.OperationID == "" || ids[operation.OperationID] {
+				t.Fatalf("missing or duplicate operation identity: %+v", operation)
+			}
+			ids[operation.OperationID] = true
+			if !reflect.DeepEqual(operation, want[i]) {
+				t.Fatalf("contact %d operation %d: got %+v want %+v", index, i, operation, want[i])
+			}
+		}
+	}
+	t.Run("escaped identity parity", func(t *testing.T) {
+		contact := resolution.Contacts[0]
+		contact.RelationshipID = "rel<>&\u2028\u2029"
+		got := deriveResolvedContactOperationsForContact(contact, plans.Plans[0], f.Boards, f.StationSpecs[0], f.OperationRecipes[0])
+		want := `j1:["rel\u003c\u003e\u0026\u2028\u2029","floor-left","floor-1",0,"synthetic-j1","test-1","pilot","test-1","pilot"]`
+		if len(got.Issues) != 0 || len(got.Operations) == 0 || got.Operations[0].OperationID != want {
+			t.Fatalf("escaped identity parity failed: got %+v, want %q", got, want)
+		}
+	})
+	moved := readJ1ContactFixture(t)
+	for i := range moved.Boards {
+		moved.Boards[i].Translation[0] += 73
+		moved.Boards[i].Translation[1] -= 41
+		moved.Boards[i].Translation[2] += 19
+	}
+	movedResolution := resolveExplicitContacts(moved.Boards, moved.Contacts, moved.RequiredContactIDs)
+	movedPlans := planResolvedContactStations(movedResolution, moved.Boards, moved.StationSpecs)
+	for index := range movedResolution.Contacts {
+		original := deriveResolvedContactOperationsForContact(resolution.Contacts[index], plans.Plans[index],
+			f.Boards, f.StationSpecs[index], f.OperationRecipes[index])
+		translated := deriveResolvedContactOperationsForContact(movedResolution.Contacts[index], movedPlans.Plans[index],
+			moved.Boards, moved.StationSpecs[index], moved.OperationRecipes[index])
+		if len(translated.Issues) != 0 || !reflect.DeepEqual(translated.Operations, original.Operations) {
+			t.Fatalf("rigid translation changed local machining for contact %d: %+v", index, translated)
+		}
+	}
+}
+
+func TestJ1PairedContactNegatives(t *testing.T) {
+	cases := []struct {
+		name, code string
+		change     func(*j1ContactFixture, *ResolvedContact, *StationPlan, *StationSpec, *ContactOperationRecipe)
+	}{
+		{"profile missing", "TECHNICAL_PROFILE_REQUIRED", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.TechnicalProfileID = ""
+		}},
+		{"recipe revision missing", "OPERATION_RECIPE_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.RecipeRevision = ""
+		}},
+		{"participant rule missing", "OPERATION_PARTICIPANT_RULE_MISSING", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules = r.Rules[:1]
+		}},
+		{"duplicate rule", "OPERATION_RULE_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules = append(r.Rules, r.Rules[0])
+		}},
+		{"duplicate machining with distinct rule IDs", "OPERATION_GEOMETRY_DUPLICATE", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			copy := r.Rules[1]
+			copy.RuleID = "counterbore-copy"
+			r.Rules = append(r.Rules, copy)
+		}},
+		{"wrong entry face", "OPERATION_GEOMETRY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules[1].EntryFace = "front"
+		}},
+		{"outward axis", "OPERATION_GEOMETRY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules[1].Axis = [3]float64{0, 1, 0}
+		}},
+		{"excess depth", "OPERATION_GEOMETRY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules[1].DepthMm = 19
+		}},
+		{"oblique swept-cylinder edge breach", "OPERATION_GEOMETRY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules[1].OffsetMm = [3]float64{-50, 18, 0}
+			r.Rules[1].Axis = [3]float64{-0.7, -math.Sqrt(0.51), 0}
+			r.Rules[1].DiameterMm = 12
+			r.Rules[1].DepthMm = 10
+		}},
+		{"nonfinite diameter", "OPERATION_RULE_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules[1].DiameterMm = math.Inf(1)
+		}},
+		{"edge breach", "OPERATION_GEOMETRY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, r *ContactOperationRecipe) {
+			r.Rules[1].DiameterMm = 60
+		}},
+		{"nonuniform station", "OPERATION_PLAN_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, p *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
+			p.Stations[1].DistanceMm = 241
+			p.Stations[1].AssemblyPointMm = [3]float64{18, 271, 27}
+			p.Stations[1].ParticipantALocalMm = [3]float64{241, 9, 0}
+			p.Stations[1].ParticipantBLocalMm = [3]float64{289, 18, 27}
+		}},
+		{"shifted endpoint", "OPERATION_PLAN_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, p *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
+			p.Stations[0].DistanceMm = 31
+			p.Stations[0].AssemblyPointMm = [3]float64{18, 61, 27}
+			p.Stations[0].ParticipantALocalMm = [3]float64{31, 9, 0}
+			p.Stations[0].ParticipantBLocalMm = [3]float64{499, 18, 27}
+		}},
+		{"wrong plan identity", "OPERATION_IDENTITY_INVALID", func(_ *j1ContactFixture, _ *ResolvedContact, p *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
+			p.ContactID = "floor-right"
+		}},
+		{"duplicate occurrence", "OPERATION_PARTICIPANT_INVALID", func(f *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
+			f.Boards = append(f.Boards, f.Boards[0])
+		}},
+		{"null decoded basis", "OPERATION_PARTICIPANT_INVALID", func(f *j1ContactFixture, _ *ResolvedContact, _ *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
+			f.Boards[1].Basis = LayoutBasis{}
+		}},
+		{"missing relationship", "OPERATION_IDENTITY_INVALID", func(_ *j1ContactFixture, c *ResolvedContact, _ *StationPlan, _ *StationSpec, _ *ContactOperationRecipe) {
+			c.RelationshipID = ""
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := readJ1ContactFixture(t)
+			resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+			plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+			contact, plan, spec, recipe := resolved.Contacts[0], plans.Plans[0], f.StationSpecs[0], f.OperationRecipes[0]
+			tc.change(&f, &contact, &plan, &spec, &recipe)
+			got := deriveResolvedContactOperationsForContact(contact, plan, f.Boards, spec, recipe)
+			if len(got.Operations) != 0 || len(got.Issues) == 0 || got.Issues[0].Code != tc.code {
+				t.Fatalf("expected %s with no partial operations, got %+v", tc.code, got)
+			}
+		})
+	}
+}
+
+func TestJ1MalformedContactVectorsRejectedByGoDecoder(t *testing.T) {
+	var nullBasis ContactBoard
+	if err := json.Unmarshal([]byte(`{"basis":null}`), &nullBasis); err != nil || nullBasis.Basis != (LayoutBasis{}) {
+		t.Fatalf("Go decoder did not produce an invalid zero basis from null: %+v, %v", nullBasis, err)
+	}
+	for _, payload := range []string{`{"frame":{"originAssemblyMm":1}}`, `{"frame":{"axisAssembly":1}}`,
+		`{"frame":{"normalAssembly":1}}`} {
+		var contact ResolvedContact
+		if err := json.Unmarshal([]byte(payload), &contact); err == nil {
+			t.Fatalf("Go decoder accepted malformed contact vector: %s", payload)
+		}
+	}
+	for _, payload := range []string{`{"translationMm":1}`, `{"basis":{"x":1}}`} {
+		var board ContactBoard
+		if err := json.Unmarshal([]byte(payload), &board); err == nil {
+			t.Fatalf("Go decoder accepted malformed participant vector: %s", payload)
+		}
+	}
+}
+
+func TestJ1PairedContactRuleOrder(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	recipe := f.OperationRecipes[0]
+	extra := recipe.Rules[1]
+	extra.RuleID, extra.OperationRole = "Z-copy", "counterbore-alt"
+	extra.OffsetMm = [3]float64{0, 18, 10}
+	recipe.Rules = append(recipe.Rules, extra)
+	got := deriveResolvedContactOperationsForContact(resolved.Contacts[0], plans.Plans[0], f.Boards, f.StationSpecs[0], recipe)
+	if len(got.Issues) != 0 || len(got.Operations) != 9 {
+		t.Fatalf("expected ordered complete operation set, got %+v", got)
+	}
+	if got.Operations[0].Provenance.RuleID != "pilot" || got.Operations[1].Provenance.RuleID != "Z-copy" ||
+		got.Operations[2].Provenance.RuleID != "counterbore" {
+		t.Fatalf("rule order must use codepoint IDs, got %+v", got.Operations[:3])
+	}
+}
+
+func TestJ1PairedContactUnicodeRuleOrder(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolved := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolved, f.Boards, f.StationSpecs)
+	recipe := f.OperationRecipes[0]
+	for _, item := range []struct {
+		id, role string
+		offset   float64
+	}{{"😀", "supplementary", 10}, {"\uE000", "bmp", 20}} {
+		rule := recipe.Rules[1]
+		rule.RuleID, rule.OperationRole, rule.OffsetMm = item.id, item.role, [3]float64{0, 18, item.offset}
+		recipe.Rules = append(recipe.Rules, rule)
+	}
+	got := deriveResolvedContactOperationsForContact(resolved.Contacts[0], plans.Plans[0], f.Boards, f.StationSpecs[0], recipe)
+	if len(got.Issues) != 0 || len(got.Operations) != 12 {
+		t.Fatalf("expected complete Unicode rule set, got %+v", got)
+	}
+	want := []string{"pilot", "counterbore", "\uE000", "😀"}
+	for i, ruleID := range want {
+		if got.Operations[i].Provenance.RuleID != ruleID {
+			t.Fatalf("Unicode scalar rule order: got %+v want %+v", got.Operations[:4], want)
+		}
+	}
 }
 
 func TestJ1StationPlans(t *testing.T) {
