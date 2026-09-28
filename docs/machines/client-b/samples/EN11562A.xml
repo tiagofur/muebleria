@@ -1,0 +1,100 @@
+<KDTPanelFormat>
+  <PANEL>
+    <PanelLength>932</PanelLength>
+    <PanelWidth>567</PanelWidth>
+    <PanelThickness>15.5</PanelThickness>
+    <PanelName>Entrepaño Movil Rinconero L Superior 15mm</PanelName>
+    <PanelOutline>
+      <Vertex>
+        <X1>932</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>932</X1>
+        <Y1>567</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>712.5</X1>
+        <Y1>567</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>712.5</X1>
+        <Y1>269.5</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>269.5</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+    </PanelOutline>
+  </PANEL>
+  <CAD>
+    <TypeNo>7</TypeNo>
+    <TypeName>Path</TypeName>
+    <Width>8</Width>
+    <Depth>15.6</Depth>
+    <Correction>2</Correction>
+    <Close>0</Close>
+    <Enable>1</Enable>
+    <Vertexes>
+      <Point>
+        <X1>712.5</X1>
+        <Y1>571</Y1>
+      </Point>
+      <Line>
+        <X1>712.5</X1>
+        <Y1>562</Y1>
+      </Line>
+    </Vertexes>
+  </CAD>
+  <CAD>
+    <TypeNo>7</TypeNo>
+    <TypeName>Path</TypeName>
+    <Width>8</Width>
+    <Depth>15.6</Depth>
+    <Correction>1</Correction>
+    <Close>0</Close>
+    <Enable>1</Enable>
+    <Vertexes>
+      <Point>
+        <X1>0</X1>
+        <Y1>269.5</Y1>
+      </Point>
+      <Line>
+        <X1>712.5</X1>
+        <Y1>269.5</Y1>
+      </Line>
+      <Line>
+        <X1>712.5</X1>
+        <Y1>567</Y1>
+      </Line>
+    </Vertexes>
+  </CAD>
+</KDTPanelFormat>
+<!--AUTHOR: Copyright ® Promob Software Solutions
+Promob Studio Start KVA
+Promob: 5.60.46.6
+3DE Render - 2.2.0 - Activated
+Build Closet - 5.5.0.6 - Activated
+New Revest - 1.8.6 - Activated
+Plugin Builder - 1.60.46.2 - Activated
+Plugin Builder Budget - 1.60.46.0 - Activated
+Plugin Cut Pro - 1.60.46.0 - Activated
+Plugin Flexdrill 1200 - 1.60.46.0 - Activated
+Plugin New Promob - 1.0.0 - Activated
+-->

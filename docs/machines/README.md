@@ -87,6 +87,7 @@ negocio ni cambian este vocabulario persistido.
 | Pack | Máquinas conocidas | Estado |
 |---|---|---|
 | [`client-a`](./client-a/README.md) | `machine-a` (WEEKE BHX 050), `machine-b` (HOLZMA HPP 250) | `NOT_TESTED` — dossier de descubrimiento, sin evidencia de campo |
+| [`client-b`](./client-b/README.md) | `machine-c` (KDT Flexdrill 1200) | `NOT_TESTED` — dossier de descubrimiento, 417 XML de muestra, sin readback |
 
 ## Infraestructura común de validación
 

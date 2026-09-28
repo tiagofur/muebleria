@@ -1,0 +1,61 @@
+<KDTPanelFormat>
+  <PANEL>
+    <PanelLength>632</PanelLength>
+    <PanelWidth>84</PanelWidth>
+    <PanelThickness>15.5</PanelThickness>
+    <PanelName>Trasera de Cajón </PanelName>
+    <PanelOutline>
+      <Vertex>
+        <X1>632</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>632</X1>
+        <Y1>84</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>84</Y1>
+        <Bulge>0</Bulge>
+        <Banding>1</Banding>
+      </Vertex>
+      <Vertex>
+        <X1>0</X1>
+        <Y1>0</Y1>
+        <Bulge>0</Bulge>
+        <Banding>2</Banding>
+        <Description>AlignmentFace</Description>
+        <BandingColor>rgb(255,0,0)</BandingColor>
+        <DescriptionColor>rgb(255,0,0)</DescriptionColor>
+      </Vertex>
+    </PanelOutline>
+  </PANEL>
+  <CAD>
+    <TypeNo>3</TypeNo>
+    <TypeName>Line</TypeName>
+    <PlaneID>0</PlaneID>
+    <BeginX>-4</BeginX>
+    <BeginY>75</BeginY>
+    <EndX>636</EndX>
+    <EndY>75</EndY>
+    <Correction>0</Correction>
+    <Width>18</Width>
+    <Depth>5.5</Depth>
+  </CAD>
+</KDTPanelFormat>
+<!--AUTHOR: Copyright ® Promob Software Solutions
+Promob Studio Start KVA
+Promob: 5.60.46.6
+3DE Render - 2.2.0 - Activated
+Build Closet - 5.5.0.6 - Activated
+New Revest - 1.8.6 - Activated
+Plugin Builder - 1.60.46.2 - Activated
+Plugin Builder Budget - 1.60.46.0 - Activated
+Plugin Cut Pro - 1.60.46.0 - Activated
+Plugin Flexdrill 1200 - 1.60.46.0 - Activated
+Plugin New Promob - 1.0.0 - Activated
+-->
