@@ -17,12 +17,12 @@ Creating a draft quote with an existing, unchanged customer currently invokes a 
 - Lane: ODD; one coherent work unit.
 - Route: delegated direct. Mapping required four or more source/test files, and the implementation crosses non-trivial source and test files. A single bounded writer owns the change.
 - TDD: enabled by the project's explicit strict-TDD instruction. Runner: `pnpm --filter @granete/web exec vitest run src/stores/projectStore.test.ts` (focused `-t` selector for the new regression when suitable). Observe RED before the fix, then GREEN and REFACTOR. Use local/offline dependencies only; report unavailable tooling rather than silently downloading.
-- Forecast: 80–140 authored changed lines, excluding generated files. Delivery strategy: `ask-on-risk`; forecast is below the ~400-line review heuristic. Running count: 54 source/test additions plus deletions before this artifact update.
+- Forecast: 80–140 authored changed lines, excluding generated files. Delivery strategy: `ask-on-risk`; forecast is below the ~400-line review heuristic. Running count: 106 authored additions plus deletions in the implementation commit, including this artifact.
 - RDD: disabled by clone-local setting; ordinary functional checks and independent review still apply. No native review transaction is authorized.
 
 ## Task checklist
 
-- [ ] **T1 — Prevent no-op catalog persistence in draft quote creation.** Add a test that first demonstrates a catalog save for an unchanged existing customer while a quote is created. Make the smallest source change that skips the save for this no-op and preserves a real new-customer save. Run focused checks, inspect the diff, and record one Conventional Commit containing behavior, tests, and this artifact.
+- [x] **T1 — Prevent no-op catalog persistence in draft quote creation.** Add a test that first demonstrates a catalog save for an unchanged existing customer while a quote is created. Make the smallest source change that skips the save for this no-op and preserves a real new-customer save. Run focused checks, inspect the diff, and record one Conventional Commit containing behavior, tests, and this artifact.
 
 ## Acceptance and checks
 
@@ -40,11 +40,11 @@ Creating a draft quote with an existing, unchanged customer currently invokes a 
 - Local dependencies: `pnpm install --offline --frozen-lockfile` succeeded with zero downloads; no lockfile change.
 - RED: `pnpm --filter @granete/web exec vitest run src/stores/projectStore.test.ts -t 'skips catalog persistence for an unchanged customer but saves a new customer'` failed, 1 failed/72 skipped, at `expect(saveCatalog).not.toHaveBeenCalled()`; the spy observed one full-catalog save.
 - GREEN: `pnpm --filter @granete/web exec vitest run src/stores/projectStore.test.ts` passed, 73/73. Refactor/readback: only `createProject` guards the upsert on an appended customer; the test proves no save for an existing customer, one save for a new customer, and quote/customer identity alignment.
-- V0: `git diff --check` passed. `pnpm --filter @granete/web typecheck` passed. No generated API or schema changed.
+- V0: `git diff --check` passed. `pnpm --filter @granete/web typecheck` passed. `python3 scripts/factory_preflight.py --require node pnpm --require-clean` returned `PREFLIGHT_OK_NOT_VERIFIED` at the clean implementation commit. No generated API or schema changed.
 - V1: `pnpm --filter @granete/web test` passed, 45 files and 558 tests. `python3 scripts/verify_affected.py --base origin/main --plan` returned a conservative all-jobs plan because this ODD artifact is an unknown input; unrelated Go/SketchUp/PostgreSQL/browser gates are not claimed from the focused web validation.
 - V2: NOT_RUN. The live React-to-Go browser flow belongs to a running app from another checkout; this isolated worktree was not installed into it, and no live process or model was changed.
 - Rollback boundary: revert only this task's `projectStore.ts` guard and matching `projectStore.test.ts` regression; no storage, backend, SketchUp, or schema change.
-- Commit: pending; source and focused tests will be one work unit.
+- Work-unit commit: `c45f313370ceb54d8d59d51cb1aa9ec6a51153c9` (`fix(web): skip catalog save for unchanged quote customer`), with behavior, tests, and this artifact. This evidence-finalization update records that already-created commit; it adds no behavior.
 - Review and CI: pending; RDD `disabled/unmanaged`.
 
 ## Next step
