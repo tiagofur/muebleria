@@ -3,6 +3,7 @@
  */
 
 import type { HardwareFinishId } from './hardwareFinishes';
+import type { FurnitureParameter } from './smartFurnitureDomain';
 import type {
   AgregadoRigidMember,
   AgregadoVariantSet,
@@ -549,6 +550,9 @@ export interface Module {
   readonly imageUrl?: string;
   readonly hardwareLines: readonly HardwareLine[];
   readonly notes?: string;
+  /** Authoritative typed authoring contract (#784/#874). The storage layer
+   *  round-trips it verbatim (#905); the server owns validation and identity. */
+  readonly parameterDefinitions?: readonly FurnitureParameter[];
 }
 
 export interface DimensionPreset {

@@ -245,6 +245,49 @@ describe('apiMappers', () => {
     expect(round.hardwareLines[0]?.hardwareId).toBe('hw1');
   });
 
+  it('round-trips module parameter_definitions verbatim (#905)', () => {
+    const mod: Module = {
+      id: 'mod-905',
+      code: 'M-905',
+      name: 'Gabinete 905',
+      baseLaborCost: 0,
+      hardwareLines: [],
+      parameterDefinitions: [
+        {
+          name: 'baseJointStations',
+          label: 'Fijaciones base por unión',
+          sortOrder: 10,
+          type: 'number',
+          defaultValue: 3,
+          required: true,
+          unit: 'count',
+          category: 'configuration',
+          integer: true,
+          binding: {
+            version: 1,
+            kind: 'structureRelationship',
+            componentId: 'comp-floor',
+            relationship: {
+              kind: 'floor-side',
+              sourceRole: 'floor-edge',
+              targets: [{ componentId: 'comp-side', role: 'inside-face', face: 'front' }],
+              station: { startMarginMm: 40, endMarginMm: 40 },
+            },
+          },
+        },
+      ],
+    } as unknown as Module;
+    const api = moduleToApi(mod);
+    const definitions = api.parameter_definitions as Record<string, unknown>[];
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0]?.name).toBe('baseJointStations');
+    const binding = definitions[0]?.binding as Record<string, unknown>;
+    expect(binding.kind).toBe('structureRelationship');
+
+    const round = moduleFromApi(api as Record<string, unknown>);
+    expect(round.parameterDefinitions).toEqual(mod.parameterDefinitions);
+  });
+
   it('round-trips structure component spatial overrides (slice 3)', () => {
     const st: Structure = {
       id: 's1',
