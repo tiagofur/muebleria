@@ -6,6 +6,7 @@ require_relative '../../src/granete_for_sketchup/connection/model_binding'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_inspector_bridge'
+require_relative '../../src/granete_for_sketchup/ui/bridges/design_inheritance_bridge'
 
 # #784 R1 — Design Inspector read bridge: the ONLY backend surface this
 # slice touches is GET working-copy. The bridge reads the model binding,
@@ -32,8 +33,9 @@ class DesignInspectorBridgeTest < Minitest::Test
   class FakeService
     attr_reader :calls
 
-    def initialize(working_copy: nil, error: nil)
+    def initialize(working_copy: nil, design_inheritance: nil, error: nil)
       @working_copy = working_copy
+      @design_inheritance = design_inheritance
       @error = error
       @calls = []
     end
@@ -43,6 +45,13 @@ class DesignInspectorBridgeTest < Minitest::Test
       raise @error if @error
 
       @working_copy
+    end
+
+    def get_design_inheritance(design_id)
+      @calls << [:get_design_inheritance, design_id]
+      raise @error if @error
+
+      @design_inheritance
     end
 
     def update_working_copy(_design_id, items:, expected_working_version:, authoring_defaults:)
@@ -90,6 +99,7 @@ class DesignInspectorBridgeTest < Minitest::Test
     end.new
     @bridge = Object.new
     @bridge.extend(Granete::SketchUpExtension::UserInterface::DesignInspectorBridge)
+    @bridge.extend(Granete::SketchUpExtension::UserInterface::DesignInheritanceBridge)
     @bridge.instance_variable_set(:@logger, logger)
     @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(@service))
     @bridge.define_singleton_method(:execute_bridge) do |dialog, method, payload|
@@ -261,5 +271,36 @@ class DesignInspectorBridgeTest < Minitest::Test
     assert_equal 'error', payload['status']
     assert_equal 3, payload['requestId']
     assert_nil payload['authoringDefaults']
+  end
+
+  def test_get_design_inheritance_forwards_summary_and_furniture_definition_id
+    with_model_bound_to(DESIGN_A)
+    summary_entry = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::RoleInheritanceCount.new(
+      role: 'FRONT', items: 3, design_backed: 2, needs_rollout: 1, design_current: 1, overridden: 1
+    )
+    role_entry = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::RoleInheritance.new(
+      role: 'FRONT', mode: 'design', applied_material_id: 'mat-old', design_default_material_id: 'mat-new',
+      needs_rollout: true
+    )
+    item = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::InheritanceItem.new(
+      furniture_instance_id: '51000000-0000-0000-0000-000000000001',
+      furniture_definition_id: 'def-1',
+      inheritance: [role_entry]
+    )
+    projection = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::DesignInheritance.new(
+      design_id: DESIGN_A, project_id: PROJECT, items: [item], inheritance_summary: [summary_entry]
+    )
+    service = FakeService.new(design_inheritance: projection)
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(service))
+
+    @bridge.handle_get_design_inheritance(@dialog, JSON.generate({ 'requestId' => 42, 'designId' => DESIGN_A }))
+
+    payload = pushed_payloads.fetch(0)
+    assert_equal 'ready', payload['status']
+    assert_equal 42, payload['requestId']
+    assert_equal [{ 'role' => 'FRONT', 'items' => 3, 'designBacked' => 2,
+                    'needsRollout' => 1, 'designCurrent' => 1, 'overridden' => 1 }],
+                 payload['inheritanceSummary']
+    assert_equal 'def-1', payload['items'].first['furnitureDefinitionId']
   end
 end

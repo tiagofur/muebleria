@@ -1195,6 +1195,7 @@ class ProjectFurnitureTest < Minitest::Test
                                   'needs_rollout' => 1, 'design_current' => 0, 'overridden' => 1 }],
       'items' => [
         { 'furniture_instance_id' => FI_1,
+          'furniture_definition_id' => DEFINITION_ID,
           'inheritance' => [
             { 'role' => 'INTERIOR', 'mode' => 'design', 'applied_material_id' => 'mat-blanco',
               'design_default_material_id' => 'mat-roble', 'needs_rollout' => true },
@@ -1205,8 +1206,16 @@ class ProjectFurnitureTest < Minitest::Test
     }
     parsed = PF::DesignInheritanceContract.parse!(body)
     assert_equal DESIGN_ID, parsed.design_id
+    assert_equal 1, parsed.inheritance_summary.length
+    summary = parsed.inheritance_summary.first
+    assert_equal 'INTERIOR', summary.role
+    assert_equal 2, summary.items
+    assert_equal 1, summary.needs_rollout
+    assert_equal 1, summary.overridden
+
     item = parsed.items.first
     assert_equal FI_1, item.furniture_instance_id
+    assert_equal DEFINITION_ID, item.furniture_definition_id
     interior = item.inheritance.first
     assert_equal 'design', interior.mode
     assert_equal 'mat-roble', interior.design_default_material_id
@@ -1214,8 +1223,15 @@ class ProjectFurnitureTest < Minitest::Test
     refute item.inheritance.last.needs_rollout
 
     bad_shapes = [
+      body.merge('inheritance_summary' => 'nope'),
+      body.merge('inheritance_summary' => [{ 'role' => '', 'items' => 1, 'design_backed' => 1,
+                                             'needs_rollout' => 0, 'design_current' => 1, 'overridden' => 0 }]),
+      body.merge('inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => -1, 'design_backed' => 0,
+                                             'needs_rollout' => 0, 'design_current' => 0, 'overridden' => 0 }]),
       body.merge('items' => 'nope'),
       body.merge('items' => [{ 'furniture_instance_id' => 'bad', 'inheritance' => [] }]),
+      body.merge('items' => [{ 'furniture_instance_id' => FI_1, 'furniture_definition_id' => '',
+                               'inheritance' => [] }]),
       body.merge('items' => [{ 'furniture_instance_id' => FI_1,
                                'inheritance' => [{ 'role' => 'INTERIOR', 'mode' => 'inherited',
                                                    'applied_material_id' => 'x', 'needs_rollout' => false }] }]),

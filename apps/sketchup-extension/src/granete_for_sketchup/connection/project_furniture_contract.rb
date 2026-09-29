@@ -30,8 +30,11 @@ module Granete
           # value equality client-side).
           RoleInheritance = Struct.new(:role, :mode, :applied_material_id, :design_default_material_id,
                                        :needs_rollout, keyword_init: true)
-          InheritanceItem = Struct.new(:furniture_instance_id, :inheritance, keyword_init: true)
-          DesignInheritance = Struct.new(:design_id, :project_id, :items, keyword_init: true)
+          RoleInheritanceCount = Struct.new(:role, :items, :design_backed, :needs_rollout,
+                                            :design_current, :overridden, keyword_init: true)
+          InheritanceItem = Struct.new(:furniture_instance_id, :inheritance, :furniture_definition_id,
+                                       keyword_init: true)
+          DesignInheritance = Struct.new(:design_id, :project_id, :items, :inheritance_summary, keyword_init: true)
 
           # #784 R4: server-resolved definition-aware effective materials and modes
           EffectiveMaterials = Struct.new(:furniture_definition_id, :material_choices, :material_choice_modes,
@@ -265,6 +268,7 @@ module Granete
         # role keys non-empty.
         module DesignInheritanceContract
           MODES = %w[design override].freeze
+          SUMMARY_FIELDS = %w[items design_backed needs_rollout design_current overridden].freeze
 
           def self.parse!(body)
             raise Contract::ContractError, 'la proyección de herencia debe ser un objeto' unless body.is_a?(Hash)
@@ -275,8 +279,41 @@ module Granete
 
             Contract::DesignInheritance.new(
               design_id: body['design_id'], project_id: body['project_id'],
-              items: body['items'].map { |entry| parse_item!(entry) }
+              items: body['items'].map { |entry| parse_item!(entry) },
+              inheritance_summary: parse_summary(body['inheritance_summary'])
             )
+          end
+
+          def self.parse_summary(summary)
+            return [] if summary.nil?
+            raise Contract::ContractError, 'inheritance_summary debe ser un array' unless summary.is_a?(Array)
+
+            summary.map { |entry| parse_summary_entry!(entry) }
+          end
+
+          def self.parse_summary_entry!(entry)
+            raise Contract::ContractError, 'entrada de inheritance_summary inválida' unless entry.is_a?(Hash)
+
+            role = entry['role']
+            unless role.is_a?(String) && !role.strip.empty?
+              raise Contract::ContractError, 'rol de inheritance_summary vacío'
+            end
+
+            validate_summary_fields!(entry, role)
+            Contract::RoleInheritanceCount.new(
+              role: role, items: entry['items'], design_backed: entry['design_backed'],
+              needs_rollout: entry['needs_rollout'], design_current: entry['design_current'],
+              overridden: entry['overridden']
+            )
+          end
+
+          def self.validate_summary_fields!(entry, role)
+            SUMMARY_FIELDS.each do |field|
+              val = entry[field]
+              unless val.is_a?(Integer) && val >= 0
+                raise Contract::ContractError, "#{field} inválido en inheritance_summary para #{role}"
+              end
+            end
           end
 
           def self.parse_item!(entry)
@@ -293,8 +330,14 @@ module Granete
               Contract::WorkingCopyContract.parse_modes!(entry['material_choice_modes'])
             end
 
+            definition_id = entry['furniture_definition_id']
+            if definition_id && (!definition_id.is_a?(String) || definition_id.strip.empty?)
+              raise Contract::ContractError, 'furniture_definition_id inválido en item'
+            end
+
             Contract::InheritanceItem.new(
               furniture_instance_id: entry['furniture_instance_id'],
+              furniture_definition_id: definition_id,
               inheritance: entry['inheritance'].map { |role_entry| parse_role!(role_entry) }
             )
           end

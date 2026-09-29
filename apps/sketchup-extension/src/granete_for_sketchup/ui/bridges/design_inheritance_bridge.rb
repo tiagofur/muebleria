@@ -37,25 +37,48 @@ module Granete
                            'requestId' => request_id,
                            'status' => 'ready',
                            'designId' => stored.design_id,
-                           'items' => projection.items.map do |item|
-                             {
-                               'furnitureInstanceId' => item.furniture_instance_id,
-                               'roles' => item.inheritance.map do |entry|
-                                 {
-                                   'role' => entry.role,
-                                   'mode' => entry.mode,
-                                   'appliedMaterialId' => entry.applied_material_id,
-                                   'designDefaultMaterialId' => entry.design_default_material_id,
-                                   'needsRollout' => entry.needs_rollout
-                                 }
-                               end
-                             }
-                           end
+                           'inheritanceSummary' => serialize_inheritance_summary(projection.inheritance_summary),
+                           'items' => serialize_items(projection.items)
                          })
         rescue StandardError => e
           @logger.error('design_inheritance_failed', error: e)
           execute_bridge(dialog, 'onDesignInheritance',
                          { 'requestId' => request_id, 'status' => 'error', 'reason' => e.message })
+        end
+
+        def serialize_items(items)
+          items.map do |item|
+            {
+              'furnitureInstanceId' => item.furniture_instance_id,
+              'furnitureDefinitionId' => item.furniture_definition_id,
+              'roles' => serialize_roles(item.inheritance)
+            }
+          end
+        end
+
+        def serialize_roles(roles)
+          roles.map do |entry|
+            {
+              'role' => entry.role,
+              'mode' => entry.mode,
+              'appliedMaterialId' => entry.applied_material_id,
+              'designDefaultMaterialId' => entry.design_default_material_id,
+              'needsRollout' => entry.needs_rollout
+            }
+          end
+        end
+
+        def serialize_inheritance_summary(summary)
+          (summary || []).map do |c|
+            {
+              'role' => c.role,
+              'items' => c.items,
+              'designBacked' => c.design_backed,
+              'needsRollout' => c.needs_rollout,
+              'designCurrent' => c.design_current,
+              'overridden' => c.overridden
+            }
+          end
         end
       end
     end
