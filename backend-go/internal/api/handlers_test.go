@@ -238,11 +238,17 @@ type stubStore struct {
 	updateAmbientReceived     *domain.AmbientMaterial
 	deactivateAmbientCalled   bool
 	deactivateAmbientReceived string
-	// Manufacturing Library (#772 / LIB-1)
-	currentPublishedRelease    *domain.LibraryRelease
-	currentPublishedReleaseErr error
-	releaseByID                map[uuid.UUID]*domain.LibraryRelease
-	getReleaseByIDErr          error
+	// Manufacturing Library (#772 / LIB-1, #773 / LIB-2)
+	currentPublishedRelease           *domain.LibraryRelease
+	currentPublishedReleaseErr        error
+	releaseByID                       map[uuid.UUID]*domain.LibraryRelease
+	getReleaseByIDErr                 error
+	releaseManifestsByID              map[uuid.UUID]*domain.LibraryManifest
+	releaseManifestRawByID            map[uuid.UUID][]byte
+	releaseManifestErr                error
+	resourceBlobsByHash               map[string]*domain.ResourceBlob
+	resourceBlobErr                   error
+	resourceBlobEntitlementCheckFunc  func(releaseID, resourceID uuid.UUID, hash string) (*domain.ResourceBlob, domain.PackageKind, error)
 	// Ambient categories (F086)
 	listAmbientCategories       []domain.AmbientCategory
 	ambientCategoryReturnedByID *domain.AmbientCategory
@@ -1600,6 +1606,43 @@ func (s *stubStore) GetReleaseByID(_ context.Context, id uuid.UUID) (*domain.Lib
 		}
 	}
 	return nil, storage.ErrLibraryReleaseNotFound
+}
+func (s *stubStore) GetReleaseManifest(_ context.Context, releaseID uuid.UUID) (*domain.LibraryManifest, []byte, error) {
+	if s.releaseManifestErr != nil {
+		return nil, nil, s.releaseManifestErr
+	}
+	if s.releaseManifestsByID != nil {
+		if m, ok := s.releaseManifestsByID[releaseID]; ok {
+			raw := s.releaseManifestRawByID[releaseID]
+			if raw == nil {
+				raw, _ = domain.CanonicalizeJSON(m)
+			}
+			return m, raw, nil
+		}
+	}
+	return nil, nil, storage.ErrManifestNotFound
+}
+func (s *stubStore) GetResourceBlob(_ context.Context, sha256 string) (*domain.ResourceBlob, error) {
+	if s.resourceBlobErr != nil {
+		return nil, s.resourceBlobErr
+	}
+	if s.resourceBlobsByHash != nil {
+		if b, ok := s.resourceBlobsByHash[sha256]; ok {
+			return b, nil
+		}
+	}
+	return nil, storage.ErrResourceBlobNotFound
+}
+func (s *stubStore) GetResourceBlobWithEntitlementCheck(_ context.Context, releaseID, resourceID uuid.UUID, hash string) (*domain.ResourceBlob, domain.PackageKind, error) {
+	if s.resourceBlobEntitlementCheckFunc != nil {
+		return s.resourceBlobEntitlementCheckFunc(releaseID, resourceID, hash)
+	}
+	if s.resourceBlobsByHash != nil {
+		if b, ok := s.resourceBlobsByHash[hash]; ok {
+			return b, domain.PackageKindFree, nil
+		}
+	}
+	return nil, "", storage.ErrResourceNotInRelease
 }
 
 // Compras/Almacén picking stubs (Fase 3)

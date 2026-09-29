@@ -2251,3 +2251,39 @@ type LibraryReleaseDetail struct {
 	CreatedAt        string               `json:"createdAt"`
 	UpdatedAt        string               `json:"updatedAt"`
 }
+
+type ManifestAssetRef struct {
+	Kind   string `json:"kind"`
+	Sha256 string `json:"sha256"`
+	Size   int64  `json:"size"`
+}
+
+type ManifestResourceRef struct {
+	Kind           string             `json:"kind"`
+	ID             string             `json:"id"`
+	Revision       string             `json:"revision"`
+	DefinitionHash string             `json:"definitionHash"`
+	PackageKind    string             `json:"packageKind"`
+	Assets         []ManifestAssetRef `json:"assets,omitempty"`
+}
+
+type ManifestUpstreamRef struct {
+	LibraryId *string `json:"libraryId,omitempty"`
+	ReleaseId string  `json:"releaseId"`
+	Version   *string `json:"version,omitempty"`
+}
+
+type LibraryManifest struct {
+	SchemaVersion      int64                 `json:"schemaVersion"`
+	LibraryId          string                `json:"libraryId"`
+	LibraryCode        string                `json:"libraryCode"`
+	LibraryVersion     string                `json:"libraryVersion"`
+	EffectiveReleaseId string                `json:"effectiveReleaseId"`
+	MinPluginVersion   *string               `json:"minPluginVersion,omitempty"`
+	Upstream           *ManifestUpstreamRef  `json:"upstream,omitempty"`
+	ManifestHash       string                `json:"manifestHash"`
+	Resources          []ManifestResourceRef `json:"resources"`
+}
+
+type LibraryResourceBlob struct {
+}

@@ -48,8 +48,10 @@ import type {
   HardwareAssetRevisionGrant,
   HardwareAssetUploadSession,
   Invitation,
+  LibraryManifest,
   LibraryReleaseDetail,
   LibraryReleaseSummary,
+  LibraryResourceBlob,
   LoginRequest,
   LoginResponse,
   LogoutRequest,
@@ -282,4 +284,6 @@ export abstract class GeneratedGraneteApiClient {
   getDesignCommercialProjection(token: string, projectId: string, designId: string, signal?: AbortSignal): Promise<CommercialProjection> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/commercial-projection`, { schema: "CommercialProjection", token, signal }); }
   getStandardCurrentRelease(token: string, signal?: AbortSignal): Promise<LibraryReleaseSummary> { return this.request("GET", "/manufacturing-libraries/standard/releases/current", { schema: "LibraryReleaseSummary", token, signal }); }
   getStandardReleaseById(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryReleaseDetail> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}`, { schema: "LibraryReleaseDetail", token, signal }); }
+  getStandardReleaseManifest(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryManifest> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/manifest`, { schema: "LibraryManifest", token, signal }); }
+  getStandardResourceBlob(token: string, releaseId: string, resourceId: string, hash: string, signal?: AbortSignal): Promise<LibraryResourceBlob> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/resources/${encodeURIComponent(resourceId)}/blobs/${encodeURIComponent(hash)}`, { schema: "LibraryResourceBlob", token, signal }); }
 }

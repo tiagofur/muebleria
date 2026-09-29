@@ -4757,6 +4757,104 @@
           }
         }
       }
+    },
+    "/manufacturing-libraries/standard/releases/{releaseId}/manifest": {
+      "get": {
+        "operationId": "getStandardReleaseManifest",
+        "summary": "Get the deterministic manifest for a standard library release",
+        "description": "Returns the complete, deterministic, content-addressed manifest of a published Granete Standard library release. [#773 P1/LIB-2]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Release manifest",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryManifest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Release or manifest not found"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/standard/releases/{releaseId}/resources/{resourceId}/blobs/{hash}": {
+      "get": {
+        "operationId": "getStandardResourceBlob",
+        "summary": "Download a content-addressed JSON definition blob",
+        "description": "Downloads the canonical JSON definition blob for a resource referenced by a published release. Server enforces entitlement: Free plan callers cannot download standard-only resource blobs even if the hash is known. [#773 P1/LIB-2]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "resourceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Canonical resource JSON blob",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryResourceBlob"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden: entitlement insufficient for standard package resource"
+          },
+          "404": {
+            "description": "Resource blob not found in release"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13237,6 +13335,147 @@
             "format": "date-time"
           }
         }
+      },
+      "ManifestAssetRef": {
+        "type": "object",
+        "required": [
+          "kind",
+          "sha256",
+          "size"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          }
+        }
+      },
+      "ManifestResourceRef": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "revision",
+          "definitionHash",
+          "packageKind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "definitionHash": {
+            "type": "string"
+          },
+          "packageKind": {
+            "type": "string",
+            "enum": [
+              "free",
+              "standard"
+            ]
+          },
+          "assets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManifestAssetRef"
+            }
+          }
+        }
+      },
+      "ManifestUpstreamRef": {
+        "type": "object",
+        "required": [
+          "releaseId"
+        ],
+        "properties": {
+          "libraryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "LibraryManifest": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "libraryId",
+          "libraryCode",
+          "libraryVersion",
+          "effectiveReleaseId",
+          "manifestHash",
+          "resources"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer"
+          },
+          "libraryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "libraryCode": {
+            "type": "string"
+          },
+          "libraryVersion": {
+            "type": "string"
+          },
+          "effectiveReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "minPluginVersion": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upstream": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ManifestUpstreamRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manifestHash": {
+            "type": "string"
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManifestResourceRef"
+            }
+          }
+        }
+      },
+      "LibraryResourceBlob": {
+        "type": "object",
+        "description": "Canonical content-addressed JSON definition blob",
+        "additionalProperties": true
       }
     }
   }
