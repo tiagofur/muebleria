@@ -343,6 +343,69 @@ module Granete
                      'the restored role carries the design lineage'
       end
 
+      # #784 R3b — Draft multi-field Apply through the REAL
+      #    HostMutationBridge build_update_command path: the dialog's single
+      #    [Aplicar] emits ONE payload carrying the WHOLE pending intent (a
+      #    parameter edit + a picked material declaring mode=override); the
+      #    coordinator must commit it as EXACTLY ONE host operation whose
+      #    undo reverts EVERYTHING — parameters and materials together.
+      def test_draft_apply_multi_field_intent_commits_one_operation_and_undo_reverts_all
+        initial_entity = place_initial_furniture
+        # Seed the persisted state the draft was anchored to: an override
+        # choice the Apply will replace explicitly.
+        metadata = metadata_store.read(initial_entity)
+        metadata['intent']['materialChoices'] = { 'INTERIOR' => 'mat-moscato' }
+        metadata['intent']['materialChoiceModes'] = { 'INTERIOR' => 'override' }
+        metadata_store.write(initial_entity, metadata)
+
+        starts_before = @transaction_observer.starts
+        commits_before = @transaction_observer.commits
+
+        payload = {
+          'instanceId' => metadata_store.read(initial_entity).dig('identity', 'instanceRef'),
+          'definitionId' => 'kitchen-base-standard',
+          'parameters' => { 'widthMm' => 800, 'heightMm' => 720, 'depthMm' => 560, 'shelfCount' => 3 },
+          'materialChoices' => { 'INTERIOR' => 'mat-blanco' },
+          'materialChoiceModes' => { 'INTERIOR' => 'override' }
+        }
+        command = mutation_bridge.send(:build_update_command, payload, nil)
+        flunk 'draft Apply command must build against the local catalog' unless command
+
+        outcome = build_coordinator.execute(command)
+
+        assert outcome.committed?, "draft Apply expected to commit, got #{outcome.outcome}: #{outcome.reason}"
+        assert_equal 1, @transaction_observer.starts - starts_before,
+                     'the whole multi-field Apply must be EXACTLY ONE start_operation'
+        assert_equal 1, @transaction_observer.commits - commits_before,
+                     'the whole multi-field Apply must be EXACTLY ONE commit_operation'
+
+        current_entity = granete_furniture_instances.first
+        metadata_after = metadata_store.read(current_entity)
+        assert_equal 800, metadata_after.dig('intent', 'parameters', 'widthMm'),
+                     'the parameter half of the draft materialized'
+        assert_equal 3, metadata_after.dig('intent', 'parameters', 'shelfCount'),
+                     'every drafted parameter materialized'
+        assert_equal 'mat-blanco',
+                     metadata_after.dig('intent', 'materialChoices', 'INTERIOR'),
+                     'the material half of the draft materialized'
+        assert_equal 'override',
+                     metadata_after.dig('intent', 'materialChoiceModes', 'INTERIOR'),
+                     'the picked role carries the explicit override lineage'
+
+        # ONE undo reverts the WHOLE Apply — parameters and materials.
+        Sketchup.send_action('editUndo:')
+        restored = granete_furniture_instances.first
+        refute_nil restored, 'undo must restore the previous furniture'
+        restored_metadata = metadata_store.read(restored)
+        assert_equal 600, restored_metadata.dig('intent', 'parameters', 'widthMm'),
+                     'undo reverts the parameter half'
+        assert_equal 1, restored_metadata.dig('intent', 'parameters', 'shelfCount'),
+                     'undo reverts every drafted parameter'
+        assert_equal 'mat-moscato',
+                     restored_metadata.dig('intent', 'materialChoices', 'INTERIOR'),
+                     'undo reverts the material half'
+      end
+
       private
 
       def mutation_bridge

@@ -7,7 +7,16 @@
 //   dispatch) and the furniture Inspector rendering
 // - the Inspector parameter/material working snapshots (inspectorParams,
 //   inspectorMaterialChoices) and the capability-driven Inspector actions
-//   (update, delete, material-choice apply)
+//   (delete, material-choice routing)
+// - #784 R3b: the furniture edit DRAFT — param edits and material picks
+//   accumulate locally against a confirmed base (confirmedBase, the render
+//   anchor of the same spirit as R2's draftBase); the footer counts the
+//   honest pending changes and ONE [Aplicar] emits ONE mutation with the
+//   complete intent (parameters + materialChoices + materialChoiceModes:
+//   override for picks, design only for restores). [Descartar] is
+//   read-only. The draft dies on a real selection change, a real binding
+//   change (#906 spirit) and every fail-closed lane; a failed Apply
+//   preserves it with an honest message.
 // - Inspector bridge result handling (onUpdateResult/onDeleteResult) and
 //   the hardware catalog slice (catalogHardware: the Inspector hardware
 //   view is its only renderer; setCatalog object branch updates it, the
@@ -67,6 +76,19 @@
   var inspectorMaterialChoices = {};
   var inspectorParams = {};
 
+  // #784 R3b: the local pending draft. `params`/`choices` carry the edited
+  // values, `modes` only the explicit restore lineage markers (role →
+  // "design"); `base` is the confirmed snapshot the edits are anchored to
+  // and `instanceRef` the item the draft belongs to. `confirmedBase` is the
+  // same anchor kept fresh by every render/success so a new draft never
+  // pins stale values. `applyInFlight` is the one-Apply-one-request guard;
+  // `bindingIdentity` implements the #906 rule: only a REAL binding change
+  // invalidates.
+  var draft = null;
+  var confirmedBase = { parameters: {}, materialChoices: {} };
+  var applyInFlight = false;
+  var bindingIdentity = null;
+
   // Injected by the dialog bootstrap before any render: shared helpers
   // stay single-implementation in dialog.html (the param/summary/toast/
   // icon/tab/capability helpers are shared with the Configurator and the
@@ -111,7 +133,12 @@
   var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
   var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
   var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
-  var btnUpdate = document.getElementById("btn-update");
+  // #784 R3b: the draft footer (pending count + Descartar + Aplicar) lives
+  // inside the mutation fieldset — the native fail-closed switch covers it.
+  var inspectorFooter = document.getElementById("inspector-footer");
+  var inspectorPending = document.getElementById("inspector-pending");
+  var btnDiscard = document.getElementById("btn-discard");
+  var btnApply = document.getElementById("btn-apply");
   var btnDelete = document.getElementById("btn-delete");
   var inspectorDeleteBlocker = document.getElementById("inspector-delete-blocker");
 
@@ -143,6 +170,230 @@
     inspectorSummaryDims.textContent = w + " × " + h + " × " + d + " mm";
     inspectorSummaryParts.textContent = deps.estimatedPartsLabel(inspectorDef, inspectorParams);
   }
+
+  // ------------------------------------------------------------------
+  // #784 R3b — the furniture edit draft. Local-only: nothing touches the
+  // host or the backend while the user drafts. One [Aplicar] emits ONE
+  // mutation with the complete intent; [Descartar] is read-only.
+  // ------------------------------------------------------------------
+
+  function copyMap(map) {
+    var copy = {};
+    for (var key in (map || {})) copy[key] = map[key];
+    return copy;
+  }
+
+  function sameMap(a, b) {
+    a = a || {};
+    b = b || {};
+    var keys = Object.keys(a);
+    if (keys.length !== Object.keys(b).length) return false;
+    for (var i = 0; i < keys.length; i++) {
+      if (a[keys[i]] !== b[keys[i]]) return false;
+    }
+    return true;
+  }
+
+  // Native fail-closed gating of the mutation controls (#476): the same
+  // rule that disables the fieldset disables the footer buttons.
+  function mutationGating() {
+    var multi = selectedContext && selectedContext.selectionCount &&
+      selectedContext.selectionCount > 1;
+    var canEdit = selectedContext && deps.capabilityEnabled(selectedContext, "canEditParameters");
+    return Boolean(multi || !canEdit);
+  }
+
+  // Honest pending count: a param/choice entry dissolves back to its base
+  // value; a restore entry (explicit mode=design statement) always counts —
+  // it is a lineage correction even when the value coincides.
+  function draftPendingCount() {
+    if (!draft) return 0;
+    var pending = 0;
+    for (var name in draft.params) {
+      if (draft.params[name] !== draft.base.parameters[name]) pending += 1;
+    }
+    for (var role in draft.choices) {
+      if (draft.modes[role]) {
+        pending += 1;
+      } else if (draft.choices[role] !== draft.base.materialChoices[role]) {
+        pending += 1;
+      }
+    }
+    return pending;
+  }
+
+  function ensureDraft() {
+    if (draft) return;
+    draft = {
+      instanceRef: selectedContext ? selectedContext.furnitureInstanceRef : null,
+      base: {
+        parameters: copyMap(confirmedBase.parameters),
+        materialChoices: copyMap(confirmedBase.materialChoices)
+      },
+      params: {},
+      choices: {},
+      modes: {}
+    };
+  }
+
+  function updateInspectorFooter() {
+    if (!inspectorFooter) return;
+    var pending = draftPendingCount();
+    if (pending === 0) {
+      // The draft dissolved back to the confirmed state: drop it entirely.
+      draft = null;
+      inspectorFooter.style.display = "none";
+      btnApply.disabled = mutationGating();
+      return;
+    }
+    inspectorFooter.style.display = "block";
+    inspectorPending.textContent =
+      pending === 1 ? "1 cambio pendiente" : pending + " cambios pendientes";
+    var busy = applyInFlight ||
+      (window.GraneteMutation && typeof window.GraneteMutation.phase === "function" &&
+       window.GraneteMutation.phase() === "applying_host_mutation");
+    btnApply.disabled = busy || mutationGating();
+    btnDiscard.disabled = applyInFlight;
+  }
+
+  function recordParamEdit(name, val) {
+    if (!selectedContext || selectedContext.kind !== "furniture") return;
+    if (selectedContext.selectionCount && selectedContext.selectionCount > 1) return;
+    if (!deps.capabilityEnabled(selectedContext, "canEditParameters")) return;
+    ensureDraft();
+    draft.params[name] = val;
+    updateInspectorFooter();
+  }
+
+  // An explicit material pick is an override in the making; it supersedes
+  // any restore marker of the same role (the last action wins).
+  function recordMaterialPick(role, id) {
+    if (!selectedContext || selectedContext.kind !== "furniture") return;
+    if (selectedContext.selectionCount && selectedContext.selectionCount > 1) return;
+    if (!deps.capabilityEnabled(selectedContext, "canEditMaterialRoles")) return;
+    ensureDraft();
+    draft.choices[role] = id;
+    delete draft.modes[role];
+    updateInspectorFooter();
+  }
+
+  // R3 restore semantics, now inside the draft: the CURRENT design default
+  // is materialized as a value plus the explicit design lineage statement.
+  function recordRoleRestore(role, designDefaultId) {
+    if (!selectedContext || selectedContext.kind !== "furniture") return;
+    if (selectedContext.selectionCount && selectedContext.selectionCount > 1) return;
+    if (!deps.capabilityEnabled(selectedContext, "canEditMaterialRoles")) return;
+    ensureDraft();
+    draft.choices[role] = designDefaultId;
+    draft.modes[role] = "design";
+    updateInspectorFooter();
+  }
+
+  function paramChangeHandler() {
+    return function (name, val, unit) {
+      inspectorParams[name] = val;
+      recordParamEdit(name, val);
+      updateInspectorSummary();
+      validateInteractiveClient(inspectorDef, inspectorParams);
+    };
+  }
+
+  function renderInspectorMaterialSelectors() {
+    window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
+      inspectorMaterialChoices, function (role, id, scope) {
+        if (scope === "project" || scope === "project_default") {
+          window.GraneteUI.materialRoles.setProjectDefaultMaterial(role, id);
+        }
+        inspectorMaterialChoices[role] = id;
+        recordMaterialPick(role, id);
+      }, { context: "inspector", instanceId: selectedContext ? selectedContext.furnitureInstanceRef : null,
+           definitionId: selectedContext ? selectedContext.furnitureDefinitionId : null });
+  }
+
+  // Repaints the working snapshots from the CONFIRMED context (never from
+  // a draft) and re-anchors confirmedBase — used by Descartar and by every
+  // honest draft invalidation.
+  function repaintConfirmedSnapshots() {
+    if (!selectedContext || selectedContext.kind !== "furniture" || !inspectorDef ||
+        !deps.capabilityEnabled(selectedContext, "canEditParameters")) return;
+    inspectorParams = Object.assign({}, deps.getDefaultParams(inspectorDef), selectedContext.parameters || {});
+    inspectorMaterialChoices = Object.assign({},
+      window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {});
+    confirmedBase = { parameters: copyMap(inspectorParams), materialChoices: copyMap(inspectorMaterialChoices) };
+    deps.renderParamForm(inspectorParamsContainer, inspectorDef, inspectorParams, paramChangeHandler());
+    if (deps.capabilityEnabled(selectedContext, "canEditMaterialRoles")) {
+      renderInspectorMaterialSelectors();
+    }
+    updateInspectorSummary();
+  }
+
+  // [Descartar]: read-only — clears the LOCAL draft and repaints the
+  // confirmed values. Zero mutations of any kind.
+  function discardDraft() {
+    if (applyInFlight) return;
+    draft = null;
+    repaintConfirmedSnapshots();
+    updateInspectorFooter();
+  }
+
+  // [Aplicar]: the ONE mutation of the whole draft. The intent carries the
+  // full working snapshots plus the explicit lineage statements (override
+  // for picks, design for restores; roles untouched by the draft are never
+  // mentioned). Guards: in-flight, capability, multi-selection, empty
+  // draft. A busy controller preserves the draft and says so.
+  function applyDraft() {
+    if (applyInFlight) return; // one user Apply = exactly one request
+    if (!selectedContext || selectedContext.kind !== "furniture") return;
+    if (selectedContext.selectionCount && selectedContext.selectionCount > 1) return;
+    if (!deps.capabilityEnabled(selectedContext, "canEditParameters")) return;
+    if (draftPendingCount() === 0) return;
+    var payload = {
+      instanceId: selectedContext.furnitureInstanceRef,
+      definitionId: selectedContext.furnitureDefinitionId,
+      parameters: copyMap(inspectorParams),
+      materialChoices: copyMap(inspectorMaterialChoices)
+    };
+    var modes = {};
+    for (var role in draft.choices) {
+      if (draft.modes[role]) {
+        modes[role] = draft.modes[role];
+      } else if (draft.choices[role] !== draft.base.materialChoices[role]) {
+        modes[role] = "override";
+      }
+    }
+    if (Object.keys(modes).length > 0) payload.materialChoiceModes = modes;
+    appliedRef = selectedContext.furnitureInstanceRef;
+    applyInFlight = true;
+    btnApply.disabled = true;
+    btnApply.innerHTML = deps.icon("clock") + "<span>Aplicando…</span>";
+    btnDiscard.disabled = true;
+    var submitted = "unavailable";
+    if (window.GraneteMutation) {
+      submitted = window.GraneteMutation.submitUpdate(payload, selectedContext);
+    }
+    if (submitted === "busy") {
+      applyInFlight = false;
+      btnApply.innerHTML = deps.icon("save") + "<span>Aplicar</span>";
+      btnDiscard.disabled = false;
+      updateInspectorFooter();
+      deps.showToast("error", "Ya hay una mutación en curso.");
+      return;
+    }
+    if (submitted === "unavailable") {
+      if (window.sketchup && window.sketchup.update_furniture) {
+        window.sketchup.update_furniture(JSON.stringify(payload));
+      } else {
+        setTimeout(function () {
+          window.GraneteDialog.onUpdateResult({ success: true, name: selectedContext.display ? selectedContext.display.name : "" });
+        }, 500);
+      }
+    }
+  }
+
+  // The identity the in-flight Apply was built for: a selection switch
+  // while the mutation flies must never stamp the result onto the new
+  // item's context.
+  var appliedRef = null;
 
   // ------------------------------------------------------------------
   // Contextual inspector (#476): renders the canonical SelectionContext
@@ -633,9 +884,9 @@
     inspectorEditBlockerReason.textContent = blockerReason || "La edición no está disponible para este mueble.";
     inspectorParamsCard.style.display = canEditParams ? "block" : "none";
 
-    // One native switch for params + materials + both buttons.
+    // One native switch for params + materials + the draft footer.
     inspectorEditFieldset.disabled = Boolean(multi || !canEditParams);
-    btnUpdate.disabled = Boolean(!canEditParams || multi);
+    btnApply.disabled = Boolean(multi || !canEditParams);
     btnDelete.disabled = Boolean(!deps.capabilityEnabled(context, "canDelete") || multi);
 
     // A denied canDelete explains itself with the Ruby-provided reason;
@@ -651,30 +902,44 @@
     if (!canEditParams) {
       inspectorParams = {};
       inspectorMaterialChoices = {};
+      draft = null; // fail-closed lane: no draft survives a denied render
       inspectorMaterialsCard.style.display = "none";
+      updateInspectorFooter();
       return;
     }
     inspectorMaterialsCard.style.display = canEditMaterials ? "block" : "none";
-    if (!canEditMaterials) {
-      inspectorMaterialChoices = {};
+
+    // #784 R3b: draft ownership check. The fresh context-seeded snapshots
+    // decide whether an existing draft still belongs to THIS item and THIS
+    // confirmed state — a diverged republish (the server moved on) kills
+    // the draft honestly instead of rebasing it silently.
+    var freshParams = Object.assign({}, (def ? deps.getDefaultParams(def) : {}), context.parameters || {});
+    var freshChoices = canEditMaterials
+      ? Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(def), context.materialChoices || {})
+      : {};
+    if (draft && (!context || context.kind !== "furniture" ||
+                  context.furnitureInstanceRef !== draft.instanceRef ||
+                  !sameMap(freshParams, draft.base.parameters) ||
+                  !sameMap(freshChoices, draft.base.materialChoices))) {
+      draft = null;
+    }
+    confirmedBase = { parameters: copyMap(freshParams), materialChoices: copyMap(freshChoices) };
+    inspectorParams = freshParams;
+    inspectorMaterialChoices = freshChoices;
+    if (draft) {
+      // Surviving draft (identical same-item republish): re-apply the
+      // pending values so the controls keep showing the drafted state.
+      for (var draftedParam in draft.params) inspectorParams[draftedParam] = draft.params[draftedParam];
+      for (var draftedRole in draft.choices) inspectorMaterialChoices[draftedRole] = draft.choices[draftedRole];
     }
 
-    inspectorParams = Object.assign({}, (def ? deps.getDefaultParams(def) : {}), context.parameters || {});
-    inspectorMaterialChoices = Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(def), context.materialChoices || {});
-
-    deps.renderParamForm(inspectorParamsContainer, def, inspectorParams, function (name, val, unit) {
-      inspectorParams[name] = val;
-      updateInspectorSummary();
-      validateInteractiveClient(def, inspectorParams);
-    });
+    deps.renderParamForm(inspectorParamsContainer, def, inspectorParams, paramChangeHandler());
     if (canEditMaterials) {
-      window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, def,
-        inspectorMaterialChoices, function (role, id) {
-          inspectorMaterialChoices[role] = id;
-        });
+      renderInspectorMaterialSelectors();
     }
 
     updateInspectorSummary();
+    updateInspectorFooter();
   }
 
   // #471 R2: the batch Apply button lives in the batch view; it is wired
@@ -684,62 +949,24 @@
     btnBatchApply.addEventListener("click", applyBatchSelections);
   }
 
-  btnUpdate.addEventListener("click", function () {
-    if (!selectedContext || selectedContext.kind !== "furniture") return;
-    if (!deps.capabilityEnabled(selectedContext, "canEditParameters")) return;
-    if (selectedContext.selectionCount > 1) return;
-    btnUpdate.disabled = true;
-    btnUpdate.innerHTML = deps.icon("clock") + "<span>Actualizando…</span>";
+  // #784 R3b: the draft footer buttons. Aplicar = the ONE mutation of the
+  // draft; Descartar = read-only discard.
+  btnApply.addEventListener("click", applyDraft);
+  btnDiscard.addEventListener("click", discardDraft);
 
-    var payload = {
-      instanceId: selectedContext.furnitureInstanceRef,
-      definitionId: selectedContext.furnitureDefinitionId,
-      parameters: inspectorParams,
-      materialChoices: inspectorMaterialChoices
-    };
-
-    // #498: managed edits ride the shared mutation controller —
-    // explicit state machine, one correlated command, double-submit
-    // guard. The legacy direct call remains as fallback when the
-    // runtime modules are not loaded.
-    var submitted = "unavailable";
-    if (window.GraneteMutation) {
-      submitted = window.GraneteMutation.submitUpdate(payload, selectedContext);
-    }
-    if (submitted === "unavailable" && window.sketchup && window.sketchup.update_furniture) {
-      window.sketchup.update_furniture(JSON.stringify(payload));
-    } else if (submitted === "unavailable") {
-      setTimeout(function () {
-        window.GraneteDialog.onUpdateResult({ success: true, name: selectedContext.display ? selectedContext.display.name : "" });
-      }, 500);
-    }
-  });
-
-  // #784 R3: Restaurar valor del diseño — materializes the current Design
-  // default for the role and declares mode=design, riding the SAME
-  // authoritative path as any furniture edit (resolve → ONE SketchUp
-  // operation → rebuild → metadata). Never a paint-only change and never
-  // inferred from value equality: the mode travels in the payload.
+  // #784 R3b: Restaurar valor del diseño — lands in the LOCAL draft with
+  // the explicit design lineage marker; the single [Aplicar] materializes
+  // it through the SAME authoritative path as any furniture edit (resolve
+  // → ONE SketchUp operation → rebuild → metadata). Never a paint-only
+  // change and never inferred from value equality: the mode travels in the
+  // Apply payload.
   function applyRoleRestore(instanceId, role, designDefaultId) {
     if (!selectedContext || selectedContext.kind !== "furniture") return;
     if (selectedContext.furnitureInstanceRef !== instanceId) return;
     if (!deps.capabilityEnabled(selectedContext, "canEditMaterialRoles")) return;
-    var payload = {
-      instanceId: selectedContext.furnitureInstanceRef,
-      definitionId: selectedContext.furnitureDefinitionId,
-      parameters: inspectorParams,
-      materialChoices: Object.assign({}, inspectorMaterialChoices),
-      materialChoiceModes: {}
-    };
-    payload.materialChoices[role] = designDefaultId;
-    payload.materialChoiceModes[role] = "design";
-    var submitted = "unavailable";
-    if (window.GraneteMutation) {
-      submitted = window.GraneteMutation.submitUpdate(payload, selectedContext);
-    }
-    if (submitted === "unavailable" && window.sketchup && window.sketchup.update_furniture) {
-      window.sketchup.update_furniture(JSON.stringify(payload));
-    }
+    recordRoleRestore(role, designDefaultId);
+    inspectorMaterialChoices[role] = designDefaultId;
+    renderInspectorMaterialSelectors();
   }
 
   // Destructive action guard: first click arms the button, second click
@@ -784,18 +1011,24 @@
   // delegation with unchanged names and payloads.
   function onUpdateResult(result) {
     requireDeps();
-    btnUpdate.disabled = !deps.capabilityEnabled(selectedContext, "canEditParameters") ||
-      (selectedContext && selectedContext.selectionCount > 1);
-    btnUpdate.innerHTML = deps.icon("save") + "<span>Actualizar Mueble</span>";
+    applyInFlight = false;
+    btnApply.innerHTML = deps.icon("save") + "<span>Aplicar</span>";
+    btnDiscard.disabled = false;
     if (result && result.success) {
       var detail = typeof result.component_count === "number" && result.component_count > 0
         ? " — " + result.component_count + " componente" + (result.component_count === 1 ? "" : "s")
         : "";
       deps.showToast("success", "✓ Mueble " + (result.name || "") + " actualizado in-place" + detail + ".");
-      if (selectedContext) {
+      // Only the item the Apply was built for absorbs the result; a
+      // selection switch mid-flight never gets the old item's values.
+      if (selectedContext && selectedContext.kind === "furniture" &&
+          selectedContext.furnitureInstanceRef === appliedRef) {
         selectedContext.parameters = Object.assign({}, inspectorParams);
         selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
       }
+      confirmedBase = { parameters: copyMap(inspectorParams), materialChoices: copyMap(inspectorMaterialChoices) };
+      draft = null; // confirmed: the draft is done
+      updateInspectorFooter();
       // #784 R3 final review: the authoritative projection (server
       // material_choice_modes) must be re-read after any successful
       // furniture mutation — the badge never infers mode changes locally.
@@ -805,29 +1038,22 @@
       }
     } else {
       deps.showToast("error", deps.parameterIssueMessage(result, "No se pudo actualizar el mueble."));
-      // Rollback in-memory inspector state to last confirmed values from selectedContext
-      if (selectedContext && inspectorDef) {
-        inspectorParams = Object.assign({}, (inspectorDef ? deps.getDefaultParams(inspectorDef) : {}), selectedContext.parameters || {});
-        inspectorMaterialChoices = Object.assign({}, window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef), selectedContext.materialChoices || {});
-        deps.renderParamForm(inspectorParamsContainer, inspectorDef, inspectorParams, function (name, val, unit) {
-          inspectorParams[name] = val;
-          updateInspectorSummary();
-          validateInteractiveClient(inspectorDef, inspectorParams);
-        });
-        window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
-          inspectorMaterialChoices, function (role, id, s) {
-            inspectorMaterialChoices[role] = id;
-            if (s === "project" || s === "project_default") {
-              window.GraneteUI.materialRoles.setProjectDefaultMaterial(role, id);
-            }
-          }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
-        updateInspectorSummary();
-      }
+      // #784 R3b: the draft is PRESERVED on failure — the drafted values
+      // stay on screen and the footer keeps counting. No silent rollback
+      // repaint; the user fixes or discards with full information.
+      updateInspectorFooter();
     }
   }
 
   function onSelectionChange(context) {
     requireDeps();
+    // #784 R3b: ANY real change of selection (another item, another kind,
+    // null) kills the draft — the safest default; only an identical
+    // same-item republish keeps it (checked at render time).
+    if (draft && (!context || context.kind !== "furniture" ||
+                  context.furnitureInstanceRef !== draft.instanceRef)) {
+      draft = null;
+    }
     selectedContext = context || null;
     // #498: the shared store owns selection truth for downstream
     // runtime surfaces (#466–#468); the legacy variable stays as the
@@ -846,6 +1072,21 @@
     if (managed && (currentTabId === "inspector" || !window.GraneteUI.configurator.hasActiveDefinition())) {
       deps.switchTab("inspector");
     }
+  }
+
+  // #784 R3b: binding lifecycle seam (#906 spirit) — only a REAL change of
+  // the binding identity (connected design/project or unbound) invalidates
+  // the draft; same-binding refreshes never do.
+  function onBindingStatus(status) {
+    var binding = (status && status.binding) || {};
+    var connected = !!(status && status.state === "connected" && binding.designId);
+    var identity = connected ? binding.designId + "|" + (binding.projectId || "") : "unbound";
+    if (identity === bindingIdentity) return;
+    bindingIdentity = identity;
+    if (!draft) return;
+    draft = null;
+    repaintConfirmedSnapshots();
+    updateInspectorFooter();
   }
 
   // "Granete: editar en el panel" (menú contextual de una selección
@@ -877,35 +1118,11 @@
         deps.capabilityEnabled(selectedContext, "canEditMaterialRoles") && !(selectedContext.selectionCount > 1);
     if (isInspectorTarget && selectedContext && selectedContext.kind === "furniture" && inspectorDef && materialsEditable && (!payload.instanceId || payload.instanceId === selectedContext.furnitureInstanceRef)) {
       if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
+      // #784 R3b: the pick lands in the LOCAL draft — no immediate
+      // mutation; the footer counts it and the single [Aplicar] emits it.
       inspectorMaterialChoices[role] = materialId;
-
-      window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard, inspectorMaterialsContainer, inspectorDef,
-        inspectorMaterialChoices, function (r, id, s) {
-          inspectorMaterialChoices[r] = id;
-          if (s === "project" || s === "project_default") {
-            window.GraneteUI.materialRoles.setProjectDefaultMaterial(r, id);
-          }
-        }, { context: "inspector", instanceId: selectedContext.furnitureInstanceRef, definitionId: selectedContext.furnitureDefinitionId });
-      updateInspectorSummary();
-
-      var updatePayload = {
-        instanceId: selectedContext.furnitureInstanceRef,
-        definitionId: selectedContext.furnitureDefinitionId,
-        parameters: inspectorParams,
-        materialChoices: inspectorMaterialChoices
-      };
-
-      if (window.sketchup && window.sketchup.update_furniture) {
-        btnUpdate.disabled = true;
-        btnUpdate.innerHTML = deps.icon("clock") + "<span>Actualizando…</span>";
-        window.sketchup.update_furniture(JSON.stringify(updatePayload));
-      } else {
-        var mat = window.GraneteUI.materialRoles.materialById(materialId);
-        var toastMsg = isProjectScope
-          ? "✓ Acabado temporal de sesión: " + (mat ? mat.name : materialId)
-          : "✓ Acabado actualizado: " + (mat ? mat.name : materialId);
-        deps.showToast("success", toastMsg);
-      }
+      recordMaterialPick(role, materialId);
+      renderInspectorMaterialSelectors();
     } else if (isConfiguratorTarget && window.GraneteUI.configurator.hasActiveDefinition()) {
       // If configuring a module in the library before inserting —
       // the configurator snapshot/renderer live in
@@ -948,6 +1165,7 @@
     onBatchUpdateResult: onBatchUpdateResult,
     onDeleteResult: onDeleteResult,
     onMaterialChoiceApplied: onMaterialChoiceApplied,
+    onBindingStatus: onBindingStatus,
     activateInspectorTab: activateInspectorTab,
     // Read-only accessors consumed by the bootstrap wiring (material
     // roles context payload fallback; inline manufacturing/preflight
@@ -957,6 +1175,7 @@
     // arrive while the lane is empty re-render via this seam).
     rerender: function () { renderInspector(); },
     // #784 R3: the restore action target (called from the role block).
+    // #784 R3b: the restore lands in the draft (mode design).
     applyRoleRestore: function (instanceId, role, designDefaultId) {
       applyRoleRestore(instanceId, role, designDefaultId);
     },

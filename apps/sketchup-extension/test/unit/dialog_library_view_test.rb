@@ -180,12 +180,15 @@ class DialogLibraryViewTest < Minitest::Test
     assert_includes @html_content, 'id="inspector-actionbar"'
     assert_includes @html_content, 'class="action-dock"'
     assert_includes @html_content, 'id="inspector-summary-dims"'
-    # btn-update dentro del fieldset del inspector; btn-delete después de cerrarlo.
+    # #784 R3b: el footer del draft (Aplicar/Descartar) vive dentro del
+    # fieldset del inspector; btn-delete después de cerrarlo.
     fieldset_open = @html_content.index('id="inspector-edit-fieldset"')
     fieldset_close = @html_content.index('</fieldset>', fieldset_open)
-    update_pos = @html_content.index('id="btn-update"', fieldset_open)
+    apply_pos = @html_content.index('id="btn-apply"', fieldset_open)
+    discard_pos = @html_content.index('id="btn-discard"', fieldset_open)
     delete_pos = @html_content.index('id="btn-delete"', fieldset_open)
-    assert update_pos < fieldset_close, 'btn-update pertenece al fieldset de mutación'
+    assert apply_pos < fieldset_close, 'btn-apply pertenece al fieldset de mutación'
+    assert discard_pos < fieldset_close, 'btn-discard pertenece al fieldset de mutación'
     assert fieldset_close < delete_pos, 'btn-delete queda fuera del fieldset (boundary de capability)'
   end
 
@@ -339,7 +342,9 @@ class DialogLibraryViewTest < Minitest::Test
     # configurador; el del inspector vive en el módulo del Inspector
     # (#848 C4.7).
     assert_includes @configurator_js, 'materialChoices: libMaterialChoices'
-    assert_includes @inspector_js, 'materialChoices: inspectorMaterialChoices'
+    # #784 R3b: el Apply del draft arma el intent con copias de los
+    # snapshots de trabajo (parameters + materialChoices + modes).
+    assert_includes @inspector_js, 'materialChoices: copyMap(inspectorMaterialChoices)'
     assert_includes @html_content, 'Materiales del Taller'
   end
 end

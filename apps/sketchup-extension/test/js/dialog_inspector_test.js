@@ -228,7 +228,7 @@ function runTests() {
   check(visible(el(sandbox, 'inspector-active-view')), 'furniture shows the active view');
   check(!visible(el(sandbox, 'inspector-empty-state')), 'empty state hidden for furniture');
   check(!el(sandbox, 'inspector-edit-fieldset').disabled, 'fieldset enabled when editable');
-  check(!el(sandbox, 'btn-update').disabled, 'update enabled when canEditParameters');
+  check(!el(sandbox, 'btn-apply').disabled, 'apply enabled when canEditParameters and no draft is pending');
   check(visible(el(sandbox, 'inspector-params-card')), 'params card visible when editable');
   check(!visible(el(sandbox, 'inspector-edit-blocker')), 'no blocker when editable');
 
@@ -243,7 +243,7 @@ function runTests() {
     }
   }));
   check(el(sandbox, 'inspector-edit-fieldset').disabled, 'fieldset fail-closed when canEditParameters=false');
-  check(el(sandbox, 'btn-update').disabled, 'update disabled when canEditParameters=false');
+  check(el(sandbox, 'btn-apply').disabled, 'apply disabled when canEditParameters=false');
   check(visible(el(sandbox, 'inspector-edit-blocker')), 'blocker visible when canEditParameters=false');
   assert(el(sandbox, 'inspector-edit-blocker-reason').textContent.includes('legacy'),
     'blocker shows the capability reason');
@@ -289,7 +289,7 @@ function runTests() {
   }));
   check(!el(sandbox, 'inspector-edit-fieldset').disabled, 'fieldset stays enabled');
   check(!visible(el(sandbox, 'inspector-materials-card')), 'materials card obeys canEditMaterialRoles, not canEditParameters');
-  check(el(sandbox, 'btn-update').disabled === false, 'update still available for parameters');
+  check(el(sandbox, 'btn-apply').disabled === false, 'apply still available for parameters');
 
   // --- typed parameter controls execute real change handlers and preserve
   //     explicit false / empty string values instead of falling back to defaults ---
@@ -316,7 +316,12 @@ function runTests() {
   booleanControl.dispatchEvent({ type: 'change' });
   stringControl.value = 'Visible note';
   stringControl.dispatchEvent({ type: 'change' });
-  el(sandbox, 'btn-update').click();
+  check(visible(el(sandbox, 'inspector-footer')) &&
+        el(sandbox, 'inspector-pending').textContent === '2 cambios pendientes',
+    'both typed edits count as pending draft changes, nothing mutated yet');
+  check(sandbox.__bridge.every((c) => c.action !== 'update_furniture'),
+    'typed edits stay local until the explicit Apply');
+  el(sandbox, 'btn-apply').click();
   const typedUpdate = sandbox.__bridge.filter((call) => call.action === 'update_furniture').pop();
   check(typedUpdate.payload.parameters.hasBackPanel === true, 'boolean change reaches the update payload');
   check(typedUpdate.payload.parameters.customerNote === 'Visible note', 'string change reaches the update payload');
@@ -329,7 +334,7 @@ function runTests() {
   // --- multi-selection: inspectable, every mutation fail-closed ---
   dialog.onSelectionChange(furnitureContext({ selectionCount: 3 }));
   check(el(sandbox, 'inspector-edit-fieldset').disabled, 'multi-selection disables the whole mutation fieldset');
-  check(el(sandbox, 'btn-update').disabled, 'update disabled on multi-selection');
+  check(el(sandbox, 'btn-apply').disabled, 'apply disabled on multi-selection');
   check(el(sandbox, 'btn-delete').disabled, 'delete disabled on multi-selection');
   check(visible(el(sandbox, 'inspector-multi-note')), 'multi-selection note visible');
   check(el(sandbox, 'inspector-multi-note').textContent.indexOf('#') === -1, 'multi note uses user copy without tracking numbers');
@@ -354,11 +359,13 @@ function runTests() {
   check(sandbox.__bridge.slice(before2).every((c) => c.action !== 'update_furniture'),
     'onMaterialChoiceApplied obeys canEditMaterialRoles');
 
-  // --- update click sends the LOCAL ref, never a fabricated business id ---
+  // --- the draft Apply sends the LOCAL ref, never a fabricated business id ---
   dialog.onSelectionChange(furnitureContext());
-  el(sandbox, 'btn-update').click();
+  dialog.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-1', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+  el(sandbox, 'btn-apply').click();
   const updateCall = sandbox.__bridge.filter((c) => c.action === 'update_furniture').pop();
-  check(updateCall && updateCall.payload.instanceId === 'ref-1', 'update sends furnitureInstanceRef as instanceId');
+  check(updateCall && updateCall.payload.instanceId === 'ref-1', 'Apply sends furnitureInstanceRef as instanceId');
+  check(updateCall.payload.materialChoices.BODY === 'mat-1', 'Apply materializes the drafted role');
 
   // --- part drill-down: breadcrumb + capabilities + collapsed tech detail ---
   dialog.onSelectionChange(partContext());
