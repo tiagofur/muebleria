@@ -1279,11 +1279,14 @@ class ProjectFurnitureTest < Minitest::Test
     stub_working_copy(working_copy_body([]))
 
     # Server effective materials: INTERIOR and FRENTES both resolved to design defaults
-    @transport.respond(:post, "/designs/#{DESIGN_ID}/effective-materials", 200, {
-      'furnitureDefinitionId' => DEFINITION_ID,
-      'materialChoices' => { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' },
-      'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'design' }
-    })
+    @transport.respond(
+      :post, "/designs/#{DESIGN_ID}/effective-materials", 200,
+      {
+        'furnitureDefinitionId' => DEFINITION_ID,
+        'materialChoices' => { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' },
+        'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'design' }
+      }
+    )
 
     create_res = @placer.create_and_place(
       definition_id: DEFINITION_ID,

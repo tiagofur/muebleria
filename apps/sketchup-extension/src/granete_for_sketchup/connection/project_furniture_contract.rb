@@ -334,41 +334,63 @@ module Granete
           MODES = %w[design override].freeze
 
           def self.parse!(body)
-            raise Contract::ContractError, 'la respuesta de materiales efectivos debe ser un objeto' unless body.is_a?(Hash)
+            unless body.is_a?(Hash)
+              raise Contract::ContractError, 'la respuesta de materiales efectivos debe ser un objeto'
+            end
 
             def_id = body['furnitureDefinitionId'] || body['furniture_definition_id']
-            unless def_id.is_a?(String) && !def_id.strip.empty?
+            if !def_id.is_a?(String) || def_id.strip.empty?
               raise Contract::ContractError, 'furniture_definition_id inválido en materiales efectivos'
             end
 
-            choices = body['materialChoices'] || body['material_choices']
-            raise Contract::ContractError, 'materialChoices inválidos en materiales efectivos' unless choices.is_a?(Hash)
-
-            modes = body['materialChoiceModes'] || body['material_choice_modes']
-            raise Contract::ContractError, 'materialChoiceModes inválidos en materiales efectivos' unless modes.is_a?(Hash)
-
-            unless (choices.keys - modes.keys).empty? && (modes.keys - choices.keys).empty?
-              raise Contract::ContractError, 'paridad incompleta entre materialChoices y materialChoiceModes'
-            end
-
-            choices.each do |role, mat_id|
-              raise Contract::ContractError, 'rol vacío en materialChoices' unless role.is_a?(String) && !role.strip.empty?
-              unless mat_id.is_a?(String) && !mat_id.strip.empty?
-                raise Contract::ContractError, "material_id inválido para rol #{role}"
-              end
-            end
-
-            modes.each do |role, mode|
-              unless MODES.include?(mode)
-                raise Contract::ContractError, "modo desconocido #{mode.inspect} para rol #{role}"
-              end
-            end
+            choices, modes = parse_choices_and_modes!(body)
 
             Contract::EffectiveMaterials.new(
               furniture_definition_id: def_id,
               material_choices: choices,
               material_choice_modes: modes
             )
+          end
+
+          def self.parse_choices_and_modes!(body)
+            choices = body['materialChoices'] || body['material_choices']
+            unless choices.is_a?(Hash)
+              raise Contract::ContractError, 'materialChoices inválidos en materiales efectivos'
+            end
+
+            modes = body['materialChoiceModes'] || body['material_choice_modes']
+            unless modes.is_a?(Hash)
+              raise Contract::ContractError, 'materialChoiceModes inválidos en materiales efectivos'
+            end
+
+            validate_parity!(choices, modes)
+            validate_choices!(choices)
+            validate_modes!(modes)
+            [choices, modes]
+          end
+
+          def self.validate_parity!(choices, modes)
+            return if (choices.keys - modes.keys).empty? && (modes.keys - choices.keys).empty?
+
+            raise Contract::ContractError, 'paridad incompleta entre materialChoices y materialChoiceModes'
+          end
+
+          def self.validate_choices!(choices)
+            choices.each do |role, mat_id|
+              raise Contract::ContractError, 'rol vacío en materialChoices' if !role.is_a?(String) || role.strip.empty?
+              if !mat_id.is_a?(String) || mat_id.strip.empty?
+                raise Contract::ContractError,
+                      "material_id inválido para rol #{role}"
+              end
+            end
+          end
+
+          def self.validate_modes!(modes)
+            modes.each do |role, mode|
+              unless MODES.include?(mode)
+                raise Contract::ContractError, "modo desconocido #{mode.inspect} para rol #{role}"
+              end
+            end
           end
         end
 

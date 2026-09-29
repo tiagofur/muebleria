@@ -586,7 +586,7 @@ module Granete
 
             execute_created_placement(model, context['binding'], prep, idempotency_key,
                                       effective_choices, material_choice_modes: effective_modes,
-                                      transformation: transformation)
+                                                         transformation: transformation)
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -801,6 +801,7 @@ module Granete
                     'cancelá con Esc y generá la vista previa de nuevo')
           end
 
+          # rubocop:disable-next Metrics/ParameterLists
           def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout,
                                    material_choice_modes: nil,
                                    transformation: nil, prepare: true, preserve_parameters: false)
