@@ -723,7 +723,7 @@
   function applyRoleRestore(instanceId, role, designDefaultId) {
     if (!selectedContext || selectedContext.kind !== "furniture") return;
     if (selectedContext.furnitureInstanceRef !== instanceId) return;
-    if (!deps.capabilityEnabled(selectedContext, "canEditMaterials")) return;
+    if (!deps.capabilityEnabled(selectedContext, "canEditMaterialRoles")) return;
     var payload = {
       instanceId: selectedContext.furnitureInstanceRef,
       definitionId: selectedContext.furnitureDefinitionId,
@@ -795,6 +795,13 @@
       if (selectedContext) {
         selectedContext.parameters = Object.assign({}, inspectorParams);
         selectedContext.materialChoices = Object.assign({}, inspectorMaterialChoices);
+      }
+      // #784 R3 final review: the authoritative projection (server
+      // material_choice_modes) must be re-read after any successful
+      // furniture mutation — the badge never infers mode changes locally.
+      var designInspector = window.GraneteUI.designInspector;
+      if (designInspector && typeof designInspector.refreshInheritance === "function") {
+        designInspector.refreshInheritance();
       }
     } else {
       deps.showToast("error", deps.parameterIssueMessage(result, "No se pudo actualizar el mueble."));

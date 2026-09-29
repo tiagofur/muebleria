@@ -178,13 +178,9 @@ module Granete
             semantic_target: context.target,
             build_furniture_request: nil,
             resolve: lambda { |ctx|
-              warn "DBG resolve choices=#{choices.inspect}"
               resolve_update_result(context.definition, params, choices, ctx)
             },
-            context_valid: lambda {
-              warn "DBG context_valid=#{update_context_valid?(context.entity, context.target)}"
-              update_context_valid?(context.entity, context.target)
-            },
+            context_valid: -> { update_context_valid?(context.entity, context.target) },
             apply: lambda { |result, host_context|
               apply_update_result(host_context, context.entity, context.definition, params, choices,
                                   result, material_choice_modes: modes)

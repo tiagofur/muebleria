@@ -115,7 +115,7 @@ module Granete
           # #784 R3: the server-side inheritance projection (badge authority).
           def get_design_inheritance(design_id)
             body = request(:get, "/designs/#{design_id}/working-copy/material-provenance")
-            Contract::DesignInheritanceContract.parse!(body)
+            DesignInheritanceContract.parse!(body)
           end
 
           def get_working_copy(design_id)

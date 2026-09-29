@@ -223,8 +223,12 @@ module Granete
             end
 
             def self.parse_modes!(raw)
-              return nil unless raw.is_a?(Hash)
-              return nil unless raw.values.all? { |m| %w[design override].include?(m) }
+              return nil if raw.nil?
+              raise Contract::ContractError, 'material_choice_modes inválidos' unless raw.is_a?(Hash)
+              unless raw.values.all? { |m| %w[design override].include?(m) }
+                raise Contract::ContractError,
+                      "material_choice_modes con modos desconocidos: #{raw.values.inspect}"
+              end
 
               raw
             end
@@ -279,6 +283,12 @@ module Granete
             end
             raise Contract::ContractError, 'inheritance del item inválido' unless entry['inheritance'].is_a?(Array)
 
+            # Final review hardening: a PRESENT material_choice_modes must be
+            # a valid object of known modes — never silently dropped.
+            if entry.key?('material_choice_modes')
+              Contract::WorkingCopyContract.parse_modes!(entry['material_choice_modes'])
+            end
+
             Contract::InheritanceItem.new(
               furniture_instance_id: entry['furniture_instance_id'],
               inheritance: entry['inheritance'].map { |role_entry| parse_role!(role_entry) }
@@ -300,6 +310,9 @@ module Granete
             default_id = entry['design_default_material_id']
             if default_id && !default_id.is_a?(String)
               raise Contract::ContractError, "design_default_material_id inválido para #{role}"
+            end
+            unless entry['needs_rollout'].is_a?(TrueClass) || entry['needs_rollout'].is_a?(FalseClass)
+              raise Contract::ContractError, "needs_rollout inválido para #{role}"
             end
 
             Contract::RoleInheritance.new(

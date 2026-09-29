@@ -144,10 +144,13 @@
     }
   }
 
-  // #784 R3: correlated read of the inheritance projection.
-  function requestInheritance() {
+  // #784 R3: correlated read of the inheritance projection. A fresh read
+  // burns a new requestId so any stale answer of a previous generation is
+  // discarded by the correlation guard in onDesignInheritance.
+  function requestInheritance(fresh) {
     requireDeps();
     if (!state.connected || !state.designId) return;
+    if (fresh) state.requestId += 1;
     var inheritancePayload = { requestId: state.requestId, designId: state.designId };
     if (window.sketchup && typeof window.sketchup.get_design_inheritance === "function") {
       window.sketchup.get_design_inheritance(JSON.stringify(inheritancePayload));
@@ -540,6 +543,15 @@
         hide();
         if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
       }
+    },
+
+    // #784 R3 final review: public refresh — called after a successful
+    // furniture mutation so the badge returns to the authoritative server
+    // projection (mode=design after a restore) instead of any local
+    // inference. Reads only: it never mutates anything itself.
+    refreshInheritance: function () {
+      if (!state.connected || !state.designId) return;
+      requestInheritance(true);
     },
 
     // #784 R3: the projection answer. Correlated; only the current design.

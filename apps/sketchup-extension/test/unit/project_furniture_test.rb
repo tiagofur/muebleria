@@ -1218,7 +1218,18 @@ class ProjectFurnitureTest < Minitest::Test
                                                    'applied_material_id' => 'x', 'needs_rollout' => false }] }]),
       body.merge('items' => [{ 'furniture_instance_id' => FI_1,
                                'inheritance' => [{ 'role' => '', 'mode' => 'design',
-                                                   'applied_material_id' => 'x', 'needs_rollout' => false }] }])
+                                                   'applied_material_id' => 'x', 'needs_rollout' => false }] }]),
+      # Final review hardening: a PRESENT material_choice_modes must be a
+      # valid object of known modes — never silently dropped to nil.
+      body.merge('items' => [{ 'furniture_instance_id' => FI_1, 'inheritance' => [],
+                               'material_choice_modes' => 'nope' }]),
+      body.merge('items' => [{ 'furniture_instance_id' => FI_1, 'inheritance' => [],
+                               'material_choice_modes' => { 'INTERIOR' => 'inherited' } }]),
+      # needs_rollout must be a real boolean when present.
+      body.merge('items' => [{ 'furniture_instance_id' => FI_1,
+                               'inheritance' => [{ 'role' => 'INTERIOR', 'mode' => 'design',
+                                                   'applied_material_id' => 'x',
+                                                   'needs_rollout' => 'true' }] }])
     ]
     bad_shapes.each do |shape|
       assert_raises(PF::Contract::ContractError, "must reject #{shape['items'].inspect}") do

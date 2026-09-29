@@ -1291,4 +1291,106 @@ test('structural: the monolith keeps no inspector implementation and delegates t
     'preflight adapter reads the inspector selection');
 });
 
+// ---------------------------------------------------------------------------
+// #784 R3 final review — applyRoleRestore rides the REAL capability and the
+// update result refreshes the inheritance projection.
+// ---------------------------------------------------------------------------
+
+test('R3 restore: applyRoleRestore emits the mutation under canEditMaterialRoles with mode=design payload', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false },
+      designInspector: { refreshInheritance: () => { sandbox.__refreshCalls.push(true); }, hide: () => {} }
+    }
+  });
+  sandbox.__refreshCalls = [];
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({
+    materialChoices: { INTERIOR: 'mat-roble' }
+  }));
+
+  api.applyRoleRestore('ref-1', 'INTERIOR', 'mat-blanco');
+
+  const mut = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert(mut, 'restore must emit submitUpdate through the real capability guard');
+  assert.strictEqual(mut.payload.instanceId, 'ref-1');
+  assert.strictEqual(mut.payload.materialChoices.INTERIOR, 'mat-blanco',
+    'the current design default is materialized');
+  assert.strictEqual(mut.payload.materialChoiceModes.INTERIOR, 'design',
+    'the payload declares the design lineage');
+});
+
+test('R3 restore: unsupported canEditMaterialRoles emits nothing', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false },
+      designInspector: { refreshInheritance: () => { sandbox.__refreshCalls.push(true); }, hide: () => {} }
+    }
+  });
+  sandbox.__refreshCalls = [];
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({
+    capabilities: {
+      canEditParameters: { supported: true, reason: null },
+      canEditMaterialRoles: { supported: false, reason: 'r' },
+      canDelete: { supported: true, reason: null }
+    }
+  }));
+
+  api.applyRoleRestore('ref-1', 'INTERIOR', 'mat-blanco');
+
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'an unsupported capability must not emit the mutation');
+});
+
+test('R3 refresh: a successful update result refreshes the inheritance projection', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false },
+      designInspector: { refreshInheritance: () => { sandbox.__refreshCalls.push(true); }, hide: () => {} }
+    }
+  });
+  sandbox.__refreshCalls = [];
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+
+  api.onUpdateResult({ success: true, name: 'Mueble' });
+
+  assert.strictEqual(sandbox.__refreshCalls.length, 1,
+    'a successful furniture mutation must refresh the inheritance projection');
+});
+
+test('R3 refresh: a failed update result does not refresh the projection', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false },
+      designInspector: { refreshInheritance: () => { sandbox.__refreshCalls.push(true); }, hide: () => {} }
+    }
+  });
+  sandbox.__refreshCalls = [];
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+
+  api.onUpdateResult({ success: false });
+
+  assert.strictEqual(sandbox.__refreshCalls.length, 0,
+    'a failed mutation must not trigger a projection refresh');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));
