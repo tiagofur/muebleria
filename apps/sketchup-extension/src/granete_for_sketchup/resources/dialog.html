@@ -599,10 +599,17 @@
                   <span id="inspector-summary-dims" class="actionbar-dims">-- × -- × --</span>
                   <span id="inspector-summary-parts" class="actionbar-parts">--</span>
                 </div>
-                <button id="btn-update" class="btn btn-primary">
-                  <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                  <span>Actualizar Mueble</span>
-                </button>
+              </div>
+
+              <!-- #784 R3b: footer del draft — sólo con ediciones pendientes.
+                   Un [Aplicar] = una mutación = un resolve = UNA operación de
+                   SketchUp = un undo coherente; [Descartar] es read-only. -->
+              <div id="inspector-footer" style="display: none; margin-top: var(--space-3);">
+                <p id="inspector-pending" class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);"></p>
+                <div style="display: flex; gap: var(--space-2);">
+                  <button id="btn-discard" class="btn btn-secondary" style="flex: 1;">Descartar</button>
+                  <button id="btn-apply" class="btn btn-primary" style="flex: 1;">Aplicar</button>
+                </div>
               </div>
             </fieldset>
 
@@ -1283,6 +1290,9 @@
             // #784 R1: the Design Inspector follows the binding identity
             // (a design switch invalidates its cached defaults).
             window.GraneteUI.designInspector.onBindingStatus(status);
+            // #784 R3b: the furniture draft dies on a REAL binding change
+            // (same-binding refreshes never invalidate — #906 rule).
+            window.GraneteUI.inspector.onBindingStatus(status);
             if (window.GraneteCommercialProjection) window.GraneteCommercialProjection.setBinding(status);
             if (window.GraneteCommercialBootstrap) window.GraneteCommercialBootstrap.setBinding(status);
             if (status && status.state === "connected") window.GraneteUI.projectFurniture.requestProjectFurniture();

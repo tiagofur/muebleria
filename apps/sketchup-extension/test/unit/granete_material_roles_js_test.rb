@@ -137,16 +137,18 @@ class GraneteMaterialRolesJsTest < Minitest::Test
     assert_includes html, 'getMaterialCategories: window.GraneteUI.materialRoles.getMaterialCategories,'
     assert_includes html, 'optionMaterialIds: window.GraneteUI.materialRoles.optionMaterialIds,'
     assert_includes html, 'updateMaterialSwatch: window.GraneteUI.materialRoles.updateMaterialSwatch,'
-    # Inspector shared calls (rollback, onMaterialChoiceApplied, render) live
+    # Inspector shared calls (onMaterialChoiceApplied, restore, render) live
     # in the inspector module since #848 C4.7 and keep going through the
-    # material-roles API.
+    # material-roles API. #784 R3b: ONE render helper covers render +
+    # choice-applied + restore; the old rollback repaint is gone — a failed
+    # Apply preserves the draft instead of repainting confirmed values.
     inspector_render = 'window.GraneteUI.materialRoles.renderMaterialSelectors(inspectorMaterialsCard'
-    assert_equal 3, inspector_js.scan(inspector_render).length,
-                 'all inspector render paths (rollback + choice-applied + render) go through the module'
+    assert_equal 1, inspector_js.scan(inspector_render).length,
+                 'the single render helper is the only module path to the material-roles renderer'
     assert_includes inspector_js, 'window.GraneteUI.materialRoles.defaultMaterialChoices(inspectorDef)'
     assert_includes inspector_js, 'window.GraneteUI.materialRoles.defaultMaterialChoices(def)'
-    assert_equal 3, inspector_js.scan('window.GraneteUI.materialRoles.setProjectDefaultMaterial(').length,
-                 'project-default writes (inspector callbacks + onMaterialChoiceApplied) go through the module'
+    assert_equal 2, inspector_js.scan('window.GraneteUI.materialRoles.setProjectDefaultMaterial(').length,
+                 'project-default writes (selector callback + onMaterialChoiceApplied) go through the module'
     # onMaterialChoiceApplied stays a Ruby-facing thin wrapper in the dialog;
     # its cross-domain routing (Inspector/Configurator/project scopes) lives
     # in the inspector module.

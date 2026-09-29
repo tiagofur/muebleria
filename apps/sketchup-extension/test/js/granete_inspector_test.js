@@ -261,7 +261,9 @@ function initDeps(sandbox, overrides) {
 }
 
 function el(sandbox, id) {
-  return sandbox.__registry[id];
+  // Same auto-registering mock DOM the module sees: ids introduced by newer
+  // slices (e.g. the #784 R3b draft footer) resolve without pre-declaring.
+  return sandbox.document.getElementById(id);
 }
 
 function visible(elm) {
@@ -379,9 +381,9 @@ test('selection: multi-selection shows the multi note and fail-closes mutations'
   const api = sandbox.window.GraneteUI.inspector;
   api.onSelectionChange(furnitureContext({ selectionCount: 3 }));
   assert(visible(el(sandbox, 'inspector-multi-note')), 'multi note visible');
-  assert(el(sandbox, 'btn-update').disabled, 'update disabled');
+  assert(el(sandbox, 'btn-apply').disabled, 'apply disabled');
   assert(el(sandbox, 'btn-delete').disabled, 'delete disabled');
-  el(sandbox, 'btn-update').click();
+  el(sandbox, 'btn-apply').click();
   assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'), 'no update under multi-selection');
 });
 
@@ -883,88 +885,7 @@ test('furniture: canDelete is independent of canEditParameters', () => {
   assert(el(sandbox, 'inspector-delete-blocker').hidden === true, 'no delete blocker note while canDelete holds');
 });
 
-test('update: click payload is exact (instanceId = furnitureInstanceRef) and rides GraneteMutation', () => {
-  const sandbox = buildModuleSandbox({
-    GraneteUI: {
-      library: { findDefinitionById: () => undefined },
-      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
-      configurator: { hasActiveDefinition: () => false }
-    }
-  });
-  runModule(sandbox);
-  initDeps(sandbox);
-  const api = sandbox.window.GraneteUI.inspector;
-  api.onSelectionChange(furnitureContext());
-  el(sandbox, 'btn-update').click();
-  const mut = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
-  assert(mut, 'submitUpdate called');
-  assert.strictEqual(mut.payload.instanceId, 'ref-1');
-  assert.strictEqual(mut.payload.definitionId, 'mod-test');
-  assert.strictEqual(mut.payload.parameters.widthMm, 600);
-  assert.deepStrictEqual(mut.ctx, api.getSelectedContext(), 'selection context passed by reference');
-});
-
-test('update: success refreshes the working copy; failure rolls params/choices back', () => {
-  const renderCalls = [];
-  const sandbox = buildModuleSandbox({
-    GraneteUI: {
-      library: { findDefinitionById: () => undefined },
-      materialRoles: {
-        defaultMaterialChoices: () => ({ BODY: 'mat-1' }),
-        renderMaterialSelectors: (card, container, def, choices) => {
-          renderCalls.push(Object.assign({}, choices));
-        }
-      },
-      configurator: { hasActiveDefinition: () => false }
-    }
-  });
-  runModule(sandbox);
-  initDeps(sandbox, {
-    renderParamForm: (container, def, values, onChange) => {
-      container.__lastRender = { def, values, onChange };
-    }
-  });
-  const api = sandbox.window.GraneteUI.inspector;
-  api.onSelectionChange(furnitureContext({ parameters: { widthMm: 700 }, materialChoices: { BODY: 'mat-2' } }));
-  // Mutate the working snapshots before the result arrives.
-  const form = el(sandbox, 'inspector-params-container').__lastRender;
-  form.onChange('widthMm', 850, 'mm');
-  api.onUpdateResult({ success: true, name: 'Mueble de Prueba', component_count: 2 });
-  assert.strictEqual(api.getSelectedContext().parameters.widthMm, 850, 'success persists the working params into the context');
-  assert.strictEqual(api.getSelectedContext().materialChoices.BODY, 'mat-2', 'success persists the working choices');
-  assert(sandbox.__toastCalls[0].msg.includes('2 componente'), 'component_count copy exact');
-
-  // Failure: unconfirmed params roll back to the last CONFIRMED values
-  // (850 — persisted into the context by the preceding success).
-  const form2 = el(sandbox, 'inspector-params-container').__lastRender;
-  form2.onChange('widthMm', 900, 'mm');
-  api.onUpdateResult({ success: false, error: 'No se pudo actualizar el mueble.' });
-  assert.strictEqual(el(sandbox, 'inspector-params-container').__lastRender.values.widthMm, 850, 'params rolled back to last confirmed');
-  assert.strictEqual(renderCalls[renderCalls.length - 1].BODY, 'mat-2', 'choices rolled back to defaults + last confirmed');
-});
-
-test('update: no-host fallback answers through GraneteDialog.onUpdateResult', () => {
-  const sandbox = buildModuleSandbox({
-    GraneteUI: {
-      library: { findDefinitionById: () => undefined },
-      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
-      configurator: { hasActiveDefinition: () => false }
-    }
-  });
-  // No runtime mutation controller AND no host update bridge: the honest
-  // 500ms demo fallback answers through the GraneteDialog wrapper.
-  delete sandbox.window.GraneteMutation;
-  sandbox.window.sketchup = {};
-  sandbox.setTimeout = (fn) => { fn(); return 0; };
-  runModule(sandbox);
-  initDeps(sandbox);
-  sandbox.window.GraneteUI.inspector.onSelectionChange(furnitureContext());
-  el(sandbox, 'btn-update').click();
-  const answered = sandbox.__bridge.filter((c) => c.action === 'onUpdateResult').pop();
-  assert(answered && answered.payload.success === true, 'no-host fallback answers success via the bridge wrapper');
-});
-
-test('materials: inspector target applies the choice, re-renders and submits the exact payload', () => {
+test('materials: inspector target lands the pick in the draft, re-renders and never submits directly', () => {
   const renderCalls = [];
   const sandbox = buildModuleSandbox({
     GraneteUI: {
@@ -985,14 +906,20 @@ test('materials: inspector target applies the choice, re-renders and submits the
   api.onSelectionChange(furnitureContext({ materialChoices: {} }));
   const before = sandbox.__bridge.length;
   api.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-9', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
-  const call = sandbox.__bridge.slice(before).filter((c) => c.action === 'update_furniture').pop();
-  assert(call, 'inspector branch submits update_furniture');
-  assert.strictEqual(call.payload.instanceId, 'ref-1');
-  assert.strictEqual(call.payload.materialChoices.BODY, 'mat-9');
+  assert(sandbox.__bridge.slice(before).every((c) => c.action !== 'update_furniture'),
+    'the pick never fires the legacy immediate update');
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'the pick never submits while drafting');
+  assert(visible(el(sandbox, 'inspector-footer')), 'the pick is pending in the draft footer');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
   assert.strictEqual(renderCalls[renderCalls.length - 1].BODY, 'mat-9', 'working snapshot updated and re-rendered');
+  el(sandbox, 'btn-apply').click();
+  const submit = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert(submit && submit.payload.materialChoices.BODY === 'mat-9', 'the Apply materializes the pick');
+  assert.strictEqual(submit.payload.materialChoiceModes.BODY, 'override');
 });
 
-test('materials: multi-selection and denied capability fail closed', () => {
+test('materials: multi-selection and denied capability fail closed (no mutation, no draft)', () => {
   const sandbox = buildModuleSandbox({
     GraneteUI: {
       library: { findDefinitionById: () => undefined },
@@ -1007,6 +934,7 @@ test('materials: multi-selection and denied capability fail closed', () => {
   let before = sandbox.__bridge.length;
   api.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-9', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
   assert(sandbox.__bridge.slice(before).every((c) => c.action !== 'update_furniture'), 'multi-selection never mutates');
+  assert(!visible(el(sandbox, 'inspector-footer')), 'multi-selection never drafts either');
 
   api.onSelectionChange(furnitureContext({
     capabilities: {
@@ -1018,6 +946,7 @@ test('materials: multi-selection and denied capability fail closed', () => {
   before = sandbox.__bridge.length;
   api.onMaterialChoiceApplied({ role: 'BODY', materialId: 'mat-9', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
   assert(sandbox.__bridge.slice(before).every((c) => c.action !== 'update_furniture'), 'denied capability never mutates');
+  assert(!visible(el(sandbox, 'inspector-footer')), 'denied capability never drafts');
 });
 
 test('materials: configurator target delegates; project scope writes project defaults', () => {
@@ -1292,64 +1221,10 @@ test('structural: the monolith keeps no inspector implementation and delegates t
 });
 
 // ---------------------------------------------------------------------------
-// #784 R3 final review — applyRoleRestore rides the REAL capability and the
-// update result refreshes the inheritance projection.
+// #784 R3 final review — the update result refreshes the inheritance
+// projection. (The restore-emit tests moved to the R3b draft block below:
+// the restore is a draft edit now, applied by the single [Aplicar].)
 // ---------------------------------------------------------------------------
-
-test('R3 restore: applyRoleRestore emits the mutation under canEditMaterialRoles with mode=design payload', () => {
-  const sandbox = buildModuleSandbox({
-    GraneteUI: {
-      library: { findDefinitionById: () => undefined },
-      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
-      configurator: { hasActiveDefinition: () => false },
-      designInspector: { refreshInheritance: () => { sandbox.__refreshCalls.push(true); }, hide: () => {} }
-    }
-  });
-  sandbox.__refreshCalls = [];
-  runModule(sandbox);
-  initDeps(sandbox);
-  const api = sandbox.window.GraneteUI.inspector;
-  api.onSelectionChange(furnitureContext({
-    materialChoices: { INTERIOR: 'mat-roble' }
-  }));
-
-  api.applyRoleRestore('ref-1', 'INTERIOR', 'mat-blanco');
-
-  const mut = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
-  assert(mut, 'restore must emit submitUpdate through the real capability guard');
-  assert.strictEqual(mut.payload.instanceId, 'ref-1');
-  assert.strictEqual(mut.payload.materialChoices.INTERIOR, 'mat-blanco',
-    'the current design default is materialized');
-  assert.strictEqual(mut.payload.materialChoiceModes.INTERIOR, 'design',
-    'the payload declares the design lineage');
-});
-
-test('R3 restore: unsupported canEditMaterialRoles emits nothing', () => {
-  const sandbox = buildModuleSandbox({
-    GraneteUI: {
-      library: { findDefinitionById: () => undefined },
-      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
-      configurator: { hasActiveDefinition: () => false },
-      designInspector: { refreshInheritance: () => { sandbox.__refreshCalls.push(true); }, hide: () => {} }
-    }
-  });
-  sandbox.__refreshCalls = [];
-  runModule(sandbox);
-  initDeps(sandbox);
-  const api = sandbox.window.GraneteUI.inspector;
-  api.onSelectionChange(furnitureContext({
-    capabilities: {
-      canEditParameters: { supported: true, reason: null },
-      canEditMaterialRoles: { supported: false, reason: 'r' },
-      canDelete: { supported: true, reason: null }
-    }
-  }));
-
-  api.applyRoleRestore('ref-1', 'INTERIOR', 'mat-blanco');
-
-  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
-    'an unsupported capability must not emit the mutation');
-});
 
 test('R3 refresh: a successful update result refreshes the inheritance projection', () => {
   const sandbox = buildModuleSandbox({
@@ -1391,6 +1266,339 @@ test('R3 refresh: a failed update result does not refresh the projection', () =>
 
   assert.strictEqual(sandbox.__refreshCalls.length, 0,
     'a failed mutation must not trigger a projection refresh');
+});
+
+// ---------------------------------------------------------------------------
+// #784 R3b — draft + Apply: las ediciones de parámetros y roles de material
+// del Furniture Inspector van a un DRAFT local con footer de pendientes; un
+// solo [Aplicar] emite UNA mutación con el intent completo (parámetros +
+// materialChoices + materialChoiceModes) = un resolve = UNA operación de
+// SketchUp = un undo coherente. [Descartar] es read-only. El draft muere con
+// cambio real de selección o de binding (espíritu #906) y un fallo de la
+// mutación lo PRESERVA con mensaje honesto.
+// ---------------------------------------------------------------------------
+
+test('R3b draft: a param edit stays local — zero mutations and the footer counts 1 pending change', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+
+  const form = el(sandbox, 'inspector-params-container').__lastRender;
+  form.onChange('widthMm', 750, 'mm');
+
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'a param edit must not submit anything');
+  assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'),
+    'a param edit must not ride the legacy bridge either');
+  assert(visible(el(sandbox, 'inspector-footer')), 'the draft footer becomes visible');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
+  assert(!el(sandbox, 'btn-apply').disabled, 'Aplicar is available');
+});
+
+test('R3b draft: a material pick lands in the draft (no immediate mutation) and the count accumulates', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  const form = el(sandbox, 'inspector-params-container').__lastRender;
+  form.onChange('widthMm', 750, 'mm');
+
+  api.onMaterialChoiceApplied({ role: 'FRONT', materialId: 'mat-2', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'a material pick must not submit anything while drafting');
+  assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'),
+    'the native-selector pick must not fire the legacy immediate update');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '2 cambios pendientes',
+    'param + role drafts accumulate honestly');
+});
+
+test('R3b apply: exactly ONE submitUpdate carrying the complete intent (params + choices + modes override)', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  const form = el(sandbox, 'inspector-params-container').__lastRender;
+  form.onChange('widthMm', 750, 'mm');
+  api.onMaterialChoiceApplied({ role: 'FRONT', materialId: 'mat-2', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+
+  el(sandbox, 'btn-apply').click();
+
+  const submits = sandbox.__mutation.filter((c) => c.action === 'submitUpdate');
+  assert.strictEqual(submits.length, 1, 'one user Apply = exactly one mutation');
+  const payload = submits[0].payload;
+  assert.strictEqual(payload.instanceId, 'ref-1');
+  assert.strictEqual(payload.definitionId, 'mod-test');
+  assert.strictEqual(payload.parameters.widthMm, 750, 'the full working parameters ride the intent');
+  assert.strictEqual(payload.materialChoices.FRONT, 'mat-2', 'the picked role materializes');
+  assert.strictEqual(payload.materialChoiceModes.FRONT, 'override',
+    'a picked role declares the explicit override lineage');
+  assert(el(sandbox, 'btn-apply').disabled, 'Aplicar is disabled while the mutation is in flight');
+});
+
+test('R3b apply: double click emits exactly one mutation (in-flight guard)', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  const form = el(sandbox, 'inspector-params-container').__lastRender;
+  form.onChange('widthMm', 750, 'mm');
+
+  el(sandbox, 'btn-apply').click();
+  el(sandbox, 'btn-apply').click();
+
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 1,
+    'the second click must be swallowed by the in-flight guard');
+});
+
+test('R3b discard: read-only — zero mutations, snapshots restored, footer hidden', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  const form = el(sandbox, 'inspector-params-container').__lastRender;
+  form.onChange('widthMm', 750, 'mm');
+  api.onMaterialChoiceApplied({ role: 'FRONT', materialId: 'mat-2', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+
+  el(sandbox, 'btn-discard').click();
+
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'Descartar never mutates');
+  assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'), 'Descartar never rides the bridge');
+  assert(!visible(el(sandbox, 'inspector-footer')), 'the footer hides with no pending edits');
+  assert.strictEqual(el(sandbox, 'inspector-params-container').__lastRender.values.widthMm, 600,
+    'the param snapshot is restored to the confirmed value');
+  assert.strictEqual(api.getSelectedContext().parameters.widthMm, 600,
+    'discard never writes into the selection context');
+});
+
+test('R3b draft: a real selection change kills the draft — identical republish of the same item survives', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+
+  // (a) same ref, diverged server state: the draft dies (no silent rebase).
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  api.onSelectionChange(furnitureContext({ parameters: { widthMm: 610 } }));
+  assert(!visible(el(sandbox, 'inspector-footer')), 'diverged server state kills the draft');
+  assert.strictEqual(el(sandbox, 'inspector-params-container').__lastRender.values.widthMm, 610,
+    'the render rebuilds from the new context, never from the dead draft');
+
+  // (b) another item: the draft dies.
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  api.onSelectionChange(furnitureContext({ furnitureInstanceRef: 'ref-2' }));
+  assert(!visible(el(sandbox, 'inspector-footer')), 'a different item kills the draft');
+
+  // (c) identical republish of the SAME item: the draft survives and the
+  //     edits stay visible.
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  api.onSelectionChange(furnitureContext());
+  assert(visible(el(sandbox, 'inspector-footer')), 'an identical republish keeps the draft');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
+  assert.strictEqual(el(sandbox, 'inspector-params-container').__lastRender.values.widthMm, 750,
+    'the surviving draft re-applies its edits on the re-render');
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'selection changes never mutate');
+});
+
+test('R3b apply failure: honest error, the draft is preserved (no silent rollback)', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  el(sandbox, 'btn-apply').click();
+
+  api.onUpdateResult({ success: false, error: 'El ancho excede el rango del catálogo.' });
+
+  const errorToast = sandbox.__toastCalls.filter((t) => t.type === 'error').pop();
+  assert(errorToast && errorToast.msg.includes('El ancho excede el rango del catálogo.'),
+    'the failure surfaces the server reason');
+  assert(visible(el(sandbox, 'inspector-footer')), 'the draft survives a failed Apply');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
+  assert.strictEqual(el(sandbox, 'inspector-params-container').__lastRender.values.widthMm, 750,
+    'the drafted value stays on screen — no rollback to the old state');
+  assert(!el(sandbox, 'btn-apply').disabled, 'Aplicar is re-enabled after the honest failure');
+});
+
+test('R3b apply success: draft cleared, footer hidden, and refreshInheritance exactly once', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      designInspector: { refreshInheritance: () => { sandbox.__refreshCalls.push(true); }, hide: () => {} }
+    }
+  });
+  sandbox.__refreshCalls = [];
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  el(sandbox, 'btn-apply').click();
+
+  api.onUpdateResult({ success: true, name: 'Mueble de Prueba' });
+
+  assert(!visible(el(sandbox, 'inspector-footer')), 'success clears the draft and hides the footer');
+  assert.strictEqual(sandbox.__refreshCalls.length, 1,
+    'the inheritance projection is refreshed exactly once per successful Apply');
+  assert.strictEqual(api.getSelectedContext().parameters.widthMm, 750,
+    'the confirmed values persist into the selection context');
+});
+
+test('R3b restore: lands in the draft with mode=design and applies together with the rest', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ materialChoices: { INTERIOR: 'mat-roble' } }));
+
+  api.applyRoleRestore('ref-1', 'INTERIOR', 'mat-blanco');
+
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'a restore is a draft edit now, not an immediate mutation');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
+
+  // A later pick on the SAME role supersedes the restore: last action wins.
+  api.onMaterialChoiceApplied({ role: 'INTERIOR', materialId: 'mat-nogal', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+  el(sandbox, 'btn-apply').click();
+  const submits = sandbox.__mutation.filter((c) => c.action === 'submitUpdate');
+  assert.strictEqual(submits.length, 1);
+  assert.strictEqual(submits[0].payload.materialChoiceModes.INTERIOR, 'override',
+    'the explicit edit supersedes the restore marker');
+  assert.strictEqual(submits[0].payload.materialChoices.INTERIOR, 'mat-nogal');
+});
+
+test('R3b restore: a pure restore Apply declares design lineage (no pick after it)', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({ materialChoices: { INTERIOR: 'mat-roble' } }));
+  api.applyRoleRestore('ref-1', 'INTERIOR', 'mat-blanco');
+
+  el(sandbox, 'btn-apply').click();
+
+  const submit = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert(submit, 'the Apply emits the mutation');
+  assert.strictEqual(submit.payload.materialChoices.INTERIOR, 'mat-blanco',
+    'the current design default is materialized');
+  assert.strictEqual(submit.payload.materialChoiceModes.INTERIOR, 'design',
+    'the restored role carries the design lineage');
+});
+
+test('R3b restore: unsupported canEditMaterialRoles emits nothing', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext({
+    capabilities: {
+      canEditParameters: { supported: true, reason: null },
+      canEditMaterialRoles: { supported: false, reason: 'r' },
+      canDelete: { supported: true, reason: null }
+    }
+  }));
+
+  api.applyRoleRestore('ref-1', 'INTERIOR', 'mat-blanco');
+
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'an unsupported capability must not draft anything');
+  assert(!visible(el(sandbox, 'inspector-footer')), 'no footer without a real draft');
+});
+
+test('R3b binding: a real binding change kills the draft; a same-binding refresh does not', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+
+  api.onBindingStatus({ state: 'connected', binding: { designId: 'd1', projectId: 'p1' } });
+  assert(!visible(el(sandbox, 'inspector-footer')), 'the first real binding notification kills the draft');
+
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  api.onBindingStatus({ state: 'connected', binding: { designId: 'd1', projectId: 'p1' } });
+  assert(visible(el(sandbox, 'inspector-footer')), 'a refresh with the SAME binding never invalidates');
+
+  api.onBindingStatus({ state: 'connected', binding: { designId: 'd2', projectId: 'p1' } });
+  assert(!visible(el(sandbox, 'inspector-footer')), 'a design switch kills the draft (espíritu #906)');
+
+  api.onBindingStatus({ state: 'unbound' });
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  api.onBindingStatus({ state: 'connected', binding: { designId: 'd1', projectId: 'p1' } });
+  assert(!visible(el(sandbox, 'inspector-footer')), 'unbound → connected is a real change too');
+});
+
+test('R3b apply: without GraneteMutation the intent rides the legacy host bridge intact', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  delete sandbox.window.GraneteMutation;
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+  api.onMaterialChoiceApplied({ role: 'FRONT', materialId: 'mat-2', scope: 'furniture', context: 'inspector', instanceId: 'ref-1' });
+
+  el(sandbox, 'btn-apply').click();
+
+  const call = sandbox.__bridge.filter((c) => c.action === 'update_furniture').pop();
+  assert(call, 'the legacy host bridge carries the Apply');
+  assert.strictEqual(call.payload.parameters.widthMm, 750);
+  assert.strictEqual(call.payload.materialChoices.FRONT, 'mat-2');
+  assert.strictEqual(call.payload.materialChoiceModes.FRONT, 'override');
+});
+
+test('R3b apply: with no host bridge at all the demo fallback answers honestly', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  delete sandbox.window.GraneteMutation;
+  sandbox.window.sketchup = {};
+  sandbox.setTimeout = (fn) => { fn(); return 0; };
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+
+  el(sandbox, 'btn-apply').click();
+
+  const answered = sandbox.__bridge.filter((c) => c.action === 'onUpdateResult').pop();
+  assert(answered && answered.payload.success === true,
+    'no-host fallback answers success via the bridge wrapper');
+});
+
+test('R3b apply: a params-only draft omits materialChoiceModes; a busy controller preserves the draft', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onSelectionChange(furnitureContext());
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 750, 'mm');
+
+  el(sandbox, 'btn-apply').click();
+  const submit = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert.strictEqual(submit.payload.materialChoiceModes, undefined,
+    'no role edits — no lineage statement is invented');
+
+  // The first Apply failed (draft preserved per contract); now another
+  // surface occupies the mutation controller and the user re-applies.
+  api.onUpdateResult({ success: false, error: 'x' });
+  sandbox.window.GraneteMutation.submitUpdate = () => 'busy';
+  el(sandbox, 'inspector-params-container').__lastRender.onChange('widthMm', 800, 'mm');
+  el(sandbox, 'btn-apply').click();
+  assert(visible(el(sandbox, 'inspector-footer')), 'a busy controller keeps the draft alive');
+  const busyToast = sandbox.__toastCalls.filter((t) => t.type === 'error').pop();
+  assert(busyToast && busyToast.msg.includes('mutación en curso'), 'the busy state is named honestly');
 });
 
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));
