@@ -871,6 +871,33 @@ assert.doesNotThrow = (fn, message) => {
 };
 
 const results = [];
+// #784 R3 final review — a confirmed Sincronizar diseño re-reads the
+// inheritance projection (the server just accepted the new material
+// lineage; the badge must return to server truth without local inference).
+// ---------------------------------------------------------------------------
+
+test('R3 refresh: a successful synchronize_design refreshes the inheritance projection exactly once', () => {
+  const refreshCalls = [];
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox, {
+    refreshDesignInheritance: () => refreshCalls.push('refresh')
+  });
+  pf.handleSynchronizeDesignResult({ ok: true, changes: { added: ['a'], updated: [], removed: [] } });
+  assert.strictEqual(refreshCalls.length, 1,
+    'a confirmed synchronize must refresh the inheritance projection exactly once');
+});
+
+test('R3 refresh: a failed synchronize_design does not refresh the projection', () => {
+  const refreshCalls = [];
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox, {
+    refreshDesignInheritance: () => refreshCalls.push('refresh')
+  });
+  pf.handleSynchronizeDesignResult({ ok: false, code: 'conflict', reason: 'x' });
+  assert.strictEqual(refreshCalls.length, 0,
+    'a failed synchronize must not claim new server truth');
+});
+
 for (const { name, fn } of tests) {
   try {
     fn();
@@ -881,6 +908,7 @@ for (const { name, fn } of tests) {
 }
 
 const failed = results.filter((r) => !r.passed);
+// ---------------------------------------------------------------------------
 console.log(JSON.stringify({
   success: failed.length === 0,
   testsPassed: results.length - failed.length,

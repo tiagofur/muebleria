@@ -1679,7 +1679,16 @@
         // captures the invalidation seam) and configurator.init (which
         // captures the reload + failure-copy deps), and before the first
         // status render below.
-        window.GraneteUI.projectFurniture.init({ showToast: showToast });
+        window.GraneteUI.projectFurniture.init({
+          showToast: showToast,
+          // #784 R3 final review: a confirmed Sincronizar diseño is the
+          // moment the server accepted the new material lineage — the
+          // inheritance projection must be re-read so the badges return to
+          // server truth (injected seam; no coupling to the module here).
+          refreshDesignInheritance: function () {
+            window.GraneteUI.designInspector.refreshInheritance();
+          }
+        });
 
         // #848 C4.8: the model binding module owns the binding/publish/
         // validation state and render paths. The bootstrap injects the
