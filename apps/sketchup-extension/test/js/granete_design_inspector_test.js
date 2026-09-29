@@ -682,6 +682,106 @@ function run() {
       'the guard released allows a new apply');
   });
 
+  // --- FINAL REVIEW fix-up: ANY real binding change invalidates pending
+  //     requests — not only applies in flight.
+  function switchToB(ctx, mod) {
+    // The binding changes to B while A's GET is still in flight. The late
+    // answer lands BEFORE B's own read burns a new requestId — the exact
+    // window where a stale requestId would still match.
+    mod.onBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p-1', designId: 'd-b', projectName: 'Cocina López', designName: 'Alternativa' }
+    });
+  }
+
+  test('binding switch: late stale_binding of the A GET is fully ignored', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    const requestA = ctx.sketchupCalls[ctx.sketchupCalls.length - 1][1];
+    switchToB(ctx, mod);
+
+    mod.onDesignDefaults({ requestId: requestA.requestId, status: 'stale_binding', designId: 'd-a' });
+
+    // The stale fail-closed of A must NOT have hidden B or fired the safe
+    // lane handoff — the answer was invalid, B still owns the lane.
+    assert.strictEqual(mod.handleNoSelection(), true, 'B stays in the lane');
+    assert.notStrictEqual(ctx.view().style.display, 'none', 'B view was never hidden by A');
+    assert.ok(!ctx.body().textContent.includes('cambió'), 'no A-driven conflict rendered');
+  });
+
+  test('binding switch: late unbound of the A GET is fully ignored', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    const requestA = ctx.sketchupCalls[ctx.sketchupCalls.length - 1][1];
+    switchToB(ctx, mod);
+
+    mod.onDesignDefaults({ requestId: requestA.requestId, status: 'unbound' });
+
+    assert.strictEqual(mod.handleNoSelection(), true, 'B stays connected despite the late unbound');
+    assert.notStrictEqual(ctx.view().style.display, 'none', 'B view alive');
+  });
+
+  test('binding switch: late error of the A GET does not change B', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    const requestA = ctx.sketchupCalls[ctx.sketchupCalls.length - 1][1];
+    switchToB(ctx, mod);
+
+    mod.onDesignDefaults({ requestId: requestA.requestId, status: 'error', reason: 'boom-A' });
+
+    assert.strictEqual(mod.handleNoSelection(), true, 'B still takes the lane');
+    assert.ok(!ctx.body().textContent.includes('boom-A'), 'A error never renders');
+    assert.ok(!ctx.body().textContent.includes('No se pudo cargar'), 'no error state from A on B');
+  });
+
+  test('same binding identity does not burn requestIds', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    const before = ctx.sketchupCalls.length;
+    mod.onBindingStatus({
+      state: 'connected',
+      binding: { projectId: 'p-1', designId: 'd-a', projectName: 'Cocina López', designName: 'Principal' }
+    });
+    mod.handleNoSelection();
+    // The repeat status for the SAME design must not invalidate anything:
+    // a fresh request is still answered normally.
+    const calls = ctx.sketchupCalls.slice(before).filter((c) => c[0] === 'get_design_defaults');
+    const latest = calls[calls.length - 1][1];
+    mod.onDesignDefaults({ requestId: latest.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white', FRENTES: 'mat-oak' } } });
+    assert.ok(ctx.body().textContent.includes('Arauco Blanco Frosty'), 'same-identity status keeps the read path alive');
+  });
+
+  test('P2: a role no definition offers falls back to the whole catalog', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    ctx.sandbox.window.GraneteUI.designInspector.init({
+      getRoleLabel: (role) => role,
+      materialById: (id) => MATERIALS[id],
+      rerenderInspector: () => {},
+      getRoleCandidates: (role) => (role === 'INTERIOR' ? ['mat-oak'] : []),
+      getMaterials: () => [{ id: 'mat-white', name: 'Arauco Blanco Frosty' }, { id: 'mat-oak', name: 'Roble Natural' }, { id: 'mat-extra', name: 'Extra' }],
+      openMaterialPicker: (roleEntry, initialId, onApply) => { ctx.picker = { roleEntry, initialId, onApply }; }
+    });
+    const mod = readyState(ctx);
+    mod.render();
+    // FRENTES comes back with NO curated candidates (simulates a role no
+    // definition offers): the picker must receive the whole catalog.
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    assert.ok(ctx.picker, 'picker opens');
+    assert.deepStrictEqual(ctx.picker.roleEntry.optionIds,
+      ['mat-white', 'mat-oak', 'mat-extra'],
+      'empty curated candidates fall back to the whole catalog (presentation only)');
+  });
+
   // --- error state with retry ---------------------------------------------
   test('failed load shows the error state and Reintentar re-requests read-only', () => {
     const ctx = createSandbox();

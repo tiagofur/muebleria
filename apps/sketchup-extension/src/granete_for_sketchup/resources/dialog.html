@@ -1627,11 +1627,13 @@
           // (presentation only: the backend stays the authority).
           getRoleCandidates: function (role) {
             var ids = [];
+            var seen = false;
             var definitions = window.GraneteUI.library.getDefinitions();
             for (var i = 0; i < definitions.length; i++) {
               var roles = (definitions[i] && definitions[i].materialRoles) || [];
               for (var j = 0; j < roles.length; j++) {
                 if (roles[j] && roles[j].role === role) {
+                  seen = true;
                   var options = roles[j].optionIds || [];
                   for (var k = 0; k < options.length; k++) {
                     if (ids.indexOf(options[k]) === -1) ids.push(options[k]);
@@ -1639,6 +1641,10 @@
                 }
               }
             }
+            // Un rol sin definiciones devuelve [] aquí; el fallback al
+            // catálogo completo lo aplica el módulo Design Inspector
+            // (presentación/picker only; el backend sigue siendo la
+            // autoridad de lo que es válido).
             return ids;
           },
           openMaterialPicker: function (roleEntry, initialId, onApply) {
