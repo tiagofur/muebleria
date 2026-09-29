@@ -1180,6 +1180,53 @@ class ProjectFurnitureTest < Minitest::Test
     assert_nil plain.display_material_choices
   end
 
+  # #784 R3: the server-side inheritance projection (material-provenance
+  # read model) is the ONLY badge authority. The parser keeps the fields
+  # the plugin renders (per-item role inheritance) and rejects unknown
+  # modes fail-closed.
+  def test_design_inheritance_projection_parses_fail_closed
+    body = {
+      'design_id' => DESIGN_ID, 'project_id' => PROJECT_ID,
+      'authoring_defaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-roble' } },
+      'inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => 2, 'design_backed' => 1,
+                                  'needs_rollout' => 1, 'design_current' => 0, 'overridden' => 1 }],
+      'items' => [
+        { 'furniture_instance_id' => FI_1,
+          'inheritance' => [
+            { 'role' => 'INTERIOR', 'mode' => 'design', 'applied_material_id' => 'mat-blanco',
+              'design_default_material_id' => 'mat-roble', 'needs_rollout' => true },
+            { 'role' => 'FRENTE', 'mode' => 'override', 'applied_material_id' => 'mat-negro',
+              'needs_rollout' => false }
+          ] }
+      ]
+    }
+    parsed = PF::DesignInheritanceContract.parse!(body)
+    assert_equal DESIGN_ID, parsed.design_id
+    item = parsed.items.first
+    assert_equal FI_1, item.furniture_instance_id
+    interior = item.inheritance.first
+    assert_equal 'design', interior.mode
+    assert_equal 'mat-roble', interior.design_default_material_id
+    assert interior.needs_rollout
+    refute item.inheritance.last.needs_rollout
+
+    bad_shapes = [
+      body.merge('items' => 'nope'),
+      body.merge('items' => [{ 'furniture_instance_id' => 'bad', 'inheritance' => [] }]),
+      body.merge('items' => [{ 'furniture_instance_id' => FI_1,
+                               'inheritance' => [{ 'role' => 'INTERIOR', 'mode' => 'inherited',
+                                                   'applied_material_id' => 'x', 'needs_rollout' => false }] }]),
+      body.merge('items' => [{ 'furniture_instance_id' => FI_1,
+                               'inheritance' => [{ 'role' => '', 'mode' => 'design',
+                                                   'applied_material_id' => 'x', 'needs_rollout' => false }] }])
+    ]
+    bad_shapes.each do |shape|
+      assert_raises(PF::Contract::ContractError, "must reject #{shape['items'].inspect}") do
+        PF::DesignInheritanceContract.parse!(shape)
+      end
+    end
+  end
+
   # #784 R1: the durable Design authoring defaults travel on the working
   # copy header. The parser must keep them (fail-closed on malformed
   # shapes), normalize absence to the canonical empty map, and never touch

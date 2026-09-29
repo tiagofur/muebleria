@@ -11,8 +11,8 @@ module Granete
           class ContractError < StandardError; end
 
           WorkingItem = Struct.new(:furniture_instance_id, :furniture_definition_id, :definition_version,
-                                   :parameters, :material_choices, :transform, :technical_client_locator,
-                                   :room_id,
+                                   :parameters, :material_choices, :material_choice_modes,
+                                   :transform, :technical_client_locator, :room_id,
                                    keyword_init: true)
           # updated_at is kept as the VERBATIM server string: it is the
           # canonical workingVersion token every write must echo back as
@@ -25,6 +25,13 @@ module Granete
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
                                 :display_name, :display_dimensions, :display_material_choices,
                                 keyword_init: true)
+          # #784 R3: one role's server-side inheritance projection — the ONLY
+          # badge authority (mode is persisted lineage, never derived from
+          # value equality client-side).
+          RoleInheritance = Struct.new(:role, :mode, :applied_material_id, :design_default_material_id,
+                                       :needs_rollout, keyword_init: true)
+          InheritanceItem = Struct.new(:furniture_instance_id, :inheritance, keyword_init: true)
+          DesignInheritance = Struct.new(:design_id, :project_id, :items, keyword_init: true)
 
           # Canonical wire shape of one working item (generated contract):
           # string keys, absent-when-null optional fields.
@@ -35,6 +42,14 @@ module Granete
                 'parameters' => parameters || {},
                 'material_choices' => material_choices || {}
               }
+              # #784 R3: explicit lineage travels ONLY as a full-parity
+              # statement (keys == material_choices keys) — the backend
+              # rejects partial statements. Absent keeps the legacy shape
+              # (the backend preserves the persisted lineage of unchanged
+              # values).
+              if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
+                item['material_choice_modes'] = material_choice_modes
+              end
               item['furniture_definition_id'] = furniture_definition_id if furniture_definition_id
               version = Contract.authoritative_definition_version(definition_version)
               item['definition_version'] = version unless version.nil?
@@ -172,10 +187,24 @@ module Granete
                       "item con furniture_instance_id inválido: #{entry['furniture_instance_id'].inspect}"
               end
 
+              shape = normalize_working_item_shape!(entry)
+
+              WorkingItem.new(
+                furniture_instance_id: entry['furniture_instance_id'],
+                furniture_definition_id: shape[:definition_id], definition_version: shape[:version],
+                parameters: shape[:parameters], material_choices: shape[:choices],
+                material_choice_modes: shape[:modes],
+                transform: shape[:transform], technical_client_locator: shape[:locator],
+                room_id: shape[:room_id]
+              )
+            end
+
+            def self.normalize_working_item_shape!(entry)
               parameters = entry['parameters']
               parameters = {} unless parameters.is_a?(Hash)
               choices = entry['material_choices']
               choices = {} unless choices.is_a?(Hash) && choices.values.all?(String)
+              modes = parse_modes!(entry['material_choice_modes'])
 
               transform = parse_transform!(entry['transform'])
               locator = parse_locator!(entry['technical_client_locator'])
@@ -186,13 +215,18 @@ module Granete
               room_id = entry['room_id']
               room_id = nil unless room_id.is_a?(String) && !room_id.strip.empty?
 
-              WorkingItem.new(
-                furniture_instance_id: entry['furniture_instance_id'],
-                furniture_definition_id: definition_id, definition_version: version,
-                parameters: parameters, material_choices: choices,
-                transform: transform, technical_client_locator: locator,
-                room_id: room_id
-              )
+              {
+                parameters: parameters, choices: choices, modes: modes,
+                transform: transform, locator: locator,
+                definition_id: definition_id, version: version, room_id: room_id
+              }
+            end
+
+            def self.parse_modes!(raw)
+              return nil unless raw.is_a?(Hash)
+              return nil unless raw.values.all? { |m| %w[design override].include?(m) }
+
+              raw
             end
 
             def self.parse_transform!(raw)
@@ -215,6 +249,65 @@ module Granete
 
               value.map(&:to_f)
             end
+          end
+        end
+
+        # #784 R3: the material-provenance projection the plugin renders
+        # badges from. Fail-closed: known shapes only, mode enum enforced,
+        # role keys non-empty.
+        module DesignInheritanceContract
+          MODES = %w[design override].freeze
+
+          def self.parse!(body)
+            raise Contract::ContractError, 'la proyección de herencia debe ser un objeto' unless body.is_a?(Hash)
+            unless ProjectFurniture.uuid?(body['design_id']) && ProjectFurniture.uuid?(body['project_id'])
+              raise Contract::ContractError, 'proyección sin design_id/project_id válidos'
+            end
+            raise Contract::ContractError, 'items de herencia inválidos' unless body['items'].is_a?(Array)
+
+            Contract::DesignInheritance.new(
+              design_id: body['design_id'], project_id: body['project_id'],
+              items: body['items'].map { |entry| parse_item!(entry) }
+            )
+          end
+
+          def self.parse_item!(entry)
+            raise Contract::ContractError, 'item de herencia inválido' unless entry.is_a?(Hash)
+            unless ProjectFurniture.uuid?(entry['furniture_instance_id'])
+              raise Contract::ContractError,
+                    "item de herencia con furniture_instance_id inválido: #{entry['furniture_instance_id'].inspect}"
+            end
+            raise Contract::ContractError, 'inheritance del item inválido' unless entry['inheritance'].is_a?(Array)
+
+            Contract::InheritanceItem.new(
+              furniture_instance_id: entry['furniture_instance_id'],
+              inheritance: entry['inheritance'].map { |role_entry| parse_role!(role_entry) }
+            )
+          end
+
+          def self.parse_role!(entry)
+            raise Contract::ContractError, 'entrada de rol inválida' unless entry.is_a?(Hash)
+
+            role = entry['role']
+            raise Contract::ContractError, 'rol de herencia vacío' unless role.is_a?(String) && !role.strip.empty?
+            unless MODES.include?(entry['mode'])
+              raise Contract::ContractError, "modo de herencia desconocido: #{entry['mode'].inspect}"
+            end
+            unless entry['applied_material_id'].is_a?(String) && !entry['applied_material_id'].empty?
+              raise Contract::ContractError, "applied_material_id inválido para #{role}"
+            end
+
+            default_id = entry['design_default_material_id']
+            if default_id && !default_id.is_a?(String)
+              raise Contract::ContractError, "design_default_material_id inválido para #{role}"
+            end
+
+            Contract::RoleInheritance.new(
+              role: role, mode: entry['mode'],
+              applied_material_id: entry['applied_material_id'],
+              design_default_material_id: default_id,
+              needs_rollout: entry['needs_rollout'] == true
+            )
           end
         end
 
@@ -264,6 +357,13 @@ module Granete
             item.parameters = intent['parameters'] if intent.key?('parameters') && intent['parameters'].is_a?(Hash)
             choices = intent['materialChoices']
             item.material_choices = choices if intent.key?('materialChoices') && choices.is_a?(Hash)
+            # #784 R3: explicit lineage markers (role → design|override).
+            # Present only when authoring declared them (e.g. a role
+            # restore); everything else stays server-owned.
+            modes = intent['materialChoiceModes']
+            if modes.is_a?(Hash) && !modes.empty?
+              item.material_choice_modes = (item.material_choice_modes || {}).merge(modes)
+            end
             definition_id = intent['furnitureDefinitionId']
             item.furniture_definition_id = definition_id if definition_id.is_a?(String) && !definition_id.strip.empty?
             version = Contract.authoritative_definition_version(
@@ -284,9 +384,28 @@ module Granete
               furniture_definition_id: intent['furnitureDefinitionId'],
               definition_version: version,
               parameters: parameters, material_choices: choices,
+              material_choice_modes: build_material_choice_modes(choices, intent),
               transform: TransformContract.from_host(entity.transformation),
               technical_client_locator: locator
             )
+          end
+
+          # #784 R3: lineage for a NEW item. Without an explicit intent
+          # declaration the item keeps the legacy absent shape (the backend
+          # preserves the persisted lineage of unchanged values). With at
+          # least one declaration the FULL parity statement is emitted:
+          # declared roles carry their mode, the rest are explicit overrides
+          # — a new item never inherits by equality.
+          def build_material_choice_modes(choices, intent)
+            declared = intent['materialChoiceModes'].is_a?(Hash) ? intent['materialChoiceModes'] : {}
+            return nil if declared.empty?
+
+            modes = {}
+            choices.each_key do |role|
+              mode = declared[role]
+              modes[role] = %w[design override].include?(mode) ? mode : 'override'
+            end
+            modes
           end
 
           def placement_parameters(instance, definition)
