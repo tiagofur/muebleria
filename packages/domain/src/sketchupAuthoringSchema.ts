@@ -72,6 +72,15 @@ export type RelationshipAnchor = {
   readonly reference?: string;
 };
 
+/** One independently counted station family inside a single joint (#874
+ *  J2-A). Mutually exclusive with a stationCount parameter (fail closed). */
+export type RelationshipFamilyIntent = {
+  readonly familyId: string;
+  readonly count: number;
+  readonly startMarginMm?: number;
+  readonly endMarginMm?: number;
+};
+
 export type PartRelationshipIntent = {
   readonly relationshipId: StableEntityId;
   readonly kind: string;
@@ -79,6 +88,7 @@ export type PartRelationshipIntent = {
   readonly targets: readonly RelationshipAnchor[];
   readonly joinerySystemId?: string;
   readonly parameters?: Readonly<Record<string, ParameterValue>>;
+  readonly families?: readonly RelationshipFamilyIntent[];
 };
 
 export type HardwarePlacementIntent = {

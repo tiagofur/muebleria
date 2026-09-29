@@ -653,6 +653,45 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			f.Components = floorSideOccurrencesJSON()
 		})), http.StatusOK),
 
+		// 26. J2-A declared families: one joint, two independently counted
+		// station families (4+2), non-overlapping margins, per-family plans
+		// with honest aggregates; still TECHNICAL_PROFILE_REQUIRED, zero ops.
+		run("26-floor-side-families", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = floorSideOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{{
+				RelationshipID: "rel-floor-sides-01",
+				Kind:           "floor-side",
+				Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "floor-01", Role: "floor"},
+				Targets: []engine.AuthoringRelationshipAnchor{
+					{ComponentInstanceID: "side-left-01", Role: "side", Face: "front"},
+					{ComponentInstanceID: "side-right-01", Role: "side", Face: "back"},
+				},
+				Families: []engine.AuthoringRelationshipFamily{
+					{FamilyID: "taquetes", Count: 2, StartMarginMm: 100, EndMarginMm: 100},
+					{FamilyID: "tornillos", Count: 4, StartMarginMm: 30, EndMarginMm: 50},
+				},
+			}}
+		})), http.StatusOK),
+
+		// 27. J2-A collision: two families planning the same position fail
+		// the whole pattern (STATION_INVALID, no familyPlans, no reduction).
+		run("27-floor-side-families-collision", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			f.Components = floorSideOccurrencesJSON()
+			f.Relationships = []engine.AuthoringRelationship{{
+				RelationshipID: "rel-floor-sides-01",
+				Kind:           "floor-side",
+				Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "floor-01", Role: "floor"},
+				Targets: []engine.AuthoringRelationshipAnchor{
+					{ComponentInstanceID: "side-left-01", Role: "side", Face: "front"},
+					{ComponentInstanceID: "side-right-01", Role: "side", Face: "back"},
+				},
+				Families: []engine.AuthoringRelationshipFamily{
+					{FamilyID: "tornillos", Count: 4, StartMarginMm: 30, EndMarginMm: 50},
+					{FamilyID: "taquetes", Count: 2, StartMarginMm: 30, EndMarginMm: 30},
+				},
+			}}
+		})), http.StatusOK),
+
 		// 25. Unsupported relationship kind: pure error echo on the wire —
 		// the joinery body stays out of the fingerprint, which must remain
 		// byte-identical to 24 (same cabinet, no joinery semantics).

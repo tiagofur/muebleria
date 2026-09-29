@@ -214,3 +214,132 @@ func TestStructureRelationshipRejectsFacelessFloorSideTarget(t *testing.T) {
 		t.Fatal("faceless floor-side target accepted")
 	}
 }
+
+func floorSideFamilies() []AuthoringRelationshipFamily {
+	return []AuthoringRelationshipFamily{
+		{FamilyID: "tornillos", Count: 4, StartMarginMm: 30, EndMarginMm: 50},
+		{FamilyID: "taquetes", Count: 2, StartMarginMm: 100, EndMarginMm: 100},
+	}
+}
+
+// TestFamilyPlansIndependentStations proves one joint plans each family
+// independently: 4+2 stations, per-family distances, honest aggregates.
+func TestFamilyPlansIndependentStations(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = floorSideFamilies()
+	var collected []domain.ContractIssue
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected)
+	if status.Stage != JoineryTechnicalProfileMissing {
+		t.Fatalf("stage = %s issues=%+v", status.Stage, collected)
+	}
+	if len(status.Stations.FamilyPlans) != 2 {
+		t.Fatalf("family plans = %+v", status.Stations.FamilyPlans)
+	}
+	// familyPlans are sorted by familyId: "taquetes" < "tornillos".
+	taquetes, tornillos := status.Stations.FamilyPlans[0], status.Stations.FamilyPlans[1]
+	if tornillos.FamilyID != "tornillos" || taquetes.FamilyID != "taquetes" {
+		t.Fatalf("family order = %+v", status.Stations.FamilyPlans)
+	}
+	for _, count := range tornillos.StationCounts {
+		if count.StationCount != 4 {
+			t.Fatalf("tornillos count = %+v", count)
+		}
+	}
+	for _, count := range taquetes.StationCounts {
+		if count.StationCount != 2 {
+			t.Fatalf("taquetes count = %+v", count)
+		}
+	}
+	// Aggregates are the honest union: sum of counts, ascending positions.
+	for _, count := range status.Stations.StationCounts {
+		if count.StationCount != 6 {
+			t.Fatalf("aggregate count = %+v", count)
+		}
+	}
+	for _, distances := range status.Stations.StationDistances {
+		if len(distances.DistancesMm) != 6 {
+			t.Fatalf("aggregate distances = %+v", distances)
+		}
+		for i := 1; i < len(distances.DistancesMm); i++ {
+			if distances.DistancesMm[i] < distances.DistancesMm[i-1] {
+				t.Fatalf("aggregate not ascending: %+v", distances)
+			}
+		}
+	}
+}
+
+// TestFamilyPlansCollisionFailsWholePattern proves overlapping family
+// positions fail the relationship without auto-reduction.
+func TestFamilyPlansCollisionFailsWholePattern(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = []AuthoringRelationshipFamily{
+		{FamilyID: "tornillos", Count: 4, StartMarginMm: 30, EndMarginMm: 50},
+		{FamilyID: "taquetes", Count: 2, StartMarginMm: 30, EndMarginMm: 30},
+	}
+	var collected []domain.ContractIssue
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected)
+	if status.Stage != JoineryStationInvalid {
+		t.Fatalf("stage = %s", status.Stage)
+	}
+	found := false
+	for _, code := range status.Stations.IssueCodes {
+		if code == "STATION_FAMILY_COLLISION" {
+			found = true
+		}
+	}
+	if !found || len(status.Stations.FamilyPlans) != 0 {
+		t.Fatalf("collision status = %+v", status.Stations)
+	}
+}
+
+// TestFamiliesAndStationCountAreExclusive proves the fail-closed rule.
+func TestFamiliesAndStationCountAreExclusive(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Families = floorSideFamilies()
+	var collected []domain.ContractIssue
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected)
+	if status.Stage != JoineryStationInvalid {
+		t.Fatalf("stage = %s", status.Stage)
+	}
+	if len(status.Stations.IssueCodes) != 1 || status.Stations.IssueCodes[0] != "STATION_PATTERN_INVALID" {
+		t.Fatalf("issue codes = %+v", status.Stations.IssueCodes)
+	}
+}
+
+// TestFamiliesEndToEndFromBinding drives the full resolve: a catalog
+// binding with families materializes a relationship whose status carries
+// per-family plans, without any authored relationships.
+func TestFamiliesEndToEndFromBinding(t *testing.T) {
+	module, catalog := authoringCabinetCatalog()
+	definition := structureDefinition()
+	definition.Binding.Relationship.Families = []domain.FurnitureRelationshipFamily{
+		{FamilyID: "tornillos", Count: 4, StartMarginMm: 30, EndMarginMm: 50},
+		{FamilyID: "taquetes", Count: 2, StartMarginMm: 100, EndMarginMm: 100},
+	}
+	definition.Binding.Relationship.Targets[0].Face = "front"
+	definition.Binding.Relationship.Targets[1].Face = "back"
+	module.ParameterDefinitions = append(module.ParameterDefinitions, definition)
+	result, err := ResolveAuthoringLayout(AuthoringResolveInput{
+		Module: module, Catalog: catalog, PrecisionMm: 0.01,
+		EvaluatedParameters: map[string]any{"baseJointStations": float64(3)},
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(result.StructuralIssues) != 0 {
+		t.Fatalf("structural: %+v", result.StructuralIssues)
+	}
+	statuses := result.Machining.JoineryStatuses
+	if len(statuses) != 1 || len(statuses[0].Stations.FamilyPlans) != 2 {
+		t.Fatalf("statuses = %+v", statuses)
+	}
+	// familyPlans are sorted by familyId: "taquetes" < "tornillos".
+	if statuses[0].Stations.FamilyPlans[0].FamilyID != "taquetes" ||
+		statuses[0].Stations.FamilyPlans[0].StationCounts[0].StationCount != 2 ||
+		statuses[0].Stations.FamilyPlans[1].FamilyID != "tornillos" ||
+		statuses[0].Stations.FamilyPlans[1].StationCounts[0].StationCount != 4 {
+		t.Fatalf("family counts = %+v", statuses[0].Stations.FamilyPlans)
+	}
+}

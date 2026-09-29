@@ -68,6 +68,17 @@ export interface JoineryStationPlanStatus {
     readonly contactId: string;
     readonly distancesMm: readonly number[];
   }[];
+  /** Per-family breakdown when the relationship declares independent
+   *  operation families (#874 J2-A); aggregates above stay honest sums. */
+  readonly familyPlans?: readonly JoineryFamilyPlan[];
+}
+
+/** One family's independently planned station set per contact; plans sorted
+ *  by familyId for deterministic cross-runtime parity. */
+export interface JoineryFamilyPlan {
+  readonly familyId: string;
+  readonly stationCounts: readonly { readonly contactId: string; readonly stationCount: number }[];
+  readonly stationDistances: readonly { readonly contactId: string; readonly distancesMm: readonly number[] }[];
 }
 
 export interface JoineryRelationshipStatus {
@@ -542,6 +553,13 @@ function deriveFloorSideJoinery(
     return;
   }
 
+  // J2-A (#874): declared families plan independently per family — one
+  // joint, one status, per-family counts and positions. stationCount and
+  // families are mutually exclusive (fail closed, never silent precedence).
+  if (relationship.families !== undefined && relationship.families.length > 0) {
+    deriveFamilyPlans(relationship, resolution, boards, contactIds, status, pushIssue);
+    return;
+  }
   const parameters = relationship.parameters ?? {};
   const count = parameters.stationCount;
   const start: unknown = parameters.startMarginMm ?? 0;
@@ -582,6 +600,105 @@ function deriveFloorSideJoinery(
         contactId: plan.contactId,
         distancesMm: plan.stations.map((station) => station.distanceMm),
       })) },
+    ['TECHNICAL_PROFILE_REQUIRED']);
+}
+
+/**
+ * J2-A (#874): plans each declared operation family independently over the
+ * SAME verified contacts — one joint, one status, per-family counts and
+ * positions; cross-family position collisions fail the whole pattern (no
+ * auto-reduction, no silent overlap). Aggregate counts are per-contact sums
+ * and aggregate distances the united ascending drilling pattern.
+ */
+function deriveFamilyPlans(
+  relationship: PartRelationshipIntent,
+  resolution: ContactResolutionResult,
+  boards: ContactBoard[],
+  contactIds: readonly string[],
+  status: (stage: JoineryResolutionStage, contacts: readonly JoineryContactStatus[],
+    stations: JoineryStationPlanStatus, blockers: readonly string[]) => void,
+  pushIssue: (code: string, message: string, remediation: string) => void,
+): void {
+  const invalid = (codes: readonly string[]): void => {
+    status('STATION_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+      { status: 'INVALID', issueCodes: [...codes], stationCounts: [], stationDistances: [] }, codes);
+  };
+  if (relationship.parameters?.stationCount !== undefined) {
+    pushIssue('STATION_PATTERN_INVALID',
+      'stationCount and families are mutually exclusive: declare one station pattern per relationship',
+      'Declare either a stationCount parameter or families with unique ids and counts >= 2.');
+    invalid(['STATION_PATTERN_INVALID']);
+    return;
+  }
+  const seen = new Set<string>();
+  for (const family of relationship.families ?? []) {
+    if (!family.familyId.trim() || seen.has(family.familyId) ||
+        typeof family.count !== 'number' || !Number.isInteger(family.count) || family.count < 2 ||
+        typeof family.startMarginMm !== 'number' || !Number.isFinite(family.startMarginMm) || family.startMarginMm < 0 ||
+        typeof family.endMarginMm !== 'number' || !Number.isFinite(family.endMarginMm) || family.endMarginMm < 0) {
+      pushIssue('STATION_PATTERN_INVALID',
+        'every family needs a unique non-blank familyId, an integer count >= 2 and finite nonnegative margins',
+        'Declare families with unique ids, counts >= 2 and optional nonnegative margins.');
+      invalid(['STATION_PATTERN_INVALID']);
+      return;
+    }
+    seen.add(family.familyId);
+  }
+  const families = [...(relationship.families ?? [])].sort((a, b) =>
+    compareUnicodeScalarIds(a.familyId, b.familyId));
+
+  const familyPlans: JoineryFamilyPlan[] = [];
+  const aggregateCounts = new Map<string, number>();
+  const aggregatePositions = new Map<string, number[]>();
+  for (const family of families) {
+    const specs = contactIds.map((contactId) =>
+      ({ contactId, count: family.count, startMarginMm: family.startMarginMm ?? 0, endMarginMm: family.endMarginMm ?? 0 }));
+    const planned = planResolvedContactStations(resolution, boards, specs);
+    if (planned.issues.length > 0) {
+      for (const issue of planned.issues) pushIssue(issue.code, issue.message, issue.remediation ?? '');
+      invalid([...new Set(planned.issues.map((issue) => issue.code))]);
+      return;
+    }
+    const counts = planned.plans.map((plan) => ({ contactId: plan.contactId, stationCount: plan.stations.length }));
+    const distances = planned.plans.map((plan) => ({
+      contactId: plan.contactId,
+      distancesMm: plan.stations.map((station) => station.distanceMm),
+    }));
+    familyPlans.push({ familyId: family.familyId, stationCounts: counts, stationDistances: distances });
+    for (const plan of planned.plans) {
+      aggregateCounts.set(plan.contactId, (aggregateCounts.get(plan.contactId) ?? 0) + plan.stations.length);
+      const positions = aggregatePositions.get(plan.contactId) ?? [];
+      positions.push(...plan.stations.map((station) => station.distanceMm));
+      aggregatePositions.set(plan.contactId, positions);
+    }
+  }
+  // Cross-family collision: two families planning the same physical position
+  // on one contact is a construction error, never an overlap.
+  for (const contactId of contactIds) {
+    const positions = [...(aggregatePositions.get(contactId) ?? [])].sort((a, b) => a - b);
+    for (let i = 1; i < positions.length; i += 1) {
+      if (positions[i]! - positions[i - 1]! <= 1e-6) {
+        pushIssue('STATION_FAMILY_COLLISION',
+          `families plan the same station position ${positions[i]!.toFixed(3)} on contact ${contactId}; patterns must not overlap`,
+          "Adjust each family's count or margins so planned positions stay distinct.");
+        invalid(['STATION_FAMILY_COLLISION']);
+        return;
+      }
+    }
+  }
+  const counts = contactIds.map((contactId) => ({
+    contactId, stationCount: aggregateCounts.get(contactId) ?? 0,
+  }));
+  const distances = contactIds.map((contactId) => ({
+    contactId,
+    distancesMm: [...(aggregatePositions.get(contactId) ?? [])].sort((a, b) => a - b),
+  }));
+  pushIssue('TECHNICAL_PROFILE_REQUIRED',
+    `floor-side relationship ${relationship.relationshipId} has no verified production technical profile`,
+    'Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.');
+  status('TECHNICAL_PROFILE_REQUIRED',
+    contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+    { status: 'PLANNED', issueCodes: [], stationCounts: counts, stationDistances: distances, familyPlans },
     ['TECHNICAL_PROFILE_REQUIRED']);
 }
 

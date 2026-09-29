@@ -612,6 +612,71 @@ describe('J1-B productive floor-side resolver states', () => {
     const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, cloneCabinetEnvelope(), cabinetCatalog);
     return deriveRelationshipMachining(response.authoringSnapshot!, cabinetJoineryCatalog);
   };
+
+
+describe('J2-A operation families inside one joint', () => {
+  const familiesEnvelope = (families: unknown, mutate?: (relationship: Record<string, unknown>) => void) =>
+    floorSideEnvelope((relationship) => {
+      delete (relationship as Record<string, unknown>).parameters;
+      (relationship as Record<string, unknown>).families = families;
+      mutate?.(relationship as Record<string, unknown>);
+    });
+
+  const statusesFrom = (envelope: ReturnType<typeof floorSideEnvelope>) => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, envelope, cabinetCatalog);
+    if (response.status !== 'accepted' || response.authoringSnapshot === undefined) {
+      throw new Error(`fixture envelope was not accepted: ${JSON.stringify(response.issues)}`);
+    }
+    return deriveRelationshipMachining(response.authoringSnapshot, cabinetJoineryCatalog).joineryStatuses
+      .find((item) => item.relationshipId === 'rel-floor-sides-01')!;
+  };
+
+  it('plans each family independently: 4+2 stations, per-family positions, honest 6-station union', () => {
+    const status = statusesFrom(familiesEnvelope([
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+    ]));
+    expect(status.stage).toBe('TECHNICAL_PROFILE_REQUIRED');
+    expect(status.stations.status).toBe('PLANNED');
+    expect(status.stations.familyPlans?.map((plan) => [plan.familyId, plan.stationCounts[0]?.stationCount]))
+      .toEqual([['taquetes', 2], ['tornillos', 4]]);
+    expect(status.stations.stationCounts).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 6 },
+      { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 6 },
+    ]);
+  });
+
+  it('keeps the declared family order irrelevant: reversed input plans identically', () => {
+    const straight = statusesFrom(familiesEnvelope([
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+    ]));
+    const reversed = statusesFrom(familiesEnvelope([
+      { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+    ]));
+    expect(reversed).toEqual(straight);
+  });
+
+  it('fails the whole pattern on cross-family position collision (no auto-reduction)', () => {
+    const status = statusesFrom(familiesEnvelope([
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 30, endMarginMm: 30 },
+    ]));
+    expect(status.stage).toBe('STATION_INVALID');
+    expect(status.stations.issueCodes).toEqual(['STATION_FAMILY_COLLISION']);
+    expect(status.stations.familyPlans).toBeUndefined();
+  });
+
+  it('rejects stationCount declared together with families', () => {
+    const status = statusesFrom(familiesEnvelope(
+      [{ familyId: 'tornillos', count: 4 }],
+      (relationship) => { relationship.parameters = { stationCount: 3 }; },
+    ));
+    expect(status.stage).toBe('STATION_INVALID');
+    expect(status.stations.issueCodes).toEqual(['STATION_PATTERN_INVALID']);
+  });
+});
 });
 
 describe('canonical case 1 — move a shelf', () => {

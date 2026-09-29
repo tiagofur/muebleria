@@ -23216,6 +23216,2274 @@
       }
     },
     {
+      "id": "26-floor-side-families",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-50354d6c1473",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  582,
+                  18,
+                  0
+                ]
+              }
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "relationships": [
+            {
+              "families": [
+                {
+                  "count": 2,
+                  "endMarginMm": 100,
+                  "familyId": "taquetes",
+                  "startMarginMm": 100
+                },
+                {
+                  "count": 4,
+                  "endMarginMm": 50,
+                  "familyId": "tornillos",
+                  "startMarginMm": 30
+                }
+              ],
+              "kind": "floor-side",
+              "relationshipId": "rel-floor-sides-01",
+              "source": {
+                "componentInstanceId": "floor-01",
+                "role": "floor"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "face": "front",
+                  "role": "side"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "face": "back",
+                  "role": "side"
+                }
+              ]
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-50354d6c1473",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "hasBackPanel": true,
+            "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "side-left-01",
+              "componentDefinitionId": "st-comp-side",
+              "catalogComponentId": "comp-side",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "componentDefinitionId": "st-comp-side-r",
+              "catalogComponentId": "comp-side-r",
+              "role": "LATERAL",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  582,
+                  18,
+                  0
+                ]
+              }
+            },
+            {
+              "componentInstanceId": "floor-01",
+              "componentDefinitionId": "st-comp-base",
+              "catalogComponentId": "comp-base",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "top-01",
+              "componentDefinitionId": "st-comp-top",
+              "catalogComponentId": "comp-top",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "back-01",
+              "componentDefinitionId": "mod-comp-back",
+              "catalogComponentId": "comp-back",
+              "role": "FONDO"
+            },
+            {
+              "componentInstanceId": "shelf-01",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "door-01",
+              "componentDefinitionId": "mod-comp-door",
+              "catalogComponentId": "comp-door",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            },
+            {
+              "relationshipId": "rel-floor-sides-01",
+              "kind": "floor-side",
+              "source": {
+                "componentInstanceId": "floor-01",
+                "role": "floor"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "side",
+                  "face": "front"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "side",
+                  "face": "back"
+                }
+              ],
+              "families": [
+                {
+                  "familyId": "taquetes",
+                  "count": 2,
+                  "startMarginMm": 100,
+                  "endMarginMm": 100
+                },
+                {
+                  "familyId": "tornillos",
+                  "count": 4,
+                  "startMarginMm": 30,
+                  "endMarginMm": 50
+                }
+              ]
+            }
+          ],
+          "hardwarePlacements": [
+            {
+              "hardwarePlacementId": "door-01-hw-0",
+              "catalogHardwareId": "hw-hinge",
+              "hostComponentInstanceId": "door-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                298,
+                100
+              ]
+            },
+            {
+              "hardwarePlacementId": "door-01-hw-1",
+              "catalogHardwareId": "hw-handle",
+              "hostComponentInstanceId": "door-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                40,
+                360
+              ]
+            }
+          ]
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+            "definitionName": "Gabinete Authoring 600",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "side-left-01",
+                "componentDefinitionId": "st-comp-side",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "side-right-01",
+                "componentDefinitionId": "st-comp-side-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    18,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    578,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "floor-01",
+                "componentDefinitionId": "st-comp-base",
+                "slotId": "base",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "top-01",
+                "componentDefinitionId": "st-comp-top",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "back-01",
+                "componentDefinitionId": "mod-comp-back",
+                "slotId": "trasera",
+                "role": "FONDO",
+                "name": "Fondo",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ]
+                },
+                "dimensionsMm": [
+                  690,
+                  15,
+                  570
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 570,
+                "widthMm": 690,
+                "thicknessMm": 15,
+                "optionRole": "FONDO",
+                "materialColorHex": "#8b7355"
+              },
+              {
+                "componentInstanceId": "shelf-01",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    150
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  564,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    150
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "door-01",
+                "componentDefinitionId": "mod-comp-door",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  716
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 716,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "door-01-hw-0",
+                "hardwareId": "hw-hinge",
+                "name": "Bisagra CL110",
+                "shape": "hinge",
+                "sizeMm": 96,
+                "diameterMm": 35,
+                "projectionMm": 25,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "door-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    252,
+                    578,
+                    84.5
+                  ]
+                },
+                "dimensionsMm": [
+                  96,
+                  25,
+                  35
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    300,
+                    578,
+                    102
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                }
+              },
+              {
+                "placementId": "door-01-hw-1",
+                "hardwareId": "hw-handle",
+                "name": "Manija 160",
+                "shape": "bar-pull",
+                "sizeMm": 160,
+                "diameterMm": 32,
+                "projectionMm": 37,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "door-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    478,
+                    578,
+                    346
+                  ]
+                },
+                "dimensionsMm": [
+                  160,
+                  37,
+                  32
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    558,
+                    578,
+                    362
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "bottom",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "door-01-hw-0:op-1",
+                "hostComponentInstanceId": "door-01",
+                "provenance": {
+                  "sourceKind": "manualHardwarePlacement",
+                  "hardwarePlacementId": "door-01-hw-0"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 298,
+                    "yMm": 100,
+                    "diameterMm": 35,
+                    "depthMm": 12.5,
+                    "type": "hinge"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "joineryStatuses": [
+              {
+                "relationshipId": "rel-floor-sides-01",
+                "kind": "floor-side",
+                "stage": "TECHNICAL_PROFILE_REQUIRED",
+                "contacts": [
+                  {
+                    "contactId": "rel-floor-sides-01:side-left-01",
+                    "status": "VALID",
+                    "issueCodes": []
+                  },
+                  {
+                    "contactId": "rel-floor-sides-01:side-right-01",
+                    "status": "VALID",
+                    "issueCodes": []
+                  }
+                ],
+                "stations": {
+                  "status": "PLANNED",
+                  "issueCodes": [],
+                  "stationCounts": [
+                    {
+                      "contactId": "rel-floor-sides-01:side-left-01",
+                      "stationCount": 6
+                    },
+                    {
+                      "contactId": "rel-floor-sides-01:side-right-01",
+                      "stationCount": 6
+                    }
+                  ],
+                  "stationDistances": [
+                    {
+                      "contactId": "rel-floor-sides-01:side-left-01",
+                      "distancesMm": [
+                        30,
+                        100,
+                        184,
+                        338,
+                        442,
+                        492
+                      ]
+                    },
+                    {
+                      "contactId": "rel-floor-sides-01:side-right-01",
+                      "distancesMm": [
+                        30,
+                        100,
+                        178,
+                        326,
+                        424,
+                        474
+                      ]
+                    }
+                  ],
+                  "familyPlans": [
+                    {
+                      "familyId": "taquetes",
+                      "stationCounts": [
+                        {
+                          "contactId": "rel-floor-sides-01:side-left-01",
+                          "stationCount": 2
+                        },
+                        {
+                          "contactId": "rel-floor-sides-01:side-right-01",
+                          "stationCount": 2
+                        }
+                      ],
+                      "stationDistances": [
+                        {
+                          "contactId": "rel-floor-sides-01:side-left-01",
+                          "distancesMm": [
+                            100,
+                            442
+                          ]
+                        },
+                        {
+                          "contactId": "rel-floor-sides-01:side-right-01",
+                          "distancesMm": [
+                            100,
+                            424
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "familyId": "tornillos",
+                      "stationCounts": [
+                        {
+                          "contactId": "rel-floor-sides-01:side-left-01",
+                          "stationCount": 4
+                        },
+                        {
+                          "contactId": "rel-floor-sides-01:side-right-01",
+                          "stationCount": 4
+                        }
+                      ],
+                      "stationDistances": [
+                        {
+                          "contactId": "rel-floor-sides-01:side-left-01",
+                          "distancesMm": [
+                            30,
+                            184,
+                            338,
+                            492
+                          ]
+                        },
+                        {
+                          "contactId": "rel-floor-sides-01:side-right-01",
+                          "distancesMm": [
+                            30,
+                            178,
+                            326,
+                            474
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "blockers": [
+                  "TECHNICAL_PROFILE_REQUIRED"
+                ]
+              }
+            ],
+            "manufacturingFingerprint": "sha256-21acab0bb5d3484ca4a3495ab60f5c3ef641838d212644096af076621d8d1ecc"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "blocked",
+            "issues": [
+              {
+                "code": "TECHNICAL_PROFILE_REQUIRED",
+                "message": "floor-side relationship rel-floor-sides-01 has no verified production technical profile",
+                "severity": "error",
+                "entityId": "rel-floor-sides-01",
+                "path": "furniture.relationships[relationshipId=rel-floor-sides-01]",
+                "remediation": "Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production."
+              }
+            ],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": [
+          {
+            "code": "TECHNICAL_PROFILE_REQUIRED",
+            "message": "floor-side relationship rel-floor-sides-01 has no verified production technical profile",
+            "severity": "error",
+            "entityId": "rel-floor-sides-01",
+            "path": "furniture.relationships[relationshipId=rel-floor-sides-01]",
+            "remediation": "Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production."
+          }
+        ]
+      }
+    },
+    {
+      "id": "27-floor-side-families-collision",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-50354d6c1473",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  582,
+                  18,
+                  0
+                ]
+              }
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "relationships": [
+            {
+              "families": [
+                {
+                  "count": 4,
+                  "endMarginMm": 50,
+                  "familyId": "tornillos",
+                  "startMarginMm": 30
+                },
+                {
+                  "count": 2,
+                  "endMarginMm": 30,
+                  "familyId": "taquetes",
+                  "startMarginMm": 30
+                }
+              ],
+              "kind": "floor-side",
+              "relationshipId": "rel-floor-sides-01",
+              "source": {
+                "componentInstanceId": "floor-01",
+                "role": "floor"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "face": "front",
+                  "role": "side"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "face": "back",
+                  "role": "side"
+                }
+              ]
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-50354d6c1473",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "hasBackPanel": true,
+            "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "side-left-01",
+              "componentDefinitionId": "st-comp-side",
+              "catalogComponentId": "comp-side",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "componentDefinitionId": "st-comp-side-r",
+              "catalogComponentId": "comp-side-r",
+              "role": "LATERAL",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  582,
+                  18,
+                  0
+                ]
+              }
+            },
+            {
+              "componentInstanceId": "floor-01",
+              "componentDefinitionId": "st-comp-base",
+              "catalogComponentId": "comp-base",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "top-01",
+              "componentDefinitionId": "st-comp-top",
+              "catalogComponentId": "comp-top",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "back-01",
+              "componentDefinitionId": "mod-comp-back",
+              "catalogComponentId": "comp-back",
+              "role": "FONDO"
+            },
+            {
+              "componentInstanceId": "shelf-01",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "door-01",
+              "componentDefinitionId": "mod-comp-door",
+              "catalogComponentId": "comp-door",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            },
+            {
+              "relationshipId": "rel-floor-sides-01",
+              "kind": "floor-side",
+              "source": {
+                "componentInstanceId": "floor-01",
+                "role": "floor"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "side",
+                  "face": "front"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "side",
+                  "face": "back"
+                }
+              ],
+              "families": [
+                {
+                  "familyId": "tornillos",
+                  "count": 4,
+                  "startMarginMm": 30,
+                  "endMarginMm": 50
+                },
+                {
+                  "familyId": "taquetes",
+                  "count": 2,
+                  "startMarginMm": 30,
+                  "endMarginMm": 30
+                }
+              ]
+            }
+          ],
+          "hardwarePlacements": [
+            {
+              "hardwarePlacementId": "door-01-hw-0",
+              "catalogHardwareId": "hw-hinge",
+              "hostComponentInstanceId": "door-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                298,
+                100
+              ]
+            },
+            {
+              "hardwarePlacementId": "door-01-hw-1",
+              "catalogHardwareId": "hw-handle",
+              "hostComponentInstanceId": "door-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                40,
+                360
+              ]
+            }
+          ]
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+            "definitionName": "Gabinete Authoring 600",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "side-left-01",
+                "componentDefinitionId": "st-comp-side",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "side-right-01",
+                "componentDefinitionId": "st-comp-side-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    18,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    578,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "floor-01",
+                "componentDefinitionId": "st-comp-base",
+                "slotId": "base",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "top-01",
+                "componentDefinitionId": "st-comp-top",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "back-01",
+                "componentDefinitionId": "mod-comp-back",
+                "slotId": "trasera",
+                "role": "FONDO",
+                "name": "Fondo",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ]
+                },
+                "dimensionsMm": [
+                  690,
+                  15,
+                  570
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 570,
+                "widthMm": 690,
+                "thicknessMm": 15,
+                "optionRole": "FONDO",
+                "materialColorHex": "#8b7355"
+              },
+              {
+                "componentInstanceId": "shelf-01",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    150
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  564,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    150
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "door-01",
+                "componentDefinitionId": "mod-comp-door",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  716
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 716,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "door-01-hw-0",
+                "hardwareId": "hw-hinge",
+                "name": "Bisagra CL110",
+                "shape": "hinge",
+                "sizeMm": 96,
+                "diameterMm": 35,
+                "projectionMm": 25,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "door-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    252,
+                    578,
+                    84.5
+                  ]
+                },
+                "dimensionsMm": [
+                  96,
+                  25,
+                  35
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    300,
+                    578,
+                    102
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                }
+              },
+              {
+                "placementId": "door-01-hw-1",
+                "hardwareId": "hw-handle",
+                "name": "Manija 160",
+                "shape": "bar-pull",
+                "sizeMm": 160,
+                "diameterMm": 32,
+                "projectionMm": 37,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "door-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    478,
+                    578,
+                    346
+                  ]
+                },
+                "dimensionsMm": [
+                  160,
+                  37,
+                  32
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    558,
+                    578,
+                    362
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "bottom",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "door-01-hw-0:op-1",
+                "hostComponentInstanceId": "door-01",
+                "provenance": {
+                  "sourceKind": "manualHardwarePlacement",
+                  "hardwarePlacementId": "door-01-hw-0"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 298,
+                    "yMm": 100,
+                    "diameterMm": 35,
+                    "depthMm": 12.5,
+                    "type": "hinge"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "joineryStatuses": [
+              {
+                "relationshipId": "rel-floor-sides-01",
+                "kind": "floor-side",
+                "stage": "STATION_INVALID",
+                "contacts": [
+                  {
+                    "contactId": "rel-floor-sides-01:side-left-01",
+                    "status": "VALID",
+                    "issueCodes": []
+                  },
+                  {
+                    "contactId": "rel-floor-sides-01:side-right-01",
+                    "status": "VALID",
+                    "issueCodes": []
+                  }
+                ],
+                "stations": {
+                  "status": "INVALID",
+                  "issueCodes": [
+                    "STATION_FAMILY_COLLISION"
+                  ],
+                  "stationCounts": [],
+                  "stationDistances": []
+                },
+                "blockers": [
+                  "STATION_FAMILY_COLLISION"
+                ]
+              }
+            ],
+            "manufacturingFingerprint": "sha256-853941541f0a2dc96d8961282d8d9cfebd27e0fb65ba6b6bced208c852767080"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "blocked",
+            "issues": [
+              {
+                "code": "STATION_FAMILY_COLLISION",
+                "message": "families plan the same station position 30.000 on contact rel-floor-sides-01:side-left-01; patterns must not overlap",
+                "severity": "error",
+                "entityId": "rel-floor-sides-01",
+                "path": "furniture.relationships[relationshipId=rel-floor-sides-01]",
+                "remediation": "Adjust each family's count or margins so planned positions stay distinct."
+              }
+            ],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": [
+          {
+            "code": "STATION_FAMILY_COLLISION",
+            "message": "families plan the same station position 30.000 on contact rel-floor-sides-01:side-left-01; patterns must not overlap",
+            "severity": "error",
+            "entityId": "rel-floor-sides-01",
+            "path": "furniture.relationships[relationshipId=rel-floor-sides-01]",
+            "remediation": "Adjust each family's count or margins so planned positions stay distinct."
+          }
+        ]
+      }
+    },
+    {
       "id": "25-floor-side-unsupported-kind",
       "request": {
         "coordinateSystem": {

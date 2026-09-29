@@ -67,6 +67,15 @@ type AuthoringRelationshipAnchor struct {
 	Reference           string `json:"reference,omitempty"`
 }
 
+// AuthoringRelationshipFamily is one independently counted station family
+// inside a single joint (#874 J2-A).
+type AuthoringRelationshipFamily struct {
+	FamilyID      string  `json:"familyId"`
+	Count         int     `json:"count"`
+	StartMarginMm float64 `json:"startMarginMm,omitempty"`
+	EndMarginMm   float64 `json:"endMarginMm,omitempty"`
+}
+
 // AuthoringRelationship mirrors the TS PartRelationshipIntent: constructive
 // intent, never final perforations.
 type AuthoringRelationship struct {
@@ -76,6 +85,9 @@ type AuthoringRelationship struct {
 	Targets         []AuthoringRelationshipAnchor `json:"targets"`
 	JoinerySystemID string                        `json:"joinerySystemId,omitempty"`
 	Parameters      map[string]any                `json:"parameters,omitempty"`
+	// Families declares independent operation families; mutually exclusive
+	// with a stationCount parameter (validated fail-closed).
+	Families []AuthoringRelationshipFamily `json:"families,omitempty"`
 }
 
 // AuthoringManualPlacement is the resolve-scoped manual placement intent.
@@ -488,17 +500,42 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 					ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole,
 					Face: binding.Relationship.SourceFace,
 				}
-				result = append(result, AuthoringRelationship{
-					RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1),
-					Kind:           binding.Relationship.Kind,
-					Source:         sourceAnchor, Targets: targets, Parameters: parameters,
-				})
+				// Families (#874 J2-A): construction-declared independent
+				// operation families replace the single parameter-driven
+				// station count; each family carries its own count/margins.
+				if len(binding.Relationship.Families) > 0 {
+					result = append(result, AuthoringRelationship{
+						RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1),
+						Kind:           binding.Relationship.Kind,
+						Source:         sourceAnchor, Targets: targets,
+						Families: convertBindingFamilies(binding.Relationship.Families),
+					})
+				} else {
+					result = append(result, AuthoringRelationship{
+						RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1),
+						Kind:           binding.Relationship.Kind,
+						Source:         sourceAnchor, Targets: targets, Parameters: parameters,
+					})
+				}
 				has[key] = true
 			}
 		}
 	}
 	sort.SliceStable(result, func(i, j int) bool { return result[i].RelationshipID < result[j].RelationshipID })
 	return result
+}
+
+// convertBindingFamilies copies construction-declared families into the
+// authoring wire shape (same fields, distinct types).
+func convertBindingFamilies(families []domain.FurnitureRelationshipFamily) []AuthoringRelationshipFamily {
+	out := make([]AuthoringRelationshipFamily, 0, len(families))
+	for _, family := range families {
+		out = append(out, AuthoringRelationshipFamily{
+			FamilyID: family.FamilyID, Count: family.Count,
+			StartMarginMm: family.StartMarginMm, EndMarginMm: family.EndMarginMm,
+		})
+	}
+	return out
 }
 
 // structureStationCount reads the station count a structureRelationship
@@ -954,6 +991,46 @@ func effectiveManualPlacements(boards []layoutBoard, authored []AuthoringManualP
 	return out, issues
 }
 
+// validateRelationshipFamilies enforces the closed shape and the single
+// exclusivity rule of declared operation families (#874 J2-A): stationCount
+// and families are mutually exclusive, familyIds unique, counts >= 2 and
+// margins finite nonnegative.
+func validateRelationshipFamilies(relationship AuthoringRelationship) []domain.ContractIssue {
+	if len(relationship.Families) == 0 {
+		return nil
+	}
+	path := fmt.Sprintf("furniture.relationships[relationshipId=%s].families", relationship.RelationshipID)
+	issues := []domain.ContractIssue{}
+	add := func(message string) {
+		issues = append(issues, domain.ContractIssue{
+			Code: "RELATIONSHIP_INVALID", Message: message,
+			Severity: domain.IssueSeverityError, EntityID: relationship.RelationshipID, Path: path,
+			Remediation: "Declare either a stationCount parameter or families with unique ids and counts >= 2.",
+		})
+	}
+	if _, hasCount := relationship.Parameters["stationCount"]; hasCount {
+		add("stationCount and families are mutually exclusive: declare one station pattern per relationship")
+	}
+	seen := map[string]bool{}
+	for _, family := range relationship.Families {
+		if strings.TrimSpace(family.FamilyID) == "" {
+			add("familyId is required")
+		}
+		if seen[family.FamilyID] {
+			add(fmt.Sprintf("familyId %s appears more than once", family.FamilyID))
+		}
+		seen[family.FamilyID] = true
+		if family.Count < 2 {
+			add(fmt.Sprintf("family %s count must be an integer >= 2", family.FamilyID))
+		}
+		if math.IsNaN(family.StartMarginMm) || math.IsInf(family.StartMarginMm, 0) || family.StartMarginMm < 0 ||
+			math.IsNaN(family.EndMarginMm) || math.IsInf(family.EndMarginMm, 0) || family.EndMarginMm < 0 {
+			add(fmt.Sprintf("family %s margins must be finite and nonnegative", family.FamilyID))
+		}
+	}
+	return issues
+}
+
 // validateRelationships checks anchors against the effective occurrence set
 // (structural: orphaned anchors reject the request — #477 scenario 7).
 func validateRelationships(relationships []AuthoringRelationship, boards []layoutBoard) []domain.ContractIssue {
@@ -989,6 +1066,7 @@ func validateRelationships(relationships []AuthoringRelationship, boards []layou
 			})
 			continue
 		}
+		issues = append(issues, validateRelationshipFamilies(relationship)...)
 		if !ids[relationship.Source.ComponentInstanceID] {
 			issues = append(issues, domain.ContractIssue{
 				Code:     "RELATIONSHIP_ORPHANED",

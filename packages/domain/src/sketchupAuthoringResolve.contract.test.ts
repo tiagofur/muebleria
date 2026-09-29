@@ -235,6 +235,8 @@ describe('#477 shared authoring resolve contract fixture', () => {
       '23-floor-side-reorder',
       '24-floor-side-none',
       '25-floor-side-unsupported-kind',
+      '26-floor-side-families',
+      '27-floor-side-families-collision',
     ]) {
       expect(ids).toContain(required);
     }
@@ -595,6 +597,59 @@ describe('J1 golden floor-side cross-runtime parity (#874)', () => {
     expect(fingerprintOf('24-floor-side-none')).toBe(fingerprintOf('25-floor-side-unsupported-kind'));
   });
 
+  test('J2-A declared families plan independently inside ONE joint (4+2, not 4 groups)', () => {
+    const status = joineryOf('26-floor-side-families')[0]!;
+    expect(status.stage).toBe('TECHNICAL_PROFILE_REQUIRED');
+    const stations = status.stations;
+    // Independently expected (asymmetric cabinet: left overlap 542, right 524):
+    // tornillos 4, margins 30/50 and taquetes 2, margins 100/100 per contact.
+    expect(stations.familyPlans).toEqual([
+      {
+        familyId: 'taquetes',
+        stationCounts: [
+          { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 2 },
+          { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 2 },
+        ],
+        stationDistances: [
+          { contactId: 'rel-floor-sides-01:side-left-01', distancesMm: [100, 442] },
+          { contactId: 'rel-floor-sides-01:side-right-01', distancesMm: [100, 424] },
+        ],
+      },
+      {
+        familyId: 'tornillos',
+        stationCounts: [
+          { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 4 },
+          { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 4 },
+        ],
+        stationDistances: [
+          { contactId: 'rel-floor-sides-01:side-left-01', distancesMm: [30, 184, 338, 492] },
+          { contactId: 'rel-floor-sides-01:side-right-01', distancesMm: [30, 178, 326, 474] },
+        ],
+      },
+    ]);
+    // Aggregates are the honest union: 6 stations, ascending positions.
+    expect(stations.stationCounts).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', stationCount: 6 },
+      { contactId: 'rel-floor-sides-01:side-right-01', stationCount: 6 },
+    ]);
+    expect(stations.stationDistances).toEqual([
+      { contactId: 'rel-floor-sides-01:side-left-01', distancesMm: [30, 100, 184, 338, 442, 492] },
+      { contactId: 'rel-floor-sides-01:side-right-01', distancesMm: [30, 100, 178, 326, 424, 474] },
+    ]);
+    // Declaring families moves the manufacturing identity.
+    expect(fingerprintOf('26-floor-side-families')).not.toBe(fingerprintOf('20-floor-side-contacts'));
+    expect(fingerprintOf('26-floor-side-families')).not.toBe(fingerprintOf('24-floor-side-none'));
+  });
+
+  test('J2-A family collision fails the whole pattern without auto-reduction', () => {
+    const status = joineryOf('27-floor-side-families-collision')[0]!;
+    expect(status.stage).toBe('STATION_INVALID');
+    expect(status.stations.status).toBe('INVALID');
+    expect(status.stations.issueCodes).toEqual(['STATION_FAMILY_COLLISION']);
+    expect(status.stations.familyPlans).toBeUndefined();
+    expect(status.stations.stationCounts).toEqual([]);
+  });
+
   test('the unsupported kind is an honest structured state, never a joinery identity', () => {
     expect(joineryOf('25-floor-side-unsupported-kind')).toEqual([
       {
@@ -617,6 +672,8 @@ describe('J1 golden floor-side cross-runtime parity (#874)', () => {
       '23-floor-side-reorder',
       '24-floor-side-none',
       '25-floor-side-unsupported-kind',
+      '26-floor-side-families',
+      '27-floor-side-families-collision',
     ]) {
       const scenario = byId.get(id)!;
       const result = deriveRelationshipMachining(snapshotFromScenario(scenario), catalog);
@@ -645,6 +702,21 @@ describe('authoringResolveFingerprint joinery statuses (J1-B)', () => {
       joineryStatuses: [{ ...base, relationshipId: 'rel-x', stage: 'RELATIONSHIP_UNSUPPORTED' }] });
     expect(empty).toBe(without);
     expect(unsupported).toBe(without);
+  });
+
+  test('familyPlans join the hash only when declared (J2-A)', () => {
+    const tornillos = { familyId: 'tornillos', stationCounts: [{ contactId: 'c1', stationCount: 4 }],
+      stationDistances: [{ contactId: 'c1', distancesMm: [30, 184, 338, 492] }] };
+    const taquetes = { familyId: 'taquetes', stationCounts: [{ contactId: 'c1', stationCount: 2 }],
+      stationDistances: [{ contactId: 'c1', distancesMm: [100, 442] }] };
+    const withFamilies = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [],
+      joineryStatuses: [{ ...base, stations: { ...base.stations, familyPlans: [tornillos, taquetes] } }] });
+    const without = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [] });
+    expect(withFamilies).not.toBe(without);
+    // Family list order never moves the identity (the twin sorts by familyId).
+    const reordered = authoringResolveFingerprint({ boards, manualPlacements: [], derivedHardwarePlacements: [], operations: [],
+      joineryStatuses: [{ ...base, stations: { ...base.stations, familyPlans: [taquetes, tornillos] } }] });
+    expect(reordered).toBe(withFamilies);
   });
 
   test('moves with semantics and ignores reordering', () => {
