@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -236,6 +238,11 @@ type stubStore struct {
 	updateAmbientReceived     *domain.AmbientMaterial
 	deactivateAmbientCalled   bool
 	deactivateAmbientReceived string
+	// Manufacturing Library (#772 / LIB-1)
+	currentPublishedRelease    *domain.LibraryRelease
+	currentPublishedReleaseErr error
+	releaseByID                map[uuid.UUID]*domain.LibraryRelease
+	getReleaseByIDErr          error
 	// Ambient categories (F086)
 	listAmbientCategories       []domain.AmbientCategory
 	ambientCategoryReturnedByID *domain.AmbientCategory
@@ -1567,6 +1574,32 @@ func (s *stubStore) SetUserSectors(_ context.Context, _ string, _ []domain.UserS
 }
 func (s *stubStore) GetUsersBySector(_ context.Context, _ string) ([]domain.User, error) {
 	return []domain.User{}, nil
+}
+
+// Manufacturing library stubs (#772)
+func (s *stubStore) GetStandardLibrary(_ context.Context) (*domain.ManufacturingLibrary, error) {
+	s.stubNotUsed("GetStandardLibrary")
+	return nil, nil
+}
+func (s *stubStore) GetCurrentPublishedRelease(_ context.Context, _ uuid.UUID) (*domain.LibraryRelease, error) {
+	if s.currentPublishedReleaseErr != nil {
+		return nil, s.currentPublishedReleaseErr
+	}
+	if s.currentPublishedRelease != nil {
+		return s.currentPublishedRelease, nil
+	}
+	return nil, storage.ErrLibraryReleaseNotFound
+}
+func (s *stubStore) GetReleaseByID(_ context.Context, id uuid.UUID) (*domain.LibraryRelease, error) {
+	if s.getReleaseByIDErr != nil {
+		return nil, s.getReleaseByIDErr
+	}
+	if s.releaseByID != nil {
+		if rel, ok := s.releaseByID[id]; ok {
+			return rel, nil
+		}
+	}
+	return nil, storage.ErrLibraryReleaseNotFound
 }
 
 // Compras/Almacén picking stubs (Fase 3)

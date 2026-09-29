@@ -577,6 +577,10 @@ func (s *PostgresStore) FinalizeDesignPublish(ctx context.Context, cmd FinalizeD
 		return nil, err
 	}
 
+	// 6b. The exact effective library release at this immutable boundary
+	// (#772 / ADR-0008) is recorded atomically inside insertDesignRevisionAndItems
+	// at creation time. No subsequent mutation is permitted by the immutability trigger.
+
 	// 7. Link the staged artifacts to the revision (immutable rows).
 	var uploadedBy *string
 	if isValidUUID(cmd.ActorUserID) {

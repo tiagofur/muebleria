@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // #387 / DT-3: Design aggregate and immutable DesignRevision snapshots
@@ -375,6 +377,11 @@ type DesignRevision struct {
 	// preview). Nil for legacy artifact-less publishes; readers treat nil as
 	// "no artifacts".
 	Artifacts []DesignRevisionArtifact `json:"artifacts,omitempty"`
+
+	// EffectiveLibraryReleaseID freezes the exact effective library release at
+	// publish time (#772 / ADR-0008). Nil marks a legacy revision published
+	// before the library contract or when no published release was available.
+	EffectiveLibraryReleaseID *uuid.UUID `json:"effective_library_release_id,omitempty"`
 
 	OrganizationID string `json:"-"`
 }

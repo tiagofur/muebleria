@@ -2713,21 +2713,33 @@
         "operationId": "prepareProjectDesignDraftUnits",
         "summary": "Converge draft project lines to pending units before an existing Design handoff (#831)",
         "parameters": [
-          { "$ref": "#/components/parameters/ProjectId" },
-          { "$ref": "#/components/parameters/DesignId" },
-          { "$ref": "#/components/parameters/IdempotencyKey" }
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
         ],
         "responses": {
           "200": {
             "description": "Existing Design with draft units prepared",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Design" }
+                "schema": {
+                  "$ref": "#/components/schemas/Design"
+                }
               }
             }
           },
-          "409": { "$ref": "#/components/responses/ApiError" },
-          "default": { "$ref": "#/components/responses/ApiError" }
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
         }
       }
     },
@@ -2949,17 +2961,40 @@
         "summary": "Create Q1 from one exact canonical Design working copy (#711)",
         "description": "Design-first entry into the same QuoteRevision and pricing authority. The client supplies only both canonical working-copy concurrency tokens; the server adopts or creates exact one-unit commercial lines, preserves FurnitureInstance identity, freezes the working configuration and creates at most Q1 atomically. Requires Idempotency-Key.",
         "parameters": [
-          { "$ref": "#/components/parameters/ProjectId" },
-          { "$ref": "#/components/parameters/DesignId" },
-          { "$ref": "#/components/parameters/IdempotencyKey" }
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          },
+          {
+            "$ref": "#/components/parameters/DesignId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
         ],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateInitialDesignQuoteRevisionRequest" } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInitialDesignQuoteRevisionRequest"
+              }
+            }
+          }
         },
         "responses": {
-          "201": { "description": "The created initial draft QuoteRevision", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QuoteRevision" } } } },
-          "default": { "$ref": "#/components/responses/ApiError" }
+          "201": {
+            "description": "The created initial draft QuoteRevision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteRevision"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
         }
       }
     },
@@ -3397,7 +3432,9 @@
         "operationId": "getProjectWorkshopOccurrences",
         "summary": "Frozen manufacturing occurrence authority of the exact release (#781)",
         "description": "The EXACT release's frozen manufacturing occurrence authority: the frozen unit order (workshop_occurrence_ordinal = snapshot position, index+1, decided when the work was liberated and never recomputed) projected onto the CURRENT quote-line↔instance links. Engineering builds its derived BOM context from it so the same physical occurrence keeps the same workshop code from preview to PTX/CNC. covers_all_current_instances is false when the live representation drifted from the frozen release — callers then keep the LIVE canonical order instead of mixing frozen and unfrozen occurrences. #781 FIX — uses EXACT releaseId; never falls back to latest.",
-        "tags": ["projects"],
+        "tags": [
+          "projects"
+        ],
         "security": [
           {
             "bearerAuth": []
@@ -4653,6 +4690,73 @@
           }
         }
       }
+    },
+    "/manufacturing-libraries/standard/releases/current": {
+      "get": {
+        "operationId": "getStandardCurrentRelease",
+        "summary": "Get the current published Granete Standard library release",
+        "description": "Returns the most recently published (non-withdrawn) release of the Granete Standard manufacturing library. Standard releases are readable by all authenticated organizations. Returns 404 if no published release exists yet (e.g., before LIB-2 publishes the first release). [#772 P1/LIB-1]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "responses": {
+          "200": {
+            "description": "Current published release",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryReleaseSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "No published release available"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/standard/releases/{releaseId}": {
+      "get": {
+        "operationId": "getStandardReleaseById",
+        "summary": "Get a specific Granete Standard library release by ID",
+        "description": "Returns a specific published release of the Granete Standard manufacturing library by its UUID. Used by SketchUp and React to verify release identity and compatibility metadata. [#772 P1/LIB-1]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Library release detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryReleaseDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Release not found or not accessible"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5391,38 +5495,70 @@
       "SketchupProfileResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["user"],
+        "required": [
+          "user"
+        ],
         "properties": {
-          "user": { "$ref": "#/components/schemas/SketchupProfileUser" },
-          "organization": { "$ref": "#/components/schemas/SketchupProfileOrganization" },
-          "session_scope": { "$ref": "#/components/schemas/SketchupProfileScope" }
+          "user": {
+            "$ref": "#/components/schemas/SketchupProfileUser"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/SketchupProfileOrganization"
+          },
+          "session_scope": {
+            "$ref": "#/components/schemas/SketchupProfileScope"
+          }
         }
       },
       "SketchupProfileUser": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "email"],
+        "required": [
+          "name",
+          "email"
+        ],
         "properties": {
-          "name": { "type": "string" },
-          "email": { "type": "string", "format": "email" }
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
         }
       },
       "SketchupProfileOrganization": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "license"],
+        "required": [
+          "id",
+          "name",
+          "license"
+        ],
         "properties": {
-          "id": { "type": "string", "format": "uuid" },
-          "name": { "type": "string" },
-          "license": { "$ref": "#/components/schemas/License" }
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "license": {
+            "$ref": "#/components/schemas/License"
+          }
         }
       },
       "SketchupProfileScope": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["organization_id"],
+        "required": [
+          "organization_id"
+        ],
         "properties": {
-          "organization_id": { "type": "string", "format": "uuid" }
+          "organization_id": {
+            "type": "string",
+            "format": "uuid"
+          }
         }
       },
       "TeamMember": {
@@ -9630,12 +9766,24 @@
         "additionalProperties": false,
         "oneOf": [
           {
-            "required": ["existingCustomerId"],
-            "not": { "required": ["newCustomer"] }
+            "required": [
+              "existingCustomerId"
+            ],
+            "not": {
+              "required": [
+                "newCustomer"
+              ]
+            }
           },
           {
-            "required": ["newCustomer"],
-            "not": { "required": ["existingCustomerId"] }
+            "required": [
+              "newCustomer"
+            ],
+            "not": {
+              "required": [
+                "existingCustomerId"
+              ]
+            }
           }
         ],
         "required": [
@@ -10544,11 +10692,24 @@
         "type": "object",
         "description": "Immutable provenance for a design-first Q1. A working copy is not a DesignRevision, so the exact source is identified by Design plus both canonical concurrency tokens.",
         "additionalProperties": false,
-        "required": ["designId", "workingVersion", "workingFingerprint"],
+        "required": [
+          "designId",
+          "workingVersion",
+          "workingFingerprint"
+        ],
         "properties": {
-          "designId": { "type": "string", "format": "uuid" },
-          "workingVersion": { "type": "string", "minLength": 1 },
-          "workingFingerprint": { "type": "string", "pattern": "^sha256-[0-9a-f]{64}$" }
+          "designId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "workingVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workingFingerprint": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          }
         }
       },
       "QuoteCommercialIdentity": {
@@ -11161,11 +11322,22 @@
         "type": "object",
         "description": "Explicit design-first Q1 decision. workingVersion and workingFingerprint must be the exact canonical tokens returned for this Design working copy; no commercial values or identities are accepted from the client.",
         "additionalProperties": false,
-        "required": ["workingVersion", "workingFingerprint"],
+        "required": [
+          "workingVersion",
+          "workingFingerprint"
+        ],
         "properties": {
-          "workingVersion": { "type": "string", "minLength": 1 },
-          "workingFingerprint": { "type": "string", "pattern": "^sha256-[0-9a-f]{64}$" },
-          "notes": { "type": "string" }
+          "workingVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "workingFingerprint": {
+            "type": "string",
+            "pattern": "^sha256-[0-9a-f]{64}$"
+          },
+          "notes": {
+            "type": "string"
+          }
         }
       },
       "RequoteProjectQuoteRequest": {
@@ -12827,6 +12999,242 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "LibraryResourceRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "releaseId",
+          "resourceKind",
+          "resourceId",
+          "resourceRevision",
+          "packageKind"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resourceKind": {
+            "type": "string",
+            "description": "Domain kind of the referenced resource (e.g. furniture_definition, hardware, material)"
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Canonical domain resource UUID. Not a duplicate of the domain entity; only a reference."
+          },
+          "resourceRevision": {
+            "type": "string",
+            "description": "Exact pinned revision/fingerprint of the referenced canonical resource"
+          },
+          "definitionHash": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "SHA-256 content hash; populated by LIB-2 publisher"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "packageKind": {
+            "type": "string",
+            "enum": [
+              "free",
+              "standard"
+            ],
+            "description": "Entitlement: 'free' resources are accessible to Free plan; 'standard' are Standard-only"
+          }
+        }
+      },
+      "LibraryReleaseSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "libraryId",
+          "version",
+          "status",
+          "schemaVersion",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "libraryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string",
+            "description": "Semantic library version (e.g. '1.2.0')"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "withdrawn"
+            ]
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "description": "Manifest schema version understood by clients"
+          },
+          "minPluginVersion": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Minimum SketchUp plugin version required to load this release"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manifestHash": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Deterministic manifest hash; null until LIB-2 publishes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LibraryReleaseDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "libraryId",
+          "version",
+          "status",
+          "schemaVersion",
+          "resourceRefs",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "libraryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "published",
+              "withdrawn"
+            ]
+          },
+          "schemaVersion": {
+            "type": "integer"
+          },
+          "minPluginVersion": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseReleaseId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "manifestHash": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changelog": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "publishedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resourceRefs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryResourceRef"
+            },
+            "description": "Canonical resource references in this release (empty until LIB-2 populates them)"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

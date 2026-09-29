@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
@@ -533,4 +535,9 @@ type Store interface {
 	ListDamageReportsByProject(ctx context.Context, projectID string) ([]domain.DamageReport, error)
 	ResolveDamageReport(ctx context.Context, id string) error
 	GetTodayDamageCount(ctx context.Context) (int, error)
+
+	// Manufacturing Libraries (#772 / LIB-1)
+	GetStandardLibrary(ctx context.Context) (*domain.ManufacturingLibrary, error)
+	GetCurrentPublishedRelease(ctx context.Context, libraryID uuid.UUID) (*domain.LibraryRelease, error)
+	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
 }
