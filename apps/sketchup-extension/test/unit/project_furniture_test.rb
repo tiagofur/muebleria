@@ -1245,13 +1245,14 @@ class ProjectFurnitureTest < Minitest::Test
   def test_effective_materials_contract_parsing_fail_closed
     valid = {
       'furnitureDefinitionId' => DEFINITION_ID,
-      'materialChoices' => { 'INTERIOR' => 'mat-white', 'FRENTES' => 'mat-oak' },
-      'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'override' }
+      'materialChoices' => { 'INTERIOR' => 'mat-white', 'FRENTES' => 'mat-oak', 'FONDO' => 'mat-hdf' },
+      'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'override', 'FONDO' => 'definition' }
     }
     parsed = PF::EffectiveMaterialsContract.parse!(valid)
     assert_equal DEFINITION_ID, parsed.furniture_definition_id
-    assert_equal({ 'INTERIOR' => 'mat-white', 'FRENTES' => 'mat-oak' }, parsed.material_choices)
-    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'override' }, parsed.material_choice_modes)
+    assert_equal({ 'INTERIOR' => 'mat-white', 'FRENTES' => 'mat-oak', 'FONDO' => 'mat-hdf' }, parsed.material_choices)
+    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'override', 'FONDO' => 'definition' },
+                 parsed.material_choice_modes)
 
     bad_shapes = [
       'not a hash',
@@ -1278,13 +1279,15 @@ class ProjectFurnitureTest < Minitest::Test
     stub_project_furniture([instance_body(FI_1, 'design')])
     stub_working_copy(working_copy_body([]))
 
-    # Server effective materials: INTERIOR and FRENTES both resolved to design defaults
+    # Server effective materials: INTERIOR and FRENTES inherit design defaults;
+    # FONDO has no compatible design default and materializes the curated
+    # definition fallback with mode=definition (not a user exception).
     @transport.respond(
       :post, "/designs/#{DESIGN_ID}/effective-materials", 200,
       {
         'furnitureDefinitionId' => DEFINITION_ID,
-        'materialChoices' => { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' },
-        'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'design' }
+        'materialChoices' => { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id', 'FONDO' => 'hdf-id' },
+        'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'design', 'FONDO' => 'definition' }
       }
     )
 
@@ -1302,8 +1305,23 @@ class ProjectFurnitureTest < Minitest::Test
     put_req = @transport.requests.find { |r| r['method'] == 'PUT' && r['path'] == "/designs/#{DESIGN_ID}/working-copy" }
     refute_nil put_req
     item = put_req['body']['items'].first
-    assert_equal({ 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }, item['material_choices'])
-    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'design' }, item['material_choice_modes'])
+    assert_equal({ 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id', 'FONDO' => 'hdf-id' }, item['material_choices'])
+    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'design', 'FONDO' => 'definition' },
+                 item['material_choice_modes'])
+  end
+
+  # #784 R4 review: an empty definition id fails locally (same code as the
+  # catalog resolve) without paying the effective-materials roundtrip.
+  def test_create_and_place_with_empty_definition_fails_locally
+    res = @placer.create_and_place(definition_id: '  ', parameters: {}, material_choices: {})
+    refute res['ok']
+    assert_equal 'definition_unavailable', res['code']
+    assert_empty @transport.requests.select { |r| r['path'].to_s.include?('effective-materials') },
+                 'no effective-materials call for an empty definition id'
+
+    res_preview = @placer.prepare_catalog_preview(definition_id: '', parameters: {}, material_choices: {})
+    refute res_preview['ok']
+    assert_equal 'definition_unavailable', res_preview['code']
   end
 
   # #784 R4: A new furniture insertion with an explicit override marks touched role as override and untouched as design

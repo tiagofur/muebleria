@@ -135,6 +135,9 @@ module Granete
           # Working-copy (GET/PUT) parsing: same fail-closed rules, split
           # from the instance parser so each contract stays focused.
           module WorkingCopyContract
+            # #784 canonical lineage modes (server contract): design lineage,
+            # explicit furniture exception, curated definition fallback.
+            MODES = %w[design override definition].freeze
             def self.parse_working_copy!(body)
               raise ContractError, 'el working copy debe ser un objeto' unless body.is_a?(Hash)
               unless ProjectFurniture.uuid?(body['design_id']) && ProjectFurniture.uuid?(body['project_id'])
@@ -229,7 +232,7 @@ module Granete
             def self.parse_modes!(raw)
               return nil if raw.nil?
               raise Contract::ContractError, 'material_choice_modes inválidos' unless raw.is_a?(Hash)
-              unless raw.values.all? { |m| %w[design override].include?(m) }
+              unless raw.values.all? { |m| MODES.include?(m) }
                 raise Contract::ContractError,
                       "material_choice_modes con modos desconocidos: #{raw.values.inspect}"
               end
@@ -264,7 +267,7 @@ module Granete
         # badges from. Fail-closed: known shapes only, mode enum enforced,
         # role keys non-empty.
         module DesignInheritanceContract
-          MODES = %w[design override].freeze
+          MODES = Contract::WorkingCopyContract::MODES
 
           def self.parse!(body)
             raise Contract::ContractError, 'la proyección de herencia debe ser un objeto' unless body.is_a?(Hash)
@@ -331,7 +334,7 @@ module Granete
         # #784 R4: Fail-closed parser for POST /api/designs/:design_id/effective-materials
         # response (definition-aware composition of materials & lineage modes).
         module EffectiveMaterialsContract
-          MODES = %w[design override].freeze
+          MODES = Contract::WorkingCopyContract::MODES
 
           def self.parse!(body)
             unless body.is_a?(Hash)
@@ -480,19 +483,13 @@ module Granete
           # declared roles carry their mode, the rest are explicit overrides
           # — a new item never inherits by equality.
           def build_material_choice_modes(choices, intent)
-            declared = if intent['materialChoiceModes'].is_a?(Hash)
-                         intent['materialChoiceModes']
-                       elsif intent['material_choice_modes'].is_a?(Hash)
-                         intent['material_choice_modes']
-                       else
-                         {}
-                       end
+            declared = intent['materialChoiceModes'].is_a?(Hash) ? intent['materialChoiceModes'] : {}
             return nil if declared.empty?
 
             modes = {}
             choices.each_key do |role|
               mode = declared[role]
-              modes[role] = %w[design override].include?(mode) ? mode : 'override'
+              modes[role] = Contract::WorkingCopyContract::MODES.include?(mode) ? mode : 'override'
             end
             modes
           end

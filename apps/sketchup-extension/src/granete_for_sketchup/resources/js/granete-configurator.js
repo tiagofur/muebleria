@@ -134,6 +134,8 @@
     libUserCustomizedRoles = {};
 
     bindLibraryParamForm();
+    // #784 R4: the explicit customization signal travels to the shared
+    // renderer — the lineage badge never falls back to value equality.
     deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
       libMaterialChoices[role] = id;
       libUserCustomizedRoles[role] = true;
@@ -141,12 +143,25 @@
       if (scope === "project" || scope === "project_default") {
         deps.setProjectDefaultMaterial(role, id);
       }
-    });
+    }, configuratorLineageContext(def));
     renderRegisteredMeasuresButton(def);
     renderPresetChips();
 
     updateLibrarySummary();
     updateLibraryInsertButton();
+  }
+
+  // #784 R4: explicit lineage context for the shared material renderer.
+  // customizedRoles is the ONLY override signal (tracked on user input);
+  // designLineage gates the badges to connected models — an unbound insert
+  // carries no lineage statement at all.
+  function configuratorLineageContext(def) {
+    return {
+      context: "configurator",
+      definitionId: def ? (def.furnitureDefinitionId || def.furniture_definition_id) : null,
+      customizedRoles: libUserCustomizedRoles,
+      designLineage: typeof deps.isModelConnected === "function" ? deps.isModelConnected() : false
+    };
   }
 
   // Preview del mueble en el encabezado del configurador: la misma
@@ -388,10 +403,11 @@
 
     deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, activeLibDef, libMaterialChoices, function (r, id, s) {
       libMaterialChoices[r] = id;
+      libUserCustomizedRoles[r] = true;
       if (s === "project" || s === "project_default") {
         deps.setProjectDefaultMaterial(r, id);
       }
-    }, { context: "configurator", definitionId: activeLibDef.furnitureDefinitionId || activeLibDef.furniture_definition_id });
+    }, configuratorLineageContext(activeLibDef));
     updateLibrarySummary();
 
     var matLib = deps.materialById(materialId);

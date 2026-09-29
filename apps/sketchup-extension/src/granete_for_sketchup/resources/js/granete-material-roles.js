@@ -202,17 +202,23 @@
 
       // #784 R3/R4: the inheritance badge comes EXCLUSIVELY from the injected
       // server projection accessor (design-inspector module) — never from
-      // comparing values in the inspector. In the configurator context (no instance),
-      // indicates if role inherits active design default or is customized.
+      // comparing values in the inspector. In the configurator context (no
+      // instance, ctx.designLineage) the lineage comes from the EXPLICIT
+      // customization signal (ctx.customizedRoles, tracked by the
+      // configurator on user input) plus role compatibility with the active
+      // design default — the same predicate the server composes with.
+      // Equality of values never guesses the override state.
       var badge = null;
       if (ctx.instanceId && typeof deps.getRoleBadge === "function") {
         badge = deps.getRoleBadge(ctx.instanceId, r.role);
-      } else if (!ctx.instanceId && typeof deps.getDesignDefaults === "function") {
+      } else if (!ctx.instanceId && ctx.designLineage && typeof deps.getDesignDefaults === "function") {
         var dDefaults = deps.getDesignDefaults() || {};
-        if (dDefaults[r.role]) {
-          badge = choices[r.role] === dDefaults[r.role]
-            ? { text: "Diseño", kind: "design" }
-            : { text: "Personalizado", kind: "override" };
+        if (ctx.customizedRoles && ctx.customizedRoles[r.role]) {
+          badge = { text: "Personalizado", kind: "override" };
+        } else if (dDefaults[r.role] && availableIds.indexOf(dDefaults[r.role]) !== -1) {
+          badge = { text: "Diseño", kind: "design" };
+        } else {
+          badge = { text: "Definición", kind: "definition" };
         }
       }
       if (badge) {

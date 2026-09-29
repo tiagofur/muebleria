@@ -154,7 +154,7 @@ func TestHandleDesignEffectiveMaterials(t *testing.T) {
 		}
 	})
 
-	t.Run("Incompatible design default falls back to definition default with override mode", func(t *testing.T) {
+	t.Run("Incompatible design default falls back to definition default with definition mode", func(t *testing.T) {
 		// Design default specifies matGlass for FRENTES, but FRENTES only allows matOak and matWalnut
 		incompatibleDefaults := domain.DesignAuthoringDefaults{
 			MaterialChoices: map[string]string{
@@ -179,9 +179,10 @@ func TestHandleDesignEffectiveMaterials(t *testing.T) {
 		if resp.MaterialChoices["BODY"] != matWhite || resp.MaterialChoiceModes["BODY"] != openapi.DesignMaterialChoiceModeDesign {
 			t.Errorf("BODY = %v (mode %v), want %s (mode design)", resp.MaterialChoices["BODY"], resp.MaterialChoiceModes["BODY"], matWhite)
 		}
-		// First option in option group is matOak
-		if resp.MaterialChoices["FRENTES"] != matOak || resp.MaterialChoiceModes["FRENTES"] != openapi.DesignMaterialChoiceModeOverride {
-			t.Errorf("FRENTES = %v (mode %v), want %s (mode override fallback)", resp.MaterialChoices["FRENTES"], resp.MaterialChoiceModes["FRENTES"], matOak)
+		// First option in option group is matOak, materialized as curated
+		// definition fallback — never a user exception.
+		if resp.MaterialChoices["FRENTES"] != matOak || resp.MaterialChoiceModes["FRENTES"] != openapi.DesignMaterialChoiceModeDefinition {
+			t.Errorf("FRENTES = %v (mode %v), want %s (mode definition fallback)", resp.MaterialChoices["FRENTES"], resp.MaterialChoiceModes["FRENTES"], matOak)
 		}
 	})
 

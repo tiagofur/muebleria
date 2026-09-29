@@ -541,35 +541,58 @@ test('#784 R4: defaultMaterialChoices seeds from deps.getDesignDefaults when ava
   assert.strictEqual(choices.BODY, 'mat-1', 'role with invalid design default falls back to first option');
 });
 
-test('#784 R4: renderMaterialSelectors in configurator context shows Diseño or Personalizado badge based on design default', () => {
+test('#784 R4: configurator badges come from the explicit customization signal, never from value equality', () => {
   const { mr } = runModule({ depOverrides: {
     getDesignDefaults: () => ({ FRENTES: 'mat-2' })
   } });
   mr.setCatalog({ materials: MATERIALS, categories: [] });
+  const lineageCtx = { context: 'configurator', designLineage: true };
 
-  // 1. Inheriting choice (mat-2 matches design default)
-  const renderedDesign = renderRole(mr, { choices: { FRENTES: 'mat-2' } });
+  // 1. Untouched role whose design default is compatible with the definition
+  //    shows Diseño (the server will compose mode=design).
+  const renderedDesign = renderRole(mr, { choices: { FRENTES: 'mat-2' }, contextInfo: lineageCtx });
   const headerDesign = renderedDesign.block.children[0];
   const badgeDesign = headerDesign.children[1];
   assert.ok(badgeDesign, 'badge exists in header');
   assert.strictEqual(badgeDesign.textContent, 'Diseño');
   assert.ok(badgeDesign.className.includes('material-role-badge--design'));
 
-  // 2. Customized override choice (mat-1 does not match design default)
-  const renderedOverride = renderRole(mr, { choices: { FRENTES: 'mat-1' } });
-  const headerOverride = renderedOverride.block.children[0];
-  const badgeOverride = headerOverride.children[1];
-  assert.ok(badgeOverride, 'badge exists in header');
-  assert.strictEqual(badgeOverride.textContent, 'Personalizado');
-  assert.ok(badgeOverride.className.includes('material-role-badge--override'));
-
-  // 3. Role without design default has no badge
-  const renderedNoDef = renderRole(mr, {
-    defExtra: { materialRoles: [{ role: 'BODY', label: 'Cuerpo', optionIds: ['mat-1'] }] },
-    choices: { BODY: 'mat-1' }
+  // 2. Customized role stays Personalizado EVEN when the value was reverted
+  //    to the design default — the explicit signal decides, not equality.
+  const renderedReverted = renderRole(mr, {
+    choices: { FRENTES: 'mat-2' },
+    contextInfo: Object.assign({ customizedRoles: { FRENTES: true } }, lineageCtx)
   });
-  const headerNoDef = renderedNoDef.block.children[0];
-  assert.strictEqual(headerNoDef.children.length, 1, 'only title in header when no design default');
+  const badgeReverted = renderedReverted.block.children[0].children[1];
+  assert.strictEqual(badgeReverted.textContent, 'Personalizado',
+    'a reverted-to-design value the user touched is still an explicit override');
+  assert.ok(badgeReverted.className.includes('material-role-badge--override'));
+
+  // 3. Untouched role without a compatible design default shows Definición
+  //    (the server materializes the curated fallback with mode=definition).
+  const renderedFallback = renderRole(mr, {
+    defExtra: { materialRoles: [{ role: 'BODY', label: 'Cuerpo', optionIds: ['mat-1'] }] },
+    choices: { BODY: 'mat-1' },
+    contextInfo: lineageCtx
+  });
+  const badgeFallback = renderedFallback.block.children[0].children[1];
+  assert.strictEqual(badgeFallback.textContent, 'Definición',
+    'a role the user never touched and the design does not cover is definition-backed');
+  assert.ok(badgeFallback.className.includes('material-role-badge--definition'));
+
+  // 4. Unbound model (no design lineage) renders NO badge at all.
+  const renderedUnbound = renderRole(mr, {
+    choices: { FRENTES: 'mat-2' },
+    contextInfo: { context: 'configurator', designLineage: false }
+  });
+  const headerUnbound = renderedUnbound.block.children[0];
+  assert.strictEqual(headerUnbound.children.length, 1, 'only title in header when the model is not connected');
+
+  // 5. Connected but the render never received a designLineage context
+  //    (legacy call shape): no badge — never an equality guess.
+  const renderedLegacy = renderRole(mr, { choices: { FRENTES: 'mat-2' } });
+  assert.strictEqual(renderedLegacy.block.children[0].children.length, 1,
+    'no badge without the explicit lineage context');
 });
 
 test('setProjectDefaultMaterial is the single write path for project defaults', () => {

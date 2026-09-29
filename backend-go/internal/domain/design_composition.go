@@ -14,8 +14,8 @@ type DefinitionRoleOptionSpec struct {
 // EffectiveDefinitionMaterials represents the result of the definition-aware composition:
 // the effective material choices and their inheritance modes.
 type EffectiveDefinitionMaterials struct {
-	FurnitureDefinitionID string                             `json:"furnitureDefinitionId"`
-	MaterialChoices       map[string]string                  `json:"materialChoices"`
+	FurnitureDefinitionID string                              `json:"furnitureDefinitionId"`
+	MaterialChoices       map[string]string                   `json:"materialChoices"`
 	MaterialChoiceModes   map[string]DesignMaterialChoiceMode `json:"materialChoiceModes"`
 }
 
@@ -23,14 +23,16 @@ type EffectiveDefinitionMaterials struct {
 // and their inheritance modes (override || Design default || FurnitureDefinition compatibility -> effective intent).
 //
 // Rules for each role in roles:
-// 1. Explicit override: if overrides[role] is non-empty, use it with mode=override.
-// 2. Compatible Design default: if defaults.MaterialChoices[role] is non-empty AND compatible with
-//    the role's allowed OptionIDs (contained in OptionIDs, or OptionIDs is empty meaning unrestricted),
-//    use it with mode=design.
-// 3. Fallback: if not compatible or no Design default, fall back to the first available OptionID (if any)
-//    with mode=override.
+//  1. Explicit override: if overrides[role] is non-empty, use it with mode=override.
+//  2. Compatible Design default: if defaults.MaterialChoices[role] is non-empty AND compatible with
+//     the role's allowed OptionIDs (contained in OptionIDs, or OptionIDs is empty meaning unrestricted),
+//     use it with mode=design.
+//  3. Fallback: if not compatible or no Design default, fall back to the first available OptionID (if any)
+//     with mode=definition — the curated definition fallback, never a user exception.
 //
-// Returns an EffectiveDefinitionMaterials with strict parity: keys(MaterialChoices) == keys(MaterialChoiceModes).
+// A role with no allowed OptionIDs and no Design default carries no effective
+// statement at all (absent from both maps). Returns an
+// EffectiveDefinitionMaterials with strict parity: keys(MaterialChoices) == keys(MaterialChoiceModes).
 func ComposeEffectiveDefinitionMaterials(
 	furnitureDefinitionID string,
 	roles []DefinitionRoleOptionSpec,
@@ -64,15 +66,15 @@ func ComposeEffectiveDefinitionMaterials(
 			continue
 		}
 
-		// 3. Fallback to definition default (first allowed option)
+		// 3. Curated definition fallback (first allowed option). An
+		// unrestricted role without candidates and without a Design default
+		// carries no statement at all.
 		if len(spec.OptionIDs) > 0 {
 			fallback := strings.TrimSpace(spec.OptionIDs[0])
-			out.MaterialChoices[role] = fallback
-			out.MaterialChoiceModes[role] = DesignMaterialChoiceModeOverride
-		} else if designDefault != "" {
-			// Unrestricted role without specific candidates accepts design default
-			out.MaterialChoices[role] = designDefault
-			out.MaterialChoiceModes[role] = DesignMaterialChoiceModeDesign
+			if fallback != "" {
+				out.MaterialChoices[role] = fallback
+				out.MaterialChoiceModes[role] = DesignMaterialChoiceModeDefinition
+			}
 		}
 	}
 

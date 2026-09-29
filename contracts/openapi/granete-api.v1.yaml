@@ -9056,9 +9056,10 @@
         "type": "string",
         "enum": [
           "design",
-          "override"
+          "override",
+          "definition"
         ],
-        "description": "#784 inheritance lineage of one material role: design = belongs to the Design lineage and may be updated by an explicit rollout (NOT a live pointer — the item keeps its materialized choice); override = explicit furniture exception preserved by rollouts."
+        "description": "#784 inheritance lineage of one material role: design = belongs to the Design lineage and may be updated by an explicit rollout (NOT a live pointer — the item keeps its materialized choice); override = explicit furniture exception preserved by rollouts; definition = the role materialized the FurnitureDefinition curated fallback (no compatible Design default existed and no user choice was made) — not a user exception, so a future rollout may adopt it deliberately."
       },
       "DesignAuthoringDefaults": {
         "type": "object",
@@ -9282,6 +9283,7 @@
           "role",
           "items",
           "design_backed",
+          "definition_backed",
           "needs_rollout",
           "design_current",
           "overridden"
@@ -9297,6 +9299,10 @@
           "design_backed": {
             "type": "integer",
             "description": "Items whose lineage for this role is design."
+          },
+          "definition_backed": {
+            "type": "integer",
+            "description": "Items whose lineage for this role is definition (curated fallback materialized at insertion; not a user exception). Rollout eligibility for these is an explicit R5 decision, never inferred."
           },
           "needs_rollout": {
             "type": "integer",

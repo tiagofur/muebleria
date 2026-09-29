@@ -586,6 +586,9 @@
           ? { text: "Diseño · pendiente de aplicar", kind: "pending" }
           : { text: "Diseño", kind: "design" };
       }
+      if (entry.mode === "definition") {
+        return { text: "Definición", kind: "definition" };
+      }
       return { text: "Personalizado", kind: "override",
                designDefault: entry.designDefault || null };
     },

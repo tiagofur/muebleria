@@ -1192,8 +1192,9 @@ type DesignWorkingCopyItem struct {
 type DesignMaterialChoiceMode string
 
 const (
-	DesignMaterialChoiceModeDesign   DesignMaterialChoiceMode = "design"
-	DesignMaterialChoiceModeOverride DesignMaterialChoiceMode = "override"
+	DesignMaterialChoiceModeDesign     DesignMaterialChoiceMode = "design"
+	DesignMaterialChoiceModeOverride   DesignMaterialChoiceMode = "override"
+	DesignMaterialChoiceModeDefinition DesignMaterialChoiceMode = "definition"
 )
 
 type DesignAuthoringDefaults struct {
@@ -1255,12 +1256,13 @@ type MaterialRoleInheritance struct {
 }
 
 type DesignRoleInheritanceCount struct {
-	Role          string `json:"role"`
-	Items         int64  `json:"items"`
-	DesignBacked  int64  `json:"design_backed"`
-	NeedsRollout  int64  `json:"needs_rollout"`
-	DesignCurrent int64  `json:"design_current"`
-	Overridden    int64  `json:"overridden"`
+	Role             string `json:"role"`
+	Items            int64  `json:"items"`
+	DesignBacked     int64  `json:"design_backed"`
+	DefinitionBacked int64  `json:"definition_backed"`
+	NeedsRollout     int64  `json:"needs_rollout"`
+	DesignCurrent    int64  `json:"design_current"`
+	Overridden       int64  `json:"overridden"`
 }
 
 type DesignWorkingItemMaterialProvenance struct {

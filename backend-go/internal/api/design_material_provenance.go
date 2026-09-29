@@ -46,12 +46,13 @@ func toMaterialRoleInheritanceDTO(entry domain.DesignRoleInheritance) openapi.Ma
 
 func toDesignRoleInheritanceCountDTO(count domain.DesignRoleInheritanceCount) openapi.DesignRoleInheritanceCount {
 	return openapi.DesignRoleInheritanceCount{
-		Role:          count.Role,
-		Items:         int64(count.Items),
-		DesignBacked:  int64(count.DesignBacked),
-		NeedsRollout:  int64(count.NeedsRollout),
-		DesignCurrent: int64(count.DesignCurrent),
-		Overridden:    int64(count.Overridden),
+		Role:             count.Role,
+		Items:            int64(count.Items),
+		DesignBacked:     int64(count.DesignBacked),
+		DefinitionBacked: int64(count.DefinitionBacked),
+		NeedsRollout:     int64(count.NeedsRollout),
+		DesignCurrent:    int64(count.DesignCurrent),
+		Overridden:       int64(count.Overridden),
 	}
 }
 

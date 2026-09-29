@@ -383,8 +383,9 @@ module Granete
               'parameters' => parameters || {},
               'material_choices' => material_choices || {}
             }
+            # Canonical intent key (camelCase) matches MetadataWriter intent
+            # and the working-copy merger; no duplicated snake_case spelling.
             if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
-              entry['material_choice_modes'] = material_choice_modes
               entry['materialChoiceModes'] = material_choice_modes
             end
             @intents[instance_id.to_s] = entry
@@ -540,6 +541,11 @@ module Granete
             failure(:preview_failed, e.message)
           end
 
+          # #784 R4: server-authoritative effective materials for a bound
+          # insertion. Unbound models (or an already-explicit modes statement
+          # from the R3b inspector apply) keep the caller-provided choices.
+          EffectivePlacementMaterials = Struct.new(:choices, :modes, keyword_init: true)
+
           # #390 / DT-6: Design-first creation and placement from catalog.
           # Flow:
           #   1. context guard: model active, binding connected & current.
@@ -564,28 +570,29 @@ module Granete
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
+            # Local fast failure (same code the catalog resolve uses) so an
+            # empty definition never pays the effective-materials roundtrip.
+            if definition_id.to_s.strip.empty?
+              return failure(:definition_unavailable,
+                             'la definición del mueble es requerida')
+            end
+
             context = placement_context(model)
             return context unless context['ok']
 
-            effective_choices = material_choices
-            effective_modes = material_choice_modes
+            effective = compose_effective_materials(context['binding'], definition_id,
+                                                    material_choices,
+                                                    overrides: material_overrides,
+                                                    modes: material_choice_modes)
 
-            if context['binding'] && effective_modes.nil?
-              overrides = material_overrides.nil? ? material_choices : material_overrides
-              effective = @service.get_effective_materials(context['binding'].design_id, definition_id,
-                                                           material_choices: overrides)
-              effective_choices = effective.material_choices
-              effective_modes = effective.material_choice_modes
-            end
-
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective_choices)
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices)
             return prep unless prep['ok']
 
             signature_mismatch = composition_mismatch(expected_layout_signature, prep['layout'])
             return signature_mismatch if signature_mismatch
 
             execute_created_placement(model, context['binding'], prep, idempotency_key,
-                                      effective_choices, material_choice_modes: effective_modes,
+                                      effective.choices, material_choice_modes: effective.modes,
                                                          transformation: transformation)
           rescue Service::Error => e
             failure(:service_error, e.message)
@@ -607,23 +614,24 @@ module Granete
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
+            # Local fast failure before the effective-materials roundtrip.
+            if definition_id.to_s.strip.empty?
+              return failure(:definition_unavailable,
+                             'la definición del mueble es requerida')
+            end
+
             context = placement_context(model)
             return context unless context['ok']
 
-            effective_choices = material_choices
-            if context['binding']
-              overrides = material_overrides.nil? ? material_choices : material_overrides
-              effective = @service.get_effective_materials(context['binding'].design_id, definition_id,
-                                                           material_choices: overrides)
-              effective_choices = effective.material_choices
-            end
+            effective = compose_effective_materials(context['binding'], definition_id,
+                                                    material_choices, overrides: material_overrides)
 
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective_choices)
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices)
             return prep unless prep['ok']
 
             { 'ok' => true, 'code' => 'preview_ready',
               'definition' => prep['definition'], 'parameters' => prep['params'],
-              'material_choices' => effective_choices, 'layout' => prep['layout'],
+              'material_choices' => effective.choices, 'layout' => prep['layout'],
               'layout_signature' => PlacementGuards.layout_signature(prep['layout']) }
           rescue Service::Error => e
             failure(:service_error, e.message)
@@ -710,6 +718,22 @@ module Granete
           end
 
           private
+
+          # #784 R4: resolves definition-aware effective materials against
+          # the Design working copy when the model is bound and no explicit
+          # modes statement exists (the R3b inspector apply carries its
+          # server-derived statement verbatim). Server authority only — the
+          # client never composes compatibility or lineage itself.
+          def compose_effective_materials(binding, definition_id, material_choices, overrides: nil, modes: nil)
+            return EffectivePlacementMaterials.new(choices: material_choices, modes: modes) unless binding && modes.nil?
+
+            resolved = @service.get_effective_materials(
+              binding.design_id, definition_id,
+              material_choices: overrides.nil? ? material_choices : overrides
+            )
+            EffectivePlacementMaterials.new(choices: resolved.material_choices,
+                                            modes: resolved.material_choice_modes)
+          end
 
           def execute_created_placement(model, binding, prep, idempotency_key, material_choices,
                                         material_choice_modes: nil, transformation: nil)
