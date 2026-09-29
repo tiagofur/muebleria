@@ -120,6 +120,7 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'STATION_SPAN_INVALID',
   'STATION_PARTICIPANT_INVALID',
   'STATION_POINT_INVALID',
+  'STATION_FAMILY_COLLISION',
   'TECHNICAL_PROFILE_REQUIRED',
 ] as const;
 
@@ -538,6 +539,46 @@ export function validateAuthoringResolveRequest(
         push('RELATIONSHIP_INVALID', 'relationship parameters must be finite scalar values', `${path}.parameters.${key}`);
       }
     }
+    // Declared operation families (#874 J2-A): closed shape, fail-closed
+    // exclusivity with a stationCount parameter.
+    const families = relationship.families;
+    if (families !== undefined) {
+      if (!Array.isArray(families) || families.length === 0) {
+        push('RELATIONSHIP_INVALID', 'families must be a non-empty array', `${path}.families`);
+      } else {
+        const seenFamilies = new Set<string>();
+        for (const [familyIndex, familyValue] of families.entries()) {
+          const family = familyValue as Record<string, unknown> | undefined;
+          const familyPath = `${path}.families[${familyIndex}]`;
+          if (!family || typeof family !== 'object' ||
+            Object.keys(family).some((key) => !['familyId', 'count', 'startMarginMm', 'endMarginMm'].includes(key))) {
+            push('RELATIONSHIP_INVALID', 'family has unknown keys', familyPath);
+            continue;
+          }
+          if (typeof family.familyId !== 'string' || !isBoundedString(family.familyId)) {
+            push('RELATIONSHIP_INVALID', 'family familyId is required', `${familyPath}.familyId`);
+          } else if (seenFamilies.has(family.familyId)) {
+            push('RELATIONSHIP_INVALID', `familyId ${family.familyId} appears more than once`, familyPath);
+          }
+          if (typeof family.familyId === 'string' && isBoundedString(family.familyId)) seenFamilies.add(family.familyId);
+          if (typeof family.count !== 'number' || !Number.isInteger(family.count) || family.count < 2) {
+            push('RELATIONSHIP_INVALID', 'family count must be an integer >= 2', `${familyPath}.count`);
+          }
+          for (const marginKey of ['startMarginMm', 'endMarginMm'] as const) {
+            const margin = family[marginKey];
+            if (margin !== undefined && (typeof margin !== 'number' || !Number.isFinite(margin) || margin < 0)) {
+              push('RELATIONSHIP_INVALID', `family ${marginKey} must be a finite nonnegative number`, `${familyPath}.${marginKey}`);
+            }
+          }
+        }
+      }
+      if (families.length > 0 && relationship.parameters !== undefined && 'stationCount' in relationship.parameters) {
+        push('RELATIONSHIP_INVALID',
+          'stationCount and families are mutually exclusive: declare one station pattern per relationship',
+          `${path}.families`);
+      }
+    }
+
     const anchors = [relationship.source, ...(relationship.targets ?? [])];
     for (const anchor of anchors) {
       if (anchor?.componentInstanceId !== undefined &&
@@ -665,7 +706,7 @@ const COMPONENT_KEYS = new Set([
   'componentInstanceId', 'componentDefinitionId', 'catalogComponentId', 'role', 'transform',
 ]);
 const RELATIONSHIP_KEYS = new Set([
-  'relationshipId', 'kind', 'source', 'targets', 'joinerySystemId', 'parameters',
+  'relationshipId', 'kind', 'source', 'targets', 'joinerySystemId', 'parameters', 'families',
 ]);
 const RESPONSE_KEYS = new Set([
   'schemaId', 'schemaName', 'schemaVersion', 'resolveContract', 'responseMessageId',
@@ -970,6 +1011,16 @@ function validateResolvedMachining(
           }))) {
           problems.push(`${path}.stations.stationDistances is invalid`);
         }
+        // Declared operation families (#874 J2-A): closed per-family shape.
+        const familyPlans = (status.stations as Record<string, unknown>).familyPlans;
+        if (familyPlans !== undefined
+          && (!Array.isArray(familyPlans) || !familyPlans.every((entry) => {
+            const plan = asRecord(entry);
+            return plan !== null && plan !== undefined && isBoundedString(plan.familyId)
+              && Array.isArray(plan.stationCounts) && Array.isArray(plan.stationDistances);
+          }))) {
+          problems.push(`${path}.stations.familyPlans is invalid`);
+        }
       }
     }
   }
@@ -1220,6 +1271,15 @@ export function authoringResolveFingerprint(input: {
             ...status.stations,
             stationCounts: [...status.stations.stationCounts].sort((a, b) => compareUtf8(a.contactId, b.contactId)),
             stationDistances: [...(status.stations.stationDistances ?? [])].sort((a, b) => compareUtf8(a.contactId, b.contactId)),
+            familyPlans: (status.stations.familyPlans ?? []).length === 0
+              ? undefined
+              : [...status.stations.familyPlans!]
+                  .sort((a, b) => compareUtf8(a.familyId, b.familyId))
+                  .map((plan) => ({
+                    familyId: plan.familyId,
+                    stationCounts: [...plan.stationCounts].sort((a, b) => compareUtf8(a.contactId, b.contactId)),
+                    stationDistances: [...plan.stationDistances].sort((a, b) => compareUtf8(a.contactId, b.contactId)),
+                  })),
           },
         },
       }));
@@ -1243,6 +1303,14 @@ export interface FingerprintJoineryStatus {
     readonly stationDistances?: readonly {
       readonly contactId: string;
       readonly distancesMm: readonly number[];
+    }[];
+    readonly familyPlans?: readonly {
+      readonly familyId: string;
+      readonly stationCounts: readonly { readonly contactId: string; readonly stationCount: number }[];
+      readonly stationDistances: readonly {
+        readonly contactId: string;
+        readonly distancesMm: readonly number[];
+      }[];
     }[];
   };
   readonly blockers: readonly string[];

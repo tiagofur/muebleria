@@ -3,6 +3,8 @@ package engine
 import (
 	"fmt"
 	"math"
+	"sort"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -29,6 +31,19 @@ type JoineryContactStatus struct {
 type JoineryStationPlanStatus struct {
 	Status           string                    `json:"status"`
 	IssueCodes       []string                  `json:"issueCodes"`
+	StationCounts    []JoineryStationPlanCount `json:"stationCounts"`
+	StationDistances []JoineryStationDistances `json:"stationDistances"`
+	// FamilyPlans carries the per-family breakdown when the relationship
+	// declares independent operation families (#874 J2-A); absent otherwise.
+	// The aggregate counts/distances above stay honest: sums and the united
+	// (ascending) physical drilling pattern per contact.
+	FamilyPlans []JoineryFamilyPlan `json:"familyPlans,omitempty"`
+}
+
+// JoineryFamilyPlan is one family's independently planned station set per
+// contact. Plans are sorted by familyId for deterministic parity.
+type JoineryFamilyPlan struct {
+	FamilyID         string                    `json:"familyId"`
 	StationCounts    []JoineryStationPlanCount `json:"stationCounts"`
 	StationDistances []JoineryStationDistances `json:"stationDistances"`
 }
@@ -175,6 +190,12 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 		return failContacts(codes...)
 	}
 
+	// J2-A (#874): declared families plan independently per family — one
+	// joint, one status, per-family counts and positions. stationCount and
+	// families are mutually exclusive (fail closed, never silent precedence).
+	if len(relationship.Families) > 0 {
+		return deriveFamilyPlans(relationship, resolution, boards, contactIDs, validContacts, pushIssue)
+	}
 	count, hasCount := relationship.Parameters["stationCount"].(float64)
 	start, hasStart := relationship.Parameters["startMarginMm"].(float64)
 	end, hasEnd := relationship.Parameters["endMarginMm"].(float64)
@@ -226,6 +247,109 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 	return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 		Stage: JoineryTechnicalProfileMissing, Contacts: validContacts(),
 		Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{}, StationCounts: counts, StationDistances: distances},
+		Blockers: []string{"TECHNICAL_PROFILE_REQUIRED"}}
+}
+
+// deriveFamilyPlans plans each declared operation family independently over
+// the SAME verified contacts (#874 J2-A): one joint, one status, per-family
+// counts and positions; cross-family position collisions fail the whole
+// pattern (no auto-reduction, no silent overlap). The aggregate counts are
+// the per-contact sums and the aggregate distances the united ascending
+// physical drilling pattern.
+func deriveFamilyPlans(relationship AuthoringRelationship, resolution ContactResolutionResult,
+	boards []ContactBoard, contactIDs []string, validContacts func() []JoineryContactStatus,
+	pushIssue func(code, message, remediation string)) JoineryRelationshipStatus {
+	relationshipID := relationship.RelationshipID
+	invalid := func(codes []string) JoineryRelationshipStatus {
+		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+			Stage: JoineryStationInvalid, Contacts: validContacts(),
+			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: codes,
+				StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}},
+			Blockers: codes}
+	}
+	if _, hasCount := relationship.Parameters["stationCount"]; hasCount {
+		pushIssue("STATION_PATTERN_INVALID",
+			"stationCount and families are mutually exclusive: declare one station pattern per relationship",
+			"Declare either a stationCount parameter or families with unique ids and counts >= 2.")
+		return invalid([]string{"STATION_PATTERN_INVALID"})
+	}
+	seen := map[string]bool{}
+	for _, family := range relationship.Families {
+		if strings.TrimSpace(family.FamilyID) == "" || seen[family.FamilyID] || family.Count < 2 ||
+			math.IsNaN(family.StartMarginMm) || math.IsInf(family.StartMarginMm, 0) || family.StartMarginMm < 0 ||
+			math.IsNaN(family.EndMarginMm) || math.IsInf(family.EndMarginMm, 0) || family.EndMarginMm < 0 {
+			pushIssue("STATION_PATTERN_INVALID",
+				"every family needs a unique non-blank familyId, an integer count >= 2 and finite nonnegative margins",
+				"Declare families with unique ids, counts >= 2 and optional nonnegative margins.")
+			return invalid([]string{"STATION_PATTERN_INVALID"})
+		}
+		seen[family.FamilyID] = true
+	}
+	families := append([]AuthoringRelationshipFamily(nil), relationship.Families...)
+	sort.Slice(families, func(i, j int) bool { return families[i].FamilyID < families[j].FamilyID })
+
+	familyPlans := make([]JoineryFamilyPlan, 0, len(families))
+	aggregateCounts := map[string]int{}
+	aggregatePositions := map[string][]float64{}
+	for _, family := range families {
+		specs := make([]StationSpec, 0, len(contactIDs))
+		for _, contactID := range contactIDs {
+			specs = append(specs, StationSpec{ContactID: contactID, Count: family.Count,
+				StartMarginMm: family.StartMarginMm, EndMarginMm: family.EndMarginMm})
+		}
+		planned := planResolvedContactStations(resolution, boards, specs)
+		if len(planned.Issues) > 0 {
+			for _, issue := range planned.Issues {
+				pushIssue(issue.Code, issue.Message, issue.Remediation)
+			}
+			codes := uniqueIssueCodes(planned.Issues)
+			return invalid(codes)
+		}
+		counts := make([]JoineryStationPlanCount, 0, len(planned.Plans))
+		distances := make([]JoineryStationDistances, 0, len(planned.Plans))
+		for _, plan := range planned.Plans {
+			counts = append(counts, JoineryStationPlanCount{ContactID: plan.ContactID, StationCount: len(plan.Stations)})
+			positions := make([]float64, 0, len(plan.Stations))
+			for _, station := range plan.Stations {
+				positions = append(positions, station.DistanceMm)
+			}
+			distances = append(distances, JoineryStationDistances{ContactID: plan.ContactID, DistancesMm: positions})
+			aggregateCounts[plan.ContactID] += len(plan.Stations)
+			aggregatePositions[plan.ContactID] = append(aggregatePositions[plan.ContactID], positions...)
+		}
+		familyPlans = append(familyPlans, JoineryFamilyPlan{FamilyID: family.FamilyID,
+			StationCounts: counts, StationDistances: distances})
+	}
+	// Cross-family collision: two families planning the same physical
+	// position on one contact is a construction error, never an overlap.
+	for _, contactID := range contactIDs {
+		positions := append([]float64(nil), aggregatePositions[contactID]...)
+		sort.Float64s(positions)
+		for i := 1; i < len(positions); i++ {
+			if positions[i]-positions[i-1] <= 1e-6 {
+				pushIssue("STATION_FAMILY_COLLISION",
+					fmt.Sprintf("families plan the same station position %.3f on contact %s; patterns must not overlap",
+						positions[i], contactID),
+					"Adjust each family's count or margins so planned positions stay distinct.")
+				return invalid([]string{"STATION_FAMILY_COLLISION"})
+			}
+		}
+	}
+	counts := make([]JoineryStationPlanCount, 0, len(contactIDs))
+	distances := make([]JoineryStationDistances, 0, len(contactIDs))
+	for _, contactID := range contactIDs {
+		counts = append(counts, JoineryStationPlanCount{ContactID: contactID, StationCount: aggregateCounts[contactID]})
+		positions := append([]float64(nil), aggregatePositions[contactID]...)
+		sort.Float64s(positions)
+		distances = append(distances, JoineryStationDistances{ContactID: contactID, DistancesMm: positions})
+	}
+	pushIssue("TECHNICAL_PROFILE_REQUIRED",
+		fmt.Sprintf("floor-side relationship %s has no verified production technical profile", relationshipID),
+		"Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.")
+	return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+		Stage: JoineryTechnicalProfileMissing, Contacts: validContacts(),
+		Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{},
+			StationCounts: counts, StationDistances: distances, FamilyPlans: familyPlans},
 		Blockers: []string{"TECHNICAL_PROFILE_REQUIRED"}}
 }
 

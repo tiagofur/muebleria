@@ -666,6 +666,47 @@ func authoringManufacturingFingerprint(
 		if blockers == nil {
 			blockers = []string{}
 		}
+		stationsBody := map[string]any{
+			"status":           status.Stations.Status,
+			"issueCodes":       stationIssueCodes,
+			"stationCounts":    countBodies,
+			"stationDistances": distanceBodies,
+		}
+		// Family plans join the hashed body only when declared (#874 J2-A):
+		// absence keeps every existing fingerprint byte-identical.
+		if len(status.Stations.FamilyPlans) > 0 {
+			familyPlans := append([]JoineryFamilyPlan(nil), status.Stations.FamilyPlans...)
+			sort.Slice(familyPlans, func(i, j int) bool { return familyPlans[i].FamilyID < familyPlans[j].FamilyID })
+			familyBodies := make([]any, 0, len(familyPlans))
+			for _, plan := range familyPlans {
+				planCounts := append([]JoineryStationPlanCount(nil), plan.StationCounts...)
+				sort.Slice(planCounts, func(i, j int) bool { return planCounts[i].ContactID < planCounts[j].ContactID })
+				planCountBodies := make([]any, 0, len(planCounts))
+				for _, count := range planCounts {
+					planCountBodies = append(planCountBodies, map[string]any{
+						"contactId": count.ContactID, "stationCount": count.StationCount,
+					})
+				}
+				planDistances := append([]JoineryStationDistances(nil), plan.StationDistances...)
+				sort.Slice(planDistances, func(i, j int) bool { return planDistances[i].ContactID < planDistances[j].ContactID })
+				planDistanceBodies := make([]any, 0, len(planDistances))
+				for _, distance := range planDistances {
+					values := distance.DistancesMm
+					if values == nil {
+						values = []float64{}
+					}
+					planDistanceBodies = append(planDistanceBodies, map[string]any{
+						"contactId": distance.ContactID, "distancesMm": values,
+					})
+				}
+				familyBodies = append(familyBodies, map[string]any{
+					"familyId":         plan.FamilyID,
+					"stationCounts":    planCountBodies,
+					"stationDistances": planDistanceBodies,
+				})
+			}
+			stationsBody["familyPlans"] = familyBodies
+		}
 		joineryBodies = append(joineryBodies, map[string]any{
 			"sort": status.RelationshipID,
 			"body": map[string]any{
@@ -673,13 +714,8 @@ func authoringManufacturingFingerprint(
 				"kind":           status.Kind,
 				"stage":          status.Stage,
 				"contacts":       contactBodies,
-				"stations": map[string]any{
-					"status":           status.Stations.Status,
-					"issueCodes":       stationIssueCodes,
-					"stationCounts":    countBodies,
-					"stationDistances": distanceBodies,
-				},
-				"blockers": blockers,
+				"stations":       stationsBody,
+				"blockers":       blockers,
 			},
 		})
 	}

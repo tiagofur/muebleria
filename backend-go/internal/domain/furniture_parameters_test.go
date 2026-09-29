@@ -569,3 +569,61 @@ func TestStructureRelationshipModuleConsumersMustBeUnambiguous(t *testing.T) {
 		t.Fatalf("ambiguous relationship target accepted: %+v", issues)
 	}
 }
+
+func familiesBinding() *FurnitureParameterBinding {
+	binding := structureRelationshipDefinition().Binding
+	binding.Relationship.Families = []FurnitureRelationshipFamily{
+		{FamilyID: "tornillos", Count: 4, StartMarginMm: 30, EndMarginMm: 50},
+		{FamilyID: "taquetes", Count: 2, StartMarginMm: 100, EndMarginMm: 100},
+	}
+	return binding
+}
+
+func TestStructureRelationshipFamiliesValidation(t *testing.T) {
+	valid := structureRelationshipDefinition()
+	valid.Binding = familiesBinding()
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{valid}); len(issues) != 0 {
+		t.Fatalf("valid families rejected: %+v", issues)
+	}
+
+	duplicateID := structureRelationshipDefinition()
+	duplicateID.Binding = familiesBinding()
+	duplicateID.Binding.Relationship.Families[1].FamilyID = "tornillos"
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{duplicateID}); !hasDefinitionIssueField(issues, "binding.relationship.families") {
+		t.Fatalf("duplicate familyId accepted: %+v", issues)
+	}
+
+	lowCount := structureRelationshipDefinition()
+	lowCount.Binding = familiesBinding()
+	lowCount.Binding.Relationship.Families[0].Count = 1
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{lowCount}); !hasDefinitionIssueField(issues, "binding.relationship.families") {
+		t.Fatalf("family count < 2 accepted: %+v", issues)
+	}
+
+	negativeMargin := structureRelationshipDefinition()
+	negativeMargin.Binding = familiesBinding()
+	negativeMargin.Binding.Relationship.Families[1].EndMarginMm = -5
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{negativeMargin}); !hasDefinitionIssueField(issues, "binding.relationship.families") {
+		t.Fatalf("negative family margin accepted: %+v", issues)
+	}
+
+	emptyID := structureRelationshipDefinition()
+	emptyID.Binding = familiesBinding()
+	emptyID.Binding.Relationship.Families[1].FamilyID = "  "
+	if issues := ValidatePersistedFurnitureParameterDefinitions([]FurnitureParameterDefinition{emptyID}); !hasDefinitionIssueField(issues, "binding.relationship.families") {
+		t.Fatalf("blank familyId accepted: %+v", issues)
+	}
+
+	// The engine gate blocks ambiguous composition targets with families too.
+	module := Module{
+		ParameterDefinitions: []FurnitureParameterDefinition{valid},
+		Components:           []ComponentInstance{{ComponentID: "comp-base", Quantity: 1}},
+		StructureID:          "structure",
+	}
+	catalog := Catalog{Structures: []Structure{{ID: "structure", Components: []ComponentInstance{
+		{ComponentID: "comp-side", Quantity: 1}, {ComponentID: "comp-side-r", Quantity: 1},
+	}}}}
+	if issues := ValidateModuleFurnitureParameterConsumers(module, catalog); len(issues) != 0 {
+		t.Fatalf("families binding rejected on unambiguous composition: %+v", issues)
+	}
+}

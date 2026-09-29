@@ -103,6 +103,13 @@
             "$ref": "#/$defs/parameterValue"
           },
           "maxProperties": 256
+        },
+        "families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/relationshipFamily"
+          }
         }
       },
       "required": [
@@ -308,6 +315,7 @@
             "STATION_SPAN_INVALID",
             "STATION_PARTICIPANT_INVALID",
             "STATION_POINT_INVALID",
+            "STATION_FAMILY_COLLISION",
             "TECHNICAL_PROFILE_REQUIRED"
           ]
         },
@@ -1360,6 +1368,69 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "familyPlans": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "familyId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "stationCounts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "contactId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stationCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "contactId",
+                        "stationCount"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "stationDistances": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "contactId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "distancesMm": {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "required": [
+                        "contactId",
+                        "distancesMm"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "familyId",
+                  "stationCounts",
+                  "stationDistances"
+                ],
+                "additionalProperties": false
+              }
             }
           },
           "required": [
@@ -1384,6 +1455,32 @@
         "contacts",
         "stations",
         "blockers"
+      ],
+      "additionalProperties": false
+    },
+    "relationshipFamily": {
+      "type": "object",
+      "properties": {
+        "familyId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "startMarginMm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "endMarginMm": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "familyId",
+        "count"
       ],
       "additionalProperties": false
     }

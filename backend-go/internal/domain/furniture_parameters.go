@@ -105,6 +105,20 @@ type FurnitureParameterRelationshipBinding struct {
 	// Station declares the construction-fixed station margins for kinds that
 	// plan stations; the station COUNT always comes from the parameter value.
 	Station *FurnitureRelationshipStationMargins `json:"station,omitempty"`
+	// Families declares independent operation families for one joint (#874
+	// J2-A): each family plans its OWN stations with its own count and
+	// margins. When present, the parameter value no longer drives a single
+	// station count. familyId values must be unique; counts are >= 2.
+	Families []FurnitureRelationshipFamily `json:"families,omitempty"`
+}
+
+// FurnitureRelationshipFamily is one operation family inside a joint:
+// an independently counted, independently distributed station set.
+type FurnitureRelationshipFamily struct {
+	FamilyID      string  `json:"familyId"`
+	Count         int     `json:"count"`
+	StartMarginMm float64 `json:"startMarginMm,omitempty"`
+	EndMarginMm   float64 `json:"endMarginMm,omitempty"`
 }
 
 type FurnitureParameterRelationshipTarget struct {
@@ -574,6 +588,24 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 				math.IsNaN(station.StartMarginMm) || math.IsNaN(station.EndMarginMm) ||
 				math.IsInf(station.StartMarginMm, 0) || math.IsInf(station.EndMarginMm, 0) {
 				add("binding.relationship.station", "margins must be finite and nonnegative")
+			}
+		}
+		seenFamilies := map[string]bool{}
+		for _, family := range b.Relationship.Families {
+			if strings.TrimSpace(family.FamilyID) == "" {
+				add("binding.relationship.families", "familyId is required")
+			}
+			if seenFamilies[family.FamilyID] {
+				add("binding.relationship.families", "each familyId must be unique")
+			}
+			seenFamilies[family.FamilyID] = true
+			if family.Count < 2 {
+				add("binding.relationship.families", "each family count must be an integer >= 2")
+			}
+			if family.StartMarginMm < 0 || family.EndMarginMm < 0 ||
+				math.IsNaN(family.StartMarginMm) || math.IsNaN(family.EndMarginMm) ||
+				math.IsInf(family.StartMarginMm, 0) || math.IsInf(family.EndMarginMm, 0) {
+				add("binding.relationship.families", "margins must be finite and nonnegative")
 			}
 		}
 	default:

@@ -267,7 +267,7 @@ module Granete
           STATION_CONTACT_UNKNOWN STATION_CONTACT_AMBIGUOUS STATION_SPEC_MISSING
           STATION_SPEC_AMBIGUOUS STATION_COUNT_INVALID STATION_MARGIN_INVALID
           STATION_FRAME_INVALID STATION_SPAN_INVALID STATION_PARTICIPANT_INVALID
-          STATION_POINT_INVALID TECHNICAL_PROFILE_REQUIRED
+          STATION_POINT_INVALID STATION_FAMILY_COLLISION TECHNICAL_PROFILE_REQUIRED
         ].freeze
         ISSUE_SEVERITIES = %w[error warning info].freeze
         ISSUE_KEYS = %w[code message severity entityId path remediation details].freeze
@@ -406,10 +406,36 @@ module Granete
                   valid_anchor?(relationship['source'], component_ids) && valid_targets?(relationship, component_ids)
           valid &&= !relationship.key?('joinerySystemId') || non_empty_string?(relationship['joinerySystemId'])
           valid &&= !relationship.key?('parameters') || valid_scalar_map?(relationship['parameters'])
+          valid &&= !relationship.key?('families') || valid_families?(relationship['families'])
           raise AuthoringResolveContract::ContractError, 'Relationship del snapshot normalizado inválida' unless valid
 
           targets = relationship['targets'].map { |target| [target['componentInstanceId'], target['role']] }
           AuthoringResolveContract.ensure_unique!(targets, "target de #{relationship['relationshipId']}")
+        end
+
+        def valid_families?(families)
+          return false unless families.is_a?(Array) && !families.empty?
+
+          ids = families.map do |family|
+            return false if family.is_a?(Hash) && !valid_family?(family)
+
+            family.is_a?(Hash) ? family['familyId'] : nil
+          end
+          ids.uniq.length == ids.length
+        end
+
+        def valid_family?(family)
+          unless family.keys.all? { |key| AuthoringSnapshotParsing::RELATIONSHIP_FAMILY_KEYS.include?(key) }
+            return false
+          end
+
+          non_empty_string?(family['familyId']) && family['count'].is_a?(Integer) && family['count'] >= 2 &&
+            (!family.key?('startMarginMm') || finite_nonnegative_number?(family['startMarginMm'])) &&
+            (!family.key?('endMarginMm') || finite_nonnegative_number?(family['endMarginMm']))
+        end
+
+        def finite_nonnegative_number?(value)
+          value.is_a?(Numeric) && value.finite? && value >= 0
         end
 
         def valid_targets?(relationship, component_ids)
@@ -430,7 +456,8 @@ module Granete
                                      anchorFace offsetMm].freeze
         PLACEMENT_KEYS = (PLACEMENT_REQUIRED_KEYS + %w[placementKind rotationDeg]).freeze
         PLACEMENT_KINDS = %w[manual derived].freeze
-        RELATIONSHIP_KEYS = %w[relationshipId kind source targets joinerySystemId parameters].freeze
+        RELATIONSHIP_KEYS = %w[relationshipId kind source targets joinerySystemId parameters families].freeze
+        RELATIONSHIP_FAMILY_KEYS = %w[familyId count startMarginMm endMarginMm].freeze
         ANCHOR_KEYS = %w[componentInstanceId role face reference].freeze
         ANCHOR_REQUIRED_KEYS = %w[componentInstanceId role].freeze
 
