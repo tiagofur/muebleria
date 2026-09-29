@@ -679,6 +679,10 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     image_url: m.imageUrl ?? '',
     notes: m.notes ?? '',
     hardware_lines: m.hardwareLines.map(hardwareLineToApi),
+    // Verbatim pass-through (#905): the parameter-definition wire shape IS
+    // the domain shape (the Go struct tags are camelCase) — dropping it here
+    // silently erased every module's authoring contract on saveCatalog.
+    parameter_definitions: m.parameterDefinitions ?? [],
   };
 }
 
@@ -737,6 +741,11 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     hardwareLines: Array.isArray(lines)
       ? lines.map((l) => hardwareLineFromApi(l as Record<string, unknown>))
       : [],
+    // Verbatim round-trip (#905): the authoritative authoring contract the
+    // server persists must survive workspace load/save untouched.
+    parameterDefinitions: Array.isArray(raw.parameter_definitions)
+      ? (raw.parameter_definitions as Module['parameterDefinitions'])
+      : undefined,
   };
 }
 

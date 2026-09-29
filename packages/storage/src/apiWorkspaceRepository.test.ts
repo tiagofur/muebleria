@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { APIWorkspaceRepository } from './apiWorkspaceRepository';
+import type { Catalog } from '@granete/domain';
 import { ProjectInlineUpdateHttpError } from './workspaceRepository';
 
 describe('APIWorkspaceRepository', () => {
@@ -204,6 +205,66 @@ describe('APIWorkspaceRepository', () => {
     const body = JSON.parse(putBodies[0]!);
     expect(body.width_mm).toBe(100);
     expect(body.board_price).toBe(10);
+  });
+
+  it('saveCatalog PUTs module parameter_definitions verbatim (#905)', async () => {
+    const putBodies: Record<string, unknown>[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (init?.method === 'PUT' && url.includes('/catalog/modules/')) {
+        putBodies.push(JSON.parse(String(init.body)));
+        return { ok: true, json: async () => ({}) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await repo.saveCatalog({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [
+        {
+          id: 'mod-905',
+          code: 'M-905',
+          name: 'Gabinete 905',
+          baseLaborCost: 0,
+          hardwareLines: [],
+          parameterDefinitions: [
+            {
+              name: 'baseJointStations',
+              label: 'Fijaciones base por unión',
+              type: 'number',
+              defaultValue: 3,
+              required: true,
+              unit: 'count',
+              category: 'configuration',
+              integer: true,
+              binding: {
+                version: 1,
+                kind: 'structureRelationship',
+                componentId: 'comp-floor',
+                relationship: {
+                  kind: 'floor-side',
+                  sourceRole: 'floor-edge',
+                  targets: [{ componentId: 'comp-side', role: 'inside-face', face: 'front' }],
+                  station: { startMarginMm: 40, endMarginMm: 40 },
+                },
+              },
+            },
+          ],
+        } as unknown as Catalog['modules'][number],
+      ],
+      categories: [],
+      customers: [],
+    });
+
+    expect(putBodies).toHaveLength(1);
+    const definitions = putBodies[0]!.parameter_definitions as Record<string, unknown>[];
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0]!.name).toBe('baseJointStations');
+    expect((definitions[0]!.binding as Record<string, unknown>).kind).toBe('structureRelationship');
   });
 
   it('saveCatalog PUTs snake_case ambientMaterials body', async () => {
