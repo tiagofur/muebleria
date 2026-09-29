@@ -142,6 +142,12 @@ var FurnitureRelationshipAnchorFaces = map[string]bool{
 	"top": true, "bottom": true, "left": true, "right": true, "front": true, "back": true,
 }
 
+// faceVerifiedRelationshipKind reports whether a structure relationship kind
+// resolves its contacts through declared anchor faces (#874 J1-B/J2-B).
+func faceVerifiedRelationshipKind(kind string) bool {
+	return kind == "floor-side" || kind == "fixed-shelf-side"
+}
+
 type FurnitureParameterDefinition struct {
 	Name         string                     `json:"name"`
 	Label        string                     `json:"label"`
@@ -574,10 +580,11 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 				add("binding.relationship.targets", "each target must reference a distinct component")
 			}
 			seenTargets[target.ComponentID] = true
-			// Face-verified kinds (floor-side today) resolve contacts through
-			// declared faces; a target without one can never verify.
-			if b.Relationship.Kind == "floor-side" && !FurnitureRelationshipAnchorFaces[target.Face] {
-				add("binding.relationship.targets", "floor-side targets must declare one concrete contact face")
+			// Face-verified kinds (floor-side, fixed-shelf-side) resolve
+			// contacts through declared faces; a target without one can never
+			// verify.
+			if faceVerifiedRelationshipKind(b.Relationship.Kind) && !FurnitureRelationshipAnchorFaces[target.Face] {
+				add("binding.relationship.targets", "floor-side and fixed-shelf-side targets must declare one concrete contact face")
 			}
 			if target.Face != "" && !FurnitureRelationshipAnchorFaces[target.Face] {
 				add("binding.relationship.targets", "target face must be one of the six concrete board faces")
@@ -759,8 +766,8 @@ func ValidateModuleFurnitureParameterConsumers(module Module, catalog Catalog) [
 				}
 				seenTargetComponents[target.ComponentID] = true
 				// Face-verified kinds resolve contacts through declared faces.
-				if binding.Relationship.Kind == "floor-side" && !FurnitureRelationshipAnchorFaces[target.Face] {
-					issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "floor-side targets must declare one concrete contact face"})
+				if faceVerifiedRelationshipKind(binding.Relationship.Kind) && !FurnitureRelationshipAnchorFaces[target.Face] {
+					issues = append(issues, FurnitureParameterDefinitionIssue{Parameter: definition.Name, Field: "binding.relationship.targets", Message: "floor-side and fixed-shelf-side targets must declare one concrete contact face"})
 				}
 			}
 		}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import contactFixture from '../../../contracts/j1ContactMachining.contract.json';
 import identityFixture from '../../../contracts/j1ContactOperationIdentity.contract.json';
+import j2Fixture from '../../../contracts/j2FixedShelfOperations.contract.json';
 
 import {
   cabinetCatalog,
@@ -16,18 +17,25 @@ import {
   contactOperationId,
   deriveResolvedContactOperationsForContact,
   deriveResolvedContactOperations,
+  deriveFixedShelfOperations,
   deriveRelationshipMachining,
   diffRelationshipMachining,
   isFingerprintStale,
   provenanceKey,
   type RelationshipMachiningResult,
   type ContactResolutionInput,
+  type ContactBoard,
   type StationSpec,
   type ContactOperationProvenance,
   type ContactOperationRecipe,
 } from './sketchupRelationshipMachining';
 import { applyAuthoringEnvelope, EMPTY_AUTHORING_STATE } from './sketchupAuthoringExchange';
-import type { AuthoringEnvelopeV1, ReadonlyAuthoringSnapshot } from './sketchupAuthoringSchema';
+import type {
+  AuthoringEnvelopeV1,
+  PartRelationshipIntent,
+  ReadonlyAuthoringSnapshot,
+  RelationshipRecipeIntent,
+} from './sketchupAuthoringSchema';
 
 function acceptedSnapshot(): ReadonlyAuthoringSnapshot {
   const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, cloneCabinetEnvelope(), cabinetCatalog);
@@ -795,6 +803,241 @@ describe('J2-A operation families inside one joint', () => {
     ));
     expect(status.stage).toBe('STATION_INVALID');
     expect(status.stations.issueCodes).toEqual(['STATION_PATTERN_INVALID']);
+  });
+});
+
+describe('J2-B fixed shelf over versioned recipes', () => {
+  // Shared contract fixture: both runtimes consume the same file and assert
+  // the same hand-computed expectations (byte-level parity of the new
+  // surface).
+  it('reproduces the shared fixture expectations exactly (parity with Go)', () => {
+    const result = deriveFixedShelfOperations(
+      j2Fixture.relationship as unknown as PartRelationshipIntent,
+      j2Fixture.boards as unknown as ContactBoard[],
+    );
+    expect(result.issues).toEqual([]);
+    expect(result.status).toEqual(j2Fixture.expectedStatus);
+    expect(result.operations.map((operation) => ({
+      operationId: operation.operationId,
+      hostComponentInstanceId: operation.hostComponentInstanceId,
+      provenance: operation.provenance,
+      holes: operation.detail.holes,
+    }))).toEqual(j2Fixture.expectedOperations);
+  });
+
+  const shelfRecipes = (relationshipId: string): RelationshipRecipeIntent[] => [
+    { contactId: `${relationshipId}:side-left-01`, recipeId: 'test:synthetic-fixed-shelf', recipeRevision: 'test-1',
+      technicalProfileId: 'test:synthetic-shelf-profile', technicalProfileRevision: 'test-1',
+      rules: [
+        { ruleId: 'pilot', ruleRevision: 'test-1', participantRole: 'A', operationRole: 'pilot',
+          entryFace: 'bottom', offsetMm: [0, 0, 0], axis: [0, -1, 0], diameterMm: 3, depthMm: 12 },
+        { ruleId: 'counterbore', ruleRevision: 'test-1', participantRole: 'B', operationRole: 'counterbore',
+          entryFace: 'front', offsetMm: [0, 18, 0], axis: [0, -1, 0], diameterMm: 6, depthMm: 9 },
+      ] },
+    { contactId: `${relationshipId}:side-right-01`, recipeId: 'test:synthetic-fixed-shelf', recipeRevision: 'test-1',
+      technicalProfileId: 'test:synthetic-shelf-profile', technicalProfileRevision: 'test-1',
+      rules: [
+        { ruleId: 'pilot', ruleRevision: 'test-1', participantRole: 'A', operationRole: 'pilot',
+          entryFace: 'top', offsetMm: [0, 0, 0], axis: [0, -1, 0], diameterMm: 3, depthMm: 12 },
+        { ruleId: 'counterbore', ruleRevision: 'test-1', participantRole: 'B', operationRole: 'counterbore',
+          entryFace: 'back', offsetMm: [0, 18, 0], axis: [0, -1, 0], diameterMm: 6, depthMm: 9 },
+      ] },
+  ];
+
+  type ShelfEnvelopeOptions = {
+    readonly shelfZ?: number;
+    readonly withShelf?: boolean;
+    readonly secondShelf?: boolean;
+    readonly recipes?: readonly RelationshipRecipeIntent[];
+    readonly withoutRecipes?: boolean;
+    readonly reversedTargets?: boolean;
+  };
+
+  // Cabinet with physical sides, a floor-side families relationship (READY
+  // with synthetic profiles) and a fixed shelf at z=400 — the same coexistence
+  // the Go wiring test proves.
+  const fixedShelfEnvelope = (options: ShelfEnvelopeOptions = {}) =>
+    mutateCabinetEnvelope((envelope) => {
+      const assembly = envelope.assemblies[0]!;
+      for (const side of assembly.components ?? []) {
+        if (side.componentInstanceId === 'side-left-01') side.transform.translationMm[0] = 18;
+        if (side.componentInstanceId === 'side-right-01') side.transform.translationMm[0] = 600;
+        if (side.componentInstanceId.startsWith('side-')) {
+          side.transform.rotationQuaternion = [0, 0, Math.SQRT1_2, Math.SQRT1_2] as [number, number, number, number];
+        }
+      }
+      const relationships: Record<string, unknown>[] = [{
+        relationshipId: 'rel-floor-sides-01', kind: 'floor-side',
+        source: { componentInstanceId: 'floor-01', role: 'floor-edge' },
+        targets: [
+          { componentInstanceId: 'side-left-01', role: 'inside-face', face: 'back' },
+          { componentInstanceId: 'side-right-01', role: 'inside-face', face: 'front' },
+        ],
+        families: [
+          { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+          { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+        ],
+      }];
+      assembly.components = [...(assembly.components ?? []), {
+        componentDefinitionId: 'definition-shelf', componentInstanceId: 'floor-01', role: 'floor',
+        transform: { frame: 'assembly', translationMm: [18, 0, 0],
+          rotationQuaternion: [0.5, 0.5, 0.5, 0.5], scale: [1, 1, 1] },
+      }];
+      if (options.withShelf !== false) {
+        assembly.components = [...(assembly.components ?? []), {
+          componentDefinitionId: 'definition-shelf', componentInstanceId: 'fixed-shelf-01', role: 'shelf',
+          transform: { frame: 'assembly', translationMm: [18, 0, options.shelfZ ?? 400],
+            rotationQuaternion: [0.5, 0.5, 0.5, 0.5], scale: [1, 1, 1] },
+        }];
+        const targets = options.reversedTargets
+          ? [{ componentInstanceId: 'side-right-01', role: 'inside-face', face: 'front' },
+             { componentInstanceId: 'side-left-01', role: 'inside-face', face: 'back' }]
+          : [{ componentInstanceId: 'side-left-01', role: 'inside-face', face: 'back' },
+             { componentInstanceId: 'side-right-01', role: 'inside-face', face: 'front' }];
+        const shelf: Record<string, unknown> = {
+          relationshipId: 'rel-fixed-shelf-01', kind: 'fixed-shelf-side',
+          source: { componentInstanceId: 'fixed-shelf-01', role: 'shelf-edge' },
+          targets,
+          parameters: { stationCount: 3, startMarginMm: 40, endMarginMm: 40 },
+        };
+        if (!options.withoutRecipes) shelf.recipes = [...(options.recipes ?? shelfRecipes('rel-fixed-shelf-01'))];
+        relationships.push(shelf);
+      }
+      if (options.secondShelf) {
+        assembly.components = [...(assembly.components ?? []), {
+          componentDefinitionId: 'definition-shelf', componentInstanceId: 'fixed-shelf-02', role: 'shelf',
+          transform: { frame: 'assembly', translationMm: [18, 0, 430],
+            rotationQuaternion: [0.5, 0.5, 0.5, 0.5], scale: [1, 1, 1] },
+        }];
+        relationships.push({
+          relationshipId: 'rel-fixed-shelf-02', kind: 'fixed-shelf-side',
+          source: { componentInstanceId: 'fixed-shelf-02', role: 'shelf-edge' },
+          targets: [
+            { componentInstanceId: 'side-left-01', role: 'inside-face', face: 'back' },
+            { componentInstanceId: 'side-right-01', role: 'inside-face', face: 'front' },
+          ],
+          parameters: { stationCount: 3, startMarginMm: 40, endMarginMm: 40 },
+          recipes: shelfRecipes('rel-fixed-shelf-02'),
+        });
+      }
+      assembly.relationships = [...(assembly.relationships ?? []), ...(relationships as never[])];
+    });
+
+  const resultFrom = (envelope: ReturnType<typeof fixedShelfEnvelope>) => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, envelope, cabinetCatalog);
+    if (response.status !== 'accepted' || response.authoringSnapshot === undefined) {
+      throw new Error(`envelope was not accepted: ${JSON.stringify(response.issues)}`);
+    }
+    return deriveRelationshipMachining(response.authoringSnapshot, cabinetJoineryCatalog, { familyProfiles: {
+      tornillos: { profileId: 'test:synthetic-screw-4x15', diameterMm: 4, depthMm: 15, holeType: 'screw' },
+      taquetes: { profileId: 'test:synthetic-dowel-8x15', diameterMm: 8, depthMm: 15, holeType: 'dowel' },
+    } });
+  };
+  const opsByRelationship = (result: RelationshipMachiningResult, relationshipId: string) =>
+    result.derivedMachiningOperations
+      .filter((operation) => operation.provenance.sourceKind === 'relationship' && operation.provenance.relationshipId === relationshipId);
+
+  it('reaches MACHINING_READY with four recipe operations beside a READY floor-side joint', () => {
+    const result = resultFrom(fixedShelfEnvelope());
+    const floorStatus = result.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01')!;
+    const shelfStatus = result.joineryStatuses.find((item) => item.relationshipId === 'rel-fixed-shelf-01')!;
+    expect(floorStatus.stage).toBe('MACHINING_READY');
+    expect(shelfStatus.stage).toBe('MACHINING_READY');
+    expect(shelfStatus.blockers).toEqual([]);
+    expect(shelfStatus.stations.stationCounts).toEqual([
+      { contactId: 'rel-fixed-shelf-01:side-left-01', stationCount: 3 },
+      { contactId: 'rel-fixed-shelf-01:side-right-01', stationCount: 3 },
+    ]);
+    const shelfOps = opsByRelationship(result, 'rel-fixed-shelf-01');
+    expect(shelfOps.map((operation) => operation.operationId).sort()).toEqual([
+      'rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-01:fixed-shelf-01:pilot',
+      'rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-01:side-left-01:counterbore',
+      'rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-01:fixed-shelf-01:pilot',
+      'rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-01:side-right-01:counterbore',
+    ]);
+    for (const operation of shelfOps) {
+      expect(operation.detail.holes).toHaveLength(3);
+      expect(operation.provenance).toMatchObject({
+        sourceKind: 'relationship', relationshipId: 'rel-fixed-shelf-01',
+        catalogRuleId: 'test:synthetic-fixed-shelf', recipeRevision: 'test-1',
+        technicalProfileId: 'test:synthetic-shelf-profile', technicalProfileRevision: 'test-1',
+      });
+    }
+    // The shelf pilots enter through its two end faces; the sides are
+    // counterbored from their outer faces.
+    expect(opsByRelationship(result, 'rel-fixed-shelf-01').find((operation) => operation.hostComponentInstanceId === 'fixed-shelf-01' && operation.detail.holes[0]!.face === 'bottom')).toBeDefined();
+    expect(opsByRelationship(result, 'rel-fixed-shelf-01').find((operation) => operation.hostComponentInstanceId === 'fixed-shelf-01' && operation.detail.holes[0]!.face === 'top')).toBeDefined();
+    expect(opsByRelationship(result, 'rel-fixed-shelf-01').find((operation) => operation.hostComponentInstanceId === 'side-left-01' && operation.detail.holes[0]!.face === 'front')).toBeDefined();
+    expect(opsByRelationship(result, 'rel-fixed-shelf-01').find((operation) => operation.hostComponentInstanceId === 'side-right-01' && operation.detail.holes[0]!.face === 'back')).toBeDefined();
+  });
+
+  it('keeps the honest terminal without recipes: planned stations, zero operations', () => {
+    const result = resultFrom(fixedShelfEnvelope({ withoutRecipes: true }));
+    const shelfStatus = result.joineryStatuses.find((item) => item.relationshipId === 'rel-fixed-shelf-01')!;
+    expect(shelfStatus.stage).toBe('TECHNICAL_PROFILE_REQUIRED');
+    expect(shelfStatus.blockers).toEqual(['TECHNICAL_PROFILE_REQUIRED']);
+    expect(shelfStatus.stations.status).toBe('PLANNED');
+    expect(opsByRelationship(result, 'rel-fixed-shelf-01')).toEqual([]);
+    expect(result.issues.map((issue) => issue.code)).toContain('TECHNICAL_PROFILE_REQUIRED');
+  });
+
+  it('fails the whole relationship when a recipe does not fit (no omitted holes)', () => {
+    const recipes = shelfRecipes('rel-fixed-shelf-01').map((recipe) => ({
+      ...recipe,
+      rules: recipe.rules.map((rule) => rule.operationRole === 'counterbore' ? { ...rule, depthMm: 35 } : rule),
+    }));
+    const result = resultFrom(fixedShelfEnvelope({ recipes }));
+    const shelfStatus = result.joineryStatuses.find((item) => item.relationshipId === 'rel-fixed-shelf-01')!;
+    expect(shelfStatus.stage).toBe('MACHINING_INVALID');
+    expect(shelfStatus.blockers).toEqual(['OPERATION_GEOMETRY_INVALID']);
+    expect(opsByRelationship(result, 'rel-fixed-shelf-01')).toEqual([]);
+  });
+
+  it('isolates the floor-side machining across add/move/delete/duplicate/reorder', () => {
+    const baseline = resultFrom(fixedShelfEnvelope());
+    const baselineFloor = opsByRelationship(baseline, 'rel-floor-sides-01');
+    const baselineShelf = opsByRelationship(baseline, 'rel-fixed-shelf-01');
+    expect(baselineFloor).toHaveLength(8);
+
+    // ADD: without the shelf, the floor-side result is byte-identical.
+    const added = resultFrom(fixedShelfEnvelope({ withShelf: false }));
+    expect(opsByRelationship(added, 'rel-floor-sides-01')).toEqual(baselineFloor);
+
+    // MOVE (z 400→500): shelf-local operations keep identical bytes; the
+    // sides' counterbores move with the shelf; the floor-side stays.
+    const moved = resultFrom(fixedShelfEnvelope({ shelfZ: 500 }));
+    expect(opsByRelationship(moved, 'rel-floor-sides-01')).toEqual(baselineFloor);
+    const movedShelf = opsByRelationship(moved, 'rel-fixed-shelf-01');
+    expect(movedShelf).toHaveLength(4);
+    for (const operation of movedShelf) {
+      const before = baselineShelf.find((candidate) => candidate.operationId === operation.operationId)!;
+      if (operation.hostComponentInstanceId === 'fixed-shelf-01') {
+        expect(operation.detail.holes).toEqual(before.detail.holes);
+      } else {
+        expect(operation.detail.holes).not.toEqual(before.detail.holes);
+      }
+    }
+
+    // DELETE: the shelf operations vanish; the floor-side stays.
+    const deleted = resultFrom(fixedShelfEnvelope({ withShelf: false }));
+    expect(opsByRelationship(deleted, 'rel-fixed-shelf-01')).toEqual([]);
+    expect(opsByRelationship(deleted, 'rel-floor-sides-01')).toEqual(baselineFloor);
+
+    // DUPLICATE: the second shelf gets its own relationship with independent
+    // provenance; the first shelf and the floor-side stay byte-identical.
+    const duplicated = resultFrom(fixedShelfEnvelope({ secondShelf: true }));
+    expect(opsByRelationship(duplicated, 'rel-floor-sides-01')).toEqual(baselineFloor);
+    expect(opsByRelationship(duplicated, 'rel-fixed-shelf-01')).toEqual(baselineShelf);
+    const second = opsByRelationship(duplicated, 'rel-fixed-shelf-02');
+    expect(second).toHaveLength(4);
+    for (const operation of second) {
+      expect(operation.provenance).toMatchObject({ relationshipId: 'rel-fixed-shelf-02' });
+    }
+
+    // REORDER: reversed targets produce the same operations.
+    const reordered = resultFrom(fixedShelfEnvelope({ reversedTargets: true }));
+    expect(opsByRelationship(reordered, 'rel-fixed-shelf-01')).toEqual(baselineShelf);
+    expect(opsByRelationship(reordered, 'rel-floor-sides-01')).toEqual(baselineFloor);
   });
 });
 });

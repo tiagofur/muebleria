@@ -124,6 +124,21 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'TECHNICAL_PROFILE_REQUIRED',
   'TECHNICAL_PROFILE_INVALID',
   'TECHNICAL_PROFILE_INCOMPATIBLE',
+  // J2-B recipe derivation (#874): the A1a/A1b reconciler codes a
+  // fixed-shelf-side relationship can surface on the resolve wire.
+  'OPERATION_CONTACT_UNKNOWN',
+  'OPERATION_CONTACT_AMBIGUOUS',
+  'OPERATION_RECIPE_REQUIRED',
+  'OPERATION_RECIPE_AMBIGUOUS',
+  'OPERATION_PLAN_INVALID',
+  'OPERATION_IDENTITY_INVALID',
+  'OPERATION_PARTICIPANT_INVALID',
+  'OPERATION_PARTICIPANT_RULE_MISSING',
+  'OPERATION_RECIPE_INVALID',
+  'OPERATION_RULE_INVALID',
+  'OPERATION_GEOMETRY_INVALID',
+  'OPERATION_GEOMETRY_DUPLICATE',
+  'OPERATION_ID_AMBIGUOUS',
 ] as const;
 
 export type AuthoringResolveIssueCode = (typeof AUTHORING_RESOLVE_ISSUE_CODES)[number];
@@ -269,7 +284,8 @@ export type ResolvedMachiningOperationV1 = {
   readonly operationId: string;
   readonly hostComponentInstanceId: string;
   readonly provenance:
-    | { readonly sourceKind: 'relationship'; readonly relationshipId: string; readonly catalogRuleId?: string }
+    | { readonly sourceKind: 'relationship'; readonly relationshipId: string; readonly catalogRuleId?: string;
+        readonly recipeRevision?: string; readonly technicalProfileId?: string; readonly technicalProfileRevision?: string }
     | { readonly sourceKind: 'manualHardwarePlacement'; readonly hardwarePlacementId: string };
   readonly holes: readonly ResolveHoleV1[];
 };
@@ -581,6 +597,102 @@ export function validateAuthoringResolveRequest(
       }
     }
 
+    // Versioned per-contact recipes (#874 J2-B): fixed-shelf-side only, exact
+    // contract shape, every contactId is one of this relationship's own
+    // contacts, coverage is complete. An empty array is "no recipes" (the
+    // honest terminal), matching the Go gate.
+    const recipes = relationship.recipes;
+    if (recipes !== undefined && (!Array.isArray(recipes) || recipes.length > 0)) {
+      const recipePath = `${path}.recipes`;
+      if (!Array.isArray(recipes)) {
+        push('RELATIONSHIP_INVALID', 'recipes must be an array', recipePath);
+      } else if (relationship.kind !== 'fixed-shelf-side') {
+        push('RELATIONSHIP_INVALID', 'recipes are only valid on fixed-shelf-side relationships', recipePath);
+      } else {
+        const contactIds = new Set((relationship.targets ?? [])
+          .map((anchor) => `${relationship.relationshipId}:${anchor.componentInstanceId}`));
+        const seenContacts = new Set<string>();
+        const validVector = (value: unknown): boolean =>
+          Array.isArray(value) && value.length === 3 && value.every((item) => typeof item === 'number' && Number.isFinite(item));
+        for (const [recipeIndex, recipeValue] of recipes.entries()) {
+          const recipe = recipeValue as Record<string, unknown> | undefined;
+          const entryPath = `${recipePath}[${recipeIndex}]`;
+          if (!recipe || typeof recipe !== 'object' ||
+            Object.keys(recipe).some((key) => !['contactId', 'recipeId', 'recipeRevision', 'technicalProfileId', 'technicalProfileRevision', 'rules'].includes(key))) {
+            push('RELATIONSHIP_INVALID', 'recipe has unknown keys', entryPath);
+            continue;
+          }
+          if (typeof recipe.contactId !== 'string' || !isBoundedString(recipe.contactId) || !contactIds.has(recipe.contactId)) {
+            push('RELATIONSHIP_INVALID', `recipe contactId ${String(recipe.contactId)} is not a contact of this relationship`, `${entryPath}.contactId`);
+            continue;
+          }
+          if (seenContacts.has(recipe.contactId)) {
+            push('RELATIONSHIP_INVALID', `recipe contactId ${recipe.contactId} appears more than once`, entryPath);
+          }
+          seenContacts.add(recipe.contactId);
+          for (const field of ['recipeId', 'recipeRevision', 'technicalProfileId', 'technicalProfileRevision'] as const) {
+            if (typeof recipe[field] !== 'string' || !isBoundedString(recipe[field] as string)) {
+              push('RELATIONSHIP_INVALID', `recipe ${field} is required`, `${entryPath}.${field}`);
+            }
+          }
+          const rules = recipe.rules;
+          if (!Array.isArray(rules) || rules.length === 0) {
+            push('RELATIONSHIP_INVALID', `recipe for contact ${recipe.contactId} needs at least one rule`, `${entryPath}.rules`);
+            continue;
+          }
+          const roles = new Set(rules.map((rule) => (rule as Record<string, unknown>)?.participantRole));
+          if (!roles.has('A') || !roles.has('B')) {
+            push('RELATIONSHIP_INVALID', `recipe for contact ${recipe.contactId} needs at least one rule per participant role (source and target)`, `${entryPath}.rules`);
+          }
+          const seenRules = new Set<string>();
+          for (const [ruleIndex, ruleValue] of rules.entries()) {
+            const rule = ruleValue as Record<string, unknown> | undefined;
+            const rulePath = `${entryPath}.rules[${ruleIndex}]`;
+            if (!rule || typeof rule !== 'object' ||
+              Object.keys(rule).some((key) => !['ruleId', 'ruleRevision', 'participantRole', 'operationRole', 'entryFace', 'offsetMm', 'axis', 'diameterMm', 'depthMm'].includes(key))) {
+              push('RELATIONSHIP_INVALID', 'rule has unknown keys', rulePath);
+              continue;
+            }
+            if (typeof rule.ruleId !== 'string' || !isBoundedString(rule.ruleId)) {
+              push('RELATIONSHIP_INVALID', 'rule ruleId is required', `${rulePath}.ruleId`);
+            } else if (seenRules.has(rule.ruleId)) {
+              push('RELATIONSHIP_INVALID', `ruleId ${rule.ruleId} appears more than once`, rulePath);
+            } else {
+              seenRules.add(rule.ruleId);
+            }
+            if (typeof rule.ruleRevision !== 'string' || !isBoundedString(rule.ruleRevision) ||
+                typeof rule.operationRole !== 'string' || !isBoundedString(rule.operationRole) ||
+                (rule.participantRole !== 'A' && rule.participantRole !== 'B') ||
+                typeof rule.entryFace !== 'string' || !['top', 'bottom', 'left', 'right', 'front', 'back'].includes(rule.entryFace) ||
+                !validVector(rule.offsetMm) || !validVector(rule.axis)) {
+              push('RELATIONSHIP_INVALID', 'rule needs a revision, operationRole, participantRole, one of the six entry faces, and finite offset/axis vectors', rulePath);
+            }
+            if (validVector(rule.axis)) {
+              const axis = rule.axis as readonly number[];
+              if (Math.abs(axis.reduce((sum, value) => sum + value * value, 0) - 1) > 1e-6) {
+                push('RELATIONSHIP_INVALID', 'rule axis must be a unit vector', `${rulePath}.axis`);
+              }
+            }
+            for (const field of ['diameterMm', 'depthMm'] as const) {
+              const value = rule[field];
+              if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+                push('RELATIONSHIP_INVALID', `rule ${field} must be a finite positive number`, `${rulePath}.${field}`);
+              }
+            }
+          }
+        }
+        if ((relationship.families ?? []).length > 0) {
+          push('RELATIONSHIP_INVALID', 'recipes and families are mutually exclusive: declare one machining pattern per relationship', recipePath);
+        }
+        for (const anchor of relationship.targets ?? []) {
+          const contactId = `${relationship.relationshipId}:${anchor.componentInstanceId}`;
+          if (!seenContacts.has(contactId)) {
+            push('RELATIONSHIP_INVALID', `contact ${contactId} has no recipe; coverage must be complete`, recipePath);
+          }
+        }
+      }
+    }
+
     const anchors = [relationship.source, ...(relationship.targets ?? [])];
     for (const anchor of anchors) {
       if (anchor?.componentInstanceId !== undefined &&
@@ -708,7 +820,7 @@ const COMPONENT_KEYS = new Set([
   'componentInstanceId', 'componentDefinitionId', 'catalogComponentId', 'role', 'transform',
 ]);
 const RELATIONSHIP_KEYS = new Set([
-  'relationshipId', 'kind', 'source', 'targets', 'joinerySystemId', 'parameters', 'families',
+  'relationshipId', 'kind', 'source', 'targets', 'joinerySystemId', 'parameters', 'families', 'recipes',
 ]);
 const RESPONSE_KEYS = new Set([
   'schemaId', 'schemaName', 'schemaVersion', 'resolveContract', 'responseMessageId',
@@ -1075,7 +1187,10 @@ function isValidProvenance(value: unknown): boolean {
   if (!provenance) return false;
   if (provenance.sourceKind === 'relationship') {
     return isBoundedString(provenance.relationshipId) && provenance.hardwarePlacementId === undefined &&
-      (provenance.familyId === undefined || isBoundedString(provenance.familyId));
+      (provenance.familyId === undefined || isBoundedString(provenance.familyId)) &&
+      (provenance.recipeRevision === undefined || isBoundedString(provenance.recipeRevision)) &&
+      (provenance.technicalProfileId === undefined || isBoundedString(provenance.technicalProfileId)) &&
+      (provenance.technicalProfileRevision === undefined || isBoundedString(provenance.technicalProfileRevision));
   }
   if (provenance.sourceKind === 'manualHardwarePlacement') {
     return isBoundedString(provenance.hardwarePlacementId) && provenance.relationshipId === undefined && provenance.catalogRuleId === undefined;
