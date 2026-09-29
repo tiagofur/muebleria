@@ -1,0 +1,104 @@
+{
+  "schema": "granete.j2-fixed-shelf-operations.test.v1",
+  "description": "Fixed shelf ↔ sides as the cabinet's second physical contact over the A0a synthetic cabinet (the shelf repeats the floor board's orientation translated to z=400): hand-computed station and operation expectations consumed by BOTH runtimes. Test-only recipes in the test: namespace; no production technical profile or fabrication claim.",
+  "boards": [
+    { "occurrenceId": "side-left-1", "widthMm": 560, "thicknessMm": 18, "lengthMm": 720,
+      "translationMm": [0, 560, 0], "basis": { "x": [0, -1, 0], "y": [1, 0, 0], "z": [0, 0, 1] } },
+    { "occurrenceId": "side-right-1", "widthMm": 480, "thicknessMm": 18, "lengthMm": 720,
+      "translationMm": [600, 80, 0], "basis": { "x": [0, 1, 0], "y": [-1, 0, 0], "z": [0, 0, 1] } },
+    { "occurrenceId": "shelf-1", "widthMm": 500, "thicknessMm": 18, "lengthMm": 564,
+      "translationMm": [18, 30, 400], "basis": { "x": [0, 1, 0], "y": [0, 0, 1], "z": [1, 0, 0] } }
+  ],
+  "relationship": {
+    "relationshipId": "rel-fixed-shelf-01",
+    "kind": "fixed-shelf-side",
+    "source": { "componentInstanceId": "shelf-1", "role": "shelf-edge" },
+    "targets": [
+      { "componentInstanceId": "side-left-1", "role": "inside-face", "face": "front" },
+      { "componentInstanceId": "side-right-1", "role": "inside-face", "face": "front" }
+    ],
+    "parameters": { "stationCount": 3, "startMarginMm": 30, "endMarginMm": 50 },
+    "recipes": [
+      { "contactId": "rel-fixed-shelf-01:side-left-1", "recipeId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1",
+        "technicalProfileId": "test:synthetic-shelf-profile", "technicalProfileRevision": "test-1",
+        "rules": [
+          { "ruleId": "pilot", "ruleRevision": "test-1", "participantRole": "A", "operationRole": "pilot",
+            "entryFace": "bottom", "offsetMm": [0, 0, 0], "axis": [0, -1, 0], "diameterMm": 3, "depthMm": 12 },
+          { "ruleId": "counterbore", "ruleRevision": "test-1", "participantRole": "B", "operationRole": "counterbore",
+            "entryFace": "back", "offsetMm": [0, 18, 0], "axis": [0, -1, 0], "diameterMm": 6, "depthMm": 9 }
+        ] },
+      { "contactId": "rel-fixed-shelf-01:side-right-1", "recipeId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1",
+        "technicalProfileId": "test:synthetic-shelf-profile", "technicalProfileRevision": "test-1",
+        "rules": [
+          { "ruleId": "pilot", "ruleRevision": "test-1", "participantRole": "A", "operationRole": "pilot",
+            "entryFace": "top", "offsetMm": [0, 0, 0], "axis": [0, -1, 0], "diameterMm": 3, "depthMm": 12 },
+          { "ruleId": "counterbore", "ruleRevision": "test-1", "participantRole": "B", "operationRole": "counterbore",
+            "entryFace": "back", "offsetMm": [0, 18, 0], "axis": [0, -1, 0], "diameterMm": 6, "depthMm": 9 }
+        ] }
+    ]
+  },
+  "expectedStatus": {
+    "relationshipId": "rel-fixed-shelf-01",
+    "kind": "fixed-shelf-side",
+    "stage": "MACHINING_READY",
+    "contacts": [
+      { "contactId": "rel-fixed-shelf-01:side-left-1", "status": "VALID", "issueCodes": [] },
+      { "contactId": "rel-fixed-shelf-01:side-right-1", "status": "VALID", "issueCodes": [] }
+    ],
+    "stations": {
+      "status": "PLANNED",
+      "issueCodes": [],
+      "stationCounts": [
+        { "contactId": "rel-fixed-shelf-01:side-left-1", "stationCount": 3 },
+        { "contactId": "rel-fixed-shelf-01:side-right-1", "stationCount": 3 }
+      ],
+      "stationDistances": [
+        { "contactId": "rel-fixed-shelf-01:side-left-1", "distancesMm": [30, 240, 450] },
+        { "contactId": "rel-fixed-shelf-01:side-right-1", "distancesMm": [30, 215, 400] }
+      ]
+    },
+    "blockers": []
+  },
+  "expectedOperations": [
+    { "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-1:shelf-1:pilot",
+      "hostComponentInstanceId": "shelf-1",
+      "provenance": { "sourceKind": "relationship", "relationshipId": "rel-fixed-shelf-01",
+        "catalogRuleId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1",
+        "technicalProfileId": "test:synthetic-shelf-profile", "technicalProfileRevision": "test-1" },
+      "holes": [
+        { "face": "bottom", "xMm": 30, "yMm": 9, "diameterMm": 3, "depthMm": 12, "type": "pilot" },
+        { "face": "bottom", "xMm": 240, "yMm": 9, "diameterMm": 3, "depthMm": 12, "type": "pilot" },
+        { "face": "bottom", "xMm": 450, "yMm": 9, "diameterMm": 3, "depthMm": 12, "type": "pilot" }
+      ] },
+    { "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-1:side-left-1:counterbore",
+      "hostComponentInstanceId": "side-left-1",
+      "provenance": { "sourceKind": "relationship", "relationshipId": "rel-fixed-shelf-01",
+        "catalogRuleId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1",
+        "technicalProfileId": "test:synthetic-shelf-profile", "technicalProfileRevision": "test-1" },
+      "holes": [
+        { "face": "back", "xMm": 500, "yMm": 409, "diameterMm": 6, "depthMm": 9, "type": "counterbore" },
+        { "face": "back", "xMm": 290, "yMm": 409, "diameterMm": 6, "depthMm": 9, "type": "counterbore" },
+        { "face": "back", "xMm": 80, "yMm": 409, "diameterMm": 6, "depthMm": 9, "type": "counterbore" }
+      ] },
+    { "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-1:shelf-1:pilot",
+      "hostComponentInstanceId": "shelf-1",
+      "provenance": { "sourceKind": "relationship", "relationshipId": "rel-fixed-shelf-01",
+        "catalogRuleId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1",
+        "technicalProfileId": "test:synthetic-shelf-profile", "technicalProfileRevision": "test-1" },
+      "holes": [
+        { "face": "top", "xMm": 80, "yMm": 9, "diameterMm": 3, "depthMm": 12, "type": "pilot" },
+        { "face": "top", "xMm": 265, "yMm": 9, "diameterMm": 3, "depthMm": 12, "type": "pilot" },
+        { "face": "top", "xMm": 450, "yMm": 9, "diameterMm": 3, "depthMm": 12, "type": "pilot" }
+      ] },
+    { "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-1:side-right-1:counterbore",
+      "hostComponentInstanceId": "side-right-1",
+      "provenance": { "sourceKind": "relationship", "relationshipId": "rel-fixed-shelf-01",
+        "catalogRuleId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1",
+        "technicalProfileId": "test:synthetic-shelf-profile", "technicalProfileRevision": "test-1" },
+      "holes": [
+        { "face": "back", "xMm": 30, "yMm": 409, "diameterMm": 6, "depthMm": 9, "type": "counterbore" },
+        { "face": "back", "xMm": 215, "yMm": 409, "diameterMm": 6, "depthMm": 9, "type": "counterbore" },
+        { "face": "back", "xMm": 400, "yMm": 409, "diameterMm": 6, "depthMm": 9, "type": "counterbore" }
+      ] }
+  ]
+}

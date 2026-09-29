@@ -269,6 +269,12 @@ module Granete
           STATION_FRAME_INVALID STATION_SPAN_INVALID STATION_PARTICIPANT_INVALID
           STATION_POINT_INVALID STATION_FAMILY_COLLISION TECHNICAL_PROFILE_REQUIRED
           TECHNICAL_PROFILE_INVALID TECHNICAL_PROFILE_INCOMPATIBLE
+          # J2-B (#874): A1a/A1b reconciler codes a fixed-shelf-side relationship surfaces.
+          OPERATION_CONTACT_UNKNOWN OPERATION_CONTACT_AMBIGUOUS OPERATION_RECIPE_REQUIRED
+          OPERATION_RECIPE_AMBIGUOUS OPERATION_PLAN_INVALID OPERATION_IDENTITY_INVALID
+          OPERATION_PARTICIPANT_INVALID OPERATION_PARTICIPANT_RULE_MISSING
+          OPERATION_RECIPE_INVALID OPERATION_RULE_INVALID OPERATION_GEOMETRY_INVALID
+          OPERATION_GEOMETRY_DUPLICATE OPERATION_ID_AMBIGUOUS
         ].freeze
         ISSUE_SEVERITIES = %w[error warning info].freeze
         ISSUE_KEYS = %w[code message severity entityId path remediation details].freeze
@@ -405,13 +411,18 @@ module Granete
                   relationship.keys.all? { |key| AuthoringSnapshotParsing::RELATIONSHIP_KEYS.include?(key) } &&
                   non_empty_string?(relationship['relationshipId']) && non_empty_string?(relationship['kind']) &&
                   valid_anchor?(relationship['source'], component_ids) && valid_targets?(relationship, component_ids)
-          valid &&= !relationship.key?('joinerySystemId') || non_empty_string?(relationship['joinerySystemId'])
-          valid &&= !relationship.key?('parameters') || valid_scalar_map?(relationship['parameters'])
-          valid &&= !relationship.key?('families') || valid_families?(relationship['families'])
+          valid &&= valid_relationship_fields?(relationship)
+          valid &&= AuthoringRecipeValidation.valid?(relationship)
           raise AuthoringResolveContract::ContractError, 'Relationship del snapshot normalizado inválida' unless valid
 
           targets = relationship['targets'].map { |target| [target['componentInstanceId'], target['role']] }
           AuthoringResolveContract.ensure_unique!(targets, "target de #{relationship['relationshipId']}")
+        end
+
+        def valid_relationship_fields?(relationship)
+          (!relationship.key?('joinerySystemId') || non_empty_string?(relationship['joinerySystemId'])) &&
+            (!relationship.key?('parameters') || valid_scalar_map?(relationship['parameters'])) &&
+            (!relationship.key?('families') || valid_families?(relationship['families']))
         end
 
         def valid_families?(families)
@@ -445,6 +456,86 @@ module Granete
         end
       end
 
+      # J2-B (#874): versioned per-contact recipes are fixed-shelf-side only;
+      # every contactId is one of the relationship's own contacts, coverage
+      # is complete, and each rule carries full versioned technical identity.
+      # An empty array is "no recipes" (the honest terminal), matching the
+      # TS/Go wire gates.
+      module AuthoringRecipeValidation
+        RECIPE_KEYS = %w[
+          contactId recipeId recipeRevision technicalProfileId technicalProfileRevision rules
+        ].freeze
+        RECIPE_RULE_KEYS = %w[
+          ruleId ruleRevision participantRole operationRole entryFace offsetMm axis diameterMm depthMm
+        ].freeze
+
+        module_function
+
+        def valid?(relationship)
+          return true unless relationship.key?('recipes')
+          return false unless relationship['recipes'].is_a?(Array)
+
+          recipes = relationship['recipes']
+          return true if recipes.empty?
+          return false unless relationship['kind'] == 'fixed-shelf-side'
+          return false if relationship['families'].is_a?(Array) && !relationship['families'].empty?
+
+          contact_ids = relationship['targets'].map do |target|
+            "#{relationship['relationshipId']}:#{target['componentInstanceId']}"
+          end
+          return false unless recipes.all? { |recipe| valid_recipe?(recipe, contact_ids) }
+
+          seen = recipes.map { |recipe| recipe['contactId'] }
+          seen.uniq.length == seen.length && contact_ids.all? { |contact_id| seen.include?(contact_id) }
+        end
+
+        def valid_recipe?(recipe, contact_ids)
+          valid_recipe_identity?(recipe, contact_ids) && valid_recipe_rules?(recipe['rules'])
+        end
+
+        def valid_recipe_identity?(recipe, contact_ids)
+          recipe.is_a?(Hash) &&
+            recipe.keys.all? { |key| RECIPE_KEYS.include?(key) } &&
+            recipe['contactId'].is_a?(String) && contact_ids.include?(recipe['contactId']) &&
+            AuthoringSnapshotValues.non_empty_string?(recipe['recipeId']) &&
+            AuthoringSnapshotValues.non_empty_string?(recipe['recipeRevision']) &&
+            AuthoringSnapshotValues.non_empty_string?(recipe['technicalProfileId']) &&
+            AuthoringSnapshotValues.non_empty_string?(recipe['technicalProfileRevision'])
+        end
+
+        def valid_recipe_rules?(rules)
+          rules.is_a?(Array) && !rules.empty? &&
+            rules.map { |rule| rule['participantRole'] }.uniq.sort == %w[A B] &&
+            rules.map { |rule| rule['ruleId'] }.uniq.length == rules.length &&
+            rules.all? { |rule| valid_recipe_rule?(rule) }
+        end
+
+        def valid_recipe_rule?(rule)
+          rule.is_a?(Hash) &&
+            rule.keys.all? { |key| RECIPE_RULE_KEYS.include?(key) } &&
+            AuthoringSnapshotValues.non_empty_string?(rule['ruleId']) &&
+            AuthoringSnapshotValues.non_empty_string?(rule['ruleRevision']) &&
+            AuthoringSnapshotValues.non_empty_string?(rule['operationRole']) &&
+            %w[A B].include?(rule['participantRole']) &&
+            AuthoringSnapshotParsing::ANCHOR_FACES.include?(rule['entryFace']) &&
+            finite_vec3?(rule['offsetMm']) && unit_vec3?(rule['axis']) &&
+            positive_number?(rule['diameterMm']) && positive_number?(rule['depthMm'])
+        end
+
+        def finite_vec3?(value)
+          value.is_a?(Array) && value.length == 3 && value.all? { |item| AuthoringSnapshotValues.finite_number?(item) }
+        end
+
+        def unit_vec3?(value)
+          finite_vec3?(value) &&
+            (((value[0] * value[0]) + (value[1] * value[1]) + (value[2] * value[2])) - 1).abs <= 1e-6
+        end
+
+        def positive_number?(value)
+          AuthoringSnapshotValues.finite_number?(value) && value.to_f.positive?
+        end
+      end
+
       # Deep validation of the normalized authoring snapshot — the ONLY echo
       # the next request may use. Every echoed occurrence/placement is
       # validated so a corrupt echo can never seed the next authoring
@@ -457,7 +548,7 @@ module Granete
                                      anchorFace offsetMm].freeze
         PLACEMENT_KEYS = (PLACEMENT_REQUIRED_KEYS + %w[placementKind rotationDeg]).freeze
         PLACEMENT_KINDS = %w[manual derived].freeze
-        RELATIONSHIP_KEYS = %w[relationshipId kind source targets joinerySystemId parameters families].freeze
+        RELATIONSHIP_KEYS = %w[relationshipId kind source targets joinerySystemId parameters families recipes].freeze
         RELATIONSHIP_FAMILY_KEYS = %w[familyId count startMarginMm endMarginMm].freeze
         ANCHOR_KEYS = %w[componentInstanceId role face reference].freeze
         ANCHOR_REQUIRED_KEYS = %w[componentInstanceId role].freeze

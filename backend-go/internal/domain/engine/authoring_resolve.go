@@ -88,6 +88,10 @@ type AuthoringRelationship struct {
 	// Families declares independent operation families; mutually exclusive
 	// with a stationCount parameter (validated fail-closed).
 	Families []AuthoringRelationshipFamily `json:"families,omitempty"`
+	// Recipes carries the versioned per-contact technical recipes a
+	// fixed-shelf-side relationship consumes (#874 J2-B): the exact
+	// ContactOperationRecipe contract shape, one recipe per declared contact.
+	Recipes []ContactOperationRecipe `json:"recipes,omitempty"`
 }
 
 // AuthoringManualPlacement is the resolve-scoped manual placement intent.
@@ -1071,6 +1075,7 @@ func validateRelationships(relationships []AuthoringRelationship, boards []layou
 			continue
 		}
 		issues = append(issues, validateRelationshipFamilies(relationship)...)
+		issues = append(issues, validateRelationshipRecipes(relationship)...)
 		if !ids[relationship.Source.ComponentInstanceID] {
 			issues = append(issues, domain.ContractIssue{
 				Code:     "RELATIONSHIP_ORPHANED",

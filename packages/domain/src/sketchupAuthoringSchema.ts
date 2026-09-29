@@ -81,6 +81,33 @@ export type RelationshipFamilyIntent = {
   readonly endMarginMm?: number;
 };
 
+/** One machining rule of a versioned per-contact recipe (#874 J2-B): the
+ *  exact ContactOperationRule contract shape. */
+export type RelationshipRecipeRuleIntent = {
+  readonly ruleId: string;
+  readonly ruleRevision: string;
+  readonly participantRole: 'A' | 'B';
+  readonly operationRole: string;
+  readonly entryFace: 'top' | 'bottom' | 'left' | 'right' | 'front' | 'back';
+  /** Components along contact axis, contact normal, and axis × normal. */
+  readonly offsetMm: readonly [number, number, number];
+  readonly axis: readonly [number, number, number];
+  readonly diameterMm: number;
+  readonly depthMm: number;
+};
+
+/** Versioned per-contact technical recipe a fixed-shelf-side relationship
+ *  consumes (#874 J2-B): the exact ContactOperationRecipe contract shape —
+ *  contactId is `{relationshipId}:{targetInstanceId}`. */
+export type RelationshipRecipeIntent = {
+  readonly contactId: string;
+  readonly recipeId: string;
+  readonly recipeRevision: string;
+  readonly technicalProfileId: string;
+  readonly technicalProfileRevision: string;
+  readonly rules: readonly RelationshipRecipeRuleIntent[];
+};
+
 export type PartRelationshipIntent = {
   readonly relationshipId: StableEntityId;
   readonly kind: string;
@@ -89,6 +116,7 @@ export type PartRelationshipIntent = {
   readonly joinerySystemId?: string;
   readonly parameters?: Readonly<Record<string, ParameterValue>>;
   readonly families?: readonly RelationshipFamilyIntent[];
+  readonly recipes?: readonly RelationshipRecipeIntent[];
 };
 
 export type HardwarePlacementIntent = {
@@ -204,6 +232,11 @@ export type RelationshipProvenance = {
   /** Operation family inside the relationship (#874 J2-A.2). */
   readonly familyId?: string;
   readonly catalogRuleId?: string;
+  /** Versioned recipe identity (#874 J2-B): a recipe or profile revision
+   *  bump moves the manufacturing fingerprint even on identical geometry. */
+  readonly recipeRevision?: string;
+  readonly technicalProfileId?: string;
+  readonly technicalProfileRevision?: string;
 };
 
 export type JointProvenance = {

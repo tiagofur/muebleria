@@ -318,7 +318,20 @@
             "STATION_FAMILY_COLLISION",
             "TECHNICAL_PROFILE_REQUIRED",
             "TECHNICAL_PROFILE_INVALID",
-            "TECHNICAL_PROFILE_INCOMPATIBLE"
+            "TECHNICAL_PROFILE_INCOMPATIBLE",
+            "OPERATION_CONTACT_UNKNOWN",
+            "OPERATION_CONTACT_AMBIGUOUS",
+            "OPERATION_RECIPE_REQUIRED",
+            "OPERATION_RECIPE_AMBIGUOUS",
+            "OPERATION_PLAN_INVALID",
+            "OPERATION_IDENTITY_INVALID",
+            "OPERATION_PARTICIPANT_INVALID",
+            "OPERATION_PARTICIPANT_RULE_MISSING",
+            "OPERATION_RECIPE_INVALID",
+            "OPERATION_RULE_INVALID",
+            "OPERATION_GEOMETRY_INVALID",
+            "OPERATION_GEOMETRY_DUPLICATE",
+            "OPERATION_ID_AMBIGUOUS"
           ]
         },
         "message": {
@@ -918,6 +931,21 @@
         "familyId": {
           "type": "string",
           "minLength": 1
+        },
+        "recipeRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "technicalProfileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "technicalProfileRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
         }
       },
       "required": [

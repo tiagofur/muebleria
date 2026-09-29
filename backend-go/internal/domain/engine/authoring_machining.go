@@ -112,13 +112,18 @@ type ResolveHole struct {
 
 // ResolvedMachiningProvenance carries exactly one source variant
 // (relationship | manualHardwarePlacement); the wire shape matches the TS
-// discriminated union of the same name.
+// discriminated union of the same name. Recipe operations pin the versioned
+// technical identity (#874 J2-B): a recipe or profile revision bump moves
+// the manufacturing fingerprint even when the geometry is identical.
 type ResolvedMachiningProvenance struct {
-	SourceKind          string `json:"sourceKind"`
-	RelationshipID      string `json:"relationshipId,omitempty"`
-	FamilyID            string `json:"familyId,omitempty"`
-	CatalogRuleID       string `json:"catalogRuleId,omitempty"`
-	HardwarePlacementID string `json:"hardwarePlacementId,omitempty"`
+	SourceKind               string `json:"sourceKind"`
+	RelationshipID           string `json:"relationshipId,omitempty"`
+	FamilyID                 string `json:"familyId,omitempty"`
+	CatalogRuleID            string `json:"catalogRuleId,omitempty"`
+	RecipeRevision           string `json:"recipeRevision,omitempty"`
+	TechnicalProfileID       string `json:"technicalProfileId,omitempty"`
+	TechnicalProfileRevision string `json:"technicalProfileRevision,omitempty"`
+	HardwarePlacementID      string `json:"hardwarePlacementId,omitempty"`
 }
 
 func (p ResolvedMachiningProvenance) canonical() map[string]any {
@@ -131,6 +136,15 @@ func (p ResolvedMachiningProvenance) canonical() map[string]any {
 	}
 	if p.CatalogRuleID != "" {
 		m["catalogRuleId"] = p.CatalogRuleID
+	}
+	if p.RecipeRevision != "" {
+		m["recipeRevision"] = p.RecipeRevision
+	}
+	if p.TechnicalProfileID != "" {
+		m["technicalProfileId"] = p.TechnicalProfileID
+	}
+	if p.TechnicalProfileRevision != "" {
+		m["technicalProfileRevision"] = p.TechnicalProfileRevision
 	}
 	if p.HardwarePlacementID != "" {
 		m["hardwarePlacementId"] = p.HardwarePlacementID
@@ -290,6 +304,10 @@ func deriveAuthoringMachining(
 	for _, relationship := range relationships {
 		if relationship.Kind == "floor-side" {
 			joineryStatuses = append(joineryStatuses, deriveFloorSideJoinery(relationship, boardIndex, &issues, familyProfiles, &operations))
+			continue
+		}
+		if relationship.Kind == "fixed-shelf-side" {
+			joineryStatuses = append(joineryStatuses, deriveFixedShelfJoinery(relationship, boardIndex, &issues, &operations))
 			continue
 		}
 		deriveRelationshipOperations(relationship, boardIndex, catalog, &derived, &operations, &issues, &joineryStatuses)
