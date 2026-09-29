@@ -751,6 +751,43 @@ describe('J2-A operation families inside one joint', () => {
     expect(unfit.issues.some((issue) => issue.code === 'TECHNICAL_PROFILE_INCOMPATIBLE')).toBe(true);
   });
 
+  it('degrades to MACHINING_INVALID with zero ops when two families\' holes overlap (J2-A.2 review)', () => {
+    const families = [
+      { familyId: 'tornillos', count: 2, startMarginMm: 50, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 52, endMarginMm: 52 },
+    ];
+    const result = resultFrom(familiesEnvelope(families), { familyProfiles: fittingProfiles });
+    const status = result.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01')!;
+    // Distinct station positions (no station collision) but Ø8 holes 2mm
+    // apart on the same face overlap: readiness is impossible.
+    expect(status.stage).toBe('MACHINING_INVALID');
+    expect(status.blockers).toEqual(['DRILLING_CONFLICT']);
+    expect(status.stations.issueCodes).toEqual(['DRILLING_CONFLICT']);
+    expect(result.derivedMachiningOperations
+      .filter((op) => op.provenance.sourceKind === 'relationship' && op.provenance.relationshipId === 'rel-floor-sides-01'))
+      .toHaveLength(0);
+    expect(result.issues.some((issue) => issue.code === 'DRILLING_CONFLICT')).toBe(true);
+  });
+
+  it('rejects profiles without identity (blank id or hole type)', () => {
+    const families = [
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+    ];
+    const result = resultFrom(familiesEnvelope(families), {
+      familyProfiles: {
+        tornillos: { profileId: '', diameterMm: 4, depthMm: 15, holeType: 'screw' },
+        taquetes: fittingProfiles.taquetes,
+      },
+    });
+    const status = result.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01')!;
+    expect(status.stage).toBe('MACHINING_INVALID');
+    expect(status.blockers).toEqual(['TECHNICAL_PROFILE_INVALID']);
+    expect(result.derivedMachiningOperations
+      .filter((op) => op.provenance.sourceKind === 'relationship' && op.provenance.relationshipId === 'rel-floor-sides-01'))
+      .toHaveLength(0);
+  });
+
   it('rejects stationCount declared together with families', () => {
     const status = statusesFrom(familiesEnvelope(
       [{ familyId: 'tornillos', count: 4 }],

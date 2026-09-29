@@ -248,10 +248,17 @@ type effectivePlacementForMachining struct {
 // derivation re-checks defensively and reports manufacturing-domain issues
 // (which block preflight instead of rejecting the request).
 // FamilyTechnicalProfile is the explicit technical data one operation family
-// needs to emit real machining (#874 J2-A.2). Production NEVER supplies a
-// resolver: without verified profiles the relationship stays at
-// TECHNICAL_PROFILE_REQUIRED with zero operations. Test contexts inject
-// synthetic profiles; their ids carry that provenance in their namespace.
+// needs to emit real machining (#874 J2-A.2).
+//
+// TEST-ONLY SEAM — NOT the industrial recipe model. This struct exists so
+// engine tests can drive the family→operation frontier end to end while the
+// real versioned recipe contract (per-participant/face rules, technical
+// profile id+revision, offsets, axes, entry faces, multi-operation fixings —
+// the ContactOperationRecipe shape) is not yet wired to the productive
+// resolver. Production NEVER supplies a resolver: without verified profiles
+// the relationship stays at TECHNICAL_PROFILE_REQUIRED with zero
+// operations. J2-B/J3 must consume the real recipe model — do NOT extend
+// this struct with industrial semantics.
 type FamilyTechnicalProfile struct {
 	ProfileID  string
 	DiameterMm float64
@@ -292,6 +299,7 @@ func deriveAuthoringMachining(
 	}
 
 	detectHoleCollisions(operations, &issues)
+	joineryStatuses = reconcileJoineryStatusesWithCollisions(joineryStatuses, operations, issues)
 
 	return AuthoringMachining{
 		Operations:                operations,
@@ -826,11 +834,30 @@ func AuthoringJoinerySystems() map[string]ShelfSupportJoineryRule {
 // detectHoleCollisions checks for physical overlap between hole pairs on the same host board face
 // (parity with TS sketchupPreflight §5 and sketchupHardwareSync).
 func detectHoleCollisions(operations []ResolvedMachiningOperation, issues *[]domain.ContractIssue) {
+	for _, collision := range findHoleCollisions(operations) {
+		*issues = append(*issues, *collision)
+	}
+}
+
+// firstHoleCollision reports the first hole collision, if any — the
+// relationship-scoped probe used before a joint may declare MACHINING_READY.
+func firstHoleCollision(operations []ResolvedMachiningOperation) *domain.ContractIssue {
+	if collisions := findHoleCollisions(operations); len(collisions) > 0 {
+		return collisions[0]
+	}
+	return nil
+}
+
+// findHoleCollisions returns every pair of same-host same-face holes whose
+// centers sit closer than the sum of their radii (#874 joint collisions are
+// structured errors).
+func findHoleCollisions(operations []ResolvedMachiningOperation) []*domain.ContractIssue {
 	type holeWithOp struct {
 		hostID      string
 		operationID string
 		hole        ResolveHole
 	}
+	collisions := []*domain.ContractIssue{}
 	byHost := make(map[string][]holeWithOp)
 	for _, op := range operations {
 		for _, hole := range op.Holes {
@@ -852,7 +879,7 @@ func detectHoleCollisions(operations []ResolvedMachiningOperation, issues *[]dom
 				dist := math.Hypot(h1.XMm-h2.XMm, h1.YMm-h2.YMm)
 				minDist := (h1.DiameterMm + h2.DiameterMm) / 2
 				if dist < minDist {
-					*issues = append(*issues, domain.ContractIssue{
+					collision := domain.ContractIssue{
 						Code:        "DRILLING_CONFLICT",
 						Message:     fmt.Sprintf("Hole collision on host %s (%s Ø%.1f at [%.1f, %.1f] collides with %s Ø%.1f at [%.1f, %.1f])", hostID, h1.Type, h1.DiameterMm, h1.XMm, h1.YMm, h2.Type, h2.DiameterMm, h2.XMm, h2.YMm),
 						Severity:    domain.IssueSeverityError,
@@ -866,11 +893,53 @@ func detectHoleCollisions(operations []ResolvedMachiningOperation, issues *[]dom
 							"distanceMm":              dist,
 							"minDistanceMm":           minDist,
 						},
-					})
+					}
+					collisions = append(collisions, &collision)
 				}
 			}
 		}
 	}
+	return collisions
+}
+
+// reconcileJoineryStatusesWithCollisions degrades every MACHINING_READY
+// status whose operations appear in a DRILLING_CONFLICT: the relationship
+// state may never claim readiness while the machining result is blocked
+// (#874). The conflicting operations stay in the global stream (the issue
+// is the truth); only the readiness claim is corrected.
+func reconcileJoineryStatusesWithCollisions(statuses []JoineryRelationshipStatus, operations []ResolvedMachiningOperation, issues []domain.ContractIssue) []JoineryRelationshipStatus {
+	conflicted := map[string]bool{}
+	for _, issue := range issues {
+		if issue.Code != "DRILLING_CONFLICT" {
+			continue
+		}
+		details := issue.Details
+		if details == nil {
+			continue
+		}
+		for _, key := range []string{"operationId1", "operationId2"} {
+			id, _ := details[key].(string)
+			for _, op := range operations {
+				if op.OperationID == id && op.Provenance.SourceKind == "relationship" {
+					conflicted[op.Provenance.RelationshipID] = true
+				}
+			}
+		}
+	}
+	if len(conflicted) == 0 {
+		return statuses
+	}
+	// Copy before degrading: the caller's statuses stay untouched.
+	degraded := append([]JoineryRelationshipStatus(nil), statuses...)
+	for i := range degraded {
+		if statuses[i].Stage != JoineryMachiningReady || !conflicted[statuses[i].RelationshipID] {
+			continue
+		}
+		degraded[i].Stage = JoineryMachiningInvalid
+		degraded[i].Blockers = append(degraded[i].Blockers, "DRILLING_CONFLICT")
+		degraded[i].Stations.IssueCodes = append(degraded[i].Stations.IssueCodes, "DRILLING_CONFLICT")
+	}
+	return degraded
 }
 
 // J1-A0a contact resolution stays with the #356 authoring machining owner.

@@ -94,10 +94,10 @@ func TestReconcilableMaterialChoices_FillOnlyMissingQuotedRoles(t *testing.T) {
 		"FRENTE":  "mat-authored-alias", // authored alias governs ZOCLO/PUERTA
 	}
 	quoted := map[string]string{
-		"FRENTES": "mat-quoted-front",  // differs from authored → ignored
+		"FRENTES":  "mat-quoted-front",  // differs from authored → ignored
 		"INTERIOR": "mat-blanco",        // missing from working → filled
-		"ZOCLO":   "mat-quoted-zoclo",  // alias-governed → NOT filled
-		"PUERTA":  "mat-quoted-puerta", // alias-governed → NOT filled
+		"ZOCLO":    "mat-quoted-zoclo",  // alias-governed → NOT filled
+		"PUERTA":   "mat-quoted-puerta", // alias-governed → NOT filled
 	}
 	got := ReconcilableMaterialChoices(working, quoted)
 	want := map[string]string{"INTERIOR": "mat-blanco"}

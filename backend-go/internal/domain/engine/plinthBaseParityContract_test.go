@@ -41,11 +41,11 @@ type pbMaterial struct {
 }
 
 type pbEdgeBand struct {
-	ID         string  `json:"id"`
-	Code       string  `json:"code"`
-	Name       string  `json:"name"`
-	CostPerMl  float64 `json:"costPerMl"`
-	Active     bool    `json:"active"`
+	ID        string  `json:"id"`
+	Code      string  `json:"code"`
+	Name      string  `json:"name"`
+	CostPerMl float64 `json:"costPerMl"`
+	Active    bool    `json:"active"`
 }
 
 type pbHardware struct {
@@ -109,12 +109,12 @@ type pbAgregadoInstance struct {
 }
 
 type pbAgregado struct {
-	ID           string           `json:"id"`
-	Code         string           `json:"code"`
-	Name         string           `json:"name"`
-	Components   []pbInstance     `json:"components"`
+	ID            string           `json:"id"`
+	Code          string           `json:"code"`
+	Name          string           `json:"name"`
+	Components    []pbInstance     `json:"components"`
 	HardwareLines []pbHardwareLine `json:"hardwareLines"`
-	Active       bool             `json:"active"`
+	Active        bool             `json:"active"`
 }
 
 type pbStructure struct {
@@ -127,18 +127,18 @@ type pbStructure struct {
 }
 
 type pbModule struct {
-	ID              string                `json:"id"`
-	Code            string                `json:"code"`
-	Name            string                `json:"name"`
-	StructureID     string                `json:"structureId"`
-	BaseMode        string                `json:"baseMode"`
-	BaseClearanceMm *int                  `json:"baseClearanceMm"`
-	ExternalDims    pbDims                `json:"externalDims"`
-	Presets         []pbPreset            `json:"presets"`
-	Components      []pbInstance          `json:"components"`
-	Agregados       []pbAgregadoInstance  `json:"agregados"`
-	HardwareLines   []pbHardwareLine      `json:"hardwareLines"`
-	Active          bool                  `json:"active"`
+	ID              string               `json:"id"`
+	Code            string               `json:"code"`
+	Name            string               `json:"name"`
+	StructureID     string               `json:"structureId"`
+	BaseMode        string               `json:"baseMode"`
+	BaseClearanceMm *int                 `json:"baseClearanceMm"`
+	ExternalDims    pbDims               `json:"externalDims"`
+	Presets         []pbPreset           `json:"presets"`
+	Components      []pbInstance         `json:"components"`
+	Agregados       []pbAgregadoInstance `json:"agregados"`
+	HardwareLines   []pbHardwareLine     `json:"hardwareLines"`
+	Active          bool                 `json:"active"`
 }
 
 type pbPreset struct {
@@ -181,14 +181,14 @@ type pbExpectedHardware struct {
 }
 
 type pbScenario struct {
-	ID                    string          `json:"id"`
-	Description           string          `json:"description"`
-	ModuleID              string          `json:"moduleId"`
-	ItemBaseMode          string          `json:"itemBaseMode"`
-	Layout                json.RawMessage `json:"layout"`
+	ID                    string            `json:"id"`
+	Description           string            `json:"description"`
+	ModuleID              string            `json:"moduleId"`
+	ItemBaseMode          string            `json:"itemBaseMode"`
+	Layout                json.RawMessage   `json:"layout"`
 	OptionChoicesOverride map[string]string `json:"optionChoicesOverride"`
 	Expected              struct {
-		Parts    []pbExpectedPart    `json:"parts"`
+		Parts    []pbExpectedPart     `json:"parts"`
 		Hardware []pbExpectedHardware `json:"hardware"`
 	} `json:"expected"`
 }
@@ -421,8 +421,8 @@ func TestPlinthBaseParity_SharedContract(t *testing.T) {
 				BaseMode:      sc.ItemBaseMode,
 			}
 			project := domain.Project{
-				ID:         "p-contract",
-				Items:      []domain.ProjectItem{item},
+				ID:            "p-contract",
+				Items:         []domain.ProjectItem{item},
 				KitchenLayout: sc.Layout,
 			}
 

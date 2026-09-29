@@ -374,13 +374,18 @@ func deriveFamilyPlans(relationship AuthoringRelationship, resolution ContactRes
 	}
 	for familyIndex, family := range families {
 		profile := profiles[familyIndex]
-		if profile.DiameterMm <= 0 || profile.DepthMm <= 0 ||
+		if profile.ProfileID == "" || profile.HoleType == "" || profile.DiameterMm <= 0 || profile.DepthMm <= 0 ||
 			math.IsNaN(profile.DiameterMm) || math.IsInf(profile.DiameterMm, 0) ||
 			math.IsNaN(profile.DepthMm) || math.IsInf(profile.DepthMm, 0) {
 			pushIssue("TECHNICAL_PROFILE_INVALID",
-				fmt.Sprintf("family %s profile %s needs finite positive diameter and depth", family.FamilyID, profile.ProfileID),
-				"Attach a verified profile with real tool geometry.")
-			return invalid([]string{"TECHNICAL_PROFILE_INVALID"})
+				fmt.Sprintf("family %s profile %q needs a non-blank profile id and hole type, and finite positive diameter and depth", family.FamilyID, profile.ProfileID),
+				"Attach a verified profile with real identity and tool geometry.")
+			return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+				Stage: JoineryMachiningInvalid, Contacts: validContacts(),
+				Stations: JoineryStationPlanStatus{Status: "PLANNED",
+					IssueCodes:    []string{"TECHNICAL_PROFILE_INVALID"},
+					StationCounts: counts, StationDistances: distances, FamilyPlans: familyPlans},
+				Blockers: []string{"TECHNICAL_PROFILE_INVALID"}}
 		}
 	}
 	byID := map[string]ContactBoard{}
@@ -445,6 +450,20 @@ func deriveFamilyPlans(relationship AuthoringRelationship, resolution ContactRes
 				familyOperation(relationshipID, family.FamilyID, contact.ContactID, boardA.OccurrenceID, profile.ProfileID, holesA),
 				familyOperation(relationshipID, family.FamilyID, contact.ContactID, boardB.OccurrenceID, profile.ProfileID, holesB))
 		}
+	}
+	// A joint whose own emitted holes collide is NOT ready: the collision
+	// belongs to the relationship's state, never to a global-only issue that
+	// contradicts a READY stage (#874: joint collisions are structured
+	// errors). The whole relationship rolls back to zero operations.
+	if collision := firstHoleCollision(*operations); collision != nil {
+		pushIssue("DRILLING_CONFLICT", collision.Message, collision.Remediation)
+		*operations = (*operations)[:operationsBefore]
+		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+			Stage: JoineryMachiningInvalid, Contacts: validContacts(),
+			Stations: JoineryStationPlanStatus{Status: "PLANNED",
+				IssueCodes:    []string{"DRILLING_CONFLICT"},
+				StationCounts: counts, StationDistances: distances, FamilyPlans: familyPlans},
+			Blockers: []string{"DRILLING_CONFLICT"}}
 	}
 	return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 		Stage: JoineryMachiningReady, Contacts: validContacts(),

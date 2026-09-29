@@ -34,8 +34,8 @@ type kitchenPlacementInfo struct {
 }
 
 type kitchenLayoutBaseInfo struct {
-	BaseClearanceMm *int                  `json:"baseClearanceMm"`
-	Walls           []kitchenWallInfo     `json:"walls"`
+	BaseClearanceMm *int                   `json:"baseClearanceMm"`
+	Walls           []kitchenWallInfo      `json:"walls"`
 	Placements      []kitchenPlacementInfo `json:"placements"`
 }
 

@@ -108,11 +108,17 @@ interface ComponentIndexEntry {
   };
 }
 
-/** Explicit technical data one operation family needs to emit real machining
- *  (#874 J2-A.2). Production NEVER supplies profiles: without verified
- *  profiles family-bearing relationships stay at TECHNICAL_PROFILE_REQUIRED
- *  with zero operations. Test contexts inject synthetic profiles whose ids
- *  carry that provenance in their namespace. */
+/**
+ * TEST-ONLY SEAM — NOT the industrial recipe model. Explicit technical data
+ * one operation family needs to emit real machining (#874 J2-A.2) so engine
+ * tests can drive the family→operation frontier while the real versioned
+ * recipe contract (per-participant/face rules, technical profile id+revision,
+ * offsets, axes, multi-operation fixings) is not yet wired to the productive
+ * resolver. Production NEVER supplies profiles: without verified profiles
+ * family-bearing relationships stay at TECHNICAL_PROFILE_REQUIRED with zero
+ * operations. J2-B/J3 must consume the real recipe model — do NOT extend
+ * this type with industrial semantics.
+ */
 export interface FamilyTechnicalProfile {
   readonly profileId: string;
   readonly diameterMm: number;
@@ -734,11 +740,12 @@ function deriveFamilyPlans(
     return;
   }
   for (const profile of profiles) {
-    if (!Number.isFinite(profile!.diameterMm) || profile!.diameterMm <= 0 ||
+    if (!profile!.profileId.trim() || !profile!.holeType.trim() ||
+        !Number.isFinite(profile!.diameterMm) || profile!.diameterMm <= 0 ||
         !Number.isFinite(profile!.depthMm) || profile!.depthMm <= 0) {
       pushIssue('TECHNICAL_PROFILE_INVALID',
-        `family profile ${profile!.profileId} needs finite positive diameter and depth`,
-        'Attach a verified profile with real tool geometry.');
+        `family profile "${profile!.profileId}" needs a non-blank profile id and hole type, and finite positive diameter and depth`,
+        'Attach a verified profile with real identity and tool geometry.');
       status('MACHINING_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
         { ...plannedStatus, issueCodes: ['TECHNICAL_PROFILE_INVALID'] }, ['TECHNICAL_PROFILE_INVALID']);
       return;
@@ -805,7 +812,55 @@ function deriveFamilyPlans(
       });
     }
   }
+  // A joint whose own emitted holes collide is NOT ready: the collision
+  // belongs to the relationship's state, never to a global-only issue that
+  // contradicts a READY stage. The whole relationship rolls back to zero
+  // operations.
+  const collision = firstHoleCollision(operations.slice(operationsBefore));
+  if (collision !== null) {
+    pushIssue('DRILLING_CONFLICT', collision.message, collision.remediation ?? '');
+    operations.length = operationsBefore;
+    status('MACHINING_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+      { ...plannedStatus, issueCodes: ['DRILLING_CONFLICT'] }, ['DRILLING_CONFLICT']);
+    return;
+  }
   status('MACHINING_READY', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })), plannedStatus, []);
+}
+
+/** First same-host same-face hole overlap (centers closer than the sum of
+ *  the radii) among the given operations; null when clean. */
+function firstHoleCollision(
+  operations: readonly ResolvedRelationshipOperation[],
+): { message: string; remediation?: string } | null {
+  // Flat same-host hole list (mirrors the Go detector): pairs may come from
+  // the same or different operations.
+  const byHost = new Map<string, { operationId: string; hole: HoleDefinition }[]>();
+  for (const operation of operations) {
+    const bucket = byHost.get(operation.hostComponentInstanceId) ?? [];
+    for (const hole of operation.detail.holes) {
+      bucket.push({ operationId: operation.operationId, hole });
+    }
+    byHost.set(operation.hostComponentInstanceId, bucket);
+  }
+  for (const [host, holes] of byHost) {
+    for (let i = 0; i < holes.length; i += 1) {
+      for (let j = i + 1; j < holes.length; j += 1) {
+        const h1 = holes[i]!.hole;
+        const h2 = holes[j]!.hole;
+        if (h1.face !== h2.face) continue;
+        const distance = Math.hypot(h1.xMm - h2.xMm, h1.yMm - h2.yMm);
+        if (distance < (h1.diameterMm + h2.diameterMm) / 2) {
+          return {
+            message: `Hole collision on host ${host} ` +
+              `(${h1.type} Ø${h1.diameterMm} at [${h1.xMm}, ${h1.yMm}] collides with ` +
+              `${h2.type} Ø${h2.diameterMm} at [${h2.xMm}, ${h2.yMm}])`,
+            remediation: 'Shift conflicting positions to ensure minimum clearance.',
+          };
+        }
+      }
+    }
+  }
+  return null;
 }
 
 /** Project a station's board-local point onto its contact face (the entry

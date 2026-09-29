@@ -61,9 +61,9 @@ type PlinthSides struct {
 // A nil BaseClearanceMm falls back to the module value (then 100); a non-nil
 // zero overrides to 0 (wall elevation).
 type BaseResolutionContext struct {
-	BaseMode       string
+	BaseMode        string
 	BaseClearanceMm *int
-	PlinthSides    *PlinthSides
+	PlinthSides     *PlinthSides
 }
 
 func isModuleBaseMode(v string) bool {

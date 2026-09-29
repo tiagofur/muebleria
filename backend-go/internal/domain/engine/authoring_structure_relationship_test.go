@@ -485,3 +485,105 @@ func TestFamilyOperationsUnfitProfileFailsWholeRelationship(t *testing.T) {
 		t.Fatalf("structured issue missing: %+v", collected)
 	}
 }
+
+// TestFamilyHoleCollisionDegradesReady: two families whose stations do NOT
+// collide positionally but whose emitted holes overlap on the same face
+// (Ø8 holes 2 mm apart) must degrade to MACHINING_INVALID with
+// DRILLING_CONFLICT and ZERO operations — never a READY stage beside a
+// global-only conflict issue.
+func TestFamilyHoleCollisionDegradesReady(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	// Tornillos at [50, 520], taquetes at [52, 518]: distinct station
+	// positions (no STATION_FAMILY_COLLISION) but Ø8 holes 2 mm apart on
+	// the same face overlap (2 < 8).
+	relationship.Families = []AuthoringRelationshipFamily{
+		{FamilyID: "tornillos", Count: 2, StartMarginMm: 50, EndMarginMm: 50},
+		{FamilyID: "taquetes", Count: 2, StartMarginMm: 52, EndMarginMm: 52},
+	}
+	var collected []domain.ContractIssue
+	var operations []ResolvedMachiningOperation
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, syntheticProfiles(), &operations)
+	if status.Stage != JoineryMachiningInvalid {
+		t.Fatalf("stage = %s", status.Stage)
+	}
+	if len(status.Blockers) != 1 || status.Blockers[0] != "DRILLING_CONFLICT" {
+		t.Fatalf("blockers = %+v", status.Blockers)
+	}
+	if len(status.Stations.IssueCodes) != 1 || status.Stations.IssueCodes[0] != "DRILLING_CONFLICT" {
+		t.Fatalf("stations issueCodes = %+v", status.Stations.IssueCodes)
+	}
+	if len(operations) != 0 {
+		t.Fatalf("colliding joint emitted operations: %+v", operations)
+	}
+	found := false
+	for _, issue := range collected {
+		if issue.Code == "DRILLING_CONFLICT" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("DRILLING_CONFLICT issue missing: %+v", collected)
+	}
+}
+
+// TestProfileIdentityRequired: a blank profile id or hole type is an
+// invalid profile, not a ready joint.
+func TestProfileIdentityRequired(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = floorSideFamilies()
+	faceless := func(kind, familyID string) *FamilyTechnicalProfile {
+		if familyID == "tornillos" {
+			return &FamilyTechnicalProfile{ProfileID: "", DiameterMm: 4, DepthMm: 15, HoleType: "screw"}
+		}
+		return &FamilyTechnicalProfile{ProfileID: "test:synthetic-dowel-8x15", DiameterMm: 8, DepthMm: 15, HoleType: ""}
+	}
+	var collected []domain.ContractIssue
+	var operations []ResolvedMachiningOperation
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, faceless, &operations)
+	if status.Stage != JoineryMachiningInvalid {
+		t.Fatalf("stage = %s", status.Stage)
+	}
+	if len(status.Blockers) != 1 || status.Blockers[0] != "TECHNICAL_PROFILE_INVALID" {
+		t.Fatalf("blockers = %+v", status.Blockers)
+	}
+	if len(operations) != 0 {
+		t.Fatalf("invalid profile emitted operations: %+v", operations)
+	}
+}
+
+// TestReconcileDegradesReadyOnCrossSourceConflict: a READY status whose
+// operations appear in a global DRILLING_CONFLICT (e.g. against a manual
+// placement hole) is degraded — readiness may never contradict the blocked
+// machining result.
+func TestReconcileDegradesReadyOnCrossSourceConflict(t *testing.T) {
+	statuses := []JoineryRelationshipStatus{{
+		RelationshipID: "rel-1", Kind: "floor-side", Stage: JoineryMachiningReady,
+		Contacts: []JoineryContactStatus{}, Stations: JoineryStationPlanStatus{Status: "PLANNED"},
+	}, {
+		RelationshipID: "rel-2", Kind: "floor-side", Stage: JoineryMachiningReady,
+		Contacts: []JoineryContactStatus{}, Stations: JoineryStationPlanStatus{Status: "PLANNED"},
+	}}
+	operations := []ResolvedMachiningOperation{
+		{OperationID: "op-a", HostComponentInstanceID: "b1", Provenance: ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "rel-1"}},
+		{OperationID: "op-b", HostComponentInstanceID: "b1", Provenance: ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "rel-2"}},
+	}
+	issues := []domain.ContractIssue{{
+		Code: "DRILLING_CONFLICT", Details: map[string]any{"operationId1": "op-a", "operationId2": "op-b"},
+	}}
+	reconciled := reconcileJoineryStatusesWithCollisions(statuses, operations, issues)
+	if reconciled[0].Stage != JoineryMachiningInvalid || reconciled[1].Stage != JoineryMachiningInvalid {
+		t.Fatalf("stages = %s/%s", reconciled[0].Stage, reconciled[1].Stage)
+	}
+	for _, status := range reconciled {
+		if len(status.Blockers) != 1 || status.Blockers[0] != "DRILLING_CONFLICT" {
+			t.Fatalf("blockers = %+v", status.Blockers)
+		}
+	}
+	// No conflict → untouched.
+	clean := reconcileJoineryStatusesWithCollisions(statuses, operations, nil)
+	if clean[0].Stage != JoineryMachiningReady {
+		t.Fatalf("clean stage = %s", clean[0].Stage)
+	}
+}

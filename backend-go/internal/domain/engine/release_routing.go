@@ -62,11 +62,11 @@ type ReleaseRoutingOperation struct {
 // operation hosted on this part, never "data missing" (missing evidence keeps
 // the whole program invalid and physical execution blocked).
 type ReleaseRoutingPart struct {
-	PartID            string                   `json:"partId"`
-	Cut               bool                     `json:"cut"`
-	EdgeBandingSides  []string                 `json:"edgeBandingSides,omitempty"`
-	CncRequired       bool                     `json:"cncRequired"`
-	Operations        []ReleaseRoutingOperation `json:"operations,omitempty"`
+	PartID           string                    `json:"partId"`
+	Cut              bool                      `json:"cut"`
+	EdgeBandingSides []string                  `json:"edgeBandingSides,omitempty"`
+	CncRequired      bool                      `json:"cncRequired"`
+	Operations       []ReleaseRoutingOperation `json:"operations,omitempty"`
 }
 
 // ReleaseRoutingUnit is the frozen routing program of one physical unit.
@@ -215,8 +215,8 @@ func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedRelea
 	return &ReleaseRoutingUnit{
 		FurnitureInstanceID:   item.FurnitureInstanceID,
 		FurnitureDefinitionID: unit.FurnitureDefinitionID,
-		MachiningFingerprint: resolved.Machining.ManufacturingFingerprint,
-		Parts:                parts,
+		MachiningFingerprint:  resolved.Machining.ManufacturingFingerprint,
+		Parts:                 parts,
 	}, nil
 }
 
