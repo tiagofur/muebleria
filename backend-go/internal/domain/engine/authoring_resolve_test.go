@@ -1218,7 +1218,7 @@ func TestAuthoringResolveRejectsOutOfRangeHardwareOffset(t *testing.T) {
 	module, catalog := authoringCabinetCatalog()
 	outOfRangeInput := AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
+		Occurrences:   defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
@@ -1248,7 +1248,7 @@ func TestAuthoringResolveRejectsDerivedHardwarePlacementEdit(t *testing.T) {
 	module, catalog := authoringCabinetCatalog()
 	input := AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
+		Occurrences:   defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
@@ -1288,7 +1288,7 @@ func TestAuthoringResolveRejectsIncompatibleHardwareSubstitution(t *testing.T) {
 
 	input := AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
+		Occurrences:   defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
@@ -1322,7 +1322,7 @@ func TestAuthoringResolveOpaquePlacementIdentity(t *testing.T) {
 	// It must NOT be rejected as derived based on ID name.
 	manualWithDerivedLookingID := AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
+		Occurrences:   defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
@@ -1351,7 +1351,7 @@ func TestAuthoringResolveOpaquePlacementIdentity(t *testing.T) {
 	// It must be rejected with HARDWARE_DERIVED_EDIT regardless of ID string.
 	derivedWithRandomID := AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
+		Occurrences:   defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
@@ -1406,7 +1406,7 @@ func TestAuthoringResolveDataDrivenHardwareCompatibility(t *testing.T) {
 	// Case A: Compatible category accepted regardless of ID/Code
 	resA, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
+		Occurrences:   defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
@@ -1432,7 +1432,7 @@ func TestAuthoringResolveDataDrivenHardwareCompatibility(t *testing.T) {
 	// Case B: Incompatible category rejected regardless of friendly ID/Code
 	resB, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences: defaultAuthoringOccurrences(),
+		Occurrences:   defaultAuthoringOccurrences(),
 		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
@@ -1582,7 +1582,6 @@ func TestAuthoringResolveMachiningIsolationAndDrillingConflictClearance(t *testi
 	}
 }
 
-
 // TestAuthoringResolveNamesDoNotAffectCompatibility verifies that two host components
 // with different display names but identical canonical role/capability produce the same
 // compatibility outcome. The engine must not inspect names.
@@ -1610,8 +1609,8 @@ func TestAuthoringResolveNamesDoNotAffectCompatibility(t *testing.T) {
 	// Placing a slide on the renamed component must still be incompatible.
 	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences:         defaultAuthoringOccurrences(),
-		Relationships:       []AuthoringRelationship{},
+		Occurrences:   defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
 				HardwarePlacementID:     "hp-name-test",
@@ -1658,8 +1657,8 @@ func TestAuthoringResolveComponentDefIDDoesNotAffectCompatibility(t *testing.T) 
 	// The engine must not use this to infer compatibility.
 	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences:         defaultAuthoringOccurrences(),
-		Relationships:       []AuthoringRelationship{},
+		Occurrences:   defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
 				HardwarePlacementID:     "hp-defid-test",
@@ -1700,8 +1699,8 @@ func TestAuthoringResolveExplicitCategoryEnforced(t *testing.T) {
 
 	res, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences:         defaultAuthoringOccurrences(),
-		Relationships:       []AuthoringRelationship{},
+		Occurrences:   defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
 				HardwarePlacementID:     "hp-cat-test",
@@ -1735,8 +1734,8 @@ func TestAuthoringResolveExplicitCategoryEnforced(t *testing.T) {
 	})
 	resOK, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences:         defaultAuthoringOccurrences(),
-		Relationships:       []AuthoringRelationship{},
+		Occurrences:   defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
 				HardwarePlacementID:     "hp-cat-hinge",
@@ -1784,8 +1783,8 @@ func TestAuthoringResolveExplicitRoleEnforced(t *testing.T) {
 	// FRENTE hardware on FRENTE host (door-01) must be accepted.
 	resOK, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences:         defaultAuthoringOccurrences(),
-		Relationships:       []AuthoringRelationship{},
+		Occurrences:   defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
 				HardwarePlacementID:     "hp-role-ok",
@@ -1810,8 +1809,8 @@ func TestAuthoringResolveExplicitRoleEnforced(t *testing.T) {
 	// LATERAL hardware on FRENTE host (door-01) must be rejected.
 	resBad, err := ResolveAuthoringLayout(AuthoringResolveInput{
 		Module: module, Catalog: catalog, PrecisionMm: 0.01,
-		Occurrences:         defaultAuthoringOccurrences(),
-		Relationships:       []AuthoringRelationship{},
+		Occurrences:   defaultAuthoringOccurrences(),
+		Relationships: []AuthoringRelationship{},
 		ManualPlacements: []AuthoringManualPlacement{
 			{
 				HardwarePlacementID:     "hp-role-bad",

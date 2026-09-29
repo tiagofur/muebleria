@@ -122,6 +122,8 @@ export const AUTHORING_RESOLVE_ISSUE_CODES = [
   'STATION_POINT_INVALID',
   'STATION_FAMILY_COLLISION',
   'TECHNICAL_PROFILE_REQUIRED',
+  'TECHNICAL_PROFILE_INVALID',
+  'TECHNICAL_PROFILE_INCOMPATIBLE',
 ] as const;
 
 export type AuthoringResolveIssueCode = (typeof AUTHORING_RESOLVE_ISSUE_CODES)[number];
@@ -1072,7 +1074,8 @@ function isValidProvenance(value: unknown): boolean {
   const provenance = asRecord(value);
   if (!provenance) return false;
   if (provenance.sourceKind === 'relationship') {
-    return isBoundedString(provenance.relationshipId) && provenance.hardwarePlacementId === undefined;
+    return isBoundedString(provenance.relationshipId) && provenance.hardwarePlacementId === undefined &&
+      (provenance.familyId === undefined || isBoundedString(provenance.familyId));
   }
   if (provenance.sourceKind === 'manualHardwarePlacement') {
     return isBoundedString(provenance.hardwarePlacementId) && provenance.relationshipId === undefined && provenance.catalogRuleId === undefined;

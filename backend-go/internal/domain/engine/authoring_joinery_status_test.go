@@ -34,7 +34,7 @@ func j1bRelationship() AuthoringRelationship {
 
 func TestFloorSideJoineryReachesProfileRequired(t *testing.T) {
 	var collected []domain.ContractIssue
-	status := deriveFloorSideJoinery(j1bRelationship(), j1bBoards(), &collected)
+	status := deriveFloorSideJoinery(j1bRelationship(), j1bBoards(), &collected, nil, nil)
 	if status.Stage != JoineryTechnicalProfileMissing {
 		t.Fatalf("stage = %s, want TECHNICAL_PROFILE_REQUIRED (%+v)", status.Stage, status)
 	}
@@ -69,7 +69,7 @@ func TestFloorSideJoineryReachesProfileRequired(t *testing.T) {
 
 func TestFloorSideJoineryTerminalStatusShape(t *testing.T) {
 	var collected []domain.ContractIssue
-	status := deriveFloorSideJoinery(j1bRelationship(), j1bBoards(), &collected)
+	status := deriveFloorSideJoinery(j1bRelationship(), j1bBoards(), &collected, nil, nil)
 	raw, err := json.Marshal(status)
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestFloorSideJoinerySourceFaceCodeReported(t *testing.T) {
 	rel := j1bRelationship()
 	rel.Source.Face = "diagonal"
 	var collected []domain.ContractIssue
-	status := deriveFloorSideJoinery(rel, j1bBoards(), &collected)
+	status := deriveFloorSideJoinery(rel, j1bBoards(), &collected, nil, nil)
 	if status.Stage != JoineryContactInvalid {
 		t.Fatalf("stage = %s", status.Stage)
 	}
@@ -127,7 +127,7 @@ func TestFloorSideJoineryNegatives(t *testing.T) {
 			boards := j1bBoards()
 			tc.mutate(rel, boards)
 			var collected []domain.ContractIssue
-			status := deriveFloorSideJoinery(rel, boards, &collected)
+			status := deriveFloorSideJoinery(rel, boards, &collected, nil, nil)
 			if status.Stage != tc.stage {
 				t.Fatalf("stage = %s, want %s (%+v)", status.Stage, tc.stage, status)
 			}
@@ -152,13 +152,13 @@ func TestFloorSideJoineryNegatives(t *testing.T) {
 func TestFloorSideJoineryFingerprintMovesWithSemantics(t *testing.T) {
 	base := func() []JoineryRelationshipStatus {
 		var collected []domain.ContractIssue
-		return []JoineryRelationshipStatus{deriveFloorSideJoinery(j1bRelationship(), j1bBoards(), &collected)}
+		return []JoineryRelationshipStatus{deriveFloorSideJoinery(j1bRelationship(), j1bBoards(), &collected, nil, nil)}
 	}
 	changed := func() []JoineryRelationshipStatus {
 		rel := j1bRelationship()
 		rel.Parameters["stationCount"] = float64(4)
 		var collected []domain.ContractIssue
-		return []JoineryRelationshipStatus{deriveFloorSideJoinery(rel, j1bBoards(), &collected)}
+		return []JoineryRelationshipStatus{deriveFloorSideJoinery(rel, j1bBoards(), &collected, nil, nil)}
 	}
 	empty := FurnitureLayout{}
 	boards := []layoutBoard{}
@@ -176,7 +176,7 @@ func TestFloorSideJoineryFingerprintMovesWithSemantics(t *testing.T) {
 	relRight := j1bRelationship()
 	relRight.RelationshipID = "rel-floor-sides-02"
 	relRight.Parameters["stationCount"] = float64(4)
-	first = append(first, deriveFloorSideJoinery(relRight, j1bBoards(), &collected))
+	first = append(first, deriveFloorSideJoinery(relRight, j1bBoards(), &collected, nil, nil))
 	second := []JoineryRelationshipStatus{first[1], first[0]}
 	x := authoringManufacturingFingerprint(empty, boards, nil, nil, nil, first)
 	y := authoringManufacturingFingerprint(empty, boards, nil, nil, nil, second)

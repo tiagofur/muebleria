@@ -108,9 +108,27 @@ interface ComponentIndexEntry {
   };
 }
 
+/** Explicit technical data one operation family needs to emit real machining
+ *  (#874 J2-A.2). Production NEVER supplies profiles: without verified
+ *  profiles family-bearing relationships stay at TECHNICAL_PROFILE_REQUIRED
+ *  with zero operations. Test contexts inject synthetic profiles whose ids
+ *  carry that provenance in their namespace. */
+export interface FamilyTechnicalProfile {
+  readonly profileId: string;
+  readonly diameterMm: number;
+  readonly depthMm: number;
+  readonly holeType: string;
+}
+
+export interface RelationshipMachiningOptions {
+  /** Test-only synthetic family profiles keyed by familyId. */
+  readonly familyProfiles?: Readonly<Record<string, FamilyTechnicalProfile>>;
+}
+
 export function deriveRelationshipMachining(
   snapshot: ReadonlyAuthoringSnapshot,
   catalog: SketchUpJoineryCatalog,
+  options: RelationshipMachiningOptions = {},
 ): RelationshipMachiningResult {
   const issues: ContractIssue[] = [];
   const operations: ResolvedRelationshipOperation[] = [];
@@ -121,7 +139,7 @@ export function deriveRelationshipMachining(
     const components = indexComponents(assembly);
     for (const relationship of assembly.relationships ?? []) {
       deriveRelationshipOperations(assembly, relationship, components, catalog,
-        placements, operations, issues, joineryStatuses);
+        placements, operations, issues, joineryStatuses, options);
     }
     for (const placement of assembly.hardwarePlacements ?? []) {
       deriveManualPlacement(assembly, placement, components, catalog, placements, operations, issues);
@@ -146,11 +164,12 @@ function deriveRelationshipOperations(
   operations: ResolvedRelationshipOperation[],
   issues: ContractIssue[],
   joineryStatuses: JoineryRelationshipStatus[],
+  options: RelationshipMachiningOptions,
 ): void {
   const path = `assemblies[assemblyId=${assembly.assemblyId}].relationships[relationshipId=${relationship.relationshipId}]`;
 
   if (relationship.kind === 'floor-side') {
-    deriveFloorSideJoinery(relationship, components, catalog, issues, joineryStatuses);
+    deriveFloorSideJoinery(relationship, components, catalog, issues, joineryStatuses, options, operations);
     return;
   }
 
@@ -456,6 +475,8 @@ function deriveFloorSideJoinery(
   catalog: SketchUpJoineryCatalog,
   issues: ContractIssue[],
   joineryStatuses: JoineryRelationshipStatus[],
+  options: RelationshipMachiningOptions,
+  operations: ResolvedRelationshipOperation[],
 ): void {
   const status = (stage: JoineryResolutionStage, contacts: readonly JoineryContactStatus[],
     stations: JoineryStationPlanStatus, blockers: readonly string[]): void => {
@@ -557,7 +578,7 @@ function deriveFloorSideJoinery(
   // joint, one status, per-family counts and positions. stationCount and
   // families are mutually exclusive (fail closed, never silent precedence).
   if (relationship.families !== undefined && relationship.families.length > 0) {
-    deriveFamilyPlans(relationship, resolution, boards, contactIds, status, pushIssue);
+    deriveFamilyPlans(relationship, resolution, boards, contactIds, status, pushIssue, options, operations);
     return;
   }
   const parameters = relationship.parameters ?? {};
@@ -618,6 +639,8 @@ function deriveFamilyPlans(
   status: (stage: JoineryResolutionStage, contacts: readonly JoineryContactStatus[],
     stations: JoineryStationPlanStatus, blockers: readonly string[]) => void,
   pushIssue: (code: string, message: string, remediation: string) => void,
+  options: RelationshipMachiningOptions,
+  operations: ResolvedRelationshipOperation[],
 ): void {
   const invalid = (codes: readonly string[]): void => {
     status('STATION_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
@@ -693,13 +716,138 @@ function deriveFamilyPlans(
     contactId,
     distancesMm: [...(aggregatePositions.get(contactId) ?? [])].sort((a, b) => a - b),
   }));
-  pushIssue('TECHNICAL_PROFILE_REQUIRED',
-    `floor-side relationship ${relationship.relationshipId} has no verified production technical profile`,
-    'Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.');
-  status('TECHNICAL_PROFILE_REQUIRED',
-    contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
-    { status: 'PLANNED', issueCodes: [], stationCounts: counts, stationDistances: distances, familyPlans },
-    ['TECHNICAL_PROFILE_REQUIRED']);
+  // J2-A.2 (#874): with a technical profile for EVERY family the joint
+  // derives real operations (one per family×contact×participant, one hole
+  // per station on the participant's contact face). Any missing profile —
+  // or one whose geometry does not fit a participant — keeps the honest
+  // state and ZERO operations for the whole relationship.
+  const familyProfiles = options.familyProfiles ?? {};
+  const profiles = families.map((family) => familyProfiles[family.familyId]);
+  const plannedStatus: JoineryStationPlanStatus = {
+    status: 'PLANNED', issueCodes: [], stationCounts: counts, stationDistances: distances, familyPlans,
+  };
+  if (!profiles.every((profile) => profile !== undefined)) {
+    pushIssue('TECHNICAL_PROFILE_REQUIRED',
+      `floor-side relationship ${relationship.relationshipId} has no verified production technical profile`,
+      'Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.');
+    status('TECHNICAL_PROFILE_REQUIRED', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })), plannedStatus, ['TECHNICAL_PROFILE_REQUIRED']);
+    return;
+  }
+  for (const profile of profiles) {
+    if (!Number.isFinite(profile!.diameterMm) || profile!.diameterMm <= 0 ||
+        !Number.isFinite(profile!.depthMm) || profile!.depthMm <= 0) {
+      pushIssue('TECHNICAL_PROFILE_INVALID',
+        `family profile ${profile!.profileId} needs finite positive diameter and depth`,
+        'Attach a verified profile with real tool geometry.');
+      status('MACHINING_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+        { ...plannedStatus, issueCodes: ['TECHNICAL_PROFILE_INVALID'] }, ['TECHNICAL_PROFILE_INVALID']);
+      return;
+    }
+  }
+  const byId = new Map(boards.map((board) => [board.occurrenceId, board]));
+  const operationsBefore = operations.length;
+  const unfit = (familyId: string, profile: FamilyTechnicalProfile, participant: string, face: string): boolean => {
+    pushIssue('TECHNICAL_PROFILE_INCOMPATIBLE',
+      `family ${familyId} profile ${profile.profileId} does not fit participant ${participant} on face ${face}`,
+      'Attach a profile whose diameter and depth fit every participant of this joint.');
+    operations.length = operationsBefore;
+    status('MACHINING_INVALID', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })),
+      { ...plannedStatus, issueCodes: ['TECHNICAL_PROFILE_INCOMPATIBLE'] }, ['TECHNICAL_PROFILE_INCOMPATIBLE']);
+    return true;
+  };
+  for (const [familyIndex, family] of families.entries()) {
+    const profile = profiles[familyIndex]!;
+    const specs = contactIds.map((contactId) =>
+      ({ contactId, count: family.count, startMarginMm: family.startMarginMm ?? 0, endMarginMm: family.endMarginMm ?? 0 }));
+    const planned = planResolvedContactStations(resolution, boards, specs);
+    for (const contact of resolution.contacts) {
+      const boardA = byId.get(contact.participantA)!;
+      const boardB = byId.get(contact.participantB)!;
+      const holesA: HoleDefinition[] = [];
+      const holesB: HoleDefinition[] = [];
+      let failed = false;
+      for (const plan of planned.plans) {
+        if (plan.contactId !== contact.contactId) continue;
+        for (const station of plan.stations) {
+          const holeA = stationHole(boardA, contact.faceA, station.participantALocalMm, profile);
+          if (holeA === null) {
+            failed = unfit(family.familyId, profile, boardA.occurrenceId, contact.faceA);
+            break;
+          }
+          holesA.push(holeA);
+          const holeB = stationHole(boardB, contact.faceB, station.participantBLocalMm, profile);
+          if (holeB === null) {
+            failed = unfit(family.familyId, profile, boardB.occurrenceId, contact.faceB);
+            break;
+          }
+          holesB.push(holeB);
+        }
+        if (failed) break;
+      }
+      if (failed) return;
+      operations.push({
+        operationId: `${relationship.relationshipId}:${family.familyId}:${contact.contactId}:${boardA.occurrenceId}`,
+        hostComponentInstanceId: boardA.occurrenceId,
+        provenance: {
+          sourceKind: 'relationship', relationshipId: relationship.relationshipId,
+          familyId: family.familyId, catalogRuleId: profile.profileId,
+        },
+        detail: { holes: holesA },
+      });
+      operations.push({
+        operationId: `${relationship.relationshipId}:${family.familyId}:${contact.contactId}:${boardB.occurrenceId}`,
+        hostComponentInstanceId: boardB.occurrenceId,
+        provenance: {
+          sourceKind: 'relationship', relationshipId: relationship.relationshipId,
+          familyId: family.familyId, catalogRuleId: profile.profileId,
+        },
+        detail: { holes: holesB },
+      });
+    }
+  }
+  status('MACHINING_READY', contactIds.map((contactId) => ({ contactId, status: 'VALID', issueCodes: [] })), plannedStatus, []);
+}
+
+/** Project a station's board-local point onto its contact face (the entry
+ *  face) using the #356 face-coordinate convention: the two non-normal
+ *  local axes in X<Y<Z order. The bit must fit the face plane and the bore
+ *  the board from the entry face. */
+function stationHole(
+  board: ContactBoard,
+  face: string,
+  local: Vec3,
+  profile: FamilyTechnicalProfile,
+): HoleDefinition | null {
+  const axes: Record<string, [number, boolean]> = {
+    left: [0, false], right: [0, true], back: [1, false], front: [1, true], bottom: [2, false], top: [2, true],
+  };
+  const entry = axes[face];
+  if (entry === undefined) return null;
+  const [axis, high] = entry;
+  const dims: Vec3 = [board.widthMm, board.thicknessMm, board.lengthMm];
+  const radius = profile.diameterMm / 2;
+  const faceCoord = high ? dims[axis]! : 0;
+  if (Math.abs(local[axis]! - faceCoord) > 1e-6) return null;
+  if (profile.depthMm > dims[axis]! + 1e-6) return null;
+  const plane: [number, number] = [0, 0];
+  const nonAxis: [number, number] = [0, 0];
+  let pi = 0;
+  for (let i = 0; i < 3; i += 1) {
+    if (i === axis) continue;
+    plane[pi] = local[i]!;
+    nonAxis[pi] = i;
+    pi += 1;
+  }
+  if (plane[0]! < radius - 1e-6 || plane[1]! < radius - 1e-6 ||
+      plane[0]! > dims[nonAxis[0]]! - radius + 1e-6 || plane[1]! > dims[nonAxis[1]]! - radius + 1e-6) {
+    return null;
+  }
+  return {
+    face: face as HoleDefinition['face'],
+    xMm: plane[0]!, yMm: plane[1]!,
+    diameterMm: profile.diameterMm, depthMm: profile.depthMm,
+    type: profile.holeType as HoleDefinition['type'],
+  };
 }
 
 function pushOperation(

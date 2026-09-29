@@ -316,7 +316,9 @@
             "STATION_PARTICIPANT_INVALID",
             "STATION_POINT_INVALID",
             "STATION_FAMILY_COLLISION",
-            "TECHNICAL_PROFILE_REQUIRED"
+            "TECHNICAL_PROFILE_REQUIRED",
+            "TECHNICAL_PROFILE_INVALID",
+            "TECHNICAL_PROFILE_INCOMPATIBLE"
           ]
         },
         "message": {
@@ -912,6 +914,10 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 256
+        },
+        "familyId": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [

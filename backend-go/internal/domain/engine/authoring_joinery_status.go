@@ -94,7 +94,8 @@ var joineryFaces = map[string]bool{
 // honest terminal TECHNICAL_PROFILE_REQUIRED blocker — never a synthetic
 // recipe (#874 §J4). Zero operations are emitted at this stage.
 func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[string]*layoutBoard,
-	issues *[]domain.ContractIssue) JoineryRelationshipStatus {
+	issues *[]domain.ContractIssue, familyProfiles FamilyProfileResolver,
+	operations *[]ResolvedMachiningOperation) JoineryRelationshipStatus {
 	relationshipID := relationship.RelationshipID
 	pushIssue := func(code, message, remediation string) {
 		*issues = append(*issues, domain.ContractIssue{
@@ -194,7 +195,7 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 	// joint, one status, per-family counts and positions. stationCount and
 	// families are mutually exclusive (fail closed, never silent precedence).
 	if len(relationship.Families) > 0 {
-		return deriveFamilyPlans(relationship, resolution, boards, contactIDs, validContacts, pushIssue)
+		return deriveFamilyPlans(relationship, resolution, boards, contactIDs, validContacts, pushIssue, familyProfiles, operations)
 	}
 	count, hasCount := relationship.Parameters["stationCount"].(float64)
 	start, hasStart := relationship.Parameters["startMarginMm"].(float64)
@@ -258,7 +259,8 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 // physical drilling pattern.
 func deriveFamilyPlans(relationship AuthoringRelationship, resolution ContactResolutionResult,
 	boards []ContactBoard, contactIDs []string, validContacts func() []JoineryContactStatus,
-	pushIssue func(code, message, remediation string)) JoineryRelationshipStatus {
+	pushIssue func(code, message, remediation string), familyProfiles FamilyProfileResolver,
+	operations *[]ResolvedMachiningOperation) JoineryRelationshipStatus {
 	relationshipID := relationship.RelationshipID
 	invalid := func(codes []string) JoineryRelationshipStatus {
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
@@ -343,14 +345,179 @@ func deriveFamilyPlans(relationship AuthoringRelationship, resolution ContactRes
 		sort.Float64s(positions)
 		distances = append(distances, JoineryStationDistances{ContactID: contactID, DistancesMm: positions})
 	}
-	pushIssue("TECHNICAL_PROFILE_REQUIRED",
-		fmt.Sprintf("floor-side relationship %s has no verified production technical profile", relationshipID),
-		"Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.")
+	// J2-A.2 (#874): with a verified technical profile for EVERY family the
+	// joint derives real operations (one per family×contact×participant,
+	// every station one hole on the participant's contact face). Any missing
+	// profile keeps the honest terminal state and ZERO operations for the
+	// whole relationship — all-or-nothing, never a partial fabrication.
+	profiles := make([]*FamilyTechnicalProfile, 0, len(families))
+	complete := familyProfiles != nil
+	if complete {
+		for _, family := range families {
+			profile := familyProfiles(relationship.Kind, family.FamilyID)
+			if profile == nil {
+				complete = false
+				break
+			}
+			profiles = append(profiles, profile)
+		}
+	}
+	if !complete {
+		pushIssue("TECHNICAL_PROFILE_REQUIRED",
+			fmt.Sprintf("floor-side relationship %s has no verified production technical profile", relationshipID),
+			"Attach a versioned, verified technical profile before fabrication; synthetic fixtures never enter production.")
+		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+			Stage: JoineryTechnicalProfileMissing, Contacts: validContacts(),
+			Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{},
+				StationCounts: counts, StationDistances: distances, FamilyPlans: familyPlans},
+			Blockers: []string{"TECHNICAL_PROFILE_REQUIRED"}}
+	}
+	for familyIndex, family := range families {
+		profile := profiles[familyIndex]
+		if profile.DiameterMm <= 0 || profile.DepthMm <= 0 ||
+			math.IsNaN(profile.DiameterMm) || math.IsInf(profile.DiameterMm, 0) ||
+			math.IsNaN(profile.DepthMm) || math.IsInf(profile.DepthMm, 0) {
+			pushIssue("TECHNICAL_PROFILE_INVALID",
+				fmt.Sprintf("family %s profile %s needs finite positive diameter and depth", family.FamilyID, profile.ProfileID),
+				"Attach a verified profile with real tool geometry.")
+			return invalid([]string{"TECHNICAL_PROFILE_INVALID"})
+		}
+	}
+	byID := map[string]ContactBoard{}
+	for _, board := range boards {
+		byID[board.OccurrenceID] = board
+	}
+	operationsBefore := len(*operations)
+	for familyIndex, family := range families {
+		profile := profiles[familyIndex]
+		// Re-plan to recover the per-station local points (A0b is
+		// deterministic): one operation per contact×participant. A profile
+		// whose geometry does not fit a participant (bit breakout, bore
+		// deeper than the board) fails the WHOLE relationship — a hole is
+		// never silently omitted (#874).
+		specs := make([]StationSpec, 0, len(contactIDs))
+		for _, contactID := range contactIDs {
+			specs = append(specs, StationSpec{ContactID: contactID, Count: family.Count,
+				StartMarginMm: family.StartMarginMm, EndMarginMm: family.EndMarginMm})
+		}
+		planned := planResolvedContactStations(resolution, boards, specs)
+		for _, contact := range resolution.Contacts {
+			boardA, boardB := byID[contact.ParticipantA], byID[contact.ParticipantB]
+			holesA, holesB := []ResolveHole{}, []ResolveHole{}
+			for _, plan := range planned.Plans {
+				if plan.ContactID != contact.ContactID {
+					continue
+				}
+				for _, station := range plan.Stations {
+					holeA, okA := stationHole(boardA, contact.FaceA, station.ParticipantALocalMm, profile)
+					if !okA {
+						pushIssue("TECHNICAL_PROFILE_INCOMPATIBLE",
+							fmt.Sprintf("family %s profile %s does not fit participant %s on face %s",
+								family.FamilyID, profile.ProfileID, boardA.OccurrenceID, contact.FaceA),
+							"Attach a profile whose diameter and depth fit every participant of this joint.")
+						*operations = (*operations)[:operationsBefore]
+						return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+							Stage: JoineryMachiningInvalid, Contacts: validContacts(),
+							Stations: JoineryStationPlanStatus{Status: "PLANNED",
+								IssueCodes:    []string{"TECHNICAL_PROFILE_INCOMPATIBLE"},
+								StationCounts: counts, StationDistances: distances, FamilyPlans: familyPlans},
+							Blockers: []string{"TECHNICAL_PROFILE_INCOMPATIBLE"}}
+					}
+					holesA = append(holesA, holeA)
+					holeB, okB := stationHole(boardB, contact.FaceB, station.ParticipantBLocalMm, profile)
+					if !okB {
+						pushIssue("TECHNICAL_PROFILE_INCOMPATIBLE",
+							fmt.Sprintf("family %s profile %s does not fit participant %s on face %s",
+								family.FamilyID, profile.ProfileID, boardB.OccurrenceID, contact.FaceB),
+							"Attach a profile whose diameter and depth fit every participant of this joint.")
+						*operations = (*operations)[:operationsBefore]
+						return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+							Stage: JoineryMachiningInvalid, Contacts: validContacts(),
+							Stations: JoineryStationPlanStatus{Status: "PLANNED",
+								IssueCodes:    []string{"TECHNICAL_PROFILE_INCOMPATIBLE"},
+								StationCounts: counts, StationDistances: distances, FamilyPlans: familyPlans},
+							Blockers: []string{"TECHNICAL_PROFILE_INCOMPATIBLE"}}
+					}
+					holesB = append(holesB, holeB)
+				}
+			}
+			*operations = append(*operations,
+				familyOperation(relationshipID, family.FamilyID, contact.ContactID, boardA.OccurrenceID, profile.ProfileID, holesA),
+				familyOperation(relationshipID, family.FamilyID, contact.ContactID, boardB.OccurrenceID, profile.ProfileID, holesB))
+		}
+	}
 	return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
-		Stage: JoineryTechnicalProfileMissing, Contacts: validContacts(),
+		Stage: JoineryMachiningReady, Contacts: validContacts(),
 		Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{},
 			StationCounts: counts, StationDistances: distances, FamilyPlans: familyPlans},
-		Blockers: []string{"TECHNICAL_PROFILE_REQUIRED"}}
+		Blockers: []string{}}
+}
+
+// familyOperation builds one family×contact×participant machining operation.
+func familyOperation(relationshipID, familyID, contactID, participantID, profileID string, holes []ResolveHole) ResolvedMachiningOperation {
+	return ResolvedMachiningOperation{
+		OperationID:             fmt.Sprintf("%s:%s:%s:%s", relationshipID, familyID, contactID, participantID),
+		HostComponentInstanceID: participantID,
+		Provenance: ResolvedMachiningProvenance{
+			SourceKind: "relationship", RelationshipID: relationshipID,
+			FamilyID: familyID, CatalogRuleID: profileID,
+		},
+		Holes: holes,
+	}
+}
+
+// stationHole projects a station's board-local point onto its contact face
+// (the entry face) using the #356 face-coordinate convention: the two
+// non-normal local axes in X<Y<Z order. The bore runs along the face
+// normal; depth must fit inside the board from that face and the bit must
+// fit the face plane.
+func stationHole(board ContactBoard, face string, local [3]float64, profile *FamilyTechnicalProfile) (ResolveHole, bool) {
+	axis, high := contactOperationFaceAxis(face)
+	if axis < 0 {
+		return ResolveHole{}, false
+	}
+	dims := [3]float64{board.WidthMm, board.ThicknessMm, board.LengthMm}
+	radius := profile.DiameterMm / 2
+	entry := 0.0
+	if high {
+		entry = dims[axis]
+	}
+	if math.Abs(local[axis]-entry) > 1e-6 {
+		return ResolveHole{}, false
+	}
+	inward := 1.0
+	if high {
+		inward = -1
+	}
+	if profile.DepthMm < 0 || profile.DepthMm > dims[axis]+1e-6 {
+		return ResolveHole{}, false
+	}
+	// Face coordinates follow the #356 convention: the two non-normal
+	// local axes in X<Y<Z order (contactOperationFaceAxis defines the
+	// normal axis; same package, same board-local frame).
+	plane := [2]float64{}
+	nonAxis := [2]int{}
+	pi, ni := 0, 0
+	for i := 0; i < 3; i++ {
+		if i == axis {
+			continue
+		}
+		plane[pi] = local[i]
+		nonAxis[ni] = i
+		pi++
+		ni++
+	}
+	// The bit must fit the face plane and the bore must fit the board from
+	// the entry face along the inward normal.
+	if plane[0] < radius-1e-6 || plane[1] < radius-1e-6 ||
+		plane[0] > dims[nonAxis[0]]-radius+1e-6 || plane[1] > dims[nonAxis[1]]-radius+1e-6 {
+		return ResolveHole{}, false
+	}
+	_ = inward
+	return ResolveHole{
+		Face: face, XMm: plane[0], YMm: plane[1],
+		DiameterMm: profile.DiameterMm, DepthMm: profile.DepthMm, Type: profile.HoleType,
+	}, true
 }
 
 // coincidentFaceA finds the single face of a whose plane exactly coincides

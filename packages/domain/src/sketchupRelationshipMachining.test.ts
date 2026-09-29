@@ -668,6 +668,89 @@ describe('J2-A operation families inside one joint', () => {
     expect(status.stations.familyPlans).toBeUndefined();
   });
 
+  const fittingProfiles = {
+    tornillos: { profileId: 'test:synthetic-screw-4x15', diameterMm: 4, depthMm: 15, holeType: 'screw' },
+    taquetes: { profileId: 'test:synthetic-dowel-8x15', diameterMm: 8, depthMm: 15, holeType: 'dowel' },
+  } as const;
+
+  const resultFrom = (envelope: ReturnType<typeof floorSideEnvelope>, options?: Parameters<typeof deriveRelationshipMachining>[2]) => {
+    const { response } = applyAuthoringEnvelope(EMPTY_AUTHORING_STATE, envelope, cabinetCatalog);
+    if (response.status !== 'accepted' || response.authoringSnapshot === undefined) {
+      throw new Error(`fixture envelope was not accepted: ${JSON.stringify(response.issues)}`);
+    }
+    return deriveRelationshipMachining(response.authoringSnapshot, cabinetJoineryCatalog, options);
+  };
+
+  it('derives real operations per family with complete synthetic profiles (J2-A.2)', () => {
+    const families = [
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+    ];
+    const without = resultFrom(familiesEnvelope(families));
+    expect(without.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01')?.stage)
+      .toBe('TECHNICAL_PROFILE_REQUIRED');
+    expect(without.derivedMachiningOperations.filter((op) => op.provenance.sourceKind === 'relationship' && op.provenance.relationshipId === 'rel-floor-sides-01'))
+      .toHaveLength(0);
+
+    const withProfiles = resultFrom(familiesEnvelope(families), { familyProfiles: fittingProfiles });
+    const status = withProfiles.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01')!;
+    expect(status.stage).toBe('MACHINING_READY');
+    expect(status.blockers).toEqual([]);
+    const familyOps = withProfiles.derivedMachiningOperations.filter((op) => op.provenance.sourceKind === 'relationship' && op.provenance.relationshipId === 'rel-floor-sides-01');
+    // 2 families × 2 contacts × 2 participants.
+    expect(familyOps).toHaveLength(8);
+    const perFamily = new Map<string, number>();
+    for (const operation of familyOps) {
+      if (operation.provenance.sourceKind !== 'relationship') continue;
+      expect(operation.provenance.familyId).toBeDefined();
+      expect(operation.provenance.catalogRuleId).toMatch(/^test:synthetic-/u);
+      const holes = operation.detail.holes;
+      expect([2, 4]).toContain(holes.length);
+      for (const hole of holes) {
+        expect(hole.face).toBeDefined();
+        expect(hole.diameterMm).toBeGreaterThan(0);
+        expect(hole.depthMm).toBeGreaterThan(0);
+      }
+      perFamily.set(operation.provenance.familyId!, (perFamily.get(operation.provenance.familyId!) ?? 0) + 1);
+    }
+    expect(perFamily.get('tornillos')).toBe(4);
+    expect(perFamily.get('taquetes')).toBe(4);
+  });
+
+  it('keeps ZERO operations when one family lacks a profile (all-or-nothing)', () => {
+    const families = [
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+    ];
+    const partial = resultFrom(familiesEnvelope(families), {
+      familyProfiles: { tornillos: fittingProfiles.tornillos },
+    });
+    const status = partial.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01')!;
+    expect(status.stage).toBe('TECHNICAL_PROFILE_REQUIRED');
+    expect(status.stations.familyPlans).toHaveLength(2);
+    expect(partial.derivedMachiningOperations.filter((op) => op.provenance.sourceKind === 'relationship' && op.provenance.relationshipId === 'rel-floor-sides-01'))
+      .toHaveLength(0);
+  });
+
+  it('fails the whole relationship when a profile does not fit a participant (no omitted holes)', () => {
+    const families = [
+      { familyId: 'tornillos', count: 4, startMarginMm: 30, endMarginMm: 50 },
+      { familyId: 'taquetes', count: 2, startMarginMm: 100, endMarginMm: 100 },
+    ];
+    const unfit = resultFrom(familiesEnvelope(families), {
+      familyProfiles: {
+        tornillos: { profileId: 'test:synthetic-screw-4x35', diameterMm: 4, depthMm: 35, holeType: 'screw' },
+        taquetes: fittingProfiles.taquetes,
+      },
+    });
+    const status = unfit.joineryStatuses.find((item) => item.relationshipId === 'rel-floor-sides-01')!;
+    expect(status.stage).toBe('MACHINING_INVALID');
+    expect(status.blockers).toEqual(['TECHNICAL_PROFILE_INCOMPATIBLE']);
+    expect(unfit.derivedMachiningOperations.filter((op) => op.provenance.sourceKind === 'relationship' && op.provenance.relationshipId === 'rel-floor-sides-01'))
+      .toHaveLength(0);
+    expect(unfit.issues.some((issue) => issue.code === 'TECHNICAL_PROFILE_INCOMPATIBLE')).toBe(true);
+  });
+
   it('rejects stationCount declared together with families', () => {
     const status = statusesFrom(familiesEnvelope(
       [{ familyId: 'tornillos', count: 4 }],

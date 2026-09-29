@@ -63,7 +63,7 @@ func TestStructureRelationshipMaterializesFromParameterValue(t *testing.T) {
 
 	// The materialized relationship resolves through the honest J1 chain.
 	var collected []domain.ContractIssue
-	status := deriveFloorSideJoinery(relationship, boardIndexFor(structureBoards()), &collected)
+	status := deriveFloorSideJoinery(relationship, boardIndexFor(structureBoards()), &collected, nil, nil)
 	if status.Stage != JoineryTechnicalProfileMissing {
 		t.Fatalf("stage = %s issues=%+v", status.Stage, collected)
 	}
@@ -229,7 +229,7 @@ func TestFamilyPlansIndependentStations(t *testing.T) {
 	relationship.Parameters = nil
 	relationship.Families = floorSideFamilies()
 	var collected []domain.ContractIssue
-	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected)
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, nil, nil)
 	if status.Stage != JoineryTechnicalProfileMissing {
 		t.Fatalf("stage = %s issues=%+v", status.Stage, collected)
 	}
@@ -279,7 +279,7 @@ func TestFamilyPlansCollisionFailsWholePattern(t *testing.T) {
 		{FamilyID: "taquetes", Count: 2, StartMarginMm: 30, EndMarginMm: 30},
 	}
 	var collected []domain.ContractIssue
-	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected)
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, nil, nil)
 	if status.Stage != JoineryStationInvalid {
 		t.Fatalf("stage = %s", status.Stage)
 	}
@@ -299,7 +299,7 @@ func TestFamiliesAndStationCountAreExclusive(t *testing.T) {
 	relationship := j1bRelationship()
 	relationship.Families = floorSideFamilies()
 	var collected []domain.ContractIssue
-	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected)
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, nil, nil)
 	if status.Stage != JoineryStationInvalid {
 		t.Fatalf("stage = %s", status.Stage)
 	}
@@ -341,5 +341,147 @@ func TestFamiliesEndToEndFromBinding(t *testing.T) {
 		statuses[0].Stations.FamilyPlans[1].FamilyID != "tornillos" ||
 		statuses[0].Stations.FamilyPlans[1].StationCounts[0].StationCount != 4 {
 		t.Fatalf("family counts = %+v", statuses[0].Stations.FamilyPlans)
+	}
+}
+
+func syntheticProfiles() FamilyProfileResolver {
+	return func(kind, familyID string) *FamilyTechnicalProfile {
+		if kind != "floor-side" {
+			return nil
+		}
+		switch familyID {
+		case "tornillos":
+			// Fits every participant: entry faces include the 18mm-thick
+			// sides, so the synthetic bore depth stays within 18mm.
+			return &FamilyTechnicalProfile{ProfileID: "test:synthetic-screw-4x15", DiameterMm: 4, DepthMm: 15, HoleType: "screw"}
+		case "taquetes":
+			return &FamilyTechnicalProfile{ProfileID: "test:synthetic-dowel-8x15", DiameterMm: 8, DepthMm: 15, HoleType: "dowel"}
+		default:
+			return nil
+		}
+	}
+}
+
+// TestFamilyOperationsWithSyntheticProfiles: complete profiles derive real
+// operations (one per family×contact×participant, one hole per station on
+// the contact face) and the stage reaches MACHINING_READY.
+func TestFamilyOperationsWithSyntheticProfiles(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = floorSideFamilies()
+	var collected []domain.ContractIssue
+	var operations []ResolvedMachiningOperation
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, syntheticProfiles(), &operations)
+	if status.Stage != JoineryMachiningReady {
+		t.Fatalf("stage = %s issues=%+v", status.Stage, collected)
+	}
+	if len(status.Blockers) != 0 {
+		t.Fatalf("blockers = %+v", status.Blockers)
+	}
+	// 2 families × 2 contacts × 2 participants = 8 operations; every
+	// operation carries family provenance and 4 or 2 holes.
+	if len(operations) != 8 {
+		t.Fatalf("operations = %d, want 8: %+v", len(operations), operations)
+	}
+	perFamily := map[string]int{}
+	for _, operation := range operations {
+		if operation.Provenance.SourceKind != "relationship" ||
+			operation.Provenance.RelationshipID != "rel-floor-sides-01" ||
+			operation.Provenance.FamilyID == "" || operation.Provenance.CatalogRuleID == "" {
+			t.Fatalf("provenance = %+v", operation.Provenance)
+		}
+		perFamily[operation.Provenance.FamilyID]++
+		expectedHoles := 4
+		if operation.Provenance.FamilyID == "taquetes" {
+			expectedHoles = 2
+		}
+		if len(operation.Holes) != expectedHoles {
+			t.Fatalf("family %s holes = %d, want %d", operation.Provenance.FamilyID, len(operation.Holes), expectedHoles)
+		}
+		for _, hole := range operation.Holes {
+			if hole.Face == "" || hole.DiameterMm <= 0 || hole.DepthMm <= 0 || hole.Type == "" {
+				t.Fatalf("hole = %+v", hole)
+			}
+		}
+	}
+	if perFamily["tornillos"] != 4 || perFamily["taquetes"] != 4 {
+		t.Fatalf("per-family operations = %+v", perFamily)
+	}
+}
+
+// TestFamilyOperationsPartialProfilesStayBlocked: one missing profile keeps
+// the honest terminal state and ZERO operations for the whole relationship.
+func TestFamilyOperationsPartialProfilesStayBlocked(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = floorSideFamilies()
+	partial := func(kind, familyID string) *FamilyTechnicalProfile {
+		if familyID != "tornillos" {
+			return nil
+		}
+		return &FamilyTechnicalProfile{ProfileID: "test:synthetic-screw-4x15", DiameterMm: 4, DepthMm: 15, HoleType: "screw"}
+	}
+	var collected []domain.ContractIssue
+	var operations []ResolvedMachiningOperation
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, partial, &operations)
+	if status.Stage != JoineryTechnicalProfileMissing {
+		t.Fatalf("stage = %s", status.Stage)
+	}
+	if len(operations) != 0 {
+		t.Fatalf("partial profiles emitted operations: %+v", operations)
+	}
+	if len(status.Stations.FamilyPlans) != 2 {
+		t.Fatalf("plans should still publish: %+v", status.Stations.FamilyPlans)
+	}
+}
+
+// TestFamilyOperationsProductionResolverAbsent: nil resolver (production)
+// changes nothing — terminal state, zero operations, plans published.
+func TestFamilyOperationsProductionResolverAbsent(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = floorSideFamilies()
+	var collected []domain.ContractIssue
+	var operations []ResolvedMachiningOperation
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, nil, &operations)
+	if status.Stage != JoineryTechnicalProfileMissing || len(operations) != 0 {
+		t.Fatalf("status = %s operations = %d", status.Stage, len(operations))
+	}
+}
+
+// TestFamilyOperationsUnfitProfileFailsWholeRelationship: a profile whose
+// bore is deeper than a participant's entry-face extent fails the joint
+// with a structured error and ZERO operations (never an omitted hole).
+func TestFamilyOperationsUnfitProfileFailsWholeRelationship(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = floorSideFamilies()
+	unfit := func(kind, familyID string) *FamilyTechnicalProfile {
+		if familyID == "tornillos" {
+			// 35mm bore through the 18mm side: breakout.
+			return &FamilyTechnicalProfile{ProfileID: "test:synthetic-screw-4x35", DiameterMm: 4, DepthMm: 35, HoleType: "screw"}
+		}
+		return &FamilyTechnicalProfile{ProfileID: "test:synthetic-dowel-8x15", DiameterMm: 8, DepthMm: 15, HoleType: "dowel"}
+	}
+	var collected []domain.ContractIssue
+	var operations []ResolvedMachiningOperation
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, unfit, &operations)
+	if status.Stage != JoineryMachiningInvalid {
+		t.Fatalf("stage = %s", status.Stage)
+	}
+	if len(status.Blockers) != 1 || status.Blockers[0] != "TECHNICAL_PROFILE_INCOMPATIBLE" {
+		t.Fatalf("blockers = %+v", status.Blockers)
+	}
+	if len(operations) != 0 {
+		t.Fatalf("unfit profile emitted operations: %+v", operations)
+	}
+	found := false
+	for _, issue := range collected {
+		if issue.Code == "TECHNICAL_PROFILE_INCOMPATIBLE" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("structured issue missing: %+v", collected)
 	}
 }

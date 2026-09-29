@@ -116,6 +116,7 @@ type ResolveHole struct {
 type ResolvedMachiningProvenance struct {
 	SourceKind          string `json:"sourceKind"`
 	RelationshipID      string `json:"relationshipId,omitempty"`
+	FamilyID            string `json:"familyId,omitempty"`
 	CatalogRuleID       string `json:"catalogRuleId,omitempty"`
 	HardwarePlacementID string `json:"hardwarePlacementId,omitempty"`
 }
@@ -124,6 +125,9 @@ func (p ResolvedMachiningProvenance) canonical() map[string]any {
 	m := map[string]any{"sourceKind": p.SourceKind}
 	if p.RelationshipID != "" {
 		m["relationshipId"] = p.RelationshipID
+	}
+	if p.FamilyID != "" {
+		m["familyId"] = p.FamilyID
 	}
 	if p.CatalogRuleID != "" {
 		m["catalogRuleId"] = p.CatalogRuleID
@@ -243,11 +247,28 @@ type effectivePlacementForMachining struct {
 // Structural reference problems are expected to be caught by validation;
 // derivation re-checks defensively and reports manufacturing-domain issues
 // (which block preflight instead of rejecting the request).
+// FamilyTechnicalProfile is the explicit technical data one operation family
+// needs to emit real machining (#874 J2-A.2). Production NEVER supplies a
+// resolver: without verified profiles the relationship stays at
+// TECHNICAL_PROFILE_REQUIRED with zero operations. Test contexts inject
+// synthetic profiles; their ids carry that provenance in their namespace.
+type FamilyTechnicalProfile struct {
+	ProfileID  string
+	DiameterMm float64
+	DepthMm    float64
+	HoleType   string
+}
+
+// FamilyProfileResolver maps (relationship kind, familyId) to a technical
+// profile. nil or a nil result means "no verified profile".
+type FamilyProfileResolver func(kind, familyID string) *FamilyTechnicalProfile
+
 func deriveAuthoringMachining(
 	boards []layoutBoard,
 	relationships []AuthoringRelationship,
 	placements []effectivePlacementForMachining,
 	catalog domain.Catalog,
+	familyProfiles FamilyProfileResolver,
 ) (AuthoringMachining, []domain.ContractIssue) {
 	issues := []domain.ContractIssue{}
 	operations := []ResolvedMachiningOperation{}
@@ -261,7 +282,7 @@ func deriveAuthoringMachining(
 
 	for _, relationship := range relationships {
 		if relationship.Kind == "floor-side" {
-			joineryStatuses = append(joineryStatuses, deriveFloorSideJoinery(relationship, boardIndex, &issues))
+			joineryStatuses = append(joineryStatuses, deriveFloorSideJoinery(relationship, boardIndex, &issues, familyProfiles, &operations))
 			continue
 		}
 		deriveRelationshipOperations(relationship, boardIndex, catalog, &derived, &operations, &issues, &joineryStatuses)
