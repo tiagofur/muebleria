@@ -1289,6 +1289,17 @@ type DesignWorkingMaterialsReconciliation struct {
 	WorkingCopyUpdatedAt string            `json:"working_copy_updated_at"`
 }
 
+type ComposeDesignEffectiveMaterialsRequest struct {
+	FurnitureDefinitionId string            `json:"furnitureDefinitionId"`
+	MaterialChoices       map[string]string `json:"materialChoices,omitempty"`
+}
+
+type DesignEffectiveMaterials struct {
+	FurnitureDefinitionId string                              `json:"furnitureDefinitionId"`
+	MaterialChoices       map[string]string                   `json:"materialChoices"`
+	MaterialChoiceModes   map[string]DesignMaterialChoiceMode `json:"materialChoiceModes"`
+}
+
 type PublishDesignRevisionRequest struct {
 	SourceType     DesignRevisionSourceType `json:"source_type"`
 	BaseRevisionID *string                  `json:"base_revision_id,omitempty"`
