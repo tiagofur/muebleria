@@ -15,6 +15,7 @@ module Granete
         include ProjectFurnitureBridge
         include PlacementPreviewBridge
         include DesignInspectorBridge
+        include DesignInheritanceBridge
         include DesignWorkflowBridge
         include FurnitureBridge
         include HostMutationBridge

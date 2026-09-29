@@ -21,6 +21,10 @@ module Granete
           dialog.add_action_callback('apply_design_defaults') do |_c, payload|
             handle_apply_design_defaults(dialog, payload)
           end
+          # #784 R3: the inheritance read bridge mixes into the same
+          # controller; its registration rides here so bind_callbacks stays
+          # within its complexity budget.
+          register_design_inheritance_callbacks(dialog)
         end
 
         # Payload entrante: { requestId, designId }. Respuesta via

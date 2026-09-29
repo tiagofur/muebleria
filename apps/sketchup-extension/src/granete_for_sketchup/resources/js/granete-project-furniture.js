@@ -233,6 +233,11 @@
       // The confirmed total comes from the backend projection, never
       // from local math (#810 rule F).
       if (window.GraneteCommercialProjection) { window.GraneteCommercialProjection.refresh(); }
+      // #784 R3 final review: the confirmed synchronize is exactly the
+      // moment the server accepted the new material lineage — re-read the
+      // inheritance projection so the badges return to server truth (via
+      // the injected seam; no optimistic badge inference here).
+      if (typeof deps.refreshDesignInheritance === "function") { deps.refreshDesignInheritance(); }
       requestProjectFurniture();
     } else {
       lastDesignSyncOutcome = { kind: result.code === "conflict" ? "conflict" : "error", reason: result.reason };

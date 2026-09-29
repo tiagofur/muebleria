@@ -26,6 +26,9 @@ class WorkingCopyContractTest < Minitest::Test
         'expected_working_version' => expected.fetch('expected_working_version'),
         'items' => [item.to_contract_h]
       }
+      # #784 R2/R3: the caller-side merge may carry the durable Design
+      # defaults — the boundary echoes them verbatim when present.
+      actual['authoring_defaults'] = expected['authoring_defaults'] if expected.key?('authoring_defaults')
 
       assert_equal expected, actual, scenario.fetch('id')
     end

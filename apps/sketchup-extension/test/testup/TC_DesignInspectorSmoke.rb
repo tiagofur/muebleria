@@ -238,6 +238,95 @@ module Granete
         assert_empty puts, 'R1 never writes the working copy'
       end
 
+      # R3. Projection ready: design mode, override mode and needs_rollout
+      #    reach the dialog exactly as the server projection declares.
+      def test_inheritance_projection_serves_modes_and_needs_rollout
+        bind_model_to(DESIGN_A)
+        transport = ScriptedTransport.new
+        design_role = { 'mode' => 'design', 'applied' => 'mat-blanco',
+                        'default' => 'mat-blanco', 'needs_rollout' => false }
+        override_role = { 'mode' => 'override', 'applied' => 'mat-negro',
+                          'default' => 'mat-blanco', 'needs_rollout' => false }
+        stale_role = { 'mode' => 'design', 'applied' => 'mat-viejo',
+                       'default' => 'mat-nuevo', 'needs_rollout' => true }
+        transport.stub_inheritance(DESIGN_A, [
+                                     transport.inheritance_item(FI_1, 'INTERIOR' => design_role,
+                                                                      'FRENTES' => override_role, 'FONDO' => stale_role)
+                                   ])
+
+        dialog = CaptureDialog.new
+        projection_request = JSON.generate({ 'requestId' => 51, 'designId' => DESIGN_A })
+        inspector_bridge(transport).handle_get_design_inheritance(dialog, projection_request)
+
+        payload = dialog.pushed.fetch('onDesignInheritance')
+        File.write('/tmp/host_smoke_784_r3_projection_debug.json', JSON.pretty_generate(payload))
+        assert_equal 'ready', payload['status'], payload.inspect
+        roles = payload['items'].first['roles'].to_h do |entry|
+          [entry['role'], entry]
+        end
+        assert_equal 'design', roles.fetch('INTERIOR')['mode']
+        assert_equal 'override', roles.fetch('FRENTES')['mode']
+        assert_equal true, roles.fetch('FONDO')['needsRollout']
+        assert_equal 'mat-nuevo', roles.fetch('FONDO')['designDefaultMaterialId']
+      end
+
+      # R2 regression on the R3 head: applying design defaults (the #810
+      #    working-copy PUT) materializes the declared defaults — this is the
+      #    DESIGN DEFAULTS apply path, NOT the furniture restore (which is
+      #    covered by TC_HostMutationSmoke over the real builder).
+      def test_apply_design_defaults_materializes_declared_defaults
+        bind_model_to(DESIGN_A)
+        transport = ScriptedTransport.new
+        transport.stub_working_copy(DESIGN_A, WC_VERSION_A,
+                                    'authoring_defaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-blanco' } },
+                                    'items' => [transport.working_item_body(FI_1)])
+
+        starts_before = @transaction_observer.starts
+        commits_before = @transaction_observer.commits
+        dialog = CaptureDialog.new
+        apply_request = JSON.generate(
+          { 'requestId' => 61, 'designId' => DESIGN_A,
+            'expectedWorkingVersion' => WC_VERSION_A,
+            'authoringDefaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-blanco' } } }
+        )
+        inspector_bridge(transport).handle_apply_design_defaults(dialog, apply_request)
+
+        payload = dialog.pushed.fetch('onDesignDefaultsApplied')
+        assert_equal 'ok', payload['status']
+        assert_equal({ 'INTERIOR' => 'mat-blanco' }, payload['authoringDefaults']['materialChoices'])
+        assert_equal 1, transport.requests.select { |request| request['method'] == 'PUT' }.length
+        assert_equal 0, @transaction_observer.starts - starts_before
+        assert_equal 0, @transaction_observer.commits - commits_before
+      end
+
+      # R3. After a rebind, an inheritance read naming the OLD design is
+      #    refused (stale_binding) without any fetch — the request
+      #    correlation itself is exercised by the JS harness.
+      def test_inheritance_read_after_rebind_refuses_old_design
+        bind_model_to(DESIGN_A)
+        transport = ScriptedTransport.new
+        override_now = { 'mode' => 'override', 'applied' => 'mat-viejo',
+                         'default' => 'mat-nuevo', 'needs_rollout' => false }
+        item = transport.inheritance_item(FI_1, 'INTERIOR' => override_now)
+        transport.stub_inheritance(DESIGN_A, [item])
+
+        dialog = CaptureDialog.new
+        bridge = inspector_bridge(transport)
+        bridge.handle_get_design_inheritance(dialog, JSON.generate(
+                                                       { 'requestId' => 73, 'designId' => DESIGN_A }
+                                                     ))
+        assert_equal 'ready', dialog.pushed.fetch('onDesignInheritance')['status']
+
+        bind_model_to(DESIGN_B)
+        bridge.handle_get_design_inheritance(dialog, JSON.generate(
+                                                       { 'requestId' => 74, 'designId' => DESIGN_A }
+                                                     ))
+
+        payload = dialog.pushed.fetch('onDesignInheritance')
+        assert_equal 'stale_binding', payload['status']
+        assert_equal 1, transport.requests.length, 'no fetch for the refused old-design read'
+      end
+
       private
 
       def model
@@ -302,8 +391,12 @@ module Granete
           transport: transport, auth_provider: AlwaysAuth.new, logger: silent_logger
         )
         placer = Struct.new(:service).new(service)
+        # Production wiring: DialogController includes BOTH bridges, so the
+        # smoke extends them together (the inheritance handler lives in its
+        # own module since the R3 split).
         bridge = Object.new
         bridge.extend(UserInterface::DesignInspectorBridge)
+        bridge.extend(UserInterface::DesignInheritanceBridge)
         bridge.instance_variable_set(:@logger, silent_logger)
         bridge.instance_variable_set(:@project_furniture_placer, placer)
         bridge.define_singleton_method(:active_model) { Sketchup.active_model }
@@ -383,6 +476,25 @@ module Granete
 
         # The #810 scripted semantics: an accepted PUT mints the new token
         # and becomes the next authoritative GET (applied defaults included).
+        # #784 R3: the inheritance projection route serves a scripted
+        # per-item projection the R3 smoke cases assert against.
+        def stub_inheritance(design_id, items)
+          respond(:get, "/designs/#{design_id}/working-copy/material-provenance", 200,
+                  { 'design_id' => design_id, 'project_id' => PROJECT_ID,
+                    'authoring_defaults' => { 'materialChoices' => {} },
+                    'inheritance_summary' => [], 'items' => items })
+        end
+
+        def inheritance_item(fi_id, roles)
+          { 'furniture_instance_id' => fi_id,
+            'inheritance' => roles.map do |role, entry|
+              { 'role' => role, 'mode' => entry['mode'],
+                'applied_material_id' => entry['applied'],
+                'design_default_material_id' => entry['default'],
+                'needs_rollout' => entry['needs_rollout'] }
+            end }
+        end
+
         def request(payload, authorization_header: nil)
           _ = authorization_header
           method = payload['method'].to_s.upcase

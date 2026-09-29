@@ -1,0 +1,6 @@
+Path: "%CONFIG_DIR%/test/testup"
+Output: "%CONFIG_DIR%/../../progress/host_smoke_784_r3_testup_ci.json"
+ErrorLogPath: "%CONFIG_DIR%/../../progress/host_smoke_784_r3_testup_error.log"
+Tests:
+  - "Granete::SketchUpExtension::TC_DesignInspectorSmoke#"
+KeepOpen: false

@@ -386,6 +386,45 @@ function run() {
     assert.ok(ctx.body().textContent.includes('Arauco Blanco Frosty'), 'cached ready state renders');
   });
 
+  // --- R3 owner check: restore uses the CURRENT design default even after
+  //     it changed since the furniture was created (lineage, not equality).
+  test('R3: after the design default changes, restore materializes the NEW default', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.onDesignInheritance({
+      requestId: ctx.sketchupCalls[0][1].requestId, status: 'ready', designId: 'd-a',
+      items: [{
+        furnitureInstanceId: 'fi-1',
+        roles: [
+          // Created when INTERIOR default was blanco; overridden to roble.
+          { role: 'INTERIOR', mode: 'override', appliedMaterialId: 'mat-oak',
+            designDefaultMaterialId: 'mat-white', needsRollout: false }
+        ]
+      }]
+    });
+    assert.strictEqual(mod.getRoleBadge('fi-1', 'INTERIOR').designDefault, 'mat-white');
+
+    // The design default changes to moscato (another working-copy write).
+    // The server projection now reports the NEW default as the restore
+    // target — the client never remembers the old one.
+    mod.onDesignInheritance({
+      requestId: ctx.sketchupCalls[0][1].requestId, status: 'ready', designId: 'd-a',
+      items: [{
+        furnitureInstanceId: 'fi-1',
+        roles: [
+          { role: 'INTERIOR', mode: 'override', appliedMaterialId: 'mat-oak',
+            designDefaultMaterialId: 'mat-moscato', needsRollout: true }
+        ]
+      }]
+    });
+    const badge = mod.getRoleBadge('fi-1', 'INTERIOR');
+    assert.strictEqual(badge.kind, 'override');
+    assert.strictEqual(badge.designDefault, 'mat-moscato',
+      'the restore target is the CURRENT design default (moscato), never the original blanco');
+  });
+
   // --- R2: pending draft + footer + one PUT -------------------------------
   function initModuleR2(ctx) {
     ctx.sandbox.window.GraneteUI.designInspector.init({
@@ -780,6 +819,71 @@ function run() {
     assert.deepStrictEqual(ctx.picker.roleEntry.optionIds,
       ['mat-white', 'mat-oak', 'mat-extra'],
       'empty curated candidates fall back to the whole catalog (presentation only)');
+  });
+
+  // --- R3: inheritance projection (badge authority) ------------------------
+  test('R3: onDesignInheritance caches the projection; getRoleBadge is the only authority', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    assert.strictEqual(mod.getRoleBadge('fi-1', 'INTERIOR'), null, 'no projection yet — never a guess');
+    mod.onDesignInheritance({ requestId: 999, status: 'ready', designId: 'd-a', items: [] }); // stale: ignored
+    const request = ctx.sketchupCalls.filter((c) => c[0] === 'get_design_defaults')[0][1];
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [{
+        furnitureInstanceId: 'fi-1',
+        roles: [
+          { role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-white', needsRollout: false },
+          { role: 'FRENTES', mode: 'override', appliedMaterialId: 'mat-oak',
+            designDefaultMaterialId: 'mat-white', needsRollout: false },
+          { role: 'FONDO', mode: 'design', appliedMaterialId: 'mat-old', needsRollout: true }
+        ]
+      }]
+    });
+    const design = mod.getRoleBadge('fi-1', 'INTERIOR');
+    assert.strictEqual(design.text, 'Diseño');
+    assert.strictEqual(design.kind, 'design');
+    const override = mod.getRoleBadge('fi-1', 'FRENTES');
+    assert.strictEqual(override.text, 'Personalizado');
+    assert.strictEqual(override.kind, 'override');
+    assert.strictEqual(override.designDefault, 'mat-white');
+    const pending = mod.getRoleBadge('fi-1', 'FONDO');
+    assert.strictEqual(pending.text, 'Diseño · pendiente de aplicar');
+    // Applied-ok and binding switch clear/re-refresh it.
+    mod.onBindingStatus({ state: 'unbound' });
+    assert.strictEqual(mod.getRoleBadge('fi-1', 'INTERIOR'), null, 'unbound clears the projection');
+  });
+
+  test('R3: the furniture inspector renders the badge and the restore action', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.onDesignInheritance({
+      requestId: ctx.sketchupCalls[0][1].requestId, status: 'ready', designId: 'd-a',
+      items: [{
+        furnitureInstanceId: 'fi-1',
+        roles: [
+          { role: 'INTERIOR', mode: 'override', appliedMaterialId: 'mat-oak',
+            designDefaultMaterialId: 'mat-white', needsRollout: false }
+        ]
+      }]
+    });
+    // The badge comes from the module (the inspector/materials render reads
+    // it through the injected dep — covered in the material-roles harness);
+    // here we pin the module contract: override exposes the design default.
+    const badge = mod.getRoleBadge('fi-1', 'INTERIOR');
+    assert.ok(badge.designDefault, 'restore action target exists');
+    // A design-backed role never offers restore.
+    mod.onDesignInheritance({
+      requestId: ctx.sketchupCalls[0][1].requestId, status: 'ready', designId: 'd-a',
+      items: [{ furnitureInstanceId: 'fi-1',
+        roles: [{ role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-white', needsRollout: false }] }]
+    });
+    assert.strictEqual(mod.getRoleBadge('fi-1', 'INTERIOR').kind, 'design');
+    assert.strictEqual(mod.getRoleBadge('fi-1', 'INTERIOR').designDefault, undefined);
   });
 
   // --- error state with retry ---------------------------------------------

@@ -297,10 +297,132 @@ module Granete
         end
       end
 
+      # #784 R3 — Restore-to-design through the REAL HostMutationBridge
+      #    build_update_command path: the payload carries the CURRENT design
+      #    default plus mode=design; the resolve is the authoritative
+      #    authoring resolve (golden scenario, native layout) and the
+      #    builder materializes both into the item intent inside EXACTLY
+      #    ONE host operation. No second operation, no paint-only change.
+      def test_restore_materializes_current_default_with_design_mode
+        initial_entity = place_initial_furniture
+        # Seed the persisted override state: materialized choice = the
+        # override material, lineage = override.
+        metadata = metadata_store.read(initial_entity)
+        metadata['intent']['materialChoices'] = { 'INTERIOR' => 'mat-roble' }
+        metadata['intent']['materialChoiceModes'] = { 'INTERIOR' => 'override' }
+        metadata_store.write(initial_entity, metadata)
+
+        starts_before = @transaction_observer.starts
+        commits_before = @transaction_observer.commits
+
+        payload = {
+          'instanceId' => metadata_store.read(initial_entity).dig('identity', 'instanceRef'),
+          'definitionId' => 'kitchen-base-standard',
+          'parameters' => { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560, 'shelfCount' => 1 },
+          'materialChoices' => { 'INTERIOR' => 'mat-moscato' },
+          'materialChoiceModes' => { 'INTERIOR' => 'design' }
+        }
+        command = mutation_bridge.send(:build_update_command, payload, nil)
+        flunk 'restore command must build against the local catalog' unless command
+
+        outcome = build_coordinator.execute(command)
+
+        assert outcome.committed?, "restore expected to commit, got #{outcome.outcome}: #{outcome.reason}"
+        assert_equal 1, @transaction_observer.starts - starts_before,
+                     'the restore must be EXACTLY ONE start_operation'
+        assert_equal 1, @transaction_observer.commits - commits_before,
+                     'the restore must be EXACTLY ONE commit_operation'
+
+        current_entity = granete_furniture_instances.first
+        metadata_after = metadata_store.read(current_entity)
+        assert_equal 'mat-moscato',
+                     metadata_after.dig('intent', 'materialChoices', 'INTERIOR'),
+                     'the CURRENT design default is materialized'
+        assert_equal 'design',
+                     metadata_after.dig('intent', 'materialChoiceModes', 'INTERIOR'),
+                     'the restored role carries the design lineage'
+      end
+
       private
+
+      def mutation_bridge
+        # Production wiring parity: DialogController includes BOTH the
+        # furniture bridge (entity lookup, layout resolve, merged choices)
+        # and the host mutation bridge (command build + coordinator path).
+        bridge = Object.new
+        bridge.extend(Granete::SketchUpExtension::UserInterface::FurnitureBridge)
+        bridge.extend(Granete::SketchUpExtension::UserInterface::HostMutationBridge)
+        provider = RestoreCatalogProvider.new(golden_native_layout)
+        bridge.instance_variable_set(:@catalog_provider, provider)
+        bridge.instance_variable_set(:@metadata_store_factory, ->(_m) { metadata_store })
+        bridge.instance_variable_set(:@logger, quiet_logger)
+        bridge.define_singleton_method(:active_model) { Sketchup.active_model }
+        builder_ref = @builder
+        bridge.define_singleton_method(:furniture_builder_for) { |_m| builder_ref }
+        # No-op seams: the smoke asserts outcomes, not dialog re-rendering.
+        bridge.define_singleton_method(:overlay_mutation_started) do |_target|
+          # no-op: not under test
+        end
+        bridge.define_singleton_method(:push_mutation_outcome) do |_dialog, _outcome, **_|
+          # no-op: not under test
+        end
+        bridge.define_singleton_method(:execute_bridge) do |_dialog, _method, _payload|
+          # no-op: not under test
+        end
+        bridge
+      end
+
+      def furniture_builder
+        @builder
+      end
 
       def quiet_logger
         @quiet_logger ||= Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+      end
+
+      # #784 R3 restore smoke: catalog stub that serves the restore
+      #    definition (with a multi-option material role) and the golden
+      #    native layout the production resolve returns.
+      class RestoreCatalogProvider
+        DEFINITION = {
+          'furniture_definition_id' => 'kitchen-base-standard',
+          'name' => 'Gabinete Base',
+          'parameters' => [
+            { 'name' => 'widthMm', 'defaultValue' => 600 },
+            { 'name' => 'heightMm', 'defaultValue' => 720 },
+            { 'name' => 'depthMm', 'defaultValue' => 560 },
+            { 'name' => 'shelfCount', 'defaultValue' => 1 }
+          ],
+          'materialRoles' => [
+            { 'role' => 'INTERIOR', 'label' => 'Interior', 'optionIds' => %w[mat-moscato mat-blanco] }
+          ]
+        }.freeze
+
+        def initialize(native_layout)
+          @native_layout = native_layout
+        end
+
+        def find_definition(_definition_id)
+          DEFINITION
+        end
+
+        def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
+          @native_layout
+        end
+      end
+
+      # The golden authoring layout (native) the restore resolve returns.
+      def golden_native_layout
+        request = scenario_request('13-definition-driven-typed-parameters')
+        request['messageId'] = 'restore-smoke-msg'
+        request['idempotencyKey'] = 'restore-smoke-idem'
+        response = JSON.parse(JSON.generate(scenario_response('13-definition-driven-typed-parameters')))
+        response['inReplyToMessageId'] = request['messageId']
+        response['responseMessageId'] = "resolve-#{request['messageId']}"
+        response['idempotencyKey'] = request['idempotencyKey']
+        Granete::SketchUpExtension::Library::AuthoringResolveContract.parse!(
+          response, expected_request: request
+        ).layout
       end
 
       def build_coordinator

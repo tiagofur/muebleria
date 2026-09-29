@@ -189,6 +189,8 @@ function renderRole(mr, overrides) {
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Part A — module contract (real granete-material-roles.js)
 // ---------------------------------------------------------------------------
 
@@ -452,6 +454,79 @@ test('explicit contextInfo wins over the fallback heuristic', () => {
   );
 });
 
+// #784 R3 — badges + restore (server-side inheritance authority)
+// ---------------------------------------------------------------------------
+
+test('R3 badges: inspector role block renders the server badge and never derives it', () => {
+  const fx = runModule({ depOverrides: {
+    getRoleBadge: (instanceId, role) => (instanceId === 'ref-9' && role === 'FRENTES'
+      ? { text: 'Diseño', kind: 'design' }
+      : null)
+  } });
+  fx.mr.setCatalog({ materials: MATERIALS, categories: [] });
+  const rendered = renderRole(fx.mr, { contextInfo: { context: 'inspector', instanceId: 'ref-9', definitionId: 'def-1' } });
+  const header = rendered.block.children[0];
+  const badge = header.children.find((child) => child.textContent === 'Diseño');
+  assert.ok(badge, 'the server badge renders in the role header');
+  assert.ok(!rendered.block.textContent.includes('Personalizado'), 'no invented badge');
+
+  // Without a projection entry for the role there is NO badge (never a guess).
+  const none = runModule({ depOverrides: { getRoleBadge: () => null } });
+  none.mr.setCatalog({ materials: MATERIALS, categories: [] });
+  const renderedNone = renderRole(none.mr, { contextInfo: { context: 'inspector', instanceId: 'ref-9', definitionId: 'def-1' } });
+  assert.ok(!renderedNone.block.textContent.includes('Diseño'), 'null projection renders no badge');
+});
+
+test('R3 restore: an override role with a design default offers Restaurar valor del diseño', () => {
+  const restoreCalls = [];
+  const fx = runModule({ depOverrides: {
+    getRoleBadge: (instanceId, role) => (instanceId === 'ref-9' && role === 'FRENTES'
+      ? { text: 'Personalizado', kind: 'override', designDefault: 'mat-2' }
+      : null),
+    onRestoreRole: (instanceId, role, designDefaultId) => {
+      restoreCalls.push({ instanceId, role, designDefaultId });
+    }
+  } });
+  fx.mr.setCatalog({ materials: MATERIALS, categories: [] });
+  const rendered = renderRole(fx.mr, { contextInfo: { context: 'inspector', instanceId: 'ref-9', definitionId: 'def-1' } });
+  const restore = rendered.block.children.find((child) => typeof child.textContent === 'string' && child.textContent.includes('Restaurar valor del diseño'));
+  assert.ok(restore, 'the restore affordance renders for an override role');
+  restore.click();
+  assert.deepStrictEqual(restoreCalls, [
+    { instanceId: 'ref-9', role: 'FRENTES', designDefaultId: 'mat-2' }
+  ], 'the restore action reports instance/role/design default');
+
+  // Owner check: the restore target is the CURRENT design default — when
+  // the default changed after the override was made, the button hands the
+  // NEW default to the authoritative resolve (lineage, not equality).
+  const changed = runModule({ depOverrides: {
+    getRoleBadge: () => ({ text: 'Personalizado', kind: 'override', designDefault: 'mat-moscato' }),
+    onRestoreRole: (instanceId, role, designDefaultId) => {
+      restoreCalls.push({ instanceId, role, designDefaultId, changedDefault: true });
+    }
+  } });
+  changed.mr.setCatalog({ materials: MATERIALS, categories: [] });
+  const renderedChanged = renderRole(changed.mr, { contextInfo: { context: 'inspector', instanceId: 'ref-9', definitionId: 'def-1' } });
+  const changedBtn = renderedChanged.block.children.find((child) => typeof child.textContent === 'string' && child.textContent.includes('Restaurar valor del diseño'));
+  assert.ok(changedBtn, 'restore renders for the changed-default case');
+  changedBtn.click();
+  const last = restoreCalls[restoreCalls.length - 1];
+  assert.strictEqual(last.designDefaultId, 'mat-moscato',
+    'the NEW design default (moscato) is materialized, never the old value');
+
+  // A design-backed role never offers restore.
+  const designBacked = runModule({ depOverrides: {
+    getRoleBadge: () => ({ text: 'Diseño', kind: 'design' }),
+    onRestoreRole: (instanceId, role, designDefaultId) => restoreCalls.push({ instanceId, role, designDefaultId })
+  } });
+  designBacked.mr.setCatalog({ materials: MATERIALS, categories: [] });
+  const renderedDesign = renderRole(designBacked.mr, { contextInfo: { context: 'inspector', instanceId: 'ref-9', definitionId: 'def-1' } });
+  assert.ok(!renderedDesign.block.textContent.includes('Restaurar valor del diseño'),
+    'design-backed roles offer no restore');
+});
+
+
+
 test('setProjectDefaultMaterial is the single write path for project defaults', () => {
   const { mr } = runModule();
   mr.setCatalog({ materials: MATERIALS, categories: [] });
@@ -605,5 +680,6 @@ test('inspector materials render through the materialRoles module', () => {
   assert.strictEqual(container.children[0].className, 'material-role-block', 'rendered by materialRoles.renderSelectors');
   assert.strictEqual(sandbox.__registry['inspector-materials-card'].style.display, 'block');
 });
+
 
 console.log(JSON.stringify({ success: true, testsPassed, module: 'granete-material-roles.js' }));

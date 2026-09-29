@@ -813,7 +813,8 @@ module Granete
         # replaced, only its definition's children are regenerated. Child
         # persistent_ids may change; Granete contract IDs are the durable link.
         def update_furniture(model, furniture, definition, raw_parameters = {}, resolved_layout: nil,
-                             material_choices: nil, transaction: true, relationships: nil)
+                             material_choices: nil, material_choice_modes: nil, transaction: true,
+                             relationships: nil)
           # Host-accurate native check: in SketchUp a Group ALSO responds to
           # #definition, so entity type — not duck typing — is the only safe
           # discriminator. Legacy Group representations fail closed: use the
@@ -851,6 +852,7 @@ module Granete
             MetadataWriter.write_furniture(
               @metadata_store, furniture, instance_id, definition, parameters,
               material_choices: merged_material_choices, existing_metadata: existing_meta,
+              material_choice_modes: material_choice_modes,
               relationships: relationships, authoring_dirty: true,
               placement_envelope: placement_envelope(resolved_layout)
             )
@@ -1074,9 +1076,9 @@ module Granete
         # the existing metadata carries; a Hash replaces it.
         # rubocop:disable-next Metrics/ParameterLists
         def write_furniture(store, furniture, instance_id, definition, parameters,
-                            material_choices: nil, existing_metadata: nil, migrated_from: nil,
-                            identity: nil, relationships: nil, authoring_dirty: false,
-                            placement_envelope: nil)
+                            material_choices: nil, material_choice_modes: nil, existing_metadata: nil,
+                            migrated_from: nil, identity: nil, relationships: nil,
+                            authoring_dirty: false, placement_envelope: nil)
           return unless store
 
           proj_ref = store.respond_to?(:project_ref) ? store.project_ref : 'project-sketchup-active'
@@ -1086,7 +1088,10 @@ module Granete
           apply_placement_envelope(metadata_payload, placement_envelope)
           metadata_payload['identity'] = furniture_identity(metadata_payload, instance_id, proj_ref,
                                                             rev_ref, identity: identity)
-          metadata_payload['intent'] = furniture_intent(metadata_payload, definition, parameters, material_choices)
+          metadata_payload['intent'] = furniture_intent(
+            metadata_payload, definition, parameters, material_choices,
+            material_choice_modes: material_choice_modes
+          )
           if authoring_dirty
             metadata_payload['authoringDirty'] = true
           else
@@ -1170,7 +1175,7 @@ module Granete
           end
         end
 
-        def furniture_intent(payload, definition, parameters, material_choices)
+        def furniture_intent(payload, definition, parameters, material_choices, material_choice_modes: nil)
           intent = payload['intent'].is_a?(Hash) ? payload['intent'] : {}
           intent['semanticRole'] ||= 'furniture-instance'
           intent['furnitureDefinitionId'] = definition['furniture_definition_id']
@@ -1183,6 +1188,12 @@ module Granete
           # means no statement: the key is omitted and the server value
           # survives.
           intent['materialChoices'] = material_choices if material_choices.is_a?(Hash)
+          # #784 R3: explicit lineage markers ride the intent (a role
+          # restore carries design). The working-copy merger turns them
+          # into the full-parity statement the backend requires.
+          if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
+            intent['materialChoiceModes'] = material_choice_modes
+          end
           intent
         end
       end

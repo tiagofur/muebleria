@@ -105,6 +105,7 @@ module Granete
         host/placement_environment
         ui/bridges/placement_preview_bridge
         ui/bridges/design_inspector_bridge
+        ui/bridges/design_inheritance_bridge
         ui/bridges/design_workflow_bridge
         ui/bridges/project_furniture_bridge
         ui/bridges/host_mutation_bridge

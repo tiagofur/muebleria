@@ -64,6 +64,10 @@
     // bridge remains the authority that refuses a stale token).
     draftBase: null,
     draftStale: false,
+    // #784 R3: the server-side per-item inheritance projection
+    // {furnitureInstanceId: {role: {mode, applied, designDefault, needsRollout}}}
+    // — the ONLY badge authority. Never derived client-side.
+    inheritance: {},
     // #784 R2 final review: one user Apply = exactly one apply request.
     // True from applyDraft() until its correlated answer (or the no-bridge
     // fallback) lands; a binding switch invalidates the in-flight request.
@@ -137,6 +141,19 @@
       window.sketchup.get_design_defaults(JSON.stringify(payload));
     } else {
       state.status = "error";
+    }
+  }
+
+  // #784 R3: correlated read of the inheritance projection. A fresh read
+  // burns a new requestId so any stale answer of a previous generation is
+  // discarded by the correlation guard in onDesignInheritance.
+  function requestInheritance(fresh) {
+    requireDeps();
+    if (!state.connected || !state.designId) return;
+    if (fresh) state.requestId += 1;
+    var inheritancePayload = { requestId: state.requestId, designId: state.designId };
+    if (window.sketchup && typeof window.sketchup.get_design_inheritance === "function") {
+      window.sketchup.get_design_inheritance(JSON.stringify(inheritancePayload));
     }
   }
 
@@ -389,6 +406,7 @@
         state.draftBase = null;
         state.draftStale = false;
         state.conflict = null;
+        state.inheritance = {};
         // The authority is gone: every in-flight request is dead.
         invalidateBindingRequests();
       } else {
@@ -404,6 +422,7 @@
           state.draftBase = null;
           state.draftStale = false;
           state.conflict = null;
+          state.inheritance = {};
           // A design switch kills every in-flight request of the old one.
           invalidateBindingRequests();
         }
@@ -458,6 +477,7 @@
         state.workingVersion = payload.workingVersion || null;
         state.status = "ready";
         state.conflict = null;
+        requestInheritance();
         render();
       } else if (payload.status === "error") {
         state.status = "error";
@@ -502,6 +522,7 @@
         state.draftBase = null;
         state.draftStale = false;
         state.conflict = null;
+        requestInheritance();
         render();
       } else if (payload.status === "conflict" || payload.status === "error") {
         state.conflict = payload.reason || "No se pudo aplicar el cambio.";
@@ -522,6 +543,51 @@
         hide();
         if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
       }
+    },
+
+    // #784 R3 final review: public refresh — called after a successful
+    // furniture mutation so the badge returns to the authoritative server
+    // projection (mode=design after a restore) instead of any local
+    // inference. Reads only: it never mutates anything itself.
+    refreshInheritance: function () {
+      if (!state.connected || !state.designId) return;
+      requestInheritance(true);
+    },
+
+    // #784 R3: the projection answer. Correlated; only the current design.
+    onDesignInheritance: function (payload) {
+      if (!payload || payload.requestId !== state.requestId) return;
+      if (payload.status !== "ready" || !state.connected || payload.designId !== state.designId) return;
+      var map = {};
+      (payload.items || []).forEach(function (item) {
+        var roles = {};
+        (item.roles || []).forEach(function (entry) {
+          roles[entry.role] = {
+            mode: entry.mode,
+            applied: entry.appliedMaterialId,
+            designDefault: entry.designDefaultMaterialId || null,
+            needsRollout: entry.needsRollout === true
+          };
+        });
+        map[item.furnitureInstanceId] = roles;
+      });
+      state.inheritance = map;
+      if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
+    },
+
+    // #784 R3: the ONLY badge authority accessor. Returns null when there
+    // is no server projection for the item/role — never a guess.
+    getRoleBadge: function (furnitureInstanceId, role) {
+      var roles = state.inheritance[furnitureInstanceId];
+      var entry = roles && roles[role];
+      if (!entry) return null;
+      if (entry.mode === "design") {
+        return entry.needsRollout
+          ? { text: "Diseño · pendiente de aplicar", kind: "pending" }
+          : { text: "Diseño", kind: "design" };
+      }
+      return { text: "Personalizado", kind: "override",
+               designDefault: entry.designDefault || null };
     },
 
     hide: hide,
