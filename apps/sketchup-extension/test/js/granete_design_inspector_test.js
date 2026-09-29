@@ -856,6 +856,27 @@ function run() {
     assert.strictEqual(mod.getRoleBadge('fi-1', 'INTERIOR'), null, 'unbound clears the projection');
   });
 
+  test('R4: a definition-backed role (curated fallback) badges as Definición, never Personalizado', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    const request = ctx.sketchupCalls.filter((c) => c[0] === 'get_design_defaults')[0][1];
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [{
+        furnitureInstanceId: 'fi-1',
+        roles: [
+          { role: 'FRENTES', mode: 'definition', appliedMaterialId: 'mat-oak', needsRollout: false }
+        ]
+      }]
+    });
+    const badge = mod.getRoleBadge('fi-1', 'FRENTES');
+    assert.strictEqual(badge.text, 'Definición');
+    assert.strictEqual(badge.kind, 'definition');
+    assert.strictEqual(badge.designDefault, undefined, 'definition fallback offers no restore target');
+  });
+
   test('R3: the furniture inspector renders the badge and the restore action', () => {
     const ctx = createSandbox();
     ctx.picker = null;
@@ -903,6 +924,27 @@ function run() {
     const last = ctx.sketchupCalls[ctx.sketchupCalls.length - 1];
     assert.strictEqual(last[0], 'get_design_defaults', 'retry only reads');
     assert.ok(ctx.body().textContent.includes('Cargando'), 'retry returns to loading');
+  });
+
+  // #784 R4: getDesignDefaults accessor
+  test('R4: getDesignDefaults returns an isolated copy of active design authoring defaults', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    assert.strictEqual(JSON.stringify(mod.getDesignDefaults()), '{}');
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white', FRENTES: 'mat-oak' } },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    const defaults = mod.getDesignDefaults();
+    assert.strictEqual(defaults.INTERIOR, 'mat-white');
+    assert.strictEqual(defaults.FRENTES, 'mat-oak');
+    defaults.INTERIOR = 'tampered';
+    assert.strictEqual(mod.getDesignDefaults().INTERIOR, 'mat-white', 'mutating the returned copy must not corrupt state');
   });
 }
 

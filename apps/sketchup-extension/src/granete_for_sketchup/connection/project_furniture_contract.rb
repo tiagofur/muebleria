@@ -33,6 +33,10 @@ module Granete
           InheritanceItem = Struct.new(:furniture_instance_id, :inheritance, keyword_init: true)
           DesignInheritance = Struct.new(:design_id, :project_id, :items, keyword_init: true)
 
+          # #784 R4: server-resolved definition-aware effective materials and modes
+          EffectiveMaterials = Struct.new(:furniture_definition_id, :material_choices, :material_choice_modes,
+                                          keyword_init: true)
+
           # Canonical wire shape of one working item (generated contract):
           # string keys, absent-when-null optional fields.
           class WorkingItem
@@ -131,6 +135,9 @@ module Granete
           # Working-copy (GET/PUT) parsing: same fail-closed rules, split
           # from the instance parser so each contract stays focused.
           module WorkingCopyContract
+            # #784 canonical lineage modes (server contract): design lineage,
+            # explicit furniture exception, curated definition fallback.
+            MODES = %w[design override definition].freeze
             def self.parse_working_copy!(body)
               raise ContractError, 'el working copy debe ser un objeto' unless body.is_a?(Hash)
               unless ProjectFurniture.uuid?(body['design_id']) && ProjectFurniture.uuid?(body['project_id'])
@@ -225,7 +232,7 @@ module Granete
             def self.parse_modes!(raw)
               return nil if raw.nil?
               raise Contract::ContractError, 'material_choice_modes inválidos' unless raw.is_a?(Hash)
-              unless raw.values.all? { |m| %w[design override].include?(m) }
+              unless raw.values.all? { |m| MODES.include?(m) }
                 raise Contract::ContractError,
                       "material_choice_modes con modos desconocidos: #{raw.values.inspect}"
               end
@@ -260,7 +267,7 @@ module Granete
         # badges from. Fail-closed: known shapes only, mode enum enforced,
         # role keys non-empty.
         module DesignInheritanceContract
-          MODES = %w[design override].freeze
+          MODES = Contract::WorkingCopyContract::MODES
 
           def self.parse!(body)
             raise Contract::ContractError, 'la proyección de herencia debe ser un objeto' unless body.is_a?(Hash)
@@ -321,6 +328,72 @@ module Granete
               design_default_material_id: default_id,
               needs_rollout: entry['needs_rollout'] == true
             )
+          end
+        end
+
+        # #784 R4: Fail-closed parser for POST /api/designs/:design_id/effective-materials
+        # response (definition-aware composition of materials & lineage modes).
+        module EffectiveMaterialsContract
+          MODES = Contract::WorkingCopyContract::MODES
+
+          def self.parse!(body)
+            unless body.is_a?(Hash)
+              raise Contract::ContractError, 'la respuesta de materiales efectivos debe ser un objeto'
+            end
+
+            def_id = body['furnitureDefinitionId'] || body['furniture_definition_id']
+            if !def_id.is_a?(String) || def_id.strip.empty?
+              raise Contract::ContractError, 'furniture_definition_id inválido en materiales efectivos'
+            end
+
+            choices, modes = parse_choices_and_modes!(body)
+
+            Contract::EffectiveMaterials.new(
+              furniture_definition_id: def_id,
+              material_choices: choices,
+              material_choice_modes: modes
+            )
+          end
+
+          def self.parse_choices_and_modes!(body)
+            choices = body['materialChoices'] || body['material_choices']
+            unless choices.is_a?(Hash)
+              raise Contract::ContractError, 'materialChoices inválidos en materiales efectivos'
+            end
+
+            modes = body['materialChoiceModes'] || body['material_choice_modes']
+            unless modes.is_a?(Hash)
+              raise Contract::ContractError, 'materialChoiceModes inválidos en materiales efectivos'
+            end
+
+            validate_parity!(choices, modes)
+            validate_choices!(choices)
+            validate_modes!(modes)
+            [choices, modes]
+          end
+
+          def self.validate_parity!(choices, modes)
+            return if (choices.keys - modes.keys).empty? && (modes.keys - choices.keys).empty?
+
+            raise Contract::ContractError, 'paridad incompleta entre materialChoices y materialChoiceModes'
+          end
+
+          def self.validate_choices!(choices)
+            choices.each do |role, mat_id|
+              raise Contract::ContractError, 'rol vacío en materialChoices' if !role.is_a?(String) || role.strip.empty?
+              if !mat_id.is_a?(String) || mat_id.strip.empty?
+                raise Contract::ContractError,
+                      "material_id inválido para rol #{role}"
+              end
+            end
+          end
+
+          def self.validate_modes!(modes)
+            modes.each do |role, mode|
+              unless MODES.include?(mode)
+                raise Contract::ContractError, "modo desconocido #{mode.inspect} para rol #{role}"
+              end
+            end
           end
         end
 
@@ -416,7 +489,7 @@ module Granete
             modes = {}
             choices.each_key do |role|
               mode = declared[role]
-              modes[role] = %w[design override].include?(mode) ? mode : 'override'
+              modes[role] = Contract::WorkingCopyContract::MODES.include?(mode) ? mode : 'override'
             end
             modes
           end

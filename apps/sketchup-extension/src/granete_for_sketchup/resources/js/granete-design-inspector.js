@@ -586,8 +586,23 @@
           ? { text: "Diseño · pendiente de aplicar", kind: "pending" }
           : { text: "Diseño", kind: "design" };
       }
+      if (entry.mode === "definition") {
+        return { text: "Definición", kind: "definition" };
+      }
       return { text: "Personalizado", kind: "override",
                designDefault: entry.designDefault || null };
+    },
+
+    // #784 R4: returns a copy of current design-scoped authoring defaults
+    getDesignDefaults: function () {
+      if (!state.connected || !state.designId) return {};
+      var out = {};
+      for (var k in state.defaults) {
+        if (Object.prototype.hasOwnProperty.call(state.defaults, k)) {
+          out[k] = state.defaults[k];
+        }
+      }
+      return out;
     },
 
     hide: hide,

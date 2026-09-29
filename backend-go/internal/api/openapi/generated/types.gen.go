@@ -1192,8 +1192,9 @@ type DesignWorkingCopyItem struct {
 type DesignMaterialChoiceMode string
 
 const (
-	DesignMaterialChoiceModeDesign   DesignMaterialChoiceMode = "design"
-	DesignMaterialChoiceModeOverride DesignMaterialChoiceMode = "override"
+	DesignMaterialChoiceModeDesign     DesignMaterialChoiceMode = "design"
+	DesignMaterialChoiceModeOverride   DesignMaterialChoiceMode = "override"
+	DesignMaterialChoiceModeDefinition DesignMaterialChoiceMode = "definition"
 )
 
 type DesignAuthoringDefaults struct {
@@ -1255,12 +1256,13 @@ type MaterialRoleInheritance struct {
 }
 
 type DesignRoleInheritanceCount struct {
-	Role          string `json:"role"`
-	Items         int64  `json:"items"`
-	DesignBacked  int64  `json:"design_backed"`
-	NeedsRollout  int64  `json:"needs_rollout"`
-	DesignCurrent int64  `json:"design_current"`
-	Overridden    int64  `json:"overridden"`
+	Role             string `json:"role"`
+	Items            int64  `json:"items"`
+	DesignBacked     int64  `json:"design_backed"`
+	DefinitionBacked int64  `json:"definition_backed"`
+	NeedsRollout     int64  `json:"needs_rollout"`
+	DesignCurrent    int64  `json:"design_current"`
+	Overridden       int64  `json:"overridden"`
 }
 
 type DesignWorkingItemMaterialProvenance struct {
@@ -1287,6 +1289,17 @@ type DesignWorkingMaterialsReconciliation struct {
 	FilledChoices        map[string]string `json:"filled_choices"`
 	PreservedChoices     map[string]string `json:"preserved_choices"`
 	WorkingCopyUpdatedAt string            `json:"working_copy_updated_at"`
+}
+
+type ComposeDesignEffectiveMaterialsRequest struct {
+	FurnitureDefinitionId string            `json:"furnitureDefinitionId"`
+	MaterialChoices       map[string]string `json:"materialChoices,omitempty"`
+}
+
+type DesignEffectiveMaterials struct {
+	FurnitureDefinitionId string                              `json:"furnitureDefinitionId"`
+	MaterialChoices       map[string]string                   `json:"materialChoices"`
+	MaterialChoiceModes   map[string]DesignMaterialChoiceMode `json:"materialChoiceModes"`
 }
 
 type PublishDesignRevisionRequest struct {

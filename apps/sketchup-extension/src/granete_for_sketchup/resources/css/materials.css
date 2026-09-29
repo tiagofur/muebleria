@@ -24,6 +24,37 @@
         color: var(--text-secondary);
       }
 
+      /* #784 inheritance lineage badges (Diseño / Definición /
+         Personalizado / pendiente de aplicar). Kind colors follow the same
+         semantic tokens as the status badges in base.css. */
+      .material-role-badge {
+        font-size: var(--text-xs);
+        font-weight: var(--weight-semibold);
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        white-space: nowrap;
+      }
+
+      .material-role-badge--design {
+        background: var(--success-50);
+        color: var(--success-600);
+      }
+
+      .material-role-badge--definition {
+        background: var(--neutral-50);
+        color: var(--neutral-700);
+      }
+
+      .material-role-badge--override {
+        background: var(--warning-50);
+        color: var(--warning-700);
+      }
+
+      .material-role-badge--pending {
+        background: var(--warning-50);
+        color: var(--warning-700);
+      }
+
       .material-selected-preview {
         display: flex;
         align-items: center;

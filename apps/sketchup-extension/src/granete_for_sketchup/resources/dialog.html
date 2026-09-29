@@ -1676,6 +1676,7 @@
           // authoritative resolve path. material-roles never derives
           // inheritance itself.
           getRoleBadge: window.GraneteUI.designInspector.getRoleBadge,
+          getDesignDefaults: window.GraneteUI.designInspector.getDesignDefaults,
           onRestoreRole: function (instanceId, role, designDefaultId) {
             window.GraneteUI.inspector.applyRoleRestore(instanceId, role, designDefaultId);
           }
@@ -1735,6 +1736,9 @@
           parameterIssueMessage: window.GraneteUI.paramForm.parameterIssueMessage,
           isModelConnected: window.GraneteUI.modelBinding.isConnected,
           setProjectDefaultMaterial: window.GraneteUI.materialRoles.setProjectDefaultMaterial,
+          refreshDesignInheritance: function () {
+            window.GraneteUI.designInspector.refreshInheritance();
+          },
           switchTab: switchTab,
           requestProjectFurniture: window.GraneteUI.projectFurniture.requestProjectFurniture,
           pfPlaceFailureMessage: window.GraneteUI.projectFurniture.pfPlaceFailureMessage
