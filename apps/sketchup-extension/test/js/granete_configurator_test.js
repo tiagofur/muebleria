@@ -730,6 +730,49 @@ test('applyMaterialChoice updates the snapshot through the injected renderer', (
     'project scope keeps the session-scope copy');
 });
 
+test('#784 R4: insert click in connected mode sends payload.materialOverrides containing only customized roles', () => {
+  const sandbox = runModule();
+  const configurator = sandbox.window.GraneteUI.configurator;
+  sandbox.__state.connected = true;
+  configurator.open(definition());
+
+  // 1. Untouched finishes: materialOverrides is empty
+  el(sandbox, 'btn-insert').click();
+  assert.strictEqual(sandbox.__calls.bridge.length, 1);
+  const call1 = sandbox.__calls.bridge[0];
+  assert.strictEqual(call1.fn, 'begin_catalog_placement_preview');
+  assert.deepStrictEqual(call1.payload.materialOverrides, {}, 'untouched roles produce empty materialOverrides');
+  assert.deepStrictEqual(call1.payload.materialChoices, { INTERIOR: 'mat-a', FRENTES: 'mat-b' });
+
+  // 2. Customizing one role: only that role appears in materialOverrides
+  configurator.rearmInsertButton();
+  configurator.applyMaterialChoice('FRENTES', 'mat-custom', false);
+  el(sandbox, 'btn-insert').click();
+  assert.strictEqual(sandbox.__calls.bridge.length, 2);
+  const call2 = sandbox.__calls.bridge[1];
+  assert.deepStrictEqual(call2.payload.materialOverrides, { FRENTES: 'mat-custom' },
+    'customized role is the ONLY key in materialOverrides');
+  assert.strictEqual(call2.payload.materialChoices.FRENTES, 'mat-custom');
+  assert.strictEqual(call2.payload.materialChoices.INTERIOR, 'mat-a');
+});
+
+test('#784 R4: onCreateProjectFurnitureResult calls deps.refreshDesignInheritance when placement succeeds', () => {
+  let refreshed = 0;
+  const sandbox = runModule({
+    refreshDesignInheritance: () => { refreshed += 1; }
+  });
+  const configurator = sandbox.window.GraneteUI.configurator;
+  configurator.open(definition());
+
+  // Successful placement triggers refreshDesignInheritance
+  configurator.onCreateProjectFurnitureResult({ ok: true, name: 'Mueble X' });
+  assert.strictEqual(refreshed, 1, 'successful placement refreshed design inheritance');
+
+  // Failed placement does NOT trigger refreshDesignInheritance
+  configurator.onCreateProjectFurnitureResult({ ok: false, reason: 'failed' });
+  assert.strictEqual(refreshed, 1, 'failed placement does not refresh design inheritance');
+});
+
 test('structural: the module owns no material catalog or project furniture state', () => {
   ['var catalogMaterials', 'var catalogMaterialCategories', 'var catalogHardware',
     'var projectDefaultMaterials', 'var modelBindingState', 'pfPlacing',

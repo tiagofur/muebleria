@@ -56,6 +56,7 @@
   var activeLibDef = null;
   var libParams = {};
   var libMaterialChoices = {};
+  var libUserCustomizedRoles = {};
   var catalogPresets = [];
   var catalogCreateIntentKey = null;
   // #469 repeat placement: the last catalog intent (definition +
@@ -130,10 +131,12 @@
 
     libParams = deps.getDefaultParams(def);
     libMaterialChoices = deps.defaultMaterialChoices(def);
+    libUserCustomizedRoles = {};
 
     bindLibraryParamForm();
     deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
       libMaterialChoices[role] = id;
+      libUserCustomizedRoles[role] = true;
       clearCatalogIntentKey();
       if (scope === "project" || scope === "project_default") {
         deps.setProjectDefaultMaterial(role, id);
@@ -345,6 +348,9 @@
     updateLibraryInsertButton();
     if (result.ok) {
       clearCatalogIntentKey();
+      if (typeof deps.refreshDesignInheritance === "function") {
+        deps.refreshDesignInheritance();
+      }
       if (result.code === "pending_position") {
         deps.showToast("info", "✓ Mueble agregado al proyecto: ubicalo con la herramienta Mover y confirmá su posición final en la pestaña Proyecto.");
       } else if (beginRepeatCatalogPreview()) {
@@ -377,6 +383,8 @@
   function applyMaterialChoice(role, materialId, isProjectScope) {
     if (!libMaterialChoices) libMaterialChoices = {};
     libMaterialChoices[role] = materialId;
+    if (!libUserCustomizedRoles) libUserCustomizedRoles = {};
+    libUserCustomizedRoles[role] = true;
 
     deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, activeLibDef, libMaterialChoices, function (r, id, s) {
       libMaterialChoices[r] = id;
@@ -410,6 +418,16 @@
       parameters: libParams,
       materialChoices: libMaterialChoices
     };
+
+    if (isConnected) {
+      var overrides = {};
+      for (var r in libUserCustomizedRoles) {
+        if (libUserCustomizedRoles[r] && libMaterialChoices[r]) {
+          overrides[r] = libMaterialChoices[r];
+        }
+      }
+      payload.materialOverrides = overrides;
+    }
 
     if (window.sketchup && window.sketchup.begin_catalog_placement_preview) {
       // #469: the SAME shared preview tool as the Project panel for

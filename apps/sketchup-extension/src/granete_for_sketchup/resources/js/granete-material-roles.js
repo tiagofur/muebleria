@@ -96,10 +96,13 @@
 
   function defaultMaterialChoices(def) {
     var choices = {};
+    var designDefaults = typeof deps.getDesignDefaults === "function" ? (deps.getDesignDefaults() || {}) : {};
     (def && def.materialRoles ? def.materialRoles : []).forEach(function (r) {
       var ids = optionMaterialIds(r);
       if (ids.length > 0) {
-        if (projectDefaultMaterials[r.role] && ids.indexOf(projectDefaultMaterials[r.role]) !== -1) {
+        if (designDefaults[r.role] && ids.indexOf(designDefaults[r.role]) !== -1) {
+          choices[r.role] = designDefaults[r.role];
+        } else if (projectDefaultMaterials[r.role] && ids.indexOf(projectDefaultMaterials[r.role]) !== -1) {
           choices[r.role] = projectDefaultMaterials[r.role];
         } else {
           choices[r.role] = ids[0];
@@ -197,12 +200,20 @@
       title.textContent = r.label || r.role;
       header.appendChild(title);
 
-      // #784 R3: the inheritance badge comes EXCLUSIVELY from the injected
+      // #784 R3/R4: the inheritance badge comes EXCLUSIVELY from the injected
       // server projection accessor (design-inspector module) — never from
-      // comparing values. Only in the Inspector context (an item exists).
+      // comparing values in the inspector. In the configurator context (no instance),
+      // indicates if role inherits active design default or is customized.
       var badge = null;
       if (ctx.instanceId && typeof deps.getRoleBadge === "function") {
         badge = deps.getRoleBadge(ctx.instanceId, r.role);
+      } else if (!ctx.instanceId && typeof deps.getDesignDefaults === "function") {
+        var dDefaults = deps.getDesignDefaults() || {};
+        if (dDefaults[r.role]) {
+          badge = choices[r.role] === dDefaults[r.role]
+            ? { text: "Diseño", kind: "design" }
+            : { text: "Personalizado", kind: "override" };
+        }
       }
       if (badge) {
         var badgeSpan = document.createElement("span");

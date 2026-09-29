@@ -118,6 +118,17 @@ module Granete
             DesignInheritanceContract.parse!(body)
           end
 
+          # #784 R4: resolves definition-aware effective materials and inheritance modes
+          # against the Design's authoring defaults.
+          def get_effective_materials(design_id, definition_id, material_choices: {})
+            payload = {
+              'furnitureDefinitionId' => definition_id,
+              'materialChoices' => material_choices || {}
+            }
+            body = request(:post, "/designs/#{design_id}/effective-materials", payload)
+            EffectiveMaterialsContract.parse!(body)
+          end
+
           def get_working_copy(design_id)
             body = request(:get, "/designs/#{design_id}/working-copy")
             Contract::WorkingCopyContract.parse_working_copy!(body)
@@ -365,13 +376,18 @@ module Granete
             @intents = {}
           end
 
-          def store(instance_id, parameters:, material_choices:)
+          def store(instance_id, parameters:, material_choices:, material_choice_modes: nil)
             return unless instance_id
 
-            @intents[instance_id.to_s] = {
+            entry = {
               'parameters' => parameters || {},
               'material_choices' => material_choices || {}
             }
+            if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
+              entry['material_choice_modes'] = material_choice_modes
+              entry['materialChoiceModes'] = material_choice_modes
+            end
+            @intents[instance_id.to_s] = entry
           end
 
           def fetch(instance_id)
@@ -543,21 +559,34 @@ module Granete
           # the insertion lands at the user's final position with no Move
           # handoff. Browsing/previewing the catalog never allocates identity.
           def create_and_place(definition_id:, parameters: {}, material_choices: {}, idempotency_key: nil,
-                               transformation: nil, expected_layout_signature: nil)
+                               transformation: nil, expected_layout_signature: nil,
+                               material_choice_modes: nil, material_overrides: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
             context = placement_context(model)
             return context unless context['ok']
 
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
+            effective_choices = material_choices
+            effective_modes = material_choice_modes
+
+            if context['binding'] && effective_modes.nil?
+              overrides = material_overrides.nil? ? material_choices : material_overrides
+              effective = @service.get_effective_materials(context['binding'].design_id, definition_id,
+                                                           material_choices: overrides)
+              effective_choices = effective.material_choices
+              effective_modes = effective.material_choice_modes
+            end
+
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective_choices)
             return prep unless prep['ok']
 
             signature_mismatch = composition_mismatch(expected_layout_signature, prep['layout'])
             return signature_mismatch if signature_mismatch
 
             execute_created_placement(model, context['binding'], prep, idempotency_key,
-                                      material_choices, transformation: transformation)
+                                      effective_choices, material_choice_modes: effective_modes,
+                                      transformation: transformation)
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -574,19 +603,27 @@ module Granete
           # any backend identity (no POST /furniture-instances) — the
           # FurnitureInstance is created canonically (#390) only inside the
           # commit gesture.
-          def prepare_catalog_preview(definition_id:, parameters: {}, material_choices: {})
+          def prepare_catalog_preview(definition_id:, parameters: {}, material_choices: {}, material_overrides: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
             context = placement_context(model)
             return context unless context['ok']
 
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
+            effective_choices = material_choices
+            if context['binding']
+              overrides = material_overrides.nil? ? material_choices : material_overrides
+              effective = @service.get_effective_materials(context['binding'].design_id, definition_id,
+                                                           material_choices: overrides)
+              effective_choices = effective.material_choices
+            end
+
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective_choices)
             return prep unless prep['ok']
 
             { 'ok' => true, 'code' => 'preview_ready',
               'definition' => prep['definition'], 'parameters' => prep['params'],
-              'material_choices' => material_choices, 'layout' => prep['layout'],
+              'material_choices' => effective_choices, 'layout' => prep['layout'],
               'layout_signature' => PlacementGuards.layout_signature(prep['layout']) }
           rescue Service::Error => e
             failure(:service_error, e.message)
@@ -675,20 +712,22 @@ module Granete
           private
 
           def execute_created_placement(model, binding, prep, idempotency_key, material_choices,
-                                        transformation: nil)
+                                        material_choice_modes: nil, transformation: nil)
             key = PlacementCreation.fallback_idempotency_key(idempotency_key)
             created = @service.create_furniture_instance(
               binding.project_id,
               definition_id: prep['definition']['furniture_definition_id'],
               idempotency_key: key
             )
-            @intent_store.store(created.id, parameters: prep['params'], material_choices: material_choices)
+            @intent_store.store(created.id, parameters: prep['params'], material_choices: material_choices,
+                                            material_choice_modes: material_choice_modes)
 
             located = locate_unit(model, created.id)
             return { 'ok' => true, 'code' => 'pending_position', 'instanceId' => created.id } if located['entity']
 
             inserted = insert_physical_unit(model, binding, created, prep['definition'],
                                             prep['params'], material_choices, prep['layout'],
+                                            material_choice_modes: material_choice_modes,
                                             transformation: transformation,
                                             prepare: transformation.nil?)
             unless inserted['ok']
@@ -763,10 +802,12 @@ module Granete
           end
 
           def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout,
+                                   material_choice_modes: nil,
                                    transformation: nil, prepare: true, preserve_parameters: false)
             result = @furniture_builder_factory.call(model).place_existing_furniture(
               model, furniture_instance_id: instance.id, definition: definition,
                      parameters: parameters, resolved_layout: layout, material_choices: choices,
+                     material_choice_modes: material_choice_modes,
                      project_id: binding.project_id, design_id: binding.design_id,
                      transformation: transformation, prepare: prepare,
                      preserve_parameters: preserve_parameters

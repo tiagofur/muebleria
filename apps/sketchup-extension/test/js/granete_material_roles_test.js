@@ -525,7 +525,52 @@ test('R3 restore: an override role with a design default offers Restaurar valor 
     'design-backed roles offer no restore');
 });
 
+test('#784 R4: defaultMaterialChoices seeds from deps.getDesignDefaults when available', () => {
+  const { mr } = runModule({ depOverrides: {
+    getDesignDefaults: () => ({ FRENTES: 'mat-2', BODY: 'non-existent-mat' })
+  } });
+  mr.setCatalog({ materials: MATERIALS, categories: [] });
+  const def = {
+    materialRoles: [
+      { role: 'FRENTES', label: 'Frentes', optionIds: ['mat-1', 'mat-2', 'mat-3'] },
+      { role: 'BODY', label: 'Cuerpo', optionIds: ['mat-1', 'mat-2'] }
+    ]
+  };
+  const choices = plain(mr.defaultMaterialChoices(def));
+  assert.strictEqual(choices.FRENTES, 'mat-2', 'role with valid design default picks design default');
+  assert.strictEqual(choices.BODY, 'mat-1', 'role with invalid design default falls back to first option');
+});
 
+test('#784 R4: renderMaterialSelectors in configurator context shows Diseño or Personalizado badge based on design default', () => {
+  const { mr } = runModule({ depOverrides: {
+    getDesignDefaults: () => ({ FRENTES: 'mat-2' })
+  } });
+  mr.setCatalog({ materials: MATERIALS, categories: [] });
+
+  // 1. Inheriting choice (mat-2 matches design default)
+  const renderedDesign = renderRole(mr, { choices: { FRENTES: 'mat-2' } });
+  const headerDesign = renderedDesign.block.children[0];
+  const badgeDesign = headerDesign.children[1];
+  assert.ok(badgeDesign, 'badge exists in header');
+  assert.strictEqual(badgeDesign.textContent, 'Diseño');
+  assert.ok(badgeDesign.className.includes('material-role-badge--design'));
+
+  // 2. Customized override choice (mat-1 does not match design default)
+  const renderedOverride = renderRole(mr, { choices: { FRENTES: 'mat-1' } });
+  const headerOverride = renderedOverride.block.children[0];
+  const badgeOverride = headerOverride.children[1];
+  assert.ok(badgeOverride, 'badge exists in header');
+  assert.strictEqual(badgeOverride.textContent, 'Personalizado');
+  assert.ok(badgeOverride.className.includes('material-role-badge--override'));
+
+  // 3. Role without design default has no badge
+  const renderedNoDef = renderRole(mr, {
+    defExtra: { materialRoles: [{ role: 'BODY', label: 'Cuerpo', optionIds: ['mat-1'] }] },
+    choices: { BODY: 'mat-1' }
+  });
+  const headerNoDef = renderedNoDef.block.children[0];
+  assert.strictEqual(headerNoDef.children.length, 1, 'only title in header when no design default');
+});
 
 test('setProjectDefaultMaterial is the single write path for project defaults', () => {
   const { mr } = runModule();

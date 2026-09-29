@@ -904,6 +904,27 @@ function run() {
     assert.strictEqual(last[0], 'get_design_defaults', 'retry only reads');
     assert.ok(ctx.body().textContent.includes('Cargando'), 'retry returns to loading');
   });
+
+  // #784 R4: getDesignDefaults accessor
+  test('R4: getDesignDefaults returns an isolated copy of active design authoring defaults', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    assert.strictEqual(JSON.stringify(mod.getDesignDefaults()), '{}');
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white', FRENTES: 'mat-oak' } },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    const defaults = mod.getDesignDefaults();
+    assert.strictEqual(defaults.INTERIOR, 'mat-white');
+    assert.strictEqual(defaults.FRENTES, 'mat-oak');
+    defaults.INTERIOR = 'tampered';
+    assert.strictEqual(mod.getDesignDefaults().INTERIOR, 'mat-white', 'mutating the returned copy must not corrupt state');
+  });
 }
 
 let failed = 0;

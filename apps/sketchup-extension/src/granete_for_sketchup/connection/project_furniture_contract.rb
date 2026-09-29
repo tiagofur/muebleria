@@ -33,6 +33,10 @@ module Granete
           InheritanceItem = Struct.new(:furniture_instance_id, :inheritance, keyword_init: true)
           DesignInheritance = Struct.new(:design_id, :project_id, :items, keyword_init: true)
 
+          # #784 R4: server-resolved definition-aware effective materials and modes
+          EffectiveMaterials = Struct.new(:furniture_definition_id, :material_choices, :material_choice_modes,
+                                          keyword_init: true)
+
           # Canonical wire shape of one working item (generated contract):
           # string keys, absent-when-null optional fields.
           class WorkingItem
@@ -324,6 +328,50 @@ module Granete
           end
         end
 
+        # #784 R4: Fail-closed parser for POST /api/designs/:design_id/effective-materials
+        # response (definition-aware composition of materials & lineage modes).
+        module EffectiveMaterialsContract
+          MODES = %w[design override].freeze
+
+          def self.parse!(body)
+            raise Contract::ContractError, 'la respuesta de materiales efectivos debe ser un objeto' unless body.is_a?(Hash)
+
+            def_id = body['furnitureDefinitionId'] || body['furniture_definition_id']
+            unless def_id.is_a?(String) && !def_id.strip.empty?
+              raise Contract::ContractError, 'furniture_definition_id inválido en materiales efectivos'
+            end
+
+            choices = body['materialChoices'] || body['material_choices']
+            raise Contract::ContractError, 'materialChoices inválidos en materiales efectivos' unless choices.is_a?(Hash)
+
+            modes = body['materialChoiceModes'] || body['material_choice_modes']
+            raise Contract::ContractError, 'materialChoiceModes inválidos en materiales efectivos' unless modes.is_a?(Hash)
+
+            unless (choices.keys - modes.keys).empty? && (modes.keys - choices.keys).empty?
+              raise Contract::ContractError, 'paridad incompleta entre materialChoices y materialChoiceModes'
+            end
+
+            choices.each do |role, mat_id|
+              raise Contract::ContractError, 'rol vacío en materialChoices' unless role.is_a?(String) && !role.strip.empty?
+              unless mat_id.is_a?(String) && !mat_id.strip.empty?
+                raise Contract::ContractError, "material_id inválido para rol #{role}"
+              end
+            end
+
+            modes.each do |role, mode|
+              unless MODES.include?(mode)
+                raise Contract::ContractError, "modo desconocido #{mode.inspect} para rol #{role}"
+              end
+            end
+
+            Contract::EffectiveMaterials.new(
+              furniture_definition_id: def_id,
+              material_choices: choices,
+              material_choice_modes: modes
+            )
+          end
+        end
+
         # Merge rule (#389 §14 + review fix, extended by #810): the PUT
         # carries the COMPLETE desired state. An EXISTING working item keeps
         # every authoritative authoring field (definition, version,
@@ -410,7 +458,13 @@ module Granete
           # declared roles carry their mode, the rest are explicit overrides
           # — a new item never inherits by equality.
           def build_material_choice_modes(choices, intent)
-            declared = intent['materialChoiceModes'].is_a?(Hash) ? intent['materialChoiceModes'] : {}
+            declared = if intent['materialChoiceModes'].is_a?(Hash)
+                         intent['materialChoiceModes']
+                       elsif intent['material_choice_modes'].is_a?(Hash)
+                         intent['material_choice_modes']
+                       else
+                         {}
+                       end
             return nil if declared.empty?
 
             modes = {}

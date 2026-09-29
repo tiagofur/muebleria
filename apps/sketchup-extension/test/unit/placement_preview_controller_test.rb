@@ -172,7 +172,21 @@ class PlacementPreviewControllerTest < Minitest::Test
     private
 
     def route_for(method, path, body)
-      return @routes[[method, path]] if @routes.key?([method, path])
+      if @routes.key?([method, path])
+        route = @routes[[method, path]]
+        res_body = route['body'].respond_to?(:call) ? route['body'].call(body) : route['body']
+        return { 'status' => route['status'], 'body' => res_body }
+      end
+
+      if method == 'POST' && path == "/designs/#{DESIGN_ID}/effective-materials"
+        choices = (body && body['materialChoices']) || {}
+        modes = {}
+        choices.each_key { |k| modes[k] = 'override' }
+        return { 'status' => 200,
+                 'body' => { 'furnitureDefinitionId' => (body && body['furnitureDefinitionId']) || DEFINITION_ID,
+                             'materialChoices' => choices,
+                             'materialChoiceModes' => modes } }
+      end
 
       if method == 'PUT' && path == "/designs/#{DESIGN_ID}/working-copy"
         return { 'status' => 200,
