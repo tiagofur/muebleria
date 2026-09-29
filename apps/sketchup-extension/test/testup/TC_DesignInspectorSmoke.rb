@@ -270,10 +270,11 @@ module Granete
         assert_equal 'mat-nuevo', roles.fetch('FONDO')['designDefaultMaterialId']
       end
 
-      # R3. Restore/materialization: the restore intent (design default +
-      #    mode=design) rides the normal update path and the merged intent
-      #    carries both — zero extra host operations.
-      def test_restore_materializes_current_default_with_design_mode
+      # R2 regression on the R3 head: applying design defaults (the #810
+      #    working-copy PUT) materializes the declared defaults — this is the
+      #    DESIGN DEFAULTS apply path, NOT the furniture restore (which is
+      #    covered by TC_HostMutationSmoke over the real builder).
+      def test_apply_design_defaults_materializes_declared_defaults
         bind_model_to(DESIGN_A)
         transport = ScriptedTransport.new
         transport.stub_working_copy(DESIGN_A, WC_VERSION_A,
