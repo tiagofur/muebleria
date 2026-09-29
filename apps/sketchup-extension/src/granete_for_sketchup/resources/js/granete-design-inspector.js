@@ -309,17 +309,28 @@
 
   function openImpactReviewModal(role) {
     var els = ensureRolloutElements();
-    var summary = (state.inheritanceSummary && state.inheritanceSummary[role]) || {
-      items: 0, designBacked: 0, needsRollout: 0, designCurrent: 0, overridden: 0
-    };
     var materialId = state.defaults[role];
     var matName = materialName(materialId) || materialId;
     var label = (typeof deps.getRoleLabel === "function" && deps.getRoleLabel(role)) || role;
+    var summary = (state.inheritanceSummary && state.inheritanceSummary[role]) || { items: 0 };
     var compatible = summary.items || 0;
-    var inheritCount = summary.needsRollout || 0;
-    var customCount = summary.overridden || 0;
     var total = state.totalDesignItems || compatible;
     var unsupported = Math.max(0, total - compatible);
+
+    // Counts and the batch selection derive from the SAME per-item server
+    // projection (explicit modes; equality only decides whether a value
+    // still differs, mirroring the server's own needsRollout rule), so the
+    // modal can never promise a count the dispatch then misses.
+    var inheritCount = 0;
+    var definitionCount = 0;
+    var customCount = 0;
+    (state.inheritanceItems || []).forEach(function (item) {
+      var r = item.roles && item.roles[role];
+      if (!r) return;
+      if (r.mode === "design" && r.needsRollout === true) inheritCount += 1;
+      else if (r.mode === "definition" && r.applied !== materialId) definitionCount += 1;
+      else if (r.mode === "override") customCount += 1;
+    });
 
     els.title.textContent = "Aplicar " + matName + " a " + label;
 
@@ -335,6 +346,16 @@
     stat2.className = "rollout-stat";
     stat2.textContent = inheritCount + (inheritCount === 1 ? " heredará/cambiará" : " heredarán/cambiarán");
     els.statsContainer.appendChild(stat2);
+
+    // #784 R5: definition-backed furniture materialized the curated
+    // fallback at insertion (nobody chose it); the rollout adopts the
+    // design default for them and the impact review says so explicitly.
+    var statDefinition = document.createElement("div");
+    statDefinition.id = "rollout-stat-definition";
+    statDefinition.className = "rollout-stat";
+    statDefinition.textContent = definitionCount +
+      (definitionCount === 1 ? " usará el default del diseño (fallback de definición)" : " usarán el default del diseño (fallback de definición)");
+    els.statsContainer.appendChild(statDefinition);
 
     var stat3 = document.createElement("div");
     stat3.id = "rollout-stat-custom";
@@ -353,7 +374,7 @@
 
     function updateApplyButton() {
       var isPreserve = els.scopePreserve.checked;
-      var count = isPreserve ? inheritCount : (inheritCount + customCount);
+      var count = isPreserve ? (inheritCount + definitionCount) : (inheritCount + definitionCount + customCount);
       els.applyBtn.textContent = "Aplicar a " + count;
       els.applyBtn.disabled = (count === 0);
     }
@@ -373,9 +394,16 @@
       (state.inheritanceItems || []).forEach(function (item) {
         var r = item.roles && item.roles[role];
         if (!r) return;
+        // Preserve scope: everything that is NOT an explicit user exception —
+        // design-lineage items behind the default AND definition-fallback
+        // items still carrying a different value both adopt the design
+        // default. Replace scope additionally forces explicit overrides.
         var shouldInclude = isPreserve
-          ? (r.mode === "design" && r.needsRollout === true)
-          : ((r.mode === "design" && r.needsRollout === true) || r.mode === "override");
+          ? ((r.mode === "design" && r.needsRollout === true) ||
+             (r.mode === "definition" && r.applied !== materialId))
+          : ((r.mode === "design" && r.needsRollout === true) ||
+             (r.mode === "definition" && r.applied !== materialId) ||
+             r.mode === "override");
         if (shouldInclude) {
           var choices = {};
           choices[role] = materialId;
@@ -774,6 +802,7 @@
           role: s.role,
           items: s.items || 0,
           designBacked: s.designBacked || 0,
+          definitionBacked: s.definitionBacked || 0,
           needsRollout: s.needsRollout || 0,
           designCurrent: s.designCurrent || 0,
           overridden: s.overridden || 0
@@ -785,16 +814,14 @@
       if (state.laneActive) render();
     },
 
-    // #784 R5: batch rollout outcome listener — when the batch update commits,
-    // refresh the server inheritance projection so badges and rollout counts update.
+    // #784 R5: batch rollout outcome listener — when a batch update commits,
+    // refresh the server inheritance projection so badges and rollout counts
+    // update. The user-facing toast belongs to the #471 batch lane
+    // (granete-inspector onBatchUpdateResult), which already reports every
+    // outcome; duplicating it here would stack two identical toasts.
     onBatchUpdateResult: function (result) {
       if (result && result.success) {
         requestInheritance(true);
-        if (typeof deps.showToast === "function") {
-          deps.showToast("success", "✓ Lote aplicado a " + (result.applied || 0) + " muebles.");
-        }
-      } else if (result && !result.success && typeof deps.showToast === "function") {
-        deps.showToast("error", "El lote no se aplicó: " + (result.error || "error desconocido"));
       }
     },
 

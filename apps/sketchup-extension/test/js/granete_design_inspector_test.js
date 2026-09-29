@@ -1169,7 +1169,7 @@ function run() {
     ]);
   });
 
-  test('R5: onBatchUpdateResult refreshes server inheritance projection and displays toast', () => {
+  test('R5: onBatchUpdateResult refreshes the projection and never duplicates the batch-lane toast', () => {
     const ctx = createSandbox();
     const mod = ctx.sandbox.window.GraneteUI.designInspector;
     const toastCalls = [];
@@ -1187,19 +1187,82 @@ function run() {
     mod.onBindingStatus(CONNECTED_A);
     mod.handleNoSelection();
 
-    // Success outcome
+    // Success outcome: refresh the server projection…
     mod.onBatchUpdateResult({ success: true, applied: 2 });
     const lastCall = ctx.sketchupCalls[ctx.sketchupCalls.length - 1];
     assert.strictEqual(lastCall[0], 'get_design_inheritance', 'refreshes server inheritance projection');
-    assert.strictEqual(toastCalls.length, 1);
-    assert.strictEqual(toastCalls[0].kind, 'success');
-    assert.ok(toastCalls[0].text.includes('2 muebles'));
 
-    // Failure outcome
+    // …but the user-facing toast belongs to the #471 batch lane
+    // (granete-inspector onBatchUpdateResult): the design inspector must
+    // not stack a second identical toast on either outcome.
+    assert.strictEqual(toastCalls.length, 0, 'no duplicated toast from the design inspector');
+
     mod.onBatchUpdateResult({ success: false, error: 'Locked by other user' });
-    assert.strictEqual(toastCalls.length, 2);
-    assert.strictEqual(toastCalls[1].kind, 'error');
-    assert.ok(toastCalls[1].text.includes('Locked by other user'));
+    assert.strictEqual(toastCalls.length, 0, 'no duplicated failure toast either');
+  });
+
+  test('R5: preserve scope adopts definition-fallback furniture and skips one already carrying the default', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [
+        // design lineage, behind the default → always selected
+        { furnitureInstanceId: 'fi-1', furnitureDefinitionId: 'def-1',
+          roles: [{ role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-oak', needsRollout: true }] },
+        // definition fallback carrying a different value → adopted by preserve
+        { furnitureInstanceId: 'fi-2', furnitureDefinitionId: 'def-2',
+          roles: [{ role: 'INTERIOR', mode: 'definition', appliedMaterialId: 'mat-oak', needsRollout: false }] },
+        // definition fallback already equal to the design default → no-op, excluded
+        { furnitureInstanceId: 'fi-3', furnitureDefinitionId: 'def-3',
+          roles: [{ role: 'INTERIOR', mode: 'definition', appliedMaterialId: 'mat-white', needsRollout: false }] },
+        // explicit user override → only in replace scope
+        { furnitureInstanceId: 'fi-4', furnitureDefinitionId: 'def-1',
+          roles: [{ role: 'INTERIOR', mode: 'override', appliedMaterialId: 'mat-oak', needsRollout: false }] }
+      ],
+      inheritanceSummary: [
+        { role: 'INTERIOR', items: 4, designBacked: 1, definitionBacked: 2, needsRollout: 1, designCurrent: 0, overridden: 1 }
+      ]
+    });
+
+    mod.openImpactReviewModal('INTERIOR');
+    const statDefinition = ctx.document.getElementById('rollout-stat-definition');
+    assert.ok(statDefinition, 'definition stat renders');
+    assert.strictEqual(statDefinition.textContent, '1 usará el default del diseño (fallback de definición)',
+      'only the definition item still differing from the default counts');
+
+    const applyBtn = ctx.document.getElementById('btn-design-rollout-apply');
+    assert.strictEqual(applyBtn.textContent, 'Aplicar a 2', 'preserve = needsRollout + differing definition');
+
+    const batchCalls = [];
+    ctx.sandbox.window.GraneteMutation = {
+      submitBatchUpdate: (items) => { batchCalls.push(items); return 'sent'; }
+    };
+    applyBtn.click();
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(batchCalls[0])).map((i) => i.instanceId),
+      ['fi-1', 'fi-2'], 'preserve adopts the differing definition item, skips the no-op one');
+
+    // Replace scope additionally forces the explicit override (never the no-op member).
+    batchCalls.length = 0;
+    mod.openImpactReviewModal('INTERIOR');
+    const scopePreserve = ctx.document.getElementById('rollout-scope-preserve');
+    const scopeReplace = ctx.document.getElementById('rollout-scope-replace');
+    scopePreserve.checked = false;
+    scopeReplace.checked = true;
+    scopeReplace.dispatchEvent({ type: 'change' });
+    assert.strictEqual(ctx.document.getElementById('btn-design-rollout-apply').textContent, 'Aplicar a 3');
+    ctx.document.getElementById('btn-design-rollout-apply').click();
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(batchCalls[0])).map((i) => i.instanceId),
+      ['fi-1', 'fi-2', 'fi-4']);
   });
 
   test('R5: binding switch / disconnect clears rollout state and closes modal', () => {

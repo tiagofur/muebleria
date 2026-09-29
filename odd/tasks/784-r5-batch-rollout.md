@@ -114,3 +114,44 @@ El endpoint `GET /api/designs/{designId}/working-copy/material-provenance` ya ca
    - Pruebas en `test/js/granete_design_inspector_test.js` para renderizado del botón, cálculo del review, selección de radios y payload exacto a `submitBatchUpdate`.
 4. **Paso 4: Verificación Integral**
    - Ejecutar `bundle exec rake verify` y tests JS de la extensión.
+
+---
+
+## Ronda de corrección (review independiente 2026-09-29)
+
+El PR nació sobre el base viejo de #922 (`41e0b592`). La ronda de corrección
+de #922 introdujo el tercer modo `definition` (fallback curado de definición)
+y el conteo `definition_backed`; este slice se integró a ese contrato:
+
+- **Merge del base corregido** (`bf8619e9`): conflicto único en
+  `DesignInheritanceContract::MODES` resuelto hacia la constante canónica;
+  `parse_role!` acepta `definition` automáticamente.
+- **`definition_backed` de punta a punta:** `SUMMARY_FIELDS` y el struct
+  `RoleInheritanceCount` lo exigen (el server siempre lo envía; ausente ⇒
+  fail-closed), el bridge lo serializa como `definitionBacked`, y el
+  `summaryMap` JS lo conserva.
+- **Impact review honesto con el tercer bucket:** nueva línea
+  "N usará(n) el default del diseño (fallback de definición)". Los contadores
+  y la selección del lote derivan del MISMO escaneo per-item (modos explícitos
+  del server; la igualdad sólo decide si un valor difiere, igual que el
+  `needsRollout` del server) — el "Aplicar a N" no puede discrepar del lote
+  despachado.
+- **Scope preserve adopta los `definition`:** no son excepciones de usuario.
+  Se incluye sólo al que aún difiere del default (el que ya lo lleva es
+  no-op y queda fuera). El radio se re-etiqueta "actualiza muebles en modo
+  Diseño y Definición". Replace añade los override.
+- **Doble toast eliminado:** el feedback de usuario de TODO batch pertenece
+  al lane #471 (`granete-inspector.onBatchUpdateResult`); el listener del
+  design-inspector sólo refresca la proyección (`requestInheritance(true)`),
+  sin apilar un segundo toast idéntico.
+- Cuerpo del PR: sección "Alcance restante" explícita (Delivery: partial).
+
+### Verificación ronda de corrección
+- `bundle exec rake unit`: PASS (1272 runs, 9426 assertions, 0 failures).
+- `bundle exec rake lint`: PASS (274 archivos, 0 ofensas).
+- JS: `granete_design_inspector` 42, `granete_configurator` 36,
+  `granete_material_roles` 34, `granete_inspector` 48, `dialog_inspector` 74,
+  `dialog_placement_preview` 13 — todos PASS.
+- CI remota del HEAD nuevo: ver body del PR (la matriz completa corre tras
+  retarget a main cuando #922 mergee; en base feature-branch sólo corre
+  Publication metadata).

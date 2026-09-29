@@ -276,7 +276,8 @@ class DesignInspectorBridgeTest < Minitest::Test
   def test_get_design_inheritance_forwards_summary_and_furniture_definition_id
     with_model_bound_to(DESIGN_A)
     summary_entry = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::RoleInheritanceCount.new(
-      role: 'FRONT', items: 3, design_backed: 2, needs_rollout: 1, design_current: 1, overridden: 1
+      role: 'FRONT', items: 3, design_backed: 2, definition_backed: 1,
+      needs_rollout: 1, design_current: 1, overridden: 1
     )
     role_entry = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::RoleInheritance.new(
       role: 'FRONT', mode: 'design', applied_material_id: 'mat-old', design_default_material_id: 'mat-new',
@@ -298,7 +299,7 @@ class DesignInspectorBridgeTest < Minitest::Test
     payload = pushed_payloads.fetch(0)
     assert_equal 'ready', payload['status']
     assert_equal 42, payload['requestId']
-    assert_equal [{ 'role' => 'FRONT', 'items' => 3, 'designBacked' => 2,
+    assert_equal [{ 'role' => 'FRONT', 'items' => 3, 'designBacked' => 2, 'definitionBacked' => 1,
                     'needsRollout' => 1, 'designCurrent' => 1, 'overridden' => 1 }],
                  payload['inheritanceSummary']
     assert_equal 'def-1', payload['items'].first['furnitureDefinitionId']

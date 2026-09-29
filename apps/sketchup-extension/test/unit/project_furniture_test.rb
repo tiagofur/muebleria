@@ -1192,6 +1192,7 @@ class ProjectFurnitureTest < Minitest::Test
       'design_id' => DESIGN_ID, 'project_id' => PROJECT_ID,
       'authoring_defaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-roble' } },
       'inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => 2, 'design_backed' => 1,
+                                  'definition_backed' => 0,
                                   'needs_rollout' => 1, 'design_current' => 0, 'overridden' => 1 }],
       'items' => [
         { 'furniture_instance_id' => FI_1,
@@ -1210,6 +1211,7 @@ class ProjectFurnitureTest < Minitest::Test
     summary = parsed.inheritance_summary.first
     assert_equal 'INTERIOR', summary.role
     assert_equal 2, summary.items
+    assert_equal 0, summary.definition_backed
     assert_equal 1, summary.needs_rollout
     assert_equal 1, summary.overridden
 
@@ -1225,8 +1227,12 @@ class ProjectFurnitureTest < Minitest::Test
     bad_shapes = [
       body.merge('inheritance_summary' => 'nope'),
       body.merge('inheritance_summary' => [{ 'role' => '', 'items' => 1, 'design_backed' => 1,
+                                             'definition_backed' => 0,
                                              'needs_rollout' => 0, 'design_current' => 1, 'overridden' => 0 }]),
+      body.merge('inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => 1, 'design_backed' => 1,
+                                             'needs_rollout' => 0, 'design_current' => 0, 'overridden' => 0 }]),
       body.merge('inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => -1, 'design_backed' => 0,
+                                             'definition_backed' => 0,
                                              'needs_rollout' => 0, 'design_current' => 0, 'overridden' => 0 }]),
       body.merge('items' => 'nope'),
       body.merge('items' => [{ 'furniture_instance_id' => 'bad', 'inheritance' => [] }]),
