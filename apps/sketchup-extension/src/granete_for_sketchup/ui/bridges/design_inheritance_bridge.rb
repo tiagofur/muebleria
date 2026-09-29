@@ -74,6 +74,7 @@ module Granete
               'role' => c.role,
               'items' => c.items,
               'designBacked' => c.design_backed,
+              'definitionBacked' => c.definition_backed,
               'needsRollout' => c.needs_rollout,
               'designCurrent' => c.design_current,
               'overridden' => c.overridden

@@ -27,10 +27,21 @@ Por cada rol soportado por la definición:
      - `mode = "design"`
    - Si la opción NO es compatible con la definición:
      - `choice = defaultDeLaDefinición` (primera opción curada permitida)
-     - `mode = "override"`
+     - `mode = "definition"`
 3. **Sin default en Design:**
    - `choice = defaultDeLaDefinición` (primera opción curada permitida)
-   - `mode = "override"`
+   - `mode = "definition"`
+4. **Sin candidatos curados ni default** (rol irrestricto sin default): el rol no
+   emite declaración alguna (ausente de ambos mapas; la paridad se preserva
+   por ausencia).
+
+> **Revisión 2026-09-29 (ronda de corrección):** el fallback curado pasó de
+> `mode="override"` a `mode="definition"` (tercer modo del enum
+> `DesignMaterialChoiceMode`). Un valor que nadie eligió y que no proviene del
+> Design no es una excepción de usuario: debe poder ser adoptado
+> deliberadamente por el rollout R5 y mostrarse con badge "Definición", no
+> preservarse como "Personalizado". El conteo de impacto gana
+> `definition_backed` para distinguirlo sin inflar `overridden`.
 
 Invariante estricto: $\text{keys}(\text{materialChoices}) == \text{keys}(\text{materialChoiceModes})$.
 
@@ -96,5 +107,50 @@ Invariante estricto: $\text{keys}(\text{materialChoices}) == \text{keys}(\text{m
 - `node test/js/granete_material_roles_test.js`: PASS (34 tests)
 - `node test/js/granete_design_inspector_test.js`: PASS (34 tests)
 - `python3 scripts/factory_preflight.py`: PASS (PREFLIGHT_OK_NOT_VERIFIED, no errors)
+
+## Ronda de corrección (review independiente 2026-09-29)
+
+Review fresh del HEAD `41e0b592` (CI 17/17 en ese pin) devolvió
+CHANGES_REQUESTED con 1 blocker + 5 sugerencias; el owner autorizó corregir
+todo. Cambios:
+
+- **B1 (blocker):** el badge del configurador ya NO deduce el linaje por
+  igualdad de valores. `granete-configurator.js` pasa el contexto explícito
+  (`customizedRoles` — señal de customización trackeada por input del
+  usuario — y `designLineage`) a `renderMaterialSelectors`; el badge
+  "Personalizado" proviene exclusivamente de esa señal, "Diseño" de la
+  compatibilidad rol/default (mismo predicado que el servidor) y
+  "Definición" del fallback curado. Un valor revertido al default sigue
+  siendo "Personalizado" (test del caso toggle-back incluido).
+- **Tercer modo `definition`** de punta a punta: enum OpenAPI
+  `DesignMaterialChoiceMode` + `definition_backed` en
+  `DesignRoleInheritanceCount`, regeneración Go/TS sin drift, dominio
+  (`ComposeEffectiveDefinitionMaterials`, `IsValid…`, `Summarize…`),
+  contrato Ruby (`WorkingCopyContract::MODES` canónico compartido por
+  `DesignInheritanceContract` y `EffectiveMaterialsContract`), badge
+  "Definición" en inspector (`getRoleBadge`) y configurador, y CSS de los
+  badges (antes sin estilo alguno).
+- **Rama muerta eliminada** en `design_composition.go` (el `else if
+  designDefault != ""` era inalcanzable) y guard contra `optionIds[0]`
+  blank que emitía una elección vacía.
+- **Clave única** `materialChoiceModes` en el `IntentStore` (sin duplicado
+  snake_case) y lector del merger canónico.
+- **Fallo local temprano** para `definition_id` vacío en `create_and_place`
+  y `prepare_catalog_preview` (mismo código `definition_unavailable` que el
+  resolve de catálogo, sin pagar el roundtrip).
+- Extracción `compose_effective_materials` (deduplica create/preview y
+  mantiene AbcSize bajo el límite de rubocop).
+
+### Verificación ronda de corrección
+- `go test ./internal/domain/` (focused): PASS.
+- `./scripts/backend-test.sh ./internal/domain/... ./internal/api` con
+  PostgreSQL desechable: PASS (27s).
+- `bundle exec rake unit`: PASS (1271 runs, 9410 assertions, 0 failures).
+- `bundle exec rake lint`: PASS (274 files, no offenses).
+- JS: `granete_configurator` 36, `granete_material_roles` 34,
+  `granete_design_inspector` 35, `granete_inspector` 48,
+  `dialog_inspector` 74 — todos PASS.
+- `python3 scripts/check_openapi_drift.py`: PASS.
+- `pnpm --filter @granete/storage typecheck`: PASS.
 
 

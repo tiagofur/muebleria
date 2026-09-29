@@ -40,7 +40,7 @@ func TestComposeEffectiveDefinitionMaterials_FullInheritance(t *testing.T) {
 	}
 }
 
-func TestComposeEffectiveDefinitionMaterials_IncompatibleDefaultFallsBackToOverride(t *testing.T) {
+func TestComposeEffectiveDefinitionMaterials_IncompatibleDefaultFallsBackToDefinition(t *testing.T) {
 	roles := []DefinitionRoleOptionSpec{
 		{Role: "FRONT", OptionIDs: []string{"mat-oak", "mat-black"}},
 	}
@@ -56,7 +56,7 @@ func TestComposeEffectiveDefinitionMaterials_IncompatibleDefaultFallsBackToOverr
 		"FRONT": "mat-oak", // first allowed option
 	}
 	wantModes := map[string]DesignMaterialChoiceMode{
-		"FRONT": DesignMaterialChoiceModeOverride, // marked override because it diverged from Design default
+		"FRONT": DesignMaterialChoiceModeDefinition, // curated fallback lineage, not a user exception
 	}
 
 	if !reflect.DeepEqual(res.MaterialChoices, wantChoices) {
@@ -117,7 +117,7 @@ func TestComposeEffectiveDefinitionMaterials_RoleWithoutDefault(t *testing.T) {
 		"BACK": "mat-hdf-white",
 	}
 	wantModes := map[string]DesignMaterialChoiceMode{
-		"BACK": DesignMaterialChoiceModeOverride,
+		"BACK": DesignMaterialChoiceModeDefinition,
 	}
 
 	if !reflect.DeepEqual(res.MaterialChoices, wantChoices) {
@@ -152,5 +152,38 @@ func TestComposeEffectiveDefinitionMaterials_UnrestrictedOptionIDsInherits(t *te
 	}
 	if !reflect.DeepEqual(res.MaterialChoiceModes, wantModes) {
 		t.Errorf("MaterialChoiceModes = %v, want %v", res.MaterialChoiceModes, wantModes)
+	}
+}
+
+func TestComposeEffectiveDefinitionMaterials_UnrestrictedRoleWithoutDefaultCarriesNoStatement(t *testing.T) {
+	roles := []DefinitionRoleOptionSpec{
+		{Role: "SPECIAL", OptionIDs: []string{}}, // unrestricted, no Design default
+		{Role: "BODY", OptionIDs: []string{"  "}}, // curated list holding only a blank id
+	}
+	res := ComposeEffectiveDefinitionMaterials("BASE-750", roles, DesignAuthoringDefaults{}, nil)
+
+	// Parity holds through absence: neither map carries a statement for a
+	// role with no curated candidates and no Design default.
+	if len(res.MaterialChoices) != 0 || len(res.MaterialChoiceModes) != 0 {
+		t.Errorf("expected no statements, got choices=%v modes=%v", res.MaterialChoices, res.MaterialChoiceModes)
+	}
+}
+
+func TestComposeEffectiveDefinitionMaterials_DefinitionFallbackDoesNotInflateOverrideCounts(t *testing.T) {
+	entries := []DesignRoleInheritance{
+		{Role: "FRENTES", Mode: DesignMaterialChoiceModeDefinition, AppliedChoice: "mat-oak", DesignDefault: "mat-glass"},
+		{Role: "FRENTES", Mode: DesignMaterialChoiceModeDesign, AppliedChoice: "mat-oak", DesignDefault: "mat-oak"},
+		{Role: "FRENTES", Mode: DesignMaterialChoiceModeOverride, AppliedChoice: "mat-walnut", DesignDefault: "mat-oak"},
+	}
+	counts := SummarizeDesignInheritance(entries)
+	if len(counts) != 1 {
+		t.Fatalf("expected one role count, got %d", len(counts))
+	}
+	c := counts[0]
+	if c.Items != 3 || c.DefinitionBacked != 1 || c.DesignBacked != 1 || c.Overridden != 1 {
+		t.Errorf("items=%d definition=%d design=%d overridden=%d; want 3/1/1/1", c.Items, c.DefinitionBacked, c.DesignBacked, c.Overridden)
+	}
+	if c.NeedsRollout != 0 || c.DesignCurrent != 1 {
+		t.Errorf("needsRollout=%d designCurrent=%d; want 0/1", c.NeedsRollout, c.DesignCurrent)
 	}
 }

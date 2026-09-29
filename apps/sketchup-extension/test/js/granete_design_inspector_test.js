@@ -862,6 +862,27 @@ function run() {
     assert.strictEqual(mod.getRoleBadge('fi-1', 'INTERIOR'), null, 'unbound clears the projection');
   });
 
+  test('R4: a definition-backed role (curated fallback) badges as Definición, never Personalizado', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    const request = ctx.sketchupCalls.filter((c) => c[0] === 'get_design_defaults')[0][1];
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [{
+        furnitureInstanceId: 'fi-1',
+        roles: [
+          { role: 'FRENTES', mode: 'definition', appliedMaterialId: 'mat-oak', needsRollout: false }
+        ]
+      }]
+    });
+    const badge = mod.getRoleBadge('fi-1', 'FRENTES');
+    assert.strictEqual(badge.text, 'Definición');
+    assert.strictEqual(badge.kind, 'definition');
+    assert.strictEqual(badge.designDefault, undefined, 'definition fallback offers no restore target');
+  });
+
   test('R3: the furniture inspector renders the badge and the restore action', () => {
     const ctx = createSandbox();
     ctx.picker = null;

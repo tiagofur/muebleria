@@ -10,8 +10,9 @@ import (
 
 func TestDesignMaterialChoiceModeEnum(t *testing.T) {
 	if !IsValidDesignMaterialChoiceMode(DesignMaterialChoiceModeDesign) ||
-		!IsValidDesignMaterialChoiceMode(DesignMaterialChoiceModeOverride) {
-		t.Fatal("design and override are the known modes")
+		!IsValidDesignMaterialChoiceMode(DesignMaterialChoiceModeOverride) ||
+		!IsValidDesignMaterialChoiceMode(DesignMaterialChoiceModeDefinition) {
+		t.Fatal("design, override and definition are the known modes")
 	}
 	for _, unknown := range []DesignMaterialChoiceMode{"", "inherited", "default", "DESIGN"} {
 		if IsValidDesignMaterialChoiceMode(unknown) {
