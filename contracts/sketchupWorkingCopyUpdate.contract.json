@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "comment": "Shared #624/#810 Ruby-to-Go working-copy boundary. Ruby builds each request from the persisted placement intent; the Go handler decodes the same request through the generated UpdateDesignWorkingCopyRequest. Catalog semver is not an integer Design definition revision and must be omitted, while an authoritative integer is preserved. #810: every PUT carries expected_working_version — the canonical workingVersion token (working-copy updated_at of the caller's last authoritative read) validated under the write lock. #784: scenarios784 freezes the design-authoring-defaults boundary (authoring_defaults + per-item material_choice_modes). It is consumed by the Go contract test only until the SketchUp Ruby builder emits these fields; then the scenarios join the shared 'scenarios' list.",
+  "comment": "Shared #624/#810 Ruby-to-Go working-copy boundary. Ruby builds each request from the persisted placement intent; the Go handler decodes the same request through the generated UpdateDesignWorkingCopyRequest. Catalog semver is not an integer Design definition revision and must be omitted, while an authoritative integer is preserved. #810: every PUT carries expected_working_version — the canonical workingVersion token (working-copy updated_at of the caller's last authoritative read) validated under the write lock. Since #784 R3 the Ruby builder emits material_choice_modes (intents below carry them) and the scenarios are part of the shared list; invalidModesRequest is the shared partial-lineage negative proof.",
   "endpoint": "PUT /api/designs/{designId}/working-copy",
   "scenarios": [
     {
@@ -91,22 +91,7 @@
           }
         ]
       }
-    }
-  ],
-  "invalidRequest": {
-    "base_revision_id": "53000000-0000-0000-0000-000000000001",
-    "expected_working_version": "2026-09-21T00:00:00.000000Z",
-    "items": [
-      {
-        "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
-        "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
-        "definition_version": "1.0.0",
-        "parameters": {},
-        "material_choices": {}
-      }
-    ]
-  },
-  "scenarios784": [
+    },
     {
       "id": "design-backed-inherits-default",
       "request": {
@@ -150,6 +135,18 @@
             }
           }
         ]
+      },
+      "intent": {
+        "materialChoiceModes": {
+          "INTERIOR": "design",
+          "FRENTES": "design"
+        },
+        "materialChoices": {
+          "INTERIOR": "mat-roble",
+          "FRENTES": "mat-blanco"
+        },
+        "furnitureDefinitionId": "50000000-0000-0000-0000-0000000000d1",
+        "definitionVersion": 7
       }
     },
     {
@@ -192,6 +189,16 @@
             }
           }
         ]
+      },
+      "intent": {
+        "materialChoiceModes": {
+          "INTERIOR": "override"
+        },
+        "materialChoices": {
+          "INTERIOR": "mat-roble"
+        },
+        "furnitureDefinitionId": "50000000-0000-0000-0000-0000000000d1",
+        "definitionVersion": 7
       }
     },
     {
@@ -232,10 +239,40 @@
             }
           }
         ]
+      },
+      "intent": {
+        "furnitureDefinitionId": "50000000-0000-0000-0000-0000000000d1",
+        "definitionVersion": 7,
+        "materialChoices": {
+          "INTERIOR": "mat-blanco"
+        }
       }
     }
   ],
-  "invalidModesRequest784": {
+  "invalidRequest": {
+    "base_revision_id": "53000000-0000-0000-0000-000000000001",
+    "expected_working_version": "2026-09-21T00:00:00.000000Z",
+    "items": [
+      {
+        "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+        "furniture_definition_id": "50000000-0000-0000-0000-0000000000d1",
+        "definition_version": "1.0.0",
+        "parameters": {},
+        "material_choices": {}
+      }
+    ]
+  },
+  "missingPreconditionRequest": {
+    "base_revision_id": "53000000-0000-0000-0000-000000000001",
+    "items": [
+      {
+        "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
+        "parameters": {},
+        "material_choices": {}
+      }
+    ]
+  },
+  "invalidModesRequest": {
     "base_revision_id": "53000000-0000-0000-0000-000000000001",
     "expected_working_version": "2026-09-21T00:00:00.000000Z",
     "items": [
@@ -250,16 +287,6 @@
         "material_choice_modes": {
           "INTERIOR": "design"
         }
-      }
-    ]
-  },
-  "missingPreconditionRequest": {
-    "base_revision_id": "53000000-0000-0000-0000-000000000001",
-    "items": [
-      {
-        "furniture_instance_id": "51000000-0000-0000-0000-0000000000f1",
-        "parameters": {},
-        "material_choices": {}
       }
     ]
   }

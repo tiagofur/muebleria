@@ -161,8 +161,43 @@ module Granete
         # authoring snapshot capture arrives with #467/#468; today the
         # authoritative resolve rides the server layout channel (nil layout
         # under offline catalogs stays an explicit generic preview).
-        # rubocop:disable-next Metrics/AbcSize
         def build_update_command(payload, semantic_target)
+          context = resolve_update_context(payload, semantic_target)
+          return nil if context.nil?
+
+          params = payload['parameters'] || payload[:parameters] || {}
+          choices = merged_material_choices(context.entity, payload)
+          # #784 R3: explicit lineage markers (role → design|override) from
+          # the caller (e.g. a role restore); they reach the item intent so
+          # the working-copy sync emits the full-parity statement.
+          raw_modes = payload['materialChoiceModes'] || payload[:materialChoiceModes]
+          modes = raw_modes.is_a?(Hash) ? raw_modes : nil
+          Host::MutationCommand.new(
+            name: 'update_furniture',
+            operation_name: "Editar Mueble #{context.definition['name']}",
+            semantic_target: context.target,
+            build_furniture_request: nil,
+            resolve: lambda { |ctx|
+              warn "DBG resolve choices=#{choices.inspect}"
+              resolve_update_result(context.definition, params, choices, ctx)
+            },
+            context_valid: lambda {
+              warn "DBG context_valid=#{update_context_valid?(context.entity, context.target)}"
+              update_context_valid?(context.entity, context.target)
+            },
+            apply: lambda { |result, host_context|
+              apply_update_result(host_context, context.entity, context.definition, params, choices,
+                                  result, material_choice_modes: modes)
+            }
+          )
+        end
+
+        UpdateContext = Struct.new(:entity, :definition, :target, keyword_init: true)
+
+        # Selection-first flows still capture an explicit semantic target:
+        # the captured entity's own identity, never `selection.first` as
+        # lasting truth.
+        def resolve_update_context(payload, semantic_target)
           definition_id = payload['definitionId'] || payload[:definitionId]
           definition = @catalog_provider.find_definition(definition_id)
           return nil if definition.nil?
@@ -173,9 +208,6 @@ module Granete
                    else
                      find_target_furniture_entity(nil)
                    end
-          # Selection-first flows still capture an explicit semantic target:
-          # the captured entity's own identity, never `selection.first` as
-          # lasting truth.
           if entity && target['furnitureInstanceRef'].nil?
             identity = @metadata_store_factory.call(active_model).read(entity)&.dig('identity')
             target['furnitureInstanceRef'] = identity && identity['instanceRef']
@@ -183,19 +215,7 @@ module Granete
           return nil if entity.nil? || active_model.nil? ||
                         Host::CommandContract.semantic_target_key(target).empty?
 
-          params = payload['parameters'] || payload[:parameters] || {}
-          choices = merged_material_choices(entity, payload)
-          Host::MutationCommand.new(
-            name: 'update_furniture',
-            operation_name: "Editar Mueble #{definition['name']}",
-            semantic_target: target,
-            build_furniture_request: nil,
-            resolve: ->(ctx) { resolve_update_result(definition, params, choices, ctx) },
-            context_valid: -> { update_context_valid?(entity, target) },
-            apply: lambda { |result, host_context|
-              apply_update_result(host_context, entity, definition, params, choices, result)
-            }
-          )
+          UpdateContext.new(entity: entity, definition: definition, target: target)
         end
 
         def update_semantic_target(payload, semantic_target)
@@ -216,7 +236,8 @@ module Granete
           )
         end
 
-        def apply_update_result(_host_context, entity, definition, params, choices, result)
+        def apply_update_result(_host_context, entity, definition, params, choices, result,
+                                material_choice_modes: nil)
           model = entity.respond_to?(:model) && entity.model ? entity.model : active_model
           relationships = result.normalized_snapshot.is_a?(Hash) ? result.normalized_snapshot['relationships'] : nil
           # The server-normalized echo is the authoritative parameter intent
@@ -231,6 +252,7 @@ module Granete
           outcome = furniture_builder_for(model).update_furniture(
             model, entity, definition, normalized_params,
             resolved_layout: result.layout, material_choices: choices,
+            material_choice_modes: material_choice_modes,
             transaction: false, relationships: relationships
           )
           return outcome if outcome['success'] == true

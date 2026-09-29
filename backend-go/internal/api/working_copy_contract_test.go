@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 const workingCopyFixturePath = "../../../contracts/sketchupWorkingCopyUpdate.contract.json"
@@ -17,103 +18,9 @@ type workingCopyContractFixture struct {
 		ID      string          `json:"id"`
 		Request json.RawMessage `json:"request"`
 	} `json:"scenarios"`
-	Scenarios784 []struct {
-		ID      string          `json:"id"`
-		Request json.RawMessage `json:"request"`
-	} `json:"scenarios784"`
 	InvalidRequest             json.RawMessage `json:"invalidRequest"`
-	InvalidModesRequest784     json.RawMessage `json:"invalidModesRequest784"`
+	InvalidModesRequest        json.RawMessage `json:"invalidModesRequest"`
 	MissingPreconditionRequest json.RawMessage `json:"missingPreconditionRequest"`
-}
-
-// TestWorkingCopyContractFixture_DesignDefaultsAcceptedByGeneratedGoHandler
-// freezes the #784 half of the shared boundary: design-level
-// authoring_defaults and per-item material_choice_modes decode through the
-// generated request and reach the working-copy command verbatim. These
-// scenarios live beside (not inside) the Ruby-built list until the SketchUp
-// builder emits the fields; the Go side already accepts them.
-func TestWorkingCopyContractFixture_DesignDefaultsAcceptedByGeneratedGoHandler(t *testing.T) {
-	fixture := loadWorkingCopyContractFixture(t)
-	if len(fixture.Scenarios784) == 0 {
-		t.Fatal("fixture must carry scenarios784")
-	}
-	for _, scenario := range fixture.Scenarios784 {
-		t.Run(scenario.ID, func(t *testing.T) {
-			store := &stubStore{}
-			srv := &Server{Store: store}
-			req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
-				string(scenario.Request), string(domain.RoleAdmin))
-			rr := httptest.NewRecorder()
-
-			srv.HandleDesignWorkingCopy(rr, req)
-
-			if rr.Code != http.StatusOK {
-				t.Fatalf("status = %d, want 200 (body=%s)", rr.Code, rr.Body.String())
-			}
-			cmd := store.updateDesignWorkingCopyCmd
-			if cmd == nil || len(cmd.Items) != 1 {
-				t.Fatal("request must reach the working-copy command with one item")
-			}
-			if cmd.AuthoringDefaults == nil {
-				t.Fatal("authoring_defaults must reach the command")
-			}
-			wantDefaults := map[string]string{"INTERIOR": "mat-roble"}
-			switch scenario.ID {
-			case "design-backed-inherits-default", "apply-design-defaults-preserving-items":
-				wantDefaults["FRENTES"] = "mat-blanco"
-			}
-			if got := cmd.AuthoringDefaults.MaterialChoices; len(got) != len(wantDefaults) {
-				t.Fatalf("authoring defaults = %v, want %v", got, wantDefaults)
-			}
-			for role, material := range wantDefaults {
-				if cmd.AuthoringDefaults.MaterialChoices[role] != material {
-					t.Fatalf("authoring default %s = %q, want %q", role, cmd.AuthoringDefaults.MaterialChoices[role], material)
-				}
-			}
-			item := cmd.Items[0]
-			if scenario.ID == "apply-design-defaults-preserving-items" {
-				// The R2 apply carries items VERBATIM without modes: the
-				// backend legacy merge preserves the persisted lineage.
-				if item.MaterialChoiceModes != nil {
-					t.Fatal("the apply scenario must not carry item modes")
-				}
-			} else if len(item.MaterialChoiceModes) == 0 {
-				t.Fatal("material_choice_modes must reach the command")
-			}
-			if scenario.ID == "override-equal-to-default-survives-exact" &&
-				item.MaterialChoiceModes["INTERIOR"] != domain.DesignMaterialChoiceModeOverride {
-				t.Fatalf("INTERIOR mode = %q, want override (equality with the default must never flip lineage)", item.MaterialChoiceModes["INTERIOR"])
-			}
-			if scenario.ID == "design-backed-inherits-default" &&
-				item.MaterialChoiceModes["INTERIOR"] != domain.DesignMaterialChoiceModeDesign {
-				t.Fatalf("INTERIOR mode = %q, want design", item.MaterialChoiceModes["INTERIOR"])
-			}
-		})
-	}
-}
-
-// TestWorkingCopyContractFixture_PartialModesRejected: a PARTIAL lineage
-// statement (some roles carry modes while others do not) is ambiguous and
-// never reaches the store — 400 is part of the #784 boundary.
-func TestWorkingCopyContractFixture_PartialModesRejected(t *testing.T) {
-	fixture := loadWorkingCopyContractFixture(t)
-	if len(fixture.InvalidModesRequest784) == 0 {
-		t.Fatal("fixture must carry invalidModesRequest784")
-	}
-	store := &stubStore{}
-	srv := &Server{Store: store}
-	req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
-		string(fixture.InvalidModesRequest784), string(domain.RoleAdmin))
-	rr := httptest.NewRecorder()
-
-	srv.HandleDesignWorkingCopy(rr, req)
-
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
-	}
-	if store.updateDesignWorkingCopyCmd != nil {
-		t.Fatal("partial lineage statement must never reach the working-copy command")
-	}
 }
 
 func loadWorkingCopyContractFixture(t *testing.T) workingCopyContractFixture {
@@ -154,7 +61,50 @@ func TestWorkingCopyContractFixture_AcceptedByGeneratedGoHandler(t *testing.T) {
 			if scenario.ID == "authoritative-integer-preserved" && (version == nil || *version != 7) {
 				t.Fatalf("authoritative integer version = %v, want 7", version)
 			}
+			assertDesignDefaultsScenario(t, scenario.ID, store.updateDesignWorkingCopyCmd)
 		})
+	}
+}
+
+// assertDesignDefaultsScenario pins the #784 wire contract per scenario:
+// design-level authoring_defaults reach the command, explicit lineage rides
+// with full parity, and the apply scenario carries NO item modes (the
+// backend legacy merge preserves the persisted lineage of unchanged items).
+func assertDesignDefaultsScenario(t *testing.T, scenarioID string, cmd *storage.UpdateDesignWorkingCopyCommand) {
+	t.Helper()
+	switch scenarioID {
+	case "design-backed-inherits-default", "override-equal-to-default-survives-exact",
+		"apply-design-defaults-preserving-items":
+		if cmd.AuthoringDefaults == nil {
+			t.Fatal("authoring_defaults must reach the command")
+		}
+		wantDefaults := map[string]string{"INTERIOR": "mat-roble"}
+		if scenarioID == "design-backed-inherits-default" {
+			wantDefaults["FRENTES"] = "mat-blanco"
+		}
+		for role, material := range wantDefaults {
+			if cmd.AuthoringDefaults.MaterialChoices[role] != material {
+				t.Fatalf("authoring default %s = %q, want %q", role, cmd.AuthoringDefaults.MaterialChoices[role], material)
+			}
+		}
+		item := cmd.Items[0]
+		if scenarioID == "apply-design-defaults-preserving-items" {
+			if item.MaterialChoiceModes != nil {
+				t.Fatal("the apply scenario must not carry item modes")
+			}
+			return
+		}
+		if len(item.MaterialChoiceModes) == 0 {
+			t.Fatal("material_choice_modes must reach the command")
+		}
+		if scenarioID == "override-equal-to-default-survives-exact" &&
+			item.MaterialChoiceModes["INTERIOR"] != domain.DesignMaterialChoiceModeOverride {
+			t.Fatalf("INTERIOR mode = %q, want override (equality with the default must never flip lineage)", item.MaterialChoiceModes["INTERIOR"])
+		}
+		if scenarioID == "design-backed-inherits-default" &&
+			item.MaterialChoiceModes["INTERIOR"] != domain.DesignMaterialChoiceModeDesign {
+			t.Fatalf("INTERIOR mode = %q, want design", item.MaterialChoiceModes["INTERIOR"])
+		}
 	}
 }
 
@@ -173,6 +123,30 @@ func TestWorkingCopyContractFixture_SemverIsRejectedByGeneratedGoHandler(t *test
 	}
 	if store.updateDesignWorkingCopyCmd != nil {
 		t.Fatal("invalid semver must never reach the working-copy command")
+	}
+}
+
+// #784 R3 fixture parity: a PARTIAL lineage statement (some roles carry
+// modes while others do not) is ambiguous and never reaches the store —
+// 400 is part of the shared Ruby-to-Go boundary.
+func TestWorkingCopyContractFixture_PartialModesRejected(t *testing.T) {
+	fixture := loadWorkingCopyContractFixture(t)
+	if len(fixture.InvalidModesRequest) == 0 {
+		t.Fatal("fixture must carry invalidModesRequest")
+	}
+	store := &stubStore{}
+	srv := &Server{Store: store}
+	req := designRequest(http.MethodPut, "/api/designs/"+designTestDesignID+"/working-copy",
+		string(fixture.InvalidModesRequest), string(domain.RoleAdmin))
+	rr := httptest.NewRecorder()
+
+	srv.HandleDesignWorkingCopy(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body=%s)", rr.Code, rr.Body.String())
+	}
+	if store.updateDesignWorkingCopyCmd != nil {
+		t.Fatal("partial lineage statement must never reach the working-copy command")
 	}
 }
 
