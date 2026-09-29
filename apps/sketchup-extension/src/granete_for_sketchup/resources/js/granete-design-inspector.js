@@ -68,6 +68,11 @@
     // {furnitureInstanceId: {role: {mode, applied, designDefault, needsRollout}}}
     // — the ONLY badge authority. Never derived client-side.
     inheritance: {},
+    // #784 R5: the server-side inheritance summary and items projection
+    // inheritanceSummary: { role: { role, items, designBacked, needsRollout, designCurrent, overridden } }
+    inheritanceSummary: {},
+    inheritanceItems: [],
+    totalDesignItems: 0,
     // #784 R2 final review: one user Apply = exactly one apply request.
     // True from applyDraft() until its correlated answer (or the no-bridge
     // fallback) lands; a binding switch invalidates the in-flight request.
@@ -232,7 +237,181 @@
       });
       row.appendChild(changeBtn);
     }
+
+    // #784 R5: explicit rollout action to roll the default across existing furniture
+    var summary = state.inheritanceSummary && state.inheritanceSummary[role];
+    if (materialId && summary && summary.items > 0) {
+      var rolloutBtn = document.createElement("button");
+      rolloutBtn.id = "design-inspector-rollout-" + role;
+      rolloutBtn.className = "btn design-insp-rollout";
+      rolloutBtn.textContent = "Aplicar a muebles existentes…";
+      if (pendingCount() > 0) {
+        rolloutBtn.disabled = true;
+        rolloutBtn.title = "Aplica o descarta los cambios pendientes del diseño primero";
+      } else {
+        rolloutBtn.addEventListener("click", function () {
+          openImpactReviewModal(role);
+        });
+      }
+      row.appendChild(rolloutBtn);
+    }
     return row;
+  }
+
+  function ensureRolloutElements() {
+    var modal = document.getElementById("design-rollout-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "design-rollout-modal";
+      modal.className = "selector-modal-backdrop";
+      modal.style.display = "none";
+      if (document.body && typeof document.body.appendChild === "function") {
+        document.body.appendChild(modal);
+      }
+    }
+    var title = document.getElementById("design-rollout-modal-title") || document.createElement("h2");
+    title.id = "design-rollout-modal-title";
+    var closeBtn = document.getElementById("btn-design-rollout-close") || document.createElement("button");
+    closeBtn.id = "btn-design-rollout-close";
+    var statsContainer = document.getElementById("design-rollout-stats") || document.createElement("div");
+    statsContainer.id = "design-rollout-stats";
+    var scopePreserve = document.getElementById("rollout-scope-preserve") || document.createElement("input");
+    scopePreserve.id = "rollout-scope-preserve";
+    scopePreserve.type = "radio";
+    scopePreserve.name = "design-rollout-scope";
+    scopePreserve.value = "preserve";
+    var scopeReplace = document.getElementById("rollout-scope-replace") || document.createElement("input");
+    scopeReplace.id = "rollout-scope-replace";
+    scopeReplace.type = "radio";
+    scopeReplace.name = "design-rollout-scope";
+    scopeReplace.value = "replace";
+    var cancelBtn = document.getElementById("btn-design-rollout-cancel") || document.createElement("button");
+    cancelBtn.id = "btn-design-rollout-cancel";
+    var applyBtn = document.getElementById("btn-design-rollout-apply") || document.createElement("button");
+    applyBtn.id = "btn-design-rollout-apply";
+
+    return {
+      modal: modal,
+      title: title,
+      closeBtn: closeBtn,
+      statsContainer: statsContainer,
+      scopePreserve: scopePreserve,
+      scopeReplace: scopeReplace,
+      cancelBtn: cancelBtn,
+      applyBtn: applyBtn
+    };
+  }
+
+  function hideRolloutModal() {
+    var modal = document.getElementById("design-rollout-modal");
+    if (modal) modal.style.display = "none";
+  }
+
+  function openImpactReviewModal(role) {
+    var els = ensureRolloutElements();
+    var summary = (state.inheritanceSummary && state.inheritanceSummary[role]) || {
+      items: 0, designBacked: 0, needsRollout: 0, designCurrent: 0, overridden: 0
+    };
+    var materialId = state.defaults[role];
+    var matName = materialName(materialId) || materialId;
+    var label = (typeof deps.getRoleLabel === "function" && deps.getRoleLabel(role)) || role;
+    var compatible = summary.items || 0;
+    var inheritCount = summary.needsRollout || 0;
+    var customCount = summary.overridden || 0;
+    var total = state.totalDesignItems || compatible;
+    var unsupported = Math.max(0, total - compatible);
+
+    els.title.textContent = "Aplicar " + matName + " a " + label;
+
+    els.statsContainer.innerHTML = "";
+    var stat1 = document.createElement("div");
+    stat1.id = "rollout-stat-compatible";
+    stat1.className = "rollout-stat";
+    stat1.textContent = compatible + (compatible === 1 ? " mueble compatible" : " muebles compatibles");
+    els.statsContainer.appendChild(stat1);
+
+    var stat2 = document.createElement("div");
+    stat2.id = "rollout-stat-inherit";
+    stat2.className = "rollout-stat";
+    stat2.textContent = inheritCount + (inheritCount === 1 ? " heredará/cambiará" : " heredarán/cambiarán");
+    els.statsContainer.appendChild(stat2);
+
+    var stat3 = document.createElement("div");
+    stat3.id = "rollout-stat-custom";
+    stat3.className = "rollout-stat";
+    stat3.textContent = customCount + (customCount === 1 ? " tiene personalización" : " tienen personalización");
+    els.statsContainer.appendChild(stat3);
+
+    var stat4 = document.createElement("div");
+    stat4.id = "rollout-stat-unsupported";
+    stat4.className = "rollout-stat";
+    stat4.textContent = unsupported + (unsupported === 1 ? " no admite este rol" : " no admiten este rol");
+    els.statsContainer.appendChild(stat4);
+
+    els.scopePreserve.checked = true;
+    els.scopeReplace.checked = false;
+
+    function updateApplyButton() {
+      var isPreserve = els.scopePreserve.checked;
+      var count = isPreserve ? inheritCount : (inheritCount + customCount);
+      els.applyBtn.textContent = "Aplicar a " + count;
+      els.applyBtn.disabled = (count === 0);
+    }
+
+    updateApplyButton();
+
+    els.scopePreserve.onchange = updateApplyButton;
+    els.scopeReplace.onchange = updateApplyButton;
+
+    els.closeBtn.onclick = hideRolloutModal;
+    els.cancelBtn.onclick = hideRolloutModal;
+
+    els.applyBtn.onclick = function () {
+      if (els.applyBtn.disabled) return;
+      var isPreserve = els.scopePreserve.checked;
+      var targetItems = [];
+      (state.inheritanceItems || []).forEach(function (item) {
+        var r = item.roles && item.roles[role];
+        if (!r) return;
+        var shouldInclude = isPreserve
+          ? (r.mode === "design" && r.needsRollout === true)
+          : ((r.mode === "design" && r.needsRollout === true) || r.mode === "override");
+        if (shouldInclude) {
+          var choices = {};
+          choices[role] = materialId;
+          var modes = {};
+          modes[role] = "design";
+          targetItems.push({
+            instanceId: item.furnitureInstanceId,
+            definitionId: item.furnitureDefinitionId,
+            materialChoices: choices,
+            materialChoiceModes: modes
+          });
+        }
+      });
+
+      if (targetItems.length === 0) {
+        hideRolloutModal();
+        return;
+      }
+
+      if (window.GraneteMutation && typeof window.GraneteMutation.submitBatchUpdate === "function") {
+        var result = window.GraneteMutation.submitBatchUpdate(targetItems);
+        if (result === "busy") {
+          if (typeof deps.showToast === "function") deps.showToast("error", "Ya hay una mutación en curso.");
+          return;
+        }
+        if (result === "unavailable") {
+          if (typeof deps.showToast === "function") {
+            deps.showToast("error", "La edición por lote no está disponible fuera de SketchUp.");
+          }
+          return;
+        }
+      }
+      hideRolloutModal();
+    };
+
+    els.modal.style.display = "flex";
   }
 
   // ANY real binding change (design switch or unbound) invalidates every
@@ -407,6 +586,10 @@
         state.draftStale = false;
         state.conflict = null;
         state.inheritance = {};
+        state.inheritanceSummary = {};
+        state.inheritanceItems = [];
+        state.totalDesignItems = 0;
+        hideRolloutModal();
         // The authority is gone: every in-flight request is dead.
         invalidateBindingRequests();
       } else {
@@ -423,6 +606,10 @@
           state.draftStale = false;
           state.conflict = null;
           state.inheritance = {};
+          state.inheritanceSummary = {};
+          state.inheritanceItems = [];
+          state.totalDesignItems = 0;
+          hideRolloutModal();
           // A design switch kills every in-flight request of the old one.
           invalidateBindingRequests();
         }
@@ -559,6 +746,7 @@
       if (!payload || payload.requestId !== state.requestId) return;
       if (payload.status !== "ready" || !state.connected || payload.designId !== state.designId) return;
       var map = {};
+      var itemsList = [];
       (payload.items || []).forEach(function (item) {
         var roles = {};
         (item.roles || []).forEach(function (entry) {
@@ -570,10 +758,48 @@
           };
         });
         map[item.furnitureInstanceId] = roles;
+        itemsList.push({
+          furnitureInstanceId: item.furnitureInstanceId,
+          furnitureDefinitionId: item.furnitureDefinitionId || null,
+          roles: roles
+        });
       });
       state.inheritance = map;
+      state.inheritanceItems = itemsList;
+      state.totalDesignItems = (payload.items || []).length;
+
+      var summaryMap = {};
+      (payload.inheritanceSummary || []).forEach(function (s) {
+        summaryMap[s.role] = {
+          role: s.role,
+          items: s.items || 0,
+          designBacked: s.designBacked || 0,
+          needsRollout: s.needsRollout || 0,
+          designCurrent: s.designCurrent || 0,
+          overridden: s.overridden || 0
+        };
+      });
+      state.inheritanceSummary = summaryMap;
+
       if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
+      if (state.laneActive) render();
     },
+
+    // #784 R5: batch rollout outcome listener — when the batch update commits,
+    // refresh the server inheritance projection so badges and rollout counts update.
+    onBatchUpdateResult: function (result) {
+      if (result && result.success) {
+        requestInheritance(true);
+        if (typeof deps.showToast === "function") {
+          deps.showToast("success", "✓ Lote aplicado a " + (result.applied || 0) + " muebles.");
+        }
+      } else if (result && !result.success && typeof deps.showToast === "function") {
+        deps.showToast("error", "El lote no se aplicó: " + (result.error || "error desconocido"));
+      }
+    },
+
+    openImpactReviewModal: openImpactReviewModal,
+    ensureRolloutElements: ensureRolloutElements,
 
     // #784 R3: the ONLY badge authority accessor. Returns null when there
     // is no server projection for the item/role — never a guess.

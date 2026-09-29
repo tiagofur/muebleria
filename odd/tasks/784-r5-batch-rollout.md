@@ -2,7 +2,7 @@
 
 - Issue: #784 (`[P1][SU-UX-4] Design defaults, inheritance and contextual Inspector`), slice R5.
 - Autorización: prompt del owner 2026-09-29 ("creamos el ODD").
-- Lane: ODD. Estado: IN_PROGRESS.
+- Lane: ODD. Estado: COMPLETED.
 - Base: `feat/784-definition-aware-composition` (PR #922 @ `41e0b592`).
 - Branch: `feat/784-r5-batch-rollout`.
 
@@ -76,15 +76,15 @@ El endpoint `GET /api/designs/{designId}/working-copy/material-provenance` ya ca
 
 ## Criterios de Aceptación
 
-- [ ] `DesignInheritanceContract` en Ruby valida y parsea `inheritance_summary` y `furniture_definition_id`.
-- [ ] `DesignInheritanceBridge` emite `inheritanceSummary` a `onDesignInheritance` sin perder correlación de `requestId`.
-- [ ] En el Inspector de Diseño (sin selección), cada rol con muebles compatibles expone `[Aplicar a muebles existentes…]`.
-- [ ] El modal de Impact Review computa y muestra los 4 contadores honestos sin inventar valores.
-- [ ] Por defecto (`Conservar personalizados`), los muebles con `mode="override"` quedan intactos y no se incluyen en el lote.
-- [ ] Al seleccionar `Reemplazar también personalizados`, los muebles personalizados se incluyen en el lote con `materialChoiceModes: { [role]: 'design' }`.
-- [ ] La mutación viaja a través de `GraneteMutation.submitBatchUpdate` en un solo Undo de SketchUp.
-- [ ] Tras el éxito del lote, se re-consulta la proyección de herencia actualizando la UI.
-- [ ] Pruebas unitarias Ruby (`design_inspector_bridge_test.rb`, `project_furniture_test.rb`) y JS (`granete_design_inspector_test.js`) verifican el contrato y los flujos.
+- [x] `DesignInheritanceContract` en Ruby valida y parsea `inheritance_summary` y `furniture_definition_id`.
+- [x] `DesignInheritanceBridge` emite `inheritanceSummary` a `onDesignInheritance` sin perder correlación de `requestId`.
+- [x] En el Inspector de Diseño (sin selección), cada rol con muebles compatibles expone `[Aplicar a muebles existentes…]`.
+- [x] El modal de Impact Review computa y muestra los 4 contadores honestos sin inventar valores.
+- [x] Por defecto (`Conservar personalizados`), los muebles con `mode="override"` quedan intactos y no se incluyen en el lote.
+- [x] Al seleccionar `Reemplazar también personalizados`, los muebles personalizados se incluyen en el lote con `materialChoiceModes: { [role]: 'design' }`.
+- [x] La mutación viaja a través de `GraneteMutation.submitBatchUpdate` en un solo Undo de SketchUp.
+- [x] Tras el éxito del lote, se re-consulta la proyección de herencia actualizando la UI.
+- [x] Pruebas unitarias Ruby (`design_inspector_bridge_test.rb`, `project_furniture_test.rb`) y JS (`granete_design_inspector_test.js`) verifican el contrato y los flujos.
 
 ---
 

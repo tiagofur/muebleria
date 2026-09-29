@@ -970,6 +970,34 @@
         </div>
       </div>
 
+      <!-- Design Rollout Impact Review Modal (#784 R5) -->
+      <div id="design-rollout-modal" class="selector-modal-backdrop" style="display: none;">
+        <div class="selector-modal" role="dialog" aria-modal="true" aria-labelledby="design-rollout-modal-title" style="max-width: 480px; height: auto; max-height: 90vh;">
+          <header class="selector-modal-header">
+            <h2 id="design-rollout-modal-title" class="selector-modal-title">Aplicar a muebles existentes</h2>
+            <button id="btn-design-rollout-close" class="selector-modal-close-btn" type="button" aria-label="Cerrar modal">✕</button>
+          </header>
+          <div class="selector-modal-body" style="padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4);">
+            <div id="design-rollout-stats" style="display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm);"></div>
+            <div class="selector-scope-group" style="border-top: 1px solid var(--border-default); padding-top: var(--space-3);">
+              <div class="selector-scope-label" style="font-weight: var(--weight-semibold); margin-bottom: var(--space-2);">Alcance del despliegue:</div>
+              <label class="selector-scope-option" style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); cursor: pointer;">
+                <input type="radio" id="rollout-scope-preserve" name="design-rollout-scope" value="preserve" checked />
+                <span>Conservar personalizados (sólo actualizar muebles en modo Diseño)</span>
+              </label>
+              <label class="selector-scope-option" style="display: flex; align-items: center; gap: var(--space-2); cursor: pointer;">
+                <input type="radio" id="rollout-scope-replace" name="design-rollout-scope" value="replace" />
+                <span>Reemplazar también personalizados (forzar a todos los muebles)</span>
+              </label>
+            </div>
+          </div>
+          <footer class="selector-modal-footer" style="display: flex; justify-content: flex-end; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-default); background: var(--surface-card-subtle);">
+            <button id="btn-design-rollout-cancel" class="btn btn-secondary" type="button">Cancelar</button>
+            <button id="btn-design-rollout-apply" class="btn btn-primary" type="button">Aplicar</button>
+          </footer>
+        </div>
+      </div>
+
       <footer id="granete-version-footer">Granete para SketchUp</footer>
     </div>
 
@@ -1427,6 +1455,9 @@
           // toast can never claim N applied when fewer succeeded.
           onBatchUpdateResult: function (result) {
             window.GraneteUI.inspector.onBatchUpdateResult(result);
+            if (window.GraneteUI.designInspector && typeof window.GraneteUI.designInspector.onBatchUpdateResult === "function") {
+              window.GraneteUI.designInspector.onBatchUpdateResult(result);
+            }
           },
 
           onSelectionChange: function (context) {
@@ -1663,7 +1694,8 @@
           },
           openMaterialPicker: function (roleEntry, initialId, onApply) {
             window.GraneteUI.finishSelector.open(roleEntry, initialId, onApply, 'design');
-          }
+          },
+          showToast: function (kind, text) { showToast(kind, text); }
         });
 
         window.GraneteUI.materialRoles.init({

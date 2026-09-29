@@ -37,12 +37,15 @@ function createMockElement(id = '') {
     children,
     style: {},
     disabled: false,
+    checked: false,
     text: '',
     value: '',
     listeners,
     addEventListener: (evt, cb) => { listeners[evt] = listeners[evt] || []; listeners[evt].push(cb); },
     dispatchEvent: (evt) => {
       const type = (evt && evt.type) || evt;
+      const handlerName = `on${type}`;
+      if (typeof el[handlerName] === 'function') el[handlerName]({ type });
       (listeners[type] || []).forEach((cb) => cb({ type }));
     },
     appendChild: (child) => children.push(child),
@@ -52,7 +55,10 @@ function createMockElement(id = '') {
     },
     contains: () => false,
     focus: () => {},
-    click: () => { (listeners.click || []).forEach((cb) => cb({ type: 'click' })); },
+    click: () => {
+      if (typeof el.onclick === 'function') el.onclick({ type: 'click' });
+      (listeners.click || []).forEach((cb) => cb({ type: 'click' }));
+    },
     setAttribute: () => {},
     getAttribute: () => null
   };
@@ -924,6 +930,282 @@ function run() {
     assert.strictEqual(defaults.FRENTES, 'mat-oak');
     defaults.INTERIOR = 'tampered';
     assert.strictEqual(mod.getDesignDefaults().INTERIOR, 'mat-white', 'mutating the returned copy must not corrupt state');
+  });
+
+  // =========================================================================
+  // #784 R5: Design defaults rollout across existing furniture
+  // =========================================================================
+  test('R5: rollout button renders only when role has compatible items, and disables when draft is pending', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModuleR2(ctx);
+    readyState(ctx);
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [
+        { furnitureInstanceId: 'fi-1', furnitureDefinitionId: 'def-a', roles: [{ role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-white', needsRollout: true }] },
+        { furnitureInstanceId: 'fi-2', furnitureDefinitionId: 'def-a', roles: [{ role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-white', needsRollout: false }] }
+      ],
+      inheritanceSummary: [
+        { role: 'INTERIOR', items: 2, designBacked: 2, needsRollout: 1, designCurrent: 1, overridden: 0 },
+        { role: 'FRENTES', items: 0, designBacked: 0, needsRollout: 0, designCurrent: 0, overridden: 0 }
+      ]
+    });
+    mod.render();
+
+    const rolloutInterior = ctx.document.getElementById('design-inspector-rollout-INTERIOR');
+    assert.ok(rolloutInterior, 'rollout button exists for INTERIOR');
+    assert.strictEqual(rolloutInterior.textContent, 'Aplicar a muebles existentes…');
+    assert.strictEqual(rolloutInterior.disabled, false);
+
+    const rolloutFrentes = ctx.registry['design-inspector-rollout-FRENTES'];
+    assert.strictEqual(rolloutFrentes, undefined, 'rollout button not rendered when summary.items == 0');
+
+    // Create a pending draft: rollout button must disable
+    const changeInterior = ctx.document.getElementById('design-inspector-change-INTERIOR');
+    changeInterior.click();
+    assert.ok(ctx.picker, 'picker was opened');
+    ctx.picker.onApply('mat-oak'); // Pick new material -> pending draft
+    const updatedRollout = ctx.document.getElementById('design-inspector-rollout-INTERIOR');
+    assert.strictEqual(updatedRollout.disabled, true);
+    assert.ok(updatedRollout.title.includes('pendientes'));
+  });
+
+  test('R5: openImpactReviewModal renders title, honest stats, and default preserve scope', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    // 3 items in design: 2 compatible with INTERIOR (1 needs rollout, 1 override), 1 unsupported
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [
+        { furnitureInstanceId: 'fi-1', furnitureDefinitionId: 'def-1', roles: [{ role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-white', needsRollout: true }] },
+        { furnitureInstanceId: 'fi-2', furnitureDefinitionId: 'def-1', roles: [{ role: 'INTERIOR', mode: 'override', appliedMaterialId: 'mat-oak', needsRollout: false }] },
+        { furnitureInstanceId: 'fi-3', furnitureDefinitionId: 'def-2', roles: [] }
+      ],
+      inheritanceSummary: [
+        { role: 'INTERIOR', items: 2, designBacked: 1, needsRollout: 1, designCurrent: 0, overridden: 1 }
+      ]
+    });
+
+    mod.openImpactReviewModal('INTERIOR');
+    const modal = ctx.document.getElementById('design-rollout-modal');
+    assert.strictEqual(modal.style.display, 'flex');
+
+    const title = ctx.document.getElementById('design-rollout-modal-title');
+    assert.strictEqual(title.textContent, 'Aplicar Arauco Blanco Frosty a Interior');
+
+    const statCompat = ctx.document.getElementById('rollout-stat-compatible');
+    const statInherit = ctx.document.getElementById('rollout-stat-inherit');
+    const statCustom = ctx.document.getElementById('rollout-stat-custom');
+    const statUnsupp = ctx.document.getElementById('rollout-stat-unsupported');
+
+    assert.strictEqual(statCompat.textContent, '2 muebles compatibles');
+    assert.strictEqual(statInherit.textContent, '1 heredará/cambiará');
+    assert.strictEqual(statCustom.textContent, '1 tiene personalización');
+    assert.strictEqual(statUnsupp.textContent, '1 no admite este rol');
+
+    const scopePreserve = ctx.document.getElementById('rollout-scope-preserve');
+    const scopeReplace = ctx.document.getElementById('rollout-scope-replace');
+    assert.strictEqual(scopePreserve.checked, true, 'preserve is default');
+    assert.strictEqual(scopeReplace.checked, false);
+
+    const applyBtn = ctx.document.getElementById('btn-design-rollout-apply');
+    assert.strictEqual(applyBtn.textContent, 'Aplicar a 1');
+    assert.strictEqual(applyBtn.disabled, false);
+
+    // Cancel hides modal
+    const cancelBtn = ctx.document.getElementById('btn-design-rollout-cancel');
+    cancelBtn.click();
+    assert.strictEqual(modal.style.display, 'none');
+  });
+
+  test('R5: scope radio switches target count between needsRollout and (needsRollout + overridden)', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [
+        { furnitureInstanceId: 'fi-1', furnitureDefinitionId: 'def-1', roles: [{ role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-white', needsRollout: true }] },
+        { furnitureInstanceId: 'fi-2', furnitureDefinitionId: 'def-1', roles: [{ role: 'INTERIOR', mode: 'override', appliedMaterialId: 'mat-oak', needsRollout: false }] }
+      ],
+      inheritanceSummary: [
+        { role: 'INTERIOR', items: 2, designBacked: 1, needsRollout: 1, designCurrent: 0, overridden: 1 }
+      ]
+    });
+
+    mod.openImpactReviewModal('INTERIOR');
+    const scopePreserve = ctx.document.getElementById('rollout-scope-preserve');
+    const scopeReplace = ctx.document.getElementById('rollout-scope-replace');
+    const applyBtn = ctx.document.getElementById('btn-design-rollout-apply');
+
+    assert.strictEqual(applyBtn.textContent, 'Aplicar a 1');
+
+    // Switch to replace
+    scopePreserve.checked = false;
+    scopeReplace.checked = true;
+    scopeReplace.dispatchEvent({ type: 'change' });
+    assert.strictEqual(applyBtn.textContent, 'Aplicar a 2');
+
+    // Switch back to preserve
+    scopePreserve.checked = true;
+    scopeReplace.checked = false;
+    scopePreserve.dispatchEvent({ type: 'change' });
+    assert.strictEqual(applyBtn.textContent, 'Aplicar a 1');
+  });
+
+  test('R5: clicking Apply dispatches GraneteMutation.submitBatchUpdate with exact items and modes', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+
+    const batchCalls = [];
+    ctx.sandbox.window.GraneteMutation = {
+      submitBatchUpdate: (items) => {
+        batchCalls.push(items);
+        return 'sent';
+      }
+    };
+
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [
+        { furnitureInstanceId: 'fi-1', furnitureDefinitionId: 'def-1', roles: [{ role: 'INTERIOR', mode: 'design', appliedMaterialId: 'mat-white', needsRollout: true }] },
+        { furnitureInstanceId: 'fi-2', furnitureDefinitionId: 'def-1', roles: [{ role: 'INTERIOR', mode: 'override', appliedMaterialId: 'mat-oak', needsRollout: false }] }
+      ],
+      inheritanceSummary: [
+        { role: 'INTERIOR', items: 2, designBacked: 1, needsRollout: 1, designCurrent: 0, overridden: 1 }
+      ]
+    });
+
+    // 1) Apply with preserve (default)
+    mod.openImpactReviewModal('INTERIOR');
+    const applyBtn = ctx.document.getElementById('btn-design-rollout-apply');
+    applyBtn.click();
+
+    assert.strictEqual(batchCalls.length, 1);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(batchCalls[0])), [
+      {
+        instanceId: 'fi-1',
+        definitionId: 'def-1',
+        materialChoices: { INTERIOR: 'mat-white' },
+        materialChoiceModes: { INTERIOR: 'design' }
+      }
+    ]);
+    const modal = ctx.document.getElementById('design-rollout-modal');
+    assert.strictEqual(modal.style.display, 'none');
+
+    // 2) Apply with replace
+    batchCalls.length = 0;
+    mod.openImpactReviewModal('INTERIOR');
+    const scopePreserve = ctx.document.getElementById('rollout-scope-preserve');
+    const scopeReplace = ctx.document.getElementById('rollout-scope-replace');
+    scopePreserve.checked = false;
+    scopeReplace.checked = true;
+    scopeReplace.dispatchEvent({ type: 'change' });
+    applyBtn.click();
+
+    assert.strictEqual(batchCalls.length, 1);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(batchCalls[0])), [
+      {
+        instanceId: 'fi-1',
+        definitionId: 'def-1',
+        materialChoices: { INTERIOR: 'mat-white' },
+        materialChoiceModes: { INTERIOR: 'design' }
+      },
+      {
+        instanceId: 'fi-2',
+        definitionId: 'def-1',
+        materialChoices: { INTERIOR: 'mat-white' },
+        materialChoiceModes: { INTERIOR: 'design' }
+      }
+    ]);
+  });
+
+  test('R5: onBatchUpdateResult refreshes server inheritance projection and displays toast', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    const toastCalls = [];
+    ctx.sandbox.window.GraneteUI.designInspector.init({
+      getRoleLabel: (role) => role,
+      materialById: (id) => MATERIALS[id],
+      rerenderInspector: () => {},
+      showToast: (kind, text) => { toastCalls.push({ kind, text }); }
+    });
+
+    ctx.sandbox.sketchup.get_design_inheritance = (payload) => {
+      ctx.sketchupCalls.push(['get_design_inheritance', JSON.parse(payload)]);
+    };
+
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+
+    // Success outcome
+    mod.onBatchUpdateResult({ success: true, applied: 2 });
+    const lastCall = ctx.sketchupCalls[ctx.sketchupCalls.length - 1];
+    assert.strictEqual(lastCall[0], 'get_design_inheritance', 'refreshes server inheritance projection');
+    assert.strictEqual(toastCalls.length, 1);
+    assert.strictEqual(toastCalls[0].kind, 'success');
+    assert.ok(toastCalls[0].text.includes('2 muebles'));
+
+    // Failure outcome
+    mod.onBatchUpdateResult({ success: false, error: 'Locked by other user' });
+    assert.strictEqual(toastCalls.length, 2);
+    assert.strictEqual(toastCalls[1].kind, 'error');
+    assert.ok(toastCalls[1].text.includes('Locked by other user'));
+  });
+
+  test('R5: binding switch / disconnect clears rollout state and closes modal', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-white' } },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [{ furnitureInstanceId: 'fi-1', roles: [{ role: 'INTERIOR', mode: 'design', needsRollout: true }] }],
+      inheritanceSummary: [{ role: 'INTERIOR', items: 1, designBacked: 1, needsRollout: 1, designCurrent: 0, overridden: 0 }]
+    });
+
+    mod.openImpactReviewModal('INTERIOR');
+    const modal = ctx.document.getElementById('design-rollout-modal');
+    assert.strictEqual(modal.style.display, 'flex');
+
+    // Disconnect clears rollout state and hides modal
+    mod.onBindingStatus({ state: 'disconnected' });
+    assert.strictEqual(modal.style.display, 'none');
   });
 }
 
