@@ -455,7 +455,7 @@ func deriveFamilyPlans(relationship AuthoringRelationship, resolution ContactRes
 	// belongs to the relationship's state, never to a global-only issue that
 	// contradicts a READY stage (#874: joint collisions are structured
 	// errors). The whole relationship rolls back to zero operations.
-	if collision := firstHoleCollision(*operations); collision != nil {
+	if collision := firstHoleCollision((*operations)[operationsBefore:]); collision != nil {
 		pushIssue("DRILLING_CONFLICT", collision.Message, collision.Remediation)
 		*operations = (*operations)[:operationsBefore]
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,

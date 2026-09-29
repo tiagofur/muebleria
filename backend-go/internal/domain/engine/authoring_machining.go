@@ -929,10 +929,23 @@ func reconcileJoineryStatusesWithCollisions(statuses []JoineryRelationshipStatus
 	if len(conflicted) == 0 {
 		return statuses
 	}
-	// Copy before degrading: the caller's statuses stay untouched.
-	degraded := append([]JoineryRelationshipStatus(nil), statuses...)
+	// Deep copy before degrading: the caller's statuses — including their
+	// inner slices — stay untouched (appending to a shared backing array
+	// would silently write through).
+	degraded := make([]JoineryRelationshipStatus, len(statuses))
+	for i := range statuses {
+		blockers := make([]string, len(statuses[i].Blockers))
+		copy(blockers, statuses[i].Blockers)
+		issueCodes := make([]string, len(statuses[i].Stations.IssueCodes))
+		copy(issueCodes, statuses[i].Stations.IssueCodes)
+		stations := statuses[i].Stations
+		stations.IssueCodes = issueCodes
+		degraded[i] = statuses[i]
+		degraded[i].Blockers = blockers
+		degraded[i].Stations = stations
+	}
 	for i := range degraded {
-		if statuses[i].Stage != JoineryMachiningReady || !conflicted[statuses[i].RelationshipID] {
+		if degraded[i].Stage != JoineryMachiningReady || !conflicted[degraded[i].RelationshipID] {
 			continue
 		}
 		degraded[i].Stage = JoineryMachiningInvalid

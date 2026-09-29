@@ -587,3 +587,62 @@ func TestReconcileDegradesReadyOnCrossSourceConflict(t *testing.T) {
 		t.Fatalf("clean stage = %s", clean[0].Stage)
 	}
 }
+
+// TestPriorRelationshipHolesDoNotContaminateLocalCollision: the local probe
+// only sees the CURRENT relationship's emitted segment — a previous
+// relationship's holes (even colliding among themselves) must neither fail
+// this joint nor be rolled back by it.
+func TestPriorRelationshipHolesDoNotContaminateLocalCollision(t *testing.T) {
+	relationship := j1bRelationship()
+	relationship.Parameters = nil
+	relationship.Families = floorSideFamilies()
+	var collected []domain.ContractIssue
+	// Prior segment: two operations from an earlier relationship with two
+	// mutually colliding holes on the same host+face.
+	prior := []ResolvedMachiningOperation{{
+		OperationID: "prior:op-1", HostComponentInstanceID: "floor",
+		Provenance: ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "prior-rel"},
+		Holes: []ResolveHole{
+			{Face: "top", XMm: 100, YMm: 9, DiameterMm: 8, DepthMm: 15, Type: "dowel"},
+			{Face: "top", XMm: 102, YMm: 9, DiameterMm: 8, DepthMm: 15, Type: "dowel"},
+		},
+	}}
+	operations := append([]ResolvedMachiningOperation(nil), prior...)
+	status := deriveFloorSideJoinery(relationship, j1bBoards(), &collected, syntheticProfiles(), &operations)
+	if status.Stage != JoineryMachiningReady {
+		t.Fatalf("stage = %s issues=%+v", status.Stage, collected)
+	}
+	// The prior relationship's operations are intact (no cross-rollback).
+	if len(operations) != len(prior)+8 {
+		t.Fatalf("operations = %d, want %d+8", len(operations), len(prior))
+	}
+	for i, op := range prior {
+		if operations[i].OperationID != op.OperationID {
+			t.Fatalf("prior operation lost: %+v", operations[i])
+		}
+	}
+}
+
+// TestReconcileDoesNotMutateInput: the reconciliation degrades copies only;
+// the caller's statuses (and their inner slices) are untouched.
+func TestReconcileDoesNotMutateInput(t *testing.T) {
+	statuses := []JoineryRelationshipStatus{{
+		RelationshipID: "rel-1", Kind: "floor-side", Stage: JoineryMachiningReady,
+		Blockers: []string{},
+		Stations: JoineryStationPlanStatus{Status: "PLANNED", IssueCodes: []string{}},
+	}}
+	operations := []ResolvedMachiningOperation{
+		{OperationID: "op-a", HostComponentInstanceID: "b1", Provenance: ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "rel-1"}},
+		{OperationID: "op-b", HostComponentInstanceID: "b1", Provenance: ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "rel-1"}},
+	}
+	issues := []domain.ContractIssue{{
+		Code: "DRILLING_CONFLICT", Details: map[string]any{"operationId1": "op-a", "operationId2": "op-b"},
+	}}
+	reconciled := reconcileJoineryStatusesWithCollisions(statuses, operations, issues)
+	if reconciled[0].Stage != JoineryMachiningInvalid {
+		t.Fatalf("reconciled stage = %s", reconciled[0].Stage)
+	}
+	if statuses[0].Stage != JoineryMachiningReady || len(statuses[0].Blockers) != 0 || len(statuses[0].Stations.IssueCodes) != 0 {
+		t.Fatalf("input mutated: %+v", statuses[0])
+	}
+}
