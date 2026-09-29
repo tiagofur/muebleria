@@ -30,7 +30,7 @@ class GraneteDesignInspectorJsTest < Minitest::Test
 
     result = JSON.parse(stdout)
     assert_equal true, result['success']
-    assert_operator result['testsPassed'], :>=, 30,
+    assert_operator result['testsPassed'], :>=, 33,
                     'design inspector harness must keep covering the 11 R1 RED cases: bound render, ' \
                     'empty defaults, unbound fallback, selection transitions, design switch, ' \
                     'late-response discard, unknown material, error+retry AND the final-review ' \

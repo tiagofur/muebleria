@@ -715,6 +715,33 @@
     }
   });
 
+  // #784 R3: Restaurar valor del diseño — materializes the current Design
+  // default for the role and declares mode=design, riding the SAME
+  // authoritative path as any furniture edit (resolve → ONE SketchUp
+  // operation → rebuild → metadata). Never a paint-only change and never
+  // inferred from value equality: the mode travels in the payload.
+  function applyRoleRestore(instanceId, role, designDefaultId) {
+    if (!selectedContext || selectedContext.kind !== "furniture") return;
+    if (selectedContext.furnitureInstanceRef !== instanceId) return;
+    if (!deps.capabilityEnabled(selectedContext, "canEditMaterials")) return;
+    var payload = {
+      instanceId: selectedContext.furnitureInstanceRef,
+      definitionId: selectedContext.furnitureDefinitionId,
+      parameters: inspectorParams,
+      materialChoices: Object.assign({}, inspectorMaterialChoices),
+      materialChoiceModes: {}
+    };
+    payload.materialChoices[role] = designDefaultId;
+    payload.materialChoiceModes[role] = "design";
+    var submitted = "unavailable";
+    if (window.GraneteMutation) {
+      submitted = window.GraneteMutation.submitUpdate(payload, selectedContext);
+    }
+    if (submitted === "unavailable" && window.sketchup && window.sketchup.update_furniture) {
+      window.sketchup.update_furniture(JSON.stringify(payload));
+    }
+  }
+
   // Destructive action guard: first click arms the button, second click
   // within the window confirms. Undo still applies after deletion.
   var deleteArmed = false;
@@ -922,6 +949,10 @@
     // #784 R1: repaint through the single routing (binding changes that
     // arrive while the lane is empty re-render via this seam).
     rerender: function () { renderInspector(); },
+    // #784 R3: the restore action target (called from the role block).
+    applyRoleRestore: function (instanceId, role, designDefaultId) {
+      applyRoleRestore(instanceId, role, designDefaultId);
+    },
     getDefinition: function () { return inspectorDef; },
     getMaterialsCard: function () { return inspectorMaterialsCard; },
     setHardwareCatalog: setHardwareCatalog,

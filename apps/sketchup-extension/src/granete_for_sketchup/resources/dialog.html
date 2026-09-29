@@ -1315,6 +1315,10 @@
           onDesignDefaultsApplied: function (payload) {
             window.GraneteUI.designInspector.onDesignDefaultsApplied(payload);
           },
+          // #784 R3: the inheritance projection answer (badge authority).
+          onDesignInheritance: function (payload) {
+            window.GraneteUI.designInspector.onDesignInheritance(payload);
+          },
           onDeleteResult: function (result) {
             window.GraneteUI.inspector.onDeleteResult(result);
           },
@@ -1656,7 +1660,15 @@
           icon: icon,
           getInspectorMaterialsCard: function () { return window.GraneteUI.inspector.getMaterialsCard(); },
           getInspectorDef: function () { return window.GraneteUI.inspector.getDefinition(); },
-          getSelectedContext: function () { return window.GraneteUI.inspector.getSelectedContext(); }
+          getSelectedContext: function () { return window.GraneteUI.inspector.getSelectedContext(); },
+          // #784 R3: badges come from the server projection (design
+          // inspector module); the restore delegates to the inspector's
+          // authoritative resolve path. material-roles never derives
+          // inheritance itself.
+          getRoleBadge: window.GraneteUI.designInspector.getRoleBadge,
+          onRestoreRole: function (instanceId, role, designDefaultId) {
+            window.GraneteUI.inspector.applyRoleRestore(instanceId, role, designDefaultId);
+          }
         });
 
         // #848 C4.9: the project furniture module owns the Project

@@ -9,6 +9,10 @@
 //   project truth and NOT backend business truth — the authoritative
 //   project/default state lives server-side; these only keep the dialog's
 //   session coherent between renders
+// - #784 R3 badge/restore seams (optional deps: getRoleBadge reads the
+//   server inheritance projection via the design-inspector module;
+//   onRestoreRole delegates the authoritative reset — this module NEVER
+//   derives inheritance nor owns durable defaults)
 // - role-compatible material resolution (optionMaterialIds: the role's
 //   curated optionIds when they resolve, else every active material)
 // - default choice resolution per definition (project default when still
@@ -192,7 +196,35 @@
       title.className = "material-role-title";
       title.textContent = r.label || r.role;
       header.appendChild(title);
+
+      // #784 R3: the inheritance badge comes EXCLUSIVELY from the injected
+      // server projection accessor (design-inspector module) — never from
+      // comparing values. Only in the Inspector context (an item exists).
+      var badge = null;
+      if (ctx.instanceId && typeof deps.getRoleBadge === "function") {
+        badge = deps.getRoleBadge(ctx.instanceId, r.role);
+      }
+      if (badge) {
+        var badgeSpan = document.createElement("span");
+        badgeSpan.className = "material-role-badge material-role-badge--" + badge.kind;
+        badgeSpan.textContent = badge.text;
+        header.appendChild(badgeSpan);
+      }
       block.appendChild(header);
+
+      // #784 R3: an override role with a known Design default offers the
+      // explicit restore action; the reset itself is a full authoritative
+      // resolve handled by the inspector — never a paint-only change.
+      if (badge && badge.kind === "override" && badge.designDefault &&
+          typeof deps.onRestoreRole === "function") {
+        var restoreBtn = document.createElement("button");
+        restoreBtn.className = "btn material-role-restore";
+        restoreBtn.textContent = "Restaurar valor del diseño";
+        restoreBtn.addEventListener("click", function () {
+          deps.onRestoreRole(ctx.instanceId, r.role, badge.designDefault);
+        });
+        block.appendChild(restoreBtn);
+      }
 
       // Selected Preview (interactive card)
       var preview = document.createElement("div");
