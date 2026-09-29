@@ -46,9 +46,9 @@ func TestCalcProjectBreakdown_HonorsItemBaseMode(t *testing.T) {
 				ModuleID: "m-bajo",
 				Quantity: 1,
 				OptionChoices: map[string]string{
-					"FRENTE": "mat-front",
+					"FRENTE":   "mat-front",
 					"INTERIOR": "mat-body",
-					"PATAS":   "hw-patas",
+					"PATAS":    "hw-patas",
 				},
 				BaseMode: baseMode,
 			}},
@@ -217,7 +217,7 @@ func TestPlinthSidesForPlacement_WallLengthZeroPinsSides(t *testing.T) {
 func TestGenerateHardwareList_CeilProfileToPackageBars(t *testing.T) {
 	catalog := baseParityCatalog(t)
 	project := domain.Project{
-		ID:  "p-442-strip",
+		ID: "p-442-strip",
 		Items: []domain.ProjectItem{{
 			ID:       "item-1",
 			ModuleID: "m-bajo-perfil",

@@ -178,12 +178,12 @@ type fxExpectedPart struct {
 }
 
 type fxExpected struct {
-	Parts          []fxExpectedPart `json:"parts"`
+	Parts          []fxExpectedPart   `json:"parts"`
 	HardwareTotals map[string]float64 `json:"hardwareTotals"`
-	MaterialsCost  float64          `json:"materialsCost"`
-	HardwareTotal  float64          `json:"hardwareTotal"`
-	DirectCost     float64          `json:"directCost"`
-	SalePrice      float64          `json:"salePrice"`
+	MaterialsCost  float64            `json:"materialsCost"`
+	HardwareTotal  float64            `json:"hardwareTotal"`
+	DirectCost     float64            `json:"directCost"`
+	SalePrice      float64            `json:"salePrice"`
 }
 
 type fxScenario struct {

@@ -316,7 +316,11 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	for _, p := range effectivePlacements {
 		machiningForPlacements = append(machiningForPlacements, effectivePlacementForMachining{intent: p.intent, board: p.board})
 	}
-	machining, machiningIssues := deriveAuthoringMachining(boards, input.Relationships, machiningForPlacements, input.Catalog)
+	// Production passes no family profile resolver (#874 J2-A.2): without
+	// verified technical profiles family-bearing relationships stay at
+	// TECHNICAL_PROFILE_REQUIRED with zero operations. Test contexts inject
+	// synthetic profiles explicitly.
+	machining, machiningIssues := deriveAuthoringMachining(boards, input.Relationships, machiningForPlacements, input.Catalog, nil)
 	manufacturing = append(manufacturing, machiningIssues...)
 	machining.ManufacturingFingerprint = authoringManufacturingFingerprint(
 		layout, boards, machiningForPlacements, machining.DerivedHardwarePlacements, machining.Operations, machining.JoineryStatuses)

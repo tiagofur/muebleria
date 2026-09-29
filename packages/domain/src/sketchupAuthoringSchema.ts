@@ -201,6 +201,8 @@ export type AuthoringRoundTripResponseV1 = {
 export type RelationshipProvenance = {
   readonly sourceKind: 'relationship';
   readonly relationshipId: StableEntityId;
+  /** Operation family inside the relationship (#874 J2-A.2). */
+  readonly familyId?: string;
   readonly catalogRuleId?: string;
 };
 
