@@ -536,8 +536,11 @@ type Store interface {
 	ResolveDamageReport(ctx context.Context, id string) error
 	GetTodayDamageCount(ctx context.Context) (int, error)
 
-	// Manufacturing Libraries (#772 / LIB-1)
+	// Manufacturing Libraries (#772 / LIB-1, #773 / LIB-2)
 	GetStandardLibrary(ctx context.Context) (*domain.ManufacturingLibrary, error)
 	GetCurrentPublishedRelease(ctx context.Context, libraryID uuid.UUID) (*domain.LibraryRelease, error)
 	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
+	GetReleaseManifest(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryManifest, []byte, error)
+	GetResourceBlob(ctx context.Context, sha256 string) (*domain.ResourceBlob, error)
+	GetResourceBlobWithEntitlementCheck(ctx context.Context, releaseID uuid.UUID, resourceID uuid.UUID, sha256 string) (*domain.ResourceBlob, domain.PackageKind, error)
 }
