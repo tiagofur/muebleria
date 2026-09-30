@@ -88,7 +88,39 @@
   scenario uses the floor as the fixed participant and verifies hand-computed
   expectations exactly. Ruby RED (ambiguous provenance) → provenance
   vocabulary fix → 49/49.
-- NOT_RUN locally (CI gates for the exact HEAD): full `go test ./...` with
-  isolated PostgreSQL, Foundation Gate A postgres/browser, browser real for
-  #902 panel, TestUp/host, visual. No V2 claim is made: this slice changes
-  contract shape + tests only, no new behavior beyond schema acceptance.
+
+## Round 2 — owner correction (2026-09-30): "el entrepaño debe ser como el piso"
+
+- The owner reviewed the cross-orientation discovery and ordered the fix:
+  interior panels must share the floor board's rotation and X/Y measures.
+  Root cause found: the catalog definition already matched the floor
+  (LengthFormula PW-2*T, WidthFormula PD-T); the cross orientation came from
+  `defaultPoseForPlacement("interno", …)` having NO rotation (Go layout.go +
+  TS twin spatialPlacement.ts), unlike base/superior (rotateY 90).
+- Fix: interno pose gains rotateY: 90 in both runtimes. Regenerated golden:
+  scenario 28 now uses the real entrepaño occurrence (moved to z=400) as the
+  fixed panel — both side contacts VALID, stations [30,261,492] both contacts
+  (the shelf's width spans the full interior depth), MACHINING_READY with 4
+  productive operations / 12 holes carrying recipe provenance; hand-checked
+  hole coords against the published localTransforms (shelf pilots local
+  x=30/261/492 y=9; side counterbores 512/281/50 and 530/299/68 at z=409).
+- Second contract incompatibility the golden exposed: the authored
+  fixed-shelf-side joint still materialized the legacy shelf-support binding
+  for the same panel and both systems drilled the same faces (minifix Ø15 vs
+  recipe pilot Ø3 at [492,9]) — DRILLING_CONFLICT. One panel end carries one
+  joint system: `materializeBoundRelationships` now suppresses the
+  shelf-support binding for a source panel that carries an authored
+  fixed-shelf-side joint; other boards keep theirs (pinned both ways in
+  TestAuthoredFixedShelfRecipeReplacesShelfSupportBinding).
+- Fixture diff vs main is no longer additions-only: scenarios containing the
+  shelf change machining/localTransform with the corrected orientation
+  (160 additions / 450 deletions at round-2 HEAD); the catalog revision is
+  unchanged (the rotation lives in the layout pose, not the catalog).
+- Re-verification at round-2 HEAD 8046cde6: gofmt clean on touched files;
+  Go engine+api ok; full Go suite 14 packages ok; domain Vitest 1734/1734;
+  full workspace TS suites green (storage 239, excel 649, ui 2042, web 561,
+  desktop 17, mobile 87, databaseIsolation 16); root typecheck ok; Ruby
+  contract test 49/49; golden idempotent without regen.
+- NOT_RUN locally (CI gates for the exact HEAD): Go with isolated
+  PostgreSQL, Foundation Gate A postgres/browser, TestUp/host, machine
+  proof. No V2 claim beyond CI's own gates.
