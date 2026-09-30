@@ -381,6 +381,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	// #773 (LIB-2): Manifest and content-addressed resource distribution
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/manifest", authMW(http.HandlerFunc(server.HandleStandardLibraryReleaseManifest)))
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/resources/{resourceId}/blobs/{hash}", authMW(http.HandlerFunc(server.HandleStandardLibraryResourceBlob)))
+	// #775 (LIB-4): Organization manufacturing library overlays and 3-way rebase
+	mux.Handle("POST /api/manufacturing-libraries/overlays", authMW(http.HandlerFunc(server.HandleCreateLibraryOverlay)))
+	mux.Handle("GET /api/manufacturing-libraries/overlays/{id}", authMW(http.HandlerFunc(server.HandleGetLibraryOverlayByID)))
+	mux.Handle("PATCH /api/manufacturing-libraries/overlays/{id}", authMW(http.HandlerFunc(server.HandleUpdateLibraryOverlay)))
+	mux.Handle("POST /api/manufacturing-libraries/overlays/{id}/rebase", authMW(http.HandlerFunc(server.HandleRebaseLibraryOverlay)))
+	mux.Handle("GET /api/manufacturing-libraries/overlays/{id}/conflicts", authMW(http.HandlerFunc(server.HandleListLibraryOverlayConflicts)))
+	mux.Handle("POST /api/manufacturing-libraries/overlays/{id}/conflicts/{conflictId}/resolve", authMW(http.HandlerFunc(server.HandleResolveLibraryOverlayConflict)))
 
 	// Clientes
 	mux.Handle("GET /api/customers/summaries", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleCustomerSummaries))))

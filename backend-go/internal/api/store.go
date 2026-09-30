@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -543,4 +544,17 @@ type Store interface {
 	GetReleaseManifest(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryManifest, []byte, error)
 	GetResourceBlob(ctx context.Context, sha256 string) (*domain.ResourceBlob, error)
 	GetResourceBlobWithEntitlementCheck(ctx context.Context, releaseID uuid.UUID, resourceID uuid.UUID, sha256 string) (*domain.ResourceBlob, domain.PackageKind, error)
+
+	// Manufacturing Library Overlays (#775 / LIB-4)
+	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
+	GetOverlayByID(ctx context.Context, id uuid.UUID) (*domain.LibraryOverlay, error)
+	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
+	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
+	UpdateOverlayStatus(ctx context.Context, id uuid.UUID, status string) error
+	UpdateOverlayBaseRelease(ctx context.Context, id uuid.UUID, newBaseReleaseID uuid.UUID, overrides json.RawMessage, status string) error
+	ReplaceOverlayPendingConflicts(ctx context.Context, overlayID uuid.UUID, conflicts []domain.LibraryOverlayConflict) error
+	ListOverlayConflicts(ctx context.Context, overlayID uuid.UUID, statusFilter string) ([]domain.LibraryOverlayConflict, error)
+	GetOverlayConflictByID(ctx context.Context, conflictID uuid.UUID) (*domain.LibraryOverlayConflict, error)
+	ResolveOverlayConflict(ctx context.Context, conflictID uuid.UUID, action domain.ResolutionAction, resolvedValue any, resolvedBy *uuid.UUID) error
+	CountPendingConflicts(ctx context.Context, overlayID uuid.UUID) (int, error)
 }
