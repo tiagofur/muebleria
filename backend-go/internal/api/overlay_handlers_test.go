@@ -923,3 +923,83 @@ func TestHandleResolveLibraryOverlayConflict(t *testing.T) {
 		}
 	})
 }
+
+func TestHandleGetActiveLibraryOverlay(t *testing.T) {
+	orgA := uuid.New()
+	orgB := uuid.New()
+	userID := uuid.New()
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	baseRelID := uuid.New()
+
+	overlayID := uuid.New()
+	overlay := &domain.LibraryOverlay{
+		ID:             overlayID,
+		OrganizationID: orgA,
+		LibraryID:      standardID,
+		BaseReleaseID:  baseRelID,
+		Status:         "active",
+		Overrides:      json.RawMessage(`{"joint.floorToSide.stationsCount": 4}`),
+	}
+
+	t.Run("Success 200 returns active overlay", func(t *testing.T) {
+		store := &stubStore{
+			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+				overlayID: overlay,
+			},
+		}
+		srv := &Server{Store: store}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/manufacturing-libraries/overlays/active", nil)
+		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+		rr := httptest.NewRecorder()
+
+		srv.HandleGetActiveLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		var res openapi.LibraryOverlayDetail
+		if err := json.NewDecoder(rr.Body).Decode(&res); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if res.ID != overlayID.String() {
+			t.Errorf("expected overlay ID %s, got %s", overlayID, res.ID)
+		}
+		if res.Status != "active" {
+			t.Errorf("expected status active, got %s", res.Status)
+		}
+	})
+
+	t.Run("Not found 404 when no overlay exists for org", func(t *testing.T) {
+		store := &stubStore{
+			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+				overlayID: overlay, // belongs to orgA
+			},
+		}
+		srv := &Server{Store: store}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/manufacturing-libraries/overlays/active", nil)
+		req = withOverlayOrgClaims(req, orgB.String(), userID.String()) // orgB has no overlay
+		rr := httptest.NewRecorder()
+
+		srv.HandleGetActiveLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("expected 404 for org without overlay, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("Unauthorized 401 when claims missing", func(t *testing.T) {
+		srv := &Server{Store: &stubStore{}}
+		req := httptest.NewRequest(http.MethodGet, "/api/manufacturing-libraries/overlays/active", nil)
+		rr := httptest.NewRecorder()
+
+		srv.HandleGetActiveLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusUnauthorized {
+			t.Fatalf("expected 401 without claims, got %d", rr.Code)
+		}
+	})
+}
+

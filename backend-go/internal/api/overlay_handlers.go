@@ -96,6 +96,52 @@ func (s *Server) HandleCreateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 	respondWithJSON(w, http.StatusCreated, mapOverlayDetailToOpenAPI(created))
 }
 
+// HandleGetActiveLibraryOverlay handles GET /api/manufacturing-libraries/overlays/active.
+func (s *Server) HandleGetActiveLibraryOverlay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	orgUUID, err := uuid.Parse(claims.OrgID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid organization id")
+		return
+	}
+
+	targetLibID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	if qLib := r.URL.Query().Get("libraryId"); qLib != "" {
+		parsed, err := uuid.Parse(qLib)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid libraryId query parameter")
+			return
+		}
+		targetLibID = parsed
+	}
+
+	overlay, err := s.overlayService().GetActiveOverlay(r.Context(), orgUUID, targetLibID)
+	if err != nil {
+		if errors.Is(err, storage.ErrOverlayNotFound) {
+			respondWithError(w, http.StatusNotFound, "active overlay not found")
+			return
+		}
+		respondWithInternalError(w, err, "get active overlay")
+		return
+	}
+
+	if overlay.OrganizationID != orgUUID {
+		respondWithError(w, http.StatusNotFound, "active overlay not found")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(overlay))
+}
+
 // HandleGetLibraryOverlayByID handles GET /api/manufacturing-libraries/overlays/{id}.
 func (s *Server) HandleGetLibraryOverlayByID(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
