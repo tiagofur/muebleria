@@ -9,6 +9,7 @@ module Granete
 
     unless file_loaded?(__FILE__)
       %w[
+        paths
         identity
         logging
         auth/provider
@@ -39,6 +40,9 @@ module Granete
         library/catalog_provider
         library/layout_contract
         library/authoring_resolve_contract
+        library/library_store
+        library/library_synchronizer
+        library/local_library_resolver
         host/message_identity
         host/interaction_state
         host/error_taxonomy

@@ -14,6 +14,9 @@ class OwnershipTest < Minitest::Test
   # required wire response that Ruby validates but never computes.
   # `stale` is deliberately absent: since #498 it is the canonical host
   # interaction/degraded state for superseded or 409 conflict responses.
+  # Manufacturing library releases (ADR-0008, #772-#774) are content-addressed
+  # distribution packages (library_releases, release_id); productionRelease
+  # remains the forbidden manufacturing resolver concept.
   FORBIDDEN_RUNTIME_TERMS = %w[
     bom
     cutlist
@@ -26,10 +29,8 @@ class OwnershipTest < Minitest::Test
     parts
     postprocessing
     postprocessor
-    release
-    released
-    releases
-    releasing
+    productionRelease
+    production_release
     resolvedparts
     toolpath
   ].freeze
