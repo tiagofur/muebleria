@@ -8,7 +8,9 @@ require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contr
 class CatalogParameterContractTest < Minitest::Test
   Contract = Granete::SketchUpExtension::Library::CatalogParameterContract
   CORPUS_PATH = File.expand_path('../../../../contracts/furnitureParameterDefinitions.invalid.json', __dir__)
-  CROSS_SURFACE_FIXTURE_PATH = File.expand_path('../../../../contracts/furnitureAuthoringCrossSurface.fixture.json', __dir__)
+  CROSS_SURFACE_FIXTURE_PATH = File.expand_path(
+    '../../../../contracts/furnitureAuthoringCrossSurface.fixture.json', __dir__
+  )
 
   def test_accepts_typed_parameters_and_reserved_dimensions
     definition = valid_definition
