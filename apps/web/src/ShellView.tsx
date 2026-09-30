@@ -428,7 +428,7 @@ export interface ShellViewCtx {
   readonly createHardware: (draft: HardwareDraft) => void;
   readonly createMaterial: (draft: MaterialDraft) => void;
   readonly createMaterialCategory: (draft: CategoryDraft) => void;
-  readonly createModule: (draft: ModuleDraft) => void;
+  readonly createModule: (draft: ModuleDraft) => Promise<void>;
   readonly createOptionGroup: (draft: OptionGroupDraft) => void;
   readonly createProject: (draft: ProjectDraft) => void;
   readonly createStructure: (draft: StructureDraft) => void;
@@ -658,7 +658,7 @@ export interface ShellViewCtx {
   readonly updateMaterial: (id: string, draft: MaterialDraft) => void;
   readonly updateMaterialCategory: (id: string, draft: CategoryDraft) => void;
   readonly updateMeasureDefaults: (projectId: string, defaults: { readonly inferior?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; readonly superior?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; readonly alto?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; } | undefined) => void;
-  readonly updateModule: (id: string, draft: ModuleDraft) => void;
+  readonly updateModule: (id: string, draft: ModuleDraft) => Promise<void>;
   readonly updateOptionGroup: (id: string, draft: OptionGroupDraft) => void;
   readonly updateProject: (id: string, draft: ProjectDraft) => void;
   readonly updateProjectItem: (projectId: string, item: ProjectItem) => void;
@@ -963,6 +963,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
 
   // WEB-DT-1 (#500): the Project Furniture matrix route pins its exact
   // commercial/design context in the URL query string.
+  // #497 T7: stateless draft preview for the Parámetros tab (constructing the
+  // client once per shell is safe — it owns no state).
+  const modulePreviewClient = useMemo(
+    () => new GraneteApiClient(DEFAULT_API_BASE),
+    [],
+  );
+
   const projectFurnitureRoute = useMemo(
     () => projectFurnitureFromPath(location.pathname, location.search),
     [location.pathname, location.search],
@@ -2426,6 +2433,15 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           edges={edges}
           canMutate={canMutateModules}
           resolveImageUrl={resolveMediaUrl}
+          onPreviewAuthoring={
+            session === 'auth' && authToken
+              ? (request) =>
+                  modulePreviewClient.previewFurnitureAuthoring(authToken, request)
+              : undefined
+          }
+          onDiscardStaleEditor={() => {
+            void useWorkspaceStore.getState().loadWorkspace();
+          }}
           onUploadImage={
             canMutateModules && session === 'auth' && authToken
               ? uploadCatalogImage

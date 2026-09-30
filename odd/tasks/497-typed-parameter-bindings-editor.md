@@ -334,7 +334,7 @@ treated as missing; no SketchUp hand-written adapter.
     explained as non-authorable (projection/resolver-only). Component tests
     for ambiguity/incompatibility/metadata cases.
 
-- [ ] **T7 — UI: safe evolution impact + stale conflict UX + "Probar resolución"**
+- [x] **T7 — UI: safe evolution impact + stale conflict UX + "Probar resolución"** — DONE.
   - Route: inline.
   - Trigger evidence: issue requires impact before destructive/incompatible
     edits, optimistic-concurrency UX, and an authoritative preview with
@@ -568,11 +568,44 @@ treated as missing; no SketchUp hand-written adapter.
   browser gate (CI organization-browser); the preview wiring is T7. Delivery:
   partial (PR5; remaining acceptance T7–T8).
 
+- 2026-09-30: **T7 implemented** — one work-unit commit, client + shell
+  wiring. (1) Safe-evolution impact: parameter removal goes through a
+  ConfirmDialog stating that the definition hash and catalog revision advance
+  on save, the binding goes with the parameter, instantiated furniture keeps
+  its pinned version and SketchUp resolves against the new revision on
+  refresh, and the honest "los presets del mueble sólo llevan medidas: ningún
+  preset usa este parámetro"; changing the TYPE of an existing parameter shows
+  the same advance warning inline. (2) Stale UX: the editor submit now settles
+  the save BEFORE closing — a server VERSION_CONFLICT keeps the editor open
+  with the draft intact and a banner ("sin pisar la versión nueva") offering
+  "Descartar mis cambios y recargar" (reload via the workspace loader);
+  non-stale failures also keep the draft (no silent data loss) without the
+  stale banner. Store `createModule`/`updateModule` now return the save
+  promise so the UI can settle it. (3) Probar resolución: the panel grows a
+  preview section (requires a saved module — honest guard otherwise) with
+  sample values seeded from the definition defaults, calling
+  `GraneteApiClient.previewFurnitureAuthoring` (T4's domain-pinned preview)
+  wired from the shell; accepted renders the authoritative summary
+  (would-be hash short form, revision used, resolved piece/hardware counts,
+  preflight clear/blocked + issues in Spanish via the shared code map
+  mirroring granete-param-form); rejected renders the structured issues in
+  Spanish. The optional 3D render of the draft is NOT built here (the
+  issue's "may render" is optional; a wire→viewer adapter is follow-up
+  scope) — the summary is authoritative and the panel says so. V1 evidence:
+  panel suite 16/16 (preview guard/accepted summary with typed number
+  samples/rejected Spanish issues/remove-impact dialog/type-change impact);
+  ModulesScreen stale end-to-end 33/33 (server rejection keeps the editor
+  open with the banner; discard calls the reload hook and closes); store
+  stale test strengthened to `rejects.toMatchObject({code:'VERSION_CONFLICT'})`;
+  root typecheck 0 errors; root `pnpm test` all workspaces green (ui 2040,
+  web 561). NOT_RUN: browser gate (CI). Delivery: partial (PR6; remaining
+  acceptance T8).
+
 ## Next step
 
-Publish PR5 (T5+T6) with `Refs #497 + Delivery: partial`; then T7 (impact +
-stale + Probar resolución wiring using T4's preview method) and T8
-(cross-surface fixtures + gates) — the final acceptance slice.
+Publish PR6 (T7) with `Refs #497 + Delivery: partial`; then T8 (cross-surface
+fixtures + gates) — the final slice; if all acceptance is demonstrated, its
+PR carries `Closes #497 + Delivery: complete`.
 
 ## Next step
 

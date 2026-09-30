@@ -71,6 +71,15 @@ export type ModuleEditorFormProps = {
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) => void;
   readonly editingId: string | null;
+  /** #497 T7: the last save was rejected as stale by the server. */
+  readonly staleSave?: boolean;
+  /** #497 T7: discard the open editor draft and reload fresh catalog data. */
+  readonly onDiscardStaleSave?: () => void;
+  /** #497 T7: server-authoritative draft preview (Probar resolución). */
+  readonly savedModuleId?: string | null;
+  readonly onPreviewAuthoring?: (
+    request: import('@granete/domain').FurnitureAuthoringPreviewRequest,
+  ) => Promise<import('@granete/domain').FurnitureAuthoringPreviewResponse>;
   readonly costPreview: QuoteBreakdown | null;
   readonly previewBlocked: boolean;
   readonly previewError?: string | null;
@@ -116,6 +125,10 @@ export function ModuleEditorForm({
   onUpdateHardware,
   onHardwareGridKeyDown,
   editingId,
+  staleSave = false,
+  onDiscardStaleSave,
+  savedModuleId,
+  onPreviewAuthoring,
   costPreview,
   previewBlocked,
   previewError,
@@ -171,6 +184,27 @@ export function ModuleEditorForm({
         </p>
       ) : null}
 
+      {staleSave ? (
+        <div
+          className="catalog-form__error module-editor__stale"
+          role="alert"
+          data-testid="module-editor-stale"
+        >
+          <p>
+            El catálogo cambió en otra sesión: el servidor rechazó el guardado y
+            tus cambios siguen acá, sin pisar la versión nueva.
+          </p>
+          <button
+            type="button"
+            className="btn"
+            onClick={onDiscardStaleSave}
+            data-testid="module-editor-stale-discard"
+          >
+            Descartar mis cambios y recargar
+          </button>
+        </div>
+      ) : null}
+
       <WorkspaceTabs
         tabs={tabDefs}
         activeTab={editorTab}
@@ -200,6 +234,8 @@ export function ModuleEditorForm({
         catalogComponents={catalogComponents}
         canMutate={canMutate}
         hidden={editorTab !== 'parameters'}
+        savedModuleId={savedModuleId}
+        onPreviewAuthoring={onPreviewAuthoring}
       />
 
       <ModuleEditorStructurePanel

@@ -1922,12 +1922,13 @@ describe('catalogStore — module version concurrency (#497)', () => {
     store.getState().setCatalog(catalogWithVersion(3));
     const target = store.getState().catalog!.modules[0]!;
 
-    store.getState().updateModule(target.id, {
-      ...moduleDraft,
-      code: target.code,
-      name: 'Escritura vieja',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await expect(
+      store.getState().updateModule(target.id, {
+        ...moduleDraft,
+        code: target.code,
+        name: 'Escritura vieja',
+      }),
+    ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
 
     const stale = toasts.find((t) => t.type === 'warning');
     expect(stale?.message).toMatch(/otra sesión/);

@@ -10,8 +10,19 @@
  */
 
 import { type Dispatch, type ReactNode, type SetStateAction, useMemo, useState } from 'react';
-import type { Component, FurnitureParameter, Structure } from '@granete/domain';
+import type {
+  Component,
+  ContractIssue,
+  FurnitureParameter,
+  Structure,
+} from '@granete/domain';
 import { validateFurnitureParameterDefinitions } from '@granete/domain';
+import type {
+  FurnitureAuthoringPreviewRequest,
+  FurnitureAuthoringPreviewResponse,
+} from '@granete/domain';
+import { ConfirmDialog } from '../../common/ConfirmDialog';
+import { InlineLoading } from '../../common/InlineLoading';
 import type { ModuleDraft } from '../moduleHelpers';
 import {
   authorableBindingKinds,
@@ -29,6 +40,12 @@ export type ModuleEditorParametersPanelProps = {
   readonly catalogComponents: readonly Component[];
   readonly canMutate: boolean;
   readonly hidden: boolean;
+  /** The persisted module id, when editing a saved module (#497 T7 preview). */
+  readonly savedModuleId?: string | null;
+  /** #497 T7: the server-authoritative draft preview (Probar resolución). */
+  readonly onPreviewAuthoring?: (
+    request: FurnitureAuthoringPreviewRequest,
+  ) => Promise<FurnitureAuthoringPreviewResponse>;
 };
 
 const PARAMETER_TYPES = [
@@ -280,13 +297,28 @@ export function ModuleEditorParametersPanel({
   catalogComponents,
   canMutate,
   hidden,
+  savedModuleId,
+  onPreviewAuthoring,
 }: ModuleEditorParametersPanelProps): ReactNode {
   const definitions = draft.parameterDefinitions ?? [];
   const [editing, setEditing] = useState<
     | null
-    | { isNew: boolean; position: number; form: ParameterFormState }
+    | {
+        isNew: boolean;
+        position: number;
+        form: ParameterFormState;
+        originalType: FurnitureParameter['type'];
+      }
   >(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<{ position: number; parameter: FurnitureParameter } | null>(null);
+  const [sampleValues, setSampleValues] = useState<Record<string, string>>({});
+  const [previewState, setPreviewState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'running' }
+    | { kind: 'error'; message: string }
+    | { kind: 'done'; response: FurnitureAuthoringPreviewResponse }
+  >({ kind: 'idle' });
 
   const componentNames = useMemo(() => {
     const names = new Map<string, string>();
@@ -351,17 +383,29 @@ export function ModuleEditorParametersPanel({
 
   const openNew = (): void => {
     setFormError(null);
-    setEditing({ isNew: true, position: definitions.length, form: emptyForm() });
+    setEditing({
+      isNew: true,
+      position: definitions.length,
+      form: emptyForm(),
+      originalType: 'number',
+    });
   };
 
   const openEdit = (position: number, parameter: FurnitureParameter): void => {
     setFormError(null);
-    setEditing({ isNew: false, position, form: formFromParameter(parameter) });
+    setPreviewState({ kind: 'idle' });
+    setEditing({
+      isNew: false,
+      position,
+      form: formFromParameter(parameter),
+      originalType: parameter.type,
+    });
   };
 
   const removeParameter = (position: number): void => {
     const next = definitions.filter((_, index) => index !== position);
     writeDefinitions(next);
+    setPreviewState({ kind: 'idle' });
   };
 
   const saveForm = (): void => {
@@ -509,7 +553,7 @@ export function ModuleEditorParametersPanel({
                       type="button"
                       className="btn btn--danger"
                       disabled={!canMutate || editing !== null}
-                      onClick={() => removeParameter(position)}
+                      onClick={() => setConfirmRemove({ position, parameter })}
                       data-testid="parameter-remove"
                     >
                       Quitar
@@ -598,6 +642,16 @@ export function ModuleEditorParametersPanel({
                 </option>
               ))}
             </select>
+            {!editing.isNew && editing.form.type !== editing.originalType ? (
+              <span
+                className="catalog-form__hint module-parameters__impact"
+                data-testid="parameter-type-impact"
+              >
+                Cambiar el tipo reinterpreta el valor por defecto y puede invalidar la
+                vinculación; al guardar, el hash de la definición y la revisión del
+                catálogo avanzan.
+              </span>
+            ) : null}
           </div>
 
           <div className="catalog-form__field">
@@ -1037,6 +1091,217 @@ export function ModuleEditorParametersPanel({
           </div>
         </section>
       ) : null}
+
+      {onPreviewAuthoring ? (
+        <section
+          className="catalog-form__section module-parameters__preview"
+          data-testid="parameter-preview"
+        >
+          <h4>Probar resolución</h4>
+          <p className="catalog-form__hint">
+            Resuelve el borrador actual con valores de muestra en el servidor: el
+            resultado es autoritativo (componentes, preflight y problemas
+            estructurados); el navegador nunca calcula consecuencias de
+            fabricación.
+          </p>
+          {!savedModuleId ? (
+            <p className="catalog-form__hint" data-testid="parameter-preview-guard">
+              Guardá el mueble primero: el preview resuelve contra la composición
+              guardada.
+            </p>
+          ) : null}
+          {definitions.map((parameter) => {
+            const value =
+              sampleValues[parameter.name] ??
+              (parameter.defaultValue === undefined
+                ? ''
+                : parameter.type === 'boolean'
+                  ? parameter.defaultValue
+                    ? 'true'
+                    : 'false'
+                  : String(parameter.defaultValue));
+            const setValue = (next: string): void =>
+              setSampleValues((prev) => ({ ...prev, [parameter.name]: next }));
+            return (
+              <div className="catalog-form__field" key={parameter.name}>
+                <label htmlFor={`parameter-sample-${parameter.name}`}>
+                  {parameter.label} <code>{parameter.name}</code>
+                </label>
+                {parameter.type === 'boolean' ? (
+                  <select
+                    id={`parameter-sample-${parameter.name}`}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    disabled={!canMutate}
+                    data-testid={`parameter-sample-${parameter.name}`}
+                  >
+                    <option value="">Sin valor</option>
+                    <option value="true">Verdadero</option>
+                    <option value="false">Falso</option>
+                  </select>
+                ) : parameter.type === 'enum' ? (
+                  <select
+                    id={`parameter-sample-${parameter.name}`}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    disabled={!canMutate}
+                    data-testid={`parameter-sample-${parameter.name}`}
+                  >
+                    <option value="">Sin valor</option>
+                    {(parameter.options ?? []).map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    id={`parameter-sample-${parameter.name}`}
+                    type={parameter.type === 'number' ? 'number' : 'text'}
+                    value={value}
+                    maxLength={parameter.maxLength}
+                    onChange={(e) => setValue(e.target.value)}
+                    disabled={!canMutate}
+                    data-testid={`parameter-sample-${parameter.name}`}
+                  />
+                )}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={!canMutate || !savedModuleId || previewState.kind === 'running'}
+            onClick={() => {
+              if (!onPreviewAuthoring || !savedModuleId) return;
+              const parameters: Record<string, unknown> = {};
+              for (const parameter of definitions) {
+                const raw = sampleValues[parameter.name];
+                const value = raw ?? (
+                  parameter.defaultValue === undefined
+                    ? ''
+                    : parameter.type === 'boolean'
+                      ? parameter.defaultValue
+                        ? 'true'
+                        : 'false'
+                      : String(parameter.defaultValue)
+                );
+                if (value === '') continue;
+                if (parameter.type === 'boolean') {
+                  parameters[parameter.name] = value === 'true';
+                } else if (parameter.type === 'number') {
+                  const parsed = Number(value);
+                  if (Number.isFinite(parsed)) parameters[parameter.name] = parsed;
+                } else {
+                  parameters[parameter.name] = value;
+                }
+              }
+              setPreviewState({ kind: 'running' });
+              void onPreviewAuthoring({
+                moduleId: savedModuleId,
+                parameterDefinitions: definitions,
+                parameters,
+              })
+                .then((response) => setPreviewState({ kind: 'done', response }))
+                .catch((err: unknown) =>
+                  setPreviewState({
+                    kind: 'error',
+                    message: err instanceof Error ? err.message : 'Error de conexión al previsualizar.',
+                  }),
+                );
+            }}
+            data-testid="parameter-preview-run"
+          >
+            Probar resolución
+          </button>
+          {previewState.kind === 'running' ? (
+            <InlineLoading label="Resolviendo en el servidor…" />
+          ) : null}
+          {previewState.kind === 'error' ? (
+            <p className="catalog-form__error" role="alert" data-testid="parameter-preview-error">
+              {previewState.message}
+            </p>
+          ) : null}
+          {previewState.kind === 'done' && previewState.response.status === 'rejected' ? (
+            <div data-testid="parameter-preview-rejected">
+              <p className="catalog-form__error" role="alert">
+                Resolución rechazada:
+              </p>
+              <ul>
+                {previewState.response.issues.map((issue: ContractIssue, index: number) => (
+                  <li key={`${issue.code}-${index}`}>{describePreviewIssue(issue)}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {previewState.kind === 'done' && previewState.response.status === 'accepted' ? (
+            <div data-testid="parameter-preview-accepted">
+              <p>
+                <strong>Resolución aceptada.</strong> Hash{' '}
+                <code>{previewState.response.definitionHash.slice(0, 19)}…</code> · revisión{' '}
+                <code>{previewState.response.catalogRevision.slice(0, 17)}…</code>
+              </p>
+              <p>
+                {previewState.response.resolved.layout.components.length} piezas ·{' '}
+                {previewState.response.resolved.layout.hardware.length} herrajes visibles ·
+                preflight:{' '}
+                {previewState.response.resolved.preflight.status === 'clear'
+                  ? 'sin bloqueos'
+                  : 'bloqueado'}
+              </p>
+              {previewState.response.resolved.preflight.issues.length > 0 ? (
+                <ul data-testid="parameter-preview-preflight">
+                  {previewState.response.resolved.preflight.issues.map(
+                    (issue: ContractIssue, index: number) => (
+                      <li key={`${issue.code}-${index}`}>{describePreviewIssue(issue)}</li>
+                    ),
+                  )}
+                </ul>
+              ) : null}
+              <p className="catalog-form__hint">
+                Render 3D del borrador: sigue el resultado del servidor; este panel no
+                calcula geometría.
+              </p>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmRemove !== null}
+        onClose={() => setConfirmRemove(null)}
+        title={`Quitar ${confirmRemove?.parameter.label ?? 'parámetro'}`}
+        message={
+          'Quitar el parámetro cambia la definición del mueble: al guardar, el hash de la definición y la revisión del catálogo avanzan, y la vinculación semántica se elimina con él. Los muebles ya instanciados conservan su versión fijada; SketchUp resuelve contra la revisión nueva al refrescar. Los presets del mueble sólo llevan medidas: ningún preset usa este parámetro.'
+        }
+        onConfirm={() => {
+          if (confirmRemove) removeParameter(confirmRemove.position);
+          setConfirmRemove(null);
+        }}
+      />
     </div>
   );
+}
+
+const PREVIEW_ISSUE_LABELS: Record<string, string> = {
+  PARAMETER_REQUIRED: 'Completá el parámetro requerido',
+  PARAMETER_TYPE_INVALID: 'El parámetro tiene un tipo de valor incorrecto',
+  PARAMETER_OUT_OF_RANGE: 'El parámetro está fuera del rango permitido',
+  PARAMETER_STEP_INVALID: 'El parámetro no coincide con el incremento permitido',
+  PARAMETER_ENUM_INVALID: 'Elegí una opción permitida',
+  PARAMETER_STRING_TOO_LONG: 'El texto supera la longitud permitida',
+  PARAMETER_UNKNOWN: 'La definición no reconoce el parámetro',
+  PARAMETER_DEFINITION_INVALID: 'La definición paramétrica es inválida',
+  PARAMETER_BINDING_CONFLICT: 'La definición tiene consumidores paramétricos en conflicto',
+  CATALOG_REVISION_STALE: 'El catálogo cambió: probá de nuevo',
+  RESOLVE_GEOMETRY_INVALID: 'La geometría no resuelve con estos valores',
+  MATERIAL_CHOICE_INVALID: 'La elección de material no es válida',
+};
+
+function describePreviewIssue(issue: ContractIssue): string {
+  const label = PREVIEW_ISSUE_LABELS[issue.code] ?? issue.message ?? issue.code;
+  const parameter =
+    (issue.details as { parameter?: string } | undefined)?.parameter ??
+    (issue.path?.split('.').at(-1) ?? '');
+  return parameter && issue.code.startsWith('PARAMETER_') ? `${label}: ${parameter}` : label;
 }
