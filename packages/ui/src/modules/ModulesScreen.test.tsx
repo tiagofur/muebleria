@@ -405,8 +405,13 @@ describe('ModulesScreen navigation + modals (F021)', () => {
       'Elegí una estructura base primero',
     );
 
-    // Arrow-key roving: selection + focus move together.
+    // Arrow-key roving: selection + focus move together (#497 added the
+    // Parámetros tab between General and Estructura).
     general.focus();
+    await user.keyboard('{ArrowRight}');
+    const parameters = screen.getByTestId('module-editor-tab-parameters');
+    expect(parameters.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(parameters);
     await user.keyboard('{ArrowRight}');
     const structure = screen.getByTestId('module-editor-tab-structure');
     expect(structure.getAttribute('aria-selected')).toBe('true');
