@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Module, OptionGroup } from '@granete/domain';
+import type { FurnitureParameter, Module, OptionGroup } from '@granete/domain';
 import {
   boardFinishPickerGroupsForModule,
   defaultOptionChoicesForModule,
@@ -12,6 +12,7 @@ import {
   findModuleCodeConflict,
   formatModuleMoney,
   instanceOverridesSummary,
+  isModuleDraft,
   mergeBoardOverridesIntoDraft,
   moduleCompositionKey,
   nextGridEnterTarget,
@@ -501,5 +502,75 @@ describe('module grid keyboard helpers (F033 / #39)', () => {
     expect(modulePartGridInputId('p1', 'qty')).toBe('part-qty-p1');
     expect(modulePartGridInputId('p1', 'length')).toBe('part-l-p1');
     expect(modulePartGridInputId('p1', 'width')).toBe('part-w-p1');
+  });
+});
+
+describe('parameterDefinitions verbatim round-trip (#497)', () => {
+  const shelfParams: readonly FurnitureParameter[] = [
+    {
+      name: 'shelfCount',
+      label: 'Cantidad de estantes',
+      type: 'number',
+      defaultValue: 2,
+      unit: 'count',
+      min: 0,
+      max: 10,
+      step: 1,
+      integer: true,
+      required: true,
+      category: 'configuration',
+      binding: { version: 1, kind: 'componentQuantity', componentId: 'def-shelf' },
+    },
+    {
+      name: 'softClose',
+      label: 'Cierre suave',
+      type: 'boolean',
+      defaultValue: false,
+      category: 'metadata',
+    },
+  ];
+
+  const paramModule: Module = {
+    id: 'm-params',
+    code: 'MOD-PARAM-01',
+    name: 'Con parámetros',
+    hardwareLines: [],
+    parameterDefinitions: shelfParams,
+  };
+
+  it('emptyModuleDraft starts with an empty definition list', () => {
+    expect(emptyModuleDraft().parameterDefinitions).toEqual([]);
+  });
+
+  it('moduleToDraft carries definitions verbatim', () => {
+    expect(moduleToDraft(paramModule).parameterDefinitions).toEqual(shelfParams);
+    expect(moduleToDraft(modules[0]!).parameterDefinitions).toEqual([]);
+  });
+
+  it('draftToModule restores definitions and omits empty lists', () => {
+    const restored = draftToModule('m-params', moduleToDraft(paramModule));
+    expect(restored.parameterDefinitions).toEqual(shelfParams);
+    expect(
+      draftToModule('m1', moduleToDraft(modules[0]!)).parameterDefinitions,
+    ).toBeUndefined();
+  });
+
+  it('edit-save round-trip preserves the authoring contract byte-for-byte', () => {
+    const saved = draftToModule('m-params', moduleToDraft(paramModule));
+    // Byte-for-byte (not deep-equal) so an explicit `false` default can never
+    // be silently dropped as `undefined` by the draft pipeline.
+    expect(JSON.stringify(saved.parameterDefinitions)).toBe(
+      JSON.stringify(paramModule.parameterDefinitions),
+    );
+  });
+
+  it('isModuleDraft accepts restored drafts carrying definitions', () => {
+    expect(isModuleDraft(moduleToDraft(paramModule))).toBe(true);
+    expect(
+      isModuleDraft({
+        ...moduleToDraft(paramModule),
+        parameterDefinitions: 'shelfParams' as unknown as readonly FurnitureParameter[],
+      }),
+    ).toBe(false);
   });
 });

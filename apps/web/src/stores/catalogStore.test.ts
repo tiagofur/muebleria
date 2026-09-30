@@ -634,6 +634,7 @@ describe('catalogStore — categories (atypical)', () => {
       components: [],
       agregados: [],
       presets: [],
+      parameterDefinitions: [],
     });
 
     await store.getState().deleteCategory('cat-1');
