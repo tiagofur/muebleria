@@ -101,7 +101,7 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 			// Applied through CURRENT (000142, #497): the typed-definition
 			// rejection is schema-version-independent and the catalog read now
 			// scans version on modules.
-			identityApplyThrough(t, pool, 135)
+			identityApplyThrough(t, pool, 142)
 			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
 			if err != nil {
 				t.Fatalf("seed direct SQL: %v", err)
