@@ -14,13 +14,21 @@ import {
   restoreInheritance,
   validateConstructionPolicy,
 } from '@granete/domain';
-import { RefreshCw, Factory, AlertTriangle } from 'lucide-react';
-import type { LibraryOverlayDetail, LibraryReleaseSummary } from '@granete/storage';
+import { RefreshCw, Factory, AlertTriangle, ArrowUpCircle, History } from 'lucide-react';
+import type { LibraryOverlayDetail, LibraryReleaseSummary, LibraryOverlayConflictDetail } from '@granete/storage';
 
 export interface ConstructionSettingsSectionProps {
   readonly policy: FactoryConstructionPolicy;
   readonly activeOverlay: LibraryOverlayDetail | null;
   readonly baseRelease?: LibraryReleaseSummary | null;
+  readonly releases?: ReadonlyArray<LibraryReleaseSummary>;
+  readonly latestRelease?: LibraryReleaseSummary | null;
+  readonly hasUpstreamUpdate?: boolean;
+  readonly conflicts?: ReadonlyArray<LibraryOverlayConflictDetail>;
+  readonly rebasing?: boolean;
+  readonly resolvingConflictId?: string | null;
+  readonly onRebase?: (targetReleaseId: string) => void | Promise<unknown>;
+  readonly onResolveConflict?: (conflictId: string, action: 'keep_custom' | 'adopt_upstream') => void | Promise<unknown>;
   readonly onChange: (nextPolicy: FactoryConstructionPolicy) => void;
   readonly saving?: boolean;
   readonly disabled?: boolean;
@@ -38,6 +46,14 @@ export function ConstructionSettingsSection({
   policy,
   activeOverlay,
   baseRelease,
+  releases,
+  latestRelease,
+  hasUpstreamUpdate = false,
+  conflicts,
+  rebasing = false,
+  resolvingConflictId,
+  onRebase,
+  onResolveConflict,
   onChange,
   saving = false,
   disabled = false,
@@ -152,6 +168,144 @@ export function ConstructionSettingsSection({
           Las modificaciones se guardan en el overlay de tu fábrica sin alterar Granete Standard ni afectar proyectos ya publicados.
         </p>
       </div>
+
+      {/* Banner de Actualización Upstream Disponible (#944) */}
+      {hasUpstreamUpdate && latestRelease && activeOverlay?.status !== 'rebase_conflict' ? (
+        <div
+          style={{
+            border: '1px solid var(--color-primary-300, #b4c6fc)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-3)',
+            background: 'var(--color-primary-50, #f0f4fe)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 'var(--space-3)',
+          }}
+          data-testid="upstream-update-banner"
+        >
+          <div style={{ display: 'grid', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-primary-800, #1e429f)' }}>
+              <ArrowUpCircle size={18} aria-hidden />
+              <strong>Nueva versión disponible: Granete Estándar v{latestRelease.version}</strong>
+            </div>
+            {latestRelease.changelog ? (
+              <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-primary-700, #2b56cb)' }}>
+                {latestRelease.changelog}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="btn btn--primary btn--sm"
+            onClick={() => onRebase?.(latestRelease.id)}
+            disabled={disabled || saving || rebasing}
+            data-testid="rebase-library-btn"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            {rebasing ? (
+              <>
+                <RefreshCw size={14} className="spin" aria-hidden />
+                Actualizando...
+              </>
+            ) : (
+              <>
+                <ArrowUpCircle size={14} aria-hidden />
+                Actualizar biblioteca a v{latestRelease.version}
+              </>
+            )}
+          </button>
+        </div>
+      ) : null}
+
+      {/* Panel de Resolución de Conflictos de Rebase (#944) */}
+      {(activeOverlay?.status === 'rebase_conflict' || (conflicts && conflicts.length > 0)) ? (
+        <div
+          role="alert"
+          className="machine-output-card"
+          style={{
+            border: '1px solid var(--color-warning-400, #f6ad55)',
+            background: 'var(--color-warning-50, #fffaf0)',
+            display: 'grid',
+            gap: 'var(--space-3)',
+          }}
+          data-testid="rebase-conflicts-panel"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-warning-900, #7b341e)' }}>
+            <AlertTriangle size={20} aria-hidden />
+            <h4 style={{ margin: 0, fontSize: 'var(--text-base)' }}>
+              Conflictos de actualización detectados ({conflicts?.length ?? 0})
+            </h4>
+          </div>
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-warning-800, #9c4221)' }}>
+            La nueva versión estándar de Granete actualizó reglas que habías personalizado en tu taller.
+            Revisa cada regla en colisión para decidir si mantienes tu personalización o adoptas el nuevo estándar.
+          </p>
+          <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+            {(conflicts ?? []).map((conflict) => (
+              <div
+                key={conflict.id}
+                style={{
+                  border: '1px solid var(--border-default)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: 'var(--space-3)',
+                  background: 'var(--surface-primary, #fff)',
+                  display: 'grid',
+                  gap: 'var(--space-2)',
+                }}
+                data-testid={`conflict-card-${conflict.id}`}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                  <strong style={{ fontSize: 'var(--text-sm)', fontFamily: 'monospace' }}>{conflict.path}</strong>
+                  <span
+                    style={{
+                      fontSize: 'var(--text-xs)',
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      background: 'var(--color-warning-100, #feebc8)',
+                      color: 'var(--color-warning-800, #9c4221)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Colisión de valores
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-2)', fontSize: 'var(--text-xs)' }}>
+                  <div style={{ padding: 'var(--space-2)', background: 'var(--surface-hover)', borderRadius: 'var(--radius-sm)' }}>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Valor actual de tu taller:</div>
+                    <strong>{JSON.stringify(conflict.customValue)}</strong>
+                  </div>
+                  <div style={{ padding: 'var(--space-2)', background: 'var(--surface-hover)', borderRadius: 'var(--radius-sm)' }}>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}>Nuevo estándar Granete:</div>
+                    <strong>{JSON.stringify(conflict.newBaseValue)}</strong>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', marginTop: 4 }}>
+                  <button
+                    type="button"
+                    className="btn btn--secondary btn--sm"
+                    onClick={() => onResolveConflict?.(conflict.id, 'keep_custom')}
+                    disabled={disabled || resolvingConflictId === conflict.id}
+                    data-testid={`btn-resolve-keep-${conflict.id}`}
+                  >
+                    {resolvingConflictId === conflict.id ? 'Resolviendo...' : 'Mantener valor de taller'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--primary btn--sm"
+                    onClick={() => onResolveConflict?.(conflict.id, 'adopt_upstream')}
+                    disabled={disabled || resolvingConflictId === conflict.id}
+                    data-testid={`btn-resolve-adopt-${conflict.id}`}
+                  >
+                    {resolvingConflictId === conflict.id ? 'Resolviendo...' : 'Adoptar estándar Granete'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Alerta de Validación */}
       {!validation.valid ? (
@@ -569,6 +723,105 @@ export function ConstructionSettingsSection({
           </div>
         </div>
       </div>
+
+      {/* Historial de Versiones Oficiales de Biblioteca (#944) */}
+      {releases && releases.length > 0 ? (
+        <details
+          className="settings-disclosure"
+          data-testid="library-releases-history"
+          style={{
+            border: '1px solid var(--border-default)',
+            borderRadius: 'var(--radius-md)',
+            padding: 'var(--space-3)',
+            background: 'var(--surface-hover)',
+          }}
+        >
+          <summary
+            style={{
+              cursor: 'pointer',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 'var(--text-sm)',
+            }}
+          >
+            <History size={16} aria-hidden />
+            Historial de versiones oficiales de biblioteca ({releases.length})
+          </summary>
+          <div style={{ display: 'grid', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+            {releases.map((rel) => {
+              const isCurrentBase = activeOverlay?.baseReleaseId === rel.id;
+              const isLatest = latestRelease?.id === rel.id;
+              return (
+                <div
+                  key={rel.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: 'var(--space-2) var(--space-3)',
+                    background: 'var(--surface-primary, #fff)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-default)',
+                    fontSize: 'var(--text-xs)',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                  }}
+                  data-testid={`release-item-${rel.version}`}
+                >
+                  <div style={{ display: 'grid', gap: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <strong>v{rel.version}</strong>
+                      {isCurrentBase ? (
+                        <span
+                          style={{
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: 'var(--color-success-100, #e6f7ed)',
+                            color: 'var(--color-success-800, #155724)',
+                            fontWeight: 600,
+                          }}
+                          data-testid={`badge-active-${rel.version}`}
+                        >
+                          Activa en taller
+                        </span>
+                      ) : null}
+                      {isLatest ? (
+                        <span
+                          style={{
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: 'var(--color-primary-100, #ebf5ff)',
+                            color: 'var(--color-primary-800, #1e429f)',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Última oficial
+                        </span>
+                      ) : null}
+                    </div>
+                    {rel.changelog ? (
+                      <span style={{ color: 'var(--text-muted)' }}>{rel.changelog}</span>
+                    ) : null}
+                  </div>
+                  {!isCurrentBase && onRebase ? (
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--xs"
+                      onClick={() => onRebase(rel.id)}
+                      disabled={disabled || rebasing}
+                      data-testid={`rebase-to-${rel.version}-btn`}
+                    >
+                      Cambiar a v{rel.version}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </details>
+      ) : null}
 
       {/* Acción Global: Restaurar Todo */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-2)' }}>
