@@ -160,6 +160,7 @@ import type {
 export interface GeneratedRequestOptions {
   readonly schema?: string;
   readonly arrayOf?: string;
+  readonly schemaOrNull?: string;
   readonly token?: string;
   readonly ifMatch?: number;
   readonly idempotencyKey?: string;
@@ -303,7 +304,7 @@ export abstract class GeneratedGraneteApiClient {
   getStandardReleaseManifest(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryManifest> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/manifest`, { schema: "LibraryManifest", token, signal }); }
   getStandardResourceBlob(token: string, releaseId: string, resourceId: string, hash: string, signal?: AbortSignal): Promise<LibraryResourceBlob> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/resources/${encodeURIComponent(resourceId)}/blobs/${encodeURIComponent(hash)}`, { schema: "LibraryResourceBlob", token, signal }); }
   createLibraryOverlay(token: string, body: CreateLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("POST", "/manufacturing-libraries/overlays", { schema: "LibraryOverlayDetail", token, bodySchema: "CreateLibraryOverlayRequest", body, signal }); }
-  getActiveLibraryOverlay(token: string, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("GET", "/manufacturing-libraries/overlays/active", { schema: "LibraryOverlayDetail", token, signal }); }
+  getActiveLibraryOverlay(token: string, signal?: AbortSignal): Promise<LibraryOverlayDetail | null> { return this.request("GET", "/manufacturing-libraries/overlays/active", { schemaOrNull: "LibraryOverlayDetail", token, signal }); }
   getLibraryOverlayById(token: string, id: string, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("GET", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}`, { schema: "LibraryOverlayDetail", token, signal }); }
   updateLibraryOverlay(token: string, id: string, body: UpdateLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("PATCH", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}`, { schema: "LibraryOverlayDetail", token, bodySchema: "UpdateLibraryOverlayRequest", body, signal }); }
   rebaseLibraryOverlay(token: string, id: string, body: RebaseLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayRebaseResult> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/rebase`, { schema: "LibraryOverlayRebaseResult", token, bodySchema: "RebaseLibraryOverlayRequest", body, signal }); }

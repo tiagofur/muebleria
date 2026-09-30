@@ -4949,7 +4949,7 @@
       "get": {
         "operationId": "getActiveLibraryOverlay",
         "summary": "Get the active manufacturing library overlay for the caller's organization",
-        "description": "Retrieves the calling organization's active overlay for Granete Standard. Returns 404 if no overlay has been created yet. [#875 P1/WEB-MFG]",
+        "description": "Retrieves the calling organization's active overlay for Granete Standard. Returns 200 with a null detail when the organization has no active overlay yet: an absent overlay is a normal state, never an error the browser may log. [#875 P1/WEB-MFG]",
         "tags": [
           "manufacturing-library"
         ],
@@ -4966,20 +4966,22 @@
         ],
         "responses": {
           "200": {
-            "description": "Active library overlay detail",
+            "description": "Active library overlay detail, or null when none exists yet",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LibraryOverlayDetail"
+                  "nullable": true,
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/LibraryOverlayDetail"
+                    }
+                  ]
                 }
               }
             }
           },
           "401": {
             "description": "Unauthenticated"
-          },
-          "404": {
-            "description": "No active overlay found"
           }
         }
       }

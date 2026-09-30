@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/tiagofur/muebles-backend/internal/application"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -97,6 +97,12 @@ func (s *Server) HandleCreateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 }
 
 // HandleGetActiveLibraryOverlay handles GET /api/manufacturing-libraries/overlays/active.
+//
+// The absent-overlay case responds 200 with a null detail, NOT 404: the web
+// shell fetches this on every page load, and a 404 would emit a browser
+// console error on every screen — breaking the console-clean journeys the
+// organization browser gate pins (#943 review). "No overlay yet" is a normal
+// state, not an error.
 func (s *Server) HandleGetActiveLibraryOverlay(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -127,7 +133,7 @@ func (s *Server) HandleGetActiveLibraryOverlay(w http.ResponseWriter, r *http.Re
 	overlay, err := s.overlayService().GetActiveOverlay(r.Context(), orgUUID, targetLibID)
 	if err != nil {
 		if errors.Is(err, storage.ErrOverlayNotFound) {
-			respondWithError(w, http.StatusNotFound, "active overlay not found")
+			respondWithJSON(w, http.StatusOK, nil)
 			return
 		}
 		respondWithInternalError(w, err, "get active overlay")
@@ -135,7 +141,9 @@ func (s *Server) HandleGetActiveLibraryOverlay(w http.ResponseWriter, r *http.Re
 	}
 
 	if overlay.OrganizationID != orgUUID {
-		respondWithError(w, http.StatusNotFound, "active overlay not found")
+		// Defense in depth below the ownership check: another organization's
+		// overlay is as good as absent for this caller — same null response.
+		respondWithJSON(w, http.StatusOK, nil)
 		return
 	}
 

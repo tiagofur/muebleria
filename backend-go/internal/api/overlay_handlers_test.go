@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -971,7 +972,10 @@ func TestHandleGetActiveLibraryOverlay(t *testing.T) {
 		}
 	})
 
-	t.Run("Not found 404 when no overlay exists for org", func(t *testing.T) {
+	t.Run("No overlay for org responds 200 with null detail", func(t *testing.T) {
+		// "No overlay yet" is a normal state the web shell hits on every page
+		// load: a 404 here would emit a browser console error on every screen
+		// and break the console-clean journeys (#943 review).
 		store := &stubStore{
 			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
 				overlayID: overlay, // belongs to orgA
@@ -985,8 +989,11 @@ func TestHandleGetActiveLibraryOverlay(t *testing.T) {
 
 		srv.HandleGetActiveLibraryOverlay(rr, req)
 
-		if rr.Code != http.StatusNotFound {
-			t.Fatalf("expected 404 for org without overlay, got %d: %s", rr.Code, rr.Body.String())
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200 for org without overlay, got %d: %s", rr.Code, rr.Body.String())
+		}
+		if strings.TrimSpace(rr.Body.String()) != "null" {
+			t.Fatalf("expected null detail body, got %q", rr.Body.String())
 		}
 	})
 
