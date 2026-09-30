@@ -446,6 +446,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("PUT /api/catalog/hardware/{id}", authMW(http.HandlerFunc(server.HandleHardwareByID)))
 	mux.Handle("DELETE /api/catalog/hardware/{id}", authMW(http.HandlerFunc(server.HandleHardwareByID)))
 
+	// #913 / HW-PROFILE: versioned hardware-profile catalog writes.
+	mux.Handle("GET /api/catalog/hardware-profiles", authMW(http.HandlerFunc(server.HandleHardwareProfiles)))
+	mux.Handle("POST /api/catalog/hardware-profiles", authMW(http.HandlerFunc(server.HandleHardwareProfiles)))
+	mux.Handle("GET /api/catalog/hardware-profiles/{id}", authMW(http.HandlerFunc(server.HandleHardwareProfileByID)))
+	mux.Handle("PUT /api/catalog/hardware-profiles/{id}", authMW(http.HandlerFunc(server.HandleHardwareProfileByID)))
+	mux.Handle("DELETE /api/catalog/hardware-profiles/{id}", authMW(http.HandlerFunc(server.HandleHardwareProfileByID)))
+
 	// #667 / M1: versioned 3D assets for the hardware catalog. start/finalize
 	// are durable commands behind the idempotency receipt (a lost finalize
 	// response replays the SAME asset, never a second one); the multipart

@@ -55,6 +55,8 @@ import type {
   HardwareAssetRevision,
   HardwareAssetRevisionGrant,
   HardwareAssetUploadSession,
+  HardwareProfile,
+  HardwareProfileWrite,
   Invitation,
   LibraryManifest,
   LibraryOverlayConflictDetail,
@@ -314,6 +316,11 @@ export abstract class GeneratedGraneteApiClient {
   createCatalogModule(token: string, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("POST", "/catalog/modules", { schema: "CatalogModule", token, bodySchema: "CatalogModuleWrite", body, signal }); }
   getCatalogModule(token: string, moduleId: string, signal?: AbortSignal): Promise<CatalogModule> { return this.request("GET", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, signal }); }
   updateCatalogModule(token: string, moduleId: string, version: number, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("PUT", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, ifMatch: version, bodySchema: "CatalogModuleWrite", body, signal }); }
+  listHardwareProfiles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<HardwareProfile>> { return this.request("GET", "/catalog/hardware-profiles", { arrayOf: "HardwareProfile", token, signal }); }
+  createHardwareProfile(token: string, body: HardwareProfileWrite, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("POST", "/catalog/hardware-profiles", { schema: "HardwareProfile", token, bodySchema: "HardwareProfileWrite", body, signal }); }
+  getHardwareProfile(token: string, profileId: string, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("GET", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, signal }); }
+  updateHardwareProfile(token: string, profileId: string, version: number, body: HardwareProfileWrite, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("PUT", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, bodySchema: "HardwareProfileWrite", body, signal }); }
+  deactivateHardwareProfile(token: string, profileId: string, version: number, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("DELETE", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, ifMatch: version, signal }); }
   listFurnitureDefinitions(token: string, signal?: AbortSignal): Promise<WorkshopFurnitureCatalogEnvelope> { return this.request("GET", "/furniture/definitions", { schema: "WorkshopFurnitureCatalogEnvelope", token, signal }); }
   getFurnitureDefinitionLayout(token: string, definitionId: string, signal?: AbortSignal): Promise<FurnitureDefinitionLayout> { return this.request("GET", `/furniture/definitions/${encodeURIComponent(definitionId)}/layout`, { schema: "FurnitureDefinitionLayout", token, signal }); }
   resolveAuthoringLayout(token: string, body: AuthoringResolveRequest, signal?: AbortSignal): Promise<AuthoringResolveResponse> { return this.request("POST", "/furniture/authoring/resolve", { schema: "AuthoringResolveResponse", token, bodySchema: "AuthoringResolveRequest", body, signal }); }
