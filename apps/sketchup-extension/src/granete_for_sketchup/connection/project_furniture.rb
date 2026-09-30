@@ -118,6 +118,17 @@ module Granete
             DesignInheritanceContract.parse!(body)
           end
 
+          # #784 R4: resolves definition-aware effective materials and inheritance modes
+          # against the Design's authoring defaults.
+          def get_effective_materials(design_id, definition_id, material_choices: {})
+            payload = {
+              'furnitureDefinitionId' => definition_id,
+              'materialChoices' => material_choices || {}
+            }
+            body = request(:post, "/designs/#{design_id}/effective-materials", payload)
+            EffectiveMaterialsContract.parse!(body)
+          end
+
           def get_working_copy(design_id)
             body = request(:get, "/designs/#{design_id}/working-copy")
             Contract::WorkingCopyContract.parse_working_copy!(body)
@@ -365,13 +376,19 @@ module Granete
             @intents = {}
           end
 
-          def store(instance_id, parameters:, material_choices:)
+          def store(instance_id, parameters:, material_choices:, material_choice_modes: nil)
             return unless instance_id
 
-            @intents[instance_id.to_s] = {
+            entry = {
               'parameters' => parameters || {},
               'material_choices' => material_choices || {}
             }
+            # Canonical intent key (camelCase) matches MetadataWriter intent
+            # and the working-copy merger; no duplicated snake_case spelling.
+            if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
+              entry['materialChoiceModes'] = material_choice_modes
+            end
+            @intents[instance_id.to_s] = entry
           end
 
           def fetch(instance_id)
@@ -524,6 +541,11 @@ module Granete
             failure(:preview_failed, e.message)
           end
 
+          # #784 R4: server-authoritative effective materials for a bound
+          # insertion. Unbound models (or an already-explicit modes statement
+          # from the R3b inspector apply) keep the caller-provided choices.
+          EffectivePlacementMaterials = Struct.new(:choices, :modes, keyword_init: true)
+
           # #390 / DT-6: Design-first creation and placement from catalog.
           # Flow:
           #   1. context guard: model active, binding connected & current.
@@ -543,21 +565,35 @@ module Granete
           # the insertion lands at the user's final position with no Move
           # handoff. Browsing/previewing the catalog never allocates identity.
           def create_and_place(definition_id:, parameters: {}, material_choices: {}, idempotency_key: nil,
-                               transformation: nil, expected_layout_signature: nil)
+                               transformation: nil, expected_layout_signature: nil,
+                               material_choice_modes: nil, material_overrides: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
+
+            # Local fast failure (same code the catalog resolve uses) so an
+            # empty definition never pays the effective-materials roundtrip.
+            if definition_id.to_s.strip.empty?
+              return failure(:definition_unavailable,
+                             'la definición del mueble es requerida')
+            end
 
             context = placement_context(model)
             return context unless context['ok']
 
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
+            effective = compose_effective_materials(context['binding'], definition_id,
+                                                    material_choices,
+                                                    overrides: material_overrides,
+                                                    modes: material_choice_modes)
+
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices)
             return prep unless prep['ok']
 
             signature_mismatch = composition_mismatch(expected_layout_signature, prep['layout'])
             return signature_mismatch if signature_mismatch
 
             execute_created_placement(model, context['binding'], prep, idempotency_key,
-                                      material_choices, transformation: transformation)
+                                      effective.choices, material_choice_modes: effective.modes,
+                                                         transformation: transformation)
           rescue Service::Error => e
             failure(:service_error, e.message)
           rescue PlacementResolutionError => e
@@ -574,19 +610,28 @@ module Granete
           # any backend identity (no POST /furniture-instances) — the
           # FurnitureInstance is created canonically (#390) only inside the
           # commit gesture.
-          def prepare_catalog_preview(definition_id:, parameters: {}, material_choices: {})
+          def prepare_catalog_preview(definition_id:, parameters: {}, material_choices: {}, material_overrides: nil)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
+
+            # Local fast failure before the effective-materials roundtrip.
+            if definition_id.to_s.strip.empty?
+              return failure(:definition_unavailable,
+                             'la definición del mueble es requerida')
+            end
 
             context = placement_context(model)
             return context unless context['ok']
 
-            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, material_choices)
+            effective = compose_effective_materials(context['binding'], definition_id,
+                                                    material_choices, overrides: material_overrides)
+
+            prep = PlacementCreation.prepare_unit(@catalog_provider, definition_id, parameters, effective.choices)
             return prep unless prep['ok']
 
             { 'ok' => true, 'code' => 'preview_ready',
               'definition' => prep['definition'], 'parameters' => prep['params'],
-              'material_choices' => material_choices, 'layout' => prep['layout'],
+              'material_choices' => effective.choices, 'layout' => prep['layout'],
               'layout_signature' => PlacementGuards.layout_signature(prep['layout']) }
           rescue Service::Error => e
             failure(:service_error, e.message)
@@ -674,21 +719,39 @@ module Granete
 
           private
 
+          # #784 R4: resolves definition-aware effective materials against
+          # the Design working copy when the model is bound and no explicit
+          # modes statement exists (the R3b inspector apply carries its
+          # server-derived statement verbatim). Server authority only — the
+          # client never composes compatibility or lineage itself.
+          def compose_effective_materials(binding, definition_id, material_choices, overrides: nil, modes: nil)
+            return EffectivePlacementMaterials.new(choices: material_choices, modes: modes) unless binding && modes.nil?
+
+            resolved = @service.get_effective_materials(
+              binding.design_id, definition_id,
+              material_choices: overrides.nil? ? material_choices : overrides
+            )
+            EffectivePlacementMaterials.new(choices: resolved.material_choices,
+                                            modes: resolved.material_choice_modes)
+          end
+
           def execute_created_placement(model, binding, prep, idempotency_key, material_choices,
-                                        transformation: nil)
+                                        material_choice_modes: nil, transformation: nil)
             key = PlacementCreation.fallback_idempotency_key(idempotency_key)
             created = @service.create_furniture_instance(
               binding.project_id,
               definition_id: prep['definition']['furniture_definition_id'],
               idempotency_key: key
             )
-            @intent_store.store(created.id, parameters: prep['params'], material_choices: material_choices)
+            @intent_store.store(created.id, parameters: prep['params'], material_choices: material_choices,
+                                            material_choice_modes: material_choice_modes)
 
             located = locate_unit(model, created.id)
             return { 'ok' => true, 'code' => 'pending_position', 'instanceId' => created.id } if located['entity']
 
             inserted = insert_physical_unit(model, binding, created, prep['definition'],
                                             prep['params'], material_choices, prep['layout'],
+                                            material_choice_modes: material_choice_modes,
                                             transformation: transformation,
                                             prepare: transformation.nil?)
             unless inserted['ok']
@@ -762,11 +825,14 @@ module Granete
                     'cancelá con Esc y generá la vista previa de nuevo')
           end
 
+          # rubocop:disable-next Metrics/ParameterLists
           def insert_physical_unit(model, binding, instance, definition, parameters, choices, layout,
+                                   material_choice_modes: nil,
                                    transformation: nil, prepare: true, preserve_parameters: false)
             result = @furniture_builder_factory.call(model).place_existing_furniture(
               model, furniture_instance_id: instance.id, definition: definition,
                      parameters: parameters, resolved_layout: layout, material_choices: choices,
+                     material_choice_modes: material_choice_modes,
                      project_id: binding.project_id, design_id: binding.design_id,
                      transformation: transformation, prepare: prepare,
                      preserve_parameters: preserve_parameters

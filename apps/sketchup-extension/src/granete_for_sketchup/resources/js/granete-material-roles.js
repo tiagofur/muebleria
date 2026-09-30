@@ -96,10 +96,13 @@
 
   function defaultMaterialChoices(def) {
     var choices = {};
+    var designDefaults = typeof deps.getDesignDefaults === "function" ? (deps.getDesignDefaults() || {}) : {};
     (def && def.materialRoles ? def.materialRoles : []).forEach(function (r) {
       var ids = optionMaterialIds(r);
       if (ids.length > 0) {
-        if (projectDefaultMaterials[r.role] && ids.indexOf(projectDefaultMaterials[r.role]) !== -1) {
+        if (designDefaults[r.role] && ids.indexOf(designDefaults[r.role]) !== -1) {
+          choices[r.role] = designDefaults[r.role];
+        } else if (projectDefaultMaterials[r.role] && ids.indexOf(projectDefaultMaterials[r.role]) !== -1) {
           choices[r.role] = projectDefaultMaterials[r.role];
         } else {
           choices[r.role] = ids[0];
@@ -197,12 +200,26 @@
       title.textContent = r.label || r.role;
       header.appendChild(title);
 
-      // #784 R3: the inheritance badge comes EXCLUSIVELY from the injected
+      // #784 R3/R4: the inheritance badge comes EXCLUSIVELY from the injected
       // server projection accessor (design-inspector module) — never from
-      // comparing values. Only in the Inspector context (an item exists).
+      // comparing values in the inspector. In the configurator context (no
+      // instance, ctx.designLineage) the lineage comes from the EXPLICIT
+      // customization signal (ctx.customizedRoles, tracked by the
+      // configurator on user input) plus role compatibility with the active
+      // design default — the same predicate the server composes with.
+      // Equality of values never guesses the override state.
       var badge = null;
       if (ctx.instanceId && typeof deps.getRoleBadge === "function") {
         badge = deps.getRoleBadge(ctx.instanceId, r.role);
+      } else if (!ctx.instanceId && ctx.designLineage && typeof deps.getDesignDefaults === "function") {
+        var dDefaults = deps.getDesignDefaults() || {};
+        if (ctx.customizedRoles && ctx.customizedRoles[r.role]) {
+          badge = { text: "Personalizado", kind: "override" };
+        } else if (dDefaults[r.role] && availableIds.indexOf(dDefaults[r.role]) !== -1) {
+          badge = { text: "Diseño", kind: "design" };
+        } else {
+          badge = { text: "Definición", kind: "definition" };
+        }
       }
       if (badge) {
         var badgeSpan = document.createElement("span");

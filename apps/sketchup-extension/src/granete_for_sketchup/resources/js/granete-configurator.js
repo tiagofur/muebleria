@@ -56,6 +56,7 @@
   var activeLibDef = null;
   var libParams = {};
   var libMaterialChoices = {};
+  var libUserCustomizedRoles = {};
   var catalogPresets = [];
   var catalogCreateIntentKey = null;
   // #469 repeat placement: the last catalog intent (definition +
@@ -130,20 +131,37 @@
 
     libParams = deps.getDefaultParams(def);
     libMaterialChoices = deps.defaultMaterialChoices(def);
+    libUserCustomizedRoles = {};
 
     bindLibraryParamForm();
+    // #784 R4: the explicit customization signal travels to the shared
+    // renderer — the lineage badge never falls back to value equality.
     deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, def, libMaterialChoices, function (role, id, scope) {
       libMaterialChoices[role] = id;
+      libUserCustomizedRoles[role] = true;
       clearCatalogIntentKey();
       if (scope === "project" || scope === "project_default") {
         deps.setProjectDefaultMaterial(role, id);
       }
-    });
+    }, configuratorLineageContext(def));
     renderRegisteredMeasuresButton(def);
     renderPresetChips();
 
     updateLibrarySummary();
     updateLibraryInsertButton();
+  }
+
+  // #784 R4: explicit lineage context for the shared material renderer.
+  // customizedRoles is the ONLY override signal (tracked on user input);
+  // designLineage gates the badges to connected models — an unbound insert
+  // carries no lineage statement at all.
+  function configuratorLineageContext(def) {
+    return {
+      context: "configurator",
+      definitionId: def ? (def.furnitureDefinitionId || def.furniture_definition_id) : null,
+      customizedRoles: libUserCustomizedRoles,
+      designLineage: typeof deps.isModelConnected === "function" ? deps.isModelConnected() : false
+    };
   }
 
   // Preview del mueble en el encabezado del configurador: la misma
@@ -345,6 +363,9 @@
     updateLibraryInsertButton();
     if (result.ok) {
       clearCatalogIntentKey();
+      if (typeof deps.refreshDesignInheritance === "function") {
+        deps.refreshDesignInheritance();
+      }
       if (result.code === "pending_position") {
         deps.showToast("info", "✓ Mueble agregado al proyecto: ubicalo con la herramienta Mover y confirmá su posición final en la pestaña Proyecto.");
       } else if (beginRepeatCatalogPreview()) {
@@ -377,13 +398,16 @@
   function applyMaterialChoice(role, materialId, isProjectScope) {
     if (!libMaterialChoices) libMaterialChoices = {};
     libMaterialChoices[role] = materialId;
+    if (!libUserCustomizedRoles) libUserCustomizedRoles = {};
+    libUserCustomizedRoles[role] = true;
 
     deps.renderMaterialSelectors(libMaterialsCard, libMaterialsContainer, activeLibDef, libMaterialChoices, function (r, id, s) {
       libMaterialChoices[r] = id;
+      libUserCustomizedRoles[r] = true;
       if (s === "project" || s === "project_default") {
         deps.setProjectDefaultMaterial(r, id);
       }
-    }, { context: "configurator", definitionId: activeLibDef.furnitureDefinitionId || activeLibDef.furniture_definition_id });
+    }, configuratorLineageContext(activeLibDef));
     updateLibrarySummary();
 
     var matLib = deps.materialById(materialId);
@@ -410,6 +434,16 @@
       parameters: libParams,
       materialChoices: libMaterialChoices
     };
+
+    if (isConnected) {
+      var overrides = {};
+      for (var r in libUserCustomizedRoles) {
+        if (libUserCustomizedRoles[r] && libMaterialChoices[r]) {
+          overrides[r] = libMaterialChoices[r];
+        }
+      }
+      payload.materialOverrides = overrides;
+    }
 
     if (window.sketchup && window.sketchup.begin_catalog_placement_preview) {
       // #469: the SAME shared preview tool as the Project panel for

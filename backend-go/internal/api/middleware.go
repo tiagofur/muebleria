@@ -543,6 +543,8 @@ var extensionClientGetPatterns = []*regexp.Regexp{
 	// receives no broader project, quote, or commercial mutation access.
 	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/commercial-projection$`),
 	regexp.MustCompile(`^/api/designs/[^/]+/working-copy$`),
+	// #784 R1/R3: read-only material provenance and inheritance read model for the SketchUp Inspector.
+	regexp.MustCompile(`^/api/designs/[^/]+/working-copy/material-provenance$`),
 	// #668: read hardware asset details and revision list for visual mount-frame preparation.
 	regexp.MustCompile(`^/api/hardware-assets/[^/]+$`),
 }
@@ -653,6 +655,8 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// reusing existing server-side bytes and metadata. Narrow capability; requires
 	// RoleCanMutateCatalog and tenant scope.
 	regexp.MustCompile(`^/api/hardware-assets/[^/]+/revisions:derive$`),
+	// #784 / R4: definition-aware material composition for new furniture insertions.
+	regexp.MustCompile(`^/api/designs/[^/]+/effective-materials$`),
 }
 
 // Parameterized PUT surface for the extension credential (#389 / DT-5). This

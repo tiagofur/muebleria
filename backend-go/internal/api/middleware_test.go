@@ -929,6 +929,9 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		// #668 hardware asset revision read-only authorization grant
 		{"authorize hardware asset revision grant (#668)", http.MethodPost, "/api/hardware-assets/" + projectID + "/revisions/" + designID + ":authorize", true},
 		{"arbitrary hardware asset route denied", http.MethodPost, "/api/hardware-assets/" + projectID, false},
+		// #784 grants: material-provenance read model and definition-aware composition
+		{"read design material provenance (#784)", http.MethodGet, "/api/designs/" + designID + "/working-copy/material-provenance", true},
+		{"compose effective materials (#784)", http.MethodPost, "/api/designs/" + designID + "/effective-materials", true},
 		// Surrounding surface stays closed.
 		{"project detail reads", http.MethodGet, "/api/projects/" + projectID, false},
 		{"quote line links", http.MethodGet, "/api/projects/" + projectID + "/quote-lines/" + projectID + "/furniture-instances", false},

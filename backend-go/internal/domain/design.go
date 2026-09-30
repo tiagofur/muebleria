@@ -74,17 +74,22 @@ func IsValidDesignRevisionStatus(status DesignRevisionStatus) bool {
 // "where did this value historically come from". mode=design is lineage, NOT
 // a live pointer: the item keeps its materialized choice until an explicit
 // rollout/reset applies the current Design default (OWNER DECISIONS #784,
-// 2026-09-28). Inheritance is never inferred from value equality.
+// 2026-09-28). mode=definition records the curated FurnitureDefinition
+// fallback materialized at insertion (no compatible Design default existed
+// and no user choice was made): it is not a user exception, so a future
+// rollout may adopt it deliberately. Inheritance is never inferred from
+// value equality.
 type DesignMaterialChoiceMode string
 
 const (
-	DesignMaterialChoiceModeDesign   DesignMaterialChoiceMode = "design"
-	DesignMaterialChoiceModeOverride DesignMaterialChoiceMode = "override"
+	DesignMaterialChoiceModeDesign     DesignMaterialChoiceMode = "design"
+	DesignMaterialChoiceModeOverride   DesignMaterialChoiceMode = "override"
+	DesignMaterialChoiceModeDefinition DesignMaterialChoiceMode = "definition"
 )
 
 func IsValidDesignMaterialChoiceMode(mode DesignMaterialChoiceMode) bool {
 	switch mode {
-	case DesignMaterialChoiceModeDesign, DesignMaterialChoiceModeOverride:
+	case DesignMaterialChoiceModeDesign, DesignMaterialChoiceModeOverride, DesignMaterialChoiceModeDefinition:
 		return true
 	default:
 		return false
@@ -234,12 +239,13 @@ func EvaluateDesignRoleInheritance(role string, mode DesignMaterialChoiceMode, a
 // depends on catalog capabilities, a different authority than this read
 // model; consumers join it separately and never by guessing.
 type DesignRoleInheritanceCount struct {
-	Role          string
-	Items         int
-	DesignBacked  int
-	NeedsRollout  int
-	DesignCurrent int
-	Overridden    int
+	Role             string
+	Items            int
+	DesignBacked     int
+	DefinitionBacked int
+	NeedsRollout     int
+	DesignCurrent    int
+	Overridden       int
 }
 
 // SummarizeDesignInheritance folds per-item role projections into per-role
@@ -261,6 +267,11 @@ func SummarizeDesignInheritance(entries []DesignRoleInheritance) []DesignRoleInh
 			} else {
 				count.DesignCurrent++
 			}
+		case DesignMaterialChoiceModeDefinition:
+			// Curated fallback lineage: counted separately so an explicit
+			// rollout (R5) can adopt these deliberately; they never inflate
+			// the design-backed rollout numbers nor the override count.
+			count.DefinitionBacked++
 		case DesignMaterialChoiceModeOverride:
 			count.Overridden++
 		}
