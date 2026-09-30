@@ -215,7 +215,7 @@ treated as missing; no SketchUp hand-written adapter.
 
 ## Execution tasks
 
-- [ ] **T1 — Stop the silent data loss: draft pipeline round-trip**
+- [x] **T1 — Stop the silent data loss: draft pipeline round-trip**
   - Route: inline.
   - Trigger evidence: `ModuleDraft`/`draftToModule`
     (`packages/ui/src/modules/helpers/moduleDraftTransforms.ts:81-111,313`)
@@ -224,7 +224,7 @@ treated as missing; no SketchUp hand-written adapter.
   - Outcome: `ModuleDraft` carries `parameterDefinitions` verbatim (same
     round-trip contract as `packages/storage/src/apiMappers.ts`), regression
     test proves an edit-save preserves a definition-bearing module byte-for-byte
-    on the wire. Small standalone PR.
+    on the wire. Small standalone PR. **DONE — commit `490e6b1a`.**
 
 - [ ] **T2 — Backend: module optimistic concurrency + typed validation errors**
   - Route: inline.
@@ -404,10 +404,27 @@ treated as missing; no SketchUp hand-written adapter.
 - Prerequisite state: #477 ✅, #483/#486 ✅, #448 ✅ merged; #496 OPEN (D1
   decision pending); Gate A satisfied per existing furniture-instance/design
   endpoints in the generated spec.
+- 2026-09-29: **T1 implemented** — commit `490e6b1a` on
+  `feat/497-web-catalog-param-editor` (base `9ed33bda`). Diff: 3 files,
+  +98/−2 (`moduleDraftTransforms.ts` draft type + verbatim transforms +
+  structural-only `parameterDefinitionRefRule` in `moduleDraftRule`;
+  regression tests in `moduleHelpers.test.ts`; draft literal fix in
+  `apps/web/src/stores/catalogStore.test.ts`). Key design fact: `objectRule`
+  rejects unknown keys, so the field had to enter `moduleDraftRule` or every
+  restored draft would fail `isModuleDraft`; the guard is structural-only
+  (array of objects) so a domain contract growth can never discard restored
+  drafts. V1 evidence: `packages/ui` vitest 2023/2023 (5 new: verbatim carry,
+  restore/omit-empty, byte-for-byte edit-save incl. explicit `false` default,
+  `isModuleDraft` accept/reject); `apps/web` vitest 558/558; root
+  `pnpm typecheck` clean; root `pnpm test` green (all workspaces +
+  databaseIsolation 16/16); `verify_affected.py --base origin/main --plan`
+  selected all jobs (artifact = unknown input); executed the applicable
+  `typecheck` + `typescript` gates once on the frozen candidate. V2
+  NOT_RUN (browser/PostgreSQL untouched by this slice; no UI surface change).
+  Delivery: partial (PR1 of the chain; #497 acceptance needs T2–T8).
 
 ## Next step
 
-Owner reviews this plan and decides D1 (generated-contract increment lands in
-#497 vs. block on #496) and D2 (preview endpoint naming). On approval, start
-PR1 (T1 draft round-trip fix) on this branch — smallest correctness win,
+Publish PR1 (T1) with `Refs #497 + Delivery: partial`; owner decides D1/D2;
+then start T2 (module optimistic concurrency + typed validation errors),
 unblocked by D1/D2.
