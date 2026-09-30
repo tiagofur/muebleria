@@ -249,6 +249,21 @@ type stubStore struct {
 	resourceBlobsByHash               map[string]*domain.ResourceBlob
 	resourceBlobErr                   error
 	resourceBlobEntitlementCheckFunc  func(releaseID, resourceID uuid.UUID, hash string) (*domain.ResourceBlob, domain.PackageKind, error)
+	// Manufacturing Library Overlays (#775 / LIB-4)
+	overlaysByID                      map[uuid.UUID]*domain.LibraryOverlay
+	overlayConflictsByID              map[uuid.UUID]*domain.LibraryOverlayConflict
+	overlayConflictsByOverlayID       map[uuid.UUID][]domain.LibraryOverlayConflict
+	createOverlayErr                  error
+	getOverlayByIDErr                 error
+	getActiveOverlayErr               error
+	updateOverlayOverridesErr         error
+	updateOverlayStatusErr            error
+	updateOverlayBaseReleaseErr       error
+	replaceOverlayPendingConflictsErr error
+	listOverlayConflictsErr           error
+	getOverlayConflictByIDErr         error
+	resolveOverlayConflictErr         error
+	countPendingConflictsErr          error
 	// Ambient categories (F086)
 	listAmbientCategories       []domain.AmbientCategory
 	ambientCategoryReturnedByID *domain.AmbientCategory
@@ -1643,6 +1658,159 @@ func (s *stubStore) GetResourceBlobWithEntitlementCheck(_ context.Context, relea
 		}
 	}
 	return nil, "", storage.ErrResourceNotInRelease
+}
+
+// Manufacturing library overlay stubs (#775 / LIB-4)
+func (s *stubStore) CreateOverlay(_ context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error) {
+	if s.createOverlayErr != nil {
+		return nil, s.createOverlayErr
+	}
+	if s.overlaysByID == nil {
+		s.overlaysByID = make(map[uuid.UUID]*domain.LibraryOverlay)
+	}
+	s.overlaysByID[overlay.ID] = overlay
+	return overlay, nil
+}
+func (s *stubStore) GetOverlayByID(_ context.Context, id uuid.UUID) (*domain.LibraryOverlay, error) {
+	if s.getOverlayByIDErr != nil {
+		return nil, s.getOverlayByIDErr
+	}
+	if s.overlaysByID != nil {
+		if o, ok := s.overlaysByID[id]; ok {
+			return o, nil
+		}
+	}
+	return nil, storage.ErrOverlayNotFound
+}
+func (s *stubStore) GetActiveOverlayByLibrary(_ context.Context, orgID, libID uuid.UUID) (*domain.LibraryOverlay, error) {
+	if s.getActiveOverlayErr != nil {
+		return nil, s.getActiveOverlayErr
+	}
+	if s.overlaysByID != nil {
+		for _, o := range s.overlaysByID {
+			if o.OrganizationID == orgID && o.LibraryID == libID && o.Status == "active" {
+				return o, nil
+			}
+		}
+	}
+	return nil, storage.ErrOverlayNotFound
+}
+func (s *stubStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
+	if s.updateOverlayOverridesErr != nil {
+		return s.updateOverlayOverridesErr
+	}
+	if s.overlaysByID != nil {
+		if o, ok := s.overlaysByID[id]; ok {
+			o.Overrides = overrides
+			o.CustomResourceIDs = customResourceIDs
+			return nil
+		}
+	}
+	return storage.ErrOverlayNotFound
+}
+func (s *stubStore) UpdateOverlayStatus(_ context.Context, id uuid.UUID, status string) error {
+	if s.updateOverlayStatusErr != nil {
+		return s.updateOverlayStatusErr
+	}
+	if s.overlaysByID != nil {
+		if o, ok := s.overlaysByID[id]; ok {
+			o.Status = status
+			return nil
+		}
+	}
+	return storage.ErrOverlayNotFound
+}
+func (s *stubStore) UpdateOverlayBaseRelease(_ context.Context, id uuid.UUID, newBaseReleaseID uuid.UUID, overrides json.RawMessage, status string) error {
+	if s.updateOverlayBaseReleaseErr != nil {
+		return s.updateOverlayBaseReleaseErr
+	}
+	if s.overlaysByID != nil {
+		if o, ok := s.overlaysByID[id]; ok {
+			o.BaseReleaseID = newBaseReleaseID
+			o.Overrides = overrides
+			o.Status = status
+			return nil
+		}
+	}
+	return storage.ErrOverlayNotFound
+}
+func (s *stubStore) ReplaceOverlayPendingConflicts(_ context.Context, overlayID uuid.UUID, conflicts []domain.LibraryOverlayConflict) error {
+	if s.replaceOverlayPendingConflictsErr != nil {
+		return s.replaceOverlayPendingConflictsErr
+	}
+	if s.overlayConflictsByID == nil {
+		s.overlayConflictsByID = make(map[uuid.UUID]*domain.LibraryOverlayConflict)
+	}
+	for id, c := range s.overlayConflictsByID {
+		if c.OverlayID == overlayID && c.Status == "pending" {
+			delete(s.overlayConflictsByID, id)
+		}
+	}
+	for _, c := range conflicts {
+		copyC := c
+		s.overlayConflictsByID[c.ID] = &copyC
+	}
+	return nil
+}
+func (s *stubStore) ListOverlayConflicts(_ context.Context, overlayID uuid.UUID, statusFilter string) ([]domain.LibraryOverlayConflict, error) {
+	if s.listOverlayConflictsErr != nil {
+		return nil, s.listOverlayConflictsErr
+	}
+	var list []domain.LibraryOverlayConflict
+	if s.overlayConflictsByID != nil {
+		for _, c := range s.overlayConflictsByID {
+			if c.OverlayID == overlayID && (statusFilter == "" || c.Status == statusFilter) {
+				list = append(list, *c)
+			}
+		}
+	}
+	return list, nil
+}
+func (s *stubStore) GetOverlayConflictByID(_ context.Context, conflictID uuid.UUID) (*domain.LibraryOverlayConflict, error) {
+	if s.getOverlayConflictByIDErr != nil {
+		return nil, s.getOverlayConflictByIDErr
+	}
+	if s.overlayConflictsByID != nil {
+		if c, ok := s.overlayConflictsByID[conflictID]; ok {
+			copyC := *c
+			return &copyC, nil
+		}
+	}
+	return nil, storage.ErrOverlayConflictNotFound
+}
+func (s *stubStore) ResolveOverlayConflict(_ context.Context, conflictID uuid.UUID, action domain.ResolutionAction, resolvedValue any, resolvedBy *uuid.UUID) error {
+	if s.resolveOverlayConflictErr != nil {
+		return s.resolveOverlayConflictErr
+	}
+	if s.overlayConflictsByID != nil {
+		if c, ok := s.overlayConflictsByID[conflictID]; ok {
+			if c.Status == "resolved" {
+				return storage.ErrOverlayConflictAlreadyResolved
+			}
+			c.Status = "resolved"
+			c.ResolutionAction = &action
+			c.ResolvedValue = resolvedValue
+			c.ResolvedBy = resolvedBy
+			now := time.Now()
+			c.ResolvedAt = &now
+			return nil
+		}
+	}
+	return storage.ErrOverlayConflictNotFound
+}
+func (s *stubStore) CountPendingConflicts(_ context.Context, overlayID uuid.UUID) (int, error) {
+	if s.countPendingConflictsErr != nil {
+		return 0, s.countPendingConflictsErr
+	}
+	count := 0
+	if s.overlayConflictsByID != nil {
+		for _, c := range s.overlayConflictsByID {
+			if c.OverlayID == overlayID && c.Status == "pending" {
+				count++
+			}
+		}
+	}
+	return count, nil
 }
 
 // Compras/Almacén picking stubs (Fase 3)

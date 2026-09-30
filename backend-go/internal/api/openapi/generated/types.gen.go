@@ -2300,3 +2300,63 @@ type LibraryManifest struct {
 
 type LibraryResourceBlob struct {
 }
+
+type LibraryOverlayDetail struct {
+	ID                string         `json:"id"`
+	OrganizationId    string         `json:"organizationId"`
+	LibraryId         string         `json:"libraryId"`
+	BaseReleaseId     string         `json:"baseReleaseId"`
+	Status            string         `json:"status"`
+	Overrides         map[string]any `json:"overrides"`
+	CustomResourceIds []string       `json:"customResourceIds"`
+	CreatedAt         string         `json:"createdAt"`
+	UpdatedAt         string         `json:"updatedAt"`
+}
+
+type CreateLibraryOverlayRequest struct {
+	BaseReleaseId     string         `json:"baseReleaseId"`
+	Overrides         map[string]any `json:"overrides,omitempty"`
+	CustomResourceIds []string       `json:"customResourceIds,omitempty"`
+}
+
+type UpdateLibraryOverlayRequest struct {
+	Overrides         map[string]any `json:"overrides,omitempty"`
+	CustomResourceIds []string       `json:"customResourceIds,omitempty"`
+}
+
+type RebaseLibraryOverlayRequest struct {
+	TargetReleaseId string `json:"targetReleaseId"`
+}
+
+type LibraryOverlayRebaseResult struct {
+	OverlayId        string                         `json:"overlayId"`
+	OldBaseReleaseId string                         `json:"oldBaseReleaseId"`
+	NewBaseReleaseId string                         `json:"newBaseReleaseId"`
+	HasConflicts     bool                           `json:"hasConflicts"`
+	Status           string                         `json:"status"`
+	Conflicts        []LibraryOverlayConflictDetail `json:"conflicts,omitempty"`
+}
+
+type LibraryOverlayConflictDetail struct {
+	ID               string  `json:"id"`
+	OverlayId        string  `json:"overlayId"`
+	OrganizationId   string  `json:"organizationId"`
+	OldBaseReleaseId string  `json:"oldBaseReleaseId"`
+	NewBaseReleaseId string  `json:"newBaseReleaseId"`
+	ConflictType     string  `json:"conflictType"`
+	Path             string  `json:"path"`
+	OldBaseValue     *any    `json:"oldBaseValue,omitempty"`
+	NewBaseValue     *any    `json:"newBaseValue,omitempty"`
+	CustomValue      *any    `json:"customValue,omitempty"`
+	Status           string  `json:"status"`
+	ResolutionAction *string `json:"resolutionAction,omitempty"`
+	ResolvedValue    *any    `json:"resolvedValue,omitempty"`
+	ResolvedBy       *string `json:"resolvedBy,omitempty"`
+	ResolvedAt       *string `json:"resolvedAt,omitempty"`
+	CreatedAt        string  `json:"createdAt"`
+}
+
+type ResolveLibraryOverlayConflictRequest struct {
+	Action      string `json:"action"`
+	CustomValue *any   `json:"customValue,omitempty"`
+}

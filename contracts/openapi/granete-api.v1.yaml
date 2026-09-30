@@ -4903,6 +4903,304 @@
           }
         }
       }
+    },
+    "/manufacturing-libraries/overlays": {
+      "post": {
+        "operationId": "createLibraryOverlay",
+        "summary": "Create an organization manufacturing library overlay",
+        "description": "Establishes a new lightweight overlay customizing Granete Standard for the caller's organization. Does not physically clone the catalog. [#775 P1/LIB-4]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLibraryOverlayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Library overlay created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOverlayDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed or base release not published"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Base release not found"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/overlays/{id}": {
+      "get": {
+        "operationId": "getLibraryOverlayById",
+        "summary": "Get a manufacturing library overlay by ID",
+        "description": "Retrieves the specified overlay details including its overrides and custom resource references. Strictly tenant-scoped: callers cannot access other organizations' overlays. [#775 P1/LIB-4]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Library overlay detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOverlayDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Overlay not found"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateLibraryOverlay",
+        "summary": "Update manufacturing library overlay overrides",
+        "description": "Updates the overrides and custom resource references for the specified overlay. Rejects unauthorized structural edits. [#775 P1/LIB-4]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLibraryOverlayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Library overlay updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOverlayDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid override path or payload"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Overlay not found"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/overlays/{id}/rebase": {
+      "post": {
+        "operationId": "rebaseLibraryOverlay",
+        "summary": "Rebase an organization overlay onto a newer upstream release",
+        "description": "Executes a 3-way rebase (OLD BASE, NEW BASE, CUSTOM). Clean updates merge automatically; colliding paths generate explicit conflict records and block activation until resolved. [#775 P1/LIB-4]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RebaseLibraryOverlayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Rebase outcome with conflicts or clean activation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOverlayRebaseResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Target release not published"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Overlay or target release not found"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/overlays/{id}/conflicts": {
+      "get": {
+        "operationId": "listLibraryOverlayConflicts",
+        "summary": "List recorded rebase conflicts for an overlay",
+        "description": "Returns all detected collisions from 3-way rebase for this overlay. Caller can filter by status (pending, resolved). [#775 P1/LIB-4]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "resolved",
+                "ignored"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of rebase conflicts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LibraryOverlayConflictDetail"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Overlay not found"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/overlays/{id}/conflicts/{conflictId}/resolve": {
+      "post": {
+        "operationId": "resolveLibraryOverlayConflict",
+        "summary": "Resolve an explicit rebase conflict",
+        "description": "Applies an explicit human decision ('keep_custom', 'adopt_upstream', 'custom_value', 'replace_resource'). When all conflicts are resolved, overlay is automatically reactivated on the new base release. [#775 P1/LIB-4]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conflictId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveLibraryOverlayConflictRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conflict resolved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOverlayConflictDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action or conflict already resolved"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "404": {
+            "description": "Overlay or conflict not found"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13579,6 +13877,272 @@
         "type": "object",
         "description": "Canonical content-addressed JSON definition blob",
         "additionalProperties": true
+      },
+      "LibraryOverlayDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "organizationId",
+          "libraryId",
+          "baseReleaseId",
+          "status",
+          "overrides",
+          "customResourceIds",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "libraryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "baseReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "draft",
+              "rebase_conflict",
+              "archived"
+            ]
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "customResourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateLibraryOverlayRequest": {
+        "type": "object",
+        "required": [
+          "baseReleaseId"
+        ],
+        "properties": {
+          "baseReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "overrides": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "customResourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "UpdateLibraryOverlayRequest": {
+        "type": "object",
+        "properties": {
+          "overrides": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "customResourceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "RebaseLibraryOverlayRequest": {
+        "type": "object",
+        "required": [
+          "targetReleaseId"
+        ],
+        "properties": {
+          "targetReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "LibraryOverlayRebaseResult": {
+        "type": "object",
+        "required": [
+          "overlayId",
+          "oldBaseReleaseId",
+          "newBaseReleaseId",
+          "hasConflicts",
+          "status"
+        ],
+        "properties": {
+          "overlayId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "oldBaseReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "newBaseReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hasConflicts": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LibraryOverlayConflictDetail"
+            }
+          }
+        }
+      },
+      "LibraryOverlayConflictDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "overlayId",
+          "organizationId",
+          "oldBaseReleaseId",
+          "newBaseReleaseId",
+          "conflictType",
+          "path",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "overlayId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "oldBaseReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "newBaseReleaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "conflictType": {
+            "type": "string",
+            "enum": [
+              "same_field",
+              "cross_field_dependency",
+              "structural_incompatibility"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "oldBaseValue": {},
+          "newBaseValue": {},
+          "customValue": {},
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "resolved",
+              "ignored"
+            ]
+          },
+          "resolutionAction": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "keep_custom",
+                  "adopt_upstream",
+                  "custom_value",
+                  "replace_resource"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvedValue": {},
+          "resolvedBy": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolvedAt": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ResolveLibraryOverlayConflictRequest": {
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "keep_custom",
+              "adopt_upstream",
+              "custom_value",
+              "replace_resource"
+            ]
+          },
+          "customValue": {}
+        }
       }
     }
   }

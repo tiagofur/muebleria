@@ -16,6 +16,7 @@ import type {
   CreateInitialQuoteRevisionRequest,
   CreateInvitationRequest,
   CreateInvitationResponse,
+  CreateLibraryOverlayRequest,
   CreatePairingGrantRequest,
   CreateProductionReleaseRequest,
   CustomerSummary,
@@ -51,6 +52,9 @@ import type {
   HardwareAssetUploadSession,
   Invitation,
   LibraryManifest,
+  LibraryOverlayConflictDetail,
+  LibraryOverlayDetail,
+  LibraryOverlayRebaseResult,
   LibraryReleaseDetail,
   LibraryReleaseSummary,
   LibraryResourceBlob,
@@ -108,6 +112,7 @@ import type {
   QuoteLineFurnitureInstance,
   QuoteRevision,
   QuoteRevisionDetail,
+  RebaseLibraryOverlayRequest,
   ReconcileDesignWorkingMaterialsRequest,
   ReconcileProjectDesignRequest,
   RefreshRequest,
@@ -116,6 +121,7 @@ import type {
   RequoteProjectQuoteRequest,
   ResendInvitationResponse,
   ResetDesignWorkingCopyRequest,
+  ResolveLibraryOverlayConflictRequest,
   RevokeInvitationRequest,
   RevokeInvitationResponse,
   RevokeMembershipSessionsRequest,
@@ -136,6 +142,7 @@ import type {
   TransferOrganizationAdminRequest,
   UpdateAccountStatusRequest,
   UpdateDesignWorkingCopyRequest,
+  UpdateLibraryOverlayRequest,
   UpdateMemberRolesRequest,
   UpdateMembershipStatusRequest,
   UpdateOrganizationEntitlementsRequest,
@@ -289,4 +296,10 @@ export abstract class GeneratedGraneteApiClient {
   getStandardReleaseById(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryReleaseDetail> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}`, { schema: "LibraryReleaseDetail", token, signal }); }
   getStandardReleaseManifest(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryManifest> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/manifest`, { schema: "LibraryManifest", token, signal }); }
   getStandardResourceBlob(token: string, releaseId: string, resourceId: string, hash: string, signal?: AbortSignal): Promise<LibraryResourceBlob> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/resources/${encodeURIComponent(resourceId)}/blobs/${encodeURIComponent(hash)}`, { schema: "LibraryResourceBlob", token, signal }); }
+  createLibraryOverlay(token: string, body: CreateLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("POST", "/manufacturing-libraries/overlays", { schema: "LibraryOverlayDetail", token, bodySchema: "CreateLibraryOverlayRequest", body, signal }); }
+  getLibraryOverlayById(token: string, id: string, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("GET", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}`, { schema: "LibraryOverlayDetail", token, signal }); }
+  updateLibraryOverlay(token: string, id: string, body: UpdateLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("PATCH", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}`, { schema: "LibraryOverlayDetail", token, bodySchema: "UpdateLibraryOverlayRequest", body, signal }); }
+  rebaseLibraryOverlay(token: string, id: string, body: RebaseLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayRebaseResult> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/rebase`, { schema: "LibraryOverlayRebaseResult", token, bodySchema: "RebaseLibraryOverlayRequest", body, signal }); }
+  listLibraryOverlayConflicts(token: string, id: string, signal?: AbortSignal): Promise<ReadonlyArray<LibraryOverlayConflictDetail>> { return this.request("GET", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/conflicts`, { arrayOf: "LibraryOverlayConflictDetail", token, signal }); }
+  resolveLibraryOverlayConflict(token: string, id: string, conflictId: string, body: ResolveLibraryOverlayConflictRequest, signal?: AbortSignal): Promise<LibraryOverlayConflictDetail> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, { schema: "LibraryOverlayConflictDetail", token, bodySchema: "ResolveLibraryOverlayConflictRequest", body, signal }); }
 }
