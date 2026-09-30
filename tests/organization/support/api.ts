@@ -1,5 +1,6 @@
 import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import type { DesignWorkingCopy, UpdateDesignWorkingCopyRequest } from '@granete/storage';
+import { Pool } from 'pg';
 import { TotpProvider, secretFromProvisioningUri } from './totp';
 
 export const GATE_MODULE_A_ID = 'a1111111-1111-4111-8111-111111111111';
@@ -117,6 +118,25 @@ export async function prepareAuthoritativeOrganizations(): Promise<void> {
   ) throw new Error('real gate subject is not authoritative A admin / B vendedor');
   await seedDistinctModule(aOwner.token, GATE_MODULE_A_ID, 'A');
   await seedDistinctModule(bOwner.token, GATE_MODULE_B_ID, 'B');
+  await ensurePublishedStandardRelease();
+}
+
+export async function ensurePublishedStandardRelease(): Promise<void> {
+  const dbUrl = process.env.ORGANIZATION_TEST_DATABASE_URL;
+  if (!dbUrl) return;
+  const pool = new Pool({ connectionString: dbUrl });
+  try {
+    await pool.query(`
+      UPDATE library_releases
+      SET status = 'published',
+          manifest_hash = COALESCE(manifest_hash, 'sha256:0000000000000000000000000000000000000000000000000000000000000001'),
+          published_at = COALESCE(published_at, NOW()),
+          updated_at = NOW()
+      WHERE id = '00000000-0000-0000-0002-000000000001'
+    `);
+  } finally {
+    await pool.end();
+  }
 }
 
 export async function assertAuthoritativeSession(): Promise<void> {
