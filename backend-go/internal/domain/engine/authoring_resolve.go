@@ -435,6 +435,16 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 	for _, relationship := range result {
 		has[relationship.Kind+"\x00"+relationship.Source.ComponentInstanceID] = true
 	}
+	// An authored fixed-shelf-side joint replaces the legacy shelf-support
+	// binding for the same source panel: one panel end carries one joint
+	// system, and drilling the recipe pilot and the minifix cam on the same
+	// face is a physical contradiction, not a resolvable conflict (#939).
+	recipeReplacedSources := map[string]bool{}
+	for _, relationship := range authored {
+		if relationship.Kind == "fixed-shelf-side" {
+			recipeReplacedSources[relationship.Source.ComponentInstanceID] = true
+		}
+	}
 	byComponent := map[string][]layoutBoard{}
 	for _, board := range boards {
 		byComponent[board.catalogComponentID] = append(byComponent[board.catalogComponentID], board)
@@ -447,6 +457,9 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 		switch binding.Kind {
 		case domain.FurnitureParameterBindingComponentQuantity:
 			for index, source := range byComponent[binding.ComponentID] {
+				if binding.Relationship.Kind == "shelf-support" && recipeReplacedSources[source.id] {
+					continue
+				}
 				key := binding.Relationship.Kind + "\x00" + source.id
 				if has[key] {
 					continue

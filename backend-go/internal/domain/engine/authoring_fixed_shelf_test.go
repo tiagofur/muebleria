@@ -516,6 +516,62 @@ func TestFixedShelfBindingRequiresTargetFaces(t *testing.T) {
 // materializes one fixed-shelf-side relationship per shelf occurrence (the
 // add/duplicate mechanics), each resolving through the honest terminal chain
 // with zero operations.
+// TestAuthoredFixedShelfRecipeReplacesShelfSupportBinding: an authored
+// fixed-shelf-side relationship sourced on a panel replaces the legacy
+// shelf-support parameter binding for that panel — one panel end carries
+// one joint system, and drilling the recipe pilot and the minifix cam on
+// the same face is a physical contradiction, not a resolvable conflict
+// (#939). Panels without an authored recipe keep the binding.
+func TestAuthoredFixedShelfRecipeReplacesShelfSupportBinding(t *testing.T) {
+	boards := []layoutBoard{
+		{id: "side-left", catalogComponentID: "comp-side", widthMm: 570, thicknessMm: 18, lengthMm: 720, rotX: -90, rotZ: 90},
+		{id: "side-right", catalogComponentID: "comp-side-r", widthMm: 570, thicknessMm: 18, lengthMm: 720, x: 582, rotX: -90, rotZ: 90},
+		{id: "shelf-1", catalogComponentID: "comp-shelf", widthMm: 570, thicknessMm: 18, lengthMm: 564, x: 18, z: 400, rotY: -90},
+		{id: "shelf-2", catalogComponentID: "comp-shelf", widthMm: 570, thicknessMm: 18, lengthMm: 564, x: 18, z: 430, rotY: -90},
+	}
+	definition := domain.FurnitureParameterDefinition{
+		Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber,
+		DefaultValue: float64(2), Required: true, Integer: true, Unit: domain.FurnitureParameterUnitCount,
+		Category: domain.FurnitureParameterCategoryConfiguration,
+		Binding: &domain.FurnitureParameterBinding{
+			Version: 1, Kind: domain.FurnitureParameterBindingComponentQuantity, ComponentID: "comp-shelf",
+			Relationship: &domain.FurnitureParameterRelationshipBinding{
+				Kind: "shelf-support", SourceRole: "shelf-edge",
+				Targets: []domain.FurnitureParameterRelationshipTarget{
+					{ComponentID: "comp-side", Role: "inside-face"},
+					{ComponentID: "comp-side-r", Role: "inside-face"},
+				},
+			},
+		},
+	}
+	authored := []AuthoringRelationship{{
+		RelationshipID: "rel-fixed-shelf-01",
+		Kind:           "fixed-shelf-side",
+		Source:         AuthoringRelationshipAnchor{ComponentInstanceID: "shelf-1", Role: "shelf-edge"},
+		Targets: []AuthoringRelationshipAnchor{
+			{ComponentInstanceID: "side-left", Role: "side", Face: "front"},
+			{ComponentInstanceID: "side-right", Role: "side", Face: "back"},
+		},
+	}}
+	relationships := materializeBoundRelationships(
+		[]domain.FurnitureParameterDefinition{definition},
+		map[string]any{"shelfCount": float64(2)}, boards, authored)
+	for _, relationship := range relationships {
+		if relationship.Kind == "shelf-support" && relationship.Source.ComponentInstanceID == "shelf-1" {
+			t.Fatalf("authored fixed-shelf source must not keep the shelf-support binding: %+v", relationships)
+		}
+	}
+	found := false
+	for _, relationship := range relationships {
+		if relationship.Kind == "shelf-support" && relationship.Source.ComponentInstanceID == "shelf-2" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("shelf-2 without an authored recipe must keep its binding: %+v", relationships)
+	}
+}
+
 func TestFixedShelfBindingMaterializesPerOccurrence(t *testing.T) {
 	boards := []layoutBoard{
 		{id: "side-left", catalogComponentID: "comp-side", widthMm: 570, thicknessMm: 18, lengthMm: 720, rotX: -90, rotZ: 90},

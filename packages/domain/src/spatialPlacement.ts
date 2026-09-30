@@ -112,7 +112,12 @@ export function defaultPoseForPlacement(
         rotateY: 180,
       };
     case 'interno':
-      return { ...zero, x: T, y: T, z: 150 + i * 200 };
+      // Interior panels (shelves, dividers) share the base/superior
+      // orientation: the board length spans the cabinet width between the
+      // sides (rotateY 90). Owner decision 2026-09-30: an entrepaño is the
+      // floor board rotated in height — same X/Y axes, not a depth-spanning
+      // cross orientation.
+      return { ...zero, x: T, y: T, z: 150 + i * 200, rotateY: 90 };
     case 'custom':
     default:
       return zero;

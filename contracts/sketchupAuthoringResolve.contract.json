@@ -737,20 +737,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -759,8 +759,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -1737,20 +1737,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     520
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -1759,8 +1759,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -2775,20 +2775,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -2797,8 +2797,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -2828,20 +2828,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     560
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -2850,8 +2850,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -4696,20 +4696,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -4718,8 +4718,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -5651,20 +5651,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -5673,8 +5673,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -7107,20 +7107,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -7129,8 +7129,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -8076,20 +8076,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560.12,
+                    18.12,
                     18.12,
                     519.87
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -8098,8 +8098,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -9034,20 +9034,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -9056,8 +9056,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -10000,20 +10000,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -10022,8 +10022,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -10862,20 +10862,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   614,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -10884,8 +10884,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -10915,20 +10915,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   614,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     350
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -10937,8 +10937,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -10968,20 +10968,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   614,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     550
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -10990,8 +10990,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -12468,20 +12468,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -12490,8 +12490,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -13339,20 +13339,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -13361,8 +13361,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -14265,20 +14265,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -14287,8 +14287,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -15552,20 +15552,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -15574,8 +15574,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -16510,20 +16510,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -16532,8 +16532,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -17428,20 +17428,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -17450,8 +17450,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -18382,20 +18382,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -18404,8 +18404,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -19475,20 +19475,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -19497,8 +19497,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -20570,20 +20570,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -20592,8 +20592,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -21663,20 +21663,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -21685,8 +21685,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -22704,20 +22704,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -22726,8 +22726,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -23743,20 +23743,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -23765,8 +23765,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -24924,20 +24924,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -24946,8 +24946,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -25983,20 +25983,20 @@
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
+                    18,
                     18,
                     150
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -26005,8 +26005,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -26570,7 +26570,15 @@
             },
             {
               "componentDefinitionId": "mod-comp-shelf",
-              "componentInstanceId": "shelf-01"
+              "componentInstanceId": "shelf-01",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  18,
+                  18,
+                  400
+                ]
+              }
             },
             {
               "componentDefinitionId": "mod-comp-door",
@@ -26684,8 +26692,8 @@
               ],
               "relationshipId": "rel-fixed-shelf-01",
               "source": {
-                "componentInstanceId": "floor-01",
-                "role": "floor"
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
               },
               "targets": [
                 {
@@ -26787,7 +26795,15 @@
               "componentInstanceId": "shelf-01",
               "componentDefinitionId": "mod-comp-shelf",
               "catalogComponentId": "comp-shelf",
-              "role": "INTERIOR"
+              "role": "INTERIOR",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  18,
+                  18,
+                  400
+                ]
+              }
             },
             {
               "componentInstanceId": "door-01",
@@ -26798,29 +26814,11 @@
           ],
           "relationships": [
             {
-              "relationshipId": "parameter-shelfCount-1",
-              "kind": "shelf-support",
-              "source": {
-                "componentInstanceId": "shelf-01",
-                "role": "shelf-edge"
-              },
-              "targets": [
-                {
-                  "componentInstanceId": "side-left-01",
-                  "role": "inside-face"
-                },
-                {
-                  "componentInstanceId": "side-right-01",
-                  "role": "inside-face"
-                }
-              ]
-            },
-            {
               "relationshipId": "rel-fixed-shelf-01",
               "kind": "fixed-shelf-side",
               "source": {
-                "componentInstanceId": "floor-01",
-                "role": "floor"
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
               },
               "targets": [
                 {
@@ -27227,24 +27225,24 @@
                   "translationMm": [
                     18,
                     18,
-                    150
+                    400
                   ]
                 },
                 "dimensionsMm": [
-                  542,
                   564,
+                  542,
                   18
                 ],
                 "localTransform": {
                   "translationMm": [
-                    560,
                     18,
-                    150
+                    18,
+                    400
                   ],
                   "basis": {
                     "x": [
-                      -1,
                       0,
+                      1,
                       0
                     ],
                     "y": [
@@ -27253,8 +27251,8 @@
                       1
                     ],
                     "z": [
-                      0,
                       1,
+                      0,
                       0
                     ]
                   }
@@ -27423,255 +27421,8 @@
           "machining": {
             "operations": [
               {
-                "operationId": "parameter-shelfCount-1:op-1",
-                "hostComponentInstanceId": "side-left-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1",
-                  "catalogRuleId": "minifix-dowel"
-                },
-                "holes": [
-                  {
-                    "face": "front",
-                    "xMm": 50,
-                    "yMm": 150,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 492,
-                    "yMm": 150,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  }
-                ]
-              },
-              {
-                "operationId": "parameter-shelfCount-1:op-2",
-                "hostComponentInstanceId": "side-left-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1",
-                  "catalogRuleId": "minifix-dowel"
-                },
-                "holes": [
-                  {
-                    "face": "front",
-                    "xMm": 18,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 82,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 460,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 524,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  }
-                ]
-              },
-              {
-                "operationId": "parameter-shelfCount-1:op-3",
-                "hostComponentInstanceId": "side-right-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1",
-                  "catalogRuleId": "minifix-dowel"
-                },
-                "holes": [
-                  {
-                    "face": "front",
-                    "xMm": 50,
-                    "yMm": 150,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 492,
-                    "yMm": 150,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  }
-                ]
-              },
-              {
-                "operationId": "parameter-shelfCount-1:op-4",
-                "hostComponentInstanceId": "side-right-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1",
-                  "catalogRuleId": "minifix-dowel"
-                },
-                "holes": [
-                  {
-                    "face": "front",
-                    "xMm": 18,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 82,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 460,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "front",
-                    "xMm": 524,
-                    "yMm": 150,
-                    "diameterMm": 8,
-                    "depthMm": 12,
-                    "type": "dowel"
-                  }
-                ]
-              },
-              {
-                "operationId": "parameter-shelfCount-1:op-5",
+                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-01:shelf-01:pilot",
                 "hostComponentInstanceId": "shelf-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1",
-                  "catalogRuleId": "minifix-dowel"
-                },
-                "holes": [
-                  {
-                    "face": "bottom",
-                    "xMm": 50,
-                    "yMm": 9,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  },
-                  {
-                    "face": "bottom",
-                    "xMm": 18,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "bottom",
-                    "xMm": 82,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "top",
-                    "xMm": 50,
-                    "yMm": 9,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  },
-                  {
-                    "face": "top",
-                    "xMm": 18,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "top",
-                    "xMm": 82,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "bottom",
-                    "xMm": 492,
-                    "yMm": 9,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  },
-                  {
-                    "face": "bottom",
-                    "xMm": 460,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "bottom",
-                    "xMm": 524,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "top",
-                    "xMm": 492,
-                    "yMm": 9,
-                    "diameterMm": 15,
-                    "depthMm": 12.5,
-                    "type": "minifix"
-                  },
-                  {
-                    "face": "top",
-                    "xMm": 460,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  },
-                  {
-                    "face": "top",
-                    "xMm": 524,
-                    "yMm": 9,
-                    "diameterMm": 8,
-                    "depthMm": 20,
-                    "type": "dowel"
-                  }
-                ]
-              },
-              {
-                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-01:floor-01:pilot",
-                "hostComponentInstanceId": "floor-01",
                 "provenance": {
                   "sourceKind": "relationship",
                   "relationshipId": "rel-fixed-shelf-01",
@@ -27721,24 +27472,24 @@
                 "holes": [
                   {
                     "face": "back",
-                    "xMm": 530,
-                    "yMm": 9,
+                    "xMm": 512,
+                    "yMm": 409,
                     "diameterMm": 6,
                     "depthMm": 9,
                     "type": "counterbore"
                   },
                   {
                     "face": "back",
-                    "xMm": 299,
-                    "yMm": 9,
+                    "xMm": 281,
+                    "yMm": 409,
                     "diameterMm": 6,
                     "depthMm": 9,
                     "type": "counterbore"
                   },
                   {
                     "face": "back",
-                    "xMm": 68,
-                    "yMm": 9,
+                    "xMm": 50,
+                    "yMm": 409,
                     "diameterMm": 6,
                     "depthMm": 9,
                     "type": "counterbore"
@@ -27746,8 +27497,8 @@
                 ]
               },
               {
-                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-01:floor-01:pilot",
-                "hostComponentInstanceId": "floor-01",
+                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-01:shelf-01:pilot",
+                "hostComponentInstanceId": "shelf-01",
                 "provenance": {
                   "sourceKind": "relationship",
                   "relationshipId": "rel-fixed-shelf-01",
@@ -27759,7 +27510,7 @@
                 "holes": [
                   {
                     "face": "top",
-                    "xMm": 48,
+                    "xMm": 30,
                     "yMm": 9,
                     "diameterMm": 3,
                     "depthMm": 12,
@@ -27767,7 +27518,7 @@
                   },
                   {
                     "face": "top",
-                    "xMm": 270,
+                    "xMm": 261,
                     "yMm": 9,
                     "diameterMm": 3,
                     "depthMm": 12,
@@ -27798,23 +27549,23 @@
                   {
                     "face": "front",
                     "xMm": 530,
-                    "yMm": 9,
+                    "yMm": 409,
                     "diameterMm": 6,
                     "depthMm": 9,
                     "type": "counterbore"
                   },
                   {
                     "face": "front",
-                    "xMm": 308,
-                    "yMm": 9,
+                    "xMm": 299,
+                    "yMm": 409,
                     "diameterMm": 6,
                     "depthMm": 9,
                     "type": "counterbore"
                   },
                   {
                     "face": "front",
-                    "xMm": 86,
-                    "yMm": 9,
+                    "xMm": 68,
+                    "yMm": 409,
                     "diameterMm": 6,
                     "depthMm": 9,
                     "type": "counterbore"
@@ -27840,48 +27591,7 @@
                 ]
               }
             ],
-            "derivedHardwarePlacements": [
-              {
-                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
-                "hostComponentInstanceId": "side-left-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1"
-                }
-              },
-              {
-                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
-                "hostComponentInstanceId": "side-left-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1"
-                }
-              },
-              {
-                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
-                "hostComponentInstanceId": "side-right-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1"
-                }
-              },
-              {
-                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
-                "hostComponentInstanceId": "side-right-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1"
-                }
-              },
-              {
-                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
-                "hostComponentInstanceId": "shelf-01",
-                "provenance": {
-                  "sourceKind": "relationship",
-                  "relationshipId": "parameter-shelfCount-1"
-                }
-              }
-            ],
+            "derivedHardwarePlacements": [],
             "joineryStatuses": [
               {
                 "relationshipId": "rel-fixed-shelf-01",
@@ -27925,8 +27635,8 @@
                       "contactId": "rel-fixed-shelf-01:side-right-01",
                       "distancesMm": [
                         30,
-                        252,
-                        474
+                        261,
+                        492
                       ]
                     }
                   ]
@@ -27934,7 +27644,7 @@
                 "blockers": []
               }
             ],
-            "manufacturingFingerprint": "sha256-c674f003ac4463d67c6765f11a368336ae53048c762a0a1821c2d6b13e36c1ad"
+            "manufacturingFingerprint": "sha256-57044ba5e66fda38f9707d4a09b26dc46369a4237850460d227a566b1cb75ad9"
           },
           "preflight": {
             "scope": "authoring-resolve-subset",
