@@ -31,7 +31,9 @@ func (s *PostgresStore) loadModuleComponents(ctx context.Context, moduleID strin
 		SELECT component_id, quantity, placement_override, length_formula, width_formula, overrides
 		FROM module_components
 		WHERE module_id = $1 AND organization_id = $2
-		ORDER BY created_at ASC, id ASC;
+		-- component_id (not the random row id) breaks created_at ties so the
+		-- served wire — and any golden pinned on it — is deterministic.
+		ORDER BY created_at ASC, component_id ASC;
 	`, moduleID, OrgFromCtx(ctx))
 	if err != nil {
 		return nil, err
@@ -1692,7 +1694,9 @@ func (s *PostgresStore) listAllModuleComponents(ctx context.Context) (map[string
 		SELECT module_id, component_id, quantity, placement_override, length_formula, width_formula, overrides
 		FROM module_components
 		WHERE organization_id = $1
-		ORDER BY created_at ASC, id ASC;
+		-- component_id (not the random row id) breaks created_at ties so the
+		-- served wire — and any golden pinned on it — is deterministic.
+		ORDER BY created_at ASC, component_id ASC;
 	`
 	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
 	if err != nil {

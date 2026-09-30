@@ -39,6 +39,25 @@ function isAbortError(error: unknown): boolean {
     && error.name === 'AbortError';
 }
 
+/**
+ * Mirrors JSON.stringify semantics for request-body validation: keys whose
+ * value is undefined never reach the wire, so the schema validator must not
+ * see them either. Without this, any mapper emitting an optional field as an
+ * explicit undefined (e.g. componentInstanceToApi's placementOverride) fails
+ * validation for a payload the wire would accept (#497 T8 browser-gate find).
+ */
+function pruneUndefinedKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(pruneUndefinedKeys);
+  if (typeof value === 'object' && value !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      if (entry !== undefined) out[key] = pruneUndefinedKeys(entry);
+    }
+    return out;
+  }
+  return value;
+}
+
 async function readResponseJSON(response: Response): Promise<unknown> {
   try {
     return await response.json();
@@ -58,7 +77,7 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
 
   async request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
     const body = options.bodySchema
-      ? parseGenerated(options.bodySchema as SchemaName, options.body)
+      ? parseGenerated(options.bodySchema as SchemaName, pruneUndefinedKeys(options.body))
       : options.body;
     const headers = new Headers({ 'Content-Type': 'application/json', 'X-Request-ID': requestId() });
     if (options.token) headers.set('Authorization', `Bearer ${options.token}`);

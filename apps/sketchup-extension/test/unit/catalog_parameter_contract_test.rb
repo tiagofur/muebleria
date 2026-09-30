@@ -8,6 +8,7 @@ require_relative '../../src/granete_for_sketchup/library/catalog_parameter_contr
 class CatalogParameterContractTest < Minitest::Test
   Contract = Granete::SketchUpExtension::Library::CatalogParameterContract
   CORPUS_PATH = File.expand_path('../../../../contracts/furnitureParameterDefinitions.invalid.json', __dir__)
+  CROSS_SURFACE_FIXTURE_PATH = File.expand_path('../../../../contracts/furnitureAuthoringCrossSurface.fixture.json', __dir__)
 
   def test_accepts_typed_parameters_and_reserved_dimensions
     definition = valid_definition
@@ -195,5 +196,33 @@ class CatalogParameterContractTest < Minitest::Test
     parameter.delete('maxLength') if overrides.key?('type') && overrides['type'] != 'string' &&
                                      !overrides.key?('maxLength')
     parameter
+  end
+
+  # #497 T8 — the extension's catalog contract accepts the EXACT published
+  # definition the Go chain served (golden fixture): the downloaded catalog a
+  # real workshop edit produced passes the SketchUp-side gate with no
+  # transformation, including the projected dimensions, both behavioral
+  # bindings and the explicit false / empty-string defaults.
+  def test_accepts_cross_surface_golden_published_definition
+    fixture = JSON.parse(File.read(CROSS_SURFACE_FIXTURE_PATH))
+    published = fixture.fetch('expected').fetch('publishedParameters')
+    definition = {
+      'furnitureDefinitionId' => fixture.fetch('moduleWrite').fetch('id'),
+      'schemaRevision' => 1,
+      'definitionHash' => fixture.fetch('expected').fetch('definitionHash'),
+      'parameters' => published
+    }
+
+    assert_same definition, Contract.validate_definition!(definition, 'definition')
+
+    names = published.map { |parameter| parameter.fetch('name') }
+    assert_includes names, 'widthMm'
+    assert_includes names, 'softClose'
+    soft_close = published.find { |parameter| parameter['name'] == 'softClose' }
+    assert_equal false, soft_close.fetch('defaultValue')
+    client_note = published.find { |parameter| parameter['name'] == 'clientNote' }
+    assert_equal '', client_note.fetch('defaultValue')
+    shelf = published.find { |parameter| parameter['name'] == 'shelfCount' }
+    assert_equal 'componentQuantity', shelf.fetch('binding').fetch('kind')
   end
 end
