@@ -21,7 +21,9 @@ import (
 // #497 T4: the authoring preview must agree with the published catalog it
 // previews against. When the draft equals the persisted definitions, the
 // would-be definitionHash and the echoed catalogRevision are EXACTLY the
-// published projection's, and nothing in the database moves.
+// published projection's, and nothing in the database moves. Every call runs
+// inside a tenant transaction — the same way the auth middleware wraps real
+// requests for the NOBYPASSRLS runtime role.
 
 type previewParityStore struct {
 	*storage.PostgresStore
@@ -43,11 +45,21 @@ func (s *previewParityStore) GetOrganizationByID(_ context.Context, orgID string
 func TestAuthoringPreviewParityWithPublishedCatalog(t *testing.T) {
 	realStore, _ := migratedConnectStore(t)
 	store := &previewParityStore{PostgresStore: realStore}
-	orgID := connectStoreInitialActor.OrganizationID
-	ctx := storage.WithOrgCtx(context.Background(), orgID)
+	actor := connectStoreInitialActor
+	previewUserID := "f4970000-0000-0000-0000-0000000000u1"
 
-	componentID := "f4970000-0000-0000-0000-0000000000c1"
-	seedPreviewComponent(t, store, ctx, componentID)
+	previewComponentID := "f4970000-0000-0000-0000-0000000000c1"
+	withinConnectStoreTenant(t, store.PostgresStore, actor, func(txCtx context.Context) error {
+		if err := store.CreateComponent(txCtx, &domain.Component{
+			ID: previewComponentID, Code: "COMP-PREVIEW-497", Name: "Estante",
+			Placement: domain.PlacementInterno, GeometryKind: "rectangular_board",
+			LengthMm: 590, WidthMm: 600, ThicknessMm: 18,
+		}); err != nil {
+			return err
+		}
+		t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM components WHERE id = $1`, previewComponentID) })
+		return nil
+	})
 
 	definitions := []domain.FurnitureParameterDefinition{{
 		Name: "shelfCount", Label: "Cantidad de estantes", SortOrder: 1,
@@ -58,46 +70,42 @@ func TestAuthoringPreviewParityWithPublishedCatalog(t *testing.T) {
 		Binding: &domain.FurnitureParameterBinding{
 			Version:     domain.FurnitureParameterBindingVersion,
 			Kind:        domain.FurnitureParameterBindingComponentQuantity,
-			ComponentID: componentID,
+			ComponentID: previewComponentID,
 		},
 	}}
 	moduleID := "f4970000-0000-0000-0000-0000000000a1"
 	mod := &domain.Module{
 		ID: moduleID, Code: "MOD-PREVIEW-497", Name: "Mueble preview parity",
 		WidthMm: 600, HeightMm: 720, DepthMm: 590,
-		Components:           []domain.ComponentInstance{{ComponentID: componentID, Quantity: 2}},
+		Components:           []domain.ComponentInstance{{ComponentID: previewComponentID, Quantity: 2}},
 		ParameterDefinitions: definitions,
 	}
-	if err := store.CreateModule(ctx, mod); err != nil {
-		t.Fatalf("seed module: %v", err)
-	}
-	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM modules WHERE id = $1`, moduleID) })
+	withinConnectStoreTenant(t, store.PostgresStore, actor, func(txCtx context.Context) error {
+		if err := store.CreateModule(txCtx, mod); err != nil {
+			return err
+		}
+		t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM modules WHERE id = $1`, moduleID) })
+		return nil
+	})
 
 	server := &api.Server{Store: store}
-	doPreview := func(t *testing.T) map[string]any {
-		t.Helper()
-		body := `{"moduleId":"` + moduleID + `","parameterDefinitions":` + previewDefinitionsJSON(t, definitions) + `,"parameters":{}}`
-		req := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/preview", strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req = req.WithContext(context.WithValue(ctx, api.UserContextKey, &auth.Claims{UserID: "f4970000-0000-0000-0000-0000000000u1"}))
+
+	before := withinConnectStoreTenantValue(t, store.PostgresStore, actor, func(txCtx context.Context) (*domain.Module, error) {
+		return store.GetModuleByID(txCtx, moduleID)
+	})
+
+	// Published projection (GET /api/furniture/definitions) inside the tenant
+	// transaction, exactly as the auth middleware wraps real requests.
+	catalogBody := withinConnectStoreTenantValue(t, store.PostgresStore, actor, func(txCtx context.Context) ([]byte, error) {
+		req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
+		req = req.WithContext(context.WithValue(txCtx, api.UserContextKey, &auth.Claims{UserID: previewUserID}))
 		rr := httptest.NewRecorder()
-		server.HandleFurnitureAuthoringPreview(rr, req)
+		server.HandleFurnitureDefinitions(rr, req)
 		if rr.Code != http.StatusOK {
-			t.Fatalf("preview status = %d (body=%s)", rr.Code, rr.Body.String())
+			return nil, nil
 		}
-		var parsed map[string]any
-		if err := json.Unmarshal(rr.Body.Bytes(), &parsed); err != nil {
-			t.Fatalf("preview body: %v", err)
-		}
-		return parsed
-	}
-
-	before, err := store.GetModuleByID(ctx, moduleID)
-	if err != nil {
-		t.Fatalf("read module before previews: %v", err)
-	}
-
-	catalogBody := previewGetPublishedCatalog(t, server, ctx)
+		return rr.Body.Bytes(), nil
+	})
 	var catalog struct {
 		RevisionID  string `json:"revisionId"`
 		Definitions map[string]struct {
@@ -108,8 +116,52 @@ func TestAuthoringPreviewParityWithPublishedCatalog(t *testing.T) {
 		t.Fatalf("catalog body: %v", err)
 	}
 
-	preview1 := doPreview(t)
-	preview2 := doPreview(t)
+	previewBody := `{"moduleId":"` + moduleID + `","parameterDefinitions":` + previewDefinitionsJSON(t, definitions) + `,"parameters":{}}`
+	doPreview := func(t *testing.T) (int, []byte) {
+		t.Helper()
+		var status int
+		var payload []byte
+		withinConnectStoreTenant(t, store.PostgresStore, actor, func(txCtx context.Context) error {
+			req := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/preview", strings.NewReader(previewBody))
+			req.Header.Set("Content-Type", "application/json")
+			req = req.WithContext(context.WithValue(txCtx, api.UserContextKey, &auth.Claims{UserID: previewUserID}))
+			rr := httptest.NewRecorder()
+			server.HandleFurnitureAuthoringPreview(rr, req)
+			status = rr.Code
+			payload = rr.Body.Bytes()
+			return nil
+		})
+		return status, payload
+	}
+
+	status1, body1 := doPreview(t)
+	status2, body2 := doPreview(t)
+	if status1 != http.StatusOK || status2 != http.StatusOK {
+		t.Fatalf("preview statuses = %d/%d (body=%s)", status1, status2, body1)
+	}
+	var preview1, preview2 map[string]any
+	if err := json.Unmarshal(body1, &preview1); err != nil {
+		t.Fatalf("preview body: %v", err)
+	}
+	if err := json.Unmarshal(body2, &preview2); err != nil {
+		t.Fatalf("preview body 2: %v", err)
+	}
+
+	if preview1["status"] != "accepted" || preview2["status"] != "accepted" {
+		t.Fatalf("preview statuses: %v / %v", preview1["status"], preview2["status"])
+	}
+	if preview1["catalogRevision"] != catalog.RevisionID {
+		t.Fatalf("preview revision %v != published %v", preview1["catalogRevision"], catalog.RevisionID)
+	}
+	if preview1["definitionHash"] != catalog.Definitions[moduleID].DefinitionHash {
+		t.Fatalf("draft==persisted hash %v != published %v", preview1["definitionHash"], catalog.Definitions[moduleID].DefinitionHash)
+	}
+	if _, hasResolved := preview1["resolved"]; !hasResolved {
+		t.Fatal("accepted preview must carry resolved data")
+	}
+	if preview1["definitionHash"] != preview2["definitionHash"] || preview1["catalogRevision"] != preview2["catalogRevision"] {
+		t.Fatal("identical previews diverged (stateless violation)")
+	}
 
 	// Golden parity: the committed contracts fixture is EXACTLY what the
 	// server answered for this preview (regenerate with
@@ -132,43 +184,14 @@ func TestAuthoringPreviewParityWithPublishedCatalog(t *testing.T) {
 		}
 	}
 
-	if preview1["status"] != "accepted" || preview2["status"] != "accepted" {
-		t.Fatalf("preview statuses: %v / %v", preview1["status"], preview2["status"])
-	}
-	if preview1["catalogRevision"] != catalog.RevisionID {
-		t.Fatalf("preview revision %v != published %v", preview1["catalogRevision"], catalog.RevisionID)
-	}
-	if preview1["definitionHash"] != catalog.Definitions[moduleID].DefinitionHash {
-		t.Fatalf("draft==persisted hash %v != published %v", preview1["definitionHash"], catalog.Definitions[moduleID].DefinitionHash)
-	}
-	if _, hasResolved := preview1["resolved"]; !hasResolved {
-		t.Fatal("accepted preview must carry resolved data")
-	}
-	if preview1["definitionHash"] != preview2["definitionHash"] || preview1["catalogRevision"] != preview2["catalogRevision"] {
-		t.Fatal("identical previews diverged (stateless violation)")
-	}
-
 	// Nothing moved: the module row is untouched by previewing.
-	after, err := store.GetModuleByID(ctx, moduleID)
-	if err != nil {
-		t.Fatalf("read module after previews: %v", err)
-	}
+	after := withinConnectStoreTenantValue(t, store.PostgresStore, actor, func(txCtx context.Context) (*domain.Module, error) {
+		return store.GetModuleByID(txCtx, moduleID)
+	})
 	if !after.UpdatedAt.Equal(before.UpdatedAt) || after.Version != before.Version {
 		t.Fatalf("preview mutated the module row: updated_at %v -> %v, version %d -> %d",
 			before.UpdatedAt, after.UpdatedAt, before.Version, after.Version)
 	}
-}
-
-func previewGetPublishedCatalog(t *testing.T, server *api.Server, ctx context.Context) []byte {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/furniture/definitions", nil)
-	req = req.WithContext(context.WithValue(ctx, api.UserContextKey, &auth.Claims{UserID: connectStoreFixtureUser}))
-	rr := httptest.NewRecorder()
-	server.HandleFurnitureDefinitions(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("furniture definitions status = %d (body=%s)", rr.Code, rr.Body.String())
-	}
-	return rr.Body.Bytes()
 }
 
 func previewDefinitionsJSON(t *testing.T, definitions []domain.FurnitureParameterDefinition) string {
@@ -178,16 +201,4 @@ func previewDefinitionsJSON(t *testing.T, definitions []domain.FurnitureParamete
 		t.Fatalf("marshal definitions: %v", err)
 	}
 	return string(out)
-}
-
-func seedPreviewComponent(t *testing.T, store *previewParityStore, ctx context.Context, componentID string) {
-	t.Helper()
-	if err := store.CreateComponent(ctx, &domain.Component{
-		ID: componentID, Code: "COMP-PREVIEW-" + componentID[:8], Name: "Estante",
-		Placement: domain.PlacementInterno, GeometryKind: "rectangular_board",
-		LengthMm: 590, WidthMm: 600, ThicknessMm: 18,
-	}); err != nil {
-		t.Fatalf("seed component: %v", err)
-	}
-	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM components WHERE id = $1`, componentID) })
 }
