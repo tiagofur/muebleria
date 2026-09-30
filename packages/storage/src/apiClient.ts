@@ -9,7 +9,7 @@ import {
   type FurnitureAuthoringPreviewRequest,
   type FurnitureAuthoringPreviewResponse,
   type FactoryConstructionPolicy,
-  CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES,
+  isConstructionPolicyOwnedKey,
   policyToOverlayOverrides,
 } from '@granete/domain';
 import {
@@ -281,7 +281,7 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       const existingOverrides = (activeOverlay.overrides ?? {}) as Record<string, unknown>;
       const nextOverrides: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(existingOverrides)) {
-        if (!CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES.some((prefix) => k.startsWith(prefix))) {
+        if (!isConstructionPolicyOwnedKey(k)) {
           nextOverrides[k] = v;
         }
       }

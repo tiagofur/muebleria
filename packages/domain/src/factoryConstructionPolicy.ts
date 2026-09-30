@@ -108,8 +108,9 @@ export const DEFAULT_FACTORY_CONSTRUCTION_POLICY: FactoryConstructionPolicy = {
 /**
  * The only overlay key prefixes this policy owns. A policy save upserts
  * exactly these and never touches other overlay keys — foreign `joint.*`
- * overrides (e.g. component-level exceptions) must survive every save
- * (#943 review: namespace-wide stripping silently destroyed them).
+ * overrides (e.g. component-level exceptions stored outside the structured
+ * blob) must survive every save (#943 review: namespace-wide stripping
+ * silently destroyed them).
  */
 export const CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES = [
   'joint.floorToSide.',
@@ -117,6 +118,21 @@ export const CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES = [
   'joint.shelfToSide.',
   'joint.backPanel.',
 ] as const;
+
+/**
+ * Keys the policy owns EXACTLY (not by prefix). The structured blob must be
+ * cleaned on an all-inherited save, or a stale blob resurrects factory
+ * provenance after "Restaurar herencia".
+ */
+export const CONSTRUCTION_POLICY_OWNED_KEYS = ['joint.constructionPolicy'] as const;
+
+/** Whether an overlay key belongs to this policy (owned keys are cleaned on save). */
+export function isConstructionPolicyOwnedKey(key: string): boolean {
+  return (
+    CONSTRUCTION_POLICY_OWNED_KEYS.includes(key as (typeof CONSTRUCTION_POLICY_OWNED_KEYS)[number]) ||
+    CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+}
 
 /** Convert a typed FactoryConstructionPolicy into flattened overlay overrides with `joint.` prefix. */
 export function policyToOverlayOverrides(policy: FactoryConstructionPolicy): Record<string, unknown> {

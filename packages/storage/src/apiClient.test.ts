@@ -611,6 +611,41 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       expect(sent.overrides['parameters.someSetting']).toBe('also-keep-me');
       expect(sent.overrides['joint.floorToSide.stationsCount']).toBe(policy.floorToSide.stationsCount);
     });
+
+    it('saveConstructionPolicy removes a stale structured blob when everything is restored to Standard', async () => {
+      // The restore journey (serial e2e): factory floor saved earlier leaves
+      // BOTH flat keys and the structured blob; restoring everything writes
+      // no new keys, so the stale blob must be cleaned — otherwise a reload
+      // resurrects "Fábrica" provenance from the blob (#943 CI failure).
+      const mockOverlay = {
+        id: '11111111-1111-1111-1111-111111111111',
+        organizationId: '22222222-2222-2222-2222-222222222222',
+        libraryId: '00000000-0000-0000-0000-000000000001',
+        baseReleaseId: '33333333-3333-3333-3333-333333333333',
+        status: 'active',
+        overrides: {
+          'joint.floorToSide.stationsCount': 4,
+          'joint.floorToSide.systemId': 'screw-only',
+          'joint.constructionPolicy': { version: 1, floorToSide: { provenance: 'factory', stationsCount: 4 } },
+        },
+        customResourceIds: [],
+        createdAt: '2026-09-30T12:00:00Z',
+        updatedAt: '2026-09-30T12:00:00Z',
+      };
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ...mockOverlay, overrides: {} }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      await client.saveConstructionPolicy('test-token', DEFAULT_FACTORY_CONSTRUCTION_POLICY, mockOverlay as LibraryOverlayDetail);
+      const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+      const sent = JSON.parse(String(init.body)) as { overrides: Record<string, unknown> };
+      expect(sent.overrides['joint.constructionPolicy']).toBeUndefined();
+      expect(sent.overrides['joint.floorToSide.stationsCount']).toBeUndefined();
+      expect(sent.overrides['joint.floorToSide.systemId']).toBeUndefined();
+    });
   });
 });
 
