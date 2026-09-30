@@ -9,6 +9,7 @@ import {
   type FurnitureAuthoringPreviewRequest,
   type FurnitureAuthoringPreviewResponse,
   type FactoryConstructionPolicy,
+  CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES,
   policyToOverlayOverrides,
 } from '@granete/domain';
 import {
@@ -21,9 +22,11 @@ import {
 import { GeneratedGraneteApiClient, type GeneratedRequestOptions } from './openapi/generated/client';
 
 type SchemaName = Parameters<typeof parseGenerated>[0];
-export type RequestOptions = Omit<GeneratedRequestOptions, 'schema' | 'arrayOf'> & {
+export type RequestOptions = Omit<GeneratedRequestOptions, 'schema' | 'arrayOf' | 'schemaOrNull'> & {
   readonly schema?: SchemaName;
   readonly arrayOf?: SchemaName;
+  /** Nullable-200 endpoints: the body may be a legitimate `null` (no error). */
+  readonly schemaOrNull?: SchemaName;
 };
 
 function requestId(): string {
@@ -116,6 +119,12 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       throw new GraneteApiError(response.status, payload);
     }
     if (options.arrayOf) return parseGeneratedArray<T>(options.arrayOf, value) as T;
+    if (options.schemaOrNull) {
+      // The contract marks this 200 as nullable: an absent body is a normal
+      // "nothing yet" state, never an error the browser may log.
+      if (value === null || value === undefined) return null as T;
+      return parseGenerated<T>(options.schemaOrNull, value);
+    }
     if (options.schema) return parseGenerated<T>(options.schema, value);
     return value as T;
   }
@@ -254,6 +263,12 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
    * #875: Save factory construction policy into the organization's overlay overrides.
    * If an active overlay already exists, updates its overrides.
    * If not, fetches the current Standard release and creates a new active overlay.
+   *
+   * The save upserts ONLY the keys this policy owns (the four joint family
+   * prefixes); every other overlay key — including foreign `joint.*`
+   * overrides such as component-level exceptions — survives untouched
+   * (#943 review: namespace-wide stripping silently destroyed unrelated
+   * overrides, contradicting the preserve-exceptions acceptance).
    */
   async saveConstructionPolicy(
     token: string,
@@ -266,7 +281,7 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       const existingOverrides = (activeOverlay.overrides ?? {}) as Record<string, unknown>;
       const nextOverrides: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(existingOverrides)) {
-        if (!k.startsWith('joint.')) {
+        if (!CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES.some((prefix) => k.startsWith(prefix))) {
           nextOverrides[k] = v;
         }
       }

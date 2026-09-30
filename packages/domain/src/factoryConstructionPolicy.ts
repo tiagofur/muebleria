@@ -105,6 +105,19 @@ export const DEFAULT_FACTORY_CONSTRUCTION_POLICY: FactoryConstructionPolicy = {
   },
 };
 
+/**
+ * The only overlay key prefixes this policy owns. A policy save upserts
+ * exactly these and never touches other overlay keys — foreign `joint.*`
+ * overrides (e.g. component-level exceptions) must survive every save
+ * (#943 review: namespace-wide stripping silently destroyed them).
+ */
+export const CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES = [
+  'joint.floorToSide.',
+  'joint.topToSide.',
+  'joint.shelfToSide.',
+  'joint.backPanel.',
+] as const;
+
 /** Convert a typed FactoryConstructionPolicy into flattened overlay overrides with `joint.` prefix. */
 export function policyToOverlayOverrides(policy: FactoryConstructionPolicy): Record<string, unknown> {
   const overrides: Record<string, unknown> = {};
