@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"time"
 )
 
 // Hardware Profiles (#912): the reusable technical/commercial solution
@@ -44,6 +45,10 @@ func IsBoardFace(value string) bool {
 
 // HardwareProfile is one reusable application solution: what to buy and where
 // it applies, plus the recipe reference that machines it.
+//
+// Version/CreatedAt/UpdatedAt are server-owned persistence fields (#913):
+// the version is the optimistic-concurrency token surfaced as a strong ETag
+// ("v<N>", #443/#448); they take no part in the #912 structural contract.
 type HardwareProfile struct {
 	ID          string                `json:"id"`
 	Code        string                `json:"code"`
@@ -53,6 +58,9 @@ type HardwareProfile struct {
 	Items       []HardwareProfileItem `json:"items"`
 	RecipeRef   *ProfileRecipeRef     `json:"recipeRef,omitempty"`
 	Active      bool                  `json:"active"`
+	Version     int64                 `json:"version,omitempty"`
+	CreatedAt   time.Time             `json:"createdAt,omitempty"`
+	UpdatedAt   time.Time             `json:"updatedAt,omitempty"`
 }
 
 // HardwareProfileItem references one catalog hardware and its per-application
