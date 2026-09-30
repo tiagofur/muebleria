@@ -31,6 +31,7 @@ import {
 } from './ModuleEditorGeneralPanel';
 import { ModuleEditorHardwarePanel } from './ModuleEditorHardwarePanel';
 import { ModuleEditorMeasuresPanel } from './ModuleEditorMeasuresPanel';
+import { ModuleEditorParametersPanel } from './ModuleEditorParametersPanel';
 import { ModuleEditorStructurePanel } from './ModuleEditorStructurePanel';
 import { StructureEditorAgregadosPanel } from '../../structures/components/StructureEditorAgregadosPanel';
 import {
@@ -129,6 +130,7 @@ export function ModuleEditorForm({
   const structureMissing = !draft.structureId.trim();
 
   const counts: Partial<Record<ModuleEditorTab, number>> = {
+    parameters: draft.parameterDefinitions?.length ?? 0,
     components: draft.components?.length ?? 0,
     agregados: draft.agregados?.length ?? 0,
     measures: draft.presets?.length ?? 0,
@@ -188,6 +190,16 @@ export function ModuleEditorForm({
         onUploadImage={onUploadImage}
         editingId={editingId}
         hidden={editorTab !== 'general'}
+      />
+
+      <ModuleEditorParametersPanel
+        draft={draft}
+        setDraft={setDraft}
+        structures={structures}
+        selectedStructure={selectedStructure}
+        catalogComponents={catalogComponents}
+        canMutate={canMutate}
+        hidden={editorTab !== 'parameters'}
       />
 
       <ModuleEditorStructurePanel

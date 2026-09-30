@@ -298,7 +298,8 @@ treated as missing; no SketchUp hand-written adapter.
     `GraneteApiClient.previewFurnitureAuthoring` (resolve precedent). Web-only:
     extension tokens cannot POST it (absent from the extension allowlist).
 
-- [ ] **T5 — UI: "Parámetros" tab — list, order, definition editor**
+- [x] **T5 — UI: "Parámetros" tab — list, order, definition editor** — DONE
+  (with T6, one slice).
   - Route: inline.
   - Trigger evidence: no parameter UI exists; `moduleEditorTabs.ts` has no
     parameters tab; the editor must cover the complete current contract with
@@ -317,7 +318,7 @@ treated as missing; no SketchUp hand-written adapter.
     Explicit `false`/`""` never treated as missing. Component tests incl.
     keyboard/a11y.
 
-- [ ] **T6 — UI: semantic binding editor**
+- [x] **T6 — UI: semantic binding editor** — DONE (with T5, one slice).
   - Route: inline.
   - Trigger evidence: bindings ride inside `parameter_definitions` and
     `componentQuantity`/`componentCondition` are the persisted authorable
@@ -537,11 +538,41 @@ treated as missing; no SketchUp hand-written adapter.
   browser-gate container recipe (postgres-init-app-role.sh + NOBYPASSRLS)
   instead of trusting a superuser connection.
 
+- 2026-09-30: **T5+T6 implemented** — one work-unit commit, client-only.
+  New "Parámetros" tab (between General and Estructura; error-message routing
+  extended): list sorted by (sortOrder, name) with type/category/default/unit/
+  binding summary and per-row domain-contract issues, sortOrder reordering
+  (up/down + sequential renumbering), and a one-at-a-time create/edit form
+  covering all four types with the exact constraint fields (number
+  min/max/step/integer/unit with count⇒integer; string maxLength 1–512;
+  enum ordered options with default; boolean with an explicit
+  "Falso" default that is never dropped), reserved dimensions shown as
+  read-only projections from base measures + presets, and local save gates
+  (name charset/uniqueness/reserved, label, constraint sanity, binding
+  required for non-metadata). Binding editor (T6): only the two authorable
+  behavioral kinds (componentQuantity ⇔ integer number, componentCondition ⇔
+  boolean — mismatched kinds disabled with the reason), targets resolved from
+  the module's direct components + its structure's components with per-id
+  entry/direct counts mirroring the Go consumer validator; ambiguous targets
+  (>1 entry) are disabled with an "ambiguo (N entradas)" label and never
+  auto-selected; targets absent from the composition are explained;
+  metadata category removes the binding section entirely. A remount bug the
+  tests caught (option inputs keyed by value lost focus per keystroke) was
+  fixed at the component. V1 evidence: new panel suite 11/11 (reserved
+  projections, 4 types incl. explicit-false round-trip, enum options+default,
+  metadata-blocks-binding, save gate without binding, ambiguity never
+  first-match, kind/type incompatibility, structure targets offered,
+  reorder+renumber, canMutate disable); full UI suite 2034/2034 (roving-tab
+  test updated for the new tab order); root typecheck 0 errors; root
+  `pnpm test` all workspaces green (web 561, databaseIsolation 16). NOT_RUN:
+  browser gate (CI organization-browser); the preview wiring is T7. Delivery:
+  partial (PR5; remaining acceptance T7–T8).
+
 ## Next step
 
-Publish PR4 (done: #933) — after its merge, T5+T6 (Parámetros tab + binding
-editor, client-only) then T7 (Probar resolución wiring on T4's client method)
-and T8 (cross-surface fixtures + gates).
+Publish PR5 (T5+T6) with `Refs #497 + Delivery: partial`; then T7 (impact +
+stale + Probar resolución wiring using T4's preview method) and T8
+(cross-surface fixtures + gates) — the final acceptance slice.
 
 ## Next step
 

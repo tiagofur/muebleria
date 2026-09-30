@@ -6,6 +6,7 @@
 
 export type ModuleEditorTab =
   | 'general'
+  | 'parameters'
   | 'structure'
   | 'components'
   | 'agregados'
@@ -18,6 +19,7 @@ export const MODULE_EDITOR_TABS: readonly {
   readonly label: string;
 }[] = [
   { id: 'general', label: 'General' },
+  { id: 'parameters', label: 'Parámetros' },
   { id: 'structure', label: 'Estructura' },
   { id: 'components', label: 'Componentes' },
   { id: 'agregados', label: 'Agregados' },
@@ -37,6 +39,9 @@ export function tabForModuleValidationError(
   if (m.includes('preset') || m.includes('opción de medida')) return 'measures';
   if (m.includes('costo') || m.includes('precio') || m.includes('margen')) {
     return 'cost';
+  }
+  if (m.includes('parámetro') || m.includes('parametro') || m.includes('vinculaci')) {
+    return 'parameters';
   }
   return 'general';
 }
