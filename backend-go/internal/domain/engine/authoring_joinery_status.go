@@ -504,10 +504,6 @@ func stationHole(board ContactBoard, face string, local [3]float64, profile *Fam
 	if math.Abs(local[axis]-entry) > 1e-6 {
 		return ResolveHole{}, false
 	}
-	inward := 1.0
-	if high {
-		inward = -1
-	}
 	if profile.DepthMm < 0 || profile.DepthMm > dims[axis]+1e-6 {
 		return ResolveHole{}, false
 	}
@@ -532,7 +528,6 @@ func stationHole(board ContactBoard, face string, local [3]float64, profile *Fam
 		plane[0] > dims[nonAxis[0]]-radius+1e-6 || plane[1] > dims[nonAxis[1]]-radius+1e-6 {
 		return ResolveHole{}, false
 	}
-	_ = inward
 	return ResolveHole{
 		Face: face, XMm: plane[0], YMm: plane[1],
 		DiameterMm: profile.DiameterMm, DepthMm: profile.DepthMm, Type: profile.HoleType,
