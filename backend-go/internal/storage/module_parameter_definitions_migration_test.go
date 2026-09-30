@@ -169,7 +169,7 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 
 func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	pool := multiOrgFreshMigrationDB(t)
-	identityApplyThrough(t, pool, 103)
+	identityApplyThrough(t, pool, 142)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 	min, max, step := 0.0, 5.0, 1.0
@@ -264,7 +264,7 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 	for index, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			pool := multiOrgFreshMigrationDB(t)
-			identityApplyThrough(t, pool, 103)
+			identityApplyThrough(t, pool, 142)
 			store := &storage.PostgresStore{Pool: pool}
 			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 

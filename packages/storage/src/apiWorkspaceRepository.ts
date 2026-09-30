@@ -499,43 +499,42 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
    * response) the PUT carries If-Match and a 412 answers with the server's
    * typed envelope (GraneteApiError / VERSION_CONFLICT) so the UI can tell a
    * stale editor apart from a transport failure. Without a cached version the
-   * PUT goes out bare: a 404 keeps the POST-create fallback alive for
-   * locally-created modules, a 409 surfaces the duplicate-code conflict, and a
-   * 428 (server demands If-Match for a module whose version this session
-   * never learned) fails closed — a blind write could clobber a concurrent
-   * authoring change.
+   * PUT goes out bare; a 404 keeps the POST-create fallback alive for
+   * locally-created modules. A 428 (server demands If-Match for a module this
+   * session never learned — e.g. seeded server-side mid-session) is resolved
+   * by learning the current version with a GET and retrying ONCE under
+   * If-Match: the write stays version-guarded, and if the module changed in
+   * between the retry answers 412. Only when the version cannot be learned
+   * does the write fail closed (ModuleVersionUnknownError) — a blind write can
+   * never clobber a concurrent authoring change.
    */
   private async upsertModule(mod: Module): Promise<void> {
     const body = JSON.stringify(moduleToApi(mod));
-    const expected = this.moduleVersions.get(mod.id);
-
-    const headers = this.getHeaders();
-    if (expected !== undefined) {
-      headers['If-Match'] = `"v${expected}"`;
-    }
-
-    let res: Response | null = null;
-    try {
-      res = await this.fetch(`${this.baseUrl}/catalog/modules/${mod.id}`, {
-        method: 'PUT',
-        headers,
-        body,
-      });
-    } catch {
-      res = null;
-    }
+    let res = await this.putModule(mod.id, body, this.moduleVersions.get(mod.id));
 
     if (res?.ok) {
       this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(res));
       return;
     }
 
-    const putBody = res ? await res.text().catch(() => '') : '';
+    let putBody = res ? await res.text().catch(() => '') : '';
     if (res?.status === 412) {
       throw typedModuleApiError(res.status, putBody);
     }
     if (res?.status === 428) {
-      throw new ModuleVersionUnknownError(mod.id);
+      const current = await this.fetchModuleVersion(mod.id);
+      if (current === undefined) {
+        throw new ModuleVersionUnknownError(mod.id);
+      }
+      res = await this.putModule(mod.id, body, current);
+      if (res?.ok) {
+        this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(res));
+        return;
+      }
+      putBody = res ? await res.text().catch(() => '') : '';
+      if (res?.status === 412) {
+        throw typedModuleApiError(res.status, putBody);
+      }
     }
 
     const missing =
@@ -565,6 +564,41 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       throw new Error(msg);
     }
     this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(created));
+  }
+
+  private async putModule(id: string, body: string, expectedVersion?: number): Promise<Response | null> {
+    const headers = this.getHeaders();
+    if (expectedVersion !== undefined) {
+      headers['If-Match'] = `"v${expectedVersion}"`;
+    }
+    try {
+      return await this.fetch(`${this.baseUrl}/catalog/modules/${id}`, {
+        method: 'PUT',
+        headers,
+        body,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  /** Reads the module's current server version into the cache (#497 handshake). */
+  private async fetchModuleVersion(id: string): Promise<number | undefined> {
+    try {
+      const res = await this.fetch(`${this.baseUrl}/catalog/modules/${id}`, {
+        method: 'GET',
+        headers: this.getHeaders(),
+      });
+      if (!res.ok) return undefined;
+      const current = await parseModuleWriteResponse(res);
+      if (typeof current.version === 'number' && current.version > 0) {
+        this.moduleVersions.set(id, current.version);
+        return current.version;
+      }
+    } catch {
+      // Transport or parse failure: the version stays unknown.
+    }
+    return undefined;
   }
 
   private rememberModuleVersion(moduleId: string, saved: Module): void {

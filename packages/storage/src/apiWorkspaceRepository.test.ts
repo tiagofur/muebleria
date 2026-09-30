@@ -1538,10 +1538,61 @@ describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () =
     ).rejects.toMatchObject({ name: 'GraneteApiError', code: 'VERSION_CONFLICT', status: 412 });
   });
 
-  it('fails closed on 428 when the server demands If-Match for an unknown-version module', async () => {
+  it('resolves a 428 by learning the version and retrying once under If-Match', async () => {
+    const putIfMatch: Array<string | undefined> = [];
+    let puts = 0;
     vi.mocked(fetch).mockImplementation(async (url, init) => {
-      if ((init?.method ?? 'GET') === 'GET') return mockCatalog([{ ...modulePayload, version: undefined }])(url, init);
-      if (init?.method === 'PUT') {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET') {
+        if (String(url).endsWith('/catalog/modules/mod-497')) {
+          // The version learn handshake reads the module directly.
+          return jsonRes({ ...modulePayload, version: 9 });
+        }
+        return mockCatalog([{ ...modulePayload, version: undefined }])(url, init);
+      }
+      if (method === 'PUT') {
+        puts += 1;
+        putIfMatch.push(((init?.headers ?? {}) as Record<string, string>)['If-Match']);
+        return puts === 1
+          ? {
+              ok: false,
+              status: 428,
+              json: async () => ({
+                code: 'PRECONDITION_REQUIRED',
+                message: 'If-Match es obligatorio',
+                fieldErrors: {},
+                requestId: 'req-2',
+                retryable: false,
+                details: {},
+              }),
+              text: async () => JSON.stringify({ code: 'PRECONDITION_REQUIRED' }),
+            } as Response
+          : jsonRes({ ...modulePayload, version: 10 });
+      }
+      return jsonRes({ ...modulePayload });
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const catalog = await repo.getCatalog();
+
+    await repo.saveCatalog({
+      ...(catalog as unknown as Catalog),
+      modules: [{ ...catalog.modules[0]!, name: 'X' }],
+    });
+    // First PUT went out bare, the retry carried the learned version.
+    expect(putIfMatch).toEqual([undefined, '"v9"']);
+  });
+
+  it('fails closed on 428 when the version cannot be learned, without a blind POST', async () => {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET') {
+        if (String(url).endsWith('/catalog/modules/mod-497')) {
+          return { ok: false, status: 404, json: async () => ({}), text: async () => 'not found' } as Response;
+        }
+        return mockCatalog([{ ...modulePayload, version: undefined }])(url, init);
+      }
+      if (method === 'PUT') {
         return {
           ok: false,
           status: 428,
@@ -1549,7 +1600,7 @@ describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () =
             code: 'PRECONDITION_REQUIRED',
             message: 'If-Match es obligatorio',
             fieldErrors: {},
-            requestId: 'req-2',
+            requestId: 'req-3',
             retryable: false,
             details: {},
           }),

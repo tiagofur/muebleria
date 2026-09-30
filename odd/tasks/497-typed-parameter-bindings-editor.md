@@ -455,6 +455,24 @@ treated as missing; no SketchUp hand-written adapter.
   authoritative run for those. NOT_RUN: browser gate locally (CI
   organization-browser runs it); SketchUp host untouched. Delivery: partial
   (PR2 of the chain; remaining acceptance T3–T8).
+- 2026-09-30: **T2 correction round (one consolidated round, per contract).**
+  CI on PR2 caught two integration gaps local targeted runs missed:
+  (1) storage fixtures pinning the schema at migration 103
+  (`TestModuleParameterDefinitionsStorageRoundTrip`,
+  `TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions`) broke
+  because CreateModule now scans `version` (migration 142) — their schema
+  pins moved to 142 (they are store-contract tests; the pure migration
+  tests at 102/103 stay pinned); (2) the browser gate hit
+  `ModuleVersionUnknownError` on the seed-then-edit flow: a module seeded
+  server-side mid-session leaves the editor without a cached version, and
+  the bare PUT answered 428. Resolution — the client handshake is now
+  learn-then-retry: on 428 the repository GETs the module's current version
+  into the cache and retries the PUT ONCE under If-Match (still
+  version-guarded; a mid-flight change answers 412); only an unlearnable
+  version fails closed. `joinery-status.spec.ts` upsert helper got the same
+  handshake for its direct API PUTs. Re-verified: root typecheck 0 errors,
+  root pnpm test green (storage 230), Go parameter-definitions storage tests
+  PASS on disposable PostgreSQL with the new pins.
 
 ## Next step
 

@@ -33,6 +33,25 @@ async function upsertCatalog(token: string, pathById: string, pathCollection: st
   const put = await fetch(`${apiBase}${pathById}`, { method: 'PUT', headers, body: JSON.stringify(body) });
   if (put.ok) return;
   const putText = await put.text().catch(() => '');
+  // #497: a module PUT without If-Match answers 428 once the row exists —
+  // learn the current version and retry the write under If-Match (still
+  // version-guarded; a mid-seed change answers 412).
+  if (put.status === 428 && pathById.startsWith('/catalog/modules/')) {
+    const current = await fetch(`${apiBase}${pathById}`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}`, 'X-Request-ID': crypto.randomUUID() },
+    });
+    const etag = current.headers.get('ETag');
+    if (current.ok && etag) {
+      const retry = await fetch(`${apiBase}${pathById}`, {
+        method: 'PUT',
+        headers: { ...headers, 'If-Match': etag },
+        body: JSON.stringify(body),
+      });
+      if (retry.ok) return;
+      throw new Error(`PUT ${pathById} (If-Match ${etag}): ${retry.status} ${await retry.text().catch(() => '')}`);
+    }
+  }
   // The legacy Go update path answers an opaque 500 for a missing row; any
   // 404/405/500 falls through to the create endpoint (a real conflict
   // surfaces there as 409).
