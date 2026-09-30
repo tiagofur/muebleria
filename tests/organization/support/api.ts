@@ -86,7 +86,10 @@ export async function prepareAuthoritativeOrganizations(): Promise<void> {
   // scope; nothing sensitive runs on the plain session.
   const platformTotp = await enrollMFA(client, aOwner.token);
   await client.requestMFAStepUp(aOwner.token, { scope: 'platform_admin', method: 'totp', code: platformTotp.next() });
-  for (const [token, organizationId] of [[aOwner.token, aOwner.organization.id], [aOwner.token, bOwner.organization.id]]) {
+  for (const [token, organizationId] of [
+    [aOwner.token, aOwner.organization.id],
+    [aOwner.token, bOwner.organization.id],
+  ] as const) {
     const current = await client.getOrganizationEntitlements(token, organizationId);
     await client.updateOrganizationEntitlements(token, organizationId, current.version, {
       max_active_members: 3,
