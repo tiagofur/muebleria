@@ -7,6 +7,7 @@ import type {
   ComponentPlacement,
   EdgeAssignment,
   EdgeSide,
+  FurnitureParameter,
   FurnitureType,
   HardwareLine,
   HardwarePlacement,
@@ -108,6 +109,12 @@ export type ModuleDraft = {
   agregados: ModuleAgregadoInstance[];
   /** Commercial measure options for sales (H09 / #104). */
   presets: MeasurePresetDraft[];
+  /**
+   * Authoritative typed authoring contract, carried verbatim (#905/#497):
+   * the draft layer never transforms or validates its content — the server
+   * owns definition validation and identity.
+   */
+  parameterDefinitions: readonly FurnitureParameter[];
 };
 
 const placementRule = enumRule('base', 'superior', 'lateral_izquierdo', 'lateral_derecho',
@@ -139,11 +146,20 @@ export const agregadoInstanceDraftRule: DraftRule = objectRule({
 const presetRule = objectRule({ ...stringFields('id', 'name'), width: numberRule, height: numberRule, depth: numberRule });
 const hardwareLineDraftRule = objectRule({ ...stringFields('id', 'descriptionOverride', 'optionRole', 'hardwareId'),
   quantity: numberRule, mode: enumRule('role', 'fixed') });
+/**
+ * Structural-only guard for verbatim parameter definitions (#497): each entry
+ * must be an object, but content is NOT mirrored here — the server owns
+ * definition validation, and a closed-shape mirror would silently discard
+ * restored drafts whenever the domain contract grows a field.
+ */
+const parameterDefinitionRefRule: DraftRule = (value) =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 const moduleDraftRule = objectRule({
   ...stringFields('code', 'name', 'notes', 'categoryId', 'baseClearanceMm', 'externalWidth', 'externalHeight', 'externalDepth', 'baseLaborCost', 'imageUrl', 'structureId'),
   furnitureType: enumRule('inferior', 'superior', 'alto'), baseMode: enumRule('', 'none', 'plinth_board', 'plinth_strip', 'legs'),
   hardwareLines: arrayRule(hardwareLineDraftRule), components: arrayRule(componentInstanceDraftRule),
-  agregados: arrayRule(agregadoInstanceDraftRule), presets: arrayRule(presetRule) });
+  agregados: arrayRule(agregadoInstanceDraftRule), presets: arrayRule(presetRule),
+  parameterDefinitions: arrayRule(parameterDefinitionRefRule) });
 export function isModuleDraft(value: unknown): value is ModuleDraft { return moduleDraftRule(value); }
 
 const EDGE_SIDES: readonly EdgeSide[] = ['L1', 'L2', 'W1', 'W2'];
@@ -167,6 +183,7 @@ export function emptyModuleDraft(): ModuleDraft {
     components: [],
     agregados: [],
     presets: [],
+    parameterDefinitions: [],
   };
 }
 
@@ -299,6 +316,9 @@ export function moduleToDraft(mod: Module): ModuleDraft {
       height: p.height,
       depth: p.depth,
     })),
+    // Verbatim pass-through (#905/#497): dropping it here silently erased
+    // every module's authoring contract on edit-save.
+    parameterDefinitions: [...(mod.parameterDefinitions ?? [])],
   };
 }
 
@@ -374,6 +394,10 @@ export function draftToModule(id: string, draft: ModuleDraft): Module {
             height: p.height,
             depth: p.depth,
           }))
+        : undefined,
+    parameterDefinitions:
+      (draft.parameterDefinitions ?? []).length > 0
+        ? [...draft.parameterDefinitions]
         : undefined,
   };
 }
