@@ -118,6 +118,49 @@ describe('sketchupAuthoringResolve.schema.json', () => {
     expect(rejectedValidator!(rejected)).toBe(false);
   });
 
+  test('accepts versioned per-contact recipes and rejects malformed rules', () => {
+    const scenarios = record(fixture).scenarios as unknown[];
+    const joineryScenario = record(scenarios.find((value) => {
+      const relationships = record(record(record(value).request).furniture).relationships;
+      return Array.isArray(relationships) && relationships.length > 0;
+    }));
+    const withRecipes = () => {
+      const request = structuredClone(joineryScenario.request);
+      const relationships = record(record(request).furniture).relationships as unknown[];
+      const relationship = record(relationships[0]);
+      relationship.kind = 'fixed-shelf-side';
+      const relationshipId = record(relationship).relationshipId as string;
+      const contactIds = (relationship.targets as unknown[]).map((target) =>
+        `${relationshipId}:${record(target).componentInstanceId}`);
+      relationship.recipes = contactIds.map((contactId) => ({
+        contactId,
+        recipeId: 'test:synthetic-fixed-shelf',
+        recipeRevision: 'test-1',
+        technicalProfileId: 'test:synthetic-shelf-profile',
+        technicalProfileRevision: 'test-1',
+        rules: [
+          { ruleId: 'pilot', ruleRevision: 'test-1', participantRole: 'A', operationRole: 'pilot',
+            entryFace: 'bottom', offsetMm: [0, 0, 0], axis: [0, -1, 0], diameterMm: 3, depthMm: 12 },
+          { ruleId: 'counterbore', ruleRevision: 'test-1', participantRole: 'B', operationRole: 'counterbore',
+            entryFace: 'back', offsetMm: [0, 18, 0], axis: [0, -1, 0], diameterMm: 6, depthMm: 9 },
+        ],
+      }));
+      return request;
+    };
+    expect(requestValidator!(withRecipes()), ajv.errorsText(requestValidator!.errors)).toBe(true);
+
+    const mutateFirstRule = (request: unknown, mutate: (rule: Record<string, unknown>) => void) => {
+      const relationships = record(record(request).furniture).relationships as unknown[];
+      const rules = record((record(relationships[0]).recipes as unknown[])[0]).rules as unknown[];
+      mutate(record(rules[0]));
+      return request;
+    };
+    expect(requestValidator!(mutateFirstRule(withRecipes(), (rule) => { rule.unexpected = true; }))).toBe(false);
+    expect(requestValidator!(mutateFirstRule(withRecipes(), (rule) => { rule.participantRole = 'C'; }))).toBe(false);
+    expect(requestValidator!(mutateFirstRule(withRecipes(), (rule) => { rule.offsetMm = [0, 0]; }))).toBe(false);
+    expect(requestValidator!(mutateFirstRule(withRecipes(), (rule) => { rule.depthMm = 0; }))).toBe(false);
+  });
+
   test('pins accepted correlation, rejected issues, hole bounds, and full material projection', () => {
     const scenarios = record(fixture).scenarios as unknown[];
     const material = record(scenarios.find((value) => record(value).id === '11-material-pbr-roundtrip'));
