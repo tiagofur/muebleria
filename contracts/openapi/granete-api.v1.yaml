@@ -5436,6 +5436,210 @@
         }
       }
     },
+    "/catalog/hardware-profiles": {
+      "get": {
+        "operationId": "listHardwareProfiles",
+        "summary": "List hardware profiles for the caller's organization",
+        "responses": {
+          "200": {
+            "description": "Hardware profiles (references to catalog hardware, never copies)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HardwareProfile"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createHardwareProfile",
+        "summary": "Create a hardware profile",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareProfileWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Profile created; version starts at 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "description": "Rejected profile contract or hardware references",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareProfileInvalidError"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/catalog/hardware-profiles/{profileId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HardwareProfileId"
+        }
+      ],
+      "get": {
+        "operationId": "getHardwareProfile",
+        "summary": "Get one hardware profile by id",
+        "responses": {
+          "200": {
+            "description": "The hardware profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateHardwareProfile",
+        "summary": "Update a hardware profile (If-Match guarded)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareProfileWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated; version incremented",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "description": "Rejected profile contract or hardware references",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareProfileInvalidError"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deactivateHardwareProfile",
+        "summary": "Deactivate a hardware profile (If-Match guarded)",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile deactivated; the row stays referenced by its id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareProfile"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/furniture/definitions": {
       "get": {
         "operationId": "listFurnitureDefinitions",
@@ -5824,6 +6028,15 @@
       },
       "HardwareAssetId": {
         "name": "assetId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "HardwareProfileId": {
+        "name": "profileId",
         "in": "path",
         "required": true,
         "schema": {
@@ -15517,6 +15730,186 @@
           "field",
           "message"
         ]
+      },
+      "HardwareProfileItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hardwareId": {
+            "type": "string",
+            "description": "Catalog hardware reference of the caller's organization; commercial identity is never copied."
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Per-application quantity (per contact where the profile applies)."
+          },
+          "applicationRole": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hardwareId",
+          "quantity"
+        ]
+      },
+      "ProfileRecipeRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "recipeId": {
+            "type": "string"
+          },
+          "recipeRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "recipeId",
+          "recipeRevision"
+        ],
+        "description": "Pins the exact versioned ContactOperationRecipe the profile embodies; there is no implicit latest."
+      },
+      "HardwareProfile": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HardwareProfileItem"
+            }
+          },
+          "recipeRef": {
+            "$ref": "#/components/schemas/ProfileRecipeRef"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Server-owned optimistic-concurrency token; If-Match is the only expected-version authority on PUT/DELETE."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "revision",
+          "items",
+          "active",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "description": "Hardware profile (#912/#913): a reusable application solution — catalog hardware references with quantities plus the versioned recipe that machines it."
+      },
+      "HardwareProfileWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HardwareProfileItem"
+            }
+          },
+          "recipeRef": {
+            "$ref": "#/components/schemas/ProfileRecipeRef"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "revision",
+          "items"
+        ],
+        "description": "Authorable fields only: id, version, active and timestamps are server-owned and rejected in the body."
+      },
+      "HardwareProfileIssue": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ]
+      },
+      "HardwareProfileInvalidError": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HardwareProfileIssue"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "issues"
+        ],
+        "description": "Rejected hardware-profile write: structural contract violations (PROFILE_INVALID) and same-scope hardware reference failures (HARDWARE_REFERENCE_INVALID)."
       },
       "ParameterDefinitionInvalidError": {
         "type": "object",

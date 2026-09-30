@@ -2676,6 +2676,54 @@ type FurnitureParameterDefinitionIssue struct {
 	Message   string  `json:"message"`
 }
 
+type HardwareProfileItem struct {
+	HardwareId      string  `json:"hardwareId"`
+	Quantity        float64 `json:"quantity"`
+	ApplicationRole *string `json:"applicationRole,omitempty"`
+}
+
+type ProfileRecipeRef struct {
+	RecipeId       string `json:"recipeId"`
+	RecipeRevision string `json:"recipeRevision"`
+}
+
+type HardwareProfile struct {
+	ID          string                `json:"id"`
+	Code        string                `json:"code"`
+	Name        string                `json:"name"`
+	Description *string               `json:"description,omitempty"`
+	Revision    string                `json:"revision"`
+	Items       []HardwareProfileItem `json:"items"`
+	RecipeRef   *ProfileRecipeRef     `json:"recipeRef,omitempty"`
+	Active      bool                  `json:"active"`
+	Version     int64                 `json:"version"`
+	CreatedAt   string                `json:"createdAt"`
+	UpdatedAt   string                `json:"updatedAt"`
+}
+
+type HardwareProfileWrite struct {
+	Code        string                `json:"code"`
+	Name        string                `json:"name"`
+	Description *string               `json:"description,omitempty"`
+	Revision    string                `json:"revision"`
+	Items       []HardwareProfileItem `json:"items"`
+	RecipeRef   *ProfileRecipeRef     `json:"recipeRef,omitempty"`
+}
+
+type HardwareProfileIssue struct {
+	Code     string  `json:"code"`
+	Message  string  `json:"message"`
+	Severity string  `json:"severity"`
+	EntityId *string `json:"entityId,omitempty"`
+	Path     *string `json:"path,omitempty"`
+}
+
+type HardwareProfileInvalidError struct {
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
+	Issues  []HardwareProfileIssue `json:"issues"`
+}
+
 type ParameterDefinitionInvalidError struct {
 	Code    string                              `json:"code"`
 	Message string                              `json:"message"`

@@ -321,6 +321,18 @@ type stubStore struct {
 	listAgregados    []domain.Agregado
 	listHardwares    []domain.Hardware
 	listOptionGroups []domain.OptionGroup
+	// #913 / HW-PROFILE catalog surface hooks.
+	listHardwareProfiles                      []domain.HardwareProfile
+	hardwareProfileReturnedByID               *domain.HardwareProfile
+	hardwareProfileGetID                      string
+	createHardwareProfileErr                  error
+	createdHardwareProfile                    *domain.HardwareProfile
+	updateHardwareProfileErr                  error
+	updatedHardwareProfile                    *domain.HardwareProfile
+	updatedHardwareProfileExpectedVersion     int64
+	deactivateHardwareProfileErr              error
+	deactivatedHardwareProfileID              string
+	deactivatedHardwareProfileExpectedVersion int64
 	// #110: project templates hooks.
 	listProjectTemplates []domain.ProjectTemplate
 	lastCreatedTemplate  *domain.ProjectTemplate
