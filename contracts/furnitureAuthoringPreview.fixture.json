@@ -1,0 +1,107 @@
+{
+  "catalogRevision": "workshop-a2f64b767edc",
+  "definitionHash": "sha256-aeaf033b5b2f30e6a2326bbb494980dfcb5bfd3a70605e61bf0708c3e16d86d0",
+  "definitionParameters": [
+    {
+      "binding": {
+        "componentId": "f4970000-0000-0000-0000-0000000000c1",
+        "kind": "componentQuantity",
+        "version": 1
+      },
+      "category": "configuration",
+      "defaultValue": 2,
+      "integer": true,
+      "label": "Cantidad de estantes",
+      "name": "shelfCount",
+      "required": true,
+      "sortOrder": 1,
+      "type": "number",
+      "unit": "count"
+    },
+    {
+      "binding": {
+        "dimension": "widthMm",
+        "kind": "dimensionColumn",
+        "version": 1
+      },
+      "category": "dimension",
+      "defaultValue": 600,
+      "integer": true,
+      "label": "Ancho (mm)",
+      "max": 1200,
+      "min": 300,
+      "name": "widthMm",
+      "required": true,
+      "sortOrder": 10,
+      "step": 10,
+      "type": "number",
+      "unit": "mm"
+    },
+    {
+      "binding": {
+        "dimension": "heightMm",
+        "kind": "dimensionColumn",
+        "version": 1
+      },
+      "category": "dimension",
+      "defaultValue": 720,
+      "integer": true,
+      "label": "Alto (mm)",
+      "max": 1440,
+      "min": 360,
+      "name": "heightMm",
+      "required": true,
+      "sortOrder": 20,
+      "step": 10,
+      "type": "number",
+      "unit": "mm"
+    },
+    {
+      "binding": {
+        "dimension": "depthMm",
+        "kind": "dimensionColumn",
+        "version": 1
+      },
+      "category": "dimension",
+      "defaultValue": 590,
+      "integer": true,
+      "label": "Fondo (mm)",
+      "max": 1180,
+      "min": 295,
+      "name": "depthMm",
+      "required": true,
+      "sortOrder": 30,
+      "step": 1,
+      "type": "number",
+      "unit": "mm"
+    }
+  ],
+  "issues": [],
+  "moduleId": "f4970000-0000-0000-0000-0000000000a1",
+  "resolved": {
+    "layout": {
+      "components": [],
+      "definitionName": "Mueble preview parity",
+      "dimensionsMm": [
+        600,
+        720,
+        590
+      ],
+      "furnitureDefinitionId": "f4970000-0000-0000-0000-0000000000a1",
+      "hardware": [],
+      "transformContract": "granete.local-basis.v1"
+    },
+    "machining": {
+      "derivedHardwarePlacements": [],
+      "manufacturingFingerprint": "sha256-255bc16e037b33b7bfd9389b08bad8a3fb91f5f030560a875ee9d7cc60b88d7e",
+      "operations": []
+    },
+    "preflight": {
+      "issues": [],
+      "preflightContract": "granete.manufacturing-preflight.v1",
+      "scope": "authoring-resolve-subset",
+      "status": "clear"
+    }
+  },
+  "status": "accepted"
+}

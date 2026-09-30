@@ -374,6 +374,12 @@ func RegisterRoutes(server *Server) http.Handler {
 	// handler and receive its typed METHOD_NOT_ALLOWED envelope. Without this
 	// fallback, ServeMux emits a bare 405 before the versioned boundary runs.
 	mux.Handle("/api/furniture/authoring/resolve", authoringResolve)
+	// #497 — preview de autoría del editor web: resuelve un DRAFT de
+	// definiciones tipadas con valores de muestra por el mismo motor del
+	// resolve, sin persistir nada ni avanzar la revisión del catálogo.
+	// Web-only: los tokens de extensión no pueden POSTearlo (no está en el
+	// allowlist de extensión — fail-closed por defecto).
+	mux.Handle("POST /api/furniture/authoring/preview", authMW(http.HandlerFunc(server.HandleFurnitureAuthoringPreview)))
 
 	// #772 (LIB-1): Manufacturing library identity and immutable releases
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/current", authMW(http.HandlerFunc(server.HandleStandardLibraryCurrentRelease)))
