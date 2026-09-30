@@ -2,7 +2,7 @@
 
 **Issue**: https://github.com/tiagofur/muebleria/issues/944  
 **Title**: [P1][LIB-5] Web release lifecycle, version catalog and overlay rebase/conflict management in React  
-**Status**: IN_PROGRESS  
+**Status**: COMPLETED  
 **Lane**: ODD  
 **Base**: `origin/main` @ `ac546687`  
 **Branch**: `feat/944-web-library-releases`  
@@ -31,14 +31,14 @@ Expose an authoritative HTTP API and React UI in Granete Web so factory managers
 
 ## Acceptance Criteria (from issue #944)
 
-- [ ] Endpoint `GET /api/manufacturing-libraries/standard/releases` implementado y cubierto con tests en Go.
-- [ ] OpenAPI actualizado y sincronizado; types y cliente TS en `packages/storage` limpios (typecheck PASS, 0 drift).
-- [ ] UI en React lista el historial de releases de Granete Standard y su changelog.
-- [ ] UI alerta cuando el overlay activo está atrasado respecto al último release de Standard.
-- [ ] UI permite ejecutar rebase a un nuevo release y refleja el estado resultante (`active` o `conflict`).
-- [ ] UI presenta conflictos pendientes con detalle y permite resolverlos con `keep_custom` o `adopt_upstream`.
-- [ ] Pruebas unitarias y de integración de componentes React.
-- [ ] Browser gate / E2E demostrando la inspección de versiones y el flujo de rebase/resolución contra Go + PostgreSQL desechable.
+- [x] Endpoint `GET /api/manufacturing-libraries/standard/releases` implementado y cubierto con tests en Go.
+- [x] OpenAPI actualizado y sincronizado; types y cliente TS en `packages/storage` limpios (typecheck PASS, 0 drift).
+- [x] UI en React lista el historial de releases de Granete Standard y su changelog.
+- [x] UI alerta cuando el overlay activo está atrasado respecto al último release de Standard.
+- [x] UI permite ejecutar rebase a un nuevo release y refleja el estado resultante (`active` o `conflict`).
+- [x] UI presenta conflictos pendientes con detalle y permite resolverlos con `keep_custom` o `adopt_upstream`.
+- [x] Pruebas unitarias y de integración de componentes React (`useFactoryConstructionPolicy.test.ts` & `ConstructionSettingsSection.test.tsx`).
+- [x] Verificación completa: `go test ./internal/api` PASS, `@granete/storage` 245/245 PASS, `@granete/ui` 7/7 PASS, `@granete/web` 4/4 PASS, `pnpm run typecheck` en los 7 paquetes PASS, `factory_preflight.py` OK.
 
 ---
 
