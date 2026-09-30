@@ -75,9 +75,11 @@ export interface UseModulesScreenStateProps {
   readonly catalogAgregados?: readonly Agregado[];
   readonly materials?: readonly MaterialBoard[];
   readonly edges?: readonly EdgeBand[];
-  readonly onCreate: (draft: ModuleDraft) => void;
-  readonly onUpdate: (id: string, draft: ModuleDraft) => void;
+  readonly onCreate: (draft: ModuleDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: ModuleDraft) => void | Promise<void>;
   readonly onDelete: (id: string) => void;
+  /** #497 T7: settles with the save error (or null on success). */
+  readonly onSaveOutcome?: (error: unknown | null) => void;
   readonly onCreateCategory?: (draft: CategoryDraft) => void;
   readonly onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
   readonly onDeleteCategory?: (id: string) => void;
@@ -107,6 +109,7 @@ export function useModulesScreenState({
   edges = [],
   onCreate,
   onUpdate,
+  onSaveOutcome,
   onDelete,
   onCreateCategory,
   onUpdateCategory,
@@ -592,6 +595,15 @@ export function useModulesScreenState({
     return null;
   };
 
+  // #497 T7: set when a save fails with the server's stale-conflict (the
+  // store rolled the optimistic change back); the editor stays open with the
+  // draft intact until the user explicitly discards and reloads.
+  const [staleSave, setStaleSave] = useState(false);
+  const discardStaleSave = (): void => {
+    setStaleSave(false);
+    forceCloseEditor();
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const err = validate();
@@ -605,12 +617,28 @@ export function useModulesScreenState({
       draft,
       boardOverrides,
     );
-    if (editingId) {
-      onUpdate(editingId, draftWithOverrides);
-    } else {
-      onCreate(draftWithOverrides);
-    }
-    forceCloseEditor();
+    // #497 T7: the save settles BEFORE the editor closes — a stale write
+    // (server VERSION_CONFLICT) keeps the editor open with the draft intact
+    // so the user's work is never silently lost; success closes as before.
+    void (async () => {
+      try {
+        if (editingId) {
+          await onUpdate(editingId, draftWithOverrides);
+        } else {
+          await onCreate(draftWithOverrides);
+        }
+        setStaleSave(false);
+        onSaveOutcome?.(null);
+        forceCloseEditor();
+      } catch (saveError) {
+        onSaveOutcome?.(saveError);
+        // Structural check (no storage import): only the server's typed
+        // stale-conflict shows the banner; other failures keep the draft and
+        // rely on the shared toast.
+        const code = (saveError as { code?: string } | null)?.code;
+        setStaleSave(code === 'VERSION_CONFLICT');
+      }
+    })();
   };
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -741,6 +769,8 @@ export function useModulesScreenState({
     error,
     isDraftDirty,
     forceCloseEditor,
+    staleSave,
+    discardStaleSave,
     closeModal,
     clearDraft,
     // Category modals

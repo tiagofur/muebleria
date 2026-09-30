@@ -56,8 +56,8 @@ export interface ModulesScreenProps {
   readonly edges?: readonly EdgeBand[];
   /** Hierarchical categories (MOD-09). Default empty. */
   readonly categories?: readonly ModuleCategory[];
-  readonly onCreate: (draft: ModuleDraft) => void;
-  readonly onUpdate: (id: string, draft: ModuleDraft) => void;
+  readonly onCreate: (draft: ModuleDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: ModuleDraft) => void | Promise<void>;
   readonly onDelete: (id: string) => void;
   readonly onCreateCategory?: (draft: CategoryDraft) => void;
   readonly onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
@@ -113,6 +113,14 @@ export interface ModulesScreenProps {
    * Only used when canMutate is true.
    */
   readonly onUploadImage?: (file: File) => Promise<string>;
+  /** #497 T7: server-authoritative draft preview (Probar resolución). */
+  readonly onPreviewAuthoring?: (
+    request: import('@granete/domain').FurnitureAuthoringPreviewRequest,
+  ) => Promise<import('@granete/domain').FurnitureAuthoringPreviewResponse>;
+  /** #497 T7: set when the last save was rejected as stale by the server. */
+  readonly editorStale?: boolean;
+  /** #497 T7: discard the open editor draft and reload fresh catalog data. */
+  readonly onDiscardStaleEditor?: () => void | Promise<void>;
   /** Resolve media path for preview. */
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
   /**
@@ -168,6 +176,9 @@ export function ModulesScreen({
   edges = [],
   canMutate = true,
   onUploadImage,
+  onPreviewAuthoring,
+  editorStale,
+  onDiscardStaleEditor,
   resolveImageUrl = (u) => u,
   boardEditorSlot,
   renderBoardEditor,
@@ -307,6 +318,11 @@ export function ModulesScreen({
           <ModuleEditorForm
             formId={formId}
             error={state.error}
+            staleSave={state.staleSave}
+            onDiscardStaleSave={() => {
+              void onDiscardStaleEditor?.();
+              state.discardStaleSave();
+            }}
             onSubmit={state.handleSubmit}
             editorTab={state.editorTab}
             setEditorTab={state.setEditorTab}
@@ -322,6 +338,8 @@ export function ModulesScreen({
             catalogComponents={catalogComponents}
             catalogAgregados={catalogAgregados}
             composedEnabled={state.composedEnabled}
+            savedModuleId={state.editingId}
+            onPreviewAuthoring={onPreviewAuthoring}
             onRequestAddComponent={() => {
               state.setAddComponentOpen(true);
               state.setComponentSearch('');

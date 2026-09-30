@@ -99,14 +99,14 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
     // --- Modules ---
     createModule: (draft) => {
       const item = draftToModule(ctx.newId(), draft);
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({ ...c, modules: [...c.modules, item] }),
         `✓ "${item.code}" creado`,
       );
     },
 
     updateModule: (id, draft) => {
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           // The draft pipeline doesn't model the server version (#497): keep

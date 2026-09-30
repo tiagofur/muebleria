@@ -112,8 +112,11 @@ export interface CatalogState {
   readonly deleteCategory: (id: string) => Promise<void>;
 
   // --- Modules ---
-  readonly createModule: (draft: ModuleDraft) => void;
-  readonly updateModule: (id: string, draft: ModuleDraft) => void;
+  // The save promise resolves after the server accepts the write (or rejects
+  // with the typed failure — e.g. #497 stale VERSION_CONFLICT) so callers can
+  // react beyond the shared toast.
+  readonly createModule: (draft: ModuleDraft) => Promise<void>;
+  readonly updateModule: (id: string, draft: ModuleDraft) => Promise<void>;
   /** Auth: also DELETE /catalog/modules/{id}. */
   readonly deleteModule: (
     id: string,

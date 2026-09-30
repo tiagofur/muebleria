@@ -911,4 +911,36 @@ describe('ModulesScreen URL handoff / deep links (F152)', () => {
     expect(screen.queryByTestId('module-detail')).toBeNull();
     expect(onSelectionChange).toHaveBeenCalledWith(null);
   });
+
+  it('keeps the editor open with a stale banner when the server rejects the save (#497 T7)', async () => {
+    const user = userEvent.setup();
+    const onDiscardStaleEditor = vi.fn();
+    const staleError = Object.assign(new Error('stale'), {
+      name: 'GraneteApiError',
+      code: 'VERSION_CONFLICT',
+    });
+    const { onCreate } = renderScreen({
+      onDiscardStaleEditor,
+      onCreate: vi.fn().mockRejectedValue(staleError),
+    });
+
+    await user.click(screen.getByRole('button', { name: /Nuevo mueble/i }));
+    await screen.findByTestId('module-editor-page');
+    await user.type(screen.getByLabelText('Código'), 'MOD-STALE');
+    await user.type(screen.getByLabelText('Nombre'), 'Mueble stale');
+
+    await user.click(screen.getByRole('button', { name: /^Guardar/i }));
+
+    // The editor stays OPEN: the draft survives the stale rejection.
+    const banner = await screen.findByTestId('module-editor-stale');
+    expect(banner.textContent).toMatch(/sin pisar la versión nueva/);
+    expect(screen.getByTestId('module-editor-page')).toBeTruthy();
+
+    // A NON-stale failure does NOT show the stale banner (the shared toast
+    // covers it) but still keeps the editor open.
+    onDiscardStaleEditor.mockClear();
+    await user.click(screen.getByTestId('module-editor-stale-discard'));
+    expect(onDiscardStaleEditor).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('module-editor-page')).toBeNull();
+  });
 });

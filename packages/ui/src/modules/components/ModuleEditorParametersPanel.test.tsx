@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import type {
+  FurnitureAuthoringPreviewRequest,
+  FurnitureAuthoringPreviewResponse,
+} from '@granete/domain';
 import userEvent from '@testing-library/user-event';
 
 import { ModuleEditorParametersPanel } from './ModuleEditorParametersPanel';
@@ -26,7 +30,14 @@ const structures: Structure[] = [
   },
 ] as never;
 
-function renderPanel(draft: ModuleDraft, setDraft = vi.fn()) {
+function renderPanel(
+  draft: ModuleDraft,
+  setDraft = vi.fn(),
+  savedModuleId: string | null = null,
+  onPreviewAuthoring?: (
+    request: FurnitureAuthoringPreviewRequest,
+  ) => Promise<FurnitureAuthoringPreviewResponse>,
+) {
   return render(
     <ModuleEditorParametersPanel
       draft={draft}
@@ -36,6 +47,8 @@ function renderPanel(draft: ModuleDraft, setDraft = vi.fn()) {
       catalogComponents={catalogComponents}
       canMutate
       hidden={false}
+      savedModuleId={savedModuleId}
+      onPreviewAuthoring={onPreviewAuthoring}
     />,
   );
 }
@@ -316,5 +329,186 @@ describe('ModuleEditorParametersPanel (#497 T5/T6)', () => {
       />,
     );
     expect((screen.getByTestId('parameter-add') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('preview guard: without a saved module the section explains and disables', () => {
+    renderPanel(draftWith(), vi.fn(), null, vi.fn());
+    expect(screen.getByTestId('parameter-preview-guard').textContent).toMatch(
+      /Guardá el mueble primero/,
+    );
+    expect(
+      (screen.getByTestId('parameter-preview-run') as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it('Probar resolución sends the draft + typed samples and renders the accepted summary', async () => {
+    const user = userEvent.setup();
+    const onPreviewAuthoring = vi.fn().mockResolvedValue({
+      moduleId: 'mod-1',
+      catalogRevision: 'workshop-abc123def456',
+      status: 'accepted',
+      definitionHash: 'sha256-abc123',
+      definitionParameters: [],
+      resolved: {
+        layout: { components: [{}, {}], hardware: [{}] },
+        machining: { manufacturingFingerprint: 'sha256-fp' },
+        preflight: {
+          scope: 'authoring-resolve-subset',
+          status: 'clear',
+          issues: [],
+          preflightContract: 'granete.manufacturing-preflight.v1',
+        },
+      },
+      issues: [],
+    });
+    renderPanel(
+      draftWith({
+        parameterDefinitions: [
+          {
+            name: 'shelfCount',
+            label: 'Cantidad de estantes',
+            type: 'number',
+            category: 'configuration',
+            defaultValue: 2,
+            required: true,
+            unit: 'count',
+            integer: true,
+          },
+        ],
+      }),
+      vi.fn(),
+      'mod-1',
+      onPreviewAuthoring,
+    );
+
+    // Sample input seeded from the definition default.
+    const sample = screen.getByTestId('parameter-sample-shelfCount') as HTMLInputElement;
+    expect(sample.value).toBe('2');
+    await user.clear(sample);
+    await user.type(sample, '3');
+    await user.click(screen.getByTestId('parameter-preview-run'));
+
+    await screen.findByTestId('parameter-preview-accepted');
+    expect(onPreviewAuthoring).toHaveBeenCalledTimes(1);
+    const request = onPreviewAuthoring.mock.calls[0]![0] as {
+      moduleId: string;
+      parameterDefinitions: unknown[];
+      parameters: Record<string, unknown>;
+    };
+    expect(request.moduleId).toBe('mod-1');
+    // numbers arrive as numbers, never strings
+    expect(request.parameters).toEqual({ shelfCount: 3 });
+    const summary = screen.getByTestId('parameter-preview-accepted').textContent ?? '';
+    expect(summary).toMatch(/Resolución aceptada/);
+    expect(summary).toMatch(/2 piezas/);
+    expect(summary).toMatch(/sin bloqueos/);
+  });
+
+  it('renders rejected previews as structured Spanish issues', async () => {
+    const user = userEvent.setup();
+    const onPreviewAuthoring = vi.fn().mockResolvedValue({
+      moduleId: 'mod-1',
+      catalogRevision: 'workshop-abc123def456',
+      status: 'rejected',
+      issues: [
+        {
+          code: 'PARAMETER_OUT_OF_RANGE',
+          message: 'out of range',
+          severity: 'error',
+          path: 'furniture.parameters.widthMm',
+          details: { parameter: 'widthMm' },
+        },
+      ],
+    });
+    renderPanel(
+      draftWith({
+        parameterDefinitions: [
+          {
+            name: 'widthMm',
+            label: 'Ancho',
+            type: 'number',
+            category: 'dimension',
+            defaultValue: 600,
+            required: true,
+            unit: 'mm',
+            integer: true,
+          },
+        ],
+      }),
+      vi.fn(),
+      'mod-1',
+      onPreviewAuthoring,
+    );
+
+    await user.click(screen.getByTestId('parameter-preview-run'));
+    await screen.findByTestId('parameter-preview-rejected');
+    const rejected = screen.getByTestId('parameter-preview-rejected').textContent ?? '';
+    expect(rejected).toMatch(/Resolución rechazada/);
+    expect(rejected).toMatch(/El parámetro está fuera del rango permitido: widthMm/);
+    expect(screen.queryByTestId('parameter-preview-accepted')).toBeNull();
+  });
+
+  it('removal goes through an impact confirmation that never deletes directly', async () => {
+    const user = userEvent.setup();
+    const setDraft = vi.fn();
+    const draft = draftWith({
+      parameterDefinitions: [
+        {
+          name: 'shelfCount',
+          label: 'Cantidad de estantes',
+          type: 'number',
+          category: 'configuration',
+          defaultValue: 2,
+          required: true,
+          unit: 'count',
+          integer: true,
+          binding: {
+            version: 1,
+            kind: 'componentQuantity',
+            componentId: 'comp-shelf-1',
+          },
+        },
+      ],
+    });
+    renderPanel(draft, setDraft);
+
+    await user.click(screen.getByTestId('parameter-remove'));
+    // Nothing was removed yet: the impact dialog explains the evolution.
+    expect(setDraft).not.toHaveBeenCalled();
+    const message = await screen.findByText(
+      /hash de la definición y la revisión del catálogo avanzan/,
+    );
+    expect(message.textContent).toMatch(/ningún preset usa este parámetro/);
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(setDraft).toHaveBeenCalledTimes(1);
+    const updater = setDraft.mock.calls[0]![0] as (prev: ModuleDraft) => ModuleDraft;
+    expect(updater(draft).parameterDefinitions).toEqual([]);
+  });
+
+  it('shows the evolution impact when changing the type of an existing parameter', async () => {
+    const user = userEvent.setup();
+    renderPanel(
+      draftWith({
+        parameterDefinitions: [
+          {
+            name: 'shelfCount',
+            label: 'Cantidad de estantes',
+            type: 'number',
+            category: 'configuration',
+            defaultValue: 2,
+            required: true,
+            unit: 'count',
+            integer: true,
+          },
+        ],
+      }),
+    );
+
+    await user.click(screen.getByTestId('parameter-edit'));
+    expect(screen.queryByTestId('parameter-type-impact')).toBeNull();
+    await user.selectOptions(screen.getByTestId('parameter-type'), 'boolean');
+    expect(screen.getByTestId('parameter-type-impact').textContent).toMatch(
+      /hash de la definición y la revisión del catálogo avanzan/,
+    );
   });
 });
