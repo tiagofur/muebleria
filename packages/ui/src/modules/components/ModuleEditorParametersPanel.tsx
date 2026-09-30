@@ -983,7 +983,7 @@ export function ModuleEditorParametersPanel({
                   data-testid="parameter-binding-kind"
                 >
                   <option value="">Sin vinculación</option>
-                  {authorableBindingKinds(editing.form.type).map(({ kind, compatibility }) => (
+                  {authorableBindingKinds(editing.form.type, editing.form.integer).map(({ kind, compatibility }) => (
                     <option key={kind} value={kind} disabled={compatibility !== 'compatible'}>
                       {kind === 'componentQuantity'
                         ? 'Cantidad de un componente'
@@ -1186,7 +1186,10 @@ export function ModuleEditorParametersPanel({
                         : 'false'
                       : String(parameter.defaultValue)
                 );
-                if (value === '') continue;
+                // An explicitly cleared string sample travels as "" (the
+                // contract preserves empty strings); only non-string empties
+                // mean "sin valor" and stay unsent.
+                if (value === '' && parameter.type !== 'string') continue;
                 if (parameter.type === 'boolean') {
                   parameters[parameter.name] = value === 'true';
                 } else if (parameter.type === 'number') {
