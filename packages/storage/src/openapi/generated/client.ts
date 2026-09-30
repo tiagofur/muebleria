@@ -5,6 +5,8 @@ import type {
   AdminTransferResponse,
   ApproveDesignRevisionForProductionRequest,
   AuthDeviceDirectory,
+  AuthoringResolveRequest,
+  AuthoringResolveResponse,
   CatalogModule,
   CatalogModuleWrite,
   ChangeMembershipRolesRequest,
@@ -47,6 +49,7 @@ import type {
   EvaluateDesignRevisionPreflightRequest,
   ExchangePairingGrantRequest,
   FactoryOrganization,
+  FurnitureDefinitionLayout,
   FurnitureInstance,
   HardwareAsset,
   HardwareAssetRevision,
@@ -151,6 +154,7 @@ import type {
   UpdatePlatformOrganizationRequest,
   UpsertMachineOutputSelectionRequest,
   ValidateModelBindingRequest,
+  WorkshopFurnitureCatalogEnvelope,
 } from './types';
 
 export interface GeneratedRequestOptions {
@@ -308,4 +312,7 @@ export abstract class GeneratedGraneteApiClient {
   createCatalogModule(token: string, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("POST", "/catalog/modules", { schema: "CatalogModule", token, bodySchema: "CatalogModuleWrite", body, signal }); }
   getCatalogModule(token: string, moduleId: string, signal?: AbortSignal): Promise<CatalogModule> { return this.request("GET", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, signal }); }
   updateCatalogModule(token: string, moduleId: string, version: number, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("PUT", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, ifMatch: version, bodySchema: "CatalogModuleWrite", body, signal }); }
+  listFurnitureDefinitions(token: string, signal?: AbortSignal): Promise<WorkshopFurnitureCatalogEnvelope> { return this.request("GET", "/furniture/definitions", { schema: "WorkshopFurnitureCatalogEnvelope", token, signal }); }
+  getFurnitureDefinitionLayout(token: string, definitionId: string, signal?: AbortSignal): Promise<FurnitureDefinitionLayout> { return this.request("GET", `/furniture/definitions/${encodeURIComponent(definitionId)}/layout`, { schema: "FurnitureDefinitionLayout", token, signal }); }
+  resolveAuthoringLayout(token: string, body: AuthoringResolveRequest, signal?: AbortSignal): Promise<AuthoringResolveResponse> { return this.request("POST", "/furniture/authoring/resolve", { schema: "AuthoringResolveResponse", token, bodySchema: "AuthoringResolveRequest", body, signal }); }
 }

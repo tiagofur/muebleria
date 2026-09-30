@@ -2680,3 +2680,252 @@ type ParameterDefinitionInvalidError struct {
 	Message string                              `json:"message"`
 	Issues  []FurnitureParameterDefinitionIssue `json:"issues"`
 }
+
+type ContractIssue struct {
+	Code        string         `json:"code"`
+	Message     string         `json:"message"`
+	Severity    string         `json:"severity"`
+	EntityId    *string        `json:"entityId,omitempty"`
+	Path        *string        `json:"path,omitempty"`
+	Remediation *string        `json:"remediation,omitempty"`
+	Details     map[string]any `json:"details,omitempty"`
+}
+
+type WorkshopFurnitureCatalogEnvelope struct {
+	SchemaId           string                                 `json:"schemaId"`
+	RevisionId         string                                 `json:"revisionId"`
+	Categories         []WorkshopFurnitureCategory            `json:"categories"`
+	MaterialCategories []WorkshopMaterialCategory             `json:"materialCategories"`
+	Definitions        map[string]WorkshopFurnitureDefinition `json:"definitions"`
+	Presets            []WorkshopFurniturePreset              `json:"presets"`
+	Materials          []WorkshopMaterial                     `json:"materials"`
+}
+
+type WorkshopFurnitureDefinition struct {
+	FurnitureDefinitionId  string                         `json:"furnitureDefinitionId"`
+	Code                   string                         `json:"code"`
+	Name                   string                         `json:"name"`
+	Category               string                         `json:"category"`
+	CategoryId             *string                        `json:"categoryId,omitempty"`
+	Version                string                         `json:"version"`
+	SchemaRevision         int64                          `json:"schemaRevision"`
+	DefinitionHash         string                         `json:"definitionHash"`
+	Description            *string                        `json:"description,omitempty"`
+	ImageUrl               *string                        `json:"imageUrl,omitempty"`
+	Parameters             []FurnitureParameterDefinition `json:"parameters"`
+	EstimatedPartCount     *int64                         `json:"estimatedPartCount,omitempty"`
+	EstimatedHardwareCount *int64                         `json:"estimatedHardwareCount,omitempty"`
+	MaterialRoles          []WorkshopMaterialRole         `json:"materialRoles,omitempty"`
+}
+
+type WorkshopMaterialRole struct {
+	Role      string   `json:"role"`
+	Label     string   `json:"label"`
+	OptionIds []string `json:"optionIds"`
+}
+
+type WorkshopFurniturePreset struct {
+	PresetId              string           `json:"presetId"`
+	Name                  string           `json:"name"`
+	Category              string           `json:"category"`
+	FurnitureDefinitionId string           `json:"furnitureDefinitionId"`
+	Parameters            map[string]int64 `json:"parameters"`
+}
+
+type WorkshopFurnitureCategory struct {
+	CategoryId string  `json:"categoryId"`
+	Name       string  `json:"name"`
+	ParentId   *string `json:"parentId,omitempty"`
+	SortOrder  int64   `json:"sortOrder"`
+}
+
+type WorkshopMaterialCategory struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	ParentId  *string `json:"parentId,omitempty"`
+	SortOrder int64   `json:"sortOrder"`
+}
+
+type WorkshopMaterial struct {
+	MaterialId                 string   `json:"materialId"`
+	Code                       string   `json:"code"`
+	Name                       string   `json:"name"`
+	Manufacturer               *string  `json:"manufacturer,omitempty"`
+	CategoryId                 *string  `json:"categoryId,omitempty"`
+	PreviewColor               *string  `json:"previewColor,omitempty"`
+	ImageUrl                   *string  `json:"imageUrl,omitempty"`
+	PreviewTextureUrl          *string  `json:"previewTextureUrl,omitempty"`
+	PreviewTextureTileWidthMm  *float64 `json:"previewTextureTileWidthMm,omitempty"`
+	PreviewTextureTileLengthMm *float64 `json:"previewTextureTileLengthMm,omitempty"`
+	PreviewRoughness           *float64 `json:"previewRoughness,omitempty"`
+	PreviewMetalness           *float64 `json:"previewMetalness,omitempty"`
+	PreviewClearcoat           *float64 `json:"previewClearcoat,omitempty"`
+	ThicknessMm                int64    `json:"thicknessMm"`
+	Grain                      bool     `json:"grain"`
+}
+
+type FurnitureDefinitionLayout struct {
+	FurnitureDefinitionId string            `json:"furnitureDefinitionId"`
+	DefinitionName        string            `json:"definitionName"`
+	TransformContract     string            `json:"transformContract"`
+	DimensionsMm          []int64           `json:"dimensionsMm"`
+	Components            []LayoutComponent `json:"components"`
+	Hardware              []LayoutHardware  `json:"hardware"`
+}
+
+type LayoutTransform struct {
+	TranslationMm []float64   `json:"translationMm"`
+	Basis         LayoutBasis `json:"basis"`
+}
+
+type LayoutBasis struct {
+	X []float64 `json:"x"`
+	Y []float64 `json:"y"`
+	Z []float64 `json:"z"`
+}
+
+type LayoutLocalTransform struct {
+	TranslationMm []float64   `json:"translationMm"`
+	Basis         LayoutBasis `json:"basis"`
+	Movable       *bool       `json:"movable,omitempty"`
+	Axis          *string     `json:"axis,omitempty"`
+}
+
+type LayoutAuthoringCapability struct {
+	Movable *bool   `json:"movable,omitempty"`
+	Axis    *string `json:"axis,omitempty"`
+}
+
+type LayoutComponent struct {
+	ComponentInstanceId         string                     `json:"componentInstanceId"`
+	ComponentDefinitionId       string                     `json:"componentDefinitionId"`
+	SlotId                      string                     `json:"slotId"`
+	Role                        *string                    `json:"role,omitempty"`
+	Name                        string                     `json:"name"`
+	Kind                        string                     `json:"kind"`
+	Transform                   LayoutTransform            `json:"transform"`
+	DimensionsMm                []float64                  `json:"dimensionsMm"`
+	LocalTransform              LayoutLocalTransform       `json:"localTransform"`
+	LengthMm                    int64                      `json:"lengthMm"`
+	WidthMm                     int64                      `json:"widthMm"`
+	ThicknessMm                 int64                      `json:"thicknessMm"`
+	AuthoringCapability         *LayoutAuthoringCapability `json:"authoringCapability,omitempty"`
+	OptionRole                  *string                    `json:"optionRole,omitempty"`
+	MaterialId                  *string                    `json:"materialId,omitempty"`
+	MaterialCode                *string                    `json:"materialCode,omitempty"`
+	MaterialName                *string                    `json:"materialName,omitempty"`
+	MaterialColorHex            *string                    `json:"materialColorHex,omitempty"`
+	MaterialImageUrl            *string                    `json:"materialImageUrl,omitempty"`
+	MaterialTextureUrl          *string                    `json:"materialTextureUrl,omitempty"`
+	MaterialTextureTileWidthMm  *float64                   `json:"materialTextureTileWidthMm,omitempty"`
+	MaterialTextureTileLengthMm *float64                   `json:"materialTextureTileLengthMm,omitempty"`
+	MaterialRoughness           *float64                   `json:"materialRoughness,omitempty"`
+	MaterialMetalness           *float64                   `json:"materialMetalness,omitempty"`
+	MaterialClearcoat           *float64                   `json:"materialClearcoat,omitempty"`
+	MaterialGrain               *bool                      `json:"materialGrain,omitempty"`
+}
+
+type LayoutHardware struct {
+	PlacementId string   `json:"placementId"`
+	HardwareId  string   `json:"hardwareId"`
+	Name        string   `json:"name"`
+	Shape       string   `json:"shape"`
+	SizeMm      *float64 `json:"sizeMm,omitempty"`
+	DiameterMm  *float64 `json:"diameterMm,omitempty"`
+}
+
+type AuthoringResolveSource struct {
+	Client        string `json:"client"`
+	ClientVersion string `json:"clientVersion"`
+	Host          string `json:"host"`
+	HostVersion   string `json:"hostVersion"`
+}
+
+type AuthoringResolveUnits struct {
+	Length      string  `json:"length"`
+	Angle       string  `json:"angle"`
+	PrecisionMm float64 `json:"precisionMm"`
+}
+
+type AuthoringResolveCoordinateSystem struct {
+	Handedness     string `json:"handedness"`
+	UpAxis         string `json:"upAxis"`
+	ProjectFrameId string `json:"projectFrameId"`
+}
+
+type AuthoringOccurrenceTransform struct {
+	Frame         string    `json:"frame"`
+	TranslationMm []float64 `json:"translationMm"`
+}
+
+type AuthoringOccurrence struct {
+	ComponentInstanceId   string                        `json:"componentInstanceId"`
+	ComponentDefinitionId *string                       `json:"componentDefinitionId,omitempty"`
+	CatalogComponentId    *string                       `json:"catalogComponentId,omitempty"`
+	Role                  *string                       `json:"role,omitempty"`
+	Transform             *AuthoringOccurrenceTransform `json:"transform,omitempty"`
+}
+
+type AuthoringPlacement struct {
+	HardwarePlacementId     string         `json:"hardwarePlacementId"`
+	PlacementKind           *string        `json:"placementKind,omitempty"`
+	CatalogHardwareId       string         `json:"catalogHardwareId"`
+	HostComponentInstanceId string         `json:"hostComponentInstanceId"`
+	AnchorFace              string         `json:"anchorFace"`
+	OffsetMm                []float64      `json:"offsetMm"`
+	RotationDeg             map[string]any `json:"rotationDeg,omitempty"`
+}
+
+type AuthoringResolveFurniture struct {
+	FurnitureDefinitionId string                `json:"furnitureDefinitionId"`
+	CatalogRevision       string                `json:"catalogRevision"`
+	Parameters            map[string]any        `json:"parameters,omitempty"`
+	MaterialChoices       map[string]string     `json:"materialChoices,omitempty"`
+	Components            []AuthoringOccurrence `json:"components,omitempty"`
+	Relationships         []map[string]any      `json:"relationships,omitempty"`
+	HardwarePlacements    []AuthoringPlacement  `json:"hardwarePlacements,omitempty"`
+}
+
+type AuthoringResolveRequest struct {
+	SchemaId         string                           `json:"schemaId"`
+	SchemaName       string                           `json:"schemaName"`
+	SchemaVersion    string                           `json:"schemaVersion"`
+	MessageId        string                           `json:"messageId"`
+	IdempotencyKey   string                           `json:"idempotencyKey"`
+	SentAt           string                           `json:"sentAt"`
+	Source           AuthoringResolveSource           `json:"source"`
+	Units            AuthoringResolveUnits            `json:"units"`
+	CoordinateSystem AuthoringResolveCoordinateSystem `json:"coordinateSystem"`
+	Furniture        AuthoringResolveFurniture        `json:"furniture"`
+}
+
+type AuthoringResolvePreflight struct {
+	Scope             string          `json:"scope"`
+	Status            string          `json:"status"`
+	Issues            []ContractIssue `json:"issues"`
+	PreflightContract string          `json:"preflightContract"`
+}
+
+type NormalizedAuthoringIntent struct {
+}
+
+type AuthoringResolveResolved struct {
+	Layout    FurnitureDefinitionLayout `json:"layout"`
+	Machining map[string]any            `json:"machining"`
+	Preflight AuthoringResolvePreflight `json:"preflight"`
+}
+
+type AuthoringResolveResponse struct {
+	SchemaId           string                     `json:"schemaId"`
+	SchemaName         string                     `json:"schemaName"`
+	SchemaVersion      string                     `json:"schemaVersion"`
+	ResolveContract    string                     `json:"resolveContract"`
+	ResponseMessageId  string                     `json:"responseMessageId"`
+	InReplyToMessageId string                     `json:"inReplyToMessageId"`
+	IdempotencyKey     string                     `json:"idempotencyKey"`
+	CatalogRevision    string                     `json:"catalogRevision"`
+	Status             string                     `json:"status"`
+	NormalizedSnapshot *NormalizedAuthoringIntent `json:"normalizedSnapshot,omitempty"`
+	Resolved           *AuthoringResolveResolved  `json:"resolved,omitempty"`
+	Issues             []ContractIssue            `json:"issues"`
+}
