@@ -269,13 +269,13 @@ func floorSideRelJSON(id string, stationCount, startMargin, endMargin float64) e
 }
 
 // fixedShelfRelJSON declares the golden J2-B fixed-shelf relationship: the
-// fixed panel (the fixture's floor board — its shelf is authored across the
-// cabinet and its x-planes are width faces outside the A0a contact classes)
-// is the source, each side a target with its concrete contact face, and
-// every contact carries a versioned recipe in the test: namespace. The
-// mirrored sides flip the entry faces: the panel pilot enters via bottom on
-// the left contact and top on the right one; each counterbore enters the
-// side through its outer face (side-left "back", side-right "front").
+// entrepaño is the source, each side a target with its concrete contact
+// face, and every contact carries a versioned recipe in the test: namespace.
+// Interior panels share the floor's orientation (rotateY 90), so the shelf's
+// length faces (bottom/top) are the x-planes between the sides; the mirrored
+// sides flip the entry faces: the pilot enters the shelf via bottom on the
+// left contact and top on the right one; each counterbore enters the side
+// through its outer face (side-left "back", side-right "front").
 func fixedShelfRelJSON(id string) engine.AuthoringRelationship {
 	pilot := func(entryFace string) engine.ContactOperationRule {
 		return engine.ContactOperationRule{
@@ -306,7 +306,7 @@ func fixedShelfRelJSON(id string) engine.AuthoringRelationship {
 	return engine.AuthoringRelationship{
 		RelationshipID: id,
 		Kind:           "fixed-shelf-side",
-		Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "floor-01", Role: "floor"},
+		Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "shelf-01", Role: "shelf-edge"},
 		Targets: []engine.AuthoringRelationshipAnchor{
 			{ComponentInstanceID: "side-left-01", Role: "side", Face: "front"},
 			{ComponentInstanceID: "side-right-01", Role: "side", Face: "back"},
@@ -759,17 +759,18 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			}}
 		})), http.StatusOK),
 
-		// 28. J2-B golden fixed-shelf: the fixed-panel↔sides joint class
-		// (the same verified contacts as 20) declared with kind
-		// fixed-shelf-side carrying per-contact versioned recipes → both
-		// contacts VALID, stations planned, MACHINING_READY with productive
-		// operations and recipe provenance on the wire. The fixture's shelf
-		// occurrence is authored across the cabinet (its length spans the
-		// depth, so its x-planes are width faces outside the A0a contact
-		// classes), so the recipe-path proof uses the floor panel as the
-		// fixed participant.
+		// 28. J2-B golden fixed-shelf: the entrepaño (interior panels share
+		// the floor's orientation, rotateY 90) as the fixed panel between
+		// the sides, declared with kind fixed-shelf-side carrying
+		// per-contact versioned recipes → both contacts VALID, stations
+		// planned, MACHINING_READY with productive operations and recipe
+		// provenance on the wire. The shelf sits at a declared height
+		// (z=400); its length faces bottom/top are the x-planes that
+		// physically coincide with the sides' inner faces.
 		run("28-fixed-shelf-recipes", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
-			f.Components = floorSideOccurrencesJSON()
+			occ := floorSideOccurrencesJSON()
+			occ[5] = occurrenceJSON("shelf-01", "mod-comp-shelf", []float64{18, 18, 400})
+			f.Components = occ
 			f.Relationships = []engine.AuthoringRelationship{fixedShelfRelJSON("rel-fixed-shelf-01")}
 		})), http.StatusOK),
 

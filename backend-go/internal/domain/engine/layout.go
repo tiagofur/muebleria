@@ -948,7 +948,12 @@ func defaultPoseForPlacement(placement string, pw, ph, pd, t float64, i, quantit
 	case "puerta", "frente_cajon":
 		return spatialPose{x: 2, y: pd, z: 2, rotateX: 90, rotateY: 180}
 	case "interno":
-		return spatialPose{x: t, y: t, z: 150 + float64(i)*200}
+		// Interior panels (shelves, dividers) share the base/superior
+		// orientation: the board length spans the cabinet width between the
+		// sides (rotateY 90). Owner decision 2026-09-30: an entrepaño is the
+		// floor board rotated in height — same X/Y axes, not a depth-spanning
+		// cross orientation.
+		return spatialPose{x: t, y: t, z: 150 + float64(i)*200, rotateY: 90}
 	default: // custom
 		return zero
 	}
