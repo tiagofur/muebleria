@@ -524,7 +524,24 @@ treated as missing; no SketchUp hand-written adapter.
   resolved, client-side draft rejection); root typecheck 0 errors; root
   `pnpm test` all workspaces green (domain 1727, web 561). NOT_RUN: browser
   gate (CI); SketchUp host unaffected. Delivery: partial (PR4; remaining
-  acceptance T5–T8).
+  acceptance T5–T8). Commit `83e21a61`.
+- 2026-09-30: **T4 correction round (one consolidated round, per contract).**
+  CI storage shard 3 caught the parity test using a bare organization scope:
+  the runtime role is NOBYPASSRLS (my first local container ran as superuser,
+  bypassing RLS — the same environmental gap as the pre-existing RLS-test
+  failures), so seed + handlers must run inside `WithinTenantTx` exactly like
+  the auth middleware wraps real requests. Parity test rewritten around
+  withinConnectStoreTenant/WithinTenantTx; golden regenerated under the real
+  runtime role (stable across 3 runs). Commit `f0865c99`. Lesson: real-RLS
+  verification requires the granete_app role locally — replicate the
+  browser-gate container recipe (postgres-init-app-role.sh + NOBYPASSRLS)
+  instead of trusting a superuser connection.
+
+## Next step
+
+Publish PR4 (done: #933) — after its merge, T5+T6 (Parámetros tab + binding
+editor, client-only) then T7 (Probar resolución wiring on T4's client method)
+and T8 (cross-surface fixtures + gates).
 
 ## Next step
 
