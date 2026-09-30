@@ -124,6 +124,41 @@ func (s *PostgresStore) GetCurrentPublishedRelease(ctx context.Context, libraryI
 	return rel, nil
 }
 
+// ─── GetPublishedReleases ─────────────────────────────────────────────────────
+
+// GetPublishedReleases returns all published (non-withdrawn) releases for the given
+// library, ordered by created_at DESC (newest first). Returns an empty slice if no
+// published releases exist.
+func (s *PostgresStore) GetPublishedReleases(ctx context.Context, libraryID uuid.UUID) ([]*domain.LibraryRelease, error) {
+	const query = `
+		SELECT id, library_id, version, status, schema_version, min_plugin_version,
+		       base_release_id, manifest_hash, changelog, published_at, published_by,
+		       created_at, updated_at
+		FROM library_releases
+		WHERE library_id = $1
+		  AND status = 'published'
+		ORDER BY created_at DESC`
+
+	rows, err := s.db(ctx).Query(ctx, query, libraryID)
+	if err != nil {
+		return nil, fmt.Errorf("get published releases for library %s: %w", libraryID, err)
+	}
+	defer rows.Close()
+
+	var releases []*domain.LibraryRelease
+	for rows.Next() {
+		rel, err := scanLibraryRelease(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan library release: %w", err)
+		}
+		releases = append(releases, rel)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate library releases: %w", err)
+	}
+	return releases, nil
+}
+
 // ─── GetReleaseByID ───────────────────────────────────────────────────────────
 
 // GetReleaseByID returns a specific release by its UUID. Access is enforced by

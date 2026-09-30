@@ -4739,6 +4739,37 @@
         }
       }
     },
+    "/manufacturing-libraries/standard/releases": {
+      "get": {
+        "operationId": "getStandardReleases",
+        "summary": "List published Granete Standard library releases",
+        "description": "Returns all published (non-withdrawn) releases of the Granete Standard manufacturing library ordered newest first. Standard releases are readable by all authenticated organizations. [#944 P1/LIB-5]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of published releases",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LibraryReleaseSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/manufacturing-libraries/standard/releases/current": {
       "get": {
         "operationId": "getStandardCurrentRelease",
@@ -14048,6 +14079,17 @@
               {
                 "type": "string",
                 "description": "Deterministic manifest hash; null until LIB-2 publishes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "changelog": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Release notes / changelog"
               },
               {
                 "type": "null"
