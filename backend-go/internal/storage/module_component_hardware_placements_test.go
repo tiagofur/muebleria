@@ -93,7 +93,7 @@ func readModule858(t *testing.T, id string) *domain.Module {
 func updateModule858(t *testing.T, mod *domain.Module) {
 	t.Helper()
 	store, _ := migratedConnectStore(t)
-	withinConnectStoreTenant(t, store, connectStoreInitialActor, func(txCtx context.Context) error { return store.UpdateModule(txCtx, mod.ID, mod) })
+	withinConnectStoreTenant(t, store, connectStoreInitialActor, func(txCtx context.Context) error { return store.UpdateModule(txCtx, mod.ID, mod.Version, mod) })
 }
 
 // overrideRow858 reads module_components.overrides through the TENANT GUC

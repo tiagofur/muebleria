@@ -58,9 +58,7 @@ func (s *Server) HandleFurnitureDefinitions(w http.ResponseWriter, r *http.Reque
 	snapshot, err := s.loadWorkshopCatalogOnce(r)
 	if err != nil {
 		if definitionErr, ok := furnitureParameterDefinitionsError(err); ok {
-			respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
-				"code": "PARAMETER_DEFINITION_INVALID", "message": "furniture parameter definition is invalid", "issues": definitionErr.Issues,
-			})
+			respondWithParameterDefinitionIssues(w, definitionErr.Issues)
 			return
 		}
 		respondWithInternalError(w, err, "project furniture catalog")

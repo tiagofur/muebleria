@@ -109,7 +109,11 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
       ctx.saveAndToast(
         (c) => ({
           ...c,
-          modules: c.modules.map((m) => (m.id === id ? draftToModule(id, draft) : m)),
+          // The draft pipeline doesn't model the server version (#497): keep
+          // the loaded one so the edited module stays version-tracked.
+          modules: c.modules.map((m) =>
+            m.id === id ? { ...draftToModule(id, draft), version: m.version } : m,
+          ),
         }),
         '✓ Cambios guardados',
       );

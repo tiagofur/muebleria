@@ -362,8 +362,13 @@ type Module struct {
 	BoardParts    []BoardPart    `json:"board_parts"`
 	HardwareLines []HardwareLine `json:"hardware_lines"`
 	Notes         string         `json:"notes,omitempty"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
+	// Version is the server-owned optimistic-concurrency token (strong ETag
+	// "v<N>", #497): create starts at 1 and every accepted update increments
+	// it inside the update transaction. Request bodies never set it — the
+	// If-Match header is the only expected-version authority.
+	Version   int64     `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type DimensionPreset struct {

@@ -46,6 +46,7 @@ import {
   type ManufacturingOperation,
   type MachineOutputSelection,
   type MachineOutputSelectionRecord,
+  type Module,
 } from '@granete/domain';
 import type {
   WorkspaceRepository,
@@ -62,6 +63,7 @@ import {
   ProjectInlineUpdateHttpError,
 } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
+import { GraneteApiError, ModuleVersionUnknownError, parseApiError } from './apiErrors';
 import type { ProductionRelease, ReserveMaterialsRequest, ReleaseMaterialsRequest } from './openapi/generated/types';
 
 /** #577 / OPS-DT-1 — exact release + immutable revision items a derivation runs against. */
@@ -69,11 +71,28 @@ export interface ReleaseBomContextView {
   readonly release: ProductionRelease;
   readonly items: readonly ReleaseBomItem[];
 }
+
+async function parseModuleWriteResponse(res: Response): Promise<Module> {
+  const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('API module write response is missing a JSON body');
+  }
+  return moduleFromApi(raw);
+}
+
+function typedModuleApiError(status: number, payloadText: string): unknown {
+  try {
+    return new GraneteApiError(status, parseApiError(JSON.parse(payloadText)));
+  } catch {
+    return new Error(`API error ${status}: ${payloadText}`);
+  }
+}
 import {
   agregadoToApi,
   ambientCategoryToApi,
   ambientMaterialToApi,
   catalogFromApi,
+  moduleFromApi,
   moduleUnitFromApi,
   moduleUnitToApi,
   moduleUnitsFromApi,
@@ -299,6 +318,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly injectedFetch?: typeof fetch;
   private readonly getAccessToken?: () => string | null;
   private readonly generatedClient: GraneteApiClient;
+  /**
+   * #497: server versions of catalog modules this session has seen (seeded by
+   * getCatalog, refreshed from every accepted write response). The expected
+   * version for a module PUT comes from here — never from the request body.
+   */
+  private readonly moduleVersions = new Map<string, number>();
 
   /**
    * #460 SEC-4B: el repository NO conoce storage de credenciales. El access
@@ -435,7 +460,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/catalog/material-categories').catch(() => []),
     ]);
 
-    return catalogFromApi({
+    const catalog = catalogFromApi({
       materials,
       edges,
       hardware,
@@ -450,6 +475,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       ambientCategories,
       materialCategories,
     });
+    for (const mod of catalog.modules) {
+      if (typeof mod.version === 'number' && mod.version > 0) {
+        this.moduleVersions.set(mod.id, mod.version);
+      }
+    }
+    return catalog;
   }
 
   /**
@@ -462,6 +493,86 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
    * error — swallowing it made the UI claim "✓ creado" for entities the
    * server never accepted (they vanished on refresh).
    */
+  /**
+   * #497: module writes are guarded by optimistic concurrency. With a known
+   * server version (session cache, refreshed from every accepted write
+   * response) the PUT carries If-Match and a 412 answers with the server's
+   * typed envelope (GraneteApiError / VERSION_CONFLICT) so the UI can tell a
+   * stale editor apart from a transport failure. Without a cached version the
+   * PUT goes out bare: a 404 keeps the POST-create fallback alive for
+   * locally-created modules, a 409 surfaces the duplicate-code conflict, and a
+   * 428 (server demands If-Match for a module whose version this session
+   * never learned) fails closed — a blind write could clobber a concurrent
+   * authoring change.
+   */
+  private async upsertModule(mod: Module): Promise<void> {
+    const body = JSON.stringify(moduleToApi(mod));
+    const expected = this.moduleVersions.get(mod.id);
+
+    const headers = this.getHeaders();
+    if (expected !== undefined) {
+      headers['If-Match'] = `"v${expected}"`;
+    }
+
+    let res: Response | null = null;
+    try {
+      res = await this.fetch(`${this.baseUrl}/catalog/modules/${mod.id}`, {
+        method: 'PUT',
+        headers,
+        body,
+      });
+    } catch {
+      res = null;
+    }
+
+    if (res?.ok) {
+      this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(res));
+      return;
+    }
+
+    const putBody = res ? await res.text().catch(() => '') : '';
+    if (res?.status === 412) {
+      throw typedModuleApiError(res.status, putBody);
+    }
+    if (res?.status === 428) {
+      throw new ModuleVersionUnknownError(mod.id);
+    }
+
+    const missing =
+      !res ||
+      res.status === 404 ||
+      res.status === 405 ||
+      // Legacy Go handlers returned 500 "no rows" before not-found mapping.
+      (res.status === 500 && /not found|no rows/i.test(putBody));
+    if (!missing) {
+      const msg = `API upsert failed /catalog/modules/${mod.id}: ${res?.status} ${putBody}`;
+      console.error(msg);
+      throw new Error(msg);
+    }
+
+    const created = await this.fetch(`${this.baseUrl}/catalog/modules`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body,
+    });
+    if (!created.ok) {
+      const text = await created.text().catch(() => '');
+      if (created.status === 422) {
+        throw typedModuleApiError(created.status, text);
+      }
+      const msg = `API create failed /catalog/modules: ${created.status} ${text}`;
+      console.error(msg);
+      throw new Error(msg);
+    }
+    this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(created));
+  }
+
+  private rememberModuleVersion(moduleId: string, saved: Module): void {
+    if (typeof saved.version === 'number' && saved.version > 0) {
+      this.moduleVersions.set(moduleId, saved.version);
+    }
+  }
+
   private async upsert(
     pathById: string,
     pathCollection: string,
@@ -595,11 +706,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
 
     for (const mod of catalog.modules) {
-      await this.upsert(
-        `/catalog/modules/${mod.id}`,
-        '/catalog/modules',
-        moduleToApi(mod),
-      );
+      await this.upsertModule(mod);
     }
 
     if (catalog.customers) {

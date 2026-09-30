@@ -553,6 +553,10 @@ export interface Module {
   /** Authoritative typed authoring contract (#784/#874). The storage layer
    *  round-trips it verbatim (#905); the server owns validation and identity. */
   readonly parameterDefinitions?: readonly FurnitureParameter[];
+  /** Server-owned optimistic-concurrency token (strong ETag "v<N>", #497).
+   *  Present on modules loaded from the API; never authorable — If-Match is
+   *  the only expected-version authority on writes. */
+  readonly version?: number;
 }
 
 export interface DimensionPreset {

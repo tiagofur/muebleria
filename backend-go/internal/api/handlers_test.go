@@ -414,8 +414,13 @@ type stubStore struct {
 	projectEventWrites     []domain.ProjectEvent
 	insertProjectEventErr  error
 	listProjectEventsErr   error
-	updateModuleCalled     bool
-	updateModuleReceived   *domain.Module
+	updateModuleCalled           bool
+	updateModuleReceived         *domain.Module
+	updateModuleExpectedVersion  int64
+	updateModuleErr              error
+	createModuleArmed            bool
+	createModuleReceived         *domain.Module
+	createModuleErr              error
 	deleteModuleCalled     bool
 	deleteModuleReceivedID string
 	approveDeviceReceived  *storage.ApproveDeviceEnrollmentCommand
@@ -1231,15 +1236,24 @@ func (s *stubStore) ListProjectEvents(_ context.Context, _ string) ([]domain.Pro
 	}
 	return s.projectEventsList, nil
 }
-func (s *stubStore) CreateModule(context.Context, *domain.Module) error {
-	s.stubNotUsed("CreateModule")
-	return nil
+func (s *stubStore) CreateModule(_ context.Context, m *domain.Module) error {
+	if !s.createModuleArmed {
+		s.stubNotUsed("CreateModule")
+	}
+	cp := *m
+	m.Version = 1
+	s.createModuleReceived = &cp
+	return s.createModuleErr
 }
-func (s *stubStore) UpdateModule(_ context.Context, _ string, m *domain.Module) error {
+func (s *stubStore) UpdateModule(_ context.Context, _ string, expectedVersion int64, m *domain.Module) error {
 	s.updateModuleCalled = true
+	s.updateModuleExpectedVersion = expectedVersion
+	if s.updateModuleErr == nil {
+		m.Version = expectedVersion + 1
+	}
 	cp := *m
 	s.updateModuleReceived = &cp
-	return nil
+	return s.updateModuleErr
 }
 func (s *stubStore) DeleteModule(_ context.Context, id string) error {
 	s.deleteModuleCalled = true
@@ -4162,6 +4176,7 @@ func TestHandleModuleByIDUpdateCleansReplacedImage(t *testing.T) {
 	body := strings.NewReader(`{"code":"MC","name":"N","base_labor_cost":0,"width_mm":100,"height_mm":100,"depth_mm":100,"image_url":"/api/media/mod-new.webp"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/modules/mod1", body), "eng", string(domain.RoleIngeniero))
 	req.SetPathValue("id", "mod1")
+	req.Header.Set("If-Match", `"v1"`)
 	rr := httptest.NewRecorder()
 	srv.HandleModuleByID(rr, req)
 
