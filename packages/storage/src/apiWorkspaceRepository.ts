@@ -63,8 +63,13 @@ import {
   ProjectInlineUpdateHttpError,
 } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
-import { GraneteApiError, ModuleVersionUnknownError, parseApiError } from './apiErrors';
-import type { ProductionRelease, ReserveMaterialsRequest, ReleaseMaterialsRequest } from './openapi/generated/types';
+import { GraneteApiError, ModuleVersionUnknownError } from './apiErrors';
+import type {
+  CatalogModule,
+  ProductionRelease,
+  ReserveMaterialsRequest,
+  ReleaseMaterialsRequest,
+} from './openapi/generated/types';
 
 /** #577 / OPS-DT-1 — exact release + immutable revision items a derivation runs against. */
 export interface ReleaseBomContextView {
@@ -72,21 +77,7 @@ export interface ReleaseBomContextView {
   readonly items: readonly ReleaseBomItem[];
 }
 
-async function parseModuleWriteResponse(res: Response): Promise<Module> {
-  const raw = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('API module write response is missing a JSON body');
-  }
-  return moduleFromApi(raw);
-}
 
-function typedModuleApiError(status: number, payloadText: string): unknown {
-  try {
-    return new GraneteApiError(status, parseApiError(JSON.parse(payloadText)));
-  } catch {
-    return new Error(`API error ${status}: ${payloadText}`);
-  }
-}
 import {
   agregadoToApi,
   ambientCategoryToApi,
@@ -426,12 +417,16 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       return res.json();
     };
 
+    // Modules ride the generated contract (#497 T3): every listed module is
+    // runtime-validated against CatalogModule before it reaches the store.
+    const modules = await this.generatedClient.listCatalogModules(
+      this.getAccessToken?.() ?? '',
+    );
     const [
       materials,
       edges,
       hardware,
       optionGroups,
-      modules,
       customers,
       categories,
       structures,
@@ -445,7 +440,6 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/catalog/edges'),
       fetchJson('/catalog/hardware'),
       fetchJson('/catalog/option-groups'),
-      fetchJson('/catalog/modules'),
       fetchJson('/customers'),
       fetchJson('/catalog/categories'),
       fetchJson('/catalog/structures').catch(() => []),
@@ -494,114 +488,71 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
    * server never accepted (they vanished on refresh).
    */
   /**
-   * #497: module writes are guarded by optimistic concurrency. With a known
-   * server version (session cache, refreshed from every accepted write
-   * response) the PUT carries If-Match and a 412 answers with the server's
-   * typed envelope (GraneteApiError / VERSION_CONFLICT) so the UI can tell a
-   * stale editor apart from a transport failure. Without a cached version the
-   * PUT goes out bare; a 404 keeps the POST-create fallback alive for
-   * locally-created modules. A 428 (server demands If-Match for a module this
-   * session never learned — e.g. seeded server-side mid-session) is resolved
-   * by learning the current version with a GET and retrying ONCE under
-   * If-Match: the write stays version-guarded, and if the module changed in
-   * between the retry answers 412. Only when the version cannot be learned
-   * does the write fail closed (ModuleVersionUnknownError) — a blind write can
-   * never clobber a concurrent authoring change.
+   * #497: module writes are guarded by optimistic concurrency through the
+   * generated contract. Every PUT carries If-Match from the session version
+   * cache (seeded by getCatalog, refreshed from every accepted write
+   * response); a 412 surfaces as the server's typed GraneteApiError /
+   * VERSION_CONFLICT so the UI can tell a stale editor apart from a transport
+   * failure. Without a cached version the module is learned FIRST: a 404
+   * keeps the POST-create fallback alive for locally-created modules, and a
+   * hit (e.g. a module seeded server-side mid-session) hands back the current
+   * version so the write still goes out under If-Match. Only a version the
+   * server never declares fails closed (ModuleVersionUnknownError) — a blind
+   * write can never clobber a concurrent authoring change.
    */
   private async upsertModule(mod: Module): Promise<void> {
-    const body = JSON.stringify(moduleToApi(mod));
-    let res = await this.putModule(mod.id, body, this.moduleVersions.get(mod.id));
+    const token = this.getAccessToken?.() ?? '';
+    const body = moduleToApi(mod) as never;
 
-    if (res?.ok) {
-      this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(res));
-      return;
-    }
-
-    let putBody = res ? await res.text().catch(() => '') : '';
-    if (res?.status === 412) {
-      throw typedModuleApiError(res.status, putBody);
-    }
-    if (res?.status === 428) {
-      const current = await this.fetchModuleVersion(mod.id);
-      if (current === undefined) {
+    let expected = this.moduleVersions.get(mod.id);
+    if (expected === undefined) {
+      let learned: CatalogModule;
+      try {
+        learned = await this.generatedClient.getCatalogModule(token, mod.id);
+      } catch (err) {
+        if (err instanceof GraneteApiError && err.status === 404) {
+          await this.createModuleThroughContract(token, body, mod.id);
+          return;
+        }
+        throw err;
+      }
+      expected = learned.version;
+      if (typeof expected !== 'number' || expected < 1) {
         throw new ModuleVersionUnknownError(mod.id);
       }
-      res = await this.putModule(mod.id, body, current);
-      if (res?.ok) {
-        this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(res));
+      this.moduleVersions.set(mod.id, expected);
+    }
+
+    try {
+      const saved = await this.generatedClient.updateCatalogModule(token, mod.id, expected, body);
+      this.rememberModuleVersion(mod.id, moduleFromApi(saved as unknown as Record<string, unknown>));
+    } catch (err) {
+      if (err instanceof GraneteApiError && err.status === 404) {
+        // Deleted mid-session: recreate instead of failing the whole save.
+        await this.createModuleThroughContract(token, body, mod.id);
         return;
       }
-      putBody = res ? await res.text().catch(() => '') : '';
-      if (res?.status === 412) {
-        throw typedModuleApiError(res.status, putBody);
-      }
+      throw err;
     }
-
-    const missing =
-      !res ||
-      res.status === 404 ||
-      res.status === 405 ||
-      // Legacy Go handlers returned 500 "no rows" before not-found mapping.
-      (res.status === 500 && /not found|no rows/i.test(putBody));
-    if (!missing) {
-      const msg = `API upsert failed /catalog/modules/${mod.id}: ${res?.status} ${putBody}`;
-      console.error(msg);
-      throw new Error(msg);
-    }
-
-    const created = await this.fetch(`${this.baseUrl}/catalog/modules`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body,
-    });
-    if (!created.ok) {
-      const text = await created.text().catch(() => '');
-      if (created.status === 422) {
-        throw typedModuleApiError(created.status, text);
-      }
-      const msg = `API create failed /catalog/modules: ${created.status} ${text}`;
-      console.error(msg);
-      throw new Error(msg);
-    }
-    this.rememberModuleVersion(mod.id, await parseModuleWriteResponse(created));
   }
 
-  private async putModule(id: string, body: string, expectedVersion?: number): Promise<Response | null> {
-    const headers = this.getHeaders();
-    if (expectedVersion !== undefined) {
-      headers['If-Match'] = `"v${expectedVersion}"`;
-    }
+  private async createModuleThroughContract(
+    token: string,
+    body: never,
+    moduleId: string,
+  ): Promise<void> {
     try {
-      return await this.fetch(`${this.baseUrl}/catalog/modules/${id}`, {
-        method: 'PUT',
-        headers,
-        body,
-      });
-    } catch {
-      return null;
+      const created = await this.generatedClient.createCatalogModule(token, body);
+      this.rememberModuleVersion(moduleId, moduleFromApi(created as unknown as Record<string, unknown>));
+    } catch (err) {
+      // Surface the typed 422 envelope untouched; everything else keeps the
+      // historical create-failure shape.
+      if (err instanceof GraneteApiError && err.status === 422) throw err;
+      throw err;
     }
   }
 
-  /** Reads the module's current server version into the cache (#497 handshake). */
-  private async fetchModuleVersion(id: string): Promise<number | undefined> {
-    try {
-      const res = await this.fetch(`${this.baseUrl}/catalog/modules/${id}`, {
-        method: 'GET',
-        headers: this.getHeaders(),
-      });
-      if (!res.ok) return undefined;
-      const current = await parseModuleWriteResponse(res);
-      if (typeof current.version === 'number' && current.version > 0) {
-        this.moduleVersions.set(id, current.version);
-        return current.version;
-      }
-    } catch {
-      // Transport or parse failure: the version stays unknown.
-    }
-    return undefined;
-  }
-
-  private rememberModuleVersion(moduleId: string, saved: Module): void {
+  private rememberModuleVersion(moduleId: string, saved: { readonly version?: number }): void {
     if (typeof saved.version === 'number' && saved.version > 0) {
       this.moduleVersions.set(moduleId, saved.version);
     }

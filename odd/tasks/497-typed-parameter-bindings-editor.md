@@ -250,18 +250,28 @@ treated as missing; no SketchUp hand-written adapter.
     maps stale conflicts to a distinct warning toast with the local change
     rolled back. **DONE — this commit.**
 
-- [ ] **T3 — Generated contract surface for the editor (needs D1)**
+- [x] **T3 — Generated contract surface for the editor (D1: landed here)**
   - Route: inline.
   - Trigger evidence: production data access must consume the generated
-    contract (#497 hard prerequisite); today `/api/catalog/*` and the furniture
-    surface are hand-written wire structs outside `granete-api.v1.yaml`.
-  - Outcome: `contracts/openapi/granete-api.v1.yaml` gains module get/put
-    (+list if the store needs it) with ETag/If-Match/version, `GET
-    /furniture/definitions` (published projection + `revisionId` +
-    `definitionHash`), and `POST /api/furniture/authoring/preview` (T4 shape);
-    `pnpm openapi:generate` regenerates TS client + Go DTOs;
-    `scripts/check_openapi_drift.py` clean; web data access for the editor
-    moves to the generated client. Cross-reference comment in #496.
+    contract (#497 hard prerequisite); `/api/catalog/modules` was hand-written
+    wire outside `granete-api.v1.yaml`.
+  - Outcome: **DONE.** Spec gains `/catalog/modules` (GET list, POST create)
+    and `/catalog/modules/{moduleId}` (GET, versioned PUT with If-Match + ETag)
+    over 33 closed, runtime-validated schemas mirroring the Go wire exactly
+    (typed-parameter definitions + bindings + relationship families/stations
+    shared verbatim with the furniture projection). Web module transport moved
+    to the generated client (list/get/create/update) with the version cache +
+    412/404 semantics intact and learn-first replacing the bare PUT. **Declared
+    deviations from the original task text:** (1) `GET /furniture/definitions`
+    and the authoring/resolve surface stay OUT of the OpenAPI spec — the repo
+    already consumes them under a single authority (domain golden-pin +
+    workshop envelope contract; `GraneteApiClient.getFurnitureCatalogRevision`
+    comment records the precedent) and a second validation model would violate
+    the no-parallel-model invariant; (2) the authoring-preview path lands in
+    T4 together with its implementation; (3) Idempotency-Key stays undeclared
+    until the server enforces `RequireIdempotency` on module writes (T4+).
+    Drift gate extended: versioned module PUT must declare ETag + If-Match.
+    Cross-reference comment in #496.
 
 - [ ] **T4 — Backend: authoring preview endpoint (draft, server-authoritative)**
   - Route: inline.
@@ -472,11 +482,35 @@ treated as missing; no SketchUp hand-written adapter.
   version fails closed. `joinery-status.spec.ts` upsert helper got the same
   handshake for its direct API PUTs. Re-verified: root typecheck 0 errors,
   root pnpm test green (storage 230), Go parameter-definitions storage tests
-  PASS on disposable PostgreSQL with the new pins.
+  PASS on disposable PostgreSQL with the new pins. Commits: `0f4e9b7f` +
+  correction `9fdb2639`; CI 17/17 on head `9fdb2639`.
+- 2026-09-30: **T3 implemented** — one work-unit commit. Spec: 33 closed
+  schemas + `/catalog/modules` + `/catalog/modules/{moduleId}` (If-Match/ETag),
+  generated TS client + Go DTOs regenerated, drift gate extended (module PUT
+  ETag+IfMatch, module GET ETag). Fidelity proof: the server wire was
+  captured from a real storage round-trip into
+  `packages/storage/src/catalogModule.wire.fixture.json` and a contract test
+  validates it against `CatalogModule` and the mapper's write output against
+  `CatalogModuleWrite` — the test immediately caught two real drifts: the
+  mapper emitted legacy dead snake_case component fields the server never
+  read (removed; the overrides bag is the only formula wire) and explicit
+  `null`s where the Go wire is omitempty. Repository: `getCatalog` lists
+  modules through `listCatalogModules` (runtime-validated), `upsertModule`
+  is generated-client only with learn-first (unknown version → GET by id →
+  404 ⇒ POST create, hit ⇒ versioned PUT); `version` is optional in the read
+  schema because legacy backends omit it — the fail-closed lives at write
+  time (`ModuleVersionUnknownError`). D1 resolved: increment landed in #497,
+  #496 stays open (cross-reference comment posted). V1 evidence: root
+  typecheck 0 errors; root `pnpm test` all workspaces green (storage 233
+  incl. wire-contract + learn-first/412/POST-fallback tests; web 561);
+  `go build ./... && go vet ./internal/...` clean (generated Go types are
+  additive); `check_openapi_drift.py` PASS with the new assertions.
+  NOT_RUN locally: browser gate (CI organization-browser runs it). Delivery:
+  partial (PR3; remaining acceptance T4–T8).
 
 ## Next step
 
-Publish PR2 (T2) stacked on PR1 with `Refs #497 + Delivery: partial`; owner
-decides D1/D2; then T3 (generated-contract surface, needs D1) / T4 (authoring
-preview endpoint, needs D2 naming) — or T5 editor UI groundwork, which is
-client-only.
+Publish PR3 (T3) with `Refs #497 + Delivery: partial`; then T4 (authoring
+preview endpoint — contract path + implementation together, D2 naming
+`POST /api/furniture/authoring/preview` proposed in the PR) or T5 editor UI
+groundwork (client-only).

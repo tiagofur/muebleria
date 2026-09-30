@@ -2360,3 +2360,323 @@ type ResolveLibraryOverlayConflictRequest struct {
 	Action      string `json:"action"`
 	CustomValue *any   `json:"customValue,omitempty"`
 }
+
+type FurnitureParameterType string
+
+const (
+	FurnitureParameterTypeNumber  FurnitureParameterType = "number"
+	FurnitureParameterTypeString  FurnitureParameterType = "string"
+	FurnitureParameterTypeBoolean FurnitureParameterType = "boolean"
+	FurnitureParameterTypeEnum    FurnitureParameterType = "enum"
+)
+
+type FurnitureParameterUnit string
+
+const (
+	FurnitureParameterUnitMm    FurnitureParameterUnit = "mm"
+	FurnitureParameterUnitDeg   FurnitureParameterUnit = "deg"
+	FurnitureParameterUnitCount FurnitureParameterUnit = "count"
+)
+
+type FurnitureParameterCategory string
+
+const (
+	FurnitureParameterCategoryDimension     FurnitureParameterCategory = "dimension"
+	FurnitureParameterCategoryConfiguration FurnitureParameterCategory = "configuration"
+	FurnitureParameterCategoryStyle         FurnitureParameterCategory = "style"
+	FurnitureParameterCategoryHardware      FurnitureParameterCategory = "hardware"
+	FurnitureParameterCategoryMetadata      FurnitureParameterCategory = "metadata"
+)
+
+type FurnitureParameterBindingKind string
+
+const (
+	FurnitureParameterBindingKindComponentquantity     FurnitureParameterBindingKind = "componentQuantity"
+	FurnitureParameterBindingKindComponentcondition    FurnitureParameterBindingKind = "componentCondition"
+	FurnitureParameterBindingKindDimensioncolumn       FurnitureParameterBindingKind = "dimensionColumn"
+	FurnitureParameterBindingKindStructurerelationship FurnitureParameterBindingKind = "structureRelationship"
+)
+
+type CatalogFurnitureType string
+
+const (
+	CatalogFurnitureTypeInferior CatalogFurnitureType = "inferior"
+	CatalogFurnitureTypeSuperior CatalogFurnitureType = "superior"
+	CatalogFurnitureTypeAlto     CatalogFurnitureType = "alto"
+)
+
+type CatalogBaseMode string
+
+const (
+	CatalogBaseModeNone        CatalogBaseMode = "none"
+	CatalogBaseModePlinthBoard CatalogBaseMode = "plinth_board"
+	CatalogBaseModePlinthStrip CatalogBaseMode = "plinth_strip"
+	CatalogBaseModeLegs        CatalogBaseMode = "legs"
+)
+
+type CatalogEdgeSide string
+
+const (
+	CatalogEdgeSideL1 CatalogEdgeSide = "L1"
+	CatalogEdgeSideL2 CatalogEdgeSide = "L2"
+	CatalogEdgeSideW1 CatalogEdgeSide = "W1"
+	CatalogEdgeSideW2 CatalogEdgeSide = "W2"
+)
+
+type CatalogDimensionRuleSource string
+
+const (
+	CatalogDimensionRuleSourceAssemblyWidth   CatalogDimensionRuleSource = "assembly_width"
+	CatalogDimensionRuleSourceAssemblyDepth   CatalogDimensionRuleSource = "assembly_depth"
+	CatalogDimensionRuleSourceAssemblyHeight  CatalogDimensionRuleSource = "assembly_height"
+	CatalogDimensionRuleSourceSelectedVariant CatalogDimensionRuleSource = "selected_variant"
+)
+
+type CatalogAssemblyAxisRef string
+
+const (
+	CatalogAssemblyAxisRefMin    CatalogAssemblyAxisRef = "min"
+	CatalogAssemblyAxisRefMax    CatalogAssemblyAxisRef = "max"
+	CatalogAssemblyAxisRefCenter CatalogAssemblyAxisRef = "center"
+)
+
+type FurnitureParameterDefinition struct {
+	Name         string                     `json:"name"`
+	Label        string                     `json:"label"`
+	SortOrder    *int64                     `json:"sortOrder,omitempty"`
+	Type         FurnitureParameterType     `json:"type"`
+	DefaultValue *any                       `json:"defaultValue,omitempty"`
+	Required     bool                       `json:"required"`
+	Unit         *FurnitureParameterUnit    `json:"unit,omitempty"`
+	Category     FurnitureParameterCategory `json:"category"`
+	Min          *float64                   `json:"min,omitempty"`
+	Max          *float64                   `json:"max,omitempty"`
+	Step         *float64                   `json:"step,omitempty"`
+	Options      []string                   `json:"options,omitempty"`
+	Integer      *bool                      `json:"integer,omitempty"`
+	MaxLength    *int64                     `json:"maxLength,omitempty"`
+	Binding      *FurnitureParameterBinding `json:"binding,omitempty"`
+}
+
+type FurnitureParameterBinding struct {
+	Version      int64                                  `json:"version"`
+	Kind         FurnitureParameterBindingKind          `json:"kind"`
+	ComponentId  *string                                `json:"componentId,omitempty"`
+	Dimension    *string                                `json:"dimension,omitempty"`
+	Relationship *FurnitureParameterRelationshipBinding `json:"relationship,omitempty"`
+}
+
+type FurnitureParameterRelationshipBinding struct {
+	Kind       string                                        `json:"kind"`
+	SourceRole string                                        `json:"sourceRole"`
+	SourceFace *string                                       `json:"sourceFace,omitempty"`
+	Targets    []FurnitureParameterRelationshipTarget        `json:"targets"`
+	Station    *FurnitureParameterRelationshipStationMargins `json:"station,omitempty"`
+	Families   []FurnitureParameterRelationshipFamily        `json:"families,omitempty"`
+}
+
+type FurnitureParameterRelationshipTarget struct {
+	ComponentId string  `json:"componentId"`
+	Role        string  `json:"role"`
+	Face        *string `json:"face,omitempty"`
+}
+
+type FurnitureParameterRelationshipStationMargins struct {
+	StartMarginMm *float64 `json:"startMarginMm,omitempty"`
+	EndMarginMm   *float64 `json:"endMarginMm,omitempty"`
+}
+
+type FurnitureParameterRelationshipFamily struct {
+	FamilyId      string   `json:"familyId"`
+	Count         int64    `json:"count"`
+	StartMarginMm *float64 `json:"startMarginMm,omitempty"`
+	EndMarginMm   *float64 `json:"endMarginMm,omitempty"`
+}
+
+type CatalogDimensionPreset struct {
+	ID       string  `json:"id"`
+	Name     *string `json:"name,omitempty"`
+	WidthMm  int64   `json:"width_mm"`
+	HeightMm int64   `json:"height_mm"`
+	DepthMm  int64   `json:"depth_mm"`
+}
+
+type CatalogEdgeAssignment struct {
+	Side    CatalogEdgeSide `json:"side"`
+	Enabled bool            `json:"enabled"`
+}
+
+type CatalogBoardPart struct {
+	ID            string                  `json:"id"`
+	Code          *string                 `json:"code,omitempty"`
+	Description   string                  `json:"description"`
+	Quantity      int64                   `json:"quantity"`
+	LengthMm      int64                   `json:"length_mm"`
+	WidthMm       int64                   `json:"width_mm"`
+	Edges         []CatalogEdgeAssignment `json:"edges"`
+	OptionRole    string                  `json:"option_role"`
+	LengthFormula *string                 `json:"length_formula,omitempty"`
+	WidthFormula  *string                 `json:"width_formula,omitempty"`
+}
+
+type CatalogHardwareLine struct {
+	ID                  string  `json:"id"`
+	Quantity            float64 `json:"quantity"`
+	DescriptionOverride *string `json:"description_override,omitempty"`
+	OptionRole          string  `json:"option_role"`
+	HardwareID          *string `json:"hardware_id,omitempty"`
+}
+
+type CatalogHardwareRelativePosition struct {
+	XMm      float64  `json:"xMm"`
+	YMm      float64  `json:"yMm"`
+	XFormula *string  `json:"xFormula,omitempty"`
+	YFormula *string  `json:"yFormula,omitempty"`
+	XPercent *float64 `json:"xPercent,omitempty"`
+	YPercent *float64 `json:"yPercent,omitempty"`
+}
+
+type CatalogHardwareRotationDeg struct {
+	X *float64 `json:"x,omitempty"`
+	Y *float64 `json:"y,omitempty"`
+	Z *float64 `json:"z,omitempty"`
+}
+
+type CatalogHardwarePlacement struct {
+	HardwareId       string                          `json:"hardwareId"`
+	AnchorFace       string                          `json:"anchorFace"`
+	RelativePosition CatalogHardwareRelativePosition `json:"relativePosition"`
+	RotationDeg      *CatalogHardwareRotationDeg     `json:"rotationDeg,omitempty"`
+	Scale            *float64                        `json:"scale,omitempty"`
+}
+
+type CatalogAssemblyAxisPlacement struct {
+	Ref      CatalogAssemblyAxisRef `json:"ref"`
+	OffsetMm float64                `json:"offsetMm"`
+}
+
+type CatalogAssemblyAnchorRule struct {
+	X           CatalogAssemblyAxisPlacement `json:"x"`
+	Y           CatalogAssemblyAxisPlacement `json:"y"`
+	Z           CatalogAssemblyAxisPlacement `json:"z"`
+	RotationDeg *CatalogHardwareRotationDeg  `json:"rotationDeg,omitempty"`
+}
+
+type CatalogAssemblyDimensionRule struct {
+	Source       CatalogDimensionRuleSource `json:"source"`
+	VariantSetId *string                    `json:"variantSetId,omitempty"`
+	Multiplier   *float64                   `json:"multiplier,omitempty"`
+	OffsetMm     float64                    `json:"offsetMm"`
+}
+
+type CatalogComponentOverrides struct {
+	Edges              []CatalogEdgeAssignment       `json:"edges,omitempty"`
+	LengthFormula      *string                       `json:"lengthFormula,omitempty"`
+	WidthFormula       *string                       `json:"widthFormula,omitempty"`
+	XFormula           *string                       `json:"xFormula,omitempty"`
+	YFormula           *string                       `json:"yFormula,omitempty"`
+	ZFormula           *string                       `json:"zFormula,omitempty"`
+	RotateX            *int64                        `json:"rotateX,omitempty"`
+	RotateY            *int64                        `json:"rotateY,omitempty"`
+	RotateZ            *int64                        `json:"rotateZ,omitempty"`
+	HardwarePlacements []CatalogHardwarePlacement    `json:"hardwarePlacements,omitempty"`
+	LengthRule         *CatalogAssemblyDimensionRule `json:"lengthRule,omitempty"`
+	WidthRule          *CatalogAssemblyDimensionRule `json:"widthRule,omitempty"`
+	PlacementRule      *CatalogAssemblyAnchorRule    `json:"placementRule,omitempty"`
+}
+
+type CatalogComponentInstance struct {
+	ComponentId       string                     `json:"componentId"`
+	Quantity          int64                      `json:"quantity"`
+	PlacementOverride *string                    `json:"placementOverride,omitempty"`
+	Overrides         *CatalogComponentOverrides `json:"overrides,omitempty"`
+}
+
+type CatalogAgregadoPosition struct {
+	XFormula *string `json:"x_formula,omitempty"`
+	YFormula *string `json:"y_formula,omitempty"`
+	ZFormula *string `json:"z_formula,omitempty"`
+}
+
+type CatalogAgregadoDimensions struct {
+	WidthFormula  *string `json:"width_formula,omitempty"`
+	HeightFormula *string `json:"height_formula,omitempty"`
+	DepthFormula  *string `json:"depth_formula,omitempty"`
+}
+
+type CatalogAgregadoInstance struct {
+	ID              *string                    `json:"id,omitempty"`
+	AgregadoID      string                     `json:"agregado_id"`
+	Name            *string                    `json:"name,omitempty"`
+	Quantity        int64                      `json:"quantity"`
+	LayoutDirection *string                    `json:"layout_direction,omitempty"`
+	GapMm           *float64                   `json:"gap_mm,omitempty"`
+	Position        *CatalogAgregadoPosition   `json:"position,omitempty"`
+	Dimensions      *CatalogAgregadoDimensions `json:"dimensions,omitempty"`
+	Mirrored        *bool                      `json:"mirrored,omitempty"`
+	OptionOverrides map[string]string          `json:"option_overrides,omitempty"`
+}
+
+type CatalogModule struct {
+	ID                   string                         `json:"id"`
+	Code                 string                         `json:"code"`
+	Name                 string                         `json:"name"`
+	BaseLaborCost        float64                        `json:"base_labor_cost"`
+	WidthMm              *int64                         `json:"width_mm,omitempty"`
+	HeightMm             *int64                         `json:"height_mm,omitempty"`
+	DepthMm              *int64                         `json:"depth_mm,omitempty"`
+	CategoryId           *string                        `json:"categoryId,omitempty"`
+	StructureID          *string                        `json:"structure_id,omitempty"`
+	FurnitureType        *CatalogFurnitureType          `json:"furniture_type,omitempty"`
+	BaseMode             *CatalogBaseMode               `json:"base_mode,omitempty"`
+	BaseClearanceMm      *int64                         `json:"base_clearance_mm,omitempty"`
+	Presets              []CatalogDimensionPreset       `json:"presets,omitempty"`
+	ParameterDefinitions []FurnitureParameterDefinition `json:"parameter_definitions,omitempty"`
+	Components           []CatalogComponentInstance     `json:"components,omitempty"`
+	Agregados            []CatalogAgregadoInstance      `json:"agregados,omitempty"`
+	ImageURL             *string                        `json:"image_url,omitempty"`
+	Notes                *string                        `json:"notes,omitempty"`
+	BoardParts           []CatalogBoardPart             `json:"board_parts,omitempty"`
+	HardwareLines        []CatalogHardwareLine          `json:"hardware_lines,omitempty"`
+	Version              *int64                         `json:"version,omitempty"`
+	CreatedAt            *string                        `json:"created_at,omitempty"`
+	UpdatedAt            *string                        `json:"updated_at,omitempty"`
+}
+
+type CatalogModuleWrite struct {
+	ID                   *string                        `json:"id,omitempty"`
+	Code                 string                         `json:"code"`
+	Name                 string                         `json:"name"`
+	BaseLaborCost        *float64                       `json:"base_labor_cost,omitempty"`
+	WidthMm              *int64                         `json:"width_mm,omitempty"`
+	HeightMm             *int64                         `json:"height_mm,omitempty"`
+	DepthMm              *int64                         `json:"depth_mm,omitempty"`
+	CategoryId           *string                        `json:"categoryId,omitempty"`
+	StructureID          *string                        `json:"structure_id,omitempty"`
+	FurnitureType        *string                        `json:"furniture_type,omitempty"`
+	BaseMode             *string                        `json:"base_mode,omitempty"`
+	BaseClearanceMm      *int64                         `json:"base_clearance_mm,omitempty"`
+	Presets              []CatalogDimensionPreset       `json:"presets,omitempty"`
+	ParameterDefinitions []FurnitureParameterDefinition `json:"parameter_definitions,omitempty"`
+	Components           []CatalogComponentInstance     `json:"components,omitempty"`
+	Agregados            []CatalogAgregadoInstance      `json:"agregados,omitempty"`
+	ImageURL             *string                        `json:"image_url,omitempty"`
+	Notes                *string                        `json:"notes,omitempty"`
+	BoardParts           []CatalogBoardPart             `json:"board_parts,omitempty"`
+	HardwareLines        []CatalogHardwareLine          `json:"hardware_lines,omitempty"`
+	Version              *int64                         `json:"version,omitempty"`
+	CreatedAt            *string                        `json:"created_at,omitempty"`
+	UpdatedAt            *string                        `json:"updated_at,omitempty"`
+}
+
+type FurnitureParameterDefinitionIssue struct {
+	Parameter *string `json:"parameter,omitempty"`
+	Field     string  `json:"field"`
+	Message   string  `json:"message"`
+}
+
+type ParameterDefinitionInvalidError struct {
+	Code    string                              `json:"code"`
+	Message string                              `json:"message"`
+	Issues  []FurnitureParameterDefinitionIssue `json:"issues"`
+}

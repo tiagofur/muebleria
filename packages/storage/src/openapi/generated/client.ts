@@ -5,6 +5,8 @@ import type {
   AdminTransferResponse,
   ApproveDesignRevisionForProductionRequest,
   AuthDeviceDirectory,
+  CatalogModule,
+  CatalogModuleWrite,
   ChangeMembershipRolesRequest,
   ChangeMembershipSectorsRequest,
   CommercialProjection,
@@ -302,4 +304,8 @@ export abstract class GeneratedGraneteApiClient {
   rebaseLibraryOverlay(token: string, id: string, body: RebaseLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayRebaseResult> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/rebase`, { schema: "LibraryOverlayRebaseResult", token, bodySchema: "RebaseLibraryOverlayRequest", body, signal }); }
   listLibraryOverlayConflicts(token: string, id: string, signal?: AbortSignal): Promise<ReadonlyArray<LibraryOverlayConflictDetail>> { return this.request("GET", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/conflicts`, { arrayOf: "LibraryOverlayConflictDetail", token, signal }); }
   resolveLibraryOverlayConflict(token: string, id: string, conflictId: string, body: ResolveLibraryOverlayConflictRequest, signal?: AbortSignal): Promise<LibraryOverlayConflictDetail> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, { schema: "LibraryOverlayConflictDetail", token, bodySchema: "ResolveLibraryOverlayConflictRequest", body, signal }); }
+  listCatalogModules(token: string, signal?: AbortSignal): Promise<ReadonlyArray<CatalogModule>> { return this.request("GET", "/catalog/modules", { arrayOf: "CatalogModule", token, signal }); }
+  createCatalogModule(token: string, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("POST", "/catalog/modules", { schema: "CatalogModule", token, bodySchema: "CatalogModuleWrite", body, signal }); }
+  getCatalogModule(token: string, moduleId: string, signal?: AbortSignal): Promise<CatalogModule> { return this.request("GET", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, signal }); }
+  updateCatalogModule(token: string, moduleId: string, version: number, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("PUT", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, ifMatch: version, bodySchema: "CatalogModuleWrite", body, signal }); }
 }

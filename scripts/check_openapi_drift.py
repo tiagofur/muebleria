@@ -54,6 +54,14 @@ for path in ("/org/memberships/{membershipId}/roles", "/org/memberships/{members
         raise RuntimeError(f"membership command {path} must declare If-Match and Idempotency-Key")
 if "ETag" not in patch_headers:
     raise RuntimeError("versioned organization mutations must declare response ETag")
+module_put=spec["paths"]["/catalog/modules/{moduleId}"]["put"]
+module_put_params=[p.get("$ref",p.get("name")) for p in module_put.get("parameters",[])]
+if "ETag" not in module_put["responses"]["200"].get("headers",{}):
+    raise RuntimeError("versioned catalog module PUT must declare response ETag")
+if "#/components/parameters/IfMatch" not in module_put_params:
+    raise RuntimeError("versioned catalog module PUT must declare If-Match")
+if spec["paths"]["/catalog/modules/{moduleId}"]["get"]["responses"]["200"].get("headers",{}).get("ETag") is None:
+    raise RuntimeError("catalog module read must expose the version ETag")
 directory_response=spec["paths"]["/org/memberships"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
 if directory_response.get("$ref") != "#/components/schemas/TeamDirectory":
     raise RuntimeError("Team membership directory must expose the canonical TeamDirectory read model")

@@ -151,10 +151,14 @@ describe('APIWorkspaceRepository', () => {
   });
 
   it('normalizes JSON null list payloads to empty arrays', async () => {
-    vi.mocked(fetch).mockResolvedValue({
-      ok: true,
-      json: async () => null,
-    } as Response);
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      // Modules ride the generated contract: the list must be a real array;
+      // every other endpoint keeps the legacy null payload under test.
+      if (String(input).endsWith('/catalog/modules')) {
+        return { ok: true, json: async () => [] } as Response;
+      }
+      return { ok: true, json: async () => null } as Response;
+    });
 
     const repo = new APIWorkspaceRepository();
     const ws = await repo.load();
@@ -209,11 +213,33 @@ describe('APIWorkspaceRepository', () => {
 
   it('saveCatalog PUTs module parameter_definitions verbatim (#905)', async () => {
     const putBodies: Record<string, unknown>[] = [];
+    const mod905Wire = {
+      id: 'mod-905',
+      code: 'M-905',
+      name: 'Gabinete 905',
+      base_labor_cost: 0,
+      width_mm: 0,
+      height_mm: 0,
+      depth_mm: 0,
+      categoryId: '',
+      structure_id: '',
+      components: [],
+      agregados: [],
+      presets: [],
+      image_url: '',
+      notes: '',
+      hardware_lines: [],
+      parameter_definitions: [],
+      version: 2,
+    };
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
       if (init?.method === 'PUT' && url.includes('/catalog/modules/')) {
         putBodies.push(JSON.parse(String(init.body)));
-        return { ok: true, json: async () => ({}) } as Response;
+        return { ok: true, json: async () => mod905Wire } as Response;
+      }
+      if (init?.method === 'GET' && url.includes('/catalog/modules/mod-905')) {
+        return { ok: true, json: async () => mod905Wire } as Response;
       }
       return { ok: true, json: async () => [] } as Response;
     });
@@ -1119,17 +1145,17 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
     } as Storage;
   }
 
-  function catalogOk(): Response {
-    return {
-      ok: true,
-      json: async () => ({ materials: [], edges: [], hardware: [], optionGroups: [], categories: [], customers: [], modules: [], structures: [], components: [] }),
-    } as Response;
+  function catalogOk(input?: Parameters<typeof fetch>[0]): Response {
+    const body = String(input).endsWith('/catalog/modules')
+      ? []
+      : { materials: [], edges: [], hardware: [], optionGroups: [], categories: [], customers: [], modules: [], structures: [], components: [] };
+    return { ok: true, json: async () => body } as Response;
   }
 
   it('usa el token de memoria (getAccessToken) y NUNCA un granete_token de localStorage', async () => {
     const storage = memoryStorage({ granete_token: 'FAKE-STORAGE-TOKEN' });
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
-    const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => catalogOk());
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => catalogOk(input));
     try {
       const repo = new APIWorkspaceRepository('http://test/api', {
         getAccessToken: () => 'memory-token',
@@ -1147,7 +1173,7 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
   });
 
   it('sin token en memoria no envía Authorization alguna', async () => {
-    const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => catalogOk());
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => catalogOk(input));
     const repo = new APIWorkspaceRepository('http://test/api', {
       getAccessToken: () => null,
       fetchImpl: fetchMock as unknown as typeof fetch,
@@ -1450,9 +1476,6 @@ describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () =
     depth_mm: 0,
     categoryId: '',
     structure_id: '',
-    furniture_type: '',
-    base_mode: '',
-    base_clearance_mm: null,
     components: [],
     agregados: [],
     presets: [],
@@ -1480,7 +1503,7 @@ describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () =
     const ifMatchSeen: Array<string | undefined> = [];
     vi.mocked(fetch).mockImplementation(async (url, init) => {
       if ((init?.method ?? 'GET') === 'GET') return mockCatalog([modulePayload])(url, init);
-      ifMatchSeen.push(((init?.headers ?? {}) as Record<string, string>)['If-Match']);
+      ifMatchSeen.push(new Headers(init?.headers).get('If-Match') ?? undefined);
       return jsonRes({ ...modulePayload, version: (ifMatchSeen.length) + 4 });
     });
 
@@ -1538,74 +1561,45 @@ describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () =
     ).rejects.toMatchObject({ name: 'GraneteApiError', code: 'VERSION_CONFLICT', status: 412 });
   });
 
-  it('resolves a 428 by learning the version and retrying once under If-Match', async () => {
+  it('learns the version with GET-by-id and sends the PUT under If-Match', async () => {
     const putIfMatch: Array<string | undefined> = [];
-    let puts = 0;
     vi.mocked(fetch).mockImplementation(async (url, init) => {
       const method = init?.method ?? 'GET';
+      const target = String(url);
       if (method === 'GET') {
-        if (String(url).endsWith('/catalog/modules/mod-497')) {
-          // The version learn handshake reads the module directly.
+        if (target.endsWith('/catalog/modules/mod-497')) {
           return jsonRes({ ...modulePayload, version: 9 });
         }
-        return mockCatalog([{ ...modulePayload, version: undefined }])(url, init);
+        return mockCatalog([JSON.parse(JSON.stringify({ ...modulePayload, version: undefined }))])(url, init);
       }
       if (method === 'PUT') {
-        puts += 1;
-        putIfMatch.push(((init?.headers ?? {}) as Record<string, string>)['If-Match']);
-        return puts === 1
-          ? {
-              ok: false,
-              status: 428,
-              json: async () => ({
-                code: 'PRECONDITION_REQUIRED',
-                message: 'If-Match es obligatorio',
-                fieldErrors: {},
-                requestId: 'req-2',
-                retryable: false,
-                details: {},
-              }),
-              text: async () => JSON.stringify({ code: 'PRECONDITION_REQUIRED' }),
-            } as Response
-          : jsonRes({ ...modulePayload, version: 10 });
+        console.log('DEBUG-PUT-HEADERS', init?.headers instanceof Headers ? [...(init?.headers as Headers).entries()] : init?.headers);
+        putIfMatch.push(new Headers(init?.headers).get('If-Match') ?? undefined);
+        return jsonRes({ ...modulePayload, version: 10 });
       }
       return jsonRes({ ...modulePayload });
     });
 
     const repo = new APIWorkspaceRepository();
     const catalog = await repo.getCatalog();
+    expect(catalog.modules[0]?.version).toBeUndefined();
 
     await repo.saveCatalog({
       ...(catalog as unknown as Catalog),
       modules: [{ ...catalog.modules[0]!, name: 'X' }],
     });
-    // First PUT went out bare, the retry carried the learned version.
-    expect(putIfMatch).toEqual([undefined, '"v9"']);
+    expect(putIfMatch).toEqual(['"v9"']);
   });
 
-  it('fails closed on 428 when the version cannot be learned, without a blind POST', async () => {
+  it('fails closed when the learned module carries no version, without writing', async () => {
     vi.mocked(fetch).mockImplementation(async (url, init) => {
       const method = init?.method ?? 'GET';
+      const target = String(url);
       if (method === 'GET') {
-        if (String(url).endsWith('/catalog/modules/mod-497')) {
-          return { ok: false, status: 404, json: async () => ({}), text: async () => 'not found' } as Response;
+        if (target.endsWith('/catalog/modules/mod-497')) {
+          return jsonRes(JSON.parse(JSON.stringify({ ...modulePayload, version: undefined })));
         }
-        return mockCatalog([{ ...modulePayload, version: undefined }])(url, init);
-      }
-      if (method === 'PUT') {
-        return {
-          ok: false,
-          status: 428,
-          json: async () => ({
-            code: 'PRECONDITION_REQUIRED',
-            message: 'If-Match es obligatorio',
-            fieldErrors: {},
-            requestId: 'req-3',
-            retryable: false,
-            details: {},
-          }),
-          text: async () => JSON.stringify({ code: 'PRECONDITION_REQUIRED' }),
-        } as Response;
+        return mockCatalog([JSON.parse(JSON.stringify({ ...modulePayload, version: undefined }))])(url, init);
       }
       return jsonRes({ ...modulePayload });
     });
@@ -1619,7 +1613,35 @@ describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () =
         modules: [{ ...catalog.modules[0]!, name: 'X' }],
       }),
     ).rejects.toMatchObject({ name: 'ModuleVersionUnknownError' });
-    // The bare PUT was refused — no blind POST create may follow.
-    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toHaveLength(0);
+    // No write may leave the client: not a PUT, and not a blind POST create.
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => {
+      const method = (init as RequestInit | undefined)?.method;
+      return method === 'PUT' || method === 'POST';
+    })).toHaveLength(0);
+  });
+
+  it('creates through POST when the learned module is missing (locally-new)', async () => {
+    const calls: Array<{ method?: string; url: string }> = [];
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET';
+      const target = String(url);
+      if (method === 'GET') {
+        if (target.endsWith('/catalog/modules/mod-497')) {
+          return { ok: false, status: 404, json: async () => ({ code: 'NOT_FOUND', message: 'module not found', fieldErrors: {}, requestId: 'r', retryable: false, details: {} }), text: async () => 'not found' } as Response;
+        }
+        return mockCatalog([JSON.parse(JSON.stringify({ ...modulePayload, version: undefined }))])(url, init);
+      }
+      calls.push({ method, url: target });
+      return jsonRes({ ...modulePayload, version: 1 });
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const catalog = await repo.getCatalog();
+
+    await repo.saveCatalog({
+      ...(catalog as unknown as Catalog),
+      modules: [{ ...catalog.modules[0]!, name: 'Nuevo' }],
+    });
+    expect(calls.map((c) => c.method)).toEqual(['POST']);
   });
 });
