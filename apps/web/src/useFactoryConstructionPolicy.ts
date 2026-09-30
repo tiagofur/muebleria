@@ -1,9 +1,10 @@
 /**
- * Hook for managing factory manufacturing library construction policy and overlay (#875).
- * Connects SettingsScreen and component editors to the organization's active overlay.
+ * Hook for managing factory manufacturing library construction policy and overlay (#875, #944).
+ * Connects SettingsScreen and component editors to the organization's active overlay,
+ * published releases history, and 3-way rebase conflict resolution.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   type FactoryConstructionPolicy,
   DEFAULT_FACTORY_CONSTRUCTION_POLICY,
@@ -13,6 +14,8 @@ import {
   GraneteApiClient,
   type LibraryOverlayDetail,
   type LibraryReleaseSummary,
+  type LibraryOverlayConflictDetail,
+  type LibraryOverlayRebaseResult,
 } from '@granete/storage';
 
 export interface UseFactoryConstructionPolicyOptions {
@@ -28,10 +31,44 @@ export function useFactoryConstructionPolicy({
 }: UseFactoryConstructionPolicyOptions) {
   const [activeOverlay, setActiveOverlay] = useState<LibraryOverlayDetail | null>(null);
   const [baseRelease, setBaseRelease] = useState<LibraryReleaseSummary | null>(null);
+  const [releases, setReleases] = useState<ReadonlyArray<LibraryReleaseSummary>>([]);
+  const [conflicts, setConflicts] = useState<ReadonlyArray<LibraryOverlayConflictDetail>>([]);
   const [policy, setPolicy] = useState<FactoryConstructionPolicy>(DEFAULT_FACTORY_CONSTRUCTION_POLICY);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [rebasing, setRebasing] = useState(false);
+  const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchState = useCallback(async (client: GraneteApiClient, authToken: string) => {
+    const [overlay, currentRel, rels] = await Promise.all([
+      client.getActiveStandardLibraryOverlay(authToken),
+      client.getStandardCurrentRelease(authToken).catch(() => null),
+      client.getStandardReleases(authToken).catch(() => []),
+    ]);
+
+    setActiveOverlay(overlay);
+    setBaseRelease(currentRel);
+    setReleases(rels);
+
+    if (overlay?.overrides) {
+      setPolicy(overlayOverridesToPolicy(overlay.overrides as Record<string, unknown>));
+    } else {
+      setPolicy(DEFAULT_FACTORY_CONSTRUCTION_POLICY);
+    }
+
+    if (overlay && overlay.status === 'rebase_conflict') {
+      try {
+        const conflictList = await client.listLibraryOverlayConflicts(authToken, overlay.id);
+        const unresolved = conflictList.filter((c) => !c.resolvedAt);
+        setConflicts(unresolved);
+      } catch {
+        setConflicts([]);
+      }
+    } else {
+      setConflicts([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (!enabled || !token) return;
@@ -41,20 +78,7 @@ export function useFactoryConstructionPolicy({
     setLoading(true);
     setError(null);
 
-    Promise.all([
-      client.getActiveStandardLibraryOverlay(token),
-      client.getStandardCurrentRelease(token).catch(() => null),
-    ])
-      .then(([overlay, currentRel]) => {
-        if (cancelled) return;
-        setActiveOverlay(overlay);
-        setBaseRelease(currentRel);
-        if (overlay?.overrides) {
-          setPolicy(overlayOverridesToPolicy(overlay.overrides as Record<string, unknown>));
-        } else {
-          setPolicy(DEFAULT_FACTORY_CONSTRUCTION_POLICY);
-        }
-      })
+    fetchState(client, token)
       .catch((err) => {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Error al cargar política de fábrica');
@@ -66,9 +90,19 @@ export function useFactoryConstructionPolicy({
     return () => {
       cancelled = true;
     };
-  }, [baseUrl, token, enabled]);
+  }, [baseUrl, token, enabled, fetchState]);
 
-  const savePolicy = async (nextPolicy: FactoryConstructionPolicy) => {
+  const latestRelease = useMemo(() => {
+    if (releases.length > 0) return releases[0];
+    return baseRelease;
+  }, [releases, baseRelease]);
+
+  const hasUpstreamUpdate = useMemo(() => {
+    if (!activeOverlay || !latestRelease) return false;
+    return activeOverlay.baseReleaseId !== latestRelease.id;
+  }, [activeOverlay, latestRelease]);
+
+  const savePolicy = useCallback(async (nextPolicy: FactoryConstructionPolicy) => {
     if (!token) return;
     setSaving(true);
     setError(null);
@@ -84,16 +118,84 @@ export function useFactoryConstructionPolicy({
     } finally {
       setSaving(false);
     }
-  };
+  }, [baseUrl, token, activeOverlay]);
+
+  const rebaseToRelease = useCallback(async (targetReleaseId: string): Promise<LibraryOverlayRebaseResult | undefined> => {
+    if (!token || !activeOverlay) return;
+    setRebasing(true);
+    setError(null);
+    try {
+      const client = new GraneteApiClient(baseUrl);
+      const result = await client.rebaseLibraryOverlay(token, activeOverlay.id, { targetReleaseId });
+      
+      if (result.hasConflicts) {
+        setConflicts(result.conflicts ?? []);
+      } else {
+        setConflicts([]);
+      }
+
+      // Fetch the updated overlay detail
+      const updated = await client.getLibraryOverlayById(token, activeOverlay.id);
+      setActiveOverlay(updated);
+      if (updated.overrides) {
+        setPolicy(overlayOverridesToPolicy(updated.overrides as Record<string, unknown>));
+      }
+
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al actualizar versión de biblioteca');
+      throw err;
+    } finally {
+      setRebasing(false);
+    }
+  }, [baseUrl, token, activeOverlay]);
+
+  const resolveConflict = useCallback(async (
+    conflictId: string,
+    action: 'keep_custom' | 'adopt_upstream',
+  ): Promise<void> => {
+    if (!token || !activeOverlay) return;
+    setResolvingConflictId(conflictId);
+    setError(null);
+    try {
+      const client = new GraneteApiClient(baseUrl);
+      await client.resolveLibraryOverlayConflict(token, activeOverlay.id, conflictId, { action });
+
+      // Refresh conflicts list
+      const conflictList = await client.listLibraryOverlayConflicts(token, activeOverlay.id);
+      const unresolved = conflictList.filter((c) => !c.resolvedAt);
+      setConflicts(unresolved);
+
+      // Refresh overlay state
+      const updated = await client.getLibraryOverlayById(token, activeOverlay.id);
+      setActiveOverlay(updated);
+      if (updated.overrides) {
+        setPolicy(overlayOverridesToPolicy(updated.overrides as Record<string, unknown>));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al resolver conflicto de biblioteca');
+      throw err;
+    } finally {
+      setResolvingConflictId(null);
+    }
+  }, [baseUrl, token, activeOverlay]);
 
   return {
     activeOverlay,
     baseRelease,
+    releases,
+    latestRelease,
+    hasUpstreamUpdate,
+    conflicts,
     policy,
     setPolicy,
     savePolicy,
+    rebaseToRelease,
+    resolveConflict,
     loading,
     saving,
+    rebasing,
+    resolvingConflictId,
     error,
   };
 }
