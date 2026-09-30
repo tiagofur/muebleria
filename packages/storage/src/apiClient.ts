@@ -8,12 +8,15 @@ import {
   parseFurnitureAuthoringPreviewResponse,
   type FurnitureAuthoringPreviewRequest,
   type FurnitureAuthoringPreviewResponse,
+  type FactoryConstructionPolicy,
+  policyToOverlayOverrides,
 } from '@granete/domain';
 import {
   parseGenerated,
   parseGeneratedArray,
   type HardwareAssetRepresentation,
   type HardwareAssetUploadStaged,
+  type LibraryOverlayDetail,
 } from './openapi/generated/types';
 import { GeneratedGraneteApiClient, type GeneratedRequestOptions } from './openapi/generated/client';
 
@@ -228,4 +231,56 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     });
     return parseAuthoringResolveResponse(value, request);
   }
+
+  /**
+   * #875: Fetch the organization's active overlay for Granete Standard,
+   * falling back to null if no overlay exists yet (HTTP 404).
+   */
+  async getActiveStandardLibraryOverlay(
+    token: string,
+    signal?: AbortSignal,
+  ): Promise<LibraryOverlayDetail | null> {
+    try {
+      return await this.getActiveLibraryOverlay(token, signal);
+    } catch (error) {
+      if (error instanceof GraneteApiError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * #875: Save factory construction policy into the organization's overlay overrides.
+   * If an active overlay already exists, updates its overrides.
+   * If not, fetches the current Standard release and creates a new active overlay.
+   */
+  async saveConstructionPolicy(
+    token: string,
+    policy: FactoryConstructionPolicy,
+    activeOverlay: LibraryOverlayDetail | null,
+    signal?: AbortSignal,
+  ): Promise<LibraryOverlayDetail> {
+    const policyOverrides = policyToOverlayOverrides(policy);
+    if (activeOverlay) {
+      const existingOverrides = (activeOverlay.overrides ?? {}) as Record<string, unknown>;
+      const nextOverrides: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(existingOverrides)) {
+        if (!k.startsWith('joint.')) {
+          nextOverrides[k] = v;
+        }
+      }
+      Object.assign(nextOverrides, policyOverrides);
+      return await this.updateLibraryOverlay(token, activeOverlay.id, {
+        overrides: nextOverrides,
+      }, signal);
+    }
+
+    const currentRel = await this.getStandardCurrentRelease(token, signal);
+    return await this.createLibraryOverlay(token, {
+      baseReleaseId: currentRel.id,
+      overrides: policyOverrides,
+    }, signal);
+  }
 }
+

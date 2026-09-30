@@ -519,4 +519,46 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       expect(new Headers(fetchImpl.mock.calls[2]![1]?.headers).get('Idempotency-Key')).toBe('key-ret-1');
     });
   });
+
+  describe('Manufacturing Library Overlay & Factory Construction Policy (#875)', () => {
+    it('getActiveStandardLibraryOverlay returns null when 404 is returned', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'Overlay not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      const overlay = await client.getActiveStandardLibraryOverlay('test-token');
+      expect(overlay).toBeNull();
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'http://api.test/api/manufacturing-libraries/overlays/active',
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+
+    it('getActiveStandardLibraryOverlay returns overlay detail on 200', async () => {
+      const mockOverlay = {
+        id: '11111111-1111-1111-1111-111111111111',
+        organizationId: '22222222-2222-2222-2222-222222222222',
+        libraryId: '00000000-0000-0000-0000-000000000001',
+        baseReleaseId: '33333333-3333-3333-3333-333333333333',
+        status: 'active',
+        overrides: { 'joint.floorToSide.stationsCount': 4 },
+        customResourceIds: [],
+        createdAt: '2026-09-30T12:00:00Z',
+        updatedAt: '2026-09-30T12:00:00Z',
+      };
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(mockOverlay), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      const overlay = await client.getActiveStandardLibraryOverlay('test-token');
+      expect(overlay).toEqual(mockOverlay);
+    });
+  });
 });
+
