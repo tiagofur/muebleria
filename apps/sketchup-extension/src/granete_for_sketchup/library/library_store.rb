@@ -4,7 +4,6 @@ require 'digest'
 require 'fileutils'
 require 'json'
 require 'time'
-require_relative '../paths'
 
 module Granete
   module SketchUpExtension

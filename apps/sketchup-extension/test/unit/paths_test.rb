@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'test_helper'
-require 'granete_for_sketchup/paths'
+require_relative '../../src/granete_for_sketchup/paths'
 
 module Granete
   module SketchUpExtension

@@ -2,8 +2,8 @@
 
 require 'test_helper'
 require 'securerandom'
-require 'granete_for_sketchup/library/library_store'
-require 'granete_for_sketchup/library/library_synchronizer'
+require_relative '../../src/granete_for_sketchup/library/library_store'
+require_relative '../../src/granete_for_sketchup/library/library_synchronizer'
 
 module Granete
   module SketchUpExtension

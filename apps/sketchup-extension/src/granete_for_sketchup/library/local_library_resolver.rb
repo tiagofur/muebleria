@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'json'
-require_relative 'library_store'
 
 module Granete
   module SketchUpExtension

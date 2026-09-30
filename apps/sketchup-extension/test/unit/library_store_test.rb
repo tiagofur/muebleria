@@ -2,7 +2,7 @@
 
 require 'test_helper'
 require 'securerandom'
-require 'granete_for_sketchup/library/library_store'
+require_relative '../../src/granete_for_sketchup/library/library_store'
 
 module Granete
   module SketchUpExtension
