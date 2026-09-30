@@ -3859,6 +3859,54 @@
         }
       }
     },
+    "/designs/{designId}/effective-materials": {
+      "post": {
+        "operationId": "composeDesignEffectiveMaterials",
+        "description": "#784 / R4: definition-aware composition of effective material choices and lineage modes (override || design default || definition fallback) for a furniture definition in the context of the design working copy.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComposeDesignEffectiveMaterialsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Composed effective material choices and modes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignEffectiveMaterials"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}/revisions": {
       "get": {
         "operationId": "listDesignRevisions",
@@ -9144,9 +9192,10 @@
         "type": "string",
         "enum": [
           "design",
-          "override"
+          "override",
+          "definition"
         ],
-        "description": "#784 inheritance lineage of one material role: design = belongs to the Design lineage and may be updated by an explicit rollout (NOT a live pointer — the item keeps its materialized choice); override = explicit furniture exception preserved by rollouts."
+        "description": "#784 inheritance lineage of one material role: design = belongs to the Design lineage and may be updated by an explicit rollout (NOT a live pointer — the item keeps its materialized choice); override = explicit furniture exception preserved by rollouts; definition = the role materialized the FurnitureDefinition curated fallback (no compatible Design default existed and no user choice was made) — not a user exception, so a future rollout may adopt it deliberately."
       },
       "DesignAuthoringDefaults": {
         "type": "object",
@@ -9370,6 +9419,7 @@
           "role",
           "items",
           "design_backed",
+          "definition_backed",
           "needs_rollout",
           "design_current",
           "overridden"
@@ -9385,6 +9435,10 @@
           "design_backed": {
             "type": "integer",
             "description": "Items whose lineage for this role is design."
+          },
+          "definition_backed": {
+            "type": "integer",
+            "description": "Items whose lineage for this role is definition (curated fallback materialized at insertion; not a user exception). Rollout eligibility for these is an explicit R5 decision, never inferred."
           },
           "needs_rollout": {
             "type": "integer",
@@ -9528,6 +9582,55 @@
             "type": "string",
             "format": "date-time",
             "description": "Working-copy version AFTER the command: bumped when roles were filled, unchanged on the no-op."
+          }
+        }
+      },
+      "ComposeDesignEffectiveMaterialsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureDefinitionId"
+        ],
+        "properties": {
+          "furnitureDefinitionId": {
+            "type": "string",
+            "description": "UUID or code of the furniture definition"
+          },
+          "materialChoices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Optional manual overrides per material role (role code -> material id)"
+          }
+        }
+      },
+      "DesignEffectiveMaterials": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureDefinitionId",
+          "materialChoices",
+          "materialChoiceModes"
+        ],
+        "properties": {
+          "furnitureDefinitionId": {
+            "type": "string",
+            "description": "UUID of the resolved furniture definition"
+          },
+          "materialChoices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Effective material choice ID per role"
+          },
+          "materialChoiceModes": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DesignMaterialChoiceMode"
+            },
+            "description": "Inheritance lineage mode per role (design or override)"
           }
         }
       },

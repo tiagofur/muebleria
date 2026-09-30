@@ -46,6 +46,7 @@ overrides repository, GitHub, code, tests, or remote state.
 | Implementador (por defecto) | `.agents/skills/implementer/SKILL.md` |
 | Revisor independiente | `.agents/skills/reviewer/SKILL.md` |
 | Arquitectura / convenciones | `docs/architecture.md`, `docs/conventions.md` |
+| Arquitectura Agent-First (organización del repo para agentes; regla de extracción al tocar monolitos) | `docs/agent-first-methodology.md` |
 | Producto / prioridad | `docs/prd-v2.md`, `docs/roadmap-comercial-v2.md`, `docs/demo-mvp-plan-2026-09-05.md` |
 | Users / Auth / Memberships / Organizations / Sales Network | `docs/architecture/organization-foundation-v2.md`, ADR-0005, ADR-0006, #446 y child exacta, proofs #462 |
 | Librerías de manufactura / releases / overlays / distribución local | `docs/architecture/manufacturing-library-platform.md`, ADR-0008; además `parametric-furniture-library.md` y `3d-asset-library.md` cuando toque definiciones/assets |

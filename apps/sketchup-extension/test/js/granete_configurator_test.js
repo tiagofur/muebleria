@@ -317,16 +317,19 @@ test('open resets params to the definition defaults through the injected helper'
   assert.deepStrictEqual(form.values, { widthMm: 800, heightMm: 720 });
 });
 
-test('open resets the material choices snapshot (context derived by the shared renderer)', () => {
+test('open resets the material choices snapshot (explicit configurator lineage context)', () => {
   const sandbox = runModule();
   sandbox.window.GraneteUI.configurator.open(definition());
   assert.strictEqual(sandbox.__calls.defaultMaterialChoices.length, 1);
   const render = sandbox.__calls.renderMaterialSelectors[sandbox.__calls.renderMaterialSelectors.length - 1];
   assert.strictEqual(render.card.id, 'library-materials-card');
   assert.deepStrictEqual(render.choices, { INTERIOR: 'mat-a', FRENTES: 'mat-b' });
-  // Preserved shape: the open path passes NO contextInfo — the shared
-  // renderer derives "configurator" from the card (original behavior).
-  assert.strictEqual(render.ctx.context, undefined);
+  // #784 R4: the open path passes the EXPLICIT configurator context — the
+  // lineage badges read the customization signal, never card-identity
+  // heuristics or value equality.
+  assert.strictEqual(render.ctx.context, 'configurator');
+  assert.strictEqual(render.ctx.designLineage, false);
+  assert.strictEqual(Object.keys(render.ctx.customizedRoles || {}).length, 0);
 });
 
 test('preview renders the media-backed image with its grant name', () => {
@@ -728,6 +731,75 @@ test('applyMaterialChoice updates the snapshot through the injected renderer', (
   const projectToast = sandbox.__calls.toasts[sandbox.__calls.toasts.length - 1];
   assert.ok(projectToast.message.includes('Acabado temporal de sesión'),
     'project scope keeps the session-scope copy');
+});
+
+test('#784 R4: insert click in connected mode sends payload.materialOverrides containing only customized roles', () => {
+  const sandbox = runModule();
+  const configurator = sandbox.window.GraneteUI.configurator;
+  sandbox.__state.connected = true;
+  configurator.open(definition());
+
+  // 1. Untouched finishes: materialOverrides is empty
+  el(sandbox, 'btn-insert').click();
+  assert.strictEqual(sandbox.__calls.bridge.length, 1);
+  const call1 = sandbox.__calls.bridge[0];
+  assert.strictEqual(call1.fn, 'begin_catalog_placement_preview');
+  assert.deepStrictEqual(call1.payload.materialOverrides, {}, 'untouched roles produce empty materialOverrides');
+  assert.deepStrictEqual(call1.payload.materialChoices, { INTERIOR: 'mat-a', FRENTES: 'mat-b' });
+
+  // 2. Customizing one role: only that role appears in materialOverrides
+  configurator.rearmInsertButton();
+  configurator.applyMaterialChoice('FRENTES', 'mat-custom', false);
+  el(sandbox, 'btn-insert').click();
+  assert.strictEqual(sandbox.__calls.bridge.length, 2);
+  const call2 = sandbox.__calls.bridge[1];
+  assert.deepStrictEqual(call2.payload.materialOverrides, { FRENTES: 'mat-custom' },
+    'customized role is the ONLY key in materialOverrides');
+  assert.strictEqual(call2.payload.materialChoices.FRENTES, 'mat-custom');
+  assert.strictEqual(call2.payload.materialChoices.INTERIOR, 'mat-a');
+});
+
+test('#784 R4: renderMaterialSelectors receives the explicit lineage context (customization signal, never equality)', () => {
+  const sandbox = runModule();
+  const configurator = sandbox.window.GraneteUI.configurator;
+
+  // Unbound model: no lineage context flags — badges stay off.
+  configurator.open(definition());
+  let render = sandbox.__calls.renderMaterialSelectors[sandbox.__calls.renderMaterialSelectors.length - 1];
+  assert.strictEqual(render.ctx.context, 'configurator');
+  assert.strictEqual(render.ctx.designLineage, false, 'unbound model carries no lineage');
+  assert.strictEqual(Object.keys(render.ctx.customizedRoles || {}).length, 0);
+
+  // Connected model: lineage context on, still no customization.
+  sandbox.__state.connected = true;
+  configurator.open(definition());
+  render = sandbox.__calls.renderMaterialSelectors[sandbox.__calls.renderMaterialSelectors.length - 1];
+  assert.strictEqual(render.ctx.designLineage, true);
+
+  // A visual-picker choice marks the role customized BEFORE re-rendering,
+  // so a later revert-to-default value still reads Personalizado.
+  configurator.applyMaterialChoice('FRENTES', 'mat-b', false);
+  render = sandbox.__calls.renderMaterialSelectors[sandbox.__calls.renderMaterialSelectors.length - 1];
+  assert.strictEqual(render.ctx.designLineage, true);
+  assert.strictEqual(render.ctx.customizedRoles.FRENTES, true,
+    'the explicit customization signal travels to the shared renderer');
+});
+
+test('#784 R4: onCreateProjectFurnitureResult calls deps.refreshDesignInheritance when placement succeeds', () => {
+  let refreshed = 0;
+  const sandbox = runModule({
+    refreshDesignInheritance: () => { refreshed += 1; }
+  });
+  const configurator = sandbox.window.GraneteUI.configurator;
+  configurator.open(definition());
+
+  // Successful placement triggers refreshDesignInheritance
+  configurator.onCreateProjectFurnitureResult({ ok: true, name: 'Mueble X' });
+  assert.strictEqual(refreshed, 1, 'successful placement refreshed design inheritance');
+
+  // Failed placement does NOT trigger refreshDesignInheritance
+  configurator.onCreateProjectFurnitureResult({ ok: false, reason: 'failed' });
+  assert.strictEqual(refreshed, 1, 'failed placement does not refresh design inheritance');
 });
 
 test('structural: the module owns no material catalog or project furniture state', () => {

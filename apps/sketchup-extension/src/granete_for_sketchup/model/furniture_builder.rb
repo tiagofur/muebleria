@@ -294,6 +294,7 @@ module Granete
         # rubocop:disable-next Metrics/ParameterLists
         def place_existing_furniture(model, furniture_instance_id:, definition:, parameters: {},
                                      resolved_layout: nil, material_choices: nil,
+                                     material_choice_modes: nil,
                                      project_id: nil, design_id: nil, relationships: nil,
                                      transformation: nil, prepare: true, preserve_parameters: false,
                                      transaction: true)
@@ -329,6 +330,7 @@ module Granete
             MetadataWriter.write_furniture(@metadata_store, furniture, furniture_instance_id,
                                            definition, params,
                                            material_choices: material_choices,
+                                           material_choice_modes: material_choice_modes,
                                            identity: { server: true, project_id: project_id,
                                                        design_id: design_id },
                                            relationships: relationships,

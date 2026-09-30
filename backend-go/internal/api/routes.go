@@ -551,6 +551,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// explicit reconciliation command. The repair is an observable business
 	// mutation: durable idempotency receipt like every other design command.
 	mux.Handle("GET /api/designs/{designId}/working-copy/material-provenance", authMW(http.HandlerFunc(server.HandleDesignWorkingCopyMaterialProvenance)))
+	mux.Handle("POST /api/designs/{designId}/effective-materials", authMW(http.HandlerFunc(server.HandleDesignEffectiveMaterials)))
 	mux.Handle("POST /api/designs/{designId}/working-copy/material-choices:reconcile", noStoreMiddleware(authMW(server.RequireIdempotency("design.reconcile-working-materials", http.HandlerFunc(server.HandleDesignWorkingCopyMaterialsReconcile)))))
 	mux.Handle("GET /api/designs/{designId}/revisions", authMW(http.HandlerFunc(server.HandleDesignRevisions)))
 	mux.Handle("POST /api/designs/{designId}/revisions", authMW(server.RequireIdempotency("design.publish-revision", http.HandlerFunc(server.HandleDesignRevisions))))

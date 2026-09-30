@@ -73,7 +73,10 @@ class PlacementPreviewFlowTest < Minitest::Test
       @requests << { 'method' => method, 'path' => path, 'body' => payload['body'],
                      'headers' => payload['headers'] }
       route = @routes[[method, path]]
-      return route if route
+      if route
+        res_body = route['body'].respond_to?(:call) ? route['body'].call(payload) : route['body']
+        return { 'status' => route['status'], 'body' => res_body }
+      end
 
       raise Granete::SketchUpExtension::Transport::RequestError, "no route for #{method} #{path}"
     end
@@ -469,6 +472,16 @@ class PlacementPreviewFlowTest < Minitest::Test
                          'working_copy' => { 'base_revision_id' => REVISION_R1, 'base_revision_number' => 1 },
                          'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
                                              'can_create_initial_quote' => true } })
+    @transport.respond(:post, "/designs/#{DESIGN_ID}/effective-materials", 200, lambda { |req|
+      choices = req.dig('body', 'materialChoices') || {}
+      modes = {}
+      choices.each_key { |k| modes[k] = 'override' }
+      {
+        'furnitureDefinitionId' => req.dig('body', 'furnitureDefinitionId') || DEFINITION_ID,
+        'materialChoices' => choices,
+        'materialChoiceModes' => modes
+      }
+    })
   end
 
   def stub_project_furniture(body)

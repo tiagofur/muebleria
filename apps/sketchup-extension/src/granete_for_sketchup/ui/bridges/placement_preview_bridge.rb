@@ -184,6 +184,8 @@ module Granete
             definition_id: payload['definitionId'].to_s,
             parameters: payload['parameters'] || {},
             material_choices: payload['materialChoices'] || {},
+            material_overrides: payload['materialOverrides'],
+            material_choice_modes: payload['materialChoiceModes'],
             idempotency_key: session['idempotency_key'],
             transformation: transformation,
             expected_layout_signature: session['layout_signature']
@@ -432,7 +434,8 @@ module Granete
           prepared = project_furniture_placer.prepare_catalog_preview(
             definition_id: definition_id,
             parameters: payload['parameters'] || {},
-            material_choices: payload['materialChoices'] || {}
+            material_choices: payload['materialChoices'] || {},
+            material_overrides: payload['materialOverrides']
           )
           prepared = prepare_preview_extents(prepared, definition_id, 'definitionId') if prepared['ok']
           return prepared if prepared['ok']
