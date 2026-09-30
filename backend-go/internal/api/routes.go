@@ -375,6 +375,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	// fallback, ServeMux emits a bare 405 before the versioned boundary runs.
 	mux.Handle("/api/furniture/authoring/resolve", authoringResolve)
 
+	// #772 (LIB-1): Manufacturing library identity and immutable releases
+	mux.Handle("GET /api/manufacturing-libraries/standard/releases/current", authMW(http.HandlerFunc(server.HandleStandardLibraryCurrentRelease)))
+	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}", authMW(http.HandlerFunc(server.HandleStandardLibraryReleaseByID)))
+
 	// Clientes
 	mux.Handle("GET /api/customers/summaries", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleCustomerSummaries))))
 	mux.Handle("GET /api/customers", authMW(http.HandlerFunc(server.HandleCustomers)))

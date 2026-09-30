@@ -50,6 +50,8 @@ import type {
   HardwareAssetRevisionGrant,
   HardwareAssetUploadSession,
   Invitation,
+  LibraryReleaseDetail,
+  LibraryReleaseSummary,
   LoginRequest,
   LoginResponse,
   LogoutRequest,
@@ -281,4 +283,6 @@ export abstract class GeneratedGraneteApiClient {
   authorizeHardwareAssetRevision(token: string, assetId: string, revisionId: string, signal?: AbortSignal): Promise<HardwareAssetRevisionGrant> { return this.request("POST", `/hardware-assets/${encodeURIComponent(assetId)}/revisions/${encodeURIComponent(revisionId)}:authorize`, { schema: "HardwareAssetRevisionGrant", token, signal }); }
   deriveHardwareAssetRevision(token: string, assetId: string, body: DeriveHardwareAssetRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<HardwareAssetRevision> { return this.request("POST", `/hardware-assets/${encodeURIComponent(assetId)}/revisions:derive`, { schema: "HardwareAssetRevision", token, bodySchema: "DeriveHardwareAssetRevisionRequest", body, idempotencyKey: key, signal }); }
   getDesignCommercialProjection(token: string, projectId: string, designId: string, signal?: AbortSignal): Promise<CommercialProjection> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/commercial-projection`, { schema: "CommercialProjection", token, signal }); }
+  getStandardCurrentRelease(token: string, signal?: AbortSignal): Promise<LibraryReleaseSummary> { return this.request("GET", "/manufacturing-libraries/standard/releases/current", { schema: "LibraryReleaseSummary", token, signal }); }
+  getStandardReleaseById(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryReleaseDetail> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}`, { schema: "LibraryReleaseDetail", token, signal }); }
 }

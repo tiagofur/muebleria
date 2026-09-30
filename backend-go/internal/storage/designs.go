@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -406,7 +408,7 @@ const designRevisionColumns = `
 	source_type, status, COALESCE(created_by::text, ''),
 	created_at, COALESCE(approved_by::text, ''), approved_at,
 	COALESCE(created_by_display_name, ''), COALESCE(approved_by_display_name, ''),
-	authoring_defaults_snapshot`
+	authoring_defaults_snapshot, effective_library_release_id`
 
 func scanDesignRevision(row pgx.Row) (*domain.DesignRevision, error) {
 	var r domain.DesignRevision
@@ -417,7 +419,7 @@ func scanDesignRevision(row pgx.Row) (*domain.DesignRevision, error) {
 		&r.SourceType, &r.Status, &r.CreatedBy,
 		&r.CreatedAt, &r.ApprovedBy, &r.ApprovedAt,
 		&r.CreatedByDisplayName, &r.ApprovedByDisplayName,
-		&rawDefaults,
+		&rawDefaults, &r.EffectiveLibraryReleaseID,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domain.ErrDesignRevisionNotFound
@@ -938,25 +940,37 @@ func (s *PostgresStore) insertDesignRevisionAndItems(ctx context.Context, design
 		return nil, fmt.Errorf("%w: authoring_defaults_snapshot serialization error: %v", domain.ErrSerializationFailed, err)
 	}
 
+	var effectiveLibraryReleaseID *uuid.UUID
+	if orgUUID, parseErr := uuid.Parse(designOrgID); parseErr == nil {
+		if effectiveRelease, libErr := s.GetEffectiveReleaseForOrg(ctx, orgUUID); libErr == nil && effectiveRelease != nil {
+			effectiveLibraryReleaseID = &effectiveRelease.ID
+		} else {
+			slog.WarnContext(ctx, "design revision publishing without library pin — no published library release available",
+				"organization_id", designOrgID,
+				"issue", "#772")
+		}
+	}
+
 	var rev domain.DesignRevision
 	var rawRevDefaults []byte
 	err = s.db(ctx).QueryRow(ctx, `
 		INSERT INTO design_revisions (
 			organization_id, project_id, design_id, revision_number,
 			parent_revision_id, source_type, status, created_by, created_by_display_name,
-			authoring_defaults_snapshot
+			authoring_defaults_snapshot, effective_library_release_id
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING `+designRevisionColumns,
 		designOrgID, projectID, designID, nextRevisionNum,
 		effectiveParentID, sourceType, domain.DesignRevisionStatusPublished, createdBy, createdByDisplayName,
-		defaultsJSON,
+		defaultsJSON, effectiveLibraryReleaseID,
 	).Scan(
 		&rev.ID, &rev.OrganizationID, &rev.ProjectID, &rev.DesignID,
 		&rev.RevisionNumber, &rev.ParentRevisionID,
 		&rev.SourceType, &rev.Status, &rev.CreatedBy,
 		&rev.CreatedAt, &rev.ApprovedBy, &rev.ApprovedAt,
 		&rev.CreatedByDisplayName, &rev.ApprovedByDisplayName, &rawRevDefaults,
+		&rev.EffectiveLibraryReleaseID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert design revision: %w", err)

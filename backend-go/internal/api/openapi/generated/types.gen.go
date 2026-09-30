@@ -2225,3 +2225,42 @@ type CommercialProjection struct {
 	Comparison               *CommercialProjectionComparison `json:"comparison"`
 	Issues                   []string                        `json:"issues"`
 }
+
+type LibraryResourceRef struct {
+	ID               string  `json:"id"`
+	ReleaseId        string  `json:"releaseId"`
+	ResourceKind     string  `json:"resourceKind"`
+	ResourceId       string  `json:"resourceId"`
+	ResourceRevision string  `json:"resourceRevision"`
+	DefinitionHash   *string `json:"definitionHash,omitempty"`
+	PackageKind      string  `json:"packageKind"`
+}
+
+type LibraryReleaseSummary struct {
+	ID               string  `json:"id"`
+	LibraryId        string  `json:"libraryId"`
+	Version          string  `json:"version"`
+	Status           string  `json:"status"`
+	SchemaVersion    int64   `json:"schemaVersion"`
+	MinPluginVersion *string `json:"minPluginVersion,omitempty"`
+	ManifestHash     *string `json:"manifestHash,omitempty"`
+	PublishedAt      *string `json:"publishedAt,omitempty"`
+	CreatedAt        string  `json:"createdAt"`
+	UpdatedAt        string  `json:"updatedAt"`
+}
+
+type LibraryReleaseDetail struct {
+	ID               string               `json:"id"`
+	LibraryId        string               `json:"libraryId"`
+	Version          string               `json:"version"`
+	Status           string               `json:"status"`
+	SchemaVersion    int64                `json:"schemaVersion"`
+	MinPluginVersion *string              `json:"minPluginVersion,omitempty"`
+	BaseReleaseId    *string              `json:"baseReleaseId,omitempty"`
+	ManifestHash     *string              `json:"manifestHash,omitempty"`
+	Changelog        *string              `json:"changelog,omitempty"`
+	PublishedAt      *string              `json:"publishedAt,omitempty"`
+	ResourceRefs     []LibraryResourceRef `json:"resourceRefs"`
+	CreatedAt        string               `json:"createdAt"`
+	UpdatedAt        string               `json:"updatedAt"`
+}
