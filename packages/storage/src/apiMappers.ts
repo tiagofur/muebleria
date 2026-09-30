@@ -789,20 +789,17 @@ function componentInstanceToApi(
   if (c.overrides?.hardwarePlacements && c.overrides.hardwarePlacements.length > 0) {
     overrides.hardwarePlacements = c.overrides.hardwarePlacements;
   }
-  return {
+  // Legacy snake_case duplicates (length_formula, rotate_x, …) dropped
+  // (#497 T3 contract): the server reads ONLY the camelCase overrides bag
+  // (domain.ComponentInstance json tags) — the duplicated keys were dead
+  // weight the closed write schema now rejects.
+  const result: Record<string, unknown> = {
     componentId: c.componentId,
     quantity: c.quantity,
-    placementOverride: c.placementOverride ?? null,
-    length_formula: c.overrides?.lengthFormula ?? '',
-    width_formula: c.overrides?.widthFormula ?? '',
-    x_formula: c.overrides?.xFormula ?? '',
-    y_formula: c.overrides?.yFormula ?? '',
-    z_formula: c.overrides?.zFormula ?? '',
-    rotate_x: c.overrides?.rotateX ?? null,
-    rotate_y: c.overrides?.rotateY ?? null,
-    rotate_z: c.overrides?.rotateZ ?? null,
-    overrides: Object.keys(overrides).length > 0 ? overrides : null,
+    placementOverride: c.placementOverride,
   };
+  if (Object.keys(overrides).length > 0) result.overrides = overrides;
+  return result;
 }
 
 function hardwarePlacementFromApi(

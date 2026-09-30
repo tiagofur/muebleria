@@ -5201,6 +5201,168 @@
           }
         }
       }
+    },
+    "/catalog/modules": {
+      "get": {
+        "operationId": "listCatalogModules",
+        "responses": {
+          "200": {
+            "description": "Catalog module templates for the workshop",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogModule"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCatalogModule",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogModuleWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Module created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogModule"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "description": "Rejected typed-parameter definitions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterDefinitionInvalidError"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/catalog/modules/{moduleId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ModuleId"
+        }
+      ],
+      "get": {
+        "operationId": "getCatalogModule",
+        "responses": {
+          "200": {
+            "description": "The module template",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogModule"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateCatalogModule",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogModuleWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Module updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogModule"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "description": "Rejected typed-parameter definitions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParameterDefinitionInvalidError"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5360,6 +5522,15 @@
       },
       "HardwareAssetId": {
         "name": "assetId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "ModuleId": {
+        "name": "moduleId",
         "in": "path",
         "required": true,
         "schema": {
@@ -14143,6 +14314,920 @@
           },
           "customValue": {}
         }
+      },
+      "FurnitureParameterType": {
+        "type": "string",
+        "enum": [
+          "number",
+          "string",
+          "boolean",
+          "enum"
+        ]
+      },
+      "FurnitureParameterUnit": {
+        "type": "string",
+        "enum": [
+          "mm",
+          "deg",
+          "count"
+        ]
+      },
+      "FurnitureParameterCategory": {
+        "type": "string",
+        "enum": [
+          "dimension",
+          "configuration",
+          "style",
+          "hardware",
+          "metadata"
+        ]
+      },
+      "FurnitureParameterBindingKind": {
+        "type": "string",
+        "enum": [
+          "componentQuantity",
+          "componentCondition",
+          "dimensionColumn",
+          "structureRelationship"
+        ]
+      },
+      "CatalogFurnitureType": {
+        "type": "string",
+        "enum": [
+          "inferior",
+          "superior",
+          "alto"
+        ]
+      },
+      "CatalogBaseMode": {
+        "type": "string",
+        "enum": [
+          "none",
+          "plinth_board",
+          "plinth_strip",
+          "legs"
+        ]
+      },
+      "CatalogEdgeSide": {
+        "type": "string",
+        "enum": [
+          "L1",
+          "L2",
+          "W1",
+          "W2"
+        ]
+      },
+      "CatalogDimensionRuleSource": {
+        "type": "string",
+        "enum": [
+          "assembly_width",
+          "assembly_depth",
+          "assembly_height",
+          "selected_variant"
+        ]
+      },
+      "CatalogAssemblyAxisRef": {
+        "type": "string",
+        "enum": [
+          "min",
+          "max",
+          "center"
+        ]
+      },
+      "FurnitureParameterDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "integer"
+          },
+          "type": {
+            "$ref": "#/components/schemas/FurnitureParameterType"
+          },
+          "defaultValue": {},
+          "required": {
+            "type": "boolean"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/FurnitureParameterUnit"
+          },
+          "category": {
+            "$ref": "#/components/schemas/FurnitureParameterCategory"
+          },
+          "min": {
+            "type": "number"
+          },
+          "max": {
+            "type": "number"
+          },
+          "step": {
+            "type": "number"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "integer": {
+            "type": "boolean"
+          },
+          "maxLength": {
+            "type": "integer"
+          },
+          "binding": {
+            "$ref": "#/components/schemas/FurnitureParameterBinding"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "type",
+          "category",
+          "required"
+        ],
+        "description": "Typed, versioned furniture parameter definition (#483/#486). The persisted shape may never carry a dimensionColumn binding or a reserved dimension name; the server owns validation and identity."
+      },
+      "FurnitureParameterBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FurnitureParameterBindingKind"
+          },
+          "componentId": {
+            "type": "string"
+          },
+          "dimension": {
+            "type": "string"
+          },
+          "relationship": {
+            "$ref": "#/components/schemas/FurnitureParameterRelationshipBinding"
+          }
+        },
+        "required": [
+          "version",
+          "kind"
+        ]
+      },
+      "FurnitureParameterRelationshipBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "sourceRole": {
+            "type": "string"
+          },
+          "sourceFace": {
+            "type": "string"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureParameterRelationshipTarget"
+            }
+          },
+          "station": {
+            "$ref": "#/components/schemas/FurnitureParameterRelationshipStationMargins"
+          },
+          "families": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureParameterRelationshipFamily"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "sourceRole",
+          "targets"
+        ]
+      },
+      "FurnitureParameterRelationshipTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "componentId": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "face": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "componentId",
+          "role"
+        ]
+      },
+      "FurnitureParameterRelationshipStationMargins": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "startMarginMm": {
+            "type": "number"
+          },
+          "endMarginMm": {
+            "type": "number"
+          }
+        }
+      },
+      "FurnitureParameterRelationshipFamily": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "familyId": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "startMarginMm": {
+            "type": "number"
+          },
+          "endMarginMm": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "familyId",
+          "count"
+        ]
+      },
+      "CatalogDimensionPreset": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "width_mm": {
+            "type": "integer"
+          },
+          "height_mm": {
+            "type": "integer"
+          },
+          "depth_mm": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "width_mm",
+          "height_mm",
+          "depth_mm"
+        ]
+      },
+      "CatalogEdgeAssignment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "side": {
+            "$ref": "#/components/schemas/CatalogEdgeSide"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "side",
+          "enabled"
+        ]
+      },
+      "CatalogBoardPart": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "length_mm": {
+            "type": "integer"
+          },
+          "width_mm": {
+            "type": "integer"
+          },
+          "edges": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CatalogEdgeAssignment"
+            }
+          },
+          "option_role": {
+            "type": "string"
+          },
+          "length_formula": {
+            "type": "string"
+          },
+          "width_formula": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "quantity",
+          "length_mm",
+          "width_mm",
+          "edges",
+          "option_role"
+        ]
+      },
+      "CatalogHardwareLine": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "description_override": {
+            "type": "string"
+          },
+          "option_role": {
+            "type": "string"
+          },
+          "hardware_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "quantity",
+          "option_role"
+        ]
+      },
+      "CatalogHardwareRelativePosition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "xMm": {
+            "type": "number"
+          },
+          "yMm": {
+            "type": "number"
+          },
+          "xFormula": {
+            "type": "string"
+          },
+          "yFormula": {
+            "type": "string"
+          },
+          "xPercent": {
+            "type": "number"
+          },
+          "yPercent": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "xMm",
+          "yMm"
+        ]
+      },
+      "CatalogHardwareRotationDeg": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "z": {
+            "type": "number"
+          }
+        }
+      },
+      "CatalogHardwarePlacement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "hardwareId": {
+            "type": "string"
+          },
+          "anchorFace": {
+            "type": "string"
+          },
+          "relativePosition": {
+            "$ref": "#/components/schemas/CatalogHardwareRelativePosition"
+          },
+          "rotationDeg": {
+            "$ref": "#/components/schemas/CatalogHardwareRotationDeg"
+          },
+          "scale": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "hardwareId",
+          "anchorFace",
+          "relativePosition"
+        ]
+      },
+      "CatalogAssemblyAxisPlacement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "$ref": "#/components/schemas/CatalogAssemblyAxisRef"
+          },
+          "offsetMm": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ref",
+          "offsetMm"
+        ]
+      },
+      "CatalogAssemblyAnchorRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "x": {
+            "$ref": "#/components/schemas/CatalogAssemblyAxisPlacement"
+          },
+          "y": {
+            "$ref": "#/components/schemas/CatalogAssemblyAxisPlacement"
+          },
+          "z": {
+            "$ref": "#/components/schemas/CatalogAssemblyAxisPlacement"
+          },
+          "rotationDeg": {
+            "$ref": "#/components/schemas/CatalogHardwareRotationDeg"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "z"
+        ]
+      },
+      "CatalogAssemblyDimensionRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/CatalogDimensionRuleSource"
+          },
+          "variantSetId": {
+            "type": "string"
+          },
+          "multiplier": {
+            "type": "number"
+          },
+          "offsetMm": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "source",
+          "offsetMm"
+        ]
+      },
+      "CatalogComponentOverrides": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "edges": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CatalogEdgeAssignment"
+            }
+          },
+          "lengthFormula": {
+            "type": "string"
+          },
+          "widthFormula": {
+            "type": "string"
+          },
+          "xFormula": {
+            "type": "string"
+          },
+          "yFormula": {
+            "type": "string"
+          },
+          "zFormula": {
+            "type": "string"
+          },
+          "rotateX": {
+            "type": "integer"
+          },
+          "rotateY": {
+            "type": "integer"
+          },
+          "rotateZ": {
+            "type": "integer"
+          },
+          "hardwarePlacements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogHardwarePlacement"
+            }
+          },
+          "lengthRule": {
+            "$ref": "#/components/schemas/CatalogAssemblyDimensionRule"
+          },
+          "widthRule": {
+            "$ref": "#/components/schemas/CatalogAssemblyDimensionRule"
+          },
+          "placementRule": {
+            "$ref": "#/components/schemas/CatalogAssemblyAnchorRule"
+          }
+        }
+      },
+      "CatalogComponentInstance": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "componentId": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "placementOverride": {
+            "type": "string"
+          },
+          "overrides": {
+            "$ref": "#/components/schemas/CatalogComponentOverrides"
+          }
+        },
+        "required": [
+          "componentId",
+          "quantity"
+        ]
+      },
+      "CatalogAgregadoPosition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "x_formula": {
+            "type": "string"
+          },
+          "y_formula": {
+            "type": "string"
+          },
+          "z_formula": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogAgregadoDimensions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "width_formula": {
+            "type": "string"
+          },
+          "height_formula": {
+            "type": "string"
+          },
+          "depth_formula": {
+            "type": "string"
+          }
+        }
+      },
+      "CatalogAgregadoInstance": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agregado_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "layout_direction": {
+            "type": "string"
+          },
+          "gap_mm": {
+            "type": "number"
+          },
+          "position": {
+            "$ref": "#/components/schemas/CatalogAgregadoPosition"
+          },
+          "dimensions": {
+            "$ref": "#/components/schemas/CatalogAgregadoDimensions"
+          },
+          "mirrored": {
+            "type": "boolean"
+          },
+          "option_overrides": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "agregado_id",
+          "quantity"
+        ]
+      },
+      "CatalogModule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "base_labor_cost": {
+            "type": "number"
+          },
+          "width_mm": {
+            "type": "integer"
+          },
+          "height_mm": {
+            "type": "integer"
+          },
+          "depth_mm": {
+            "type": "integer"
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "structure_id": {
+            "type": "string"
+          },
+          "furniture_type": {
+            "$ref": "#/components/schemas/CatalogFurnitureType"
+          },
+          "base_mode": {
+            "$ref": "#/components/schemas/CatalogBaseMode"
+          },
+          "base_clearance_mm": {
+            "type": "integer"
+          },
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogDimensionPreset"
+            }
+          },
+          "parameter_definitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureParameterDefinition"
+            }
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogComponentInstance"
+            }
+          },
+          "agregados": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogAgregadoInstance"
+            }
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "board_parts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CatalogBoardPart"
+            }
+          },
+          "hardware_lines": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CatalogHardwareLine"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "description": "Server-owned optimistic-concurrency token. Legacy backends may omit it; writes then fail closed."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "base_labor_cost"
+        ],
+        "description": "Catalog furniture module template. version is the server-owned optimistic-concurrency token (strong ETag \"v<N>\"); request bodies never set it — If-Match is the only expected-version authority on PUT. Composition fields the editor does not author ride along verbatim."
+      },
+      "CatalogModuleWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "base_labor_cost": {
+            "type": "number"
+          },
+          "width_mm": {
+            "type": "integer"
+          },
+          "height_mm": {
+            "type": "integer"
+          },
+          "depth_mm": {
+            "type": "integer"
+          },
+          "categoryId": {
+            "type": "string"
+          },
+          "structure_id": {
+            "type": "string"
+          },
+          "furniture_type": {
+            "type": "string",
+            "description": "Empty string = unset (legacy); the read projection omits unset values."
+          },
+          "base_mode": {
+            "type": "string",
+            "description": "Empty string = unset (legacy); the read projection omits unset values."
+          },
+          "base_clearance_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogDimensionPreset"
+            }
+          },
+          "parameter_definitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureParameterDefinition"
+            }
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogComponentInstance"
+            }
+          },
+          "agregados": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogAgregadoInstance"
+            }
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "board_parts": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CatalogBoardPart"
+            }
+          },
+          "hardware_lines": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CatalogHardwareLine"
+            }
+          },
+          "version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ],
+        "description": "Module write payload (exactly what the web catalog store emits). Vocabulary fields accept empty strings (unset); version is echoed only and ignored — If-Match carries the expected version."
+      },
+      "FurnitureParameterDefinitionIssue": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "parameter": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message"
+        ]
+      },
+      "ParameterDefinitionInvalidError": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureParameterDefinitionIssue"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "issues"
+        ],
+        "description": "Rejected typed-parameter write. Same envelope as the furniture read surface's PARAMETER_DEFINITION_INVALID."
       }
     }
   }

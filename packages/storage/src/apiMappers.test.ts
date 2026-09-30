@@ -1080,8 +1080,12 @@ describe('component formula mappers', () => {
     };
     const api = moduleToApi(mod);
     const comps = api.components as Record<string, unknown>[];
-    expect(comps[0]?.length_formula).toBe('H-5');
-    expect(comps[0]?.x_formula).toBe('T');
+    // #497 T3: the legacy snake_case duplicates are gone from the wire —
+    // formulas live only in the camelCase overrides bag the server reads.
+    expect(comps[0]?.length_formula).toBeUndefined();
+    const overrides = comps[0]?.overrides as Record<string, unknown>;
+    expect(overrides.lengthFormula).toBe('H-5');
+    expect(overrides.xFormula).toBe('T');
     const round = moduleFromApi(api as Record<string, unknown>);
     expect(round.components?.[0]?.overrides?.lengthFormula).toBe('H-5');
     expect(round.components?.[0]?.overrides?.widthFormula).toBe('W-10');
