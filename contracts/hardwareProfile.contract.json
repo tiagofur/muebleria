@@ -1,0 +1,113 @@
+{
+  "schema": "granete.hardware-profile.contract.v1",
+  "description": "Hardware Profile domain contract fixture (#912), consumed by Go (domain hardware_profile_test) and TS (packages/domain hardwareProfile.test) — one source of valid and fail-closed expectations for both runtimes. References only: profiles reference catalog hardware by ID and versioned recipes; no prices or units are copied.",
+  "profiles": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "code": "PERF-SPAX-50",
+      "name": "Unión lateral SPAX 4x50",
+      "description": "Tornillo SPAX 4x50 por unión canto-cara simple.",
+      "revision": "rev-1",
+      "items": [
+        { "hardwareId": "22222222-2222-4222-8222-222222222222", "quantity": 2, "applicationRole": "screw" }
+      ],
+      "recipeRef": { "recipeId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1" },
+      "active": true
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "code": "PERF-MINIFIX-DOWEL",
+      "name": "Minifix 15 + taquete 8x30",
+      "description": "Perfil compuesto: excéntrica minifix y taquete con cantidades independientes.",
+      "revision": "rev-2",
+      "items": [
+        { "hardwareId": "44444444-4444-4444-8444-444444444444", "quantity": 1, "applicationRole": "cam" },
+        { "hardwareId": "55555555-5555-4555-8555-555555555555", "quantity": 1, "applicationRole": "dowel" }
+      ],
+      "recipeRef": { "recipeId": "test:synthetic-fixed-shelf", "recipeRevision": "test-1" },
+      "active": true
+    }
+  ],
+  "assignments": [
+    { "componentId": "66666666-6666-4666-8666-666666666666", "side": "left", "profileId": "11111111-1111-4111-8111-111111111111" },
+    { "componentId": "66666666-6666-4666-8666-666666666666", "side": "right", "profileId": "33333333-3333-4333-8333-333333333333" }
+  ],
+  "invalidProfiles": [
+    {
+      "case": "blank-revision",
+      "profile": {
+        "id": "77777777-7777-4777-8777-777777777777", "code": "PERF-NO-REV", "name": "Sin revisión",
+        "revision": "", "items": [{ "hardwareId": "22222222-2222-4222-8222-222222222222", "quantity": 1 }], "active": true
+      },
+      "expectedIssueCodes": ["PROFILE_INVALID"],
+      "expectedPaths": ["hardwareProfile.revision"]
+    },
+    {
+      "case": "no-items",
+      "profile": {
+        "id": "77777777-7777-4777-8777-777777777778", "code": "PERF-EMPTY", "name": "Vacío",
+        "revision": "rev-1", "items": [], "active": true
+      },
+      "expectedIssueCodes": ["PROFILE_INVALID"],
+      "expectedPaths": ["hardwareProfile.items"]
+    },
+    {
+      "case": "non-positive-quantity",
+      "profile": {
+        "id": "77777777-7777-4777-8777-777777777779", "code": "PERF-ZERO", "name": "Cantidad cero",
+        "revision": "rev-1", "items": [{ "hardwareId": "22222222-2222-4222-8222-222222222222", "quantity": 0 }], "active": true
+      },
+      "expectedIssueCodes": ["PROFILE_INVALID"],
+      "expectedPaths": ["hardwareProfile.items[0].quantity"]
+    },
+    {
+      "case": "duplicate-hardware",
+      "profile": {
+        "id": "77777777-7777-4777-8777-777777777780", "code": "PERF-DUP", "name": "Duplicado",
+        "revision": "rev-1",
+        "items": [
+          { "hardwareId": "22222222-2222-4222-8222-222222222222", "quantity": 1 },
+          { "hardwareId": "22222222-2222-4222-8222-222222222222", "quantity": 1 }
+        ],
+        "active": true
+      },
+      "expectedIssueCodes": ["PROFILE_INVALID"],
+      "expectedPaths": ["hardwareProfile.items[1].hardwareId"]
+    },
+    {
+      "case": "half-recipe-ref",
+      "profile": {
+        "id": "77777777-7777-4777-8777-777777777781", "code": "PERF-HALF-REF", "name": "Receta a medias",
+        "revision": "rev-1",
+        "items": [{ "hardwareId": "22222222-2222-4222-8222-222222222222", "quantity": 1 }],
+        "recipeRef": { "recipeId": "test:synthetic-fixed-shelf", "recipeRevision": "" },
+        "active": true
+      },
+      "expectedIssueCodes": ["PROFILE_INVALID"],
+      "expectedPaths": ["hardwareProfile.recipeRef"]
+    },
+    {
+      "case": "bad-code",
+      "profile": {
+        "id": "77777777-7777-4777-8777-777777777782", "code": "PERF ESPACIO", "name": "Código con espacio",
+        "revision": "rev-1", "items": [{ "hardwareId": "22222222-2222-4222-8222-222222222222", "quantity": 1 }], "active": true
+      },
+      "expectedIssueCodes": ["PROFILE_INVALID"],
+      "expectedPaths": ["hardwareProfile.code"]
+    }
+  ],
+  "invalidAssignments": [
+    {
+      "case": "unknown-side",
+      "assignment": { "componentId": "66666666-6666-4666-8666-666666666666", "side": "L1", "profileId": "11111111-1111-4111-8111-111111111111" },
+      "expectedIssueCodes": ["ASSIGNMENT_INVALID"],
+      "expectedPaths": ["side"]
+    },
+    {
+      "case": "blank-profile",
+      "assignment": { "componentId": "66666666-6666-4666-8666-666666666666", "side": "left", "profileId": "" },
+      "expectedIssueCodes": ["ASSIGNMENT_INVALID"],
+      "expectedPaths": ["profileId"]
+    }
+  ]
+}
