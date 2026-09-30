@@ -493,3 +493,97 @@ console.log(JSON.stringify({
   failures: failed
 }, null, 2));
 process.exit(failed.length === 0 ? 0 : 1);
+
+// ------------------------------------------------ #497 T8 cross-surface
+// The SAME golden artifact the Go chain test generates drives the SketchUp
+// dialog form: the exact published parameter set a real PostgreSQL served
+// (draft + projected dimensions) renders the right control per type, seeds
+// the explicit false / empty-string defaults, and submits typed values
+// through the onChange contract.
+
+const CROSS_SURFACE_FIXTURE = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '../../../../contracts/furnitureAuthoringCrossSurface.fixture.json'), 'utf8')
+);
+
+test('cross-surface golden: getDefaultParams seeds every published default, explicit false and "" included', () => {
+  const { sandbox, run } = buildSandbox();
+  run(MODULE_SOURCE);
+  const pf = sandbox.window.GraneteUI.paramForm;
+  const def = { parameters: CROSS_SURFACE_FIXTURE.expected.publishedParameters };
+
+  const defaults = { ...pf.getDefaultParams(def) };
+  assert.strictEqual(defaults.shelfCount, 2);
+  assert.strictEqual(defaults.doorPresence, true);
+  assert.strictEqual(defaults.softClose, false, 'explicit false default must survive');
+  assert.strictEqual(defaults.doorStyle, 'slab');
+  assert.strictEqual(defaults.clientNote, '', 'explicit empty-string default must survive');
+  assert.strictEqual(defaults.widthMm, 600);
+  assert.strictEqual(defaults.heightMm, 720);
+  assert.strictEqual(defaults.depthMm, 590);
+});
+
+test('cross-surface golden: every published parameter renders its type-correct control', () => {
+  const { sandbox, run } = buildSandbox();
+  run(MODULE_SOURCE);
+  const pf = sandbox.window.GraneteUI.paramForm;
+  const container = createMockElement('div');
+  const def = { parameters: CROSS_SURFACE_FIXTURE.expected.publishedParameters };
+  const changes = [];
+  pf.renderParamForm(container, def, {}, (name, value, unit) => changes.push({ name, value, unit }));
+
+  const published = CROSS_SURFACE_FIXTURE.expected.publishedParameters;
+
+  // mm dimension projections: dim inputs with the served min/max/step.
+  for (const name of ['widthMm', 'heightMm', 'depthMm']) {
+    const spec = published.find((p) => p.name === name);
+    const input = find(container, (n) => n.attributes['aria-label'] === spec.label)[0];
+    assert.ok(input, `${name} renders its dim input`);
+    assert.strictEqual(input.type, 'number');
+    assert.strictEqual(input.value, spec.defaultValue);
+    assert.strictEqual(input.min, spec.min);
+    assert.strictEqual(input.max, spec.max);
+  }
+
+  // number + count (shelfCount): numeric control honouring min/max.
+  const shelf = published.find((p) => p.name === 'shelfCount');
+  const shelfInput = find(container, (n) => n.attributes['aria-label'] === 'Cantidad de estantes'
+    && n.tagName === 'INPUT')[0];
+  assert.ok(shelfInput, 'shelfCount renders a numeric input');
+  assert.strictEqual(shelfInput.type, 'number');
+
+  // boolean (softClose) with explicit false: checkbox + No badge.
+  const softCloseBadge = find(container, (n) => n.className === 'param-value-badge'
+    && n.textContent === 'No');
+  assert.ok(softCloseBadge.length >= 1, 'explicit false default renders the No badge');
+  const softCloseCheckbox = find(container, (n) => n.className === 'param-checkbox'
+    && n.attributes['aria-label'] === 'Cierre suave')[0];
+  assert.strictEqual(softCloseCheckbox.checked, false, 'checkbox reflects the explicit false default');
+
+  // enum (doorStyle): select with the ordered options, default selected.
+  const selects = find(container, (n) => n.tagName === 'SELECT');
+  const styleSelect = selects.find((n) => n.children.some((o) => o.value === 'shaker'));
+  assert.ok(styleSelect, 'doorStyle renders a select with its options');
+  assert.deepStrictEqual(styleSelect.children.map((o) => o.value), ['slab', 'shaker']);
+  assert.strictEqual(styleSelect.children[0].selected, true, 'slab default selected');
+
+  // string (clientNote): text input with the served maxLength.
+  const noteInput = find(container, (n) => n.tagName === 'INPUT' && n.attributes['aria-label'] === 'Nota del cliente')[0];
+  assert.ok(noteInput, 'clientNote renders a text input');
+  assert.strictEqual(String(noteInput.maxLength), '64');
+
+  // Submit contract: user edits reach onChange as typed values.
+  shelfInput.value = '3';
+  shelfInput.fire('change');
+  assert.deepStrictEqual(
+    changes.find((c) => c.name === 'shelfCount'),
+    { name: 'shelfCount', value: 3, unit: 'count' },
+    'submitting a value reaches onChange typed (number + unit)'
+  );
+  styleSelect.value = 'shaker';
+  styleSelect.fire('change');
+  assert.deepStrictEqual(
+    changes.find((c) => c.name === 'doorStyle'),
+    { name: 'doorStyle', value: 'shaker', unit: undefined },
+    'enum submit reaches onChange with the chosen option'
+  );
+});

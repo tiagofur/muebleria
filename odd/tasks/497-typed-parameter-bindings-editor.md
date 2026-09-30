@@ -352,7 +352,8 @@ treated as missing; no SketchUp hand-written adapter.
     the existing `Furniture3DViewer`/`ModuleScene3D` (render only, never
     computes consequences).
 
-- [ ] **T8 — Cross-surface fixtures + gates**
+- [x] **T8 — Cross-surface fixtures + gates** — DONE (see the 2026-09-30
+  evidence entry for the acceptance map).
   - Route: inline.
   - Trigger evidence: the issue requires an E2E fixture proving React →
     revision change → SketchUp refresh → inspector control → submit → Go
@@ -601,11 +602,72 @@ treated as missing; no SketchUp hand-written adapter.
   web 561). NOT_RUN: browser gate (CI). Delivery: partial (PR6; remaining
   acceptance T8).
 
+- 2026-09-30: **T8 implemented** — one golden artifact
+  (`contracts/furnitureAuthoringCrossSurface.fixture.json`), every surface,
+  one authority. The hand-authored block is the exact React write wire
+  (`moduleWrite` = CatalogModuleWrite: 5 definitions exercising all four
+  types, both authorable bindings, an explicit boolean-false default and an
+  explicit empty-string default) plus sample values; the generated block
+  (`expected`: definitionHash + publishedParameters + moduleServed) is
+  produced by the Go chain test on real PostgreSQL under the granete_app
+  role (UPDATE_CROSS_SURFACE_GOLDEN=1; deterministic — stable across 3 runs).
+  Consumers: (a) **Go** `TestFurnitureAuthoringCrossSurfaceChain` (storage,
+  real RLS): React-shaped POST create (ETag v1) → catalog revision ADVANCES →
+  served definition (hash + published set incl. projected dimensions) → the
+  #477 resolve ACCEPTS the sample values against the advanced revision →
+  served module wire pinned → persisted definitions byte-identical to the
+  authored wire; (b) **TS domain**: the published set passes the
+  published-boundary mirror and evaluates the samples with zero issues
+  (explicit false/"" survive; a forbidden sample is rejected — mirror agrees
+  with the server); (c) **TS storage**: served module validates against the
+  generated CatalogModule contract and re-emits identical definitions (React
+  readback→re-save never drifts); (d) **Ruby**: the extension's catalog
+  contract ACCEPTS the exact published definition (SketchUp refresh gate);
+  (e) **SketchUp dialog JS**: the golden drives granete-param-form —
+  per-type controls (mm dim inputs with served min/max/step, numeric, enum
+  select with ordered options + default selected, boolean checkbox + No
+  badge for the explicit false, string input with maxLength), defaults
+  seeded (explicit false and "" included) and typed submits through
+  onChange; (f) **Browser (V2, real)**: `parameters-authoring.spec.ts` in
+  the organization gate — a real browser authors the parameter with its
+  binding in the React editor, Guardar settles (editor closes only on
+  server acceptance), the API readback shows the persisted definition, the
+  published revision ADVANCED with the sha256 hash, React reads it back
+  after reload, and organization B never sees it (RLS isolation).
+  **[organization-gate] PASS 3/3 locally.**
+  **Two real defects the chain caught and fixed:** (1) `module_components`
+  ordered by the random row id on created_at ties → non-deterministic
+  served wire (now `ORDER BY created_at, component_id`); (2) the generated
+  client validated request bodies BEFORE JSON.stringify semantics — any
+  mapper emitting an optional as explicit undefined (e.g.
+  componentInstanceToApi's placementOverride) failed validation for a
+  payload the wire accepts; the validator now prunes undefined keys first
+  (regression test pins the unset-optional write).
+  **Acceptance map (issue criteria → evidence):** create/edit/order all
+  types → T5 panel suite; explicit false/"" round-trip → T5 + golden (Go
+  wire, TS, JS defaults); constraints match backend exactly → shared
+  validator + preview 422 + cross-surface evaluation; stable-ID bindings +
+  honest ambiguity/incompatibility → T6 suite; reserved dimensions
+  unredefinable → T5 read-only projections + persisted validator; metadata
+  without behavioral binding → T5/T6 + preview 422; impact before
+  incompatible edits → T7; typed stale conflict without overwrite → T2 +
+  T7 (+ org-gate save path); authoritative preview with structured issues →
+  T4 + T7; SketchUp consumes the exact definition with no parallel
+  transformation → Ruby + JS consume the SAME golden, Go resolve accepts;
+  keyboard/a11y + contract errors + stale + cross-org isolation → suite
+  aria/roving assertions, 422 typed tests, T7, browser spec test 3.
+  **NOT_RUN (V2): real-host SketchUp smoke** of the full chain (needs the
+  owner's host; the extension-side segments are proven headlessly on the
+  real rendering/contract code). Delivery: partial with exactly that
+  remainder — the owner runs the host smoke or accepts the chain and closes
+  manually.
+
 ## Next step
 
-Publish PR6 (T7) with `Refs #497 + Delivery: partial`; then T8 (cross-surface
-fixtures + gates) — the final slice; if all acceptance is demonstrated, its
-PR carries `Closes #497 + Delivery: complete`.
+Publish PR7 (T8) with `Refs #497 + Delivery: partial` naming the single
+remainder (real-host SketchUp smoke). After merge, the owner either runs the
+host smoke and closes #497, or accepts the headless+browser chain as the E2E
+fixture evidence and closes manually.
 
 ## Next step
 

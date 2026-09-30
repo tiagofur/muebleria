@@ -1,0 +1,362 @@
+{
+  "componentDoor": {
+    "code": "XSURF-PUERTA",
+    "geometry_kind": "rectangular_board",
+    "id": "f4970000-0000-0000-0000-000000000102",
+    "length_mm": 700,
+    "name": "Puerta cross-surface",
+    "placement": "frontal",
+    "thickness_mm": 18,
+    "width_mm": 590
+  },
+  "componentShelf": {
+    "code": "XSURF-EST",
+    "geometry_kind": "rectangular_board",
+    "id": "f4970000-0000-0000-0000-000000000101",
+    "length_mm": 590,
+    "name": "Estante cross-surface",
+    "placement": "interno",
+    "thickness_mm": 18,
+    "width_mm": 600
+  },
+  "description": "#497 T8 cross-surface golden: the exact module a React editor authors (moduleWrite, the CatalogModuleWrite wire moduleToApi emits), the sample values an instantiation submits, and the server-computed truth (expected) every surface consumes. Generated block: internal/storage TestFurnitureAuthoringCrossSurfaceChain with UPDATE_CROSS_SURFACE_GOLDEN=1 over a real PostgreSQL. Consumers: Go (save -\u003e served catalog -\u003e resolve accepts), TS domain (published set validates + evaluates), TS storage (readback round-trip), Ruby (extension catalog contract accepts), SketchUp dialog JS (per-type controls + defaults + submit). The persisted definitions deliberately exercise all four parameter types, both authorable binding kinds, an explicit boolean false default and an explicit empty-string default.",
+  "expected": {
+    "definitionHash": "sha256-1cf74fa5371f78a617a3628831351f4cad3e6dccd79705afd8f927899fee94ee",
+    "moduleServed": {
+      "base_labor_cost": 0,
+      "board_parts": [],
+      "code": "MOD-XSURF-497",
+      "components": [
+        {
+          "componentId": "f4970000-0000-0000-0000-000000000101",
+          "quantity": 1
+        },
+        {
+          "componentId": "f4970000-0000-0000-0000-000000000102",
+          "quantity": 1
+        }
+      ],
+      "depth_mm": 590,
+      "furniture_type": "inferior",
+      "hardware_lines": [],
+      "height_mm": 720,
+      "id": "f4970000-0000-0000-0000-0000000001a1",
+      "name": "Mueble cross-surface",
+      "notes": "Fixture cross-surface #497",
+      "parameter_definitions": [
+        {
+          "binding": {
+            "componentId": "f4970000-0000-0000-0000-000000000101",
+            "kind": "componentQuantity",
+            "version": 1
+          },
+          "category": "configuration",
+          "defaultValue": 2,
+          "integer": true,
+          "label": "Cantidad de estantes",
+          "max": 8,
+          "min": 0,
+          "name": "shelfCount",
+          "required": true,
+          "sortOrder": 1,
+          "step": 1,
+          "type": "number",
+          "unit": "count"
+        },
+        {
+          "binding": {
+            "componentId": "f4970000-0000-0000-0000-000000000102",
+            "kind": "componentCondition",
+            "version": 1
+          },
+          "category": "configuration",
+          "defaultValue": true,
+          "label": "Incluye puerta",
+          "name": "doorPresence",
+          "required": true,
+          "sortOrder": 2,
+          "type": "boolean"
+        },
+        {
+          "category": "metadata",
+          "defaultValue": false,
+          "label": "Cierre suave",
+          "name": "softClose",
+          "required": false,
+          "sortOrder": 3,
+          "type": "boolean"
+        },
+        {
+          "category": "metadata",
+          "defaultValue": "slab",
+          "label": "Estilo de frente",
+          "name": "doorStyle",
+          "options": [
+            "slab",
+            "shaker"
+          ],
+          "required": false,
+          "sortOrder": 4,
+          "type": "enum"
+        },
+        {
+          "category": "metadata",
+          "defaultValue": "",
+          "label": "Nota del cliente",
+          "maxLength": 64,
+          "name": "clientNote",
+          "required": false,
+          "sortOrder": 5,
+          "type": "string"
+        }
+      ],
+      "presets": [
+        {
+          "depth_mm": 560,
+          "height_mm": 720,
+          "id": "f4970000-0000-0000-0000-0000000001b1",
+          "name": "Estándar",
+          "width_mm": 600
+        }
+      ],
+      "version": 0,
+      "width_mm": 600
+    },
+    "publishedParameters": [
+      {
+        "binding": {
+          "componentId": "f4970000-0000-0000-0000-000000000101",
+          "kind": "componentQuantity",
+          "version": 1
+        },
+        "category": "configuration",
+        "defaultValue": 2,
+        "integer": true,
+        "label": "Cantidad de estantes",
+        "max": 8,
+        "min": 0,
+        "name": "shelfCount",
+        "required": true,
+        "sortOrder": 1,
+        "step": 1,
+        "type": "number",
+        "unit": "count"
+      },
+      {
+        "binding": {
+          "componentId": "f4970000-0000-0000-0000-000000000102",
+          "kind": "componentCondition",
+          "version": 1
+        },
+        "category": "configuration",
+        "defaultValue": true,
+        "label": "Incluye puerta",
+        "name": "doorPresence",
+        "required": true,
+        "sortOrder": 2,
+        "type": "boolean"
+      },
+      {
+        "category": "metadata",
+        "defaultValue": false,
+        "label": "Cierre suave",
+        "name": "softClose",
+        "required": false,
+        "sortOrder": 3,
+        "type": "boolean"
+      },
+      {
+        "category": "metadata",
+        "defaultValue": "slab",
+        "label": "Estilo de frente",
+        "name": "doorStyle",
+        "options": [
+          "slab",
+          "shaker"
+        ],
+        "required": false,
+        "sortOrder": 4,
+        "type": "enum"
+      },
+      {
+        "category": "metadata",
+        "defaultValue": "",
+        "label": "Nota del cliente",
+        "maxLength": 64,
+        "name": "clientNote",
+        "required": false,
+        "sortOrder": 5,
+        "type": "string"
+      },
+      {
+        "binding": {
+          "dimension": "widthMm",
+          "kind": "dimensionColumn",
+          "version": 1
+        },
+        "category": "dimension",
+        "defaultValue": 600,
+        "integer": true,
+        "label": "Ancho (mm)",
+        "max": 1200,
+        "min": 300,
+        "name": "widthMm",
+        "required": true,
+        "sortOrder": 10,
+        "step": 10,
+        "type": "number",
+        "unit": "mm"
+      },
+      {
+        "binding": {
+          "dimension": "heightMm",
+          "kind": "dimensionColumn",
+          "version": 1
+        },
+        "category": "dimension",
+        "defaultValue": 720,
+        "integer": true,
+        "label": "Alto (mm)",
+        "max": 1440,
+        "min": 360,
+        "name": "heightMm",
+        "required": true,
+        "sortOrder": 20,
+        "step": 10,
+        "type": "number",
+        "unit": "mm"
+      },
+      {
+        "binding": {
+          "dimension": "depthMm",
+          "kind": "dimensionColumn",
+          "version": 1
+        },
+        "category": "dimension",
+        "defaultValue": 590,
+        "integer": true,
+        "label": "Fondo (mm)",
+        "max": 590,
+        "min": 560,
+        "name": "depthMm",
+        "required": true,
+        "sortOrder": 30,
+        "step": 10,
+        "type": "number",
+        "unit": "mm"
+      }
+    ]
+  },
+  "moduleWrite": {
+    "agregados": [],
+    "base_labor_cost": 0,
+    "base_mode": "",
+    "board_parts": null,
+    "categoryId": "",
+    "code": "MOD-XSURF-497",
+    "components": [
+      {
+        "componentId": "f4970000-0000-0000-0000-000000000101",
+        "quantity": 1
+      },
+      {
+        "componentId": "f4970000-0000-0000-0000-000000000102",
+        "quantity": 1
+      }
+    ],
+    "depth_mm": 590,
+    "furniture_type": "inferior",
+    "hardware_lines": [],
+    "height_mm": 720,
+    "id": "f4970000-0000-0000-0000-0000000001a1",
+    "image_url": "",
+    "name": "Mueble cross-surface",
+    "notes": "Fixture cross-surface #497",
+    "parameter_definitions": [
+      {
+        "binding": {
+          "componentId": "f4970000-0000-0000-0000-000000000101",
+          "kind": "componentQuantity",
+          "version": 1
+        },
+        "category": "configuration",
+        "defaultValue": 2,
+        "integer": true,
+        "label": "Cantidad de estantes",
+        "max": 8,
+        "min": 0,
+        "name": "shelfCount",
+        "required": true,
+        "sortOrder": 1,
+        "step": 1,
+        "type": "number",
+        "unit": "count"
+      },
+      {
+        "binding": {
+          "componentId": "f4970000-0000-0000-0000-000000000102",
+          "kind": "componentCondition",
+          "version": 1
+        },
+        "category": "configuration",
+        "defaultValue": true,
+        "label": "Incluye puerta",
+        "name": "doorPresence",
+        "required": true,
+        "sortOrder": 2,
+        "type": "boolean"
+      },
+      {
+        "category": "metadata",
+        "defaultValue": false,
+        "label": "Cierre suave",
+        "name": "softClose",
+        "required": false,
+        "sortOrder": 3,
+        "type": "boolean"
+      },
+      {
+        "category": "metadata",
+        "defaultValue": "slab",
+        "label": "Estilo de frente",
+        "name": "doorStyle",
+        "options": [
+          "slab",
+          "shaker"
+        ],
+        "required": false,
+        "sortOrder": 4,
+        "type": "enum"
+      },
+      {
+        "category": "metadata",
+        "defaultValue": "",
+        "label": "Nota del cliente",
+        "maxLength": 64,
+        "name": "clientNote",
+        "required": false,
+        "sortOrder": 5,
+        "type": "string"
+      }
+    ],
+    "presets": [
+      {
+        "depth_mm": 560,
+        "height_mm": 720,
+        "id": "f4970000-0000-0000-0000-0000000001b1",
+        "name": "Estándar",
+        "width_mm": 600
+      }
+    ],
+    "structure_id": "",
+    "version": 0,
+    "width_mm": 600
+  },
+  "samples": {
+    "clientNote": "Entrega abril",
+    "doorPresence": true,
+    "doorStyle": "shaker",
+    "shelfCount": 3,
+    "softClose": false
+  }
+}
