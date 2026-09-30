@@ -96,9 +96,11 @@ export type BindingKindCompatibility =
 export function bindingKindCompatibility(
   parameterType: FurnitureParameter['type'],
   kind: AuthorableBindingKind,
+  integer = false,
 ): BindingKindCompatibility {
   if (kind === 'componentQuantity') {
-    return parameterType === 'number' ? 'compatible' : 'requires-integer-number';
+    // The persisted contract requires an integer number for quantities.
+    return parameterType === 'number' && integer ? 'compatible' : 'requires-integer-number';
   }
   return parameterType === 'boolean' ? 'compatible' : 'requires-boolean';
 }
@@ -106,12 +108,13 @@ export function bindingKindCompatibility(
 /** Authorable kinds for a parameter type, in stable display order. */
 export function authorableBindingKinds(
   parameterType: FurnitureParameter['type'],
+  integer = false,
 ): readonly {
   kind: 'componentQuantity' | 'componentCondition';
   compatibility: BindingKindCompatibility;
 }[] {
   return [
-    { kind: 'componentQuantity', compatibility: bindingKindCompatibility(parameterType, 'componentQuantity') },
+    { kind: 'componentQuantity', compatibility: bindingKindCompatibility(parameterType, 'componentQuantity', integer) },
     { kind: 'componentCondition', compatibility: bindingKindCompatibility(parameterType, 'componentCondition') },
   ];
 }

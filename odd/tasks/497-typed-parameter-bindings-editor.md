@@ -662,12 +662,45 @@ treated as missing; no SketchUp hand-written adapter.
   remainder — the owner runs the host smoke or accepts the chain and closes
   manually.
 
+- 2026-09-30 (later): **post-merge audit + follow-up fixes.** Implementer-led
+  audit of the whole chain (#930–#936) against the reviewer checklist
+  (independent fresh review still pending — agent quota; run Gemini/owner or
+  relaunch). Findings: **P1** `GetFullCatalog` did not select `version`, so
+  `GET /catalog/modules` served `"version": 0` — an impossible value (CHECK
+  >= 1) violating the T3 contract; contained by learn-first but cost one
+  learn-GET per save. **Fixed**: version in the SELECT+scan, an explicit
+  chain assertion (served version == 1), golden regenerated (moduleServed
+  version 1). **P2a fixed**: explicitly cleared string samples now travel as
+  "" to the preview (only non-string empties mean "sin valor"). **P2b
+  fixed**: `componentQuantity` option is disabled with its reason until
+  Entero is ticked (compatibility is integer-aware, matching the persisted
+  contract) — previously selectable and caught only at save. New panel tests
+  (18/18) incl. both behaviors.
+- 2026-09-30 (later): **#496/#937 interplay audited** (owner merged PR #937
+  "furniture definitions, layout and authoring resolve in OpenAPI contract"
+  after T8). Overlap resolved cleanly: #937's WorkshopFurnitureDefinition
+  REFERENCES this chain's FurnitureParameterDefinition schema (no parallel
+  model); no schema collisions; drift gate green with both surfaces. #937
+  shipped zero runtime tests — its generated client validates resolve
+  responses nobody had proven: closed by validating #937's
+  WorkshopFurnitureCatalogEnvelope and AuthoringResolveResponse against the
+  #497 real-wire goldens, now a PERMANENT test
+  (packages/storage/src/furnitureContractRealWire.test.ts, 2/2). The T3/T4
+  declared deviation ("resolve stays out of the spec") is SUPERSEDED by the
+  owner's #496 decision; the preview remains domain-pinned (envelope is
+  #497-scoped + golden-pinned). Modeling the preview into the spec is now
+  cheap given #937's schemas — listed as an OPTIONAL follow-up needing an
+  owner decision (touches #496 scope). P2 cleanup candidates noted: the
+  hand-rolled resolve/catalog-revision client methods now duplicate the
+  generated ones.
+
 ## Next step
 
-Publish PR7 (T8) with `Refs #497 + Delivery: partial` naming the single
-remainder (real-host SketchUp smoke). After merge, the owner either runs the
-host smoke and closes #497, or accepts the headless+browser chain as the E2E
-fixture evidence and closes manually.
+Publish the follow-up PR (audit fixes) with `Refs #497 + Delivery: partial`.
+Remaining scope for closing #497: real-host SketchUp smoke (owner) + the
+independent fresh review of the chain. Optional owner decisions: modeling
+the preview endpoint into the generated spec (post-#937), and the client
+method deduplication.
 
 ## Next step
 

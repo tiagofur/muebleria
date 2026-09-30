@@ -190,6 +190,12 @@ func TestFurnitureAuthoringCrossSurfaceChain(t *testing.T) {
 	if moduleServed == nil {
 		t.Fatal("authored module not served by GET /catalog/modules")
 	}
+	// #497 audit follow-up: the LIST must serve the real version token (a 0
+	// here means GetFullCatalog dropped it and clients cannot seed their
+	// cache from one read).
+	if servedVersion, _ := moduleServed["version"].(float64); servedVersion != 1 {
+		t.Fatalf("served module version = %v, want 1 (GetFullCatalog must carry version)", moduleServed["version"])
+	}
 	delete(moduleServed, "created_at")
 	delete(moduleServed, "updated_at")
 

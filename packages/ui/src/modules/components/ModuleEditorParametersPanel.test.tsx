@@ -448,6 +448,78 @@ describe('ModuleEditorParametersPanel (#497 T5/T6)', () => {
     expect(screen.queryByTestId('parameter-preview-accepted')).toBeNull();
   });
 
+  it('componentQuantity stays disabled for a non-integer number until Entero is ticked', async () => {
+    const user = userEvent.setup();
+    renderPanel(draftWith());
+
+    await user.click(screen.getByTestId('parameter-add'));
+    await user.type(screen.getByTestId('parameter-name'), 'shelfCount');
+    await user.type(screen.getByTestId('parameter-label'), 'Cantidad de estantes');
+    await user.selectOptions(screen.getByTestId('parameter-category'), 'configuration');
+
+    const kindSelect = screen.getByTestId('parameter-binding-kind') as HTMLSelectElement;
+    const quantityOption = Array.from(kindSelect.options).find(
+      (option) => option.value === 'componentQuantity',
+    )!;
+    expect(quantityOption.disabled).toBe(true);
+    expect(quantityOption.textContent).toMatch(/requiere número entero/);
+
+    await user.click(screen.getByTestId('parameter-integer'));
+    expect(
+      (Array.from(kindSelect.options).find((option) => option.value === 'componentQuantity') as HTMLOptionElement)
+        .disabled,
+    ).toBe(false);
+  });
+
+  it('preview sends an explicitly cleared string sample as empty string', async () => {
+    const user = userEvent.setup();
+    const onPreviewAuthoring = vi.fn().mockResolvedValue({
+      moduleId: 'mod-1',
+      catalogRevision: 'workshop-abc123def456',
+      status: 'accepted',
+      definitionHash: 'sha256-abc123',
+      definitionParameters: [],
+      resolved: {
+        layout: { components: [], hardware: [] },
+        machining: { manufacturingFingerprint: 'sha256-fp' },
+        preflight: {
+          scope: 'authoring-resolve-subset',
+          status: 'clear',
+          issues: [],
+          preflightContract: 'granete.manufacturing-preflight.v1',
+        },
+      },
+      issues: [],
+    });
+    renderPanel(
+      draftWith({
+        parameterDefinitions: [
+          {
+            name: 'clientNote',
+            label: 'Nota del cliente',
+            type: 'string',
+            category: 'metadata',
+            defaultValue: 'Nota inicial',
+            maxLength: 64,
+          },
+        ],
+      }),
+      vi.fn(),
+      'mod-1',
+      onPreviewAuthoring,
+    );
+
+    const sample = screen.getByTestId('parameter-sample-clientNote') as HTMLInputElement;
+    expect(sample.value).toBe('Nota inicial');
+    await user.clear(sample);
+    await user.click(screen.getByTestId('parameter-preview-run'));
+    await screen.findByTestId('parameter-preview-accepted');
+    const request = onPreviewAuthoring.mock.calls[0]![0] as {
+      parameters: Record<string, unknown>;
+    };
+    expect(request.parameters).toEqual({ clientNote: '' });
+  });
+
   it('removal goes through an impact confirmation that never deletes directly', async () => {
     const user = userEvent.setup();
     const setDraft = vi.fn();
