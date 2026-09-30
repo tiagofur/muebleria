@@ -2,7 +2,7 @@
 
 **Issue**: https://github.com/tiagofur/muebleria/issues/875  
 **Title**: [P1][WEB-MFG] Factory self-service construction settings and component connection editor in React  
-**Status**: IMPLEMENTED_PENDING_REVIEW  
+**Status**: IMPLEMENTED_PENDING_REVIEW — Delivery: **partial** (independent review 2026-09-30: CHANGES_REQUESTED against the complete claim; blockers corrected, remaining scope explicit in §3)  
 **Lane**: ODD  
 **Base**: `main` @ `faa5449b249eb59d80568ff622249cae1b14be15`  
 **Branch**: `feat/875-factory-construction-settings`  
@@ -33,20 +33,29 @@ Required user-facing surfaces:
 
 ---
 
-## 3. Acceptance Criteria (from Issue #875)
+## 3. Acceptance Criteria (from Issue #875) — state after independent review 2026-09-30
 
-- [x] Same Standard IDs/revisions: Factory A (e.g. 4 screws/dowels) and Factory B (e.g. 2 minifix-dowel) obtain their respective results while Standard remains unmutated.
-- [x] Factory A can configure screw-only with 4 stations and Factory B maintains standard defaults without copying all cabinet definitions.
-- [x] A second authorized user of Factory A sees the same configuration upon reload; visitor/sales roles cannot edit even via API.
-- [x] Compatible component inherits global factory policy; component exception is preserved; "Restaurar herencia" cleanly removes the override; UI explains scope.
-- [x] Config and component editor use the same effective policy model; instance binding matches resolver output.
-- [x] Invalid draft can be saved per contract but not activated; failure/retry does not partially publish or duplicate versions.
-- [x] Two concurrent editors produce a visible conflict (`If-Match`/version), not silent data loss; cross-tenant API and SQL runtime deny cross-organization access.
-- [x] Changing active factory organization during load/save does not leak or apply stale results from the previous context.
-- [x] Activating a new profile does not alter project history; applying explicitly to an editable context shows impact and preserves exceptions.
-- [x] Real browser proof against Go/disposable PostgreSQL covers both React surfaces and effective output; typecheck/jsdom alone do not satisfy this proof.
-- [x] Accessibility, loading/error/stale/blocked states and Spanish UI copy with one contextual primary action.
-- [x] User/support documentation enables reproducing the A/B factory configuration case.
+The first candidate claimed `Delivery: complete`; the independent review
+(`CHANGES_REQUESTED`, PR 943 comment) demonstrated the claim outran the
+evidence. Delivery is **partial**: the rows below separate what this PR
+demonstrates from what remains open.
+
+Demonstrated in this PR:
+
+- [x] Factory A configures screw-only/4-stations self-service and persists it to ITS overlay; Factory B's overlay stays untouched — real browser against Go + disposable PostgreSQL (`tests/organization/factory-construction-settings.spec.ts`, 4/4), reload-proof persistence.
+- [x] Compatible component inherits the factory policy; a component-level override flips the provenance badge to *Componente (Excepción)* and "Restaurar herencia" returns to the inherited value (UI model + e2e).
+- [x] Overlay access is organization-scoped by the caller's token (never a client-supplied org), 404-vs-null semantics pinned, RLS below (#775).
+- [x] Accessibility, loading/error/saving states and Spanish copy with one contextual primary action.
+- [x] Cross-tenant: another organization's overlay is invisible (same null response), pinned by handler tests.
+
+Remaining open (why this is partial):
+
+- [ ] **Resolver consumption — the core of the issue**: the saved policy never reaches `deriveAuthoringMachining`/resolve; per the issue, "a form that saves JSON but does not affect the resolver does NOT complete this issue". The next slice must wire the effective policy (pinned overlay) into joinery resolution and demonstrate A=4/B=2 machining differences (AC12/AC01 "obtain their respective results").
+- [ ] Component-level exception persistence: the component override is UI state; it needs a server-side save path (AC03 persistence).
+- [ ] Concurrent-editor conflict proof: the save is a read-modify-write PATCH; a visible-conflict (If-Match/version) test is missing (AC07).
+- [ ] Draft vs activate lifecycle (AC: invalid draft saveable, not activatable; activation semantics over history).
+- [ ] Second authorized user / visitor-sales permission matrix over these surfaces.
+- [ ] User/support documentation reproducing the A/B case.
 
 ---
 
