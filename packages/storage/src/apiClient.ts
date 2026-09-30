@@ -3,6 +3,11 @@ import {
   type AuthoringResolveRequestV1,
   type AuthoringResolveResponseV1,
   parseAuthoringResolveResponse,
+  FURNITURE_AUTHORING_PREVIEW_PATH,
+  buildFurnitureAuthoringPreviewRequest,
+  parseFurnitureAuthoringPreviewResponse,
+  type FurnitureAuthoringPreviewRequest,
+  type FurnitureAuthoringPreviewResponse,
 } from '@granete/domain';
 import {
   parseGenerated,
@@ -164,6 +169,26 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       });
     }
     return value.revisionId;
+  }
+
+  /**
+   * #497: POST the web editor's authoring preview (a DRAFT definition set +
+   * sample values through the resolve engine, stateless). Like the resolve
+   * below it is deliberately not OpenAPI-modeled — the resolved section is
+   * golden-pinned by the domain contract, which parses the response
+   * fail-closed before any screen sees it.
+   */
+  async previewFurnitureAuthoring(
+    token: string,
+    request: FurnitureAuthoringPreviewRequest,
+    signal?: AbortSignal,
+  ): Promise<FurnitureAuthoringPreviewResponse> {
+    const value = await this.request<unknown>('POST', FURNITURE_AUTHORING_PREVIEW_PATH, {
+      token,
+      body: buildFurnitureAuthoringPreviewRequest(request),
+      signal,
+    });
+    return parseFurnitureAuthoringPreviewResponse(value);
   }
 
   /**

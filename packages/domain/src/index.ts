@@ -1518,6 +1518,18 @@ export {
   type WebAuthoringResolveInput,
   type WebJoineryProjection,
 } from './webAuthoringResolve';
+export {
+  FURNITURE_AUTHORING_PREVIEW_PATH,
+  FURNITURE_AUTHORING_PREVIEW_MAX_BODY_BYTES,
+  FurnitureAuthoringPreviewValidationError,
+  buildFurnitureAuthoringPreviewRequest,
+  parseFurnitureAuthoringPreviewResponse,
+} from './furnitureAuthoringPreview';
+export type {
+  FurnitureAuthoringPreviewRequest,
+  FurnitureAuthoringPreviewResolved,
+  FurnitureAuthoringPreviewResponse,
+} from './furnitureAuthoringPreview';
 
 // Smart Parametric Furniture Library (#349, #350, ADR-0002)
 export * from "./smartFurnitureDomain";

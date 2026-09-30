@@ -273,26 +273,30 @@ treated as missing; no SketchUp hand-written adapter.
     Drift gate extended: versioned module PUT must declare ETag + If-Match.
     Cross-reference comment in #496.
 
-- [ ] **T4 — Backend: authoring preview endpoint (draft, server-authoritative)**
+- [x] **T4 — Backend: authoring preview endpoint (draft, server-authoritative)**
   - Route: inline.
-  - Trigger evidence: no way to resolve a draft today — `POST
-    /api/furniture/authoring/resolve` resolves published definitions by id +
-    pinned `catalogRevision` only; the issue requires "current draft
-    definition + sample parameter values/material choices → authoritative
-    resolve" and impact before destructive edits, and the ownership boundary
-    puts resolved consequences server-side.
-  - Outcome: stateless `POST /api/furniture/authoring/preview` (exact path per
-    D2): accepts `moduleId` (composition reference), draft
-    `parameterDefinitions`, sample `parameters`, `materialChoices`; runs
-    persisted+published validation, `ValidateModuleFurnitureParameterConsumers`,
-    and the same resolve engine on the draft; returns normalized definitions,
-    would-be `definitionHash`, typed issues (`PARAMETER_*`,
-    `PARAMETER_BINDING_CONFLICT`), projected dimension ranges + affected
-    dimension presets, and a resolve summary (component count/layout summary/
-    preflight subset). Never mutates the catalog or advances the revision. Go
-    tests: parity with published resolve for identical inputs; draft leaves
-    `workshopCatalogRevisionID` unchanged; rejected drafts carry issues only
-    (no resolved data — same rule as the rejected resolve response).
+  - Trigger evidence: no way to resolve a draft today — the resolve resolves
+    published definitions by id + pinned `catalogRevision` only.
+  - Outcome: **DONE.** Stateless `POST /api/furniture/authoring/preview`
+    (D2 name landed as proposed): strict decode (DisallowUnknownFields, no
+    query, 2 MiB), ONE catalog snapshot read, draft boundary validation
+    (persisted → published incl. synthesized dimension projections from the
+    module's dims/presets → consumer validation inside the engine against the
+    module's real composition), sample-value evaluation and material-choice
+    validation, then `engine.ResolveAuthoringLayout` on the draft. Accepted →
+    would-be `definitionHash` + full draft published parameter set + resolved
+    (layout/machining/preflight). Rejected → 422 with structured issues and
+    NO resolved data. Never mutates the catalog (parity test asserts the
+    module row untouched) — the preview does not advance the revision; it
+    ECHOES the revision it used. **Contract decision (recorded deviation):**
+    like the #477 resolve, the preview stays OUT of granete-api.v1.yaml — its
+    `resolved` section is the resolve engine's wire, golden-pinned by the
+    domain: Go parity test pins `contracts/furnitureAuthoringPreview.fixture.json`
+    (UPDATE_AUTHORING_PREVIEW_GOLDEN=1; deterministic — fixed seed UUIDs) and
+    `packages/domain/src/furnitureAuthoringPreview.ts` parses the same file
+    fail-closed; the generated client is bypassed via
+    `GraneteApiClient.previewFurnitureAuthoring` (resolve precedent). Web-only:
+    extension tokens cannot POST it (absent from the extension allowlist).
 
 - [ ] **T5 — UI: "Parámetros" tab — list, order, definition editor**
   - Route: inline.
@@ -506,7 +510,45 @@ treated as missing; no SketchUp hand-written adapter.
   `go build ./... && go vet ./internal/...` clean (generated Go types are
   additive); `check_openapi_drift.py` PASS with the new assertions.
   NOT_RUN locally: browser gate (CI organization-browser runs it). Delivery:
-  partial (PR3; remaining acceptance T4–T8).
+  partial (PR3; remaining acceptance T4–T8). Commit `d2191d72`; CI 17/17;
+  #932 awaiting review/merge.
+- 2026-09-30: **T4 implemented** — one work-unit commit. V1 evidence: api
+  stub suite 9/9 (accepted w/ synthesized dims + hash + revision echo;
+  metadata-with-binding rejected without resolved; reserved name rejected;
+  out-of-range sample → PARAMETER_OUT_OF_RANGE; missing module 404; unknown
+  field 400; query 400; GET 405; inactive license 403; deterministic hash);
+  storage parity on real PostgreSQL: preview(draft==persisted).definitionHash
+  == published projection hash, revisionId equal, module row untouched
+  (updated_at + version), deterministic across runs, golden fixture
+  byte-pinned. TS: domain parser 3 tests (golden parse, rejected-smuggles-
+  resolved, client-side draft rejection); root typecheck 0 errors; root
+  `pnpm test` all workspaces green (domain 1727, web 561). NOT_RUN: browser
+  gate (CI); SketchUp host unaffected. Delivery: partial (PR4; remaining
+  acceptance T5–T8). Commit `83e21a61`.
+- 2026-09-30: **T4 correction round (one consolidated round, per contract).**
+  CI storage shard 3 caught the parity test using a bare organization scope:
+  the runtime role is NOBYPASSRLS (my first local container ran as superuser,
+  bypassing RLS — the same environmental gap as the pre-existing RLS-test
+  failures), so seed + handlers must run inside `WithinTenantTx` exactly like
+  the auth middleware wraps real requests. Parity test rewritten around
+  withinConnectStoreTenant/WithinTenantTx; golden regenerated under the real
+  runtime role (stable across 3 runs). Commit `f0865c99`. Lesson: real-RLS
+  verification requires the granete_app role locally — replicate the
+  browser-gate container recipe (postgres-init-app-role.sh + NOBYPASSRLS)
+  instead of trusting a superuser connection.
+
+## Next step
+
+Publish PR4 (done: #933) — after its merge, T5+T6 (Parámetros tab + binding
+editor, client-only) then T7 (Probar resolución wiring on T4's client method)
+and T8 (cross-surface fixtures + gates).
+
+## Next step
+
+Publish PR4 (T4) with `Refs #497 + Delivery: partial`; then T5+T6 (Parámetros
+tab + binding editor, client-only, consumes the preview from T7) — or T5
+alone; the "Probar resolución" wiring lands in T7 on top of T4's client
+method.
 
 ## Next step
 
