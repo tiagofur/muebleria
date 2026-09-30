@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/tiagofur/muebles-backend/internal/application"
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
@@ -94,6 +94,60 @@ func (s *Server) HandleCreateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 	}
 
 	respondWithJSON(w, http.StatusCreated, mapOverlayDetailToOpenAPI(created))
+}
+
+// HandleGetActiveLibraryOverlay handles GET /api/manufacturing-libraries/overlays/active.
+//
+// The absent-overlay case responds 200 with a null detail, NOT 404: the web
+// shell fetches this on every page load, and a 404 would emit a browser
+// console error on every screen — breaking the console-clean journeys the
+// organization browser gate pins (#943 review). "No overlay yet" is a normal
+// state, not an error.
+func (s *Server) HandleGetActiveLibraryOverlay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	orgUUID, err := uuid.Parse(claims.OrgID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid organization id")
+		return
+	}
+
+	targetLibID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	if qLib := r.URL.Query().Get("libraryId"); qLib != "" {
+		parsed, err := uuid.Parse(qLib)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "invalid libraryId query parameter")
+			return
+		}
+		targetLibID = parsed
+	}
+
+	overlay, err := s.overlayService().GetActiveOverlay(r.Context(), orgUUID, targetLibID)
+	if err != nil {
+		if errors.Is(err, storage.ErrOverlayNotFound) {
+			respondWithJSON(w, http.StatusOK, nil)
+			return
+		}
+		respondWithInternalError(w, err, "get active overlay")
+		return
+	}
+
+	if overlay.OrganizationID != orgUUID {
+		// Defense in depth below the ownership check: another organization's
+		// overlay is as good as absent for this caller — same null response.
+		respondWithJSON(w, http.StatusOK, nil)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(overlay))
 }
 
 // HandleGetLibraryOverlayByID handles GET /api/manufacturing-libraries/overlays/{id}.

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { GraneteApiClient } from './apiClient';
 import { GraneteApiError, GraneteNetworkError } from './apiErrors';
 import { parseGenerated } from './openapi/generated/types';
+import { DEFAULT_FACTORY_CONSTRUCTION_POLICY } from '@granete/domain';
+import type { LibraryOverlayDetail } from './openapi/generated/types';
 
 const json = (value: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', ...headers } });
@@ -519,4 +521,131 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
       expect(new Headers(fetchImpl.mock.calls[2]![1]?.headers).get('Idempotency-Key')).toBe('key-ret-1');
     });
   });
+
+  describe('Manufacturing Library Overlay & Factory Construction Policy (#875)', () => {
+    it('getActiveStandardLibraryOverlay returns null when 404 is returned', async () => {
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'Overlay not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      const overlay = await client.getActiveStandardLibraryOverlay('test-token');
+      expect(overlay).toBeNull();
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'http://api.test/api/manufacturing-libraries/overlays/active',
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+
+    it('getActiveStandardLibraryOverlay returns null on a 200 null body (the contract for "no overlay yet")', async () => {
+      // The endpoint answers 200 with a null detail when the organization has
+      // no active overlay: a 404 here would emit a browser console error on
+      // every page the shell renders (#943 review).
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response('null', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      const overlay = await client.getActiveStandardLibraryOverlay('test-token');
+      expect(overlay).toBeNull();
+    });
+
+    it('getActiveStandardLibraryOverlay returns overlay detail on 200', async () => {
+      const mockOverlay = {
+        id: '11111111-1111-1111-1111-111111111111',
+        organizationId: '22222222-2222-2222-2222-222222222222',
+        libraryId: '00000000-0000-0000-0000-000000000001',
+        baseReleaseId: '33333333-3333-3333-3333-333333333333',
+        status: 'active',
+        overrides: { 'joint.floorToSide.stationsCount': 4 },
+        customResourceIds: [],
+        createdAt: '2026-09-30T12:00:00Z',
+        updatedAt: '2026-09-30T12:00:00Z',
+      };
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(mockOverlay), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      const overlay = await client.getActiveStandardLibraryOverlay('test-token');
+      expect(overlay).toEqual(mockOverlay);
+    });
+
+    it('saveConstructionPolicy preserves foreign overlay keys, including other joint.* overrides', async () => {
+      const mockOverlay = {
+        id: '11111111-1111-1111-1111-111111111111',
+        organizationId: '22222222-2222-2222-2222-222222222222',
+        libraryId: '00000000-0000-0000-0000-000000000001',
+        baseReleaseId: '33333333-3333-3333-3333-333333333333',
+        status: 'active',
+        overrides: {
+          'joint.floorToSide.stationsCount': 2,
+          'joint.someOtherFamily.rule': 'keep-me',
+          'parameters.someSetting': 'also-keep-me',
+        },
+        customResourceIds: [],
+        createdAt: '2026-09-30T12:00:00Z',
+        updatedAt: '2026-09-30T12:00:00Z',
+      };
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ...mockOverlay, overrides: {} }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      const policy = {
+        ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+        floorToSide: { ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide, provenance: 'factory' as const, stationsCount: 4 },
+      };
+      await client.saveConstructionPolicy('test-token', policy, mockOverlay as LibraryOverlayDetail);
+      const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+      const sent = JSON.parse(String(init.body)) as { overrides: Record<string, unknown> };
+      expect(sent.overrides['joint.someOtherFamily.rule']).toBe('keep-me');
+      expect(sent.overrides['parameters.someSetting']).toBe('also-keep-me');
+      expect(sent.overrides['joint.floorToSide.stationsCount']).toBe(policy.floorToSide.stationsCount);
+    });
+
+    it('saveConstructionPolicy removes a stale structured blob when everything is restored to Standard', async () => {
+      // The restore journey (serial e2e): factory floor saved earlier leaves
+      // BOTH flat keys and the structured blob; restoring everything writes
+      // no new keys, so the stale blob must be cleaned — otherwise a reload
+      // resurrects "Fábrica" provenance from the blob (#943 CI failure).
+      const mockOverlay = {
+        id: '11111111-1111-1111-1111-111111111111',
+        organizationId: '22222222-2222-2222-2222-222222222222',
+        libraryId: '00000000-0000-0000-0000-000000000001',
+        baseReleaseId: '33333333-3333-3333-3333-333333333333',
+        status: 'active',
+        overrides: {
+          'joint.floorToSide.stationsCount': 4,
+          'joint.floorToSide.systemId': 'screw-only',
+          'joint.constructionPolicy': { version: 1, floorToSide: { provenance: 'factory', stationsCount: 4 } },
+        },
+        customResourceIds: [],
+        createdAt: '2026-09-30T12:00:00Z',
+        updatedAt: '2026-09-30T12:00:00Z',
+      };
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ...mockOverlay, overrides: {} }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      await client.saveConstructionPolicy('test-token', DEFAULT_FACTORY_CONSTRUCTION_POLICY, mockOverlay as LibraryOverlayDetail);
+      const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+      const sent = JSON.parse(String(init.body)) as { overrides: Record<string, unknown> };
+      expect(sent.overrides['joint.constructionPolicy']).toBeUndefined();
+      expect(sent.overrides['joint.floorToSide.stationsCount']).toBeUndefined();
+      expect(sent.overrides['joint.floorToSide.systemId']).toBeUndefined();
+    });
+  });
 });
+

@@ -247,6 +247,7 @@ import {
   startEngineeringCommand,
   useEngineeringState,
 } from './engineeringState';
+import { useFactoryConstructionPolicy } from './useFactoryConstructionPolicy';
 import {
   captureDeferredNavigationIntent,
   runDeferredNavigationGuarded,
@@ -1116,6 +1117,13 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     routeEngineeringProjectId ?? 'no-project',
     routeEngineeringReleaseId ?? 'no-release',
   );
+  // #875: Factory construction and joinery policy overlay
+  const factoryConstructionPolicy = useFactoryConstructionPolicy({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    enabled: navId === 'settings' || navId === 'components',
+  });
+
   const engineeringStateContext = useEngineeringState({
     baseUrl: DEFAULT_API_BASE,
     token: session === 'auth' ? authToken : null,
@@ -2357,9 +2365,25 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       {navId === 'settings' ? (
         <SettingsScreen
           settings={workshopSettings}
-          onSave={saveWorkshopSettings}
+          onSave={async (newSettings) => {
+            await saveWorkshopSettings(newSettings);
+            if (factoryConstructionPolicy.policy && authToken) {
+              await factoryConstructionPolicy.savePolicy(factoryConstructionPolicy.policy);
+            }
+          }}
           machineOutput={machineOutputConfig}
           onOpenOnboardingTour={() => setShowOnboardingTour(true)}
+          constructionPolicyConfig={
+            session === 'auth' && authToken
+              ? {
+                  policy: factoryConstructionPolicy.policy,
+                  activeOverlay: factoryConstructionPolicy.activeOverlay,
+                  baseRelease: factoryConstructionPolicy.baseRelease,
+                  onChange: factoryConstructionPolicy.setPolicy,
+                  saving: factoryConstructionPolicy.saving,
+                }
+              : null
+          }
           salesNetwork={
             orgType === 'factory' && authToken && onEnterConnectedOrg
               ? {
@@ -2500,6 +2524,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onRequestEdit={(id) => onEntityEditRequest('components', id)}
           onSelectionChange={onComponentSelectionChange}
           canMutate={canMutateModules}
+          factoryPolicy={factoryConstructionPolicy.policy}
         />
       ) : null}
       {navId === 'addOns' ? (

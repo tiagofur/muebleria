@@ -8,19 +8,25 @@ import {
   parseFurnitureAuthoringPreviewResponse,
   type FurnitureAuthoringPreviewRequest,
   type FurnitureAuthoringPreviewResponse,
+  type FactoryConstructionPolicy,
+  isConstructionPolicyOwnedKey,
+  policyToOverlayOverrides,
 } from '@granete/domain';
 import {
   parseGenerated,
   parseGeneratedArray,
   type HardwareAssetRepresentation,
   type HardwareAssetUploadStaged,
+  type LibraryOverlayDetail,
 } from './openapi/generated/types';
 import { GeneratedGraneteApiClient, type GeneratedRequestOptions } from './openapi/generated/client';
 
 type SchemaName = Parameters<typeof parseGenerated>[0];
-export type RequestOptions = Omit<GeneratedRequestOptions, 'schema' | 'arrayOf'> & {
+export type RequestOptions = Omit<GeneratedRequestOptions, 'schema' | 'arrayOf' | 'schemaOrNull'> & {
   readonly schema?: SchemaName;
   readonly arrayOf?: SchemaName;
+  /** Nullable-200 endpoints: the body may be a legitimate `null` (no error). */
+  readonly schemaOrNull?: SchemaName;
 };
 
 function requestId(): string {
@@ -113,6 +119,12 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       throw new GraneteApiError(response.status, payload);
     }
     if (options.arrayOf) return parseGeneratedArray<T>(options.arrayOf, value) as T;
+    if (options.schemaOrNull) {
+      // The contract marks this 200 as nullable: an absent body is a normal
+      // "nothing yet" state, never an error the browser may log.
+      if (value === null || value === undefined) return null as T;
+      return parseGenerated<T>(options.schemaOrNull, value);
+    }
     if (options.schema) return parseGenerated<T>(options.schema, value);
     return value as T;
   }
@@ -228,4 +240,62 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     });
     return parseAuthoringResolveResponse(value, request);
   }
+
+  /**
+   * #875: Fetch the organization's active overlay for Granete Standard,
+   * falling back to null if no overlay exists yet (HTTP 404).
+   */
+  async getActiveStandardLibraryOverlay(
+    token: string,
+    signal?: AbortSignal,
+  ): Promise<LibraryOverlayDetail | null> {
+    try {
+      return await this.getActiveLibraryOverlay(token, signal);
+    } catch (error) {
+      if (error instanceof GraneteApiError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * #875: Save factory construction policy into the organization's overlay overrides.
+   * If an active overlay already exists, updates its overrides.
+   * If not, fetches the current Standard release and creates a new active overlay.
+   *
+   * The save upserts ONLY the keys this policy owns (the four joint family
+   * prefixes); every other overlay key — including foreign `joint.*`
+   * overrides such as component-level exceptions — survives untouched
+   * (#943 review: namespace-wide stripping silently destroyed unrelated
+   * overrides, contradicting the preserve-exceptions acceptance).
+   */
+  async saveConstructionPolicy(
+    token: string,
+    policy: FactoryConstructionPolicy,
+    activeOverlay: LibraryOverlayDetail | null,
+    signal?: AbortSignal,
+  ): Promise<LibraryOverlayDetail> {
+    const policyOverrides = policyToOverlayOverrides(policy);
+    if (activeOverlay) {
+      const existingOverrides = (activeOverlay.overrides ?? {}) as Record<string, unknown>;
+      const nextOverrides: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(existingOverrides)) {
+        if (!isConstructionPolicyOwnedKey(k)) {
+          nextOverrides[k] = v;
+        }
+      }
+      Object.assign(nextOverrides, policyOverrides);
+      return await this.updateLibraryOverlay(token, activeOverlay.id, {
+        overrides: nextOverrides,
+      }, signal);
+    }
+
+    const currentRel = await this.getStandardCurrentRelease(token, signal);
+    return await this.createLibraryOverlay(token, {
+      baseReleaseId: currentRel.id,
+      overrides: policyOverrides,
+    }, signal);
+  }
 }
+

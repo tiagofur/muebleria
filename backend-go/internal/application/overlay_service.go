@@ -58,6 +58,7 @@ var permittedPrefixes = []string{
 	"parameters.",
 	"rules.",
 	"joint.",
+	"construction.",
 	"hardware.",
 	"tolerances.",
 	"finish.",
@@ -131,6 +132,11 @@ func (s *OverlayService) CreateOverlay(ctx context.Context, params CreateOverlay
 	}
 
 	return s.store.CreateOverlay(ctx, overlay)
+}
+
+// GetActiveOverlay retrieves the organization's active overlay for the specified library.
+func (s *OverlayService) GetActiveOverlay(ctx context.Context, orgID, libraryID uuid.UUID) (*domain.LibraryOverlay, error) {
+	return s.store.GetActiveOverlayByLibrary(ctx, orgID, libraryID)
 }
 
 // UpdateOverrides updates an organization's overrides and custom resource references.

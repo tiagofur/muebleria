@@ -389,6 +389,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/resources/{resourceId}/blobs/{hash}", authMW(http.HandlerFunc(server.HandleStandardLibraryResourceBlob)))
 	// #775 (LIB-4): Organization manufacturing library overlays and 3-way rebase
 	mux.Handle("POST /api/manufacturing-libraries/overlays", authMW(http.HandlerFunc(server.HandleCreateLibraryOverlay)))
+	mux.Handle("GET /api/manufacturing-libraries/overlays/active", authMW(http.HandlerFunc(server.HandleGetActiveLibraryOverlay)))
 	mux.Handle("GET /api/manufacturing-libraries/overlays/{id}", authMW(http.HandlerFunc(server.HandleGetLibraryOverlayByID)))
 	mux.Handle("PATCH /api/manufacturing-libraries/overlays/{id}", authMW(http.HandlerFunc(server.HandleUpdateLibraryOverlay)))
 	mux.Handle("POST /api/manufacturing-libraries/overlays/{id}/rebase", authMW(http.HandlerFunc(server.HandleRebaseLibraryOverlay)))

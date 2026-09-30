@@ -1552,3 +1552,6 @@ export * from "./agregadoAssembly";
 
 // GLB representation contract (#669)
 export * from "./glbRepresentation";
+
+// Factory Construction Policy (#875)
+export * from "./factoryConstructionPolicy";

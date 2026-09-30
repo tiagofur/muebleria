@@ -11,7 +11,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Component, OptionGroup, MaterialBoard, PlacementDims } from '@granete/domain';
+import type { Component, OptionGroup, MaterialBoard, PlacementDims, FactoryConstructionPolicy } from '@granete/domain';
 import {
   evaluatePartFormula,
   hasAmbiguousOptionRoles,
@@ -69,6 +69,8 @@ export interface ComponentsScreenProps {
    */
   readonly onRequestEdit?: (componentId: string) => void;
   readonly onSelectionChange?: (id: string | null) => void;
+  /** Factory construction policy (#875). */
+  readonly factoryPolicy?: FactoryConstructionPolicy;
 }
 
 export function ComponentsScreen({
@@ -83,6 +85,7 @@ export function ComponentsScreen({
   openComponentEditId = null,
   onRequestEdit,
   onSelectionChange,
+  factoryPolicy,
 }: ComponentsScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -532,6 +535,7 @@ export function ComponentsScreen({
           onContainerDimsChange={setContainerDims}
           showInContext={showInContext}
           onShowInContextChange={setShowInContext}
+          factoryPolicy={factoryPolicy}
         />
       )}
     />

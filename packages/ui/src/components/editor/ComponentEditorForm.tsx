@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { OptionGroup, PlacementDims, ResolvedBoardPart } from '@granete/domain';
+import type { OptionGroup, PlacementDims, ResolvedBoardPart, FactoryConstructionPolicy } from '@granete/domain';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import type {
   MaterialColorLookup,
@@ -25,6 +25,7 @@ import { ComponentEditorEdgesPanel } from './ComponentEditorEdgesPanel';
 import { ComponentEditorGeneralPanel } from './ComponentEditorGeneralPanel';
 import { ComponentEditorGeometryPanel } from './ComponentEditorGeometryPanel';
 import { ComponentEditorOptionsPanel } from './ComponentEditorOptionsPanel';
+import { ComponentEditorJoineryPanel } from './ComponentEditorJoineryPanel';
 
 export type ComponentEditorFormProps = {
   readonly formId: string;
@@ -45,6 +46,7 @@ export type ComponentEditorFormProps = {
   readonly onContainerDimsChange: (dims: PlacementDims) => void;
   readonly showInContext: boolean;
   readonly onShowInContextChange: (v: boolean) => void;
+  readonly factoryPolicy?: FactoryConstructionPolicy;
 };
 
 export function ComponentEditorForm({
@@ -64,6 +66,7 @@ export function ComponentEditorForm({
   onContainerDimsChange,
   showInContext,
   onShowInContextChange,
+  factoryPolicy,
 }: ComponentEditorFormProps): ReactNode {
   const roleCount = countOptionRoles(draft.optionRoles);
   const optionsMissing = roleCount === 0;
@@ -132,6 +135,13 @@ export function ComponentEditorForm({
         setDraft={setDraft}
         optionGroups={optionGroups}
         hidden={editorTab !== 'options'}
+      />
+
+      <ComponentEditorJoineryPanel
+        draft={draft}
+        setDraft={setDraft}
+        hidden={editorTab !== 'construction'}
+        factoryPolicy={factoryPolicy}
       />
     </form>
   );
