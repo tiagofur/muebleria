@@ -2,7 +2,7 @@
  * Component catalog draft helpers and shared placement labels.
  */
 
-import type { Component, Perforation } from '@granete/domain';
+import type { Component, ComponentConstructionOverride, Perforation } from '@granete/domain';
 import { arrayRule, booleanRule, enumRule, nullableRule, numberRule, objectRule, optionalRule, stringFields, stringRule } from '../common/draftValidation';
 
 /** Shared placement options for components and structure/module instances. */
@@ -94,7 +94,8 @@ export type ComponentEditorTab =
   | 'general'
   | 'geometry'
   | 'edges'
-  | 'options';
+  | 'options'
+  | 'construction';
 
 export const COMPONENT_EDITOR_TABS: readonly {
   readonly id: ComponentEditorTab;
@@ -104,6 +105,7 @@ export const COMPONENT_EDITOR_TABS: readonly {
   { id: 'geometry', label: 'Geometría' },
   { id: 'edges', label: 'Cantos' },
   { id: 'options', label: 'Opciones' },
+  { id: 'construction', label: 'Construcción' },
 ];
 
 /**
@@ -169,6 +171,8 @@ export interface ComponentDraft {
    * existing perforations on the entity (C2).
    */
   perforations?: readonly Perforation[];
+  /** #875: Component-level construction override */
+  constructionOverride?: ComponentConstructionOverride | null;
 }
 
 export function emptyComponentDraft(): ComponentDraft {
@@ -207,12 +211,20 @@ const componentDraftRule = objectRule({
     id: stringRule, relativePosition: objectRule({ xPercent: numberRule, yPercent: numberRule }), diameterMm: numberRule,
     depthMm: numberRule, type: enumRule('through', 'blind', 'dowel', 'shelf_pin', 'hinge_cup'),
   }))),
+  constructionOverride: optionalRule(nullableRule(objectRule({
+    componentId: stringRule,
+    joinerySystemId: optionalRule(stringRule),
+    stationsCount: optionalRule(numberRule),
+    constructiveRole: optionalRule(stringRule),
+    connectionFaces: optionalRule(arrayRule(stringRule)),
+    provenance: optionalRule(stringRule),
+  }))),
 });
 export function isComponentDraft(value: unknown): value is ComponentDraft { return componentDraftRule(value); }
 
 export function componentToDraft(item: Component): ComponentDraft {
   const edges = new Map(item.defaultEdges.map((e) => [e.side, e.enabled]));
-  return {
+  const draft: ComponentDraft = {
     code: item.code,
     name: item.name,
     placement: item.placement,
@@ -247,6 +259,10 @@ export function componentToDraft(item: Component): ComponentDraft {
     active: item.active,
     perforations: item.perforations,
   };
+  if (item.constructionOverride) {
+    draft.constructionOverride = item.constructionOverride;
+  }
+  return draft;
 }
 
 /**

@@ -4,7 +4,8 @@
  */
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import type { WorkshopSettings } from '@granete/domain';
+import type { WorkshopSettings, FactoryConstructionPolicy } from '@granete/domain';
+import type { LibraryOverlayDetail, LibraryReleaseSummary } from '@granete/storage';
 import { Network, Settings, SlidersHorizontal, Wrench } from 'lucide-react';
 import { PageHeader, submitBusyLabel, WorkspaceTabs, type TabDefinition } from '../common';
 import { SalesNetworkSection } from './SalesNetworkSection';
@@ -14,10 +15,14 @@ import {
   MachineOutputSelectionSection,
   type MachineOutputConfigProps,
 } from './MachineOutputSelectionSection';
+import {
+  ConstructionSettingsSection,
+  type ConstructionSettingsSectionProps,
+} from './ConstructionSettingsSection';
 
 export type SettingsScreenProps = {
   readonly settings: WorkshopSettings;
-  readonly onSave: (settings: WorkshopSettings) => void;
+  readonly onSave: (settings: WorkshopSettings) => void | Promise<void>;
   readonly saving?: boolean;
   readonly onOpenOnboardingTour?: () => void;
   /**
@@ -30,6 +35,10 @@ export type SettingsScreenProps = {
     readonly token: string;
     readonly onEnterOrg: (orgId: string, orgName: string) => void;
   } | null;
+  /**
+   * Factory construction policy overlay configuration (#875).
+   */
+  readonly constructionPolicyConfig?: ConstructionSettingsSectionProps | null;
 };
 
 type SettingsTabId = 'general' | 'ingenieria' | 'red';
@@ -59,6 +68,7 @@ export function SettingsScreen({
   onOpenOnboardingTour,
   salesNetwork = null,
   machineOutput = null,
+  constructionPolicyConfig = null,
 }: SettingsScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
 
@@ -115,7 +125,7 @@ export function SettingsScreen({
     setNavMode(settings.navMode ?? 'departmental');
   }, [settings]);
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const marginFactor = Number(margin);
     const laborFixedCost = Number(labor);
@@ -153,25 +163,29 @@ export function SettingsScreen({
     }
 
     setError(null);
-    onSave({
-      defaultMarginFactor: marginFactor,
-      defaultLaborFixedCost: laborFixedCost,
-      defaultCurrency: cur,
-      vendedorCanViewCosts,
-      workshopName: workshopName.trim() || undefined,
-      defaultCutStrategy: cutStrategy,
-      defaultSawKerfMm: kerfVal,
-      defaultTrimMargins: {
-        topMm: topVal,
-        bottomMm: botVal,
-        leftMm: leftVal,
-        rightMm: rightVal,
-      },
-      defaultDeductEdgeBand: deductEdgeBand,
-      navMode,
-    });
-    setSavedFlash(true);
-    window.setTimeout(() => setSavedFlash(false), 2000);
+    try {
+      await onSave({
+        defaultMarginFactor: marginFactor,
+        defaultLaborFixedCost: laborFixedCost,
+        defaultCurrency: cur,
+        vendedorCanViewCosts,
+        workshopName: workshopName.trim() || undefined,
+        defaultCutStrategy: cutStrategy,
+        defaultSawKerfMm: kerfVal,
+        defaultTrimMargins: {
+          topMm: topVal,
+          bottomMm: botVal,
+          leftMm: leftVal,
+          rightMm: rightVal,
+        },
+        defaultDeductEdgeBand: deductEdgeBand,
+        navMode,
+      });
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar los ajustes.');
+    }
   };
 
   return (
@@ -528,6 +542,10 @@ export function SettingsScreen({
                 </div>
               </div>
             </fieldset>
+
+            {constructionPolicyConfig ? (
+              <ConstructionSettingsSection {...constructionPolicyConfig} />
+            ) : null}
           </>
         ) : null}
 
