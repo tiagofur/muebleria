@@ -26530,6 +26530,1423 @@
       }
     },
     {
+      "id": "28-fixed-shelf-recipes",
+      "request": {
+        "coordinateSystem": {
+          "handedness": "right",
+          "projectFrameId": "frame-fixture",
+          "upAxis": "z"
+        },
+        "furniture": {
+          "catalogRevision": "workshop-50354d6c1473",
+          "components": [
+            {
+              "componentDefinitionId": "st-comp-side",
+              "componentInstanceId": "side-left-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-side-r",
+              "componentInstanceId": "side-right-01",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  582,
+                  18,
+                  0
+                ]
+              }
+            },
+            {
+              "componentDefinitionId": "st-comp-base",
+              "componentInstanceId": "floor-01"
+            },
+            {
+              "componentDefinitionId": "st-comp-top",
+              "componentInstanceId": "top-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-back",
+              "componentInstanceId": "back-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-shelf",
+              "componentInstanceId": "shelf-01"
+            },
+            {
+              "componentDefinitionId": "mod-comp-door",
+              "componentInstanceId": "door-01"
+            }
+          ],
+          "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+          "relationships": [
+            {
+              "kind": "fixed-shelf-side",
+              "parameters": {
+                "endMarginMm": 50,
+                "startMarginMm": 30,
+                "stationCount": 3
+              },
+              "recipes": [
+                {
+                  "contactId": "rel-fixed-shelf-01:side-left-01",
+                  "recipeId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "rules": [
+                    {
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "depthMm": 12,
+                      "diameterMm": 3,
+                      "entryFace": "bottom",
+                      "offsetMm": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "operationRole": "pilot",
+                      "participantRole": "A",
+                      "ruleId": "pilot",
+                      "ruleRevision": "test-1"
+                    },
+                    {
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "depthMm": 9,
+                      "diameterMm": 6,
+                      "entryFace": "back",
+                      "offsetMm": [
+                        0,
+                        18,
+                        0
+                      ],
+                      "operationRole": "counterbore",
+                      "participantRole": "B",
+                      "ruleId": "counterbore",
+                      "ruleRevision": "test-1"
+                    }
+                  ],
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1"
+                },
+                {
+                  "contactId": "rel-fixed-shelf-01:side-right-01",
+                  "recipeId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "rules": [
+                    {
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "depthMm": 12,
+                      "diameterMm": 3,
+                      "entryFace": "top",
+                      "offsetMm": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "operationRole": "pilot",
+                      "participantRole": "A",
+                      "ruleId": "pilot",
+                      "ruleRevision": "test-1"
+                    },
+                    {
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "depthMm": 9,
+                      "diameterMm": 6,
+                      "entryFace": "front",
+                      "offsetMm": [
+                        0,
+                        18,
+                        0
+                      ],
+                      "operationRole": "counterbore",
+                      "participantRole": "B",
+                      "ruleId": "counterbore",
+                      "ruleRevision": "test-1"
+                    }
+                  ],
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1"
+                }
+              ],
+              "relationshipId": "rel-fixed-shelf-01",
+              "source": {
+                "componentInstanceId": "floor-01",
+                "role": "floor"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "face": "front",
+                  "role": "side"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "face": "back",
+                  "role": "side"
+                }
+              ]
+            }
+          ]
+        },
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "messageId": "msg-fixture-0001",
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "sentAt": "2026-08-29T12:00:00Z",
+        "source": {
+          "client": "granete-for-sketchup",
+          "clientVersion": "0.1.0",
+          "host": "sketchup",
+          "hostVersion": "2026.2"
+        },
+        "units": {
+          "angle": "deg",
+          "length": "mm",
+          "precisionMm": 0.01
+        }
+      },
+      "expectedHttpStatus": 200,
+      "response": {
+        "schemaId": "granete.sketchup-authoring-resolve.v1",
+        "schemaName": "granete.sketchup-authoring-resolve",
+        "schemaVersion": "1.0",
+        "resolveContract": "granete.sketchup-authoring-resolve.v1",
+        "responseMessageId": "resolve-msg-fixture-0001",
+        "inReplyToMessageId": "msg-fixture-0001",
+        "idempotencyKey": "fixture:authoring-resolve:0001",
+        "catalogRevision": "workshop-50354d6c1473",
+        "status": "accepted",
+        "normalizedSnapshot": {
+          "parameters": {
+            "depthMm": 560,
+            "hasBackPanel": true,
+            "heightMm": 720,
+            "label": "standard",
+            "shelfCount": 1,
+            "softClose": false,
+            "style": "classic",
+            "tiltDeg": 0,
+            "widthMm": 600
+          },
+          "materialChoices": {},
+          "components": [
+            {
+              "componentInstanceId": "side-left-01",
+              "componentDefinitionId": "st-comp-side",
+              "catalogComponentId": "comp-side",
+              "role": "LATERAL"
+            },
+            {
+              "componentInstanceId": "side-right-01",
+              "componentDefinitionId": "st-comp-side-r",
+              "catalogComponentId": "comp-side-r",
+              "role": "LATERAL",
+              "transform": {
+                "frame": "assembly",
+                "translationMm": [
+                  582,
+                  18,
+                  0
+                ]
+              }
+            },
+            {
+              "componentInstanceId": "floor-01",
+              "componentDefinitionId": "st-comp-base",
+              "catalogComponentId": "comp-base",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "top-01",
+              "componentDefinitionId": "st-comp-top",
+              "catalogComponentId": "comp-top",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "back-01",
+              "componentDefinitionId": "mod-comp-back",
+              "catalogComponentId": "comp-back",
+              "role": "FONDO"
+            },
+            {
+              "componentInstanceId": "shelf-01",
+              "componentDefinitionId": "mod-comp-shelf",
+              "catalogComponentId": "comp-shelf",
+              "role": "INTERIOR"
+            },
+            {
+              "componentInstanceId": "door-01",
+              "componentDefinitionId": "mod-comp-door",
+              "catalogComponentId": "comp-door",
+              "role": "FRENTE"
+            }
+          ],
+          "relationships": [
+            {
+              "relationshipId": "parameter-shelfCount-1",
+              "kind": "shelf-support",
+              "source": {
+                "componentInstanceId": "shelf-01",
+                "role": "shelf-edge"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "inside-face"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "inside-face"
+                }
+              ]
+            },
+            {
+              "relationshipId": "rel-fixed-shelf-01",
+              "kind": "fixed-shelf-side",
+              "source": {
+                "componentInstanceId": "floor-01",
+                "role": "floor"
+              },
+              "targets": [
+                {
+                  "componentInstanceId": "side-left-01",
+                  "role": "side",
+                  "face": "front"
+                },
+                {
+                  "componentInstanceId": "side-right-01",
+                  "role": "side",
+                  "face": "back"
+                }
+              ],
+              "parameters": {
+                "endMarginMm": 50,
+                "startMarginMm": 30,
+                "stationCount": 3
+              },
+              "recipes": [
+                {
+                  "contactId": "rel-fixed-shelf-01:side-left-01",
+                  "recipeId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1",
+                  "rules": [
+                    {
+                      "ruleId": "pilot",
+                      "ruleRevision": "test-1",
+                      "participantRole": "A",
+                      "operationRole": "pilot",
+                      "entryFace": "bottom",
+                      "offsetMm": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "diameterMm": 3,
+                      "depthMm": 12
+                    },
+                    {
+                      "ruleId": "counterbore",
+                      "ruleRevision": "test-1",
+                      "participantRole": "B",
+                      "operationRole": "counterbore",
+                      "entryFace": "back",
+                      "offsetMm": [
+                        0,
+                        18,
+                        0
+                      ],
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "diameterMm": 6,
+                      "depthMm": 9
+                    }
+                  ]
+                },
+                {
+                  "contactId": "rel-fixed-shelf-01:side-right-01",
+                  "recipeId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1",
+                  "rules": [
+                    {
+                      "ruleId": "pilot",
+                      "ruleRevision": "test-1",
+                      "participantRole": "A",
+                      "operationRole": "pilot",
+                      "entryFace": "top",
+                      "offsetMm": [
+                        0,
+                        0,
+                        0
+                      ],
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "diameterMm": 3,
+                      "depthMm": 12
+                    },
+                    {
+                      "ruleId": "counterbore",
+                      "ruleRevision": "test-1",
+                      "participantRole": "B",
+                      "operationRole": "counterbore",
+                      "entryFace": "front",
+                      "offsetMm": [
+                        0,
+                        18,
+                        0
+                      ],
+                      "axis": [
+                        0,
+                        -1,
+                        0
+                      ],
+                      "diameterMm": 6,
+                      "depthMm": 9
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "hardwarePlacements": [
+            {
+              "hardwarePlacementId": "door-01-hw-0",
+              "catalogHardwareId": "hw-hinge",
+              "hostComponentInstanceId": "door-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                298,
+                100
+              ]
+            },
+            {
+              "hardwarePlacementId": "door-01-hw-1",
+              "catalogHardwareId": "hw-handle",
+              "hostComponentInstanceId": "door-01",
+              "anchorFace": "front",
+              "offsetMm": [
+                40,
+                360
+              ]
+            }
+          ]
+        },
+        "resolved": {
+          "layout": {
+            "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
+            "definitionName": "Gabinete Authoring 600",
+            "transformContract": "granete.local-basis.v1",
+            "dimensionsMm": [
+              600,
+              720,
+              560
+            ],
+            "components": [
+              {
+                "componentInstanceId": "side-left-01",
+                "componentDefinitionId": "st-comp-side",
+                "slotId": "lateral_izquierdo",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    0,
+                    560,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "side-right-01",
+                "componentDefinitionId": "st-comp-side-r",
+                "slotId": "lateral_derecho",
+                "role": "LATERAL",
+                "name": "Lateral",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    582,
+                    18,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  18,
+                  560,
+                  684
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    582,
+                    578,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      -1,
+                      0
+                    ],
+                    "y": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 684,
+                "widthMm": 560,
+                "thicknessMm": 18,
+                "optionRole": "LATERAL",
+                "materialColorHex": "#c8b89a"
+              },
+              {
+                "componentInstanceId": "floor-01",
+                "componentDefinitionId": "st-comp-base",
+                "slotId": "base",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    0
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "top-01",
+                "componentDefinitionId": "st-comp-top",
+                "slotId": "superior",
+                "role": "INTERIOR",
+                "name": "Piso",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ]
+                },
+                "dimensionsMm": [
+                  564,
+                  542,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    18,
+                    0,
+                    702
+                  ],
+                  "basis": {
+                    "x": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      1,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "back-01",
+                "componentDefinitionId": "mod-comp-back",
+                "slotId": "trasera",
+                "role": "FONDO",
+                "name": "Fondo",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ]
+                },
+                "dimensionsMm": [
+                  690,
+                  15,
+                  570
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    15,
+                    0,
+                    15
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 570,
+                "widthMm": 690,
+                "thicknessMm": 15,
+                "optionRole": "FONDO",
+                "materialColorHex": "#8b7355"
+              },
+              {
+                "componentInstanceId": "shelf-01",
+                "componentDefinitionId": "mod-comp-shelf",
+                "slotId": "interno",
+                "role": "INTERIOR",
+                "name": "Entrepaño",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    18,
+                    18,
+                    150
+                  ]
+                },
+                "dimensionsMm": [
+                  542,
+                  564,
+                  18
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    560,
+                    18,
+                    150
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                },
+                "lengthMm": 564,
+                "widthMm": 542,
+                "thicknessMm": 18,
+                "authoringCapability": {
+                  "movable": true,
+                  "axis": "z"
+                },
+                "optionRole": "INTERIOR",
+                "materialColorHex": "#d4c4a8"
+              },
+              {
+                "componentInstanceId": "door-01",
+                "componentDefinitionId": "mod-comp-door",
+                "slotId": "puerta",
+                "role": "FRENTE",
+                "name": "Puerta",
+                "kind": "board",
+                "transform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ]
+                },
+                "dimensionsMm": [
+                  596,
+                  18,
+                  716
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    2,
+                    560,
+                    2
+                  ],
+                  "basis": {
+                    "x": [
+                      1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      1,
+                      0
+                    ],
+                    "z": [
+                      0,
+                      0,
+                      1
+                    ]
+                  }
+                },
+                "lengthMm": 716,
+                "widthMm": 596,
+                "thicknessMm": 18,
+                "optionRole": "FRENTE",
+                "materialColorHex": "#c4a574"
+              }
+            ],
+            "hardware": [
+              {
+                "placementId": "door-01-hw-0",
+                "hardwareId": "hw-hinge",
+                "name": "Bisagra CL110",
+                "shape": "hinge",
+                "sizeMm": 96,
+                "diameterMm": 35,
+                "projectionMm": 25,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "door-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    252,
+                    578,
+                    84.5
+                  ]
+                },
+                "dimensionsMm": [
+                  96,
+                  25,
+                  35
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    300,
+                    578,
+                    102
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                }
+              },
+              {
+                "placementId": "door-01-hw-1",
+                "hardwareId": "hw-handle",
+                "name": "Manija 160",
+                "shape": "bar-pull",
+                "sizeMm": 160,
+                "diameterMm": 32,
+                "projectionMm": 37,
+                "colorHex": "#9aa0a6",
+                "hostComponentInstanceId": "door-01",
+                "anchorFace": "front",
+                "placementKind": "manual",
+                "transform": {
+                  "translationMm": [
+                    478,
+                    578,
+                    346
+                  ]
+                },
+                "dimensionsMm": [
+                  160,
+                  37,
+                  32
+                ],
+                "localTransform": {
+                  "translationMm": [
+                    558,
+                    578,
+                    362
+                  ],
+                  "basis": {
+                    "x": [
+                      -1,
+                      0,
+                      0
+                    ],
+                    "y": [
+                      0,
+                      0,
+                      1
+                    ],
+                    "z": [
+                      0,
+                      1,
+                      0
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "machining": {
+            "operations": [
+              {
+                "operationId": "parameter-shelfCount-1:op-1",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-2",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-3",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 50,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 492,
+                    "yMm": 150,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-4",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 18,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 82,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 460,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 524,
+                    "yMm": 150,
+                    "diameterMm": 8,
+                    "depthMm": 12,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "parameter-shelfCount-1:op-5",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1",
+                  "catalogRuleId": "minifix-dowel"
+                },
+                "holes": [
+                  {
+                    "face": "bottom",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 50,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 18,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 82,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 15,
+                    "depthMm": 12.5,
+                    "type": "minifix"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 460,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 524,
+                    "yMm": 9,
+                    "diameterMm": 8,
+                    "depthMm": 20,
+                    "type": "dowel"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-01:floor-01:pilot",
+                "hostComponentInstanceId": "floor-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-fixed-shelf-01",
+                  "catalogRuleId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1"
+                },
+                "holes": [
+                  {
+                    "face": "bottom",
+                    "xMm": 30,
+                    "yMm": 9,
+                    "diameterMm": 3,
+                    "depthMm": 12,
+                    "type": "pilot"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 261,
+                    "yMm": 9,
+                    "diameterMm": 3,
+                    "depthMm": 12,
+                    "type": "pilot"
+                  },
+                  {
+                    "face": "bottom",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 3,
+                    "depthMm": 12,
+                    "type": "pilot"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-left-01:side-left-01:counterbore",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-fixed-shelf-01",
+                  "catalogRuleId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1"
+                },
+                "holes": [
+                  {
+                    "face": "back",
+                    "xMm": 530,
+                    "yMm": 9,
+                    "diameterMm": 6,
+                    "depthMm": 9,
+                    "type": "counterbore"
+                  },
+                  {
+                    "face": "back",
+                    "xMm": 299,
+                    "yMm": 9,
+                    "diameterMm": 6,
+                    "depthMm": 9,
+                    "type": "counterbore"
+                  },
+                  {
+                    "face": "back",
+                    "xMm": 68,
+                    "yMm": 9,
+                    "diameterMm": 6,
+                    "depthMm": 9,
+                    "type": "counterbore"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-01:floor-01:pilot",
+                "hostComponentInstanceId": "floor-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-fixed-shelf-01",
+                  "catalogRuleId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1"
+                },
+                "holes": [
+                  {
+                    "face": "top",
+                    "xMm": 48,
+                    "yMm": 9,
+                    "diameterMm": 3,
+                    "depthMm": 12,
+                    "type": "pilot"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 270,
+                    "yMm": 9,
+                    "diameterMm": 3,
+                    "depthMm": 12,
+                    "type": "pilot"
+                  },
+                  {
+                    "face": "top",
+                    "xMm": 492,
+                    "yMm": 9,
+                    "diameterMm": 3,
+                    "depthMm": 12,
+                    "type": "pilot"
+                  }
+                ]
+              },
+              {
+                "operationId": "rel-fixed-shelf-01:rel-fixed-shelf-01:side-right-01:side-right-01:counterbore",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "rel-fixed-shelf-01",
+                  "catalogRuleId": "test:synthetic-fixed-shelf",
+                  "recipeRevision": "test-1",
+                  "technicalProfileId": "test:synthetic-shelf-profile",
+                  "technicalProfileRevision": "test-1"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 530,
+                    "yMm": 9,
+                    "diameterMm": 6,
+                    "depthMm": 9,
+                    "type": "counterbore"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 308,
+                    "yMm": 9,
+                    "diameterMm": 6,
+                    "depthMm": 9,
+                    "type": "counterbore"
+                  },
+                  {
+                    "face": "front",
+                    "xMm": 86,
+                    "yMm": 9,
+                    "diameterMm": 6,
+                    "depthMm": 9,
+                    "type": "counterbore"
+                  }
+                ]
+              },
+              {
+                "operationId": "door-01-hw-0:op-1",
+                "hostComponentInstanceId": "door-01",
+                "provenance": {
+                  "sourceKind": "manualHardwarePlacement",
+                  "hardwarePlacementId": "door-01-hw-0"
+                },
+                "holes": [
+                  {
+                    "face": "front",
+                    "xMm": 298,
+                    "yMm": 100,
+                    "diameterMm": 35,
+                    "depthMm": 12.5,
+                    "type": "hinge"
+                  }
+                ]
+              }
+            ],
+            "derivedHardwarePlacements": [
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-left-01",
+                "hostComponentInstanceId": "side-left-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-side-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-dowel-side-right-01",
+                "hostComponentInstanceId": "side-right-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              },
+              {
+                "derivedHardwarePlacementId": "parameter-shelfCount-1:dhp-shelf-shelf-01",
+                "hostComponentInstanceId": "shelf-01",
+                "provenance": {
+                  "sourceKind": "relationship",
+                  "relationshipId": "parameter-shelfCount-1"
+                }
+              }
+            ],
+            "joineryStatuses": [
+              {
+                "relationshipId": "rel-fixed-shelf-01",
+                "kind": "fixed-shelf-side",
+                "stage": "MACHINING_READY",
+                "contacts": [
+                  {
+                    "contactId": "rel-fixed-shelf-01:side-left-01",
+                    "status": "VALID",
+                    "issueCodes": []
+                  },
+                  {
+                    "contactId": "rel-fixed-shelf-01:side-right-01",
+                    "status": "VALID",
+                    "issueCodes": []
+                  }
+                ],
+                "stations": {
+                  "status": "PLANNED",
+                  "issueCodes": [],
+                  "stationCounts": [
+                    {
+                      "contactId": "rel-fixed-shelf-01:side-left-01",
+                      "stationCount": 3
+                    },
+                    {
+                      "contactId": "rel-fixed-shelf-01:side-right-01",
+                      "stationCount": 3
+                    }
+                  ],
+                  "stationDistances": [
+                    {
+                      "contactId": "rel-fixed-shelf-01:side-left-01",
+                      "distancesMm": [
+                        30,
+                        261,
+                        492
+                      ]
+                    },
+                    {
+                      "contactId": "rel-fixed-shelf-01:side-right-01",
+                      "distancesMm": [
+                        30,
+                        252,
+                        474
+                      ]
+                    }
+                  ]
+                },
+                "blockers": []
+              }
+            ],
+            "manufacturingFingerprint": "sha256-c674f003ac4463d67c6765f11a368336ae53048c762a0a1821c2d6b13e36c1ad"
+          },
+          "preflight": {
+            "scope": "authoring-resolve-subset",
+            "status": "clear",
+            "issues": [],
+            "preflightContract": "granete.manufacturing-preflight.v1"
+          }
+        },
+        "issues": []
+      }
+    },
+    {
       "id": "neg-hardware-derived-edit",
       "request": {
         "coordinateSystem": {

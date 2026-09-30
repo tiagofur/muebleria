@@ -1409,8 +1409,10 @@ function fnv1aHex(value: string): string {
   return `fnv1a-${hash.toString(16).padStart(8, '0')}`;
 }
 
-// J1-A0a contact resolution lives beside the #356 relationship owner. Productive
-// relationship resolution does not select or invoke this foundation yet.
+// J1-A0a contact resolution lives beside the #356 relationship owner.
+// floor-side and fixed-shelf-side relationships select this foundation for
+// productive resolution; the shelf-support legacy table and manual
+// placements stay outside it.
 type Vec3 = readonly [number, number, number];
 type ContactFace = HoleDefinition['face'];
 
