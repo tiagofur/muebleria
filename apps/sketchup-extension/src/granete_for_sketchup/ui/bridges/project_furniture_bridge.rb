@@ -100,6 +100,8 @@ module Granete
             definition_id: payload['definitionId'].to_s,
             parameters: payload['parameters'] || {},
             material_choices: payload['materialChoices'] || {},
+            material_overrides: payload['materialOverrides'],
+            material_choice_modes: payload['materialChoiceModes'],
             idempotency_key: payload['idempotencyKey']
           )
           if result['ok'] && result['instanceId'] && @position_sync_coordinator

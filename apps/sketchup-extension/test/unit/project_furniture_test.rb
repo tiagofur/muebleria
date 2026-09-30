@@ -108,7 +108,10 @@ class ProjectFurnitureTest < Minitest::Test
       path = payload['path']
       @requests << { 'method' => method, 'path' => path, 'body' => payload['body'], 'headers' => payload['headers'] }
       route = @routes[[method, path]]
-      return route if route
+      if route
+        res_body = route['body'].respond_to?(:call) ? route['body'].call(payload) : route['body']
+        return { 'status' => route['status'], 'body' => res_body }
+      end
 
       raise Granete::SketchUpExtension::Transport::RequestError,
             "no route for #{method} #{path}"
@@ -1189,9 +1192,11 @@ class ProjectFurnitureTest < Minitest::Test
       'design_id' => DESIGN_ID, 'project_id' => PROJECT_ID,
       'authoring_defaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-roble' } },
       'inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => 2, 'design_backed' => 1,
+                                  'definition_backed' => 0,
                                   'needs_rollout' => 1, 'design_current' => 0, 'overridden' => 1 }],
       'items' => [
         { 'furniture_instance_id' => FI_1,
+          'furniture_definition_id' => DEFINITION_ID,
           'inheritance' => [
             { 'role' => 'INTERIOR', 'mode' => 'design', 'applied_material_id' => 'mat-blanco',
               'design_default_material_id' => 'mat-roble', 'needs_rollout' => true },
@@ -1202,8 +1207,17 @@ class ProjectFurnitureTest < Minitest::Test
     }
     parsed = PF::DesignInheritanceContract.parse!(body)
     assert_equal DESIGN_ID, parsed.design_id
+    assert_equal 1, parsed.inheritance_summary.length
+    summary = parsed.inheritance_summary.first
+    assert_equal 'INTERIOR', summary.role
+    assert_equal 2, summary.items
+    assert_equal 0, summary.definition_backed
+    assert_equal 1, summary.needs_rollout
+    assert_equal 1, summary.overridden
+
     item = parsed.items.first
     assert_equal FI_1, item.furniture_instance_id
+    assert_equal DEFINITION_ID, item.furniture_definition_id
     interior = item.inheritance.first
     assert_equal 'design', interior.mode
     assert_equal 'mat-roble', interior.design_default_material_id
@@ -1211,8 +1225,19 @@ class ProjectFurnitureTest < Minitest::Test
     refute item.inheritance.last.needs_rollout
 
     bad_shapes = [
+      body.merge('inheritance_summary' => 'nope'),
+      body.merge('inheritance_summary' => [{ 'role' => '', 'items' => 1, 'design_backed' => 1,
+                                             'definition_backed' => 0,
+                                             'needs_rollout' => 0, 'design_current' => 1, 'overridden' => 0 }]),
+      body.merge('inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => 1, 'design_backed' => 1,
+                                             'needs_rollout' => 0, 'design_current' => 0, 'overridden' => 0 }]),
+      body.merge('inheritance_summary' => [{ 'role' => 'INTERIOR', 'items' => -1, 'design_backed' => 0,
+                                             'definition_backed' => 0,
+                                             'needs_rollout' => 0, 'design_current' => 0, 'overridden' => 0 }]),
       body.merge('items' => 'nope'),
       body.merge('items' => [{ 'furniture_instance_id' => 'bad', 'inheritance' => [] }]),
+      body.merge('items' => [{ 'furniture_instance_id' => FI_1, 'furniture_definition_id' => '',
+                               'inheritance' => [] }]),
       body.merge('items' => [{ 'furniture_instance_id' => FI_1,
                                'inheritance' => [{ 'role' => 'INTERIOR', 'mode' => 'inherited',
                                                    'applied_material_id' => 'x', 'needs_rollout' => false }] }]),
@@ -1236,6 +1261,128 @@ class ProjectFurnitureTest < Minitest::Test
         PF::DesignInheritanceContract.parse!(shape)
       end
     end
+  end
+
+  # #784 R4: Fail-closed parsing of POST /api/designs/:design_id/effective-materials response
+  def test_effective_materials_contract_parsing_fail_closed
+    valid = {
+      'furnitureDefinitionId' => DEFINITION_ID,
+      'materialChoices' => { 'INTERIOR' => 'mat-white', 'FRENTES' => 'mat-oak', 'FONDO' => 'mat-hdf' },
+      'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'override', 'FONDO' => 'definition' }
+    }
+    parsed = PF::EffectiveMaterialsContract.parse!(valid)
+    assert_equal DEFINITION_ID, parsed.furniture_definition_id
+    assert_equal({ 'INTERIOR' => 'mat-white', 'FRENTES' => 'mat-oak', 'FONDO' => 'mat-hdf' }, parsed.material_choices)
+    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'override', 'FONDO' => 'definition' },
+                 parsed.material_choice_modes)
+
+    bad_shapes = [
+      'not a hash',
+      valid.merge('furnitureDefinitionId' => ''),
+      valid.merge('materialChoices' => 'nope'),
+      valid.merge('materialChoiceModes' => 'nope'),
+      valid.merge('materialChoices' => { 'INTERIOR' => 'mat-white' }),
+      valid.merge('materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'invalid_mode' }),
+      valid.merge('materialChoices' => { '' => 'mat-white', 'FRENTES' => 'mat-oak' })
+    ]
+    bad_shapes.each do |shape|
+      assert_raises(PF::Contract::ContractError) do
+        PF::EffectiveMaterialsContract.parse!(shape)
+      end
+    end
+  end
+
+  # #784 R4: A new furniture insertion into a bound design inherits Design defaults with mode=design
+  def test_new_furniture_insertion_inherits_design_defaults_with_mode_design
+    write_binding(@model)
+    stub_binding_validation(base: REVISION_R1)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201,
+                       instance_body(FI_1, 'design'))
+    stub_project_furniture([instance_body(FI_1, 'design')])
+    stub_working_copy(working_copy_body([]))
+
+    # Server effective materials: INTERIOR and FRENTES inherit design defaults;
+    # FONDO has no compatible design default and materializes the curated
+    # definition fallback with mode=definition (not a user exception).
+    @transport.respond(
+      :post, "/designs/#{DESIGN_ID}/effective-materials", 200,
+      {
+        'furnitureDefinitionId' => DEFINITION_ID,
+        'materialChoices' => { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id', 'FONDO' => 'hdf-id' },
+        'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'design', 'FONDO' => 'definition' }
+      }
+    )
+
+    create_res = @placer.create_and_place(
+      definition_id: DEFINITION_ID,
+      parameters: { 'widthMm' => 600 },
+      material_choices: {},
+      idempotency_key: 'idem-r4-design-defaults'
+    )
+    assert create_res['ok']
+
+    confirm_res = @placer.confirm_placement(FI_1)
+    assert confirm_res['ok']
+
+    put_req = @transport.requests.find { |r| r['method'] == 'PUT' && r['path'] == "/designs/#{DESIGN_ID}/working-copy" }
+    refute_nil put_req
+    item = put_req['body']['items'].first
+    assert_equal({ 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id', 'FONDO' => 'hdf-id' }, item['material_choices'])
+    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'design', 'FONDO' => 'definition' },
+                 item['material_choice_modes'])
+  end
+
+  # #784 R4 review: an empty definition id fails locally (same code as the
+  # catalog resolve) without paying the effective-materials roundtrip.
+  def test_create_and_place_with_empty_definition_fails_locally
+    res = @placer.create_and_place(definition_id: '  ', parameters: {}, material_choices: {})
+    refute res['ok']
+    assert_equal 'definition_unavailable', res['code']
+    assert_empty @transport.requests.select { |r| r['path'].to_s.include?('effective-materials') },
+                 'no effective-materials call for an empty definition id'
+
+    res_preview = @placer.prepare_catalog_preview(definition_id: '', parameters: {}, material_choices: {})
+    refute res_preview['ok']
+    assert_equal 'definition_unavailable', res_preview['code']
+  end
+
+  # #784 R4: A new furniture insertion with an explicit override marks touched role as override and untouched as design
+  def test_new_furniture_insertion_with_explicit_override_marks_roles_correctly
+    write_binding(@model)
+    stub_binding_validation(base: REVISION_R1)
+    @transport.respond(:post, "/projects/#{PROJECT_ID}/furniture-instances", 201,
+                       instance_body(FI_1, 'design'))
+    stub_project_furniture([instance_body(FI_1, 'design')])
+    stub_working_copy(working_copy_body([]))
+
+    # User only overrode FRENTES; INTERIOR was untouched and inherits from Design
+    @transport.respond(:post, "/designs/#{DESIGN_ID}/effective-materials", 200, lambda { |req|
+      overrides = req.dig('body', 'materialChoices') || {}
+      assert_equal({ 'FRENTES' => 'white-2-id' }, overrides)
+      {
+        'furnitureDefinitionId' => DEFINITION_ID,
+        'materialChoices' => { 'INTERIOR' => 'white-id', 'FRENTES' => 'white-2-id' },
+        'materialChoiceModes' => { 'INTERIOR' => 'design', 'FRENTES' => 'override' }
+      }
+    })
+
+    create_res = @placer.create_and_place(
+      definition_id: DEFINITION_ID,
+      parameters: { 'widthMm' => 600 },
+      material_choices: { 'INTERIOR' => 'white-id', 'FRENTES' => 'white-2-id' },
+      material_overrides: { 'FRENTES' => 'white-2-id' },
+      idempotency_key: 'idem-r4-override'
+    )
+    assert create_res['ok']
+
+    confirm_res = @placer.confirm_placement(FI_1)
+    assert confirm_res['ok']
+
+    put_req = @transport.requests.find { |r| r['method'] == 'PUT' && r['path'] == "/designs/#{DESIGN_ID}/working-copy" }
+    refute_nil put_req
+    item = put_req['body']['items'].first
+    assert_equal({ 'INTERIOR' => 'white-id', 'FRENTES' => 'white-2-id' }, item['material_choices'])
+    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'override' }, item['material_choice_modes'])
   end
 
   # #784 R1: the durable Design authoring defaults travel on the working
@@ -1953,6 +2100,16 @@ class ProjectFurnitureTest < Minitest::Test
                          'capabilities' => { 'can_edit_working_copy' => true, 'can_publish_revision' => true,
                                              'can_create_initial_quote' => true }
                        })
+    @transport.respond(:post, "/designs/#{DESIGN_ID}/effective-materials", 200, lambda { |req|
+      choices = req.dig('body', 'materialChoices') || {}
+      modes = {}
+      choices.each_key { |k| modes[k] = 'override' }
+      {
+        'furnitureDefinitionId' => req.dig('body', 'furnitureDefinitionId') || DEFINITION_ID,
+        'materialChoices' => choices,
+        'materialChoiceModes' => modes
+      }
+    })
   end
 
   def stub_project_furniture(body)
