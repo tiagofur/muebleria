@@ -226,23 +226,29 @@ treated as missing; no SketchUp hand-written adapter.
     test proves an edit-save preserves a definition-bearing module byte-for-byte
     on the wire. Small standalone PR. **DONE — commit `490e6b1a`.**
 
-- [ ] **T2 — Backend: module optimistic concurrency + typed validation errors**
+- [x] **T2 — Backend: module optimistic concurrency + typed validation errors**
   - Route: inline.
   - Trigger evidence: `modules` has no `version` column; `UpdateModule`
     (`backend-go/internal/storage/projects.go:2071`) is a blind UPDATE; module
     create/update returns plain 400 text. Issue requires "stale writes fail
     with typed conflict" and "browser-only validation accepts a definition
     rejected by Go" must be impossible.
-  - Outcome: migration adding `modules.version` (fresh+upgrade, RLS untouched —
-    row policy already exists from 000094); module list/get responses expose
-    `version` + ETag (`FormatVersionETag`); PUT requires `If-Match`
-    (`RequireIfMatch` → 428/412 `VERSION_CONFLICT`) with conditional
-    `version = version + 1` UPDATE in one transaction; parameter-definition
-    validation failures return the typed 422 `PARAMETER_DEFINITION_INVALID`
-    envelope (same shape as the furniture read surface);
-    `APIWorkspaceRepository` module upsert sends `If-Match` and surfaces 412 as
-    a typed error so the existing catalog save flow keeps working. Go tests:
-    stale-conflict race, rollback, fresh+upgrade migration, RLS untouched.
+  - Outcome: migration 000142 `modules.version` (DEFAULT 1, CHECK >= 1,
+    fresh+upgrade proven); module list/get/create/PUT expose `version` +
+    strong ETag `"v<N>"`; PUT resolves existence first (404 keeps the client
+    POST-create fallback alive) then `RequireIfMatch` (428/400) and
+    `UpdateModule(id, expectedVersion, m)` does a conditional
+    `version = version + 1` UPDATE in one transaction — stale →
+    `storage.ErrVersionConflict` → 412 `VERSION_CONFLICT` typed envelope,
+    missing row → 404, invalid parameter definitions → 422
+    `PARAMETER_DEFINITION_INVALID` (same envelope as the furniture read
+    surface, now shared via `respondWithParameterDefinitionIssues`). Client:
+    `Module.version` (display-only), `APIWorkspaceRepository` keeps a session
+    version cache seeded by getCatalog and refreshed from every accepted
+    write; PUT sends If-Match from the cache, a bare PUT (no cached version)
+    fails closed on 428 via `ModuleVersionUnknownError`, and the catalog store
+    maps stale conflicts to a distinct warning toast with the local change
+    rolled back. **DONE — this commit.**
 
 - [ ] **T3 — Generated contract surface for the editor (needs D1)**
   - Route: inline.
@@ -422,9 +428,55 @@ treated as missing; no SketchUp hand-written adapter.
   `typecheck` + `typescript` gates once on the frozen candidate. V2
   NOT_RUN (browser/PostgreSQL untouched by this slice; no UI surface change).
   Delivery: partial (PR1 of the chain; #497 acceptance needs T2–T8).
+- 2026-09-29: **T2 implemented** — one work-unit commit on
+  `feat/497-web-catalog-param-editor` (base `9ed33bda` / PR1 head). Backend:
+  migration 000142 + `domain.Module.Version` + conditional `UpdateModule` +
+  handler ETag/If-Match/422/412 mapping (existence check BEFORE the
+  precondition so PUT-404 → POST-create keeps working) + 422 helper shared
+  with the furniture surface. Web: `Module.version`, mappers round-trip,
+  repository version cache + `upsertModule` (If-Match; bare PUT fails closed
+  on 428; 412 → `GraneteApiError`), catalog store stale warning toast +
+  rollback, `updateModule` preserves the loaded version. V1 evidence: Go
+  `internal/api` full suite ok (new `module_concurrency_test.go`: 428, 400
+  malformed, expected-version forwarding + ETag, 412 typed, 422 typed, create
+  v1+ETag, missing-row 404 without precondition); Go storage on disposable
+  PostgreSQL 16 (`GRANETE_TEST_DATABASE=1` guard): new
+  `TestModuleVersionConcurrency` (create v1 → update v2 → stale conflict
+  without row mutation → version-less fail-closed → unknown-id 404) and
+  `TestModulesVersionMigrationFreshAndUpgrade` (fresh default 1; legacy row
+  upgraded to 1) PASS, plus adapted module tests PASS. TS: root `pnpm
+  typecheck` 0 errors; root `pnpm test` all workspaces green (web 561 incl. 3
+  new store tests, storage 229 incl. repository If-Match/412/428 + mapper
+  version tests). Known environmental limit: the FULL `internal/storage`
+  suite fails in the local disposable container on pre-existing
+  RLS/tenant-boundary tests (auth sessions/devices, agregado tenant boundary)
+  — reproduced identically on pristine `origin/main` in a temp worktree, so
+  it is container role setup, not this change; CI's storage shards are the
+  authoritative run for those. NOT_RUN: browser gate locally (CI
+  organization-browser runs it); SketchUp host untouched. Delivery: partial
+  (PR2 of the chain; remaining acceptance T3–T8).
+- 2026-09-30: **T2 correction round (one consolidated round, per contract).**
+  CI on PR2 caught two integration gaps local targeted runs missed:
+  (1) storage fixtures pinning the schema at migration 103
+  (`TestModuleParameterDefinitionsStorageRoundTrip`,
+  `TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions`) broke
+  because CreateModule now scans `version` (migration 142) — their schema
+  pins moved to 142 (they are store-contract tests; the pure migration
+  tests at 102/103 stay pinned); (2) the browser gate hit
+  `ModuleVersionUnknownError` on the seed-then-edit flow: a module seeded
+  server-side mid-session leaves the editor without a cached version, and
+  the bare PUT answered 428. Resolution — the client handshake is now
+  learn-then-retry: on 428 the repository GETs the module's current version
+  into the cache and retries the PUT ONCE under If-Match (still
+  version-guarded; a mid-flight change answers 412); only an unlearnable
+  version fails closed. `joinery-status.spec.ts` upsert helper got the same
+  handshake for its direct API PUTs. Re-verified: root typecheck 0 errors,
+  root pnpm test green (storage 230), Go parameter-definitions storage tests
+  PASS on disposable PostgreSQL with the new pins.
 
 ## Next step
 
-Publish PR1 (T1) with `Refs #497 + Delivery: partial`; owner decides D1/D2;
-then start T2 (module optimistic concurrency + typed validation errors),
-unblocked by D1/D2.
+Publish PR2 (T2) stacked on PR1 with `Refs #497 + Delivery: partial`; owner
+decides D1/D2; then T3 (generated-contract surface, needs D1) / T4 (authoring
+preview endpoint, needs D2 naming) — or T5 editor UI groundwork, which is
+client-only.

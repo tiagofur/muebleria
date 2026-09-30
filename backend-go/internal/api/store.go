@@ -205,7 +205,7 @@ type Store interface {
 	GetFullCatalog(ctx context.Context) (domain.Catalog, error)
 	GetModuleByID(ctx context.Context, id string) (*domain.Module, error)
 	CreateModule(ctx context.Context, m *domain.Module) error
-	UpdateModule(ctx context.Context, id string, m *domain.Module) error
+	UpdateModule(ctx context.Context, id string, expectedVersion int64, m *domain.Module) error
 	DeleteModule(ctx context.Context, id string) error
 
 	// Catalog: structures (F049 cuerpos)

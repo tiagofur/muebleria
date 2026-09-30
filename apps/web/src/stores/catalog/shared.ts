@@ -7,6 +7,7 @@
  * unchanged — see catalogStore.ts (combinator + singleton).
  */
 
+import { GraneteApiError, ModuleVersionUnknownError } from '@granete/storage';
 import { useWorkspaceStore } from '../workspaceStore';
 import { notifyCatalogMutated } from '../../crossTabSync';
 
@@ -384,9 +385,16 @@ export function makeCatalogStoreCtx(
           set({ catalog: recomputed });
         }
 
+        // #497: a stale editor must not read like a transport failure — the
+        // local change was rolled back and the user needs the reload path.
+        const staleCatalogWrite =
+          (err instanceof GraneteApiError && err.code === 'VERSION_CONFLICT') ||
+          err instanceof ModuleVersionUnknownError;
         toast({
-          type: 'error',
-          message: 'Error de conexión al sincronizar cambios',
+          type: staleCatalogWrite ? 'warning' : 'error',
+          message: staleCatalogWrite
+            ? 'El catálogo cambió en otra sesión. Recargá la pantalla antes de volver a guardar este mueble.'
+            : 'Error de conexión al sincronizar cambios',
         });
         throw err;
       }

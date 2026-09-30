@@ -245,6 +245,26 @@ describe('apiMappers', () => {
     expect(round.hardwareLines[0]?.hardwareId).toBe('hw1');
   });
 
+  it('round-trips the module version and keeps legacy payloads versionless (#497)', () => {
+    const mod: Module = {
+      id: 'mod-497',
+      code: 'M-497',
+      name: 'Gabinete versionado',
+      baseLaborCost: 0,
+      hardwareLines: [],
+      version: 7,
+    };
+    const api = moduleToApi(mod);
+    expect(api.version).toBe(7);
+    const round = moduleFromApi(api as Record<string, unknown>);
+    expect(round.version).toBe(7);
+
+    // A payload without a version (legacy backend) stays versionless so the
+    // repository can fail closed instead of blind-writing.
+    const legacy = moduleFromApi({ ...api, version: undefined });
+    expect(legacy.version).toBeUndefined();
+  });
+
   it('round-trips module parameter_definitions verbatim (#905)', () => {
     const mod: Module = {
       id: 'mod-905',

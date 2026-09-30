@@ -1426,3 +1426,200 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// #497 T2 — module optimistic concurrency on the repository boundary
+// ---------------------------------------------------------------------------
+
+describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  function jsonRes(body: unknown, ok = true, status = 200): Response {
+    return { ok, status, json: async () => body, text: async () => JSON.stringify(body) } as Response;
+  }
+
+  const modulePayload = {
+    id: 'mod-497',
+    code: 'M-497',
+    name: 'Gabinete',
+    base_labor_cost: 0,
+    width_mm: 0,
+    height_mm: 0,
+    depth_mm: 0,
+    categoryId: '',
+    structure_id: '',
+    furniture_type: '',
+    base_mode: '',
+    base_clearance_mm: null,
+    components: [],
+    agregados: [],
+    presets: [],
+    image_url: '',
+    notes: '',
+    hardware_lines: [],
+    parameter_definitions: [],
+    version: 4,
+  };
+
+  /** Routes a full getCatalog: real module list, empty everything else. */
+  function mockCatalog(modules: unknown[]): (url: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response> {
+    return async (url, init) => {
+      const method = init?.method ?? 'GET';
+      const target = String(url);
+      if (method === 'GET') {
+        if (target.endsWith('/catalog/modules')) return jsonRes(modules);
+        return jsonRes([]);
+      }
+      throw new Error(`unexpected ${method} ${target}`);
+    };
+  }
+
+  it('PUTs with If-Match from the cached version and refreshes it from each response', async () => {
+    const ifMatchSeen: Array<string | undefined> = [];
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if ((init?.method ?? 'GET') === 'GET') return mockCatalog([modulePayload])(url, init);
+      ifMatchSeen.push(((init?.headers ?? {}) as Record<string, string>)['If-Match']);
+      return jsonRes({ ...modulePayload, version: (ifMatchSeen.length) + 4 });
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const catalog = await repo.getCatalog();
+    expect(catalog.modules[0]?.version).toBe(4);
+
+    await repo.saveCatalog({
+      ...(catalog as unknown as Catalog),
+      modules: [{ ...catalog.modules[0]!, name: 'Editado' }],
+    });
+    expect(ifMatchSeen).toEqual(['"v4"']);
+
+    // The accepted PUT refreshed the cache to 5: the next save sends v5.
+    await repo.saveCatalog({
+      ...(catalog as unknown as Catalog),
+      modules: [{ ...catalog.modules[0]!, name: 'Editado 2' }],
+    });
+    expect(ifMatchSeen).toEqual(['"v4"', '"v5"']);
+  });
+
+  it('surfaces a 412 as GraneteApiError with code VERSION_CONFLICT', async () => {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if ((init?.method ?? 'GET') === 'GET') return mockCatalog([modulePayload])(url, init);
+      return {
+        ok: false,
+        status: 412,
+        json: async () => ({
+          code: 'VERSION_CONFLICT',
+          message: 'El mueble cambió en otra sesión.',
+          fieldErrors: {},
+          requestId: 'req-1',
+          retryable: false,
+          details: {},
+        }),
+        text: async () => JSON.stringify({
+          code: 'VERSION_CONFLICT',
+          message: 'El mueble cambió en otra sesión.',
+          fieldErrors: {},
+          requestId: 'req-1',
+          retryable: false,
+          details: {},
+        }),
+      } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const catalog = await repo.getCatalog();
+
+    await expect(
+      repo.saveCatalog({
+        ...(catalog as unknown as Catalog),
+        modules: [{ ...catalog.modules[0]!, name: 'Viejo' }],
+      }),
+    ).rejects.toMatchObject({ name: 'GraneteApiError', code: 'VERSION_CONFLICT', status: 412 });
+  });
+
+  it('resolves a 428 by learning the version and retrying once under If-Match', async () => {
+    const putIfMatch: Array<string | undefined> = [];
+    let puts = 0;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET') {
+        if (String(url).endsWith('/catalog/modules/mod-497')) {
+          // The version learn handshake reads the module directly.
+          return jsonRes({ ...modulePayload, version: 9 });
+        }
+        return mockCatalog([{ ...modulePayload, version: undefined }])(url, init);
+      }
+      if (method === 'PUT') {
+        puts += 1;
+        putIfMatch.push(((init?.headers ?? {}) as Record<string, string>)['If-Match']);
+        return puts === 1
+          ? {
+              ok: false,
+              status: 428,
+              json: async () => ({
+                code: 'PRECONDITION_REQUIRED',
+                message: 'If-Match es obligatorio',
+                fieldErrors: {},
+                requestId: 'req-2',
+                retryable: false,
+                details: {},
+              }),
+              text: async () => JSON.stringify({ code: 'PRECONDITION_REQUIRED' }),
+            } as Response
+          : jsonRes({ ...modulePayload, version: 10 });
+      }
+      return jsonRes({ ...modulePayload });
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const catalog = await repo.getCatalog();
+
+    await repo.saveCatalog({
+      ...(catalog as unknown as Catalog),
+      modules: [{ ...catalog.modules[0]!, name: 'X' }],
+    });
+    // First PUT went out bare, the retry carried the learned version.
+    expect(putIfMatch).toEqual([undefined, '"v9"']);
+  });
+
+  it('fails closed on 428 when the version cannot be learned, without a blind POST', async () => {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const method = init?.method ?? 'GET';
+      if (method === 'GET') {
+        if (String(url).endsWith('/catalog/modules/mod-497')) {
+          return { ok: false, status: 404, json: async () => ({}), text: async () => 'not found' } as Response;
+        }
+        return mockCatalog([{ ...modulePayload, version: undefined }])(url, init);
+      }
+      if (method === 'PUT') {
+        return {
+          ok: false,
+          status: 428,
+          json: async () => ({
+            code: 'PRECONDITION_REQUIRED',
+            message: 'If-Match es obligatorio',
+            fieldErrors: {},
+            requestId: 'req-3',
+            retryable: false,
+            details: {},
+          }),
+          text: async () => JSON.stringify({ code: 'PRECONDITION_REQUIRED' }),
+        } as Response;
+      }
+      return jsonRes({ ...modulePayload });
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const catalog = await repo.getCatalog();
+
+    await expect(
+      repo.saveCatalog({
+        ...(catalog as unknown as Catalog),
+        modules: [{ ...catalog.modules[0]!, name: 'X' }],
+      }),
+    ).rejects.toMatchObject({ name: 'ModuleVersionUnknownError' });
+    // The bare PUT was refused — no blind POST create may follow.
+    expect(vi.mocked(fetch).mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST')).toHaveLength(0);
+  });
+});

@@ -79,7 +79,7 @@ func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
 		t.Fatalf("mismatch on module agregado: %+v", modGot.Agregados)
 	}
 	modIn.Agregados[0].Quantity = 4
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateModule(txCtx, modID, modIn) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateModule(txCtx, modID, modIn.Version, modIn) })
 	modUpd := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Module, error) { return store.GetModuleByID(txCtx, modID) })
 	if len(modUpd.Agregados) != 1 || modUpd.Agregados[0].Quantity != 4 {
 		t.Fatalf("mismatch after module update: %+v", modUpd.Agregados)

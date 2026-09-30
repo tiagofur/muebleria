@@ -2144,7 +2144,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			var definitionsErr *domain.FurnitureParameterDefinitionsError
 			if errors.As(err, &definitionsErr) {
-				respondWithError(w, http.StatusBadRequest, definitionsErr.Error())
+				respondWithParameterDefinitionIssues(w, definitionsErr.Issues)
 				return
 			}
 			if isDuplicateKey(err) {
@@ -2154,6 +2154,7 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(m.Version))
 		respondWithJSON(w, http.StatusCreated, m)
 
 	default:
@@ -2175,27 +2176,41 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "module not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(m.Version))
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar muebles plantilla") {
 			return
 		}
+		// Existence first: PUT of a module the server does not know must stay
+		// a 404 so clients can fall back to POST create; the If-Match
+		// precondition only governs writes to a row that exists.
+		cur, err := s.Store.GetModuleByID(r.Context(), id)
+		if err != nil || cur == nil {
+			respondWithError(w, http.StatusNotFound, "module not found")
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var m domain.Module
 		if !decodeJSONBody(w, r, &m) {
 			return
 		}
-		// Snapshot current media URL so we can clean up the replaced file after
-		// a successful commit.
-		prevImage := ""
-		if cur, err := s.Store.GetModuleByID(r.Context(), id); err == nil && cur != nil {
-			prevImage = cur.ImageURL
-		}
-		err := s.Store.UpdateModule(r.Context(), id, &m)
+		// cur doubles as the media-cleanup snapshot for the replaced file.
+		prevImage := cur.ImageURL
+		err = s.Store.UpdateModule(r.Context(), id, expectedVersion, &m)
 		if err != nil {
 			var definitionsErr *domain.FurnitureParameterDefinitionsError
 			if errors.As(err, &definitionsErr) {
-				respondWithError(w, http.StatusBadRequest, definitionsErr.Error())
+				respondWithParameterDefinitionIssues(w, definitionsErr.Issues)
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict,
+					"El mueble cambió en otra sesión. Recargá el catálogo y volvé a intentar con la versión actual.", nil)
 				return
 			}
 			if strings.Contains(err.Error(), "not found") {
@@ -2212,6 +2227,7 @@ func (s *Server) HandleModuleByID(w http.ResponseWriter, r *http.Request) {
 		if prevImage != m.ImageURL {
 			deleteMediaFileByURL(r.Context(), s.MediaDir, prevImage)
 		}
+		w.Header().Set("ETag", FormatVersionETag(m.Version))
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:

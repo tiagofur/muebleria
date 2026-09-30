@@ -683,6 +683,9 @@ export function moduleToApi(m: Module): Record<string, unknown> {
     // the domain shape (the Go struct tags are camelCase) — dropping it here
     // silently erased every module's authoring contract on saveCatalog.
     parameter_definitions: m.parameterDefinitions ?? [],
+    // Echoed for round-trip fidelity only (#497): the server ignores the body
+    // version — If-Match carries the expected version on writes.
+    version: m.version ?? 0,
   };
 }
 
@@ -746,6 +749,10 @@ export function moduleFromApi(raw: Record<string, unknown>): Module {
     parameterDefinitions: Array.isArray(raw.parameter_definitions)
       ? (raw.parameter_definitions as Module['parameterDefinitions'])
       : undefined,
+    version:
+      typeof raw.version === 'number' && Number.isInteger(raw.version) && raw.version > 0
+        ? raw.version
+        : undefined,
   };
 }
 

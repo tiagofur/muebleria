@@ -169,7 +169,7 @@ func TestGetFullCatalogParameterDefinitionsStayTenantScoped(t *testing.T) {
 
 func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	pool := multiOrgFreshMigrationDB(t)
-	identityApplyThrough(t, pool, 103)
+	identityApplyThrough(t, pool, 142)
 	store := &storage.PostgresStore{Pool: pool}
 	ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 	min, max, step := 0.0, 5.0, 1.0
@@ -195,7 +195,7 @@ func TestModuleParameterDefinitionsStorageRoundTrip(t *testing.T) {
 	}
 
 	got.ParameterDefinitions[0].DefaultValue = float64(2)
-	if err := store.UpdateModule(ctx, got.ID, got); err != nil {
+	if err := store.UpdateModule(ctx, got.ID, got.Version, got); err != nil {
 		t.Fatalf("update module: %v", err)
 	}
 	listed, err := store.ListModules(ctx)
@@ -264,7 +264,7 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 	for index, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			pool := multiOrgFreshMigrationDB(t)
-			identityApplyThrough(t, pool, 103)
+			identityApplyThrough(t, pool, 142)
 			store := &storage.PostgresStore{Pool: pool}
 			ctx := storage.WithOrgCtx(context.Background(), multiOrgInitialOrgID)
 
@@ -287,7 +287,7 @@ func TestCreateAndUpdateModuleRejectPersistedDimensionDefinitions(t *testing.T) 
 			}
 			valid.WidthMm = 610
 			valid.ParameterDefinitions = []domain.FurnitureParameterDefinition{testCase.definition}
-			assertDefinitionError(t, store.UpdateModule(ctx, valid.ID, valid), testCase.expectedFields)
+			assertDefinitionError(t, store.UpdateModule(ctx, valid.ID, valid.Version, valid), testCase.expectedFields)
 			persisted, err := store.GetModuleByID(ctx, valid.ID)
 			if err != nil {
 				t.Fatal(err)

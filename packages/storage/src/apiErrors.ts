@@ -20,6 +20,21 @@ export class GraneteNetworkError extends Error {
   }
 }
 
+/**
+ * #497: a module save was refused BEFORE the wire because this session has no
+ * server version for the module (legacy backend without the version field, or
+ * a lost cache entry). Fail-closed — a blind write could clobber a concurrent
+ * authoring change. Recovery: reload the catalog.
+ */
+export class ModuleVersionUnknownError extends Error {
+  constructor(readonly moduleId: string) {
+    super(
+      `No se conoce la versión del mueble ${moduleId} en esta sesión; recargá el catálogo antes de volver a guardar.`,
+    );
+    this.name = 'ModuleVersionUnknownError';
+  }
+}
+
 export function parseApiError(value: unknown): ApiError {
   return parseGenerated<ApiError>('ApiError', value);
 }

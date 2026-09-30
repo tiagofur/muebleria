@@ -40,11 +40,12 @@ func TestHandleModuleByIDWireCarriesHardwarePlacements(t *testing.T) {
 		]
 	}`
 
-	store := &stubStore{}
+	store := &stubStore{moduleReturnedByID: &domain.Module{ID: "mod858"}}
 	srv := &Server{Store: store}
 
 	put := withClaims(httptest.NewRequest("PUT", "/api/catalog/modules/mod858", strings.NewReader(wireBody)), "eng", string(domain.RoleIngeniero))
 	put.SetPathValue("id", "mod858")
+	put.Header.Set("If-Match", `"v1"`)
 	putRR := httptest.NewRecorder()
 	srv.HandleModuleByID(putRR, put)
 	if putRR.Code != http.StatusOK {

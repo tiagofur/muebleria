@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createSeedWorkspace } from '@granete/storage';
+import { createSeedWorkspace, GraneteApiError } from '@granete/storage';
+import type { ApiError } from '@granete/storage';
 import type { Catalog } from '@granete/domain';
 
 import { createCatalogStore, type CatalogStoreDeps } from './catalogStore';
@@ -622,7 +623,7 @@ describe('catalogStore — categories (atypical)', () => {
       notes: target.notes ?? '',
       categoryId: 'cat-1',
       furnitureType: target.furnitureType ?? 'inferior',
-      baseMode: '',
+      baseMode: '' as const,
       baseClearanceMm: '',
       baseLaborCost: String(target.baseLaborCost ?? ''),
       imageUrl: target.imageUrl ?? '',
@@ -1847,5 +1848,110 @@ describe('catalogStore — save serialization (P1-4)', () => {
       // hardDeleteOnAuth must NOT have been called because patchSaved must return false when context is invalidated!
       expect(hardDeleteCalled).toBe(false);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #497 T2 — module optimistic concurrency
+// ---------------------------------------------------------------------------
+
+describe('catalogStore — module version concurrency (#497)', () => {
+  const moduleDraft = {
+    code: 'MOD-497',
+    name: 'Mueble versionado',
+    notes: '',
+    categoryId: '',
+    furnitureType: 'inferior' as const,
+    baseMode: '' as const,
+    baseClearanceMm: '',
+    baseLaborCost: '',
+    imageUrl: '',
+    externalWidth: '',
+    externalHeight: '',
+    externalDepth: '',
+    hardwareLines: [],
+    structureId: '',
+    components: [],
+    agregados: [],
+    presets: [],
+    parameterDefinitions: [],
+  };
+
+  function catalogWithVersion(version: number | undefined): Catalog {
+    const cat = seedCatalog();
+    return {
+      ...cat,
+      modules: cat.modules.map((m, i) => (i === 0 ? { ...m, version } : m)),
+    };
+  }
+
+  it('updateModule keeps the loaded server version on the edited module', async () => {
+    const { deps, saved } = makeDeps();
+    const store = createCatalogStore({ deps });
+    const cat = catalogWithVersion(5);
+    store.getState().setCatalog(cat);
+    const target = cat.modules[0]!;
+
+    await store.getState().updateModule(target.id, {
+      ...moduleDraft,
+      code: target.code,
+      name: 'Editado',
+    });
+
+    const last = saved[saved.length - 1]!;
+    const edited = last.modules.find((m) => m.id === target.id)!;
+    expect(edited.name).toBe('Editado');
+    expect(edited.version).toBe(5);
+  });
+
+  it('maps a server VERSION_CONFLICT to the stale-catalog warning toast', async () => {
+    const payload = {
+      code: 'VERSION_CONFLICT',
+      message: 'El mueble cambió en otra sesión.',
+      fieldErrors: {},
+      requestId: 'req-497',
+      retryable: false,
+      details: {},
+    } as const;
+    const { deps, toasts } = makeDeps({
+      saveCatalog: async () => {
+        throw new GraneteApiError(412, payload);
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(catalogWithVersion(3));
+    const target = store.getState().catalog!.modules[0]!;
+
+    store.getState().updateModule(target.id, {
+      ...moduleDraft,
+      code: target.code,
+      name: 'Escritura vieja',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const stale = toasts.find((t) => t.type === 'warning');
+    expect(stale?.message).toMatch(/otra sesión/);
+    // The optimistic edit was rolled back: the module keeps its old name.
+    expect(store.getState().catalog!.modules.find((m) => m.id === target.id)!.name).toBe(target.name);
+  });
+
+  it('keeps the generic connection-error toast for transport failures', async () => {
+    const { deps, toasts } = makeDeps({
+      saveCatalog: async () => {
+        throw new Error('network down');
+      },
+    });
+    const store = createCatalogStore({ deps });
+    store.getState().setCatalog(catalogWithVersion(3));
+    const target = store.getState().catalog!.modules[0]!;
+
+    store.getState().updateModule(target.id, {
+      ...moduleDraft,
+      code: target.code,
+      name: 'X',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(toasts.find((t) => t.type === 'error')?.message).toMatch(/Error de conexión/);
   });
 });

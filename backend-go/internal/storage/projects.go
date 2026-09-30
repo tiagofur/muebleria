@@ -1588,7 +1588,7 @@ func (s *PostgresStore) DeleteProjectWithMediaCleanup(
 func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error) {
 	query := `
 		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, category_id,
-		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados, parameter_definitions
+		       furniture_type, base_mode, base_clearance_mm, image_url, structure_id, agregados, parameter_definitions, version
 		FROM modules
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -1613,7 +1613,7 @@ func (s *PostgresStore) ListModules(ctx context.Context) ([]domain.Module, error
 		var agrsRaw []byte
 		var parameterDefinitionsRaw []byte
 		err := rows.Scan(&m.ID, &m.Code, &m.Name, &w, &h, &d, &notes, &categoryID,
-			&furnitureType, &baseMode, &baseClearanceMm, &imageURL, &structureID, &agrsRaw, &parameterDefinitionsRaw)
+			&furnitureType, &baseMode, &baseClearanceMm, &imageURL, &structureID, &agrsRaw, &parameterDefinitionsRaw, &m.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -1771,7 +1771,7 @@ func (s *PostgresStore) listAllModulePresets(ctx context.Context) (map[string][]
 }
 
 func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.Module, error) {
-	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, created_at, updated_at FROM modules WHERE id = $1 AND organization_id = $2`
+	query := `SELECT id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, created_at, updated_at, version FROM modules WHERE id = $1 AND organization_id = $2`
 	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var m domain.Module
 	var w, h, d *int
@@ -1784,7 +1784,7 @@ func (s *PostgresStore) GetModuleByID(ctx context.Context, id string) (*domain.M
 	var baseClearanceMm *int
 	var agrsRaw []byte
 	var parameterDefinitionsRaw []byte
-	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw, &m.CreatedAt, &m.UpdatedAt)
+	err := row.Scan(&m.ID, &m.Code, &m.Name, &m.BaseLaborCost, &w, &h, &d, &notes, &categoryID, &imageURL, &structureID, &furnitureType, &baseMode, &baseClearanceMm, &agrsRaw, &parameterDefinitionsRaw, &m.CreatedAt, &m.UpdatedAt, &m.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -1942,19 +1942,19 @@ func (s *PostgresStore) CreateModule(ctx context.Context, m *domain.Module) erro
 		queryInsert = `
 			INSERT INTO modules (id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-			RETURNING created_at, updated_at;
+			RETURNING created_at, updated_at, version;
 		`
 		errQuery = tx.QueryRow(ctx, queryInsert, idToInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
-			Scan(&m.CreatedAt, &m.UpdatedAt)
+			Scan(&m.CreatedAt, &m.UpdatedAt, &m.Version)
 		m.ID = idToInsert
 	} else {
 		queryInsert = `
 			INSERT INTO modules (code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes, category_id, image_url, structure_id, furniture_type, base_mode, base_clearance_mm, agregados, parameter_definitions, organization_id)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-			RETURNING id, created_at, updated_at;
+			RETURNING id, created_at, updated_at, version;
 		`
 		errQuery = tx.QueryRow(ctx, queryInsert, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, OrgFromCtx(ctx)).
-			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt)
+			Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.Version)
 	}
 
 	if errQuery != nil {
@@ -2068,9 +2068,16 @@ func replaceModuleComponentsTx(ctx context.Context, tx pgx.Tx, moduleID string, 
 	return nil
 }
 
-func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.Module) error {
+// UpdateModule replaces the module row only when its stored version still
+// matches expectedVersion (#497 optimistic concurrency). The version bump and
+// the child-table rewrite share one transaction: any failure rolls the whole
+// update back, so a rejected stale write leaves nothing behind.
+func (s *PostgresStore) UpdateModule(ctx context.Context, id string, expectedVersion int64, m *domain.Module) error {
 	if issues := domain.ValidatePersistedFurnitureParameterDefinitions(m.ParameterDefinitions); len(issues) > 0 {
 		return &domain.FurnitureParameterDefinitionsError{Issues: issues}
+	}
+	if expectedVersion < 1 {
+		return ErrVersionConflict
 	}
 	tx, err := s.beginTx(ctx)
 	if err != nil {
@@ -2104,14 +2111,25 @@ func (s *PostgresStore) UpdateModule(ctx context.Context, id string, m *domain.M
 
 	query := `
 		UPDATE modules
-		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, agregados = $14, parameter_definitions = $15, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $16 AND organization_id = $17
-		RETURNING updated_at;
+		SET code = $1, name = $2, base_labor_cost = $3, width_mm = $4, height_mm = $5, depth_mm = $6, notes = $7, category_id = $8, image_url = $9, structure_id = $10, furniture_type = $11, base_mode = $12, base_clearance_mm = $13, agregados = $14, parameter_definitions = $15, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $16 AND organization_id = $17 AND version = $18
+		RETURNING updated_at, version;
 	`
-	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, id, OrgFromCtx(ctx)).Scan(&m.UpdatedAt)
+	err = tx.QueryRow(ctx, query, m.Code, m.Name, m.BaseLaborCost, m.WidthMm, m.HeightMm, m.DepthMm, m.Notes, categoryArg, m.ImageURL, structureArg, m.FurnitureType, m.BaseMode, baseClearanceArg, agrsJSON, parameterDefinitionsJSON, id, OrgFromCtx(ctx), expectedVersion).Scan(&m.UpdatedAt, &m.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("module not found")
+			// Missing row and stale version both surface as ErrNoRows here;
+			// disambiguate so clients get 404 vs 412 instead of guessing.
+			var exists bool
+			if checkErr := tx.QueryRow(ctx,
+				`SELECT EXISTS (SELECT 1 FROM modules WHERE id = $1 AND organization_id = $2)`,
+				id, OrgFromCtx(ctx)).Scan(&exists); checkErr != nil {
+				return fmt.Errorf("error checking module existence: %w", checkErr)
+			}
+			if !exists {
+				return fmt.Errorf("module not found")
+			}
+			return ErrVersionConflict
 		}
 		return fmt.Errorf("error updating module: %w", err)
 	}
