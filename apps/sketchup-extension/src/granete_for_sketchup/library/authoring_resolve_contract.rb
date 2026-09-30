@@ -136,7 +136,8 @@ module Granete
 
         # Exactly one provenance variant: empty or ambiguous combinations are
         # contract violations (#346 §6), never a guess.
-        PROVENANCE_KEYS = %w[relationshipId jointPlacementId hardwarePlacementId catalogRuleId sourceKind].freeze
+        PROVENANCE_KEYS = %w[relationshipId jointPlacementId hardwarePlacementId catalogRuleId familyId
+                             recipeRevision technicalProfileId technicalProfileRevision sourceKind].freeze
 
         def provenance(raw, context)
           raise AuthoringResolveContract::ContractError, "Provenance inválida en #{context}" unless raw.is_a?(Hash)
@@ -161,9 +162,13 @@ module Granete
 
           # Exclusivity: a provenance carries exactly its variant's keys — a
           # relationship provenance with a hardwarePlacementId (or vice versa)
-          # is ambiguous and fails closed (#346 §6).
+          # is ambiguous and fails closed (#346 §6). Relationship provenance
+          # may carry familyId (#874 J2-A) and the versioned recipe identity
+          # (#874 J2-B); every field stays optional and unknown keys fail.
           allowed = case source_kind
-                    when 'relationship' then %w[sourceKind relationshipId catalogRuleId]
+                    when 'relationship'
+                      %w[sourceKind relationshipId catalogRuleId familyId
+                         recipeRevision technicalProfileId technicalProfileRevision]
                     when 'manualHardwarePlacement' then %w[sourceKind hardwarePlacementId]
                     else %w[sourceKind relationshipId jointPlacementId catalogRuleId]
                     end

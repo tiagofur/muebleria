@@ -205,6 +205,29 @@ class AuthoringResolveContractTest < Minitest::Test
     end
   end
 
+  def test_recipe_provenance_identity_fields_parse
+    # The fixed-shelf golden (#939) is the first scenario whose relationship
+    # provenance carries the versioned recipe identity (#874 J2-B); parsing
+    # it fail-closed is the acceptance gate for the extended vocabulary.
+    ops = scenario('28-fixed-shelf-recipes')['response']['resolved']['machining']['operations']
+    assert(ops.any? do |op|
+      op['provenance']['recipeRevision'] == 'test-1' &&
+                      op['provenance']['technicalProfileId'] == 'test:synthetic-shelf-profile'
+    end)
+    parse_response(scenario('28-fixed-shelf-recipes')['response'])
+  end
+
+  def test_recipe_provenance_with_unknown_key_fails_closed
+    raw_op = scenario('28-fixed-shelf-recipes')['response']['resolved']['machining']['operations'][0]
+    op = raw_op.merge('provenance' => raw_op['provenance'].merge('recipeDiameterMm' => 3))
+    machining = scenario('28-fixed-shelf-recipes')['response']['resolved']['machining'].merge('operations' => [op])
+    resolved = scenario('28-fixed-shelf-recipes')['response']['resolved'].merge('machining' => machining)
+    body = scenario('28-fixed-shelf-recipes')['response'].merge('resolved' => resolved)
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body)
+    end
+  end
+
   def test_invalid_hole_face_fails_closed
     holes = scenario('02-move-shelf')['response']['resolved']['machining']['operations'][0]['holes']
             .map { |hole| hole.merge('face' => 'diagonal') }
