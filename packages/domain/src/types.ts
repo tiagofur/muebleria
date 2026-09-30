@@ -12,6 +12,7 @@ import type {
   AssemblyDimensionRule,
   HardwareRotationDeg,
 } from './agregadoAssembly';
+import type { ComponentConstructionOverride } from './factoryConstructionPolicy';
 
 // --- Literal unions ---
 
@@ -711,6 +712,8 @@ export interface Component {
   readonly rotateX?: number;
   readonly rotateY?: number;
   readonly rotateZ?: number;
+  /** #875: Component-level construction and joinery override */
+  readonly constructionOverride?: ComponentConstructionOverride | null;
 }
 
 export interface ModuleComponentInstance {
