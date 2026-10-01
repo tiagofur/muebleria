@@ -23,11 +23,21 @@ PR #702 previously delivered the Go `CommercialProjection` endpoint and the base
 
 ## Tasks
 
-- [ ] T1 — **UI & Affordances for Presentation Mode**: Add the "Modo presentación" toggle button and indicator in `apps/sketchup-extension/src/granete_for_sketchup/resources/dialog.html` and styles adhering to `docs/design.md` tokens.
-- [ ] T2 — **Commercial Projection Logic & Accessibility Tree Filtering**: In `granete-commercial-projection.js`, handle presentation mode state toggling. Ensure cost rows, margin rows, internal IDs, and admin buttons (`btn-open-in-granete`, `btn-initial-quote` when in presentation mode) are cleanly suppressed from DOM and accessibility tree without corrupting normal commercial updates. Display item count summary.
-- [ ] T3 — **Unit & JS Test Coverage**: Add test cases in `apps/sketchup-extension/test/js/commercial_projection_test.js` and `apps/sketchup-extension/test/unit/commercial_projection_js_test.rb` verifying presentation mode activation, DOM/a11y suppression of internal fields, item count rendering, and toggle reversibility.
-- [ ] T4 — **Rake Verification & RBZ Packaging**: Run `bundle exec rake verify` to ensure zero regressions in RuboCop, unit suites, dialog contracts, and deterministic RBZ build.
+- [x] T1 — **UI & Affordances for Presentation Mode**: Add the "Modo presentación" toggle button and indicator in `apps/sketchup-extension/src/granete_for_sketchup/resources/dialog.html` and styles adhering to `docs/design.md` tokens.
+- [x] T2 — **Commercial Projection Logic & Accessibility Tree Filtering**: In `granete-commercial-projection.js`, handle presentation mode state toggling. Ensure cost rows, margin rows, internal IDs, and admin buttons (`btn-open-in-granete`, `btn-initial-quote` when in presentation mode) are cleanly suppressed from DOM and accessibility tree without corrupting normal commercial updates. Display item count summary.
+- [x] T3 — **Unit & JS Test Coverage**: Add test cases in `apps/sketchup-extension/test/js/commercial_projection_test.js` and `apps/sketchup-extension/test/unit/commercial_projection_js_test.rb` verifying presentation mode activation, DOM/a11y suppression of internal fields, item count rendering, and toggle reversibility.
+- [x] T4 — **Rake Verification & RBZ Packaging**: Run `bundle exec rake verify` to ensure zero regressions in RuboCop, unit suites, dialog contracts, and deterministic RBZ build.
 
 ## Evidence
 
-- Pending execution.
+- `node apps/sketchup-extension/test/js/token_health_test.js`: PASS (157 references checked, 0 errors).
+- `node apps/sketchup-extension/test/js/commercial_projection_test.js`: PASS (35/35 passing).
+- `bundle exec rake verify` (Ruby 3.2):
+  - RuboCop: 285 files inspected, no offenses detected.
+  - Unit tests: 1308 runs, 2816 assertions, 0 failures, 0 errors, 0 skips.
+  - Boundary tests: 6 runs, 10 assertions, 0 failures, 0 errors, 0 skips.
+  - RBZ packaging: SHA-256 `2b74968f677817e4fa8a01ccccc0c83095e30e9a8c0238333fd730214475a07c` deterministic.
+- `python3 scripts/check_openapi_drift.py`: PASS.
+- `python3 -m unittest discover -s scripts -p "test_factory_*.py"`: PASS (40 tests).
+- `python3 -m unittest discover -s scripts -p "test_ci_*.py"`: PASS (61 tests, 1 skipped).
+
