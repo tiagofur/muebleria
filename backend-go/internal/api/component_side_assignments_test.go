@@ -148,3 +148,10 @@ func (s *stubStore) RemoveComponentSideAssignment(_ context.Context, componentID
 	s.removeAssignmentSide = side
 	return nil
 }
+
+func (s *stubStore) ListAllComponentSideAssignments(context.Context) ([]domain.ComponentSideAssignment, error) {
+	if s.allComponentSideAssignments != nil {
+		return s.allComponentSideAssignments, nil
+	}
+	return []domain.ComponentSideAssignment{}, nil
+}
