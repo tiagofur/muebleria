@@ -973,3 +973,94 @@ func TestExtensionTokenMayReadExactDesignCommercialProjection(t *testing.T) {
 		t.Fatalf("extension projection read status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+type capturingActorUsers struct {
+	*staticUsers
+	capturedActor storage.TenantActor
+}
+
+func (s *capturingActorUsers) WithinTenantTx(ctx context.Context, actor storage.TenantActor, execute func(context.Context) error) error {
+	s.capturedActor = actor
+	return execute(ctx)
+}
+
+func TestAuthMiddleware_PlatformAdminLiveAuthority(t *testing.T) {
+	secret := "super-secret-test-key-0123456789"
+	authority := mustAuthority(secret)
+
+	t.Run("token claims admin but DB says not admin -> actor and claims get false", func(t *testing.T) {
+		users := &capturingActorUsers{
+			staticUsers: &staticUsers{
+				byID: map[string]*domain.User{
+					"u1": {ID: "u1", Email: "u1@example.com", AccountStatus: domain.AccountStatusActive, PlatformAdmin: false},
+				},
+			},
+		}
+
+		tok, err := auth.GenerateLegacyWebToken("u1", "u1@example.com", auth.TokenContext{
+			PlatformAdmin: true,
+		}, secret)
+		if err != nil {
+			t.Fatalf("generate token: %v", err)
+		}
+
+		var claimsInContext *auth.Claims
+		handler := AuthMiddleware(authority, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claimsInContext = claimsFromRequest(r)
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/api/platform/test", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body=%s", rr.Code, rr.Body.String())
+		}
+		if users.capturedActor.PlatformAdmin {
+			t.Fatalf("captured actor PlatformAdmin = true, want false (DB authority)")
+		}
+		if claimsInContext == nil || claimsInContext.PlatformAdmin {
+			t.Fatalf("context claims PlatformAdmin = true, want false (DB authority)")
+		}
+	})
+
+	t.Run("token claims not admin but DB says admin -> actor and claims get true", func(t *testing.T) {
+		users := &capturingActorUsers{
+			staticUsers: &staticUsers{
+				byID: map[string]*domain.User{
+					"u1": {ID: "u1", Email: "u1@example.com", AccountStatus: domain.AccountStatusActive, PlatformAdmin: true},
+				},
+			},
+		}
+
+		tok, err := auth.GenerateLegacyWebToken("u1", "u1@example.com", auth.TokenContext{
+			PlatformAdmin: false,
+		}, secret)
+		if err != nil {
+			t.Fatalf("generate token: %v", err)
+		}
+
+		var claimsInContext *auth.Claims
+		handler := AuthMiddleware(authority, users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claimsInContext = claimsFromRequest(r)
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "/api/platform/test", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body=%s", rr.Code, rr.Body.String())
+		}
+		if !users.capturedActor.PlatformAdmin {
+			t.Fatalf("captured actor PlatformAdmin = false, want true (DB authority)")
+		}
+		if claimsInContext == nil || !claimsInContext.PlatformAdmin {
+			t.Fatalf("context claims PlatformAdmin = false, want true (DB authority)")
+		}
+	})
+}

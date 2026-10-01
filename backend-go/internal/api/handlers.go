@@ -2120,7 +2120,11 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	// #955: demo hardware profile + real publication of the seeded
 	// Standard draft release (idempotent; keeps the demo chain on real
 	// manifests instead of placeholder hashes).
-	if err := application.SeedDemoStandardRelease(r.Context(), s.Store); err != nil {
+	demoPublisher := ""
+	if claims := claimsFromRequest(r); claims != nil && claims.PlatformAdmin {
+		demoPublisher = claims.UserID
+	}
+	if err := application.SeedDemoStandardRelease(r.Context(), s.Store, demoPublisher); err != nil {
 		respondWithInternalError(w, err, "seed demo release")
 		return
 	}

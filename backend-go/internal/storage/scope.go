@@ -28,6 +28,11 @@ type TenantActor struct {
 	MembershipID              string
 	SupportSessionID          string
 	AuthorizedOrganizationIDs []string
+	// PlatformAdmin marks Granete platform staff (#955): the transactional
+	// app.platform_admin marker widens the manufacturing-library write
+	// policies so staff can compile and publish Standard releases. It never
+	// relaxes tenant isolation on org-owned tables.
+	PlatformAdmin bool
 }
 
 // ErrNoOrgScope is returned by RequireOrgFromCtx when the context carries no

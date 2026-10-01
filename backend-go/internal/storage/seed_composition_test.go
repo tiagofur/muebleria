@@ -253,3 +253,70 @@ func TestSeedUpgradeDoesNotOverwriteCustomGabComposition(t *testing.T) {
 		t.Fatalf("custom composition changed: structure=%s links=%d quantity=%d", structureID, links, quantity)
 	}
 }
+
+// #955: the upgrade path must survive a catalog the workshop built itself.
+// SeedCatalog takes the "materials already exist" branch and never creates
+// the composed structure EST-COMP-600 the plinth demo modules hang off; the
+// seed used to fall back to the seed UUID, so modules.structure_id pointed at
+// a row that is not there and the whole seed aborted with FK 23503 — a 500 on
+// POST /api/seed. The plinth demo set is a convenience: without its structure
+// it is skipped whole, never invented and never half-seeded.
+func TestSeedUpgradeWithoutComposedStructureSkipsPlinthSet(t *testing.T) {
+	store, pool := seedCompositionMigrationStore(t)
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+
+	// A populated catalog with no structures at all: the workshop's own DB.
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO material_boards (id, organization_id, code, name, width_mm, length_mm, thickness_mm,
+			board_price, grain_default, active)
+		VALUES ('b0000002-0000-0000-0000-0000000000f1', $1, 'TAB-WORKSHOP', 'Madera del taller', 1830, 2440, 18, 400, false, true)`,
+		storage.InitialOrganizationID); err != nil {
+		t.Fatalf("prepare workshop material: %v", err)
+	}
+	if err := store.SeedCatalog(ctx); err != nil {
+		t.Fatalf("re-seed a catalog without EST-COMP-600: %v", err)
+	}
+
+	var plinth int
+	if err := pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM modules WHERE code IN ('MOD-BAJO-ZOCLO-600','MOD-BAJO-PERFIL-600')`).Scan(&plinth); err != nil {
+		t.Fatalf("count plinth modules: %v", err)
+	}
+	if plinth != 0 {
+		t.Fatalf("módulos de zoclo sembrados sin su estructura: %d", plinth)
+	}
+
+	// Half a plinth is worse than none: a ZOCLO role with no consumer, bound to
+	// the workshop's own material, is the seed inventing catalog on their behalf.
+	var invented int
+	if err := pool.QueryRow(ctx, `
+		SELECT
+			(SELECT COUNT(*) FROM option_groups WHERE organization_id = $1 AND code IN ('ZOCLO','ZOCLO_PERFIL'))
+			+ (SELECT COUNT(*) FROM components WHERE organization_id = $1 AND code = 'COM-ZOC-01')
+			+ (SELECT COUNT(*) FROM hardwares WHERE organization_id = $1 AND code LIKE 'HER-ZOC-%')`,
+		storage.InitialOrganizationID).Scan(&invented); err != nil {
+		t.Fatalf("count invented plinth rows: %v", err)
+	}
+	if invented != 0 {
+		t.Fatalf("filas de zoclo inventadas sin estructura compuesta: %d", invented)
+	}
+
+	// The demo catalog itself still gets the whole set.
+	demoStore, demoPool := seedCompositionMigrationStore(t)
+	demoCtx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	if err := demoStore.SeedCatalog(demoCtx); err != nil {
+		t.Fatalf("seed a fresh demo catalog: %v", err)
+	}
+	var demoSet int
+	if err := demoPool.QueryRow(demoCtx, `
+		SELECT
+			(SELECT COUNT(*) FROM option_groups WHERE organization_id = $1 AND code IN ('ZOCLO','ZOCLO_PERFIL'))
+			+ (SELECT COUNT(*) FROM components WHERE organization_id = $1 AND code = 'COM-ZOC-01')
+			+ (SELECT COUNT(*) FROM modules WHERE organization_id = $1 AND code IN ('MOD-BAJO-ZOCLO-600','MOD-BAJO-PERFIL-600'))`,
+		storage.InitialOrganizationID).Scan(&demoSet); err != nil {
+		t.Fatalf("count demo plinth set: %v", err)
+	}
+	if demoSet != 5 {
+		t.Fatalf("conjunto de zoclo del catálogo demo = %d filas, want 5 (2 roles + 1 componente + 2 módulos)", demoSet)
+	}
+}

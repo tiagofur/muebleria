@@ -34,9 +34,13 @@ const (
 	seedDemoTaqueteID = "a0000003-0000-0000-0000-000000000011" // HER-TAQ-8X30 (SeedCatalog)
 )
 
-// SeedDemoStandardRelease ensures the demo profile exists and publishes
-// the seeded Standard draft release through the real compiler.
-func SeedDemoStandardRelease(ctx context.Context, store StandardReleaseStore) error {
+// SeedDemoStandardRelease ensures the demo profile exists and — when a
+// platform-staff publisher is given — publishes the seeded Standard draft
+// release through the real compiler. The publisher must be a platform
+// admin: the library write policies (#955) only accept Standard writes
+// under the transactional platform marker, which the auth middleware sets
+// from that claim. A non-platform caller gets the profile only.
+func SeedDemoStandardRelease(ctx context.Context, store StandardReleaseStore, publisherID string) error {
 	// 1. Demo profile (skip when present).
 	if _, err := store.GetHardwareProfileByID(ctx, SeedDemoProfileID); err != nil {
 		if !strings.Contains(err.Error(), "not found") {
@@ -50,7 +54,11 @@ func SeedDemoStandardRelease(ctx context.Context, store StandardReleaseStore) er
 	}
 
 	// 2. Publish the seeded Standard draft release through the real
-	// compiler (skip when already published or absent).
+	// compiler (platform staff only; skip otherwise, or when already
+	// published or absent).
+	if publisherID == "" {
+		return nil
+	}
 	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
 	release, err := store.GetReleaseByID(ctx, releaseID)
 	if err != nil {
@@ -60,11 +68,17 @@ func SeedDemoStandardRelease(ctx context.Context, store StandardReleaseStore) er
 		return fmt.Errorf("demo release load: %w", err)
 	}
 	if release.Status != domain.ReleaseStatusDraft {
-		return nil // already published (or withdrawn): never recompile
-	}
-	publisherID, err := store.EnsureSeedPlatformUser(ctx)
-	if err != nil {
-		return fmt.Errorf("demo publisher: %w", err)
+		// A "published" release with no materialized manifest is not a real
+		// publication — the browser gate lends the seeded draft that status
+		// so other specs can read a published Standard. Reset exactly that
+		// state and compile for real; a really published release is untouched.
+		reset, err := store.ResetManifestlessPublishedRelease(ctx, releaseID.String())
+		if err != nil {
+			return fmt.Errorf("demo release reset: %w", err)
+		}
+		if !reset {
+			return nil // already really published (or withdrawn): never recompile
+		}
 	}
 	if _, err := PublishStandardRelease(ctx, store, releaseID, uuid.MustParse(publisherID)); err != nil {
 		return fmt.Errorf("demo release publish: %w", err)
@@ -98,8 +112,11 @@ func demoProfile() *domain.HardwareProfile {
 					Rules: []domain.ProfileRuleSpec{
 						{RuleID: "cam-housing", RuleRevision: "demo-1", ParticipantRole: "A", OperationRole: "housing",
 							EntryFace: "bottom", OffsetMm: [3]float64{0, 0, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 15, DepthMm: 13},
+						// Dowel depth: 17 mm. Depth must be strictly less than
+						// available board thickness (18 mm board in demo catalog);
+						// 21 mm exceeds board thickness and fails hole geometry validation.
 						{RuleID: "dowel-bore", RuleRevision: "demo-1", ParticipantRole: "B", OperationRole: "dowel",
-							EntryFace: "back", OffsetMm: [3]float64{0, 18, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 8, DepthMm: 21},
+							EntryFace: "back", OffsetMm: [3]float64{0, 18, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 8, DepthMm: 17},
 					},
 				},
 				{
@@ -108,7 +125,7 @@ func demoProfile() *domain.HardwareProfile {
 						{RuleID: "cam-housing", RuleRevision: "demo-1", ParticipantRole: "A", OperationRole: "housing",
 							EntryFace: "top", OffsetMm: [3]float64{0, 0, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 15, DepthMm: 13},
 						{RuleID: "dowel-bore", RuleRevision: "demo-1", ParticipantRole: "B", OperationRole: "dowel",
-							EntryFace: "front", OffsetMm: [3]float64{0, 18, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 8, DepthMm: 21},
+							EntryFace: "front", OffsetMm: [3]float64{0, 18, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 8, DepthMm: 17},
 					},
 				},
 			},
