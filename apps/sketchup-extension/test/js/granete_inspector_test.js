@@ -542,14 +542,22 @@ test('batch: params triage mirrors the roles honesty and excluded entities get a
 
 // --- #471 R2: editable batch Apply --------------------------------------
 
-function batchSelects(sandbox) {
-  return el(sandbox, 'inspector-batch-roles').children.map((row) => ({
-    label: row.children[0].textContent,
-    select: row.children[1].children[0]
-  })).filter((r) => r.select && String(r.select.tagName).toLowerCase() === 'select');
+function batchRoleBlocks(sandbox) {
+  return el(sandbox, 'inspector-batch-roles').children.map((block) => {
+    const header = block.children[0];
+    const preview = block.children[1];
+    const info = preview ? preview.children[1] : null;
+    return {
+      role: header && header.children[0] ? header.children[0].textContent : '',
+      changeBtn: header && header.children[1] ? header.children[1] : null,
+      preview: preview,
+      nameEl: info && info.children[0] ? info.children[0] : null,
+      metaEl: info && info.children[1] ? info.children[1] : null
+    };
+  });
 }
 
-test('batch apply: roles become selects whose options are the intersection across members', () => {
+test('batch apply: roles become visual selector cards whose options are the intersection across members', () => {
   const sandbox = buildModuleSandbox({
     GraneteUI: {
       materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
@@ -563,26 +571,37 @@ test('batch apply: roles become selects whose options are the intersection acros
     batchMember({ furnitureInstanceRef: 'furn-2', materialChoices: { FRONT: 'mat-blanco', BODY: 'mat-blanco' } })
   ], [], true));
 
-  const selects = batchSelects(sandbox);
-  const front = selects.find((s) => s.label === 'FRONT');
-  const body = selects.find((s) => s.label === 'BODY');
-  assert(front && body, 'editable capability renders shared roles as selectors');
-  const frontOptions = front.select.children.map((o) => o.value);
-  assert.deepStrictEqual(frontOptions, ['', 'mat-roble', 'mat-blanco'],
-    'options are the intersection of both members, plus the mixed placeholder');
-  assert.strictEqual(front.select.children[0].textContent, 'Mixto',
-    'a mixed role starts on the Mixto placeholder');
-  assert.strictEqual(body.select.value, 'mat-blanco',
-    'a common role starts preselected');
+  const blocks = batchRoleBlocks(sandbox);
+  const front = blocks.find((s) => s.role === 'FRONT');
+  const body = blocks.find((s) => s.role === 'BODY');
+  assert(front && body, 'editable capability renders shared roles as visual selector cards');
+  assert.strictEqual(front.nameEl.textContent, 'Mixto',
+    'a mixed role starts on the Mixto label');
+  assert.strictEqual(body.nameEl.textContent, 'Material mat-blanco',
+    'a common role starts displaying the common material');
   assert(!visible(el(sandbox, 'inspector-batch-footer')), 'footer hidden until a role is chosen');
 
-  front.select.value = 'mat-roble';
-  front.select.dispatchEvent({ type: 'change' });
+  // Clicking Cambiar opens the native material selector with intersection of options
+  let selectorPayload = null;
+  sandbox.window.sketchup = {
+    open_material_selector: (json) => { selectorPayload = JSON.parse(json); }
+  };
+  front.changeBtn.click();
+  assert(selectorPayload, 'clicking Cambiar opens material selector');
+  assert.strictEqual(selectorPayload.role, 'FRONT');
+  assert.strictEqual(selectorPayload.context, 'batch');
+  assert.deepStrictEqual(selectorPayload.allowedMaterialIds, ['mat-roble', 'mat-blanco'],
+    'allowedMaterialIds is the intersection of both members');
+
+  // Picking a material through the selector dispatches onMaterialChoiceApplied
+  api.onMaterialChoiceApplied({ role: 'FRONT', materialId: 'mat-roble', context: 'batch' });
   assert(visible(el(sandbox, 'inspector-batch-footer')), 'choosing a role shows the footer');
   assert(el(sandbox, 'inspector-batch-pending').textContent.indexOf('1 cambio a aplicar') !== -1,
     'the footer counts the pending change');
   assert.strictEqual(el(sandbox, 'btn-batch-apply').textContent, 'Aplicar a 2 muebles',
     'the Apply button names the affected count');
+  assert.strictEqual(batchRoleBlocks(sandbox).find((b) => b.role === 'FRONT').nameEl.textContent,
+    'Mixto → Material mat-roble', 'draft shows from -> to transition');
 
   el(sandbox, 'btn-batch-apply').click();
   const submit = sandbox.__mutation.find((c) => c.action === 'submitBatchUpdate');
@@ -775,9 +794,7 @@ test('batch params: an edit merges into the per-member intent with current param
   const width = batchInputs(sandbox).find((i) => i.label === 'widthMm');
   width.input.value = '800';
   width.input.dispatchEvent({ type: 'change' });
-  const front = batchSelects(sandbox).find((s) => s.label === 'FRONT');
-  front.select.value = 'mat-roble';
-  front.select.dispatchEvent({ type: 'change' });
+  api.onMaterialChoiceApplied({ role: 'FRONT', materialId: 'mat-roble', context: 'batch' });
 
   assert(el(sandbox, 'inspector-batch-pending').textContent.indexOf('2 cambios a aplicar') !== -1,
     'the footer counts roles and parameters together');

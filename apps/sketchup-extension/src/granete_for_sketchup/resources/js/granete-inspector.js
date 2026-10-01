@@ -547,13 +547,17 @@
   // La intersección de opciones válidas: una elección que un miembro no
   // admite haría fallar SU resolve y, con lote atómico, al lote entero.
   function batchRoleOptionIds(members, role) {
+    var roles = window.GraneteUI.materialRoles;
     var sets = members.map(function (m) {
       var def = m.definition || {};
       var entry = (def.materialRoles || []).filter(function (r) { return r.role === role; })[0];
-      return entry ? (entry.optionIds || []) : null;
+      if (!entry) return null;
+      if (roles && typeof roles.optionMaterialIds === "function") {
+        return roles.optionMaterialIds(entry);
+      }
+      return entry.optionIds || [];
     });
     if (sets.indexOf(null) !== -1) return [];
-    var roles = window.GraneteUI.materialRoles;
     var resolvable = function (id) {
       return !roles || typeof roles.materialById !== "function" || roles.materialById(id);
     };
@@ -562,30 +566,152 @@
     });
   }
 
-  function batchRoleSelect(role, optionIds, common) {
-    var select = document.createElement("select");
-    select.className = "input";
-    select.style.width = "100%";
-    var placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = common ? "--" : "Mixto";
-    select.appendChild(placeholder);
-    optionIds.forEach(function (id) {
-      var opt = document.createElement("option");
-      opt.value = id;
-      opt.textContent = batchMaterialLabel(id);
-      select.appendChild(opt);
-    });
-    if (common && optionIds.indexOf(common) !== -1) select.value = common;
-    select.addEventListener("change", function () {
-      if (select.value) {
-        batchSelections[role] = select.value;
-      } else {
-        delete batchSelections[role];
+  function renderBatchRoleBlock(role, optionIds, common, members, context) {
+    var block = document.createElement("div");
+    block.className = "material-role-block";
+    block.id = "batch-role-block-" + role;
+
+    var roleLabel = role;
+    for (var i = 0; i < members.length; i++) {
+      var rDef = ((members[i].definition || {}).materialRoles || []).filter(function (r) { return r.role === role; })[0];
+      if (rDef && rDef.label) {
+        roleLabel = rDef.label;
+        break;
       }
-      updateBatchFooter(selectedContext && selectedContext.furniture || [], selectedContext);
+    }
+
+    var header = document.createElement("div");
+    header.className = "material-role-header";
+
+    var title = document.createElement("span");
+    title.className = "material-role-title";
+    title.textContent = roleLabel;
+    header.appendChild(title);
+
+    var drafted = batchSelections[role];
+    var currentMatId = drafted || common;
+
+    var changeBtn = document.createElement("button");
+    changeBtn.id = "batch-change-" + role;
+    changeBtn.className = "btn btn-secondary btn-sm";
+    changeBtn.style.width = "auto";
+    changeBtn.style.padding = "2px 10px";
+    changeBtn.style.fontSize = "var(--text-xs)";
+    changeBtn.style.lineHeight = "1.4";
+    changeBtn.textContent = currentMatId ? "Cambiar" : "Asignar";
+
+    header.appendChild(changeBtn);
+    block.appendChild(header);
+
+    // Selected Preview card (interactive)
+    var preview = document.createElement("div");
+    preview.className = "material-selected-preview";
+    preview.title = "Clic para abrir el catálogo de acabados";
+    preview.setAttribute("role", "button");
+    preview.setAttribute("tabindex", "0");
+    preview.setAttribute("aria-label", (currentMatId ? "Cambiar" : "Asignar") + " acabado de " + roleLabel);
+
+    var rolesMod = window.GraneteUI.materialRoles;
+    var currentMat = currentMatId && rolesMod && typeof rolesMod.materialById === "function" ? rolesMod.materialById(currentMatId) : null;
+
+    var swatch = document.createElement("div");
+    swatch.className = "material-swatch";
+    if (rolesMod && typeof rolesMod.updateMaterialSwatch === "function") {
+      rolesMod.updateMaterialSwatch(swatch, currentMat);
+    } else if (currentMat) {
+      if (currentMat.previewColor) swatch.style.backgroundColor = currentMat.previewColor;
+      var textureUrl = currentMat.previewTextureUrl || currentMat.imageUrl;
+      if (textureUrl) swatch.style.backgroundImage = "url('" + textureUrl + "')";
+    } else {
+      swatch.style.backgroundColor = "#f1f5f9";
+      swatch.style.border = "1px dashed var(--border-default, #cbd5e1)";
+    }
+    preview.appendChild(swatch);
+
+    var info = document.createElement("div");
+    info.className = "material-selected-info";
+
+    var valueEl = document.createElement("div");
+    valueEl.className = "material-selected-name";
+
+    if (drafted && drafted !== common) {
+      var from = common ? batchMaterialLabel(common) : "Mixto";
+      var to = batchMaterialLabel(drafted);
+      valueEl.textContent = from + " → " + to;
+      valueEl.title = drafted;
+      valueEl.className += " design-insp-draft";
+    } else if (common) {
+      valueEl.textContent = batchMaterialLabel(common);
+    } else {
+      valueEl.textContent = "Mixto";
+      valueEl.style.color = "var(--text-muted)";
+      valueEl.style.fontWeight = "normal";
+    }
+    info.appendChild(valueEl);
+
+    var metaEl = document.createElement("div");
+    metaEl.className = "material-selected-meta";
+    if (currentMat) {
+      var parts = [];
+      if (currentMat.code) parts.push(currentMat.code);
+      if (currentMat.thicknessMm) parts.push(currentMat.thicknessMm + " mm");
+      if (currentMat.grain) parts.push("Veta");
+      if (currentMat.manufacturer) parts.push(currentMat.manufacturer);
+      metaEl.textContent = parts.length > 0 ? parts.join(" · ") : "Acabado de catálogo";
+    } else if (drafted) {
+      metaEl.textContent = "Acabado seleccionado";
+    } else if (common) {
+      metaEl.textContent = "Acabado común en el lote";
+    } else {
+      metaEl.textContent = "Valores mixtos en la selección";
+    }
+    info.appendChild(metaEl);
+    preview.appendChild(info);
+
+    var chevron = document.createElement("span");
+    chevron.className = "material-chevron";
+    if (deps && typeof deps.icon === "function") {
+      chevron.innerHTML = deps.icon("chevron-right", 16);
+    } else {
+      chevron.textContent = "›";
+    }
+    preview.appendChild(chevron);
+
+    function triggerVisualPicker() {
+      if (window.sketchup && typeof window.sketchup.open_material_selector === "function") {
+        window.sketchup.open_material_selector(JSON.stringify({
+          role: role,
+          roleName: roleLabel || role,
+          currentMaterialId: batchSelections[role] || common || null,
+          context: "batch",
+          allowedMaterialIds: optionIds
+        }));
+      } else if (window.GraneteUI.finishSelector && typeof window.GraneteUI.finishSelector.open === "function") {
+        var roleEntry = { role: role, label: roleLabel || role, optionIds: optionIds };
+        window.GraneteUI.finishSelector.open(roleEntry, batchSelections[role] || common, function (newId) {
+          onMaterialChoiceApplied({ role: role, materialId: newId, context: "batch" });
+        }, "batch");
+      }
+    }
+
+    changeBtn.addEventListener("click", function (evt) {
+      if (evt && evt.stopPropagation) evt.stopPropagation();
+      triggerVisualPicker();
     });
-    return select;
+
+    preview.addEventListener("click", function () {
+      triggerVisualPicker();
+    });
+
+    preview.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        if (e.preventDefault) e.preventDefault();
+        triggerVisualPicker();
+      }
+    });
+
+    block.appendChild(preview);
+    return block;
   }
 
   function renderBatchRoles(members, context) {
@@ -619,17 +745,8 @@
       var common = batchCommonValue(values);
       var optionIds = batchRoleOptionIds(members, role);
       if (editable && optionIds.length > 0) {
-        var row = document.createElement("div");
-        row.className = "kv-row";
-        var k = document.createElement("span");
-        k.className = "k";
-        k.textContent = role;
-        var v = document.createElement("span");
-        v.className = "v";
-        v.appendChild(batchRoleSelect(role, optionIds, common));
-        row.appendChild(k);
-        row.appendChild(v);
-        inspectorBatchRoles.appendChild(row);
+        inspectorBatchRoles.appendChild(
+          renderBatchRoleBlock(role, optionIds, common, members, context));
       } else if (optionIds.length === 0) {
         inspectorBatchRoles.appendChild(batchRow(role, "Sin opción común", true));
       } else {
@@ -1110,6 +1227,16 @@
       if (window.GraneteUI.designInspector && typeof window.GraneteUI.designInspector.applyMaterialPick === "function") {
         window.GraneteUI.designInspector.applyMaterialPick(role, materialId);
       }
+      return;
+    }
+
+    // If the finish choice belongs to batch multi-selection (context === "batch"),
+    // apply to batch selections draft and repaint batch roles + update footer.
+    if (payload.context === "batch" || (selectedContext && selectedContext.kind === "batch")) {
+      batchSelections[role] = materialId;
+      var batchMembers = (selectedContext && selectedContext.furniture) || [];
+      renderBatchRoles(batchMembers, selectedContext);
+      updateBatchFooter(batchMembers, selectedContext);
       return;
     }
 

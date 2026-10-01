@@ -959,10 +959,11 @@
 
       // Alcance honesto por contexto: en el configurador todavía no existe
       // el mueble — la elección acompaña a la próxima inserción.
-      // En contexto "design" (defaults generales del proyecto), no hay mueble individual.
+      // En contexto "design" (defaults generales del proyecto) o "batch" (lote de muebles),
+      // no aplica el selector de alcance individual/proyecto.
       const scopeBox = document.querySelector('.scope-box');
       if (scopeBox) {
-        scopeBox.style.display = state.context === 'design' ? 'none' : 'block';
+        scopeBox.style.display = (state.context === 'design' || state.context === 'batch') ? 'none' : 'block';
       }
 
       const scopeFurnitureLabel = document.getElementById('scope-furniture-label');
@@ -1497,8 +1498,8 @@
       if (!state.selectedMaterialId) return;
 
       const scopeRadio = document.querySelector('input[name="scope-choice"]:checked');
-      const scope = state.context === 'design'
-        ? 'design'
+      const scope = (state.context === 'design' || state.context === 'batch')
+        ? state.context
         : (scopeRadio ? scopeRadio.value : (state.scope || 'furniture'));
 
       callBridge('apply_selection', {

@@ -138,6 +138,9 @@ function runTests() {
         if (sel === 'input[name="scope-choice"]:checked') {
           return elements['scope-project'].checked ? elements['scope-project'] : elements['scope-instance'];
         }
+        if (sel === '.scope-box') {
+          return elements['scope-box'] || (elements['scope-box'] = createMockElement('scope-box'));
+        }
         return null;
       },
       querySelectorAll: (sel) => {
@@ -242,9 +245,26 @@ function runTests() {
   const cancelCall = bridgeCalls.find(c => c.action === 'close_selector');
   assert(cancelCall, 'close_selector must be called when clicking btn-cancel');
 
+  // 7. Verify batch context hides scope box and applies scope: 'batch'
+  const scopeBox = elements['scope-box'] || createMockElement('scope-box');
+  elements['scope-box'] = scopeBox;
+  initFn({
+    role: 'FRONT',
+    roleName: 'Frentes',
+    currentMaterialId: 'mat-01',
+    allowedMaterials: [{ id: 'mat-01', name: 'Roble' }, { id: 'mat-02', name: 'Blanco' }],
+    categories: [{ id: 'cat-1', name: 'Maderas' }],
+    context: 'batch'
+  });
+  assert.strictEqual(scopeBox.style.display, 'none', 'scope-box is hidden for batch context');
+  elements['btn-apply'].click();
+  const batchApplyCall = bridgeCalls.filter(c => c.action === 'apply_selection').pop();
+  assert.strictEqual(batchApplyCall.payload.scope, 'batch', 'scope is batch for batch context');
+  assert.strictEqual(batchApplyCall.payload.context, 'batch');
+
   console.log(JSON.stringify({
     success: true,
-    testsPassed: 6,
+    testsPassed: 7,
     appliedPayload: applyCall.payload
   }));
 }
