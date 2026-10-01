@@ -191,62 +191,43 @@
   function renderRow(role, materialId) {
     var label = deps.getRoleLabel(role);
     var row = document.createElement("div");
-    row.className = "design-insp-row";
-    var roleEl = document.createElement("span");
-    roleEl.className = "design-insp-role";
-    roleEl.textContent = label;
+    row.className = "design-insp-row material-role-block";
 
-    var valueEl = document.createElement("span");
-    valueEl.className = "design-insp-value";
+    var header = document.createElement("div");
+    header.className = "material-role-header";
+
+    var roleEl = document.createElement("span");
+    roleEl.className = "material-role-title design-insp-role";
+    roleEl.textContent = label;
+    header.appendChild(roleEl);
+
     var drafted = state.draft[role];
     var baseChoices = (state.draftBase && state.draftBase.defaults) || state.defaults;
-    if (drafted && drafted !== baseChoices[role]) {
-      // #784 R2: pending edit renders honestly as old → new, where the
-      // "old" is the DRAFT BASE value (never a silently rebased one).
-      var from = (baseChoices[role] && (materialName(baseChoices[role]) || baseChoices[role])) || "Sin asignar";
-      var to = materialName(drafted) || drafted;
-      valueEl.textContent = from + " → " + to;
-      valueEl.title = drafted;
-      valueEl.className = "design-insp-value design-insp-draft";
-    } else if (materialId) {
-      var value = materialName(materialId);
-      if (value) {
-        valueEl.textContent = value;
-      } else {
-        valueEl.textContent = "Material no disponible en el catálogo actual";
-        valueEl.title = materialId;
-        valueEl.className = "design-insp-value design-insp-unavailable";
-      }
-    } else {
-      valueEl.textContent = "Sin default asignado";
-      valueEl.className = "design-insp-value design-insp-unassigned";
-    }
-    row.appendChild(roleEl);
-    row.appendChild(valueEl);
 
-    // #784 R2: the per-role change affordance opens the shared material
-    // picker; the pick lands in the LOCAL draft, never in the backend.
+    var changeBtn = null;
     if (hasDeps(["getRoleCandidates", "openMaterialPicker"])) {
-      var changeBtn = document.createElement("button");
+      changeBtn = document.createElement("button");
       changeBtn.id = "design-inspector-change-" + role;
-      changeBtn.className = "btn design-insp-change";
+      changeBtn.className = "btn btn-secondary btn-sm design-insp-change";
+      changeBtn.style.width = "auto";
+      changeBtn.style.padding = "2px 10px";
+      changeBtn.style.fontSize = "var(--text-xs)";
+      changeBtn.style.lineHeight = "1.4";
       changeBtn.textContent = materialId || drafted ? "Cambiar" : "Asignar";
-      changeBtn.addEventListener("click", function () {
+      changeBtn.addEventListener("click", function (evt) {
+        if (evt && evt.stopPropagation) evt.stopPropagation();
         var candidates = deps.getRoleCandidates(role);
         if ((!candidates || candidates.length === 0) && hasDeps(["getMaterials"])) {
-          // #784 R2 P2: a role no definition offers falls back to the whole
-          // catalog — SOLO presentation/picker; the backend stays the
-          // authority for what is valid.
-          candidates = deps.getMaterials().map(function (material) { return material.id; });
+          candidates = deps.getMaterials().map(function (material) { return material.id || material.materialId; });
         }
-        var roleEntry = { role: role, label: label, optionIds: candidates };
+        var roleEntry = { role: role, label: label, optionIds: candidates || [] };
         if (window.sketchup && typeof window.sketchup.open_material_selector === "function") {
           window.sketchup.open_material_selector(JSON.stringify({
             role: role,
             roleName: label || role,
             currentMaterialId: drafted || materialId || null,
             context: "design",
-            allowedMaterialIds: candidates || []
+            allowedMaterialIds: []
           }));
         } else {
           deps.openMaterialPicker(roleEntry, drafted || materialId, function (pickedId) {
@@ -254,15 +235,106 @@
           });
         }
       });
-      row.appendChild(changeBtn);
+      header.appendChild(changeBtn);
     }
+    row.appendChild(header);
+
+    // Selected Preview card (interactive)
+    var preview = document.createElement("div");
+    preview.className = "material-selected-preview";
+    preview.title = "Clic para abrir el catálogo de acabados";
+    preview.setAttribute("role", "button");
+    preview.setAttribute("tabindex", "0");
+    preview.setAttribute("aria-label", (materialId || drafted ? "Cambiar" : "Asignar") + " acabado de " + label);
+
+    var currentMatId = drafted || materialId;
+    var currentMat = currentMatId ? deps.materialById(currentMatId) : null;
+
+    var swatch = document.createElement("div");
+    swatch.className = "material-swatch";
+    if (typeof deps.updateMaterialSwatch === "function") {
+      deps.updateMaterialSwatch(swatch, currentMat);
+    } else if (currentMat) {
+      if (currentMat.previewColor) swatch.style.backgroundColor = currentMat.previewColor;
+      var textureUrl = currentMat.previewTextureUrl || currentMat.imageUrl;
+      if (textureUrl) swatch.style.backgroundImage = "url('" + textureUrl + "')";
+    } else {
+      swatch.style.backgroundColor = "#f1f5f9";
+      swatch.style.border = "1px dashed var(--border-default, #cbd5e1)";
+    }
+    preview.appendChild(swatch);
+
+    var info = document.createElement("div");
+    info.className = "material-selected-info";
+
+    var valueEl = document.createElement("div");
+    valueEl.className = "material-selected-name design-insp-value";
+
+    if (drafted && drafted !== baseChoices[role]) {
+      var from = (baseChoices[role] && (materialName(baseChoices[role]) || baseChoices[role])) || "Sin asignar";
+      var to = materialName(drafted) || drafted;
+      valueEl.textContent = from + " → " + to;
+      valueEl.title = drafted;
+      valueEl.className += " design-insp-draft";
+    } else if (materialId) {
+      var value = materialName(materialId);
+      if (value) {
+        valueEl.textContent = value;
+      } else {
+        valueEl.textContent = "Material no disponible en el catálogo actual";
+        valueEl.title = materialId;
+        valueEl.className += " design-insp-unavailable";
+      }
+    } else {
+      valueEl.textContent = "Sin default asignado";
+      valueEl.className += " design-insp-unassigned";
+      valueEl.style.color = "var(--text-muted)";
+      valueEl.style.fontWeight = "normal";
+    }
+    info.appendChild(valueEl);
+
+    var metaEl = document.createElement("div");
+    metaEl.className = "material-selected-meta";
+    if (currentMat) {
+      var parts = [];
+      if (currentMat.code) parts.push(currentMat.code);
+      if (currentMat.thicknessMm) parts.push(currentMat.thicknessMm + " mm");
+      if (currentMat.grain) parts.push("Veta");
+      if (currentMat.manufacturer) parts.push(currentMat.manufacturer);
+      metaEl.textContent = parts.length > 0 ? parts.join(" · ") : "Acabado de catálogo";
+    } else {
+      metaEl.textContent = "Clic para elegir un acabado del catálogo";
+    }
+    info.appendChild(metaEl);
+    preview.appendChild(info);
+
+    var chevron = document.createElement("span");
+    chevron.className = "material-chevron";
+    if (typeof deps.icon === "function") {
+      chevron.innerHTML = deps.icon("chevron-right", 16);
+    } else {
+      chevron.textContent = "›";
+    }
+    preview.appendChild(chevron);
+
+    preview.addEventListener("click", function () {
+      if (changeBtn) {
+        changeBtn.click();
+      }
+    });
+
+    row.appendChild(preview);
 
     // #784 R5: explicit rollout action to roll the default across existing furniture
     var summary = state.inheritanceSummary && state.inheritanceSummary[role];
     if (materialId && summary && summary.items > 0) {
       var rolloutBtn = document.createElement("button");
       rolloutBtn.id = "design-inspector-rollout-" + role;
-      rolloutBtn.className = "btn design-insp-rollout";
+      rolloutBtn.className = "btn btn-secondary btn-sm design-insp-rollout";
+      rolloutBtn.style.width = "100%";
+      rolloutBtn.style.marginTop = "var(--space-2)";
+      rolloutBtn.style.fontSize = "var(--text-xs)";
+      rolloutBtn.style.padding = "var(--space-2) var(--space-3)";
       rolloutBtn.textContent = "Aplicar a muebles existentes…";
       if (pendingCount() > 0) {
         rolloutBtn.disabled = true;

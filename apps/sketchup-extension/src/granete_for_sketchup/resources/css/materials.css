@@ -126,6 +126,35 @@
       }
 
       /* ------------------------------------------------------------- */
+      /* Design Inspector Cards & States                                */
+      /* ------------------------------------------------------------- */
+      .design-insp-row {
+        margin-bottom: var(--space-3);
+      }
+
+      .design-insp-note {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        margin-top: var(--space-2);
+        line-height: 1.4;
+      }
+
+      .design-insp-state {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        padding: var(--space-3);
+        text-align: center;
+        background: var(--surface-card-subtle);
+        border-radius: var(--radius-md);
+        margin: var(--space-2) 0;
+      }
+
+      .design-insp-state.design-insp-error {
+        color: var(--danger-600);
+        background: var(--danger-50);
+      }
+
+      /* ------------------------------------------------------------- */
       /* Visual Material Option Selector Modal (Slice B - Miller Cols) */
       /* ------------------------------------------------------------- */
       .selector-modal-backdrop {

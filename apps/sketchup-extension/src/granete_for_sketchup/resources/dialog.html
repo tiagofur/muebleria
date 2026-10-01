@@ -517,13 +517,13 @@
             </p>
             <p class="presets-block-label" style="margin-top: var(--space-3);">Acabados del diseño</p>
             <div id="design-inspector-body"></div>
-            <button id="design-inspector-retry" class="btn" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
+            <button id="design-inspector-retry" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
             <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
                  PUT with the client token; items and item modes untouched) -->
             <div id="design-inspector-footer" style="display: none; margin-top: var(--space-3);">
               <p id="design-inspector-pending" class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);"></p>
               <div style="display: flex; gap: var(--space-2);">
-                <button id="design-inspector-discard" class="btn" style="flex: 1;">Descartar</button>
+                <button id="design-inspector-discard" class="btn btn-secondary" style="flex: 1;">Descartar</button>
                 <button id="design-inspector-apply" class="btn btn-primary" style="flex: 1;">Aplicar</button>
               </div>
             </div>
@@ -1654,7 +1654,10 @@
         // never an alias. The rerender seam lets binding changes repaint
         // the no-selection lane through the inspector's single routing.
         window.GraneteUI.designInspector.init({
+          icon: icon,
           materialById: window.GraneteUI.materialRoles.materialById,
+          updateMaterialSwatch: window.GraneteUI.materialRoles.updateMaterialSwatch,
+          getMaterials: window.GraneteUI.materialRoles.getMaterials,
           getRoleLabel: function (role) {
             var definitions = window.GraneteUI.library.getDefinitions();
             for (var i = 0; i < definitions.length; i++) {
