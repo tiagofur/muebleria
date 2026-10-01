@@ -185,6 +185,7 @@ type Store interface {
 
 	ListActiveHardwareProfilesAnyOrg(ctx context.Context) ([]domain.HardwareProfile, error)
 	EnsureSeedPlatformUser(ctx context.Context) (string, error)
+	ResetManifestlessPublishedRelease(ctx context.Context, releaseID string) (bool, error)
 
 	// Component side assignments (#915 / HW-PROFILE)
 	ListComponentSideAssignments(ctx context.Context, componentID string) ([]domain.ComponentSideAssignment, error)

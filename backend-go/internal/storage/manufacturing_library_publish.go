@@ -77,15 +77,30 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 		return fmt.Errorf("insert release manifest: %w", err)
 	}
 
-	// 3. Upsert content-addressed resource blobs (deduplicating across releases)
+	// 3. Content-addressed resource blobs (deduplicating across releases).
+	// Blobs are immutable: an existing hash is skipped (the RLS insert-only
+	// policy plus the immutability trigger forbid UPDATE, so a blind upsert
+	// would abort the whole publication when a blob from a previous release
+	// already exists — #955).
+	const blobExistsQuery = `SELECT EXISTS (SELECT 1 FROM library_resource_blobs WHERE sha256 = $1)`
+	// NOTE: no ON CONFLICT here — library_resource_blobs is insert-only
+	// (no UPDATE policy by design), and PG evaluates conflicting-update
+	// policies for ON CONFLICT at insert time, which the immutability
+	// design denies. The skip-if-exists check above handles dedup (#955).
 	const insertBlobQuery = `
 		INSERT INTO library_resource_blobs (
 			sha256, resource_kind, resource_id, content_type, size_bytes, content
 		)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (sha256) DO NOTHING`
+		VALUES ($1, $2, $3, $4, $5, $6)`
 
 	for _, b := range blobs {
+		var exists bool
+		if err := tx.QueryRow(ctx, blobExistsQuery, b.SHA256).Scan(&exists); err != nil {
+			return fmt.Errorf("check resource blob %s: %w", b.SHA256, err)
+		}
+		if exists {
+			continue
+		}
 		if _, err := tx.Exec(ctx, insertBlobQuery,
 			b.SHA256, b.ResourceKind, b.ResourceID, b.ContentType, b.SizeBytes, b.Content,
 		); err != nil {
@@ -93,7 +108,26 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 		}
 	}
 
-	// 4. Update definition_hash on library_release_resource_refs
+	// 4. Materialize library_release_resource_refs for every manifest
+	// resource. The ref row is the only path a tenant read traverses to
+	// reach a pinned blob (library_resource_blobs_read joins
+	// definition_hash → refs → release → library), so a manifest resource
+	// without a ref row is a resource no tenant can ever read — the blob
+	// would be invisible and the pinned read would fail closed with
+	// "blob not found". A compiled release therefore materializes its refs
+	// here, inside the publication transaction. Existing rows keep their
+	// pinned revision and receive the compiled definition hash; missing
+	// rows are inserted from the manifest, whose revision and package kind
+	// are the compilation authority (#955).
+	const selectRefQuery = `
+		SELECT EXISTS (
+			SELECT 1 FROM library_release_resource_refs
+			WHERE release_id = $1 AND resource_kind = $2 AND resource_id = $3
+		)`
+	const insertRefQuery = `
+		INSERT INTO library_release_resource_refs
+		    (release_id, resource_kind, resource_id, resource_revision, definition_hash, package_kind)
+		VALUES ($1, $2, $3, $4, $5, $6)`
 	const updateRefQuery = `
 		UPDATE library_release_resource_refs
 		SET definition_hash = $3
@@ -102,8 +136,20 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 		  AND resource_id = $4`
 
 	for _, r := range manifest.Resources {
-		if _, err := tx.Exec(ctx, updateRefQuery, releaseID, r.Kind, r.DefinitionHash, r.ID); err != nil {
-			return fmt.Errorf("update resource ref %s/%s definition_hash: %w", r.Kind, r.ID, err)
+		var exists bool
+		if err := tx.QueryRow(ctx, selectRefQuery, releaseID, r.Kind, r.ID).Scan(&exists); err != nil {
+			return fmt.Errorf("read resource ref %s/%s: %w", r.Kind, r.ID, err)
+		}
+		if exists {
+			if _, err := tx.Exec(ctx, updateRefQuery, releaseID, r.Kind, r.DefinitionHash, r.ID); err != nil {
+				return fmt.Errorf("update resource ref %s/%s definition_hash: %w", r.Kind, r.ID, err)
+			}
+			continue
+		}
+		if _, err := tx.Exec(ctx, insertRefQuery,
+			releaseID, r.Kind, r.ID, r.Revision, r.DefinitionHash, string(r.PackageKind),
+		); err != nil {
+			return fmt.Errorf("insert resource ref %s/%s: %w", r.Kind, r.ID, err)
 		}
 	}
 

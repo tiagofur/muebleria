@@ -189,3 +189,7 @@ func (s *stubStore) ListActiveHardwareProfilesAnyOrg(context.Context) ([]domain.
 func (s *stubStore) PublishReleaseWithManifest(context.Context, uuid.UUID, *domain.LibraryManifest, []byte, []domain.ResourceBlob, *uuid.UUID) error {
 	return nil
 }
+
+func (s *stubStore) ResetManifestlessPublishedRelease(context.Context, string) (bool, error) {
+	return false, nil
+}

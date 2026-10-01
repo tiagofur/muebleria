@@ -131,6 +131,7 @@ func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Ha
 			actor := storage.TenantActor{
 				OrganizationID: claims.OrgID,
 				UserID:         claims.UserID,
+				PlatformAdmin:  claims.PlatformAdmin,
 			}
 			if claims.Support != nil {
 				actor.SupportSessionID = claims.Support.SessionID

@@ -107,8 +107,10 @@ func setTenantContext(ctx context.Context, tx pgx.Tx, actor TenantActor) error {
 			set_config('app.membership_id', $3, true),
 			set_config('app.support_session_id', $4, true),
 			set_config('app.authorized_organization_ids', $5, true),
+			set_config('app.platform_admin', $6, true),
 			set_config('row_security', 'on', true)
-	`, actor.OrganizationID, actor.UserID, actor.MembershipID, actor.SupportSessionID, authorizedOrganizations(actor))
+	`, actor.OrganizationID, actor.UserID, actor.MembershipID, actor.SupportSessionID, authorizedOrganizations(actor),
+		boolSetting(actor.PlatformAdmin))
 	if err != nil {
 		return fmt.Errorf("setting tenant transaction context: %w", err)
 	}
@@ -282,4 +284,11 @@ func (s *PostgresStore) SetTenantActor(ctx context.Context, actor TenantActor) (
 		return ctx, err
 	}
 	return WithTenantActorCtx(ctx, actor), nil
+}
+
+func boolSetting(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }
