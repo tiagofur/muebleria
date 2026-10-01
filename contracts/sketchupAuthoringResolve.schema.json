@@ -1107,6 +1107,13 @@
         },
         "joineryStatuses": {
           "$ref": "#/$defs/joineryStatuses"
+        },
+        "hardwareProfileDemand": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/hardwareProfileDemandLine"
+          },
+          "description": "Commercial projection of resolved profiles (#917): catalog hardware ids x per-contact quantities for every verified productive contact. Derived from the profile resolution, never from hole geometry; outside the manufacturing fingerprint."
         }
       },
       "required": [
@@ -1664,6 +1671,76 @@
         "depthMm"
       ],
       "additionalProperties": false
+    },
+    "hardwareProfileDemandLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hardwareId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "quantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/hardwareProfileDemandSource"
+          }
+        }
+      },
+      "required": [
+        "hardwareId",
+        "quantity",
+        "sources"
+      ]
+    },
+    "hardwareProfileDemandSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "technicalProfileId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "technicalProfileRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "recipeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "recipeRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "relationshipId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "contactCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "technicalProfileId",
+        "technicalProfileRevision",
+        "recipeId",
+        "recipeRevision",
+        "relationshipId",
+        "contactCount"
+      ]
     }
   }
 }
