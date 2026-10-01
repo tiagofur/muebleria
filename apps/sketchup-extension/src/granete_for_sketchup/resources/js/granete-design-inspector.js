@@ -167,6 +167,27 @@
     return material && material.name ? material.name : null;
   }
 
+  function applyMaterialPick(role, pickedId) {
+    if (!role) return;
+    var materialId = state.defaults ? state.defaults[role] : null;
+    if (!pickedId || pickedId === materialId) {
+      delete state.draft[role];
+    } else {
+      state.draft[role] = pickedId;
+    }
+    if (pendingCount() > 0 && !state.draftBase) {
+      // First pending edit pins the draft to the current version.
+      state.draftBase = { version: state.workingVersion, defaults: shallowCopy(state.defaults) };
+      state.draftStale = false;
+    }
+    if (pendingCount() === 0) {
+      // The draft dissolved back to the durable state: drop the base.
+      state.draftBase = null;
+      state.draftStale = false;
+    }
+    render();
+  }
+
   function renderRow(role, materialId) {
     var label = deps.getRoleLabel(role);
     var row = document.createElement("div");
@@ -219,24 +240,19 @@
           candidates = deps.getMaterials().map(function (material) { return material.id; });
         }
         var roleEntry = { role: role, label: label, optionIds: candidates };
-        deps.openMaterialPicker(roleEntry, drafted || materialId, function (pickedId) {
-          if (!pickedId || pickedId === materialId) {
-            delete state.draft[role];
-          } else {
-            state.draft[role] = pickedId;
-          }
-          if (pendingCount() > 0 && !state.draftBase) {
-            // First pending edit pins the draft to the current version.
-            state.draftBase = { version: state.workingVersion, defaults: shallowCopy(state.defaults) };
-            state.draftStale = false;
-          }
-          if (pendingCount() === 0) {
-            // The draft dissolved back to the durable state: drop the base.
-            state.draftBase = null;
-            state.draftStale = false;
-          }
-          render();
-        });
+        if (window.sketchup && typeof window.sketchup.open_material_selector === "function") {
+          window.sketchup.open_material_selector(JSON.stringify({
+            role: role,
+            roleName: label || role,
+            currentMaterialId: drafted || materialId || null,
+            context: "design",
+            allowedMaterialIds: candidates || []
+          }));
+        } else {
+          deps.openMaterialPicker(roleEntry, drafted || materialId, function (pickedId) {
+            applyMaterialPick(role, pickedId);
+          });
+        }
       });
       row.appendChild(changeBtn);
     }
@@ -882,6 +898,7 @@
       return out;
     },
 
+    applyMaterialPick: applyMaterialPick,
     hide: hide,
     render: render
   };

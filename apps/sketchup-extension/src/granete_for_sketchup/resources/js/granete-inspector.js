@@ -1103,6 +1103,16 @@
     if (!payload || !payload.role || !payload.materialId) return;
     var role = payload.role;
     var materialId = payload.materialId;
+
+    // #784: if the finish choice belongs to the design inspector (context === "design"),
+    // apply the pick to the design inspector's draft.
+    if (payload.context === "design") {
+      if (window.GraneteUI.designInspector && typeof window.GraneteUI.designInspector.applyMaterialPick === "function") {
+        window.GraneteUI.designInspector.applyMaterialPick(role, materialId);
+      }
+      return;
+    }
+
     var scope = payload.scope || "furniture";
     var isProjectScope = (scope === "project" || scope === "project_default");
 

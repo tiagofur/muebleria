@@ -959,6 +959,12 @@
 
       // Alcance honesto por contexto: en el configurador todavía no existe
       // el mueble — la elección acompaña a la próxima inserción.
+      // En contexto "design" (defaults generales del proyecto), no hay mueble individual.
+      const scopeBox = document.querySelector('.scope-box');
+      if (scopeBox) {
+        scopeBox.style.display = state.context === 'design' ? 'none' : 'block';
+      }
+
       const scopeFurnitureLabel = document.getElementById('scope-furniture-label');
       if (scopeFurnitureLabel) {
         scopeFurnitureLabel.textContent = state.context === 'configurator'
@@ -1493,7 +1499,9 @@
       if (!state.selectedMaterialId) return;
 
       const scopeRadio = document.querySelector('input[name="scope-choice"]:checked');
-      const scope = scopeRadio ? scopeRadio.value : (state.scope || 'furniture');
+      const scope = state.context === 'design'
+        ? 'design'
+        : (scopeRadio ? scopeRadio.value : (state.scope || 'furniture'));
 
       callBridge('apply_selection', {
         role: state.role,

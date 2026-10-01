@@ -984,6 +984,25 @@ test('materials: configurator target delegates; project scope writes project def
   assert(sandbox.__bridge.every((c) => c.action !== 'update_furniture'), 'no instance mutation for project scope');
 });
 
+test('materials: onMaterialChoiceApplied with context: "design" routes to GraneteUI.designInspector.applyMaterialPick', () => {
+  let designPick = null;
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} },
+      designInspector: {
+        applyMaterialPick: (role, matId) => { designPick = { role, matId }; }
+      }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.onMaterialChoiceApplied({ role: 'FRENTES', materialId: 'mat-roble', scope: 'design', context: 'design' });
+  assert.deepStrictEqual(designPick, { role: 'FRENTES', matId: 'mat-roble' });
+});
+
 test('delete: first click arms, second confirms with the Ruby payload; timeout resets', () => {
   const timeouts = [];
   const sandbox = buildModuleSandbox({

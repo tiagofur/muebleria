@@ -19,6 +19,7 @@ module Granete
             current_material_id: params[:current_material_id],
             allowed_materials: allowed_materials,
             categories: categories,
+            context: params[:context],
             media: media_authorizer.media_payload_for(
               'materials' => allowed_materials, 'categories' => categories
             ),

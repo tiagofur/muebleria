@@ -19,14 +19,15 @@ module Granete
         end
 
         def show_selector(role:, role_name:, current_material_id:, allowed_materials:, categories:, media: nil,
-                          media_refresher: nil, on_apply: nil)
+                          media_refresher: nil, on_apply: nil, context: nil)
           @current_payload = {
             'role' => role,
             'roleName' => role_name || role,
             'currentMaterialId' => current_material_id,
             'allowedMaterials' => allowed_materials || [],
             'categories' => categories || [],
-            'media' => media
+            'media' => media,
+            'context' => context
           }
           @on_apply = on_apply
           # #460 SEC-3: re-mints an expired media grant on demand. The webview

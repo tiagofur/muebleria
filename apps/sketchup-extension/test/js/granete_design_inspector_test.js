@@ -1372,6 +1372,37 @@ function run() {
     const btn = ctx.document.getElementById('design-inspector-change-PUERTAS');
     assert.ok(btn, 'button for PUERTAS must exist');
   });
+
+  test('R2: applyMaterialPick updates the draft and footer directly', () => {
+    const ctx = createSandbox();
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    mod.applyMaterialPick('INTERIOR', 'mat-oak');
+    assert.ok(ctx.body().textContent.includes('Roble Natural'), 'the draft value renders');
+    assert.ok(ctx.body().textContent.includes('→'), 'old → new is visible');
+    const footer = ctx.document.getElementById('design-inspector-footer');
+    assert.strictEqual(footer.style.display, 'block');
+    assert.ok(ctx.document.getElementById('design-inspector-pending').textContent.includes('1 cambio pendiente'));
+  });
+
+  test('R2: clicking change affordance delegates to window.sketchup.open_material_selector when available', () => {
+    const ctx = createSandbox();
+    let selectorCall = null;
+    ctx.sandbox.window.sketchup.open_material_selector = (payload) => {
+      selectorCall = JSON.parse(payload);
+    };
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    const changeBtn = ctx.document.getElementById('design-inspector-change-INTERIOR');
+    assert.ok(changeBtn, 'change affordance exists');
+    changeBtn.click();
+    assert.ok(selectorCall, 'open_material_selector was called');
+    assert.strictEqual(selectorCall.role, 'INTERIOR');
+    assert.strictEqual(selectorCall.context, 'design');
+    assert.strictEqual(selectorCall.currentMaterialId, 'mat-white');
+  });
 }
 
 let failed = 0;
