@@ -333,6 +333,13 @@ type stubStore struct {
 	deactivateHardwareProfileErr              error
 	deactivatedHardwareProfileID              string
 	deactivatedHardwareProfileExpectedVersion int64
+	// #915 side assignment hooks.
+	listComponentSideAssignments  []domain.ComponentSideAssignment
+	setComponentSideAssignment    *domain.ComponentSideAssignment
+	setComponentSideAssignmentErr error
+	removeAssignmentComponentID   string
+	removeAssignmentSide          string
+	removeAssignmentErr           error
 	// #110: project templates hooks.
 	listProjectTemplates []domain.ProjectTemplate
 	lastCreatedTemplate  *domain.ProjectTemplate
