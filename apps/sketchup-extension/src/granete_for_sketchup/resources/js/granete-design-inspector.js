@@ -182,12 +182,12 @@
     if (drafted && drafted !== baseChoices[role]) {
       // #784 R2: pending edit renders honestly as old → new, where the
       // "old" is the DRAFT BASE value (never a silently rebased one).
-      var from = materialName(baseChoices[role]) || baseChoices[role];
+      var from = (baseChoices[role] && (materialName(baseChoices[role]) || baseChoices[role])) || "Sin asignar";
       var to = materialName(drafted) || drafted;
       valueEl.textContent = from + " → " + to;
       valueEl.title = drafted;
       valueEl.className = "design-insp-value design-insp-draft";
-    } else {
+    } else if (materialId) {
       var value = materialName(materialId);
       if (value) {
         valueEl.textContent = value;
@@ -196,6 +196,9 @@
         valueEl.title = materialId;
         valueEl.className = "design-insp-value design-insp-unavailable";
       }
+    } else {
+      valueEl.textContent = "Sin default asignado";
+      valueEl.className = "design-insp-value design-insp-unassigned";
     }
     row.appendChild(roleEl);
     row.appendChild(valueEl);
@@ -206,7 +209,7 @@
       var changeBtn = document.createElement("button");
       changeBtn.id = "design-inspector-change-" + role;
       changeBtn.className = "btn design-insp-change";
-      changeBtn.textContent = "Cambiar";
+      changeBtn.textContent = materialId || drafted ? "Cambiar" : "Asignar";
       changeBtn.addEventListener("click", function () {
         var candidates = deps.getRoleCandidates(role);
         if ((!candidates || candidates.length === 0) && hasDeps(["getMaterials"])) {
@@ -509,7 +512,28 @@
       bodyEl.appendChild(conflictNote);
     }
 
-    var roles = Object.keys(state.defaults).sort();
+    function discoveredRoles() {
+      var set = {};
+      var list = [];
+      function addRole(r) {
+        if (r && !set[r]) {
+          set[r] = true;
+          list.push(r);
+        }
+      }
+      for (var k in state.defaults) addRole(k);
+      for (var d in state.draft) addRole(d);
+      if (state.inheritanceSummary) {
+        for (var s in state.inheritanceSummary) addRole(s);
+      }
+      if (typeof deps.getAvailableRoles === "function") {
+        var avail = deps.getAvailableRoles() || [];
+        for (var j = 0; j < avail.length; j++) addRole(avail[j]);
+      }
+      return list.sort();
+    }
+
+    var roles = discoveredRoles();
     if (roles.length === 0) {
       var empty = document.createElement("p");
       empty.className = "design-insp-state";

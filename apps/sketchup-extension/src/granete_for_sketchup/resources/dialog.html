@@ -509,7 +509,7 @@
                 <p id="design-inspector-design-name" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0;"></p>
               </div>
               <div class="badges-column">
-                <span class="status-badge pending">Lectura</span>
+                <span class="status-badge">General</span>
               </div>
             </div>
             <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-2) 0 0;">
@@ -1664,6 +1664,22 @@
               }
             }
             return role;
+          },
+          getAvailableRoles: function () {
+            var roles = [];
+            var seen = {};
+            var definitions = window.GraneteUI.library.getDefinitions();
+            for (var i = 0; i < definitions.length; i++) {
+              var defRoles = (definitions[i] && definitions[i].materialRoles) || [];
+              for (var j = 0; j < defRoles.length; j++) {
+                var r = defRoles[j];
+                if (r && r.role && !seen[r.role]) {
+                  seen[r.role] = true;
+                  roles.push(r.role);
+                }
+              }
+            }
+            return roles;
           },
           rerenderInspector: function () { window.GraneteUI.inspector.rerender(); },
           // #784 R2: candidate materials for a Design-level role — the union
