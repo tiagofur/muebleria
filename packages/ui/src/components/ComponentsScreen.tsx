@@ -12,6 +12,8 @@ import {
   type ReactNode,
 } from 'react';
 import type { Component, OptionGroup, MaterialBoard, PlacementDims, FactoryConstructionPolicy } from '@granete/domain';
+import type { BoardFace } from '@granete/domain';
+import type { ComponentSideAssignmentView, ComponentProfileOption } from './editor/ComponentSideAssignmentsPanel';
 import {
   evaluatePartFormula,
   hasAmbiguousOptionRoles,
@@ -71,6 +73,19 @@ export interface ComponentsScreenProps {
   readonly onSelectionChange?: (id: string | null) => void;
   /** Factory construction policy (#875). */
   readonly factoryPolicy?: FactoryConstructionPolicy;
+  /** #915: profiles to offer in the per-face pickers. */
+  readonly profileOptions?: readonly ComponentProfileOption[];
+  /** #915: per-face profile assignments for the editor (saved components). */
+  readonly sideAssignments?: {
+    readonly authenticated: boolean;
+    readonly canMutate: boolean;
+    readonly componentId: string | null;
+    readonly assignments: readonly ComponentSideAssignmentView[];
+    readonly savingSide: string | null;
+    readonly error: string | null;
+    readonly onSet: (side: BoardFace, profileId: string) => void | Promise<void>;
+    readonly onRemove: (side: BoardFace) => void | Promise<void>;
+  };
 }
 
 export function ComponentsScreen({
@@ -83,6 +98,8 @@ export function ComponentsScreen({
   canMutate = true,
   openComponentId = null,
   openComponentEditId = null,
+  profileOptions = [],
+  sideAssignments,
   onRequestEdit,
   onSelectionChange,
   factoryPolicy,
@@ -536,6 +553,8 @@ export function ComponentsScreen({
           showInContext={showInContext}
           onShowInContextChange={setShowInContext}
           factoryPolicy={factoryPolicy}
+          profileOptions={profileOptions}
+          sideAssignments={sideAssignments}
         />
       )}
     />

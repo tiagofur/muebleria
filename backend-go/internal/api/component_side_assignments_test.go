@@ -29,6 +29,9 @@ func sideAssignmentRequest(method, target string, body any) (*http.Request, *htt
 	req.Header.Set("Content-Type", "application/json")
 	if strings.Contains(target, "/side-assignments") {
 		req.SetPathValue("id", "f9150000-0000-0000-0000-00000000com")
+		if method == http.MethodDelete {
+			req.SetPathValue("side", target[strings.LastIndex(target, "/")+1:])
+		}
 	}
 	if method == http.MethodPut || method == http.MethodDelete {
 		req = withOverlayOrgClaims(req, "11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222")
@@ -108,14 +111,14 @@ func TestHandleComponentSideAssignments(t *testing.T) {
 
 	t.Run("DELETE removes one side and maps unknown to 404", func(t *testing.T) {
 		store := &stubStore{}
-		req, rec := sideAssignmentRequest(http.MethodDelete, "/api/catalog/components/c1/side-assignments?side=left", nil)
+		req, rec := sideAssignmentRequest(http.MethodDelete, "/api/catalog/components/c1/side-assignments/left", nil)
 		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusOK || store.removeAssignmentSide != "left" {
 			t.Fatalf("status = %d side=%q", rec.Code, store.removeAssignmentSide)
 		}
 
 		store = &stubStore{removeAssignmentErr: errors.New("component side assignment not found")}
-		req, rec = sideAssignmentRequest(http.MethodDelete, "/api/catalog/components/c1/side-assignments?side=top", nil)
+		req, rec = sideAssignmentRequest(http.MethodDelete, "/api/catalog/components/c1/side-assignments/top", nil)
 		(&Server{Store: store}).HandleComponentSideAssignments(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("status = %d", rec.Code)
