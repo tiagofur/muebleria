@@ -87,12 +87,12 @@
   }
 
   // Material options for a role: the workshop's curated list when the
-  // option group defines one, else every active material. When at most 1
-  // curated id resolves, fall back to all materials so the user is never
+  // option group defines one, else every active material. When 0
+  // curated ids resolve, fall back to all materials so the user is never
   // locked into a 0-alternative selection.
   function optionMaterialIds(roleEntry) {
     var ids = (roleEntry.optionIds || []).filter(function (id) { return !!materialById(id); });
-    if (ids.length > 1) return ids;
+    if (ids.length > 0) return ids;
     return catalogMaterials.map(function (m) { return m.materialId; });
   }
 

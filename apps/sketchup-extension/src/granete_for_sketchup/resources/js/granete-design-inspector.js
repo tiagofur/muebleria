@@ -217,17 +217,19 @@
       changeBtn.addEventListener("click", function (evt) {
         if (evt && evt.stopPropagation) evt.stopPropagation();
         var candidates = deps.getRoleCandidates(role);
-        if ((!candidates || candidates.length === 0) && hasDeps(["getMaterials"])) {
-          candidates = deps.getMaterials().map(function (material) { return material.id || material.materialId; });
+        var curatedCandidates = (candidates && candidates.length > 0) ? candidates : [];
+        var roleCandidates = curatedCandidates;
+        if (roleCandidates.length === 0 && hasDeps(["getMaterials"])) {
+          roleCandidates = deps.getMaterials().map(function (material) { return material.id || material.materialId; });
         }
-        var roleEntry = { role: role, label: label, optionIds: candidates || [] };
+        var roleEntry = { role: role, label: label, optionIds: roleCandidates || [] };
         if (window.sketchup && typeof window.sketchup.open_material_selector === "function") {
           window.sketchup.open_material_selector(JSON.stringify({
             role: role,
             roleName: label || role,
             currentMaterialId: drafted || materialId || null,
             context: "design",
-            allowedMaterialIds: []
+            allowedMaterialIds: curatedCandidates
           }));
         } else {
           deps.openMaterialPicker(roleEntry, drafted || materialId, function (pickedId) {

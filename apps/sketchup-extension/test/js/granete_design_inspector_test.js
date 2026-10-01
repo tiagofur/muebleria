@@ -1402,6 +1402,7 @@ function run() {
     assert.strictEqual(selectorCall.role, 'INTERIOR');
     assert.strictEqual(selectorCall.context, 'design');
     assert.strictEqual(selectorCall.currentMaterialId, 'mat-white');
+    assert.deepStrictEqual(selectorCall.allowedMaterialIds, ['mat-oak', 'mat-white']);
   });
 }
 
