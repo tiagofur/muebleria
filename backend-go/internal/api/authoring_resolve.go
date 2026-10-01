@@ -236,6 +236,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
+	sideRecipes, libraryReleaseID := s.resolvedSideRecipes(r)
 	result, err := engine.ResolveAuthoringLayout(engine.AuthoringResolveInput{
 		Module:                  *module,
 		Catalog:                 catalog,
@@ -247,6 +248,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		ManualPlacements:        placements,
 		ManualPlacementsPresent: req.Furniture.HardwarePlacements != nil,
 		EvaluatedParameters:     normalizedParameters,
+		ResolvedSideRecipes:     sideRecipes,
 	})
 	if err != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
@@ -261,7 +263,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	s.writeAuthoringResolveAccepted(w, req, revision, result)
+	s.writeAuthoringResolveAccepted(w, req, revision, libraryReleaseID, result)
 }
 
 // authoringResolveMaxBodyBytes caps the resolve payload explicitly (contract
@@ -336,14 +338,19 @@ type authoringPlacementWire struct {
 }
 
 type authoringResolveResponse struct {
-	SchemaID           string                            `json:"schemaId"`
-	SchemaName         string                            `json:"schemaName"`
-	SchemaVersion      string                            `json:"schemaVersion"`
-	ResolveContract    string                            `json:"resolveContract"`
-	ResponseMessageID  string                            `json:"responseMessageId"`
-	InReplyToMessageID string                            `json:"inReplyToMessageId"`
-	IdempotencyKey     string                            `json:"idempotencyKey"`
-	CatalogRevision    string                            `json:"catalogRevision"`
+	SchemaID           string `json:"schemaId"`
+	SchemaName         string `json:"schemaName"`
+	SchemaVersion      string `json:"schemaVersion"`
+	ResolveContract    string `json:"resolveContract"`
+	ResponseMessageID  string `json:"responseMessageId"`
+	InReplyToMessageID string `json:"inReplyToMessageId"`
+	IdempotencyKey     string `json:"idempotencyKey"`
+	CatalogRevision    string `json:"catalogRevision"`
+	// LibraryReleaseID echoes the published Standard release whose pinned
+	// hardware profiles fed server-resolved recipes (#916). Empty when no
+	// release is published: profile resolution degrades honestly to the
+	// TECHNICAL_PROFILE_REQUIRED terminal, never to an error.
+	LibraryReleaseID   string                            `json:"libraryReleaseId,omitempty"`
 	Status             string                            `json:"status"`
 	NormalizedSnapshot *engine.NormalizedAuthoringIntent `json:"normalizedSnapshot,omitempty"`
 	Resolved           *authoringResolveResolved         `json:"resolved,omitempty"`
@@ -415,7 +422,7 @@ func (s *Server) writeAuthoringResolveEnvelope(w http.ResponseWriter, httpStatus
 
 // writeAuthoringResolveAccepted serializes the accepted result with the
 // normalized snapshot and the resolved sections.
-func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req authoringResolveRequest, revision string, result *engine.AuthoringResolveResult) {
+func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req authoringResolveRequest, revision string, libraryReleaseID string, result *engine.AuthoringResolveResult) {
 	validationIssues := result.ValidationIssues
 	if validationIssues == nil {
 		validationIssues = []domain.ContractIssue{}
@@ -429,6 +436,7 @@ func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req author
 		InReplyToMessageID: req.MessageID,
 		IdempotencyKey:     req.IdempotencyKey,
 		CatalogRevision:    revision,
+		LibraryReleaseID:   libraryReleaseID,
 		Status:             authoringStatusAccepted,
 		NormalizedSnapshot: &result.Normalized,
 		Resolved: &authoringResolveResolved{
