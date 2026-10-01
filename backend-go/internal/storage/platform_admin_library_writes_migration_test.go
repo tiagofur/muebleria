@@ -199,9 +199,77 @@ func TestPlatformAdminLibraryWrites_WideningIsTenantBoundAndReversible(t *testin
 	if rows := writeLibraryRelease(t, runtimePool, paOrg, paStandardRelease, "true"); rows != 0 {
 		t.Fatalf("platform actor wrote to an already-published release (%d rows); immutability violated", rows)
 	}
+	// A published release with an authoritative manifest row is also strictly immutable.
+	const paPublishedWithManifest = "b1000000-0000-0000-0000-0000000000f1"
+	if _, err := migrationPool.Exec(ctx, `
+		INSERT INTO library_releases (id, library_id, version, status) VALUES ($1, $2, '0.9.0', 'published')`,
+		paPublishedWithManifest, paStandardLibrary); err != nil {
+		t.Fatalf("insert published standard: %v", err)
+	}
+	if _, err := migrationPool.Exec(ctx, `
+		INSERT INTO library_release_manifests (release_id, manifest_hash, manifest_json)
+		VALUES ($1, 'sha256:1111111111111111111111111111111111111111111111111111111111111111', '{}')`,
+		paPublishedWithManifest); err != nil {
+		t.Fatalf("insert manifest: %v", err)
+	}
+	if rows := writeLibraryRelease(t, runtimePool, paOrg, paPublishedWithManifest, "true"); rows != 0 {
+		t.Fatalf("platform actor wrote to a published release with manifest (%d rows); immutability violated", rows)
+	}
 	if _, err := migrationPool.Exec(ctx, `
 		UPDATE library_releases SET status = 'draft' WHERE id = $1`, paStandardRelease); err != nil {
 		t.Fatalf("restore status to draft: %v", err)
+	}
+
+	// 4b. Placeholder fixture reset (#955): a placeholder flip (published
+	// status, placeholder hash, no manifest row) can be reset to draft by
+	// platform admin, but NEVER by a tenant.
+	const placeholderHash = "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+	if _, err := migrationPool.Exec(ctx, `
+		UPDATE library_releases
+		SET status = 'published', manifest_hash = $2
+		WHERE id = $1`, paStandardRelease, placeholderHash); err != nil {
+		t.Fatalf("set status to placeholder: %v", err)
+	}
+
+	resetProbe := func(marker string) (int64, error) {
+		tx, err := runtimePool.Begin(ctx)
+		if err != nil {
+			return 0, err
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `
+			SELECT set_config('app.organization_id', $1, true),
+			       set_config('app.platform_admin', $2, true),
+			       set_config('row_security', 'on', true)`, paOrg, marker); err != nil {
+			return 0, err
+		}
+		tag, err := tx.Exec(ctx, `
+			UPDATE library_releases
+			SET status = 'draft', manifest_hash = NULL, published_at = NULL,
+			    published_by = NULL, updated_at = NOW()
+			WHERE id = $1 AND status = 'published'
+			  AND NOT EXISTS (SELECT 1 FROM library_release_manifests WHERE release_id = $1)`, paStandardRelease)
+		if err != nil {
+			return 0, err
+		}
+		if tag.RowsAffected() == 0 {
+			return 0, tx.Rollback(ctx)
+		}
+		return tag.RowsAffected(), tx.Commit(ctx)
+	}
+
+	if rows, err := resetProbe("false"); err != nil || rows != 0 {
+		t.Fatalf("tenant actor reset placeholder release (rows=%d, err=%v)", rows, err)
+	}
+	if rows, err := resetProbe("true"); err != nil || rows != 1 {
+		t.Fatalf("platform actor could not reset placeholder release (rows=%d, err=%v)", rows, err)
+	}
+	var resetStatus string
+	if err := migrationPool.QueryRow(ctx, `SELECT status FROM library_releases WHERE id = $1`, paStandardRelease).Scan(&resetStatus); err != nil {
+		t.Fatalf("query reset status: %v", err)
+	}
+	if resetStatus != "draft" {
+		t.Fatalf("release status after reset = %q, want draft", resetStatus)
 	}
 
 	// 5. Column-level privilege and draft ref updates: granete_app can update

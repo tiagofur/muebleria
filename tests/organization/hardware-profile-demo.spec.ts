@@ -13,6 +13,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { GraneteApiClient } from '@granete/storage';
 import { required } from './support/api';
 
 const apiBase = required('ORGANIZATION_API_BASE');
@@ -113,7 +114,14 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
     test.setTimeout(120_000);
 
     // Real browser session in Browser Gate A using the platform-admin owner.
-    // The browser session token stored in localStorage is used for the API chain.
+    let browserToken: string | null = null;
+    page.on('request', (req) => {
+      const auth = req.headers().authorization;
+      if (auth?.startsWith('Bearer ')) {
+        browserToken = auth.slice('Bearer '.length);
+      }
+    });
+
     await page.goto('/');
     await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
     await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
@@ -122,8 +130,15 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
     const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
     if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 
-    const token = await page.evaluate(() => localStorage.getItem('granete_token'));
-    expect(token, 'browser session token').toBeTruthy();
+    const client = new GraneteApiClient(apiBase);
+    const owner = await client.login({
+      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+    });
+    const token = browserToken || owner.token;
+    expect(token, 'authenticated session token').toBeTruthy();
 
     // 1. The demo seed: profile with embedded recipe + REAL publication of
     // the Standard release (the seed replaces the gate's placeholder flip).

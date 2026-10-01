@@ -48,6 +48,27 @@ CREATE POLICY library_release_refs_write ON library_release_resource_refs
         )
     );
 
+
+DROP POLICY IF EXISTS library_resource_blobs_read ON library_resource_blobs;
+CREATE POLICY library_resource_blobs_read ON library_resource_blobs
+    FOR SELECT TO granete_app
+    USING (
+        EXISTS (
+            SELECT 1 FROM library_release_resource_refs r
+            JOIN library_releases lr ON lr.id = r.release_id
+            JOIN manufacturing_libraries ml ON ml.id = lr.library_id
+            WHERE r.definition_hash = library_resource_blobs.sha256
+              AND (
+                  ml.owner_organization_id IS NULL
+                  OR ml.owner_organization_id = app_current_organization_id()
+              )
+              AND (
+                  lr.status = 'published'
+                  OR ml.owner_organization_id = app_current_organization_id()
+              )
+        )
+    );
+
 DROP POLICY IF EXISTS library_release_manifests_write ON library_release_manifests;
 CREATE POLICY library_release_manifests_write ON library_release_manifests
     FOR ALL TO granete_app
@@ -87,4 +108,5 @@ WHERE table_name IN ('library_releases', 'library_release_resource_refs', 'libra
 
 REVOKE UPDATE (resource_revision, package_kind) ON library_release_resource_refs FROM granete_app;
 
+DROP FUNCTION IF EXISTS library_release_has_manifest(uuid);
 DROP FUNCTION IF EXISTS app_platform_admin();

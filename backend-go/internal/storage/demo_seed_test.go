@@ -229,13 +229,11 @@ func TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority(t *testi
 	const insertStaleRef = `
 		INSERT INTO library_release_resource_refs
 			(release_id, resource_kind, resource_id, resource_revision, definition_hash, package_kind)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (release_id, resource_kind, resource_id) DO UPDATE
-		SET resource_revision = $4, definition_hash = $5, package_kind = $6`
+		VALUES ($1, $2, $3, $4, $5, $6)`
 	staleHash := "sha256:00000000000000000000000000000000000000000000000000000000000000aa"
 	if _, err := migrationPool.Exec(ctx, insertStaleRef,
 		releaseID, application.HardwareProfileResourceKind, application.SeedDemoProfileID,
-		"stale-draft-revision", staleHash, "internal",
+		"stale-draft-revision", staleHash, string(domain.PackageKindStandard),
 	); err != nil {
 		t.Fatalf("insert stale ref: %v", err)
 	}
@@ -264,7 +262,7 @@ func TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority(t *testi
 	if hash == staleHash || !strings.HasPrefix(hash, "sha256:") {
 		t.Fatalf("definition_hash was not updated: got %q", hash)
 	}
-	if pkgKind != string(domain.PackageKindStandard) {
-		t.Fatalf("package_kind was not updated from manifest: got %q, want %q", pkgKind, domain.PackageKindStandard)
+	if pkgKind != string(domain.PackageKindFree) {
+		t.Fatalf("package_kind was not updated from manifest: got %q, want %q", pkgKind, domain.PackageKindFree)
 	}
 }
