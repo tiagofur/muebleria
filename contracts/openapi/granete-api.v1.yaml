@@ -4837,6 +4837,48 @@
         }
       }
     },
+    "/manufacturing-libraries/standard/releases/{releaseId}/hardware-profiles": {
+      "get": {
+        "operationId": "getHardwareProfilesForRelease",
+        "summary": "List the hardware profiles pinned inside an exact Standard release",
+        "description": "Pinned read (#918): the release id identifies the content — there is no current/latest variant on purpose. Clients resolve the release id explicitly (e.g. GET /releases/current) and then pin it. [HW-PROFILE]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hardware profiles pinned in the release (references only; hardware identity stays canonical)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HardwareProfile"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Release has no published manifest"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/manufacturing-libraries/standard/releases/{releaseId}/manifest": {
       "get": {
         "operationId": "getStandardReleaseManifest",
