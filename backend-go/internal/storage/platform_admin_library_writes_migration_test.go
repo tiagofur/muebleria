@@ -189,8 +189,74 @@ func TestPlatformAdminLibraryWrites_WideningIsTenantBoundAndReversible(t *testin
 	if rows := writeLibraryRelease(t, runtimePool, paOrg, paStandardRelease, "true"); rows != 1 {
 		t.Fatalf("platform actor could not write the Standard release (%d rows)", rows)
 	}
-	// The marker is not a tenant-reachable string: an org that merely belongs
-	// to a tenant actor still gets the denial above.
+
+	// 4. Published release immutability (#772): once published, even platform
+	// staff CANNOT modify the release or its resource refs.
+	if _, err := migrationPool.Exec(ctx, `
+		UPDATE library_releases SET status = 'published' WHERE id = $1`, paStandardRelease); err != nil {
+		t.Fatalf("set status to published: %v", err)
+	}
+	if rows := writeLibraryRelease(t, runtimePool, paOrg, paStandardRelease, "true"); rows != 0 {
+		t.Fatalf("platform actor wrote to an already-published release (%d rows); immutability violated", rows)
+	}
+	if _, err := migrationPool.Exec(ctx, `
+		UPDATE library_releases SET status = 'draft' WHERE id = $1`, paStandardRelease); err != nil {
+		t.Fatalf("restore status to draft: %v", err)
+	}
+
+	// 5. Column-level privilege and draft ref updates: granete_app can update
+	// definition_hash, resource_revision, and package_kind on draft refs.
+	const refID = "b1000000-0000-0000-0000-000000000099"
+	if _, err := migrationPool.Exec(ctx, `
+		INSERT INTO library_release_resource_refs
+			(id, release_id, resource_kind, resource_id, resource_revision, package_kind)
+		VALUES ($1, $2, 'hardware_profile', $3, 'rev-0', 'standard')`,
+		refID, paStandardRelease, "b1000000-0000-0000-0000-000000000088"); err != nil {
+		t.Fatalf("insert draft ref: %v", err)
+	}
+
+	writeRef := func(marker string) (int64, error) {
+		tx, err := runtimePool.Begin(ctx)
+		if err != nil {
+			return 0, err
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `
+			SELECT set_config('app.organization_id', $1, true),
+			       set_config('app.platform_admin', $2, true),
+			       set_config('row_security', 'on', true)`, paOrg, marker); err != nil {
+			return 0, err
+		}
+		tag, err := tx.Exec(ctx, `
+			UPDATE library_release_resource_refs
+			SET definition_hash = 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+			    resource_revision = 'rev-1',
+			    package_kind = 'free'
+			WHERE id = $1`, refID)
+		if err != nil {
+			return 0, err
+		}
+		return tag.RowsAffected(), tx.Rollback(ctx)
+	}
+
+	if rows, err := writeRef("true"); err != nil || rows != 1 {
+		t.Fatalf("platform actor could not update draft ref (rows=%d, err=%v)", rows, err)
+	}
+	if rows, err := writeRef("false"); err != nil || rows != 0 {
+		t.Fatalf("tenant actor updated standard draft ref (rows=%d, err=%v)", rows, err)
+	}
+
+	if _, err := migrationPool.Exec(ctx, `
+		UPDATE library_releases SET status = 'published' WHERE id = $1`, paStandardRelease); err != nil {
+		t.Fatalf("set status to published: %v", err)
+	}
+	if rows, err := writeRef("true"); err != nil || rows != 0 {
+		t.Fatalf("platform actor updated ref on published release (rows=%d, err=%v); immutability violated", rows, err)
+	}
+	if _, err := migrationPool.Exec(ctx, `
+		UPDATE library_releases SET status = 'draft' WHERE id = $1`, paStandardRelease); err != nil {
+		t.Fatalf("restore status to draft: %v", err)
+	}
 
 	down, err := os.ReadFile("../../db/migration/000146_platform_admin_library_writes.down.sql")
 	if err != nil {

@@ -85,4 +85,6 @@ SET write_scope = CASE table_name
     updated_at = NOW()
 WHERE table_name IN ('library_releases', 'library_release_resource_refs', 'library_release_manifests');
 
+REVOKE UPDATE (resource_revision, package_kind) ON library_release_resource_refs FROM granete_app;
+
 DROP FUNCTION IF EXISTS app_platform_admin();

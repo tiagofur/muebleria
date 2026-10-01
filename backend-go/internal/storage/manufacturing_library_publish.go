@@ -42,30 +42,22 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 	}
 	defer tx.Rollback(ctx)
 
-	// 1. Advance release status from draft to published
-	const updateReleaseQuery = `
-		UPDATE library_releases
-		SET status        = 'published',
-		    manifest_hash = $2,
-		    published_at  = NOW(),
-		    published_by  = $3,
-		    updated_at    = NOW()
+	// 1. Verify release exists and is in draft status before materializing
+	// publication artifacts.
+	const verifyDraftQuery = `
+		SELECT status FROM library_releases
 		WHERE id = $1
-		  AND status = 'draft'`
+		FOR UPDATE`
 
-	tag, err := tx.Exec(ctx, updateReleaseQuery, releaseID, manifest.ManifestHash, publishedBy)
-	if err != nil {
-		return fmt.Errorf("update release %s to published: %w", releaseID, err)
-	}
-	if tag.RowsAffected() == 0 {
-		rel, lookupErr := s.GetReleaseByID(ctx, releaseID)
-		if lookupErr != nil {
+	var currentStatus string
+	if err := tx.QueryRow(ctx, verifyDraftQuery, releaseID).Scan(&currentStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %s", ErrLibraryReleaseNotFound, releaseID)
 		}
-		if !rel.IsDraft() {
-			return fmt.Errorf("%w: current status is %s", ErrReleaseNotDraft, rel.Status)
-		}
-		return fmt.Errorf("publish release %s: no rows affected", releaseID)
+		return fmt.Errorf("verify release %s status: %w", releaseID, err)
+	}
+	if currentStatus != string(domain.ReleaseStatusDraft) {
+		return fmt.Errorf("%w: current status is %s", ErrReleaseNotDraft, currentStatus)
 	}
 
 	// 2. Insert immutable manifest row
@@ -145,6 +137,28 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 		); err != nil {
 			return fmt.Errorf("insert resource ref %s/%s: %w", r.Kind, r.ID, err)
 		}
+	}
+
+	// 5. Seal publication: advance release status from draft to published.
+	// Once published, the RLS write policies (which require status = 'draft' in
+	// USING) lock the release and its refs against any further mutation,
+	// guaranteeing absolute immutability (#772).
+	const updateReleaseQuery = `
+		UPDATE library_releases
+		SET status        = 'published',
+		    manifest_hash = $2,
+		    published_at  = NOW(),
+		    published_by  = $3,
+		    updated_at    = NOW()
+		WHERE id = $1
+		  AND status = 'draft'`
+
+	tag, err := tx.Exec(ctx, updateReleaseQuery, releaseID, manifest.ManifestHash, publishedBy)
+	if err != nil {
+		return fmt.Errorf("update release %s to published: %w", releaseID, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("publish release %s: no rows affected", releaseID)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

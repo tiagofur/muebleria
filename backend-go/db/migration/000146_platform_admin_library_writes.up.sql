@@ -20,12 +20,14 @@ DROP POLICY IF EXISTS library_releases_write ON library_releases;
 CREATE POLICY library_releases_write ON library_releases
     FOR ALL TO granete_app
     USING (
-        app_platform_admin()
-        OR EXISTS (
-            SELECT 1 FROM manufacturing_libraries ml
-            WHERE ml.id = library_id
-              AND ml.owner_organization_id IS NOT NULL
-              AND ml.owner_organization_id = app_current_organization_id()
+        (
+            app_platform_admin()
+            OR EXISTS (
+                SELECT 1 FROM manufacturing_libraries ml
+                WHERE ml.id = library_id
+                  AND ml.owner_organization_id IS NOT NULL
+                  AND ml.owner_organization_id = app_current_organization_id()
+            )
         )
         AND library_releases.status = 'draft'
     )
@@ -43,27 +45,39 @@ DROP POLICY IF EXISTS library_release_refs_write ON library_release_resource_ref
 CREATE POLICY library_release_refs_write ON library_release_resource_refs
     FOR ALL TO granete_app
     USING (
-        app_platform_admin()
-        OR EXISTS (
+        EXISTS (
             SELECT 1 FROM library_releases lr
             JOIN manufacturing_libraries ml ON ml.id = lr.library_id
             WHERE lr.id = release_id
               AND lr.status = 'draft'
-              AND ml.owner_organization_id IS NOT NULL
-              AND ml.owner_organization_id = app_current_organization_id()
+              AND (
+                  app_platform_admin()
+                  OR (
+                      ml.owner_organization_id IS NOT NULL
+                      AND ml.owner_organization_id = app_current_organization_id()
+                  )
+              )
         )
     )
     WITH CHECK (
-        app_platform_admin()
-        OR EXISTS (
+        EXISTS (
             SELECT 1 FROM library_releases lr
             JOIN manufacturing_libraries ml ON ml.id = lr.library_id
             WHERE lr.id = release_id
               AND lr.status = 'draft'
-              AND ml.owner_organization_id IS NOT NULL
-              AND ml.owner_organization_id = app_current_organization_id()
+              AND (
+                  app_platform_admin()
+                  OR (
+                      ml.owner_organization_id IS NOT NULL
+                      AND ml.owner_organization_id = app_current_organization_id()
+                  )
+              )
         )
     );
+
+-- Allow granete_app to update revision and package_kind when reconciling
+-- draft refs with the compiled manifest at publish time (#955).
+GRANT UPDATE (resource_revision, package_kind) ON library_release_resource_refs TO granete_app;
 
 DROP POLICY IF EXISTS library_release_manifests_write ON library_release_manifests;
 -- Tenant branch keeps 000140's exact shape (no status condition): narrowing it
