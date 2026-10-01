@@ -214,16 +214,33 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 		}
 		roles := engine.ClassifyMaterialRoleProvenance(working, quoted)
 		// #784 projection: one deterministic entry per materialized role, mode
-		// read from the persisted statement, drift computed by the pure rule.
-		roleNames := make([]string, 0, len(modes))
+		roleSet := map[string]bool{}
 		for role := range modes {
+			roleSet[role] = true
+		}
+		for role := range working {
+			roleSet[role] = true
+		}
+		for role := range defaults.MaterialChoices {
+			roleSet[role] = true
+		}
+		roleNames := make([]string, 0, len(roleSet))
+		for role := range roleSet {
 			roleNames = append(roleNames, role)
 		}
 		sort.Strings(roleNames)
 		inheritance := make([]domain.DesignRoleInheritance, 0, len(roleNames))
 		for _, role := range roleNames {
+			mode := modes[role]
+			if mode == "" {
+				if defaults.MaterialChoices[role] != "" && working[role] == defaults.MaterialChoices[role] {
+					mode = domain.DesignMaterialChoiceModeDesign
+				} else {
+					mode = domain.DesignMaterialChoiceModeDefinition
+				}
+			}
 			inheritance = append(inheritance, domain.EvaluateDesignRoleInheritance(
-				role, modes[role], working[role], defaults.MaterialChoices[role],
+				role, mode, working[role], defaults.MaterialChoices[role],
 			))
 		}
 		entry := DesignWorkingItemMaterialProvenance{

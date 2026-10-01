@@ -327,7 +327,8 @@
 
     // #784 R5: explicit rollout action to roll the default across existing furniture
     var summary = state.inheritanceSummary && state.inheritanceSummary[role];
-    if (materialId && summary && summary.items > 0) {
+    var effectiveMatId = materialId || drafted;
+    if (effectiveMatId && summary && summary.items > 0) {
       var rolloutBtn = document.createElement("button");
       rolloutBtn.id = "design-inspector-rollout-" + role;
       rolloutBtn.className = "btn btn-secondary btn-sm design-insp-rollout";
@@ -922,7 +923,9 @@
       });
       state.inheritanceSummary = summaryMap;
 
-      if (typeof deps.rerenderInspector === "function") deps.rerenderInspector();
+      if (!state.laneActive && typeof deps.rerenderInspector === "function") {
+        deps.rerenderInspector();
+      }
       if (state.laneActive) render();
     },
 
