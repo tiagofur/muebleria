@@ -1217,6 +1217,12 @@
         },
         "resolved": {
           "$ref": "#/$defs/resolved"
+        },
+        "libraryReleaseId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Published Standard release whose pinned hardware profiles fed server-resolved recipes (#916). Absent when no release is published."
         }
       },
       "required": [

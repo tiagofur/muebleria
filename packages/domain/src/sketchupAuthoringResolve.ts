@@ -824,8 +824,8 @@ const RELATIONSHIP_KEYS = new Set([
 ]);
 const RESPONSE_KEYS = new Set([
   'schemaId', 'schemaName', 'schemaVersion', 'resolveContract', 'responseMessageId',
-  'inReplyToMessageId', 'idempotencyKey', 'catalogRevision', 'status', 'normalizedSnapshot',
-  'resolved', 'issues',
+  'inReplyToMessageId', 'idempotencyKey', 'catalogRevision', 'libraryReleaseId', 'status',
+  'normalizedSnapshot', 'resolved', 'issues',
 ]);
 const ISSUE_KEYS = new Set(['code', 'message', 'severity', 'entityId', 'path', 'remediation', 'details']);
 const RESOLVED_LAYOUT_COMPONENT_KEYS = new Set([
@@ -880,6 +880,13 @@ export function validateAuthoringResolveResponse(
   if (root.inReplyToMessageId !== correlation.messageId) problems.push('inReplyToMessageId does not match the request');
   if (root.idempotencyKey !== correlation.idempotencyKey) problems.push('idempotencyKey does not match the request');
   if (root.catalogRevision !== correlation.catalogRevision) problems.push('catalogRevision does not match the pinned request');
+  // libraryReleaseId (#916) is optional: present only when a published
+  // Standard release fed server-resolved recipes. Present must be a bounded
+  // string (release uuid).
+  if (root.libraryReleaseId !== undefined &&
+    (typeof root.libraryReleaseId !== 'string' || root.libraryReleaseId.length === 0 || root.libraryReleaseId.length > 128)) {
+    problems.push('libraryReleaseId must be a bounded string when present');
+  }
 
   validateIssues(root.issues, 'issues', problems);
   if (root.status === 'accepted') {

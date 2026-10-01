@@ -238,6 +238,7 @@ describe('#477 shared authoring resolve contract fixture', () => {
       '26-floor-side-families',
       '27-floor-side-families-collision',
       '28-fixed-shelf-recipes',
+      '29-fixed-shelf-profile-resolved',
     ]) {
       expect(ids).toContain(required);
     }
@@ -676,6 +677,7 @@ describe('J1 golden floor-side cross-runtime parity (#874)', () => {
       '26-floor-side-families',
       '27-floor-side-families-collision',
       '28-fixed-shelf-recipes',
+      '29-fixed-shelf-profile-resolved',
     ]) {
       const scenario = byId.get(id)!;
       const result = deriveRelationshipMachining(snapshotFromScenario(scenario), catalog);

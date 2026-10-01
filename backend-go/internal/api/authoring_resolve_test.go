@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
@@ -417,7 +419,7 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 		return f
 	}
 
-	return []authoringFixtureCase{
+	scenarios := []authoringFixtureCase{
 		// 1. Existing cabinet parameters/materials resolve with GET parity.
 		run("01-params-materials-parity", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
 			f.Parameters = map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}
@@ -805,6 +807,74 @@ func authoringFixtureScenarios(t *testing.T, server *Server, token string) []aut
 			}
 		})), http.StatusUnprocessableEntity),
 	}
+	// 29. J3 golden server-resolved recipes (#916): the SAME shelf↔sides
+	// joint as 28 but the relationship declares NO recipes — the side
+	// assignments (comp-side front / comp-side-r back) joined with the
+	// pinned profile's embedded recipe body synthesize them
+	// server-side. Same MACHINING_READY outcome and provenance as the
+	// authored path; the response echoes the library release id whose
+	// pinned profiles fed the resolution. The stub store is configured
+	// only for this scenario and reset afterwards so the remaining
+	// negative proofs stay byte-identical.
+	func() {
+		stub, ok := server.Store.(*stubStore)
+		if !ok {
+			t.Fatalf("golden fixture store must be the stub store")
+		}
+		profileID := uuid.MustParse("f9160000-0000-0000-0000-000000000001")
+		releaseID := uuid.MustParse("f9160000-0000-0000-0000-000000000001")
+		profileJSON := `{"id":"f9160000-0000-0000-0000-000000000001","code":"PERF-STUB","name":"Unión resuelta","revision":"rev-1",` +
+			`"items":[{"hardwareId":"f9160000-0000-0000-0000-000000000002","quantity":2,"applicationRole":"screw"}],` +
+			`"recipeRef":{"recipeId":"test:synthetic-fixed-shelf","recipeRevision":"test-1"},` +
+			`"recipe":{"recipeId":"test:synthetic-fixed-shelf","recipeRevision":"test-1","variants":[` +
+			`{"targetFace":"front","rules":[` +
+			`{"ruleId":"pilot","ruleRevision":"test-1","participantRole":"A","operationRole":"pilot","entryFace":"bottom","offsetMm":[0,0,0],"axis":[0,-1,0],"diameterMm":3,"depthMm":12},` +
+			`{"ruleId":"counterbore","ruleRevision":"test-1","participantRole":"B","operationRole":"counterbore","entryFace":"back","offsetMm":[0,18,0],"axis":[0,-1,0],"diameterMm":6,"depthMm":9}]},` +
+			`{"targetFace":"back","rules":[` +
+			`{"ruleId":"pilot","ruleRevision":"test-1","participantRole":"A","operationRole":"pilot","entryFace":"top","offsetMm":[0,0,0],"axis":[0,-1,0],"diameterMm":3,"depthMm":12},` +
+			`{"ruleId":"counterbore","ruleRevision":"test-1","participantRole":"B","operationRole":"counterbore","entryFace":"front","offsetMm":[0,18,0],"axis":[0,-1,0],"diameterMm":6,"depthMm":9}]}]},` +
+			`"active":true}`
+		definitionHash := "sha256:" + strings.Repeat("9", 64)
+		stub.currentPublishedRelease = &domain.LibraryRelease{
+			ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID),
+			Version: "0.1.0-golden", Status: domain.ReleaseStatusPublished,
+		}
+		stub.releaseManifestsByID = map[uuid.UUID]*domain.LibraryManifest{
+			releaseID: {SchemaVersion: domain.LibraryManifestSchemaVersion, Resources: []domain.ManifestResourceRef{{
+				Kind: "hardware_profile", ID: profileID, Revision: "rev-1",
+				DefinitionHash: definitionHash, PackageKind: domain.PackageKindFree,
+			}}},
+		}
+		stub.resourceBlobsByHash = map[string]*domain.ResourceBlob{
+			definitionHash: {SHA256: definitionHash, ResourceKind: "hardware_profile", ResourceID: profileID,
+				ContentType: "application/json", Content: []byte(profileJSON)},
+		}
+		stub.allComponentSideAssignments = []domain.ComponentSideAssignment{
+			{ComponentID: "comp-side", Side: "front", ProfileID: profileID.String()},
+			{ComponentID: "comp-side-r", Side: "back", ProfileID: profileID.String()},
+		}
+		scenarios = append(scenarios, run("29-fixed-shelf-profile-resolved", "", authoringFixtureRequest(revision, furniture(func(f *authoringResolveFurniture) {
+			occ := floorSideOccurrencesJSON()
+			occ[5] = occurrenceJSON("shelf-01", "mod-comp-shelf", []float64{18, 18, 400})
+			f.Components = occ
+			f.Relationships = []engine.AuthoringRelationship{{
+				RelationshipID: "rel-fixed-shelf-01",
+				Kind:           "fixed-shelf-side",
+				Source:         engine.AuthoringRelationshipAnchor{ComponentInstanceID: "shelf-01", Role: "shelf-edge"},
+				Targets: []engine.AuthoringRelationshipAnchor{
+					{ComponentInstanceID: "side-left-01", Role: "side", Face: "front"},
+					{ComponentInstanceID: "side-right-01", Role: "side", Face: "back"},
+				},
+				Parameters: map[string]any{"stationCount": 3, "startMarginMm": 30, "endMarginMm": 50},
+			}}
+		})), http.StatusOK))
+		// Reset so the negative proofs below stay byte-identical.
+		stub.currentPublishedRelease = nil
+		stub.releaseManifestsByID = nil
+		stub.resourceBlobsByHash = nil
+		stub.allComponentSideAssignments = nil
+	}()
+	return scenarios
 }
 
 // buildAuthoringFixtureJoinery assembles the TS-side machining inputs from

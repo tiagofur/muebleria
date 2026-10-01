@@ -15973,6 +15973,126 @@
         ],
         "description": "Authorable fields only: id and timestamps are server-owned."
       },
+      "ProfileRuleSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ruleId": {
+            "type": "string"
+          },
+          "ruleRevision": {
+            "type": "string"
+          },
+          "participantRole": {
+            "enum": [
+              "A",
+              "B"
+            ]
+          },
+          "operationRole": {
+            "type": "string"
+          },
+          "entryFace": {
+            "type": "string",
+            "enum": [
+              "top",
+              "bottom",
+              "front",
+              "back",
+              "left",
+              "right"
+            ]
+          },
+          "offsetMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "axis": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "diameterMm": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "depthMm": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "ruleId",
+          "ruleRevision",
+          "participantRole",
+          "operationRole",
+          "entryFace",
+          "offsetMm",
+          "axis",
+          "diameterMm",
+          "depthMm"
+        ]
+      },
+      "ProfileRecipeVariant": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "targetFace": {
+            "type": "string",
+            "enum": [
+              "top",
+              "bottom",
+              "front",
+              "back",
+              "left",
+              "right"
+            ]
+          },
+          "rules": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/ProfileRuleSpec"
+            }
+          }
+        },
+        "required": [
+          "targetFace",
+          "rules"
+        ]
+      },
+      "ProfileRecipeBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "recipeId": {
+            "type": "string"
+          },
+          "recipeRevision": {
+            "type": "string"
+          },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/ProfileRecipeVariant"
+            }
+          }
+        },
+        "required": [
+          "recipeId",
+          "recipeRevision",
+          "variants"
+        ],
+        "description": "Profile-embedded recipe definition (#916): one variant per target-face orientation; the release pins it and the resolve synthesizes per-contact recipes from it. Identity must agree with recipeRef."
+      },
       "HardwareProfileItem": {
         "type": "object",
         "additionalProperties": false,
@@ -16040,6 +16160,9 @@
           "recipeRef": {
             "$ref": "#/components/schemas/ProfileRecipeRef"
           },
+          "recipe": {
+            "$ref": "#/components/schemas/ProfileRecipeBody"
+          },
           "active": {
             "type": "boolean"
           },
@@ -16093,6 +16216,9 @@
           },
           "recipeRef": {
             "$ref": "#/components/schemas/ProfileRecipeRef"
+          },
+          "recipe": {
+            "$ref": "#/components/schemas/ProfileRecipeBody"
           }
         },
         "required": [
