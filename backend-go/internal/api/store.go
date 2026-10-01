@@ -183,6 +183,11 @@ type Store interface {
 	DeactivateHardwareProfile(ctx context.Context, id string, expectedVersion int64) error
 	ExistingHardwareIDs(ctx context.Context, ids []string) (map[string]bool, error)
 
+	// Component side assignments (#915 / HW-PROFILE)
+	ListComponentSideAssignments(ctx context.Context, componentID string) ([]domain.ComponentSideAssignment, error)
+	SetComponentSideAssignment(ctx context.Context, a *domain.ComponentSideAssignment) error
+	RemoveComponentSideAssignment(ctx context.Context, componentID, side string) error
+
 	// Catalog: option groups
 	ListOptionGroups(ctx context.Context) ([]domain.OptionGroup, error)
 	GetOptionGroupByID(ctx context.Context, id string) (*domain.OptionGroup, error)

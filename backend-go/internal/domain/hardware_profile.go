@@ -139,9 +139,12 @@ func (p HardwareProfile) Validate() []ContractIssue {
 // separate (#912). Assignments live on the component definition in the
 // library and are overridable through the manufacturing overlay.
 type ComponentSideAssignment struct {
-	ComponentID string `json:"componentId"`
-	Side        string `json:"side"`
-	ProfileID   string `json:"profileId"`
+	ID          string    `json:"id,omitempty"`
+	ComponentID string    `json:"componentId"`
+	Side        string    `json:"side"`
+	ProfileID   string    `json:"profileId"`
+	CreatedAt   time.Time `json:"createdAt,omitempty"`
+	UpdatedAt   time.Time `json:"updatedAt,omitempty"`
 }
 
 // Validate returns the structured issues that make this assignment unusable.

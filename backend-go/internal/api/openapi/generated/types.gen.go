@@ -2676,6 +2676,24 @@ type FurnitureParameterDefinitionIssue struct {
 	Message   string  `json:"message"`
 }
 
+type ComponentSideAssignmentRemoved struct {
+	Status string `json:"status"`
+}
+
+type ComponentSideAssignment struct {
+	ID          *string `json:"id,omitempty"`
+	ComponentId string  `json:"componentId"`
+	Side        string  `json:"side"`
+	ProfileId   string  `json:"profileId"`
+	CreatedAt   *string `json:"createdAt,omitempty"`
+	UpdatedAt   *string `json:"updatedAt,omitempty"`
+}
+
+type ComponentSideAssignmentWrite struct {
+	Side      string `json:"side"`
+	ProfileId string `json:"profileId"`
+}
+
 type HardwareProfileItem struct {
 	HardwareId      string  `json:"hardwareId"`
 	Quantity        float64 `json:"quantity"`

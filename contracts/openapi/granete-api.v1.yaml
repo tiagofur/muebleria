@@ -5316,6 +5316,120 @@
         }
       }
     },
+    "/catalog/components/{componentId}/side-assignments": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ComponentId"
+        }
+      ],
+      "get": {
+        "operationId": "listComponentSideAssignments",
+        "summary": "List hardware-profile side assignments of a component definition",
+        "responses": {
+          "200": {
+            "description": "Assignments per canonical board face",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComponentSideAssignment"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setComponentSideAssignment",
+        "summary": "Set (upsert) the hardware profile of one canonical board face",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComponentSideAssignmentWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Assignment stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentSideAssignment"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "description": "Invalid side vocabulary or broken same-scope reference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareProfileInvalidError"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeComponentSideAssignment",
+        "summary": "Remove one side assignment (restore inheritance)",
+        "parameters": [
+          {
+            "name": "side",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "front",
+                "back",
+                "left",
+                "right",
+                "top",
+                "bottom"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Assignment removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentSideAssignmentRemoved"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/modules": {
       "get": {
         "operationId": "listCatalogModules",
@@ -6070,6 +6184,15 @@
       },
       "HardwareAssetId": {
         "name": "assetId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "ComponentId": {
+        "name": "componentId",
         "in": "path",
         "required": true,
         "schema": {
@@ -15772,6 +15895,83 @@
           "field",
           "message"
         ]
+      },
+      "ComponentSideAssignmentRemoved": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "ComponentSideAssignment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "componentId": {
+            "type": "string"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "front",
+              "back",
+              "left",
+              "right",
+              "top",
+              "bottom"
+            ]
+          },
+          "profileId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "componentId",
+          "side",
+          "profileId"
+        ],
+        "description": "Which hardware profile applies to one canonical board face of a component definition (#912/#915). The mounting face and the tool entry face stay recipe concerns."
+      },
+      "ComponentSideAssignmentWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "side": {
+            "type": "string",
+            "enum": [
+              "front",
+              "back",
+              "left",
+              "right",
+              "top",
+              "bottom"
+            ]
+          },
+          "profileId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "side",
+          "profileId"
+        ],
+        "description": "Authorable fields only: id and timestamps are server-owned."
       },
       "HardwareProfileItem": {
         "type": "object",
