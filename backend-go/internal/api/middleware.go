@@ -128,6 +128,20 @@ func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Ha
 				return
 			}
 
+			// #955: Re-read user flags from DB before constructing the actor or
+			// opening the tenant transaction. The transactional app.platform_admin
+			// marker and account active status must reflect live DB truth rather
+			// than potentially revoked or stale JWT claims.
+			if users != nil {
+				u, err := users.GetUserByID(r.Context(), claims.UserID)
+				if err != nil || u == nil || u.AccountStatus != domain.AccountStatusActive {
+					respondWithError(w, http.StatusUnauthorized, "invalid token")
+					return
+				}
+				claims.Email = u.Email
+				claims.PlatformAdmin = u.PlatformAdmin
+			}
+
 			actor := storage.TenantActor{
 				OrganizationID: claims.OrgID,
 				UserID:         claims.UserID,
@@ -203,6 +217,11 @@ func serveAuthenticatedRequest(
 		}
 		claims.Email = u.Email
 		claims.PlatformAdmin = u.PlatformAdmin
+		// Carry the refreshed flag into the actor: SetTenantActor re-applies
+		// it to app.platform_admin inside the running transaction, and the
+		// actor captured from the token before this refresh would otherwise
+		// leave a revoked platform admin writing with a stale marker.
+		actor.PlatformAdmin = claims.PlatformAdmin
 
 		// #460/SEC-1: ver5 tokens are bounded by the server-side session
 		// registry. The row is resolved live on every request: revocation or

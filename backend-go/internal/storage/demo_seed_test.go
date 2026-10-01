@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -115,7 +116,7 @@ func TestDemoSeedReplacesGatePlaceholderPublication(t *testing.T) {
 	if err := application.SeedDemoStandardRelease(ctx, store, publisher); err != nil {
 		t.Fatalf("demo seed over gate flip: %v", err)
 	}
-	release, err := store.GetCurrentPublishedRelease(ctx, publisherUUID(t))
+	release, err := store.GetCurrentPublishedRelease(ctx, standardLibraryID(t))
 	if err != nil {
 		t.Fatalf("current published: %v", err)
 	}
@@ -124,7 +125,7 @@ func TestDemoSeedReplacesGatePlaceholderPublication(t *testing.T) {
 	}
 }
 
-func publisherUUID(t *testing.T) uuid.UUID {
+func standardLibraryID(t *testing.T) uuid.UUID {
 	t.Helper()
 	return uuid.MustParse(domain.GraneteStandardLibraryID)
 }
@@ -204,5 +205,66 @@ func TestDemoSeedUnderRuntimeRoleWithPlatformMarker(t *testing.T) {
 	}
 	if demo == nil || demo.Recipe == nil || len(demo.Recipe.Variants) != 2 {
 		t.Fatalf("demo profile not readable as tenant: %d pinned, demo=%v", len(pinned), demo)
+	}
+}
+
+// #955: When publishing a release, existing resource refs must be updated to
+// match the manifest's revision, definition hash, and package kind. If a draft
+// ref row had an older revision/hash, the compiled manifest is the authoritative
+// snapshot (prevents revision/hash drift).
+func TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority(t *testing.T) {
+	migrationPool := multiOrgFreshMigrationDB(t)
+	store := &storage.PostgresStore{Pool: migrationPool}
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	if err := store.RunMigrations(ctx); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	if err := store.SeedCatalog(ctx); err != nil {
+		t.Fatalf("seed catalog: %v", err)
+	}
+
+	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
+
+	// Pre-insert an outdated ref row for the demo profile with stale revision, hash, and package_kind
+	const insertStaleRef = `
+		INSERT INTO library_release_resource_refs
+			(release_id, resource_kind, resource_id, resource_revision, definition_hash, package_kind)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (release_id, resource_kind, resource_id) DO UPDATE
+		SET resource_revision = $4, definition_hash = $5, package_kind = $6`
+	staleHash := "sha256:00000000000000000000000000000000000000000000000000000000000000aa"
+	if _, err := migrationPool.Exec(ctx, insertStaleRef,
+		releaseID, application.HardwareProfileResourceKind, application.SeedDemoProfileID,
+		"stale-draft-revision", staleHash, "internal",
+	); err != nil {
+		t.Fatalf("insert stale ref: %v", err)
+	}
+
+	publisher, err := store.EnsureSeedPlatformUser(ctx)
+	if err != nil {
+		t.Fatalf("demo publisher: %v", err)
+	}
+	if err := application.SeedDemoStandardRelease(ctx, store, publisher); err != nil {
+		t.Fatalf("demo seed: %v", err)
+	}
+
+	// Verify that the existing ref was reconciled to the compiled manifest
+	var rev, hash, pkgKind string
+	err = migrationPool.QueryRow(ctx, `
+		SELECT resource_revision, definition_hash, package_kind
+		FROM library_release_resource_refs
+		WHERE release_id = $1 AND resource_kind = $2 AND resource_id = $3
+	`, releaseID, application.HardwareProfileResourceKind, application.SeedDemoProfileID).Scan(&rev, &hash, &pkgKind)
+	if err != nil {
+		t.Fatalf("query updated ref: %v", err)
+	}
+	if rev == "stale-draft-revision" || rev != "demo-1" {
+		t.Fatalf("resource_revision was not updated from manifest: got %q, want %q", rev, "demo-1")
+	}
+	if hash == staleHash || !strings.HasPrefix(hash, "sha256:") {
+		t.Fatalf("definition_hash was not updated: got %q", hash)
+	}
+	if pkgKind != string(domain.PackageKindStandard) {
+		t.Fatalf("package_kind was not updated from manifest: got %q, want %q", pkgKind, domain.PackageKindStandard)
 	}
 }

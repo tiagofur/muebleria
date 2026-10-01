@@ -87,6 +87,44 @@ func multiOrgFreshDB(t *testing.T) *pgxpool.Pool {
 	return multiOrgFreshDBWithAuthority(t, func(t *testing.T, databaseName string) string { return storage.TestDatabaseURLForDB(t, databaseName) })
 }
 
+// multiOrgFreshMigrationAndRuntimeDB is for tests that must evolve the schema as
+// the migration authority AND then write as granete_app against the very same
+// database — RLS migration proofs. One disposable database, two pools, and no
+// credential crossing: the migration pool never stands in for the runtime role.
+func multiOrgFreshMigrationAndRuntimeDB(t *testing.T) (*pgxpool.Pool, *pgxpool.Pool) {
+	t.Helper()
+	adminDSN := multiOrgAdminDSN(t)
+	admin, err := pgxpool.New(context.Background(), adminDSN)
+	if err != nil {
+		t.Skipf("no db: %v", err)
+	}
+	ctx := context.Background()
+	testDBName := fmt.Sprintf("%s_%d", multiOrgTestDBName, time.Now().UnixNano())
+	if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+testDBName+` WITH (FORCE)`); err != nil {
+		t.Skipf("drop test db: %v", err)
+	}
+	if _, err := admin.Exec(ctx, `CREATE DATABASE `+testDBName); err != nil {
+		t.Skipf("create test db: %v", err)
+	}
+	migrationPool, err := pgxpool.New(ctx, storage.TestMigrationDatabaseURL(t, testDBName))
+	if err != nil {
+		t.Fatalf("connect migration authority: %v", err)
+	}
+	runtimePool, err := pgxpool.New(ctx, storage.TestDatabaseURLForDB(t, testDBName))
+	if err != nil {
+		t.Fatalf("connect runtime authority: %v", err)
+	}
+	t.Cleanup(func() {
+		migrationPool.Close()
+		runtimePool.Close()
+		if _, err := admin.Exec(ctx, `DROP DATABASE IF EXISTS `+testDBName+` WITH (FORCE)`); err != nil {
+			t.Logf("cleanup drop: %v", err)
+		}
+		admin.Close()
+	})
+	return migrationPool, runtimePool
+}
+
 // multiOrgFreshMigrationDB is for schema and migration evolution tests.
 func multiOrgFreshMigrationDB(t *testing.T) *pgxpool.Pool {
 	t.Helper()

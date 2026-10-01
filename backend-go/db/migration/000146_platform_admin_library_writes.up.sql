@@ -98,5 +98,7 @@ SET write_scope = CASE table_name
         WHEN 'library_release_resource_refs' THEN 'owner-organization-draft-only-insert-or-platform-admin'
         ELSE 'owner-organization-or-platform-admin'
     END,
-    rationale = rationale || ' Platform staff carry the transactional app.platform_admin marker (#955) to compile and publish Standard releases; the tenant branch is unchanged.'
+    rationale = rationale || ' Platform staff carry the transactional app.platform_admin marker (#955) to compile and publish Standard releases; the tenant branch is unchanged.',
+    policy_version = policy_version + 1,
+    updated_at = NOW()
 WHERE table_name IN ('library_releases', 'library_release_resource_refs', 'library_release_manifests');

@@ -112,6 +112,9 @@ func demoProfile() *domain.HardwareProfile {
 					Rules: []domain.ProfileRuleSpec{
 						{RuleID: "cam-housing", RuleRevision: "demo-1", ParticipantRole: "A", OperationRole: "housing",
 							EntryFace: "bottom", OffsetMm: [3]float64{0, 0, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 15, DepthMm: 13},
+						// Dowel depth: 17 mm. Depth must be strictly less than
+						// available board thickness (18 mm board in demo catalog);
+						// 21 mm exceeds board thickness and fails hole geometry validation.
 						{RuleID: "dowel-bore", RuleRevision: "demo-1", ParticipantRole: "B", OperationRole: "dowel",
 							EntryFace: "back", OffsetMm: [3]float64{0, 18, 0}, Axis: [3]float64{0, -1, 0}, DiameterMm: 8, DepthMm: 17},
 					},

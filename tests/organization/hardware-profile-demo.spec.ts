@@ -13,7 +13,6 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { GraneteApiClient } from '@granete/storage';
 import { required } from './support/api';
 
 const apiBase = required('ORGANIZATION_API_BASE');
@@ -43,7 +42,7 @@ async function authedFetch(token: string, path: string, init?: RequestInit): Pro
 async function upsert(token: string, pathById: string, collection: string, body: unknown): Promise<void> {
   const put = await authedFetch(token, pathById, { method: 'PUT', body: JSON.stringify(body) });
   if (put.ok) return;
-  if (put.status !== 404 && put.status !== 405 && put.status !== 500) {
+  if (put.status !== 404 && put.status !== 405) {
     const errText = await put.text().catch(() => '');
     throw new Error(`PUT ${pathById}: ${put.status} ${errText}`);
   }
@@ -113,30 +112,26 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
   test('seed → assignment → resolve: perforations + purchase demand', async ({ page }) => {
     test.setTimeout(120_000);
 
-    // Real browser session (org A) — the chain runs in the org context.
+    // Real browser session in Browser Gate A using the platform-admin owner.
+    // The browser session token stored in localStorage is used for the API chain.
     await page.goto('/');
-    await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_EMAIL'));
+    await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
     await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
     await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
-    await expect(page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' })).toBeVisible();
-    await page.getByRole('button', { name: /Browser Gate A/ }).click();
     await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
+    const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
+    if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 
-    const client = new GraneteApiClient(apiBase);
-    const owner = await client.login({
-      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
-      password: required('ORGANIZATION_GATE_PASSWORD'),
-      transport: 'web',
-      org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
-    });
+    const token = await page.evaluate(() => localStorage.getItem('granete_token'));
+    expect(token, 'browser session token').toBeTruthy();
 
     // 1. The demo seed: profile with embedded recipe + REAL publication of
     // the Standard release (the seed replaces the gate's placeholder flip).
-    const seeded = await authedFetch(owner.token, '/seed', { method: 'POST' });
+    const seeded = await authedFetch(token!, '/seed', { method: 'POST' });
     expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
 
     // The published release carries a REAL manifest (not the placeholder).
-    const current = await authedFetch(owner.token, '/manufacturing-libraries/standard/releases/current');
+    const current = await authedFetch(token!, '/manufacturing-libraries/standard/releases/current');
     expect(current.ok).toBe(true);
     const currentJson = (await current.json()) as { id: string; manifestHash?: string };
     expect(currentJson.manifestHash).toBeDefined();
@@ -144,9 +139,9 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
 
     // 2. Catalog + per-face assignment: the demo profile applies to the
     // LEFT side's front face and the RIGHT side's back face.
-    await seedDemoCatalog(owner.token);
+    await seedDemoCatalog(token!);
     for (const [componentId, side] of [[SIDE_ID, 'front'], [SIDE_R_ID, 'back']] as const) {
-      const put = await authedFetch(owner.token, `/catalog/components/${componentId}/side-assignments`, {
+      const put = await authedFetch(token!, `/catalog/components/${componentId}/side-assignments`, {
         method: 'PUT',
         body: JSON.stringify({ side, profileId: DEMO_PROFILE_ID }),
       });
@@ -155,7 +150,7 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
 
     // 3. Authoring resolve: authored fixed-shelf-side relationship with NO
     // recipes — the server synthesizes them from the pinned profile.
-    const defs = await authedFetch(owner.token, '/furniture/definitions');
+    const defs = await authedFetch(token!, '/furniture/definitions');
     const defsJson = (await defs.json()) as { revisionId?: string };
     expect(defsJson.revisionId).toBeDefined();
 
@@ -189,7 +184,7 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
         }],
       },
     };
-    const resolved = await authedFetch(owner.token, '/furniture/authoring/resolve', {
+    const resolved = await authedFetch(token!, '/furniture/authoring/resolve', {
       method: 'POST',
       body: JSON.stringify(resolveBody),
     });

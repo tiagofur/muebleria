@@ -80,7 +80,9 @@ SET write_scope = CASE table_name
         WHEN 'library_releases' THEN 'Published Granete Standard releases visible to all; org overlay releases tenant-scoped; drafts restricted to owner; immutable once published (#772 / ADR-0008)'
         WHEN 'library_release_resource_refs' THEN 'Typed canonical resource references within a release; immutable once release published; package_kind separates Free/Standard without duplicating domain definitions (#772 / ADR-0008)'
         ELSE 'Materialized manifests are platform-global readable if standard/published, or owner-organization readable if draft/overlay; immutable once created (#773 / LIB-2)'
-    END
+    END,
+    policy_version = GREATEST(policy_version - 1, 1),
+    updated_at = NOW()
 WHERE table_name IN ('library_releases', 'library_release_resource_refs', 'library_release_manifests');
 
 DROP FUNCTION IF EXISTS app_platform_admin();

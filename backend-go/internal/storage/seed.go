@@ -584,7 +584,12 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 		SELECT id FROM structures WHERE code = 'EST-COMP-600' AND organization_id = $1 LIMIT 1`, org).Scan(&structID); err != nil || structID == "" {
 		slog.Info("plinth demo set skipped: composed structure EST-COMP-600 is absent",
 			"organization_id", org)
-		return nil
+		// The MOD-GAB-01 composition upgrade does not belong to the plinth
+		// set — it grafts onto the module's own EST-GAB-01 and is what makes
+		// Demo plantilla resolve a real despiece. Skipping the plinth set must
+		// not silently disable it for an installation that still carries the
+		// flat module.
+		return s.ensureComposedGabCatalog(ctx)
 	}
 
 	tx, err := s.beginTx(ctx)
@@ -692,6 +697,21 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 	// Upgrade existing installations: the flat MOD-GAB-01 must become composed
 	// so Demo plantilla resolves a real despiece (audit P0-2d).
 	if err := ensureComposedGabModule(ctx, tx, org, now); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// ensureComposedGabCatalog runs the MOD-GAB-01 composition upgrade on its own
+// transaction, for the upgrade path where the plinth demo set is skipped. The
+// upgrade hangs off MOD-GAB-01's own structure, not off EST-COMP-600.
+func (s *PostgresStore) ensureComposedGabCatalog(ctx context.Context) error {
+	tx, err := s.beginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := ensureComposedGabModule(ctx, tx, OrgFromCtx(ctx), time.Now().UTC()); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
