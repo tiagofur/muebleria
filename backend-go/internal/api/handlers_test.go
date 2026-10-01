@@ -342,6 +342,9 @@ type stubStore struct {
 	removeAssignmentErr           error
 	// #916 resolve synthesis hooks.
 	allComponentSideAssignments []domain.ComponentSideAssignment
+	// #955 publish surface hooks.
+	createDraftReleaseErr            error
+	listActiveHardwareProfilesAnyOrg []domain.HardwareProfile
 	// #110: project templates hooks.
 	listProjectTemplates []domain.ProjectTemplate
 	lastCreatedTemplate  *domain.ProjectTemplate

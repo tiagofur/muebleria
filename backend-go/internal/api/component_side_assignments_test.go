@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -157,4 +159,33 @@ func (s *stubStore) ListAllComponentSideAssignments(context.Context) ([]domain.C
 		return s.allComponentSideAssignments, nil
 	}
 	return []domain.ComponentSideAssignment{}, nil
+}
+
+func (s *stubStore) EnsureSeedPlatformUser(context.Context) (string, error) {
+	return "00000000-0000-0000-0000-0000000000fe", nil
+}
+
+func (s *stubStore) CreateDraftRelease(_ context.Context, params storage.CreateDraftReleaseParams) (*domain.LibraryRelease, error) {
+	if s.createDraftReleaseErr != nil {
+		return nil, s.createDraftReleaseErr
+	}
+	return &domain.LibraryRelease{
+		ID:            uuid.MustParse("a0000011-0000-0000-0000-000000000001"),
+		LibraryID:     params.LibraryID,
+		Version:       params.Version,
+		Status:        domain.ReleaseStatusDraft,
+		SchemaVersion: params.SchemaVersion,
+		Changelog:     params.Changelog,
+	}, nil
+}
+
+func (s *stubStore) ListActiveHardwareProfilesAnyOrg(context.Context) ([]domain.HardwareProfile, error) {
+	if s.listActiveHardwareProfilesAnyOrg != nil {
+		return s.listActiveHardwareProfilesAnyOrg, nil
+	}
+	return []domain.HardwareProfile{}, nil
+}
+
+func (s *stubStore) PublishReleaseWithManifest(context.Context, uuid.UUID, *domain.LibraryManifest, []byte, []domain.ResourceBlob, *uuid.UUID) error {
+	return nil
 }

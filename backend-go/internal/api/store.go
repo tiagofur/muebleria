@@ -183,6 +183,9 @@ type Store interface {
 	DeactivateHardwareProfile(ctx context.Context, id string, expectedVersion int64) error
 	ExistingHardwareIDs(ctx context.Context, ids []string) (map[string]bool, error)
 
+	ListActiveHardwareProfilesAnyOrg(ctx context.Context) ([]domain.HardwareProfile, error)
+	EnsureSeedPlatformUser(ctx context.Context) (string, error)
+
 	// Component side assignments (#915 / HW-PROFILE)
 	ListComponentSideAssignments(ctx context.Context, componentID string) ([]domain.ComponentSideAssignment, error)
 	SetComponentSideAssignment(ctx context.Context, a *domain.ComponentSideAssignment) error
@@ -555,6 +558,8 @@ type Store interface {
 	GetStandardLibrary(ctx context.Context) (*domain.ManufacturingLibrary, error)
 	GetCurrentPublishedRelease(ctx context.Context, libraryID uuid.UUID) (*domain.LibraryRelease, error)
 	GetPublishedReleases(ctx context.Context, libraryID uuid.UUID) ([]*domain.LibraryRelease, error)
+	CreateDraftRelease(ctx context.Context, params storage.CreateDraftReleaseParams) (*domain.LibraryRelease, error)
+	PublishReleaseWithManifest(ctx context.Context, releaseID uuid.UUID, manifest *domain.LibraryManifest, manifestBytes []byte, blobs []domain.ResourceBlob, publishedBy *uuid.UUID) error
 	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
 	GetReleaseManifest(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryManifest, []byte, error)
 	GetResourceBlob(ctx context.Context, sha256 string) (*domain.ResourceBlob, error)
