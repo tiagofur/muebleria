@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -566,13 +567,32 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 // ensurePlinthCatalog upserts zoclo option groups, profile hardware, component,
 // and demo modules. Safe on existing DBs (seed early-return path).
 func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
+	org := OrgFromCtx(ctx)
+
+	// The plinth demo set hangs off the composed structure EST-COMP-600: its
+	// roles, hardware, component and modules only mean something next to that
+	// structure and to each other. A catalog the workshop built itself never
+	// has it, so there is nothing to attach them to — and inventing roles
+	// (ZOCLO/ZOCLO_PERFIL) or modules is not the seed's job either. Skip the
+	// whole set instead of half-seeding it: a half plinth leaves orphan roles
+	// with no consumer and, worse, binds the workshop's own materials to a
+	// demo role. That fallback is also what used to abort the whole seed with
+	// FK 23503 (#955), because modules.structure_id pointed at a row that was
+	// never there.
+	var structID string
+	if err := s.db(ctx).QueryRow(ctx, `
+		SELECT id FROM structures WHERE code = 'EST-COMP-600' AND organization_id = $1 LIMIT 1`, org).Scan(&structID); err != nil || structID == "" {
+		slog.Info("plinth demo set skipped: composed structure EST-COMP-600 is absent",
+			"organization_id", org)
+		return nil
+	}
+
 	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 	now := time.Now().UTC()
-	org := OrgFromCtx(ctx)
 
 	// Hardware profiles (ml), package 4 m bars. Catalog-driven finishes:
 	// aluminio / bronce / negro — the workshop manages its own from here.
@@ -678,7 +698,9 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 }
 
 func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
-	// Prefer existing composed structure if present.
+	// Callers guarantee the composed structure exists (the fresh seed creates
+	// it just above; the upgrade path bails out in ensurePlinthCatalog when it
+	// is absent), so preferring the row by code is a resolution, not a guess.
 	structID := seedStruct
 	var existingStruct string
 	if err := tx.QueryRow(ctx, `SELECT id FROM structures WHERE code = 'EST-COMP-600' AND organization_id = $1 LIMIT 1`, org).Scan(&existingStruct); err == nil && existingStruct != "" {
