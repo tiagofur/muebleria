@@ -175,6 +175,14 @@ type Store interface {
 	UpdateHardware(ctx context.Context, id string, h *domain.Hardware) error
 	DeactivateHardware(ctx context.Context, id string) error
 
+	// Catalog: hardware profiles (#913 / HW-PROFILE)
+	ListHardwareProfiles(ctx context.Context) ([]domain.HardwareProfile, error)
+	GetHardwareProfileByID(ctx context.Context, id string) (*domain.HardwareProfile, error)
+	CreateHardwareProfile(ctx context.Context, p *domain.HardwareProfile) error
+	UpdateHardwareProfile(ctx context.Context, id string, expectedVersion int64, p *domain.HardwareProfile) error
+	DeactivateHardwareProfile(ctx context.Context, id string, expectedVersion int64) error
+	ExistingHardwareIDs(ctx context.Context, ids []string) (map[string]bool, error)
+
 	// Catalog: option groups
 	ListOptionGroups(ctx context.Context) ([]domain.OptionGroup, error)
 	GetOptionGroupByID(ctx context.Context, id string) (*domain.OptionGroup, error)

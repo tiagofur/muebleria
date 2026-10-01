@@ -239,16 +239,16 @@ type stubStore struct {
 	deactivateAmbientCalled   bool
 	deactivateAmbientReceived string
 	// Manufacturing Library (#772 / LIB-1, #773 / LIB-2)
-	currentPublishedRelease           *domain.LibraryRelease
-	currentPublishedReleaseErr        error
-	releaseByID                       map[uuid.UUID]*domain.LibraryRelease
-	getReleaseByIDErr                 error
-	releaseManifestsByID              map[uuid.UUID]*domain.LibraryManifest
-	releaseManifestRawByID            map[uuid.UUID][]byte
-	releaseManifestErr                error
-	resourceBlobsByHash               map[string]*domain.ResourceBlob
-	resourceBlobErr                   error
-	resourceBlobEntitlementCheckFunc  func(releaseID, resourceID uuid.UUID, hash string) (*domain.ResourceBlob, domain.PackageKind, error)
+	currentPublishedRelease          *domain.LibraryRelease
+	currentPublishedReleaseErr       error
+	releaseByID                      map[uuid.UUID]*domain.LibraryRelease
+	getReleaseByIDErr                error
+	releaseManifestsByID             map[uuid.UUID]*domain.LibraryManifest
+	releaseManifestRawByID           map[uuid.UUID][]byte
+	releaseManifestErr               error
+	resourceBlobsByHash              map[string]*domain.ResourceBlob
+	resourceBlobErr                  error
+	resourceBlobEntitlementCheckFunc func(releaseID, resourceID uuid.UUID, hash string) (*domain.ResourceBlob, domain.PackageKind, error)
 	// Manufacturing Library Overlays (#775 / LIB-4)
 	overlaysByID                      map[uuid.UUID]*domain.LibraryOverlay
 	overlayConflictsByID              map[uuid.UUID]*domain.LibraryOverlayConflict
@@ -319,6 +319,18 @@ type stubStore struct {
 	listAgregados    []domain.Agregado
 	listHardwares    []domain.Hardware
 	listOptionGroups []domain.OptionGroup
+	// #913 / HW-PROFILE catalog surface hooks.
+	listHardwareProfiles                      []domain.HardwareProfile
+	hardwareProfileReturnedByID               *domain.HardwareProfile
+	hardwareProfileGetID                      string
+	createHardwareProfileErr                  error
+	createdHardwareProfile                    *domain.HardwareProfile
+	updateHardwareProfileErr                  error
+	updatedHardwareProfile                    *domain.HardwareProfile
+	updatedHardwareProfileExpectedVersion     int64
+	deactivateHardwareProfileErr              error
+	deactivatedHardwareProfileID              string
+	deactivatedHardwareProfileExpectedVersion int64
 	// #110: project templates hooks.
 	listProjectTemplates []domain.ProjectTemplate
 	lastCreatedTemplate  *domain.ProjectTemplate
@@ -392,39 +404,39 @@ type stubStore struct {
 	stockUpsertMinCalled   bool
 	stockUpsertMinReceived domain.MaterialStock
 	// Compras/Almacén suppliers + purchase orders (Fase 3c)
-	suppliersList          []domain.Supplier
-	createSupplierErr      error
-	updateSupplierErr      error
-	deactivateSupplierErr  error
-	posList                []domain.PurchaseOrder
-	poReturnedByID         *domain.PurchaseOrder
-	poGetByIDErr           error
-	createPOErr            error
-	updatePOErr            error
-	emitPOCalled           bool
-	cancelPOCalled         bool
-	receivePOCalled        bool
-	lastReceiveLines       []domain.PurchaseOrderItem
-	lastReceiveByUserID    string
-	lastReceiveByName      string
-	activitiesByID         []domain.ProductionActivity
-	insertedActivities     []domain.ProductionActivity
-	floorStatusErr         error
-	projectEventsList      []domain.ProjectEvent
-	projectEventWrites     []domain.ProjectEvent
-	insertProjectEventErr  error
-	listProjectEventsErr   error
-	updateModuleCalled           bool
-	updateModuleReceived         *domain.Module
-	updateModuleExpectedVersion  int64
-	updateModuleErr              error
-	createModuleArmed            bool
-	createModuleReceived         *domain.Module
-	createModuleErr              error
-	deleteModuleCalled     bool
-	deleteModuleReceivedID string
-	approveDeviceReceived  *storage.ApproveDeviceEnrollmentCommand
-	resolveDeviceResult    *storage.DeviceTokenResult
+	suppliersList               []domain.Supplier
+	createSupplierErr           error
+	updateSupplierErr           error
+	deactivateSupplierErr       error
+	posList                     []domain.PurchaseOrder
+	poReturnedByID              *domain.PurchaseOrder
+	poGetByIDErr                error
+	createPOErr                 error
+	updatePOErr                 error
+	emitPOCalled                bool
+	cancelPOCalled              bool
+	receivePOCalled             bool
+	lastReceiveLines            []domain.PurchaseOrderItem
+	lastReceiveByUserID         string
+	lastReceiveByName           string
+	activitiesByID              []domain.ProductionActivity
+	insertedActivities          []domain.ProductionActivity
+	floorStatusErr              error
+	projectEventsList           []domain.ProjectEvent
+	projectEventWrites          []domain.ProjectEvent
+	insertProjectEventErr       error
+	listProjectEventsErr        error
+	updateModuleCalled          bool
+	updateModuleReceived        *domain.Module
+	updateModuleExpectedVersion int64
+	updateModuleErr             error
+	createModuleArmed           bool
+	createModuleReceived        *domain.Module
+	createModuleErr             error
+	deleteModuleCalled          bool
+	deleteModuleReceivedID      string
+	approveDeviceReceived       *storage.ApproveDeviceEnrollmentCommand
+	resolveDeviceResult         *storage.DeviceTokenResult
 	// MFA / step-up (#460 SEC-7)
 	mfaEnabledFactors  int
 	mfaStepUpFreshness storage.MFAStepUpFreshness
