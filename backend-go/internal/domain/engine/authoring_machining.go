@@ -188,6 +188,36 @@ type AuthoringMachining struct {
 	// with identical drilling, a material change) moves it. Parity-pinned
 	// against the TS recomputation over the shared fixture.
 	ManufacturingFingerprint string `json:"manufacturingFingerprint"`
+	// HardwareProfileDemand is the commercial projection of the resolved
+	// profiles (#917): catalog hardware ids × per-contact quantities for
+	// every VERIFIED productive contact. Derived from the profile
+	// resolution (assignments × pinned items) — never from hole
+	// geometry — and deliberately OUTSIDE the manufacturing fingerprint
+	// (commercial demand is not machining identity). Empty unless the api
+	// layer loaded pinned profiles.
+	HardwareProfileDemand []HardwareProfileDemandLine `json:"hardwareProfileDemand,omitempty"`
+}
+
+// HardwareProfileDemandLine aggregates one catalog hardware's consumption
+// across every contact that resolved through its profile. Prices and codes
+// are joined from the hardware catalog at consumption time — never carried
+// here (#917).
+type HardwareProfileDemandLine struct {
+	HardwareID string                        `json:"hardwareId"`
+	Quantity   float64                       `json:"quantity"`
+	Sources    []HardwareProfileDemandSource `json:"sources"`
+}
+
+// HardwareProfileDemandSource keeps the diagnostic trail of one demand
+// contribution: which profile, at which revision, through which
+// relationship, over how many verified contacts.
+type HardwareProfileDemandSource struct {
+	TechnicalProfileID       string `json:"technicalProfileId"`
+	TechnicalProfileRevision string `json:"technicalProfileRevision"`
+	RecipeID                 string `json:"recipeId"`
+	RecipeRevision           string `json:"recipeRevision"`
+	RelationshipID           string `json:"relationshipId"`
+	ContactCount             int    `json:"contactCount"`
 }
 
 // snapValueTo mirrors TS snapValue (hardwarePlacement.ts): grid snapping with

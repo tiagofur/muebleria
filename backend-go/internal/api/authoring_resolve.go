@@ -236,7 +236,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	sideRecipes, libraryReleaseID := s.resolvedSideRecipes(r)
+	sideRecipes, libraryReleaseID, profilesByID := s.resolvedSideRecipes(r)
 	result, err := engine.ResolveAuthoringLayout(engine.AuthoringResolveInput{
 		Module:                  *module,
 		Catalog:                 catalog,
@@ -262,6 +262,11 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, result.StructuralIssues)
 		return
 	}
+
+	// Commercial projection of the resolved profiles (#917): derived from
+	// the profile resolution per verified contact — never from the
+	// drilling output.
+	result.Machining.HardwareProfileDemand = deriveHardwareProfileDemand(&result.Machining, profilesByID)
 
 	s.writeAuthoringResolveAccepted(w, req, revision, libraryReleaseID, result)
 }
