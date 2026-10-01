@@ -221,9 +221,6 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 		for role := range working {
 			roleSet[role] = true
 		}
-		for role := range defaults.MaterialChoices {
-			roleSet[role] = true
-		}
 		roleNames := make([]string, 0, len(roleSet))
 		for role := range roleSet {
 			roleNames = append(roleNames, role)
@@ -233,11 +230,7 @@ func (s *PostgresStore) GetDesignWorkingCopyMaterialProvenance(ctx context.Conte
 		for _, role := range roleNames {
 			mode := modes[role]
 			if mode == "" {
-				if defaults.MaterialChoices[role] != "" && working[role] == defaults.MaterialChoices[role] {
-					mode = domain.DesignMaterialChoiceModeDesign
-				} else {
-					mode = domain.DesignMaterialChoiceModeDefinition
-				}
+				mode = domain.DesignMaterialChoiceModeOverride
 			}
 			inheritance = append(inheritance, domain.EvaluateDesignRoleInheritance(
 				role, mode, working[role], defaults.MaterialChoices[role],

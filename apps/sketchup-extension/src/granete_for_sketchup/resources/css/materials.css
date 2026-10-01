@@ -72,6 +72,17 @@
         border-color: var(--border-default);
       }
 
+      .material-selected-preview:focus-visible {
+        outline: 2px solid var(--brand-500);
+        outline-offset: 1px;
+        background: var(--surface-hover);
+        border-color: var(--border-default);
+      }
+
+      .material-role-block .material-selected-preview:last-child {
+        margin-bottom: 0;
+      }
+
       .material-swatch {
         width: 38px;
         height: 38px;

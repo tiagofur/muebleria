@@ -132,12 +132,12 @@ const MATERIALS = {
   'mat-oak': { id: 'mat-oak', name: 'Roble Natural' }
 };
 
-function initModule(sandbox) {
-  sandbox.window.GraneteUI.designInspector.init({
+function initModule(sandbox, extraDeps = {}) {
+  sandbox.window.GraneteUI.designInspector.init(Object.assign({
     getRoleLabel: (role) => ({ INTERIOR: 'Interior', FRENTES: 'Frentes' }[role] || role),
     materialById: (id) => MATERIALS[id],
     rerenderInspector: () => {}
-  });
+  }, extraDeps));
 }
 
 const CONNECTED_A = {
@@ -1403,6 +1403,27 @@ function run() {
     assert.strictEqual(selectorCall.context, 'design');
     assert.strictEqual(selectorCall.currentMaterialId, 'mat-white');
     assert.deepStrictEqual(selectorCall.allowedMaterialIds, ['mat-oak', 'mat-white']);
+  });
+
+  test('R2: discoveredRoles deduplicates role aliases such as FRENTE and FRENTES', () => {
+    const ctx = createSandbox();
+    initModule(ctx.sandbox, {
+      getAvailableRoles: () => ['FRENTE', 'INTERIORES', 'FONDO']
+    });
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    mod.onBindingStatus(CONNECTED_A);
+    mod.onDesignDefaults({
+      requestId: 1, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { FRENTES: 'mat-oak', INTERIOR: 'mat-white' } }
+    });
+    mod.handleNoSelection();
+    // Should have exactly 3 role rows: FONDO, FRENTES (aliased from FRENTE), INTERIOR (aliased from INTERIORES)
+    const rows = ctx.body().children.filter((r) => r.id && r.id.startsWith('design-inspector-row-'));
+    assert.strictEqual(rows.length, 3, 'aliases must be deduplicated in discoveredRoles');
+    const rowIds = rows.map((r) => r.id);
+    assert.ok(rowIds.includes('design-inspector-row-FRENTES') || rowIds.includes('design-inspector-row-FRENTE'), 'front row must exist');
+    assert.ok(rowIds.includes('design-inspector-row-INTERIOR') || rowIds.includes('design-inspector-row-INTERIORES'), 'interior row must exist');
+    assert.ok(rowIds.includes('design-inspector-row-FONDO'), 'fondo row must exist');
   });
 }
 

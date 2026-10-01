@@ -607,14 +607,60 @@ test('batch apply: roles become visual selector cards whose options are the inte
   const submit = sandbox.__mutation.find((c) => c.action === 'submitBatchUpdate');
   assert(submit, 'Apply rides GraneteMutation.submitBatchUpdate');
   // JSON round-trip: the items were built in the sandbox realm, the
-  // expected literal in the test realm — deepStrictEqual compares
-  // prototypes across realms.
   assert.deepStrictEqual(JSON.parse(JSON.stringify(submit.items)), [
     { instanceId: 'furn-1', definitionId: 'kitchen-base-standard',
       parameters: { widthMm: 600 }, materialChoices: { FRONT: 'mat-roble' } },
     { instanceId: 'furn-2', definitionId: 'kitchen-base-standard',
       parameters: { widthMm: 600 }, materialChoices: { FRONT: 'mat-roble' } }
   ], 'one complete per-member intent: current parameters + only the chosen roles');
+});
+
+test('batch apply: role aliases (FRENTE vs FRENTES) across members unify into a single batch card and map accurately to each definition', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      materialRoles: { materialById: (id) => ({ materialId: id, name: 'Material ' + id }) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  // Member 1 defines FRENTE; Member 2 defines FRENTES
+  const member1 = batchMember({
+    furnitureInstanceRef: 'furn-1',
+    definition: {
+      materialRoles: [{ role: 'FRENTE', label: 'Frentes', optionIds: ['mat-roble', 'mat-blanco'] }]
+    },
+    materialChoices: { FRENTE: 'mat-blanco' }
+  });
+  const member2 = batchMember({
+    furnitureInstanceRef: 'furn-2',
+    definition: {
+      materialRoles: [{ role: 'FRENTES', label: 'Frentes', optionIds: ['mat-roble', 'mat-blanco'] }]
+    },
+    materialChoices: { FRENTES: 'mat-blanco' }
+  });
+
+  api.onSelectionChange(batchContext([member1, member2], [], true));
+
+  const blocks = batchRoleBlocks(sandbox);
+  // Should unify into exactly 1 block, not "No aplica"
+  assert.strictEqual(blocks.length, 1, 'aliases unify into 1 block');
+  const frontBlock = blocks[0];
+  assert.strictEqual(frontBlock.nameEl.textContent, 'Material mat-blanco', 'common value detected across aliases');
+
+  // Change to mat-roble
+  api.onMaterialChoiceApplied({ role: 'FRENTES', materialId: 'mat-roble', context: 'batch' });
+  el(sandbox, 'btn-batch-apply').click();
+
+  const submit = sandbox.__mutation.find((c) => c.action === 'submitBatchUpdate');
+  assert(submit, 'batch submitted');
+  // Each member gets its own matching definition role key!
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(submit.items)), [
+    { instanceId: 'furn-1', definitionId: 'kitchen-base-standard',
+      parameters: { widthMm: 600 }, materialChoices: { FRENTE: 'mat-roble' } },
+    { instanceId: 'furn-2', definitionId: 'kitchen-base-standard',
+      parameters: { widthMm: 600 }, materialChoices: { FRENTES: 'mat-roble' } }
+  ], 'each member gets choices keyed by its own definition role');
 });
 
 test('batch apply: one honest all-or-nothing outcome per result', () => {

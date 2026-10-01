@@ -544,13 +544,24 @@
     return first;
   }
 
+  function matchRole(r1, r2) {
+    if (!r1 || !r2) return false;
+    if (r1 === r2) return true;
+    var s1 = String(r1).trim().toUpperCase();
+    var s2 = String(r2).trim().toUpperCase();
+    if (s1 === s2) return true;
+    if ((s1 === "FRENTE" && s2 === "FRENTES") || (s1 === "FRENTES" && s2 === "FRENTE")) return true;
+    if ((s1 === "INTERIOR" && s2 === "INTERIORES") || (s1 === "INTERIORES" && s2 === "INTERIOR")) return true;
+    return false;
+  }
+
   // La intersección de opciones válidas: una elección que un miembro no
   // admite haría fallar SU resolve y, con lote atómico, al lote entero.
   function batchRoleOptionIds(members, role) {
     var roles = window.GraneteUI.materialRoles;
     var sets = members.map(function (m) {
       var def = m.definition || {};
-      var entry = (def.materialRoles || []).filter(function (r) { return r.role === role; })[0];
+      var entry = (def.materialRoles || []).filter(function (r) { return matchRole(r.role, role); })[0];
       if (!entry) return null;
       if (roles && typeof roles.optionMaterialIds === "function") {
         return roles.optionMaterialIds(entry);
@@ -573,7 +584,7 @@
 
     var roleLabel = role;
     for (var i = 0; i < members.length; i++) {
-      var rDef = ((members[i].definition || {}).materialRoles || []).filter(function (r) { return r.role === role; })[0];
+      var rDef = ((members[i].definition || {}).materialRoles || []).filter(function (r) { return matchRole(r.role, role); })[0];
       if (rDef && rDef.label) {
         roleLabel = rDef.label;
         break;
@@ -589,6 +600,11 @@
     header.appendChild(title);
 
     var drafted = batchSelections[role];
+    if (!drafted) {
+      for (var bKey in batchSelections) {
+        if (matchRole(bKey, role)) { drafted = batchSelections[bKey]; break; }
+      }
+    }
     var currentMatId = drafted || common;
 
     var changeBtn = document.createElement("button");
@@ -720,7 +736,12 @@
     members.forEach(function (m) {
       var def = m.definition || {};
       (def.materialRoles || []).forEach(function (r) {
-        if (seen.indexOf(r.role) === -1) seen.push(r.role);
+        if (!r || !r.role) return;
+        var exists = false;
+        for (var i = 0; i < seen.length; i++) {
+          if (matchRole(seen[i], r.role)) { exists = true; break; }
+        }
+        if (!exists) seen.push(r.role);
       });
     });
     if (seen.length === 0) {
@@ -734,14 +755,21 @@
     seen.forEach(function (role) {
       var supported = members.filter(function (m) {
         var def = m.definition || {};
-        return (def.materialRoles || []).some(function (r) { return r.role === role; });
+        return (def.materialRoles || []).some(function (r) { return matchRole(r.role, role); });
       });
       if (supported.length < members.length) {
         inspectorBatchRoles.appendChild(
           batchRow(role, "No aplica a " + (members.length - supported.length), true));
         return;
       }
-      var values = members.map(function (m) { return (m.materialChoices || {})[role]; });
+      var values = members.map(function (m) {
+        var choices = m.materialChoices || {};
+        if (choices[role] !== undefined) return choices[role];
+        for (var k in choices) {
+          if (matchRole(k, role)) return choices[k];
+        }
+        return null;
+      });
       var common = batchCommonValue(values);
       var optionIds = batchRoleOptionIds(members, role);
       if (editable && optionIds.length > 0) {
@@ -938,6 +966,18 @@
     if ((pendingRoles + pendingParams) === 0 || members.length === 0) return;
 
     var items = members.map(function (m) {
+      var memberChoices = {};
+      var defRoles = (m.definition && m.definition.materialRoles) || [];
+      for (var chosenRole in chosen) {
+        var targetRole = chosenRole;
+        for (var i = 0; i < defRoles.length; i++) {
+          if (matchRole(defRoles[i].role, chosenRole)) {
+            targetRole = defRoles[i].role;
+            break;
+          }
+        }
+        memberChoices[targetRole] = chosen[chosenRole];
+      }
       return {
         instanceId: m.furnitureInstanceRef,
         definitionId: m.furnitureDefinitionId,
@@ -945,7 +985,7 @@
         // the batch edits, current choices overridden by the chosen roles
         // (Ruby merges with each entity's persisted materialChoices).
         parameters: Object.assign({}, m.parameters || {}, paramEdits),
-        materialChoices: chosen
+        materialChoices: memberChoices
       };
     });
     var result = window.GraneteMutation.submitBatchUpdate(items);
@@ -1233,7 +1273,11 @@
     // If the finish choice belongs to batch multi-selection (context === "batch"),
     // apply to batch selections draft and repaint batch roles + update footer.
     if (payload.context === "batch" || (selectedContext && selectedContext.kind === "batch")) {
-      batchSelections[role] = materialId;
+      var batchKey = role;
+      for (var bRole in batchSelections) {
+        if (matchRole(bRole, role)) { delete batchSelections[bRole]; batchKey = bRole; break; }
+      }
+      batchSelections[batchKey] = materialId;
       var batchMembers = (selectedContext && selectedContext.furniture) || [];
       renderBatchRoles(batchMembers, selectedContext);
       updateBatchFooter(batchMembers, selectedContext);

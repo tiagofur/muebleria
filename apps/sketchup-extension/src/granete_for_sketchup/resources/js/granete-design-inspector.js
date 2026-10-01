@@ -133,6 +133,26 @@
     return names.every(function (name) { return typeof deps[name] === "function"; });
   }
 
+  function matchRole(r1, r2) {
+    if (!r1 || !r2) return false;
+    if (r1 === r2) return true;
+    var s1 = String(r1).trim().toUpperCase();
+    var s2 = String(r2).trim().toUpperCase();
+    if (s1 === s2) return true;
+    if ((s1 === "FRENTE" && s2 === "FRENTES") || (s1 === "FRENTES" && s2 === "FRENTE")) return true;
+    if ((s1 === "INTERIOR" && s2 === "INTERIORES") || (s1 === "INTERIORES" && s2 === "INTERIOR")) return true;
+    return false;
+  }
+
+  function findRoleInObject(obj, role) {
+    if (!obj || !role) return null;
+    if (obj[role] !== undefined) return obj[role];
+    for (var k in obj) {
+      if (matchRole(k, role)) return obj[k];
+    }
+    return null;
+  }
+
   // The ONLY bridge call of R1: a read. Correlation = monotonically growing
   // requestId + the current designId; late or foreign responses are
   // discarded in onDesignDefaults.
@@ -169,11 +189,15 @@
 
   function applyMaterialPick(role, pickedId) {
     if (!role) return;
-    var materialId = state.defaults ? state.defaults[role] : null;
+    var materialId = state.defaults ? findRoleInObject(state.defaults, role) : null;
+    var draftKey = role;
+    for (var k in state.draft) {
+      if (matchRole(k, role)) { draftKey = k; break; }
+    }
     if (!pickedId || pickedId === materialId) {
-      delete state.draft[role];
+      delete state.draft[draftKey];
     } else {
-      state.draft[role] = pickedId;
+      state.draft[draftKey] = pickedId;
     }
     if (pendingCount() > 0 && !state.draftBase) {
       // First pending edit pins the draft to the current version.
@@ -191,6 +215,7 @@
   function renderRow(role, materialId) {
     var label = deps.getRoleLabel(role);
     var row = document.createElement("div");
+    row.id = "design-inspector-row-" + role;
     row.className = "design-insp-row material-role-block";
 
     var header = document.createElement("div");
@@ -201,8 +226,10 @@
     roleEl.textContent = label;
     header.appendChild(roleEl);
 
-    var drafted = state.draft[role];
+    var drafted = findRoleInObject(state.draft, role);
+    var defaultId = findRoleInObject(state.defaults, role);
     var baseChoices = (state.draftBase && state.draftBase.defaults) || state.defaults;
+    var baseVal = findRoleInObject(baseChoices, role);
 
     var changeBtn = null;
     if (hasDeps(["getRoleCandidates", "openMaterialPicker"])) {
@@ -213,7 +240,7 @@
       changeBtn.style.padding = "2px 10px";
       changeBtn.style.fontSize = "var(--text-xs)";
       changeBtn.style.lineHeight = "1.4";
-      changeBtn.textContent = materialId || drafted ? "Cambiar" : "Asignar";
+      changeBtn.textContent = defaultId || drafted ? "Cambiar" : "Asignar";
       changeBtn.addEventListener("click", function (evt) {
         if (evt && evt.stopPropagation) evt.stopPropagation();
         var candidates = deps.getRoleCandidates(role);
@@ -249,7 +276,7 @@
     preview.setAttribute("tabindex", "0");
     preview.setAttribute("aria-label", (materialId || drafted ? "Cambiar" : "Asignar") + " acabado de " + label);
 
-    var currentMatId = drafted || materialId;
+    var currentMatId = drafted || defaultId;
     var currentMat = currentMatId ? deps.materialById(currentMatId) : null;
 
     var swatch = document.createElement("div");
@@ -272,19 +299,19 @@
     var valueEl = document.createElement("div");
     valueEl.className = "material-selected-name design-insp-value";
 
-    if (drafted && drafted !== baseChoices[role]) {
-      var from = (baseChoices[role] && (materialName(baseChoices[role]) || baseChoices[role])) || "Sin asignar";
+    if (drafted && drafted !== baseVal) {
+      var from = (baseVal && (materialName(baseVal) || baseVal)) || "Sin asignar";
       var to = materialName(drafted) || drafted;
       valueEl.textContent = from + " → " + to;
       valueEl.title = drafted;
       valueEl.className += " design-insp-draft";
-    } else if (materialId) {
-      var value = materialName(materialId);
+    } else if (defaultId) {
+      var value = materialName(defaultId);
       if (value) {
         valueEl.textContent = value;
       } else {
         valueEl.textContent = "Material no disponible en el catálogo actual";
-        valueEl.title = materialId;
+        valueEl.title = defaultId;
         valueEl.className += " design-insp-unavailable";
       }
     } else {
@@ -328,8 +355,8 @@
     row.appendChild(preview);
 
     // #784 R5: explicit rollout action to roll the default across existing furniture
-    var summary = state.inheritanceSummary && state.inheritanceSummary[role];
-    var effectiveMatId = materialId || drafted;
+    var summary = findRoleInObject(state.inheritanceSummary, role);
+    var effectiveMatId = defaultId || drafted;
     if (effectiveMatId && summary && summary.items > 0) {
       var rolloutBtn = document.createElement("button");
       rolloutBtn.id = "design-inspector-rollout-" + role;
@@ -403,10 +430,10 @@
 
   function openImpactReviewModal(role) {
     var els = ensureRolloutElements();
-    var materialId = state.defaults[role];
+    var materialId = findRoleInObject(state.defaults, role);
     var matName = materialName(materialId) || materialId;
     var label = (typeof deps.getRoleLabel === "function" && deps.getRoleLabel(role)) || role;
-    var summary = (state.inheritanceSummary && state.inheritanceSummary[role]) || { items: 0 };
+    var summary = findRoleInObject(state.inheritanceSummary, role) || { items: 0 };
     var compatible = summary.items || 0;
     var total = state.totalDesignItems || compatible;
     var unsupported = Math.max(0, total - compatible);
@@ -419,7 +446,7 @@
     var definitionCount = 0;
     var customCount = 0;
     (state.inheritanceItems || []).forEach(function (item) {
-      var r = item.roles && item.roles[role];
+      var r = item.roles && findRoleInObject(item.roles, role);
       if (!r) return;
       if (r.mode === "design" && r.needsRollout === true) inheritCount += 1;
       else if (r.mode === "definition" && r.applied !== materialId) definitionCount += 1;
@@ -486,7 +513,7 @@
       var isPreserve = els.scopePreserve.checked;
       var targetItems = [];
       (state.inheritanceItems || []).forEach(function (item) {
-        var r = item.roles && item.roles[role];
+        var r = item.roles && findRoleInObject(item.roles, role);
         if (!r) return;
         // Preserve scope: everything that is NOT an explicit user exception —
         // design-lineage items behind the default AND definition-fallback
@@ -499,10 +526,16 @@
              (r.mode === "definition" && r.applied !== materialId) ||
              r.mode === "override");
         if (shouldInclude) {
+          var actualRoleKey = role;
+          if (item.roles) {
+            for (var k in item.roles) {
+              if (matchRole(k, role)) { actualRoleKey = k; break; }
+            }
+          }
           var choices = {};
-          choices[role] = materialId;
+          choices[actualRoleKey] = materialId;
           var modes = {};
-          modes[role] = "design";
+          modes[actualRoleKey] = "design";
           targetItems.push({
             instanceId: item.furnitureInstanceId,
             definitionId: item.furnitureDefinitionId,
@@ -548,7 +581,8 @@
   function pendingCount() {
     var count = 0;
     for (var role in state.draft) {
-      if (state.defaults[role] !== state.draft[role]) count += 1;
+      var curVal = findRoleInObject(state.defaults, role);
+      if (curVal !== state.draft[role]) count += 1;
     }
     return count;
   }
@@ -604,13 +638,13 @@
     }
 
     function discoveredRoles() {
-      var set = {};
       var list = [];
       function addRole(r) {
-        if (r && !set[r]) {
-          set[r] = true;
-          list.push(r);
+        if (!r) return;
+        for (var i = 0; i < list.length; i++) {
+          if (matchRole(list[i], r)) return;
         }
+        list.push(r);
       }
       for (var k in state.defaults) addRole(k);
       for (var d in state.draft) addRole(d);
@@ -687,7 +721,17 @@
     var merged = {};
     var baseChoices = (state.draftBase && state.draftBase.defaults) || state.defaults;
     for (var role in baseChoices) merged[role] = baseChoices[role];
-    for (var draftRole in state.draft) merged[draftRole] = state.draft[draftRole];
+    for (var draftRole in state.draft) {
+      var targetKey = draftRole;
+      for (var mKey in merged) {
+        if (matchRole(mKey, draftRole)) {
+          delete merged[mKey];
+          targetKey = mKey;
+          break;
+        }
+      }
+      merged[targetKey] = state.draft[draftRole];
+    }
     state.requestId += 1;
     state.conflict = null;
     state.applyInFlight = true;
