@@ -18,6 +18,30 @@ export interface ProfileRecipeRef {
   readonly recipeRevision: string;
 }
 
+export interface ProfileRuleSpec {
+  readonly ruleId: string;
+  readonly ruleRevision: string;
+  readonly participantRole: 'A' | 'B';
+  readonly operationRole: string;
+  readonly entryFace: string;
+  readonly offsetMm: readonly [number, number, number];
+  readonly axis: readonly [number, number, number];
+  readonly diameterMm: number;
+  readonly depthMm: number;
+}
+
+export interface ProfileRecipeVariant {
+  readonly targetFace: string;
+  readonly rules: readonly ProfileRuleSpec[];
+}
+
+/** Profile-embedded recipe definition (#916): one variant per target-face orientation. */
+export interface ProfileRecipeBody {
+  readonly recipeId: string;
+  readonly recipeRevision: string;
+  readonly variants: readonly ProfileRecipeVariant[];
+}
+
 export interface HardwareProfile {
   readonly id: string;
   readonly code: string;
@@ -26,6 +50,7 @@ export interface HardwareProfile {
   readonly revision: string;
   readonly items: readonly HardwareProfileItem[];
   readonly recipeRef?: ProfileRecipeRef;
+  readonly recipe?: ProfileRecipeBody;
   readonly active: boolean;
 }
 
@@ -94,6 +119,65 @@ export function validateHardwareProfile(profile: HardwareProfile): readonly Hard
   if (profile.recipeRef && (profile.recipeRef.recipeId === '' || profile.recipeRef.recipeRevision === '')) {
     add('recipeRef needs a non-blank recipeId and recipeRevision together', path('recipeRef'));
   }
+  issues.push(...validateProfileRecipeBody(profile.recipeRef, profile.recipe));
+  return issues;
+}
+
+const isFiniteVec3 = (v: readonly number[]): boolean => v.every((value) => Number.isFinite(value));
+
+const dotVec3 = (a: readonly number[], b: readonly number[]): number =>
+  (a[0] ?? 0) * (b[0] ?? 0) + (a[1] ?? 0) * (b[1] ?? 0) + (a[2] ?? 0) * (b[2] ?? 0);
+
+/** Twin of Go ValidateProfileRecipeBody — same codes, paths and rules. */
+export function validateProfileRecipeBody(
+  ref: ProfileRecipeRef | undefined,
+  body: ProfileRecipeBody | undefined,
+): readonly HardwareProfileIssue[] {
+  const issues: HardwareProfileIssue[] = [];
+  if (!body) return issues;
+  const add = (message: string, p: string) =>
+    issues.push({ code: PROFILE_INVALID, message, severity: 'error', entityId: '', path: p });
+  const recipePath = (suffix: string) => `hardwareProfile.recipe.${suffix}`;
+
+  if (body.recipeId === '' || body.recipeRevision === '') {
+    add('recipe body needs a non-blank recipeId and recipeRevision', recipePath('recipeId'));
+  }
+  if (ref && ref.recipeId !== '' && ref.recipeRevision !== '' &&
+    (ref.recipeId !== body.recipeId || ref.recipeRevision !== body.recipeRevision)) {
+    add('recipe body identity must agree with the profile recipeRef', recipePath('recipeId'));
+  }
+  if (body.variants.length === 0) {
+    add('recipe body needs at least one target-face variant', recipePath('variants'));
+  }
+  const seenFaces = new Set<string>();
+  body.variants.forEach((variant, index) => {
+    const variantPath = recipePath(`variants[${index}]`);
+    if (!isBoardFace(variant.targetFace)) {
+      add(`variant targetFace ${JSON.stringify(variant.targetFace)} is not one of the six canonical board faces`, `${variantPath}.targetFace`);
+      return;
+    }
+    if (seenFaces.has(variant.targetFace)) {
+      add(`targetFace ${variant.targetFace} declares more than one variant`, `${variantPath}.targetFace`);
+    }
+    seenFaces.add(variant.targetFace);
+    const roleA = variant.rules.some((rule) => rule.participantRole === 'A');
+    const roleB = variant.rules.some((rule) => rule.participantRole === 'B');
+    const ruleIds = new Set<string>();
+    variant.rules.forEach((rule, ruleIndex) => {
+      const rulePath = `${variantPath}.rules[${ruleIndex}]`;
+      if (rule.ruleId === '' || rule.ruleRevision === '' || rule.operationRole === '' || ruleIds.has(rule.ruleId) ||
+        (rule.participantRole !== 'A' && rule.participantRole !== 'B') ||
+        !isBoardFace(rule.entryFace) || !isFiniteVec3(rule.offsetMm) || !isFiniteVec3(rule.axis) ||
+        !(rule.diameterMm > 0) || !(rule.depthMm > 0) ||
+        Math.abs(dotVec3(rule.axis, rule.axis) - 1) > 1e-6) {
+        add('rule needs unique ruleId, revision, operationRole, participantRole, one of the six entry faces, finite offset, unit axis, positive finite diameter and depth', rulePath);
+      }
+      ruleIds.add(rule.ruleId);
+    });
+    if (!roleA || !roleB) {
+      add(`variant ${variant.targetFace} needs at least one rule per participant role (source and target)`, `${variantPath}.rules`);
+    }
+  });
   return issues;
 }
 

@@ -340,6 +340,8 @@ type stubStore struct {
 	removeAssignmentComponentID   string
 	removeAssignmentSide          string
 	removeAssignmentErr           error
+	// #916 resolve synthesis hooks.
+	allComponentSideAssignments []domain.ComponentSideAssignment
 	// #110: project templates hooks.
 	listProjectTemplates []domain.ProjectTemplate
 	lastCreatedTemplate  *domain.ProjectTemplate

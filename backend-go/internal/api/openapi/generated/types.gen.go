@@ -2694,6 +2694,29 @@ type ComponentSideAssignmentWrite struct {
 	ProfileId string `json:"profileId"`
 }
 
+type ProfileRuleSpec struct {
+	RuleId          string    `json:"ruleId"`
+	RuleRevision    string    `json:"ruleRevision"`
+	ParticipantRole any       `json:"participantRole"`
+	OperationRole   string    `json:"operationRole"`
+	EntryFace       string    `json:"entryFace"`
+	OffsetMm        []float64 `json:"offsetMm"`
+	Axis            []float64 `json:"axis"`
+	DiameterMm      float64   `json:"diameterMm"`
+	DepthMm         float64   `json:"depthMm"`
+}
+
+type ProfileRecipeVariant struct {
+	TargetFace string            `json:"targetFace"`
+	Rules      []ProfileRuleSpec `json:"rules"`
+}
+
+type ProfileRecipeBody struct {
+	RecipeId       string                 `json:"recipeId"`
+	RecipeRevision string                 `json:"recipeRevision"`
+	Variants       []ProfileRecipeVariant `json:"variants"`
+}
+
 type HardwareProfileItem struct {
 	HardwareId      string  `json:"hardwareId"`
 	Quantity        float64 `json:"quantity"`
@@ -2713,6 +2736,7 @@ type HardwareProfile struct {
 	Revision    string                `json:"revision"`
 	Items       []HardwareProfileItem `json:"items"`
 	RecipeRef   *ProfileRecipeRef     `json:"recipeRef,omitempty"`
+	Recipe      *ProfileRecipeBody    `json:"recipe,omitempty"`
 	Active      bool                  `json:"active"`
 	Version     int64                 `json:"version"`
 	CreatedAt   string                `json:"createdAt"`
@@ -2726,6 +2750,7 @@ type HardwareProfileWrite struct {
 	Revision    string                `json:"revision"`
 	Items       []HardwareProfileItem `json:"items"`
 	RecipeRef   *ProfileRecipeRef     `json:"recipeRef,omitempty"`
+	Recipe      *ProfileRecipeBody    `json:"recipe,omitempty"`
 }
 
 type HardwareProfileIssue struct {

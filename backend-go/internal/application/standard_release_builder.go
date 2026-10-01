@@ -45,6 +45,7 @@ type hardwareProfileResourcePayload struct {
 	Revision    string                       `json:"revision"`
 	Items       []domain.HardwareProfileItem `json:"items"`
 	RecipeRef   *domain.ProfileRecipeRef     `json:"recipeRef,omitempty"`
+	Recipe      *domain.ProfileRecipeBody    `json:"recipe,omitempty"`
 	Active      bool                         `json:"active"`
 }
 
@@ -68,6 +69,7 @@ func BuildHardwareProfileResource(profile *domain.HardwareProfile, packageKind d
 		Revision:    profile.Revision,
 		Items:       profile.Items,
 		RecipeRef:   profile.RecipeRef,
+		Recipe:      profile.Recipe,
 		Active:      profile.Active,
 	}
 	raw, err := json.Marshal(payload)

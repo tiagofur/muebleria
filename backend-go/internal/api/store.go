@@ -187,6 +187,7 @@ type Store interface {
 	ListComponentSideAssignments(ctx context.Context, componentID string) ([]domain.ComponentSideAssignment, error)
 	SetComponentSideAssignment(ctx context.Context, a *domain.ComponentSideAssignment) error
 	RemoveComponentSideAssignment(ctx context.Context, componentID, side string) error
+	ListAllComponentSideAssignments(ctx context.Context) ([]domain.ComponentSideAssignment, error)
 
 	// Catalog: option groups
 	ListOptionGroups(ctx context.Context) ([]domain.OptionGroup, error)

@@ -124,3 +124,31 @@ func scanComponentSideAssignment(row pgx.Row) (*domain.ComponentSideAssignment, 
 	}
 	return &a, nil
 }
+
+// ListAllComponentSideAssignments reads every assignment of the caller's
+// organization. The resolve (#916) needs the org-wide assignment map to
+// synthesize per-(component, side) recipes after layout resolution, when
+// boards expose their catalogComponentID. Org-scoped by the caller.
+func (s *PostgresStore) ListAllComponentSideAssignments(ctx context.Context) ([]domain.ComponentSideAssignment, error) {
+	query := `
+		SELECT id, component_id, side, profile_id, created_at, updated_at
+		FROM component_side_assignments
+		WHERE organization_id = $1
+		ORDER BY component_id ASC, side ASC;
+	`
+	rows, err := s.db(ctx).Query(ctx, query, OrgFromCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []domain.ComponentSideAssignment{}
+	for rows.Next() {
+		assignment, err := scanComponentSideAssignment(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, *assignment)
+	}
+	return list, nil
+}

@@ -142,6 +142,12 @@ type AuthoringResolveInput struct {
 	ManualPlacements        []AuthoringManualPlacement
 	ManualPlacementsPresent bool
 	EvaluatedParameters     map[string]any
+	// ResolvedSideRecipes carries server-resolved profile recipes (#916):
+	// release-pinned profiles joined with the organization's component side
+	// assignments, synthesized by the api layer. The engine injects them
+	// into fixed-shelf-side relationships that declare none
+	// (authored-override-wins, complete coverage required).
+	ResolvedSideRecipes []ResolvedSideRecipe
 }
 
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
@@ -308,6 +314,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		input.Relationships = pruneRemovedAnchorRelationships(input.Relationships, boards)
 	}
 	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, input.EvaluatedParameters, boards, input.Relationships)
+	input.Relationships = injectResolvedSideRecipes(input.Relationships, boards, input.ResolvedSideRecipes)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
 
