@@ -26,6 +26,8 @@ import { ComponentEditorGeneralPanel } from './ComponentEditorGeneralPanel';
 import { ComponentEditorGeometryPanel } from './ComponentEditorGeometryPanel';
 import { ComponentEditorOptionsPanel } from './ComponentEditorOptionsPanel';
 import { ComponentEditorJoineryPanel } from './ComponentEditorJoineryPanel';
+import type { BoardFace } from '@granete/domain';
+import { ComponentSideAssignmentsPanel, type ComponentSideAssignmentView, type ComponentProfileOption } from './ComponentSideAssignmentsPanel';
 
 export type ComponentEditorFormProps = {
   readonly formId: string;
@@ -47,6 +49,18 @@ export type ComponentEditorFormProps = {
   readonly showInContext: boolean;
   readonly onShowInContextChange: (v: boolean) => void;
   readonly factoryPolicy?: FactoryConstructionPolicy;
+  /** #915: per-face hardware profile assignments (saved components only). */
+  readonly profileOptions?: readonly ComponentProfileOption[];
+  readonly sideAssignments?: {
+    readonly authenticated: boolean;
+    readonly canMutate: boolean;
+    readonly componentId: string | null;
+    readonly assignments: readonly ComponentSideAssignmentView[];
+    readonly savingSide: string | null;
+    readonly error: string | null;
+    readonly onSet: (side: BoardFace, profileId: string) => void | Promise<void>;
+    readonly onRemove: (side: BoardFace) => void | Promise<void>;
+  };
 };
 
 export function ComponentEditorForm({
@@ -67,6 +81,8 @@ export function ComponentEditorForm({
   showInContext,
   onShowInContextChange,
   factoryPolicy,
+  profileOptions,
+  sideAssignments,
 }: ComponentEditorFormProps): ReactNode {
   const roleCount = countOptionRoles(draft.optionRoles);
   const optionsMissing = roleCount === 0;
@@ -142,6 +158,19 @@ export function ComponentEditorForm({
         setDraft={setDraft}
         hidden={editorTab !== 'construction'}
         factoryPolicy={factoryPolicy}
+      />
+
+      <ComponentSideAssignmentsPanel
+        hidden={editorTab !== 'construction'}
+        componentId={sideAssignments?.componentId ?? null}
+        authenticated={sideAssignments?.authenticated ?? false}
+        assignments={sideAssignments?.assignments ?? []}
+        profiles={profileOptions ?? []}
+        canMutate={sideAssignments?.canMutate ?? false}
+        savingSide={sideAssignments?.savingSide ?? null}
+        error={sideAssignments?.error ?? null}
+        onSet={sideAssignments?.onSet ?? (() => undefined)}
+        onRemove={sideAssignments?.onRemove ?? (() => undefined)}
       />
     </form>
   );

@@ -459,7 +459,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// #915 / HW-PROFILE: component definition side assignments.
 	mux.Handle("GET /api/catalog/components/{id}/side-assignments", authMW(http.HandlerFunc(server.HandleComponentSideAssignments)))
 	mux.Handle("PUT /api/catalog/components/{id}/side-assignments", authMW(http.HandlerFunc(server.HandleComponentSideAssignments)))
-	mux.Handle("DELETE /api/catalog/components/{id}/side-assignments", authMW(http.HandlerFunc(server.HandleComponentSideAssignments)))
+	mux.Handle("DELETE /api/catalog/components/{id}/side-assignments/{side}", authMW(http.HandlerFunc(server.HandleComponentSideAssignments)))
 
 	// #667 / M1: versioned 3D assets for the hardware catalog. start/finalize
 	// are durable commands behind the idempotency receipt (a lost finalize

@@ -250,6 +250,7 @@ import {
 } from './engineeringState';
 import { useFactoryConstructionPolicy } from './useFactoryConstructionPolicy';
 import { useHardwareProfiles } from './useHardwareProfiles';
+import { useComponentSideAssignments } from './useComponentSideAssignments';
 import {
   captureDeferredNavigationIntent,
   runDeferredNavigationGuarded,
@@ -1130,6 +1131,23 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     DEFAULT_API_BASE,
     session === 'auth' ? authToken : null,
     navId === 'hardwareProfiles',
+  );
+  // #915: profiles for the component editor's per-face pickers + the
+  // editing component's assignments (editor id comes from the route).
+  const hardwareProfilesForPicker = useHardwareProfiles(
+    DEFAULT_API_BASE,
+    session === 'auth' ? authToken : null,
+    navId === 'components',
+  );
+  const editingComponentId =
+    navId === 'components' && routeComponentEditId && routeComponentEditId !== 'new'
+      ? routeComponentEditId
+      : null;
+  const componentSideAssignments = useComponentSideAssignments(
+    DEFAULT_API_BASE,
+    session === 'auth' ? authToken : null,
+    editingComponentId,
+    navId === 'components',
   );
 
   const engineeringStateContext = useEngineeringState({
@@ -2551,6 +2569,19 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onSelectionChange={onComponentSelectionChange}
           canMutate={canMutateModules}
           factoryPolicy={factoryConstructionPolicy.policy}
+          profileOptions={hardwareProfilesForPicker.profiles.map((p) => ({
+            id: p.id, code: p.code, name: p.name, revision: p.revision, active: p.active,
+          }))}
+          sideAssignments={{
+            authenticated: session === 'auth',
+            canMutate: canMutateCatalog,
+            componentId: editingComponentId,
+            assignments: componentSideAssignments.assignments,
+            savingSide: null,
+            error: componentSideAssignments.error,
+            onSet: componentSideAssignments.set,
+            onRemove: componentSideAssignments.remove,
+          }}
         />
       ) : null}
       {navId === 'addOns' ? (

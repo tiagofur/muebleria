@@ -1555,3 +1555,4 @@ export * from "./glbRepresentation";
 
 // Factory Construction Policy (#875)
 export * from "./factoryConstructionPolicy";
+export * from "./hardwareProfile";

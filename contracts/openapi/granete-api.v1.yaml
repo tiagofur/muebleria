@@ -5316,7 +5316,7 @@
         }
       }
     },
-    "/catalog/components/{componentId}/side-assignments": {
+    "/catalog/components/{componentId}/side-assignments/{side}": {
       "parameters": [
         {
           "$ref": "#/components/parameters/ComponentId"
@@ -5392,7 +5392,7 @@
         "parameters": [
           {
             "name": "side",
-            "in": "query",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string",

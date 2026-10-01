@@ -65,9 +65,9 @@ func (s *Server) HandleComponentSideAssignments(w http.ResponseWriter, r *http.R
 		if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "sólo roles con permiso de catálogo pueden quitar asignaciones por lado") {
 			return
 		}
-		side := r.URL.Query().Get("side")
+		side := r.PathValue("side")
 		if side == "" {
-			respondWithError(w, http.StatusBadRequest, "side query parameter is required")
+			respondWithError(w, http.StatusBadRequest, "missing side")
 			return
 		}
 		if err := s.Store.RemoveComponentSideAssignment(r.Context(), componentID, side); err != nil {
