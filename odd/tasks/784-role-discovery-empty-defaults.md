@@ -2,7 +2,7 @@
 
 - Issue: #784 (`[P1][SU-UX-4] Design defaults, inheritance and contextual Inspector`).
 - Autorización: prompt del owner 2026-09-30 ("planeamos... separamos en partes y hacemos nuestros planes de G-ODD").
-- Lane: ODD. Estado: IN_PROGRESS.
+- Lane: ODD. Estado: COMPLETED.
 - Base: `main` (`29b5fa84`).
 - Branch: `feat/784-role-discovery-empty-defaults`.
 
