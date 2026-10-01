@@ -509,7 +509,7 @@
                 <p id="design-inspector-design-name" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0;"></p>
               </div>
               <div class="badges-column">
-                <span class="status-badge pending">Lectura</span>
+                <span class="status-badge">General</span>
               </div>
             </div>
             <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-2) 0 0;">
@@ -517,13 +517,13 @@
             </p>
             <p class="presets-block-label" style="margin-top: var(--space-3);">Acabados del diseño</p>
             <div id="design-inspector-body"></div>
-            <button id="design-inspector-retry" class="btn" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
+            <button id="design-inspector-retry" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
             <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
                  PUT with the client token; items and item modes untouched) -->
             <div id="design-inspector-footer" style="display: none; margin-top: var(--space-3);">
               <p id="design-inspector-pending" class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);"></p>
               <div style="display: flex; gap: var(--space-2);">
-                <button id="design-inspector-discard" class="btn" style="flex: 1;">Descartar</button>
+                <button id="design-inspector-discard" class="btn btn-secondary" style="flex: 1;">Descartar</button>
                 <button id="design-inspector-apply" class="btn btn-primary" style="flex: 1;">Aplicar</button>
               </div>
             </div>
@@ -1653,17 +1653,47 @@
         // names); the canonical role key is the presentable fallback —
         // never an alias. The rerender seam lets binding changes repaint
         // the no-selection lane through the inspector's single routing.
+        function matchRoleName(r1, r2) {
+          if (!r1 || !r2) return false;
+          if (r1 === r2) return true;
+          var s1 = String(r1).trim().toUpperCase();
+          var s2 = String(r2).trim().toUpperCase();
+          if (s1 === s2) return true;
+          if ((s1 === "FRENTE" && s2 === "FRENTES") || (s1 === "FRENTES" && s2 === "FRENTE")) return true;
+          if ((s1 === "INTERIOR" && s2 === "INTERIORES") || (s1 === "INTERIORES" && s2 === "INTERIOR")) return true;
+          return false;
+        }
+
         window.GraneteUI.designInspector.init({
+          icon: icon,
           materialById: window.GraneteUI.materialRoles.materialById,
+          updateMaterialSwatch: window.GraneteUI.materialRoles.updateMaterialSwatch,
+          getMaterials: window.GraneteUI.materialRoles.getMaterials,
           getRoleLabel: function (role) {
             var definitions = window.GraneteUI.library.getDefinitions();
             for (var i = 0; i < definitions.length; i++) {
               var roles = (definitions[i] && definitions[i].materialRoles) || [];
               for (var j = 0; j < roles.length; j++) {
-                if (roles[j] && roles[j].role === role && roles[j].label) return roles[j].label;
+                if (roles[j] && matchRoleName(roles[j].role, role) && roles[j].label) return roles[j].label;
               }
             }
             return role;
+          },
+          getAvailableRoles: function () {
+            var roles = [];
+            var seen = {};
+            var definitions = window.GraneteUI.library.getDefinitions();
+            for (var i = 0; i < definitions.length; i++) {
+              var defRoles = (definitions[i] && definitions[i].materialRoles) || [];
+              for (var j = 0; j < defRoles.length; j++) {
+                var r = defRoles[j];
+                if (r && r.role && !seen[r.role]) {
+                  seen[r.role] = true;
+                  roles.push(r.role);
+                }
+              }
+            }
+            return roles;
           },
           rerenderInspector: function () { window.GraneteUI.inspector.rerender(); },
           // #784 R2: candidate materials for a Design-level role — the union
@@ -1672,13 +1702,11 @@
           // (presentation only: the backend stays the authority).
           getRoleCandidates: function (role) {
             var ids = [];
-            var seen = false;
             var definitions = window.GraneteUI.library.getDefinitions();
             for (var i = 0; i < definitions.length; i++) {
               var roles = (definitions[i] && definitions[i].materialRoles) || [];
               for (var j = 0; j < roles.length; j++) {
-                if (roles[j] && roles[j].role === role) {
-                  seen = true;
+                if (roles[j] && matchRoleName(roles[j].role, role)) {
                   var options = roles[j].optionIds || [];
                   for (var k = 0; k < options.length; k++) {
                     if (ids.indexOf(options[k]) === -1) ids.push(options[k]);

@@ -87,7 +87,9 @@
   }
 
   // Material options for a role: the workshop's curated list when the
-  // option group defines one, else every active material.
+  // option group defines one, else every active material. When 0
+  // curated ids resolve, fall back to all materials so the user is never
+  // locked into a 0-alternative selection.
   function optionMaterialIds(roleEntry) {
     var ids = (roleEntry.optionIds || []).filter(function (id) { return !!materialById(id); });
     if (ids.length > 0) return ids;
@@ -99,11 +101,14 @@
     var designDefaults = typeof deps.getDesignDefaults === "function" ? (deps.getDesignDefaults() || {}) : {};
     (def && def.materialRoles ? def.materialRoles : []).forEach(function (r) {
       var ids = optionMaterialIds(r);
+      var preferredId = (r.optionIds || []).filter(function (id) { return !!materialById(id); })[0];
       if (ids.length > 0) {
         if (designDefaults[r.role] && ids.indexOf(designDefaults[r.role]) !== -1) {
           choices[r.role] = designDefaults[r.role];
         } else if (projectDefaultMaterials[r.role] && ids.indexOf(projectDefaultMaterials[r.role]) !== -1) {
           choices[r.role] = projectDefaultMaterials[r.role];
+        } else if (preferredId) {
+          choices[r.role] = preferredId;
         } else {
           choices[r.role] = ids[0];
         }
@@ -184,8 +189,9 @@
 
     roles.forEach(function (r) {
       var availableIds = optionMaterialIds(r);
+      var preferredId = (r.optionIds || []).filter(function (id) { return !!materialById(id); })[0];
       if (!choices[r.role] || availableIds.indexOf(choices[r.role]) === -1) {
-        choices[r.role] = availableIds[0];
+        choices[r.role] = preferredId || availableIds[0];
       }
       var currentMat = materialById(choices[r.role]);
 

@@ -132,12 +132,12 @@ const MATERIALS = {
   'mat-oak': { id: 'mat-oak', name: 'Roble Natural' }
 };
 
-function initModule(sandbox) {
-  sandbox.window.GraneteUI.designInspector.init({
+function initModule(sandbox, extraDeps = {}) {
+  sandbox.window.GraneteUI.designInspector.init(Object.assign({
     getRoleLabel: (role) => ({ INTERIOR: 'Interior', FRENTES: 'Frentes' }[role] || role),
     materialById: (id) => MATERIALS[id],
     rerenderInspector: () => {}
-  });
+  }, extraDeps));
 }
 
 const CONNECTED_A = {
@@ -1290,6 +1290,140 @@ function run() {
     // Disconnect clears rollout state and hides modal
     mod.onBindingStatus({ state: 'disconnected' });
     assert.strictEqual(modal.style.display, 'none');
+  });
+
+  // --- role autodiscovery and empty defaults -----------------------------
+  test('empty authoringDefaults with getAvailableRoles renders unassigned rows with Asignar button', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    let pickedCallback = null;
+    ctx.sandbox.window.GraneteUI.designInspector.init({
+      getRoleLabel: (role) => ({ INTERIOR: 'Interior', FRENTES: 'Frentes' }[role] || role),
+      materialById: (id) => MATERIALS[id],
+      getAvailableRoles: () => ['FRENTES', 'INTERIOR'],
+      getRoleCandidates: () => ['mat-white', 'mat-oak'],
+      openMaterialPicker: (roleEntry, initialId, onApply) => {
+        pickedCallback = onApply;
+      },
+      rerenderInspector: () => {}
+    });
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: {} },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+
+    const bodyText = ctx.body().textContent;
+    assert.ok(!bodyText.includes('Sin defaults configurados todavía'), 'must not render dead-end message');
+    assert.ok(bodyText.includes('Sin default asignado'), 'must render unassigned role label');
+
+    const btnFrentes = ctx.document.getElementById('design-inspector-change-FRENTES');
+    assert.ok(btnFrentes, 'button for FRENTES must exist');
+    assert.strictEqual(btnFrentes.textContent, 'Asignar', 'button must say Asignar');
+
+    // Clicking Asignar and selecting mat-oak drafts the initial assignment
+    btnFrentes.click();
+    assert.ok(pickedCallback, 'openMaterialPicker must be called');
+    pickedCallback('mat-oak');
+
+    // Verify row now shows draft
+    assert.ok(ctx.body().textContent.includes('Sin asignar → Roble Natural'));
+    const updatedBtn = ctx.document.getElementById('design-inspector-change-FRENTES');
+    assert.strictEqual(updatedBtn.textContent, 'Cambiar');
+
+    // Verify footer is active with Apply
+    const footer = ctx.document.getElementById('design-inspector-footer');
+    assert.strictEqual(footer.style.display, 'block');
+    const pending = ctx.document.getElementById('design-inspector-pending');
+    assert.strictEqual(pending.textContent, '1 cambio pendiente');
+
+    // Applying sends the new default to backend
+    const applyBtn = ctx.document.getElementById('design-inspector-apply');
+    applyBtn.click();
+    const applyCall = ctx.sketchupCalls.find((c) => c[0] === 'apply_design_defaults');
+    assert.ok(applyCall, 'apply_design_defaults must be called');
+    assert.deepStrictEqual(applyCall[1].authoringDefaults.materialChoices, { FRENTES: 'mat-oak' });
+  });
+
+  test('roles discovered from inheritanceSummary render even without defaults or catalog roles', () => {
+    const ctx = createSandbox();
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    initModule(ctx.sandbox);
+    mod.onBindingStatus(CONNECTED_A);
+    mod.handleNoSelection();
+    const request = ctx.sketchupCalls[0][1];
+    mod.onDesignDefaults({
+      requestId: request.requestId, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: {} },
+      workingVersion: '2026-09-01T00:00:00Z'
+    });
+    mod.onDesignInheritance({
+      requestId: request.requestId, status: 'ready', designId: 'd-a',
+      items: [{ furnitureInstanceId: 'fi-1', roles: [{ role: 'PUERTAS', mode: 'definition' }] }],
+      inheritanceSummary: [{ role: 'PUERTAS', items: 1, designBacked: 0, needsRollout: 0, designCurrent: 0, overridden: 0 }]
+    });
+
+    const bodyText = ctx.body().textContent;
+    assert.ok(!bodyText.includes('Sin defaults configurados todavía'), 'must discover PUERTAS');
+    assert.ok(bodyText.includes('Sin default asignado'), 'PUERTAS must be unassigned');
+    const btn = ctx.document.getElementById('design-inspector-change-PUERTAS');
+    assert.ok(btn, 'button for PUERTAS must exist');
+  });
+
+  test('R2: applyMaterialPick updates the draft and footer directly', () => {
+    const ctx = createSandbox();
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    mod.applyMaterialPick('INTERIOR', 'mat-oak');
+    assert.ok(ctx.body().textContent.includes('Roble Natural'), 'the draft value renders');
+    assert.ok(ctx.body().textContent.includes('→'), 'old → new is visible');
+    const footer = ctx.document.getElementById('design-inspector-footer');
+    assert.strictEqual(footer.style.display, 'block');
+    assert.ok(ctx.document.getElementById('design-inspector-pending').textContent.includes('1 cambio pendiente'));
+  });
+
+  test('R2: clicking change affordance delegates to window.sketchup.open_material_selector when available', () => {
+    const ctx = createSandbox();
+    let selectorCall = null;
+    ctx.sandbox.window.sketchup.open_material_selector = (payload) => {
+      selectorCall = JSON.parse(payload);
+    };
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    const changeBtn = ctx.document.getElementById('design-inspector-change-INTERIOR');
+    assert.ok(changeBtn, 'change affordance exists');
+    changeBtn.click();
+    assert.ok(selectorCall, 'open_material_selector was called');
+    assert.strictEqual(selectorCall.role, 'INTERIOR');
+    assert.strictEqual(selectorCall.context, 'design');
+    assert.strictEqual(selectorCall.currentMaterialId, 'mat-white');
+    assert.deepStrictEqual(selectorCall.allowedMaterialIds, ['mat-oak', 'mat-white']);
+  });
+
+  test('R2: discoveredRoles deduplicates role aliases such as FRENTE and FRENTES', () => {
+    const ctx = createSandbox();
+    initModule(ctx.sandbox, {
+      getAvailableRoles: () => ['FRENTE', 'INTERIORES', 'FONDO']
+    });
+    const mod = ctx.sandbox.window.GraneteUI.designInspector;
+    mod.onBindingStatus(CONNECTED_A);
+    mod.onDesignDefaults({
+      requestId: 1, designId: 'd-a', status: 'ready',
+      authoringDefaults: { materialChoices: { FRENTES: 'mat-oak', INTERIOR: 'mat-white' } }
+    });
+    mod.handleNoSelection();
+    // Should have exactly 3 role rows: FONDO, FRENTES (aliased from FRENTE), INTERIOR (aliased from INTERIORES)
+    const rows = ctx.body().children.filter((r) => r.id && r.id.startsWith('design-inspector-row-'));
+    assert.strictEqual(rows.length, 3, 'aliases must be deduplicated in discoveredRoles');
+    const rowIds = rows.map((r) => r.id);
+    assert.ok(rowIds.includes('design-inspector-row-FRENTES') || rowIds.includes('design-inspector-row-FRENTE'), 'front row must exist');
+    assert.ok(rowIds.includes('design-inspector-row-INTERIOR') || rowIds.includes('design-inspector-row-INTERIORES'), 'interior row must exist');
+    assert.ok(rowIds.includes('design-inspector-row-FONDO'), 'fondo row must exist');
   });
 }
 

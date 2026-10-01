@@ -19,6 +19,7 @@ module Granete
             current_material_id: params[:current_material_id],
             allowed_materials: allowed_materials,
             categories: categories,
+            context: params[:context],
             media: media_authorizer.media_payload_for(
               'materials' => allowed_materials, 'categories' => categories
             ),
@@ -58,6 +59,7 @@ module Granete
 
         def selector_allowed_materials(params)
           all = @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : []
+
           filter_ids = resolve_allowed_material_ids(params)
           return all if filter_ids.nil? || filter_ids.empty?
 
@@ -72,14 +74,53 @@ module Granete
             return params[:allowed_material_ids]
           end
 
-          return nil unless params[:definition_id] && params[:role] && @catalog_provider.respond_to?(:find_definition)
+          target_role = params[:role].to_s
+          from_def = definition_role_material_ids(params[:definition_id], target_role)
+          return from_def if from_def
 
-          definition = @catalog_provider.find_definition(params[:definition_id])
+          aggregate_catalog_role_material_ids(target_role)
+        end
+
+        def definition_role_material_ids(definition_id, target_role)
+          return nil unless definition_id && @catalog_provider.respond_to?(:find_definition)
+
+          definition = @catalog_provider.find_definition(definition_id)
           return nil unless definition
 
           roles = definition['materialRoles'] || definition[:materialRoles] || []
-          role_entry = roles.find { |r| (r['role'] || r[:role]) == params[:role] }
-          role_entry ? (role_entry['optionIds'] || role_entry[:optionIds]) : nil
+          entry = roles.find { |r| match_role_names?(r['role'] || r[:role], target_role) }
+          ids = entry ? (entry['optionIds'] || entry[:optionIds]) : nil
+          ids && !ids.empty? ? ids : nil
+        end
+
+        def aggregate_catalog_role_material_ids(target_role)
+          return nil unless @catalog_provider.respond_to?(:all_definitions) && !target_role.empty?
+
+          collected = []
+          (@catalog_provider.all_definitions || []).each do |defn|
+            roles = defn['materialRoles'] || defn[:materialRoles] || []
+            roles.each do |role_entry|
+              next unless match_role_names?(role_entry['role'] || role_entry[:role], target_role)
+
+              opts = role_entry['optionIds'] || role_entry[:optionIds] || []
+              opts.each { |opt| collected << opt unless collected.include?(opt) }
+            end
+          end
+          collected.empty? ? nil : collected
+        end
+
+        def match_role_names?(role_a, role_b)
+          return false if role_a.nil? || role_b.nil?
+
+          first = role_a.to_s.strip.upcase
+          second = role_b.to_s.strip.upcase
+          return true if first == second
+          return true if (first == 'FRENTE' && second == 'FRENTES') ||
+                         (first == 'FRENTES' && second == 'FRENTE')
+          return true if (first == 'INTERIOR' && second == 'INTERIORES') ||
+                         (first == 'INTERIORES' && second == 'INTERIOR')
+
+          false
         end
 
         def selector_categories

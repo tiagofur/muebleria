@@ -877,6 +877,85 @@ class DialogControllerTest < Minitest::Test
     refute_includes init_script, '"materialId":"mat-01"'
   end
 
+  def test_open_material_selector_filters_materials_in_design_context_by_allowed_ids
+    fake_catalog = Class.new(Granete::SketchUpExtension::Library::CatalogProvider) do
+      def all_materials
+        [
+          { 'materialId' => 'mat-01', 'name' => 'Roble 18mm' },
+          { 'materialId' => 'mat-02', 'name' => 'Blanco 15mm' }
+        ]
+      end
+    end.new
+
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      catalog_provider: fake_catalog
+    )
+
+    dialog = controller.show
+    payload = {
+      'role' => 'INTERIOR', 'roleName' => 'Interior', 'currentMaterialId' => 'mat-02',
+      'context' => 'design', 'allowedMaterialIds' => ['mat-02']
+    }
+
+    dialog.callbacks.fetch('open_material_selector').call(nil, JSON.generate(payload))
+
+    selector = controller.send(:option_selector)
+    refute_nil selector.dialog
+    selector.dialog.callbacks.fetch('selector_ready').call(nil)
+    init_script = selector.dialog.executed_scripts.find { |s| s.include?('initOptionSelector') }
+    refute_nil init_script
+    assert_includes init_script, '"materialId":"mat-02"'
+    refute_includes init_script, '"materialId":"mat-01"'
+  end
+
+  def test_open_material_selector_filters_materials_by_role_across_catalog_definitions_with_alias
+    fake_catalog = Class.new(Granete::SketchUpExtension::Library::CatalogProvider) do
+      def all_materials
+        [
+          { 'materialId' => 'mat-oak', 'name' => 'Roble 18mm' },
+          { 'materialId' => 'mat-white', 'name' => 'Blanco 15mm' }
+        ]
+      end
+
+      def all_definitions
+        [
+          {
+            'furniture_definition_id' => 'def-base',
+            'materialRoles' => [
+              { 'role' => 'INTERIORES', 'label' => 'Interiores', 'optionIds' => ['mat-white'] }
+            ]
+          }
+        ]
+      end
+    end.new
+
+    controller = Granete::SketchUpExtension::UserInterface::DialogController.new(
+      logger: @logger,
+      status_provider: StatusProvider.new,
+      metadata_store: @store,
+      catalog_provider: fake_catalog
+    )
+
+    dialog = controller.show
+    payload = {
+      'role' => 'INTERIOR', 'roleName' => 'Interior', 'currentMaterialId' => 'mat-white',
+      'context' => 'design'
+    }
+
+    dialog.callbacks.fetch('open_material_selector').call(nil, JSON.generate(payload))
+
+    selector = controller.send(:option_selector)
+    refute_nil selector.dialog
+    selector.dialog.callbacks.fetch('selector_ready').call(nil)
+    init_script = selector.dialog.executed_scripts.find { |s| s.include?('initOptionSelector') }
+    refute_nil init_script
+    assert_includes init_script, '"materialId":"mat-white"'
+    refute_includes init_script, '"materialId":"mat-oak"'
+  end
+
   def test_delete_selected_furniture_erases_target_with_granete_metadata
     group = @model.active_entities.add_group
     @store.write(

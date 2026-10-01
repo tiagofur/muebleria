@@ -260,6 +260,12 @@ test('optionMaterialIds falls back to every material when no curated ids resolve
   assert.deepStrictEqual(mr.optionMaterialIds({ optionIds: ['ghost-1', 'ghost-2'] }), ['mat-1', 'mat-2', 'mat-3'], 'all-invalid optionIds');
 });
 
+test('optionMaterialIds preserves single curated material without fallback', () => {
+  const { mr } = runModule();
+  mr.setCatalog({ materials: MATERIALS, categories: [] });
+  assert.deepStrictEqual(mr.optionMaterialIds({ optionIds: ['mat-2'] }), ['mat-2'], 'single curated material is preserved');
+});
+
 test('defaultChoices uses the project default when it is still offered', () => {
   const { mr } = runModule();
   mr.setCatalog({ materials: MATERIALS, categories: [] });

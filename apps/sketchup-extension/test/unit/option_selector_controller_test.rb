@@ -36,6 +36,21 @@ class OptionSelectorControllerTest < Minitest::Test
     assert(scripts.any? { |s| s.include?('initOptionSelector') && s.include?('FRENTES') })
   end
 
+  def test_show_selector_preserves_context_in_payload
+    dialog = @controller.show_selector(
+      role: 'FRENTES',
+      role_name: 'Frentes',
+      current_material_id: 'mat-01',
+      allowed_materials: [{ 'materialId' => 'mat-01', 'name' => 'Roble' }],
+      categories: [],
+      context: 'design'
+    )
+    dialog.callbacks.fetch('selector_ready').call(dialog)
+    script = dialog.executed_scripts.find { |s| s.include?('initOptionSelector') }
+    refute_nil script
+    assert_includes script, '"context":"design"'
+  end
+
   def test_handle_apply_invokes_on_apply_and_closes_dialog
     applied_result = nil
     dialog = @controller.show_selector(

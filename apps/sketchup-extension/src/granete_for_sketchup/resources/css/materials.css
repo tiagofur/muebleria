@@ -72,6 +72,17 @@
         border-color: var(--border-default);
       }
 
+      .material-selected-preview:focus-visible {
+        outline: 2px solid var(--brand-500);
+        outline-offset: 1px;
+        background: var(--surface-hover);
+        border-color: var(--border-default);
+      }
+
+      .material-role-block .material-selected-preview:last-child {
+        margin-bottom: 0;
+      }
+
       .material-swatch {
         width: 38px;
         height: 38px;
@@ -123,6 +134,35 @@
         width: 100%;
         font-size: var(--text-sm);
         margin-top: var(--space-1);
+      }
+
+      /* ------------------------------------------------------------- */
+      /* Design Inspector Cards & States                                */
+      /* ------------------------------------------------------------- */
+      .design-insp-row {
+        margin-bottom: var(--space-3);
+      }
+
+      .design-insp-note {
+        font-size: var(--text-xs);
+        color: var(--text-muted);
+        margin-top: var(--space-2);
+        line-height: 1.4;
+      }
+
+      .design-insp-state {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        padding: var(--space-3);
+        text-align: center;
+        background: var(--surface-card-subtle);
+        border-radius: var(--radius-md);
+        margin: var(--space-2) 0;
+      }
+
+      .design-insp-state.design-insp-error {
+        color: var(--danger-600);
+        background: var(--danger-50);
       }
 
       /* ------------------------------------------------------------- */
