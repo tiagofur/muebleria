@@ -124,6 +124,7 @@ import {
   AppShell,
   EdgesCatalog,
   HardwareCatalog,
+  HardwareProfilesCatalog,
   AmbientMaterialsCatalog,
   MaterialsCatalog,
   ModulesScreen,
@@ -248,6 +249,7 @@ import {
   useEngineeringState,
 } from './engineeringState';
 import { useFactoryConstructionPolicy } from './useFactoryConstructionPolicy';
+import { useHardwareProfiles } from './useHardwareProfiles';
 import {
   captureDeferredNavigationIntent,
   runDeferredNavigationGuarded,
@@ -1123,6 +1125,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     token: session === 'auth' ? authToken : null,
     enabled: navId === 'settings' || navId === 'components',
   });
+  // #914: hardware profiles catalog data (org-scoped, If-Match writes).
+  const hardwareProfiles = useHardwareProfiles(
+    DEFAULT_API_BASE,
+    session === 'auth' ? authToken : null,
+    navId === 'hardwareProfiles',
+  );
 
   const engineeringStateContext = useEngineeringState({
     baseUrl: DEFAULT_API_BASE,
@@ -2269,6 +2277,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               ? uploadCatalogImage
               : undefined
           }
+        />
+      ) : null}
+      {navId === 'hardwareProfiles' ? (
+        <HardwareProfilesCatalog
+          profiles={hardwareProfiles.profiles}
+          hardware={hardware}
+          onCreate={hardwareProfiles.create}
+          onUpdate={hardwareProfiles.update}
+          onDeactivate={hardwareProfiles.deactivate}
+          canMutate={canMutateCatalog}
         />
       ) : null}
       {navId === 'finishes' ? (

@@ -619,6 +619,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
       'materials',
       'edges',
       'hardware',
+      'hardwareProfiles',
       'finishes',
       'optionGroups',
       'settings',
@@ -643,6 +644,7 @@ export function navIdsForRole(role: string | null | undefined): ReadonlySet<stri
     ids.add('materials');
     ids.add('edges');
     ids.add('hardware');
+    ids.add('hardwareProfiles');
     ids.add('optionGroups');
   }
   if (roleCanAccessSettings(role)) ids.add('settings');

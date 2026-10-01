@@ -83,6 +83,7 @@ export type AppNavId =
   | 'materials'
   | 'edges'
   | 'hardware'
+  | 'hardwareProfiles'
   | 'finishes'
   | 'optionGroups'
   | 'settings'
@@ -317,6 +318,7 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
       { id: 'materials', label: 'Materiales', icon: Layers },
       { id: 'edges', label: 'Cantos', icon: Minus },
       { id: 'hardware', label: 'Herrajes', icon: Settings2 },
+      { id: 'hardwareProfiles', label: 'Perfiles de herrajes', icon: Layers },
       { id: 'finishes', label: 'Acabados', icon: Palette },
     ],
   },

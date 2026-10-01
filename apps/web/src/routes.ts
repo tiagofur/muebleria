@@ -30,6 +30,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   materials: '/materials',
   edges: '/edges',
   hardware: '/hardware',
+  hardwareProfiles: '/hardware-profiles',
   finishes: '/finishes',
   optionGroups: '/option-groups',
   settings: '/settings',
