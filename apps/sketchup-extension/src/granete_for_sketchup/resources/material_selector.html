@@ -983,13 +983,11 @@
         millerPane.style.display = 'flex';
       }
 
-      // If current material has a category, navigate to it
-      if (state.currentMaterialId) {
-        const currentMat = state.allowedMaterials.find(m => (m.materialId || m.id) === state.currentMaterialId);
-        if (currentMat && currentMat.categoryId) {
-          locateCategoryBranch(currentMat.categoryId);
-        }
-      }
+      // Keep "Todas" selected by default so the full candidate grid is immediately visible.
+      // The current material is still highlighted in the grid and shown in the detail pane.
+      state.selectedL1Id = null;
+      state.selectedL2Id = null;
+      state.selectedL3Id = null;
 
       renderMillerColumns();
       renderBreadcrumbs();

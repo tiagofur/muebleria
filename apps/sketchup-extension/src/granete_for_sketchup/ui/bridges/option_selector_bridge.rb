@@ -59,6 +59,8 @@ module Granete
 
         def selector_allowed_materials(params)
           all = @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : []
+          return all if params[:context] == 'design'
+
           filter_ids = resolve_allowed_material_ids(params)
           return all if filter_ids.nil? || filter_ids.empty?
 
