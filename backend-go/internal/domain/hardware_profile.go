@@ -57,6 +57,7 @@ type HardwareProfile struct {
 	Revision    string                `json:"revision"`
 	Items       []HardwareProfileItem `json:"items"`
 	RecipeRef   *ProfileRecipeRef     `json:"recipeRef,omitempty"`
+	Recipe      *ProfileRecipeBody    `json:"recipe,omitempty"`
 	Active      bool                  `json:"active"`
 	Version     int64                 `json:"version,omitempty"`
 	CreatedAt   time.Time             `json:"createdAt,omitempty"`
@@ -78,6 +79,116 @@ type HardwareProfileItem struct {
 type ProfileRecipeRef struct {
 	RecipeID       string `json:"recipeId"`
 	RecipeRevision string `json:"recipeRevision"`
+}
+
+// ProfileRecipeBody is the profile-embedded recipe definition (#916): the
+// full technical content a release pins — one variant per target-face
+// orientation, each carrying the complete rule set for both participants.
+// The wire shape of rules mirrors the frozen engine ContactOperationRule
+// contract exactly; identity (recipeId+revision) must agree with RecipeRef
+// when both are present. One resource (the profile) stays the authoring
+// surface — the recipe remains server/domain authoritative because it only
+// ever takes effect through the pinned release blob.
+type ProfileRecipeBody struct {
+	RecipeID       string                 `json:"recipeId"`
+	RecipeRevision string                 `json:"recipeRevision"`
+	Variants       []ProfileRecipeVariant `json:"variants"`
+}
+
+// ProfileRecipeVariant machines one target-face orientation: the contact
+// target's declared face selects the variant.
+type ProfileRecipeVariant struct {
+	TargetFace string            `json:"targetFace"`
+	Rules      []ProfileRuleSpec `json:"rules"`
+}
+
+// ProfileRuleSpec mirrors the engine ContactOperationRule wire (same json
+// tags) so the pinned blob needs no reshaping at consumption time. It lives
+// in domain because the profile contract validates it before compilation.
+type ProfileRuleSpec struct {
+	RuleID          string     `json:"ruleId"`
+	RuleRevision    string     `json:"ruleRevision"`
+	ParticipantRole string     `json:"participantRole"`
+	OperationRole   string     `json:"operationRole"`
+	EntryFace       string     `json:"entryFace"`
+	OffsetMm        [3]float64 `json:"offsetMm"` // contact axis, normal, axis × normal
+	Axis            [3]float64 `json:"axis"`
+	DiameterMm      float64    `json:"diameterMm"`
+	DepthMm         float64    `json:"depthMm"`
+}
+
+// ValidateProfileRecipeBody returns the structured issues of an embedded
+// recipe: identity coherence with the profile pin, unique target faces, and
+// the same per-rule shape the engine validator enforces (both participant
+// roles present, unique rule ids, revisions, six entry faces, unit axis,
+// positive finite diameter/depth). Fail-closed: a broken body must never
+// enter an immutable release nor resolve productively.
+func ValidateProfileRecipeBody(ref *ProfileRecipeRef, body *ProfileRecipeBody) []ContractIssue {
+	issues := []ContractIssue{}
+	add := func(message, path string) {
+		issues = append(issues, ContractIssue{
+			Code: "PROFILE_INVALID", Message: message, Severity: IssueSeverityError, Path: path,
+		})
+	}
+	if body == nil {
+		return issues
+	}
+	path := func(suffix string) string { return "hardwareProfile.recipe." + suffix }
+	if body.RecipeID == "" || body.RecipeRevision == "" {
+		add("recipe body needs a non-blank recipeId and recipeRevision", path("recipeId"))
+	}
+	if ref != nil && ref.RecipeID != "" && ref.RecipeRevision != "" &&
+		(ref.RecipeID != body.RecipeID || ref.RecipeRevision != body.RecipeRevision) {
+		add("recipe body identity must agree with the profile recipeRef", path("recipeId"))
+	}
+	if len(body.Variants) == 0 {
+		add("recipe body needs at least one target-face variant", path("variants"))
+	}
+	seenFaces := map[string]bool{}
+	for index, variant := range body.Variants {
+		variantPath := path(fmt.Sprintf("variants[%d]", index))
+		if !IsBoardFace(variant.TargetFace) {
+			add(fmt.Sprintf("variant targetFace %q is not one of the six canonical board faces", variant.TargetFace), variantPath+".targetFace")
+			continue
+		}
+		if seenFaces[variant.TargetFace] {
+			add(fmt.Sprintf("targetFace %s declares more than one variant", variant.TargetFace), variantPath+".targetFace")
+		}
+		seenFaces[variant.TargetFace] = true
+		roleA, roleB := false, false
+		ruleIDs := map[string]bool{}
+		for ruleIndex, rule := range variant.Rules {
+			rulePath := fmt.Sprintf("%s.rules[%d]", variantPath, ruleIndex)
+			roleA = roleA || rule.ParticipantRole == "A"
+			roleB = roleB || rule.ParticipantRole == "B"
+			if rule.RuleID == "" || rule.RuleRevision == "" || rule.OperationRole == "" || ruleIDs[rule.RuleID] ||
+				(rule.ParticipantRole != "A" && rule.ParticipantRole != "B") ||
+				!IsBoardFace(rule.EntryFace) || !isFiniteVec3(rule.OffsetMm) || !isFiniteVec3(rule.Axis) ||
+				rule.DiameterMm <= 0 || math.IsNaN(rule.DiameterMm) || math.IsInf(rule.DiameterMm, 0) ||
+				rule.DepthMm <= 0 || math.IsNaN(rule.DepthMm) || math.IsInf(rule.DepthMm, 0) ||
+				math.Abs(dotVec3(rule.Axis, rule.Axis)-1) > 1e-6 {
+				add("rule needs unique ruleId, revision, operationRole, participantRole, one of the six entry faces, finite offset, unit axis, positive finite diameter and depth", rulePath)
+			}
+			ruleIDs[rule.RuleID] = true
+		}
+		if !roleA || !roleB {
+			add(fmt.Sprintf("variant %s needs at least one rule per participant role (source and target)", variant.TargetFace), variantPath+".rules")
+		}
+	}
+	return issues
+}
+
+func isFiniteVec3(v [3]float64) bool {
+	for _, value := range v {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return false
+		}
+	}
+	return true
+}
+
+func dotVec3(a, b [3]float64) float64 {
+	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
 }
 
 // Validate returns the structured issues that make this profile unusable.
@@ -130,6 +241,7 @@ func (p HardwareProfile) Validate() []ContractIssue {
 			add("PROFILE_INVALID", "recipeRef needs a non-blank recipeId and recipeRevision together", path("recipeRef"))
 		}
 	}
+	issues = append(issues, ValidateProfileRecipeBody(p.RecipeRef, p.Recipe)...)
 	return issues
 }
 
