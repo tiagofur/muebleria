@@ -36,7 +36,8 @@ PR #702 previously delivered the Go `CommercialProjection` endpoint and the base
   - RuboCop: 285 files inspected, no offenses detected.
   - Unit tests: 1308 runs, 2816 assertions, 0 failures, 0 errors, 0 skips.
   - Boundary tests: 6 runs, 10 assertions, 0 failures, 0 errors, 0 skips.
-  - RBZ packaging: SHA-256 `2b74968f677817e4fa8a01ccccc0c83095e30e9a8c0238333fd730214475a07c` deterministic.
+  - RBZ packaging (0.1.25): SHA-256 `4682f306c3a16e794031a14b362a1cf0d2cd65e1a0649e1ace6138312ccca11e` deterministic.
+- Local host installation: Unzipped into `~/Library/Application Support/SketchUp 2026/SketchUp/Plugins`.
 - `python3 scripts/check_openapi_drift.py`: PASS.
 - `python3 -m unittest discover -s scripts -p "test_factory_*.py"`: PASS (40 tests).
 - `python3 -m unittest discover -s scripts -p "test_ci_*.py"`: PASS (61 tests, 1 skipped).
