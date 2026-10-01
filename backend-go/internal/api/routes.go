@@ -382,6 +382,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("POST /api/furniture/authoring/preview", authMW(http.HandlerFunc(server.HandleFurnitureAuthoringPreview)))
 
 	// #772 (LIB-1): Manufacturing library identity and immutable releases
+	mux.Handle("GET /api/manufacturing-libraries/standard/releases", authMW(http.HandlerFunc(server.HandleStandardLibraryReleases)))
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/current", authMW(http.HandlerFunc(server.HandleStandardLibraryCurrentRelease)))
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}", authMW(http.HandlerFunc(server.HandleStandardLibraryReleaseByID)))
 	// #773 (LIB-2): Manifest and content-addressed resource distribution

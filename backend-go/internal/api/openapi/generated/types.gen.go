@@ -2244,6 +2244,7 @@ type LibraryReleaseSummary struct {
 	SchemaVersion    int64   `json:"schemaVersion"`
 	MinPluginVersion *string `json:"minPluginVersion,omitempty"`
 	ManifestHash     *string `json:"manifestHash,omitempty"`
+	Changelog        *string `json:"changelog,omitempty"`
 	PublishedAt      *string `json:"publishedAt,omitempty"`
 	CreatedAt        string  `json:"createdAt"`
 	UpdatedAt        string  `json:"updatedAt"`

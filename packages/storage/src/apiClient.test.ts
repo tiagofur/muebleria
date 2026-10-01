@@ -523,6 +523,34 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
   });
 
   describe('Manufacturing Library Overlay & Factory Construction Policy (#875)', () => {
+    it('getStandardReleases requests the releases list endpoint and validates array response', async () => {
+      const mockReleases = [
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          libraryId: '00000000-0000-0000-0000-000000000001',
+          version: '1.1.0',
+          status: 'published',
+          schemaVersion: 1,
+          changelog: 'Added new drawer joints',
+          createdAt: '2026-09-30T12:00:00Z',
+          updatedAt: '2026-09-30T12:00:00Z',
+        },
+      ];
+      const fetchImpl = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(mockReleases), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const client = new GraneteApiClient('http://api.test/api', fetchImpl);
+      const releases = await client.getStandardReleases('test-token');
+      expect(releases).toEqual(mockReleases);
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'http://api.test/api/manufacturing-libraries/standard/releases',
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+
     it('getActiveStandardLibraryOverlay returns null when 404 is returned', async () => {
       const fetchImpl = vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ code: 'NOT_FOUND', message: 'Overlay not found' }), {

@@ -241,6 +241,8 @@ type stubStore struct {
 	// Manufacturing Library (#772 / LIB-1, #773 / LIB-2)
 	currentPublishedRelease          *domain.LibraryRelease
 	currentPublishedReleaseErr       error
+	publishedReleases                []*domain.LibraryRelease
+	publishedReleasesErr             error
 	releaseByID                      map[uuid.UUID]*domain.LibraryRelease
 	getReleaseByIDErr                error
 	releaseManifestsByID             map[uuid.UUID]*domain.LibraryManifest
@@ -1636,6 +1638,12 @@ func (s *stubStore) GetCurrentPublishedRelease(_ context.Context, _ uuid.UUID) (
 		return s.currentPublishedRelease, nil
 	}
 	return nil, storage.ErrLibraryReleaseNotFound
+}
+func (s *stubStore) GetPublishedReleases(_ context.Context, _ uuid.UUID) ([]*domain.LibraryRelease, error) {
+	if s.publishedReleasesErr != nil {
+		return nil, s.publishedReleasesErr
+	}
+	return s.publishedReleases, nil
 }
 func (s *stubStore) GetReleaseByID(_ context.Context, id uuid.UUID) (*domain.LibraryRelease, error) {
 	if s.getReleaseByIDErr != nil {

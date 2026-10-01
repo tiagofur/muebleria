@@ -187,6 +187,7 @@ func TestManufacturingLibraryRoutes_AuthRequired(t *testing.T) {
 	})
 
 	paths := []string{
+		"/api/manufacturing-libraries/standard/releases",
 		"/api/manufacturing-libraries/standard/releases/current",
 		"/api/manufacturing-libraries/standard/releases/" + uuid.NewString(),
 	}
@@ -200,5 +201,111 @@ func TestManufacturingLibraryRoutes_AuthRequired(t *testing.T) {
 				t.Fatalf("expected 401 Unauthorized without auth headers, got %d", rr.Code)
 			}
 		})
+	}
+}
+
+func TestStandardLibraryReleases_Success(t *testing.T) {
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	rel1ID := uuid.New()
+	rel2ID := uuid.New()
+	pubAt := time.Now().UTC()
+	hash1 := "sha256:111111"
+	hash2 := "sha256:222222"
+	minPlugin := "1.0.0"
+	cl1 := "Initial v1.0.0"
+	cl2 := "Update v1.1.0"
+
+	rel1 := &domain.LibraryRelease{
+		ID:               rel1ID,
+		LibraryID:        standardID,
+		Version:          "1.0.0",
+		Status:           domain.ReleaseStatusPublished,
+		SchemaVersion:    1,
+		MinPluginVersion: &minPlugin,
+		ManifestHash:     &hash1,
+		Changelog:        &cl1,
+		PublishedAt:      &pubAt,
+		CreatedAt:        pubAt.Add(-2 * time.Hour),
+		UpdatedAt:        pubAt,
+	}
+	rel2 := &domain.LibraryRelease{
+		ID:               rel2ID,
+		LibraryID:        standardID,
+		Version:          "1.1.0",
+		Status:           domain.ReleaseStatusPublished,
+		SchemaVersion:    1,
+		MinPluginVersion: &minPlugin,
+		ManifestHash:     &hash2,
+		Changelog:        &cl2,
+		PublishedAt:      &pubAt,
+		CreatedAt:        pubAt.Add(-time.Hour),
+		UpdatedAt:        pubAt,
+	}
+
+	store := &stubStore{
+		publishedReleases: []*domain.LibraryRelease{rel2, rel1},
+	}
+	server := &Server{Store: store}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/manufacturing-libraries/standard/releases", nil)
+	rr := httptest.NewRecorder()
+
+	server.HandleStandardLibraryReleases(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d (body: %s)", rr.Code, rr.Body.String())
+	}
+
+	var resp []openapi.LibraryReleaseSummary
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp) != 2 {
+		t.Fatalf("expected 2 releases, got %d", len(resp))
+	}
+	if resp[0].Version != "1.1.0" || resp[1].Version != "1.0.0" {
+		t.Errorf("unexpected versions order: %v, %v", resp[0].Version, resp[1].Version)
+	}
+	if resp[0].Changelog == nil || *resp[0].Changelog != "Update v1.1.0" {
+		t.Errorf("expected changelog 'Update v1.1.0', got %v", resp[0].Changelog)
+	}
+}
+
+func TestStandardLibraryReleases_Empty(t *testing.T) {
+	store := &stubStore{
+		publishedReleases: []*domain.LibraryRelease{},
+	}
+	server := &Server{Store: store}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/manufacturing-libraries/standard/releases", nil)
+	rr := httptest.NewRecorder()
+
+	server.HandleStandardLibraryReleases(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+
+	var resp []openapi.LibraryReleaseSummary
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp) != 0 {
+		t.Fatalf("expected 0 releases, got %d", len(resp))
+	}
+}
+
+func TestStandardLibraryReleases_MethodNotAllowed(t *testing.T) {
+	server := &Server{Store: &stubStore{}}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/manufacturing-libraries/standard/releases", nil)
+	rr := httptest.NewRecorder()
+
+	server.HandleStandardLibraryReleases(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status 405, got %d", rr.Code)
 	}
 }

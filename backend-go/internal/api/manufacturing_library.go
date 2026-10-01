@@ -16,6 +16,44 @@ import (
 // Phase 1 scope: GET current published release and GET release by ID for Granete Standard.
 // Authoring / publishing / withdrawing mutations are admin-internal and not exposed via public API.
 
+// HandleStandardLibraryReleases handles GET /api/manufacturing-libraries/standard/releases.
+func (s *Server) HandleStandardLibraryReleases(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	releases, err := s.Store.GetPublishedReleases(r.Context(), standardID)
+	if err != nil {
+		respondWithInternalError(w, err, "get published standard library releases")
+		return
+	}
+
+	summaries := make([]openapi.LibraryReleaseSummary, 0, len(releases))
+	for _, rel := range releases {
+		summary := openapi.LibraryReleaseSummary{
+			ID:               rel.ID.String(),
+			LibraryId:        rel.LibraryID.String(),
+			Version:          rel.Version,
+			Status:           string(rel.Status),
+			SchemaVersion:    int64(rel.SchemaVersion),
+			MinPluginVersion: rel.MinPluginVersion,
+			ManifestHash:     rel.ManifestHash,
+			Changelog:        rel.Changelog,
+			CreatedAt:        rel.CreatedAt.Format(time.RFC3339),
+			UpdatedAt:        rel.UpdatedAt.Format(time.RFC3339),
+		}
+		if rel.PublishedAt != nil {
+			tStr := rel.PublishedAt.Format(time.RFC3339)
+			summary.PublishedAt = &tStr
+		}
+		summaries = append(summaries, summary)
+	}
+
+	respondWithJSON(w, http.StatusOK, summaries)
+}
+
 // HandleStandardLibraryCurrentRelease handles GET /api/manufacturing-libraries/standard/releases/current.
 func (s *Server) HandleStandardLibraryCurrentRelease(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -42,6 +80,7 @@ func (s *Server) HandleStandardLibraryCurrentRelease(w http.ResponseWriter, r *h
 		SchemaVersion:    int64(rel.SchemaVersion),
 		MinPluginVersion: rel.MinPluginVersion,
 		ManifestHash:     rel.ManifestHash,
+		Changelog:        rel.Changelog,
 		CreatedAt:        rel.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:        rel.UpdatedAt.Format(time.RFC3339),
 	}

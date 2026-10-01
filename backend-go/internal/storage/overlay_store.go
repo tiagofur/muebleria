@@ -88,7 +88,7 @@ func (s *PostgresStore) GetActiveOverlayByLibrary(ctx context.Context, organizat
 	const query = `
 		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, created_at, updated_at
 		FROM library_overlays
-		WHERE organization_id = $1 AND library_id = $2 AND status = 'active'
+		WHERE organization_id = $1 AND library_id = $2 AND status IN ('active', 'rebase_conflict')
 		ORDER BY created_at DESC
 		LIMIT 1`
 
