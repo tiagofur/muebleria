@@ -95,13 +95,11 @@ CREATE POLICY library_release_refs_write ON library_release_resource_refs
 -- draft refs with the compiled manifest at publish time (#955).
 GRANT UPDATE (resource_revision, package_kind) ON library_release_resource_refs TO granete_app;
 
-
 DROP POLICY IF EXISTS library_resource_blobs_read ON library_resource_blobs;
 CREATE POLICY library_resource_blobs_read ON library_resource_blobs
     FOR SELECT TO granete_app
     USING (
-        app_platform_admin()
-        OR EXISTS (
+        EXISTS (
             SELECT 1 FROM library_release_resource_refs r
             JOIN library_releases lr ON lr.id = r.release_id
             JOIN manufacturing_libraries ml ON ml.id = lr.library_id
@@ -113,9 +111,13 @@ CREATE POLICY library_resource_blobs_read ON library_resource_blobs
               AND (
                   lr.status = 'published'
                   OR ml.owner_organization_id = app_current_organization_id()
+                  OR (app_platform_admin() AND ml.owner_organization_id IS NULL)
               )
         )
     );
+
+
+
 
 DROP POLICY IF EXISTS library_release_manifests_write ON library_release_manifests;
 -- Tenant branch keeps 000140's exact shape (no status condition): narrowing it

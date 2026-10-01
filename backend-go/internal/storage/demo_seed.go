@@ -22,19 +22,23 @@ func (s *PostgresStore) EnsureSeedPlatformUser(ctx context.Context) (string, err
 	return id, nil
 }
 
-// ResetManifestlessPublishedRelease flips a "published" release that has no
-// materialized manifest back to draft, so the demo seed can publish it for
-// real. PublishReleaseWithManifest writes the manifest row and the published
+// ResetManifestlessPublishedRelease is strictly a test/demo fixture repair
+// helper (#955) that flips a placeholder "published" release without a
+// materialized manifest back to draft so the demo seed can publish it for
+// real. It is NOT a general or production publication mechanism; production
+// releases are immutable once published.
+//
+// PublishReleaseWithManifest writes the manifest row and the published
 // status in one transaction, so a committed release without a manifest is not
-// a real publication — it is a fixture that borrowed the published status. A
+// a real publication — it is a test fixture that borrowed the published status. A
 // genuinely published release (manifest row present) is never touched, and
 // published_by is cleared with the rest of the publication provenance so the
 // demoted row does not keep crediting the fixture's publisher.
 //
 // This runs in its own transaction, so between it and the recompile the
 // Standard library has no published release at all. That gap is acceptable for
-// a demo seed; a path that mattered operationally would need both steps in one
-// transaction.
+// a demo seed; production publication flows execute compile, validation, ref
+// materialization, blob insertion, and publication in a single atomic transaction.
 func (s *PostgresStore) ResetManifestlessPublishedRelease(ctx context.Context, releaseID string) (bool, error) {
 	tag, err := s.db(ctx).Exec(ctx, `
 		UPDATE library_releases

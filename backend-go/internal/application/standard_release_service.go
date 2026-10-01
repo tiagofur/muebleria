@@ -154,6 +154,7 @@ type StandardReleaseStore interface {
 	GetHardwareProfileByID(ctx context.Context, id string) (*domain.HardwareProfile, error)
 	CreateHardwareProfile(ctx context.Context, p *domain.HardwareProfile) error
 	EnsureSeedPlatformUser(ctx context.Context) (string, error)
+	// ResetManifestlessPublishedRelease is strictly a test/demo fixture repair helper (#955).
 	ResetManifestlessPublishedRelease(ctx context.Context, releaseID string) (bool, error)
 }
 

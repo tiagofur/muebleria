@@ -49,6 +49,8 @@ CREATE POLICY library_release_refs_write ON library_release_resource_refs
     );
 
 
+
+
 DROP POLICY IF EXISTS library_resource_blobs_read ON library_resource_blobs;
 CREATE POLICY library_resource_blobs_read ON library_resource_blobs
     FOR SELECT TO granete_app

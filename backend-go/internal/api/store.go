@@ -185,6 +185,7 @@ type Store interface {
 
 	ListActiveHardwareProfilesAnyOrg(ctx context.Context) ([]domain.HardwareProfile, error)
 	EnsureSeedPlatformUser(ctx context.Context) (string, error)
+	// ResetManifestlessPublishedRelease is strictly a test/demo fixture repair helper (#955).
 	ResetManifestlessPublishedRelease(ctx context.Context, releaseID string) (bool, error)
 
 	// Component side assignments (#915 / HW-PROFILE)

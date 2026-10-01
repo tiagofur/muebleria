@@ -69,40 +69,13 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 		return fmt.Errorf("insert release manifest: %w", err)
 	}
 
-	// 3. Content-addressed resource blobs (deduplicating across releases).
-	// Blobs are immutable, so a blob a previous release already wrote is
-	// skipped rather than updated. ON CONFLICT DO NOTHING performs no
-	// conflicting update, so it needs only the INSERT grant and the
-	// library_resource_blobs_insert policy (000140) — no UPDATE, which this
-	// role does not have and the immutability trigger forbids. A read-then-
-	// insert probe would be weaker: library_resource_blobs_read reaches a
-	// blob only through a ref row, and refs are materialized at step 4.
-	const insertBlobQuery = `
-		INSERT INTO library_resource_blobs (
-			sha256, resource_kind, resource_id, content_type, size_bytes, content
-		)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (sha256) DO NOTHING`
-
-	for _, b := range blobs {
-		if _, err := tx.Exec(ctx, insertBlobQuery,
-			b.SHA256, b.ResourceKind, b.ResourceID, b.ContentType, b.SizeBytes, b.Content,
-		); err != nil {
-			return fmt.Errorf("insert resource blob %s: %w", b.SHA256, err)
-		}
-	}
-
-	// 4. Materialize library_release_resource_refs for every manifest
-	// resource. The ref row is the only path a tenant read traverses to
+	// 3. Materialize library_release_resource_refs for every manifest
+	// resource (#955). The ref row is the only path traversing to
 	// reach a pinned blob (library_resource_blobs_read joins
-	// definition_hash → refs → release → library), so a manifest resource
-	// without a ref row is a resource no tenant can ever read — the blob
-	// would be invisible and the pinned read would fail closed with
-	// "blob not found". A compiled release therefore materializes its refs
-	// here, inside the publication transaction. Existing rows receive the compiled revision, definition hash, and
-	// package kind from the manifest, which is the compilation authority; missing
-	// rows are inserted from the manifest, whose revision and package kind
-	// are the compilation authority (#955).
+	// definition_hash → refs → release → library). Materializing refs BEFORE
+	// inserting blobs ensures PostgreSQL's RLS engine can evaluate
+	// library_resource_blobs_read during ON CONFLICT (sha256) DO NOTHING
+	// without violating RLS policies.
 	const selectRefQuery = `
 		SELECT EXISTS (
 			SELECT 1 FROM library_release_resource_refs
@@ -136,6 +109,26 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 			releaseID, r.Kind, r.ID, r.Revision, r.DefinitionHash, string(r.PackageKind),
 		); err != nil {
 			return fmt.Errorf("insert resource ref %s/%s: %w", r.Kind, r.ID, err)
+		}
+	}
+
+	// 4. Content-addressed resource blobs (deduplicating across releases).
+	// Blobs are immutable, so a blob a previous release already wrote is
+	// skipped rather than updated. ON CONFLICT DO NOTHING performs no
+	// conflicting update. Since refs were materialized in step 3,
+	// library_resource_blobs_read successfully finds the active ref link.
+	const insertBlobQuery = `
+		INSERT INTO library_resource_blobs (
+			sha256, resource_kind, resource_id, content_type, size_bytes, content
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (sha256) DO NOTHING`
+
+	for _, b := range blobs {
+		if _, err := tx.Exec(ctx, insertBlobQuery,
+			b.SHA256, b.ResourceKind, b.ResourceID, b.ContentType, b.SizeBytes, b.Content,
+		); err != nil {
+			return fmt.Errorf("insert resource blob %s: %w", b.SHA256, err)
 		}
 	}
 

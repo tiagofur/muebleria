@@ -326,6 +326,71 @@ func TestPlatformAdminLibraryWrites_WideningIsTenantBoundAndReversible(t *testin
 		t.Fatalf("restore status to draft: %v", err)
 	}
 
+	// 6. Content-addressed blob read scope (#955):
+	// Standard draft release blobs are readable by platform admin during
+	// compilation/publication, but platform admin CANNOT read other
+	// organizations' private overlay blobs. Unreferenced blobs are never readable.
+	const stdBlobHash = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+	const overlayBlobHash = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+	if _, err := migrationPool.Exec(ctx, `
+		INSERT INTO library_resource_blobs (sha256, resource_kind, resource_id, content_type, size_bytes, content)
+		VALUES
+			($1, 'hardware_profile', 'b1000000-0000-0000-0000-000000000088', 'application/json', 2, '{}'),
+			($2, 'hardware_profile', 'b1000000-0000-0000-0000-000000000077', 'application/json', 2, '{}')`,
+		stdBlobHash, overlayBlobHash); err != nil {
+		t.Fatalf("insert test blobs: %v", err)
+	}
+	// Ref linking stdBlobHash to paStandardRelease (Standard, owner NULL, draft status).
+	if _, err := migrationPool.Exec(ctx, `
+		UPDATE library_release_resource_refs
+		SET definition_hash = $1
+		WHERE id = $2`, stdBlobHash, refID); err != nil {
+		t.Fatalf("link std blob to ref: %v", err)
+	}
+	// Ref linking overlayBlobHash to paOtherOrgRelease (Other org's overlay, draft status).
+	const otherRefID = "b1000000-0000-0000-0000-000000000077"
+	if _, err := migrationPool.Exec(ctx, `
+		INSERT INTO library_release_resource_refs
+			(id, release_id, resource_kind, resource_id, resource_revision, definition_hash, package_kind)
+		VALUES ($1, $2, 'hardware_profile', $3, 'rev-0', $4, 'standard')`,
+		otherRefID, paOtherOrgRelease, "b1000000-0000-0000-0000-000000000077", overlayBlobHash); err != nil {
+		t.Fatalf("insert other org draft ref: %v", err)
+	}
+
+	readBlob := func(org, marker, hash string) (int64, error) {
+		tx, err := runtimePool.Begin(ctx)
+		if err != nil {
+			return 0, err
+		}
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `
+			SELECT set_config('app.organization_id', $1, true),
+			       set_config('app.platform_admin', $2, true),
+			       set_config('row_security', 'on', true)`, org, marker); err != nil {
+			return 0, err
+		}
+		var count int64
+		err = tx.QueryRow(ctx, `SELECT COUNT(*) FROM library_resource_blobs WHERE sha256 = $1`, hash).Scan(&count)
+		return count, err
+	}
+
+	// Platform admin CAN read the Standard draft release blob.
+	if count, err := readBlob(paOrg, "true", stdBlobHash); err != nil || count != 1 {
+		t.Fatalf("platform admin could not read Standard draft blob: count=%d, err=%v", count, err)
+	}
+	// Platform admin CANNOT read another organization's private overlay blob (isolation strictly preserved).
+	if count, err := readBlob(paOrg, "true", overlayBlobHash); err != nil || count != 0 {
+		t.Fatalf("platform admin read other organization's overlay blob: count=%d, err=%v", count, err)
+	}
+	// Tenant CANNOT read the Standard draft blob (only published Standard is readable by tenants).
+	if count, err := readBlob(paOrg, "false", stdBlobHash); err != nil || count != 0 {
+		t.Fatalf("tenant actor read Standard draft blob: count=%d, err=%v", count, err)
+	}
+	// Tenant CANNOT read another organization's overlay blob.
+	if count, err := readBlob(paOrg, "false", overlayBlobHash); err != nil || count != 0 {
+		t.Fatalf("tenant actor read other organization's overlay blob: count=%d, err=%v", count, err)
+	}
+
 	down, err := os.ReadFile("../../db/migration/000146_platform_admin_library_writes.down.sql")
 	if err != nil {
 		t.Fatal(err)
