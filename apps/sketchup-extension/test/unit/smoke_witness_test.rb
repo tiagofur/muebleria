@@ -2,6 +2,7 @@
 
 require 'json'
 require 'tmpdir'
+require 'tempfile'
 require 'fileutils'
 require_relative '../test_helper'
 require_relative '../support/smoke_witness'
@@ -110,11 +111,15 @@ class SmokeWitnessTest < Minitest::Test
     witness = Granete::SketchUpExtension::SmokeWitness.new(run_id: 'test-6')
     original_err = RuntimeError.new('original_test_failure')
 
-    # Writing to a non-writable / impossible path fails silently within write_witness
-    result = witness.write_witness('/dev/null/impossible/path/witness.json', original_exception: original_err)
+    # Writing to a path where an existing file is used as a directory component
+    # fails predictably across macOS, Linux, and Windows (Errno::EEXIST / Errno::ENOTDIR).
+    Tempfile.create('smoke_witness_blocked') do |file|
+      impossible_path = File.join(file.path, 'nested', 'witness.json')
+      result = witness.write_witness(impossible_path, original_exception: original_err)
 
-    assert_nil result, 'failing write must return nil'
-    refute_nil witness.last_write_error, 'last write error recorded'
-    assert_equal 'original_test_failure', original_err.message
+      assert_nil result, 'failing write must return nil'
+      refute_nil witness.last_write_error, 'last write error recorded'
+      assert_equal 'original_test_failure', original_err.message
+    end
   end
 end
