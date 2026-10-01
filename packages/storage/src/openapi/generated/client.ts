@@ -26,6 +26,7 @@ import type {
   CreateLibraryOverlayRequest,
   CreatePairingGrantRequest,
   CreateProductionReleaseRequest,
+  CreateStandardReleaseRequest,
   CustomerSummary,
   DeriveHardwareAssetRevisionRequest,
   Design,
@@ -142,6 +143,7 @@ import type {
   SessionDirectory,
   SessionRevokeResponse,
   SketchupProfileResponse,
+  StandardReleasePublishResult,
   StartHardwareAssetUploadRequest,
   StartSupportSessionRequest,
   SupportSessionResponse,
@@ -305,8 +307,10 @@ export abstract class GeneratedGraneteApiClient {
   deriveHardwareAssetRevision(token: string, assetId: string, body: DeriveHardwareAssetRevisionRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<HardwareAssetRevision> { return this.request("POST", `/hardware-assets/${encodeURIComponent(assetId)}/revisions:derive`, { schema: "HardwareAssetRevision", token, bodySchema: "DeriveHardwareAssetRevisionRequest", body, idempotencyKey: key, signal }); }
   getDesignCommercialProjection(token: string, projectId: string, designId: string, signal?: AbortSignal): Promise<CommercialProjection> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/designs/${encodeURIComponent(designId)}/commercial-projection`, { schema: "CommercialProjection", token, signal }); }
   getStandardReleases(token: string, signal?: AbortSignal): Promise<ReadonlyArray<LibraryReleaseSummary>> { return this.request("GET", "/manufacturing-libraries/standard/releases", { arrayOf: "LibraryReleaseSummary", token, signal }); }
+  createStandardLibraryRelease(token: string, body: CreateStandardReleaseRequest, signal?: AbortSignal): Promise<LibraryReleaseSummary> { return this.request("POST", "/manufacturing-libraries/standard/releases", { schema: "LibraryReleaseSummary", token, bodySchema: "CreateStandardReleaseRequest", body, signal }); }
   getStandardCurrentRelease(token: string, signal?: AbortSignal): Promise<LibraryReleaseSummary> { return this.request("GET", "/manufacturing-libraries/standard/releases/current", { schema: "LibraryReleaseSummary", token, signal }); }
   getStandardReleaseById(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryReleaseDetail> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}`, { schema: "LibraryReleaseDetail", token, signal }); }
+  publishStandardLibraryRelease(token: string, releaseId: string, signal?: AbortSignal): Promise<StandardReleasePublishResult> { return this.request("POST", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/publish`, { schema: "StandardReleasePublishResult", token, signal }); }
   getHardwareProfilesForRelease(token: string, releaseId: string, signal?: AbortSignal): Promise<ReadonlyArray<HardwareProfile>> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/hardware-profiles`, { arrayOf: "HardwareProfile", token, signal }); }
   getStandardReleaseManifest(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryManifest> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/manifest`, { schema: "LibraryManifest", token, signal }); }
   getStandardResourceBlob(token: string, releaseId: string, resourceId: string, hash: string, signal?: AbortSignal): Promise<LibraryResourceBlob> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/resources/${encodeURIComponent(resourceId)}/blobs/${encodeURIComponent(hash)}`, { schema: "LibraryResourceBlob", token, signal }); }
