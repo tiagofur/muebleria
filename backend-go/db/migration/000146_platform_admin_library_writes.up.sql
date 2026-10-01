@@ -19,8 +19,9 @@ $$;
 -- Helper to check manifest existence without triggering mutual RLS recursion
 -- between library_releases and library_release_manifests policies (#955).
 CREATE OR REPLACE FUNCTION library_release_has_manifest(p_release_id uuid) RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER AS $$
-    SELECT EXISTS (SELECT 1 FROM library_release_manifests WHERE release_id = p_release_id)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp AS $$
+    SELECT EXISTS (SELECT 1 FROM public.library_release_manifests WHERE release_id = p_release_id)
 $$;
 
 DROP POLICY IF EXISTS library_releases_write ON library_releases;

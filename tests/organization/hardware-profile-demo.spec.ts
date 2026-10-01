@@ -12,8 +12,7 @@
  *   → hardwareProfileDemand (minifix ×2, tarugo ×2 = per contact × 2).
  */
 
-import { expect, test, type Page } from '@playwright/test';
-import { GraneteApiClient } from '@granete/storage';
+import { expect, test } from '@playwright/test';
 import { required } from './support/api';
 
 const apiBase = required('ORGANIZATION_API_BASE');
@@ -130,15 +129,17 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
     const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
     if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
 
-    const client = new GraneteApiClient(apiBase);
-    const owner = await client.login({
-      email: required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
-      password: required('ORGANIZATION_GATE_PASSWORD'),
-      transport: 'web',
-      org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
-    });
-    const token = browserToken || owner.token;
-    expect(token, 'authenticated session token').toBeTruthy();
+    if (!browserToken) {
+      const authReq = await page.waitForRequest(
+        (req) => Boolean(req.headers().authorization?.startsWith('Bearer ')),
+        { timeout: 10_000 },
+      ).catch(() => null);
+      if (authReq) {
+        browserToken = authReq.headers().authorization!.slice('Bearer '.length);
+      }
+    }
+    expect(browserToken, 'browser session token').toBeTruthy();
+    const token = browserToken!;
 
     // 1. The demo seed: profile with embedded recipe + REAL publication of
     // the Standard release (the seed replaces the gate's placeholder flip).
