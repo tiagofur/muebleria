@@ -189,6 +189,36 @@ func (s *PostgresStore) ExistingHardwareIDs(ctx context.Context, ids []string) (
 	return existing, nil
 }
 
+// ListActiveHardwareProfilesAnyOrg reads every active profile across all
+// organizations. It exists for Standard release compilation (#918): the
+// Granete-staff publish path gathers canonical profiles — including
+// Granete-authored org rows — into immutable release blobs. This is an
+// explicit cross-tenant ADMIN read (compilation context), never exposed
+// through tenant handlers; RLS still bounds every tenant-scoped call.
+func (s *PostgresStore) ListActiveHardwareProfilesAnyOrg(ctx context.Context) ([]domain.HardwareProfile, error) {
+	query := `
+		SELECT id, code, name, description, revision, items, recipe_ref, active, version, created_at, updated_at
+		FROM hardware_profiles
+		WHERE active = TRUE
+		ORDER BY code ASC, id ASC;
+	`
+	rows, err := s.db(ctx).Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := []domain.HardwareProfile{}
+	for rows.Next() {
+		profile, err := scanHardwareProfile(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, *profile)
+	}
+	return list, nil
+}
+
 // --- JSONB helpers ---
 
 func hardwareProfileItemsArg(items []domain.HardwareProfileItem) ([]byte, error) {
