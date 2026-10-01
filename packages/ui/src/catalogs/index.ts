@@ -56,6 +56,16 @@ export {
 } from './hardware/HardwareCatalog';
 
 export {
+  HardwareProfilesCatalog,
+  type HardwareProfilesCatalogProps,
+  type HardwareProfileRow,
+} from './hardware/HardwareProfilesCatalog';
+export type {
+  HardwareProfileDraft,
+  HardwareProfileItemDraft,
+} from './hardware/hardwareProfileDraft';
+
+export {
   AmbientMaterialsCatalog,
   type AmbientCategoryDraft,
   type AmbientMaterialDraft,
