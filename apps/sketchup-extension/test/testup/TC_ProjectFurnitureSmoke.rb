@@ -6,6 +6,7 @@ require 'fileutils'
 require 'testup/testcase'
 
 require_relative '../support/smoke_textures'
+require_relative '../support/smoke_witness'
 
 # Host smoke for #389 / DT-5 Place EXISTING FurnitureInstance: the INSTALLED
 # extension must materialize the native #415 hierarchy with the backend's
@@ -14,6 +15,8 @@ require_relative '../support/smoke_textures'
 # save/close/reopen. Like TC_ModelBindingSmoke, this suite proves the host
 # persistence/placement half; business identity itself stays backend-owned
 # (placer unit tests prove the server-side rules).
+# Endured and hardened under #873 with bounded, sanitized witness recording and
+# phase-by-phase pre-save invariant assertions.
 module Granete
   module SketchUpExtension
     class TC_ProjectFurnitureSmoke < TestUp::TestCase
@@ -34,10 +37,14 @@ module Granete
         fail_closed_unless_installed_extension_is_loaded
         fail_closed_if_loaded_from_checkout
         Sketchup.file_new
+        model.entities.erase_entities(model.entities.to_a)
+        @witness = SmokeWitness.new(run_id: "pf-#{object_id}", test_name: name)
+        @witness.verify_reset_precondition!(model)
       end
 
       def teardown
         Sketchup.file_new
+        @witness = nil
       end
 
       def test_place_existing_stamps_server_identity_in_native_hierarchy
@@ -71,22 +78,171 @@ module Granete
         refute_equal FI_1, placed.persistent_id.to_s
       end
 
+      # #873 PF05: Full double-cycle place/save/reopen/select/save/reopen with
+      # strict pre-save and post-reopen assertions (§ H4).
       def test_placed_identity_survives_save_close_and_reopen
         Dir.mktmpdir('granete-project-furniture') do |dir|
           path = File.join(dir, 'cocina-garcia.skp')
-          builder.place_existing_furniture(
-            model, furniture_instance_id: FI_1, definition: catalog_definition,
-                   parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
-          )
-          assert model.save(path), 'the host must save the model'
+          initial_model = model
+          parameters = { 'widthMm' => 600, 'heightMm' => 720, 'depthMm' => 560, 'shelfCount' => 1 }
+          material_choices = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
 
+          # 1. Place existing furniture
+          result = builder.place_existing_furniture(
+            initial_model, furniture_instance_id: FI_1, definition: catalog_definition,
+                           parameters: parameters, material_choices: material_choices,
+                           project_id: PROJECT_ID, design_id: DESIGN_ID
+          )
+          assert result['success'], "host placement failed: #{result['error']}"
+          entity = result['entity']
+          assert entity.valid?, 'placed entity must be valid before save'
+
+          # 2. Pre-save verification (§ H4)
+          pre_roots = top_level_furniture
+          assert_equal 1, pre_roots.count, 'must have exactly one root before save'
+          pre_located = Connection::ProjectFurniture::ManagedFurniture.locate(initial_model, metadata_store, FI_1)
+          @witness.verify_furniture_identity!(pre_located, FI_1)
+          pre_transform = entity.transformation.to_a
+          pre_meta = metadata_store.read(entity)
+          assert_equal parameters, pre_meta.dig('intent', 'parameters')
+          assert_equal material_choices, pre_meta.dig('intent', 'materialChoices')
+
+          # 3. Save
+          assert initial_model.save(path), 'the host must save the model'
+          @witness.record(:save, model: initial_model, details: { 'path' => path })
+
+          # 4. Reopen in new phase
           Sketchup.file_new
           assert Sketchup.open_file(path), 'the host must reopen the model'
+          reopened_model = model
+          reopened_store = Metadata::Store.new(reopened_model)
+          @witness.record(:post_reopen, model: reopened_model)
 
-          located = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
-          refute_nil located['entity'], 'placed identity must resolve after reopen'
-          assert_equal 1, located['duplicates'], 'reopen must not duplicate the identity'
+          # 5. Post-reopen assertions
+          located = Connection::ProjectFurniture::ManagedFurniture.locate(reopened_model, reopened_store, FI_1)
+          @witness.verify_furniture_identity!(located, FI_1)
+          reopened_entity = located['entity']
+          assert reopened_entity.valid?, 'reopened entity must be valid'
+          reopened_meta = reopened_store.read(reopened_entity)
+          assert_equal parameters, reopened_meta.dig('intent', 'parameters')
+          assert_equal material_choices, reopened_meta.dig('intent', 'materialChoices')
+          assert_equal DEFINITION_ID, reopened_meta.dig('intent', 'furnitureDefinitionId')
+          assert_equal PROJECT_ID, reopened_meta.dig('identity', 'projectId')
+          assert_equal DESIGN_ID, reopened_meta.dig('identity', 'designId')
+          assert_equal pre_transform, reopened_entity.transformation.to_a
+
+          # 6. Second cycle: select -> save -> reopen (§ H4)
+          reopened_model.selection.clear
+          reopened_model.selection.add(reopened_entity)
+          @witness.record(:second_save, model: reopened_model, details: { 'selected' => 1 })
+          assert reopened_model.save(path), 'the host must save after selection'
+
+          Sketchup.file_new
+          assert Sketchup.open_file(path), 'the host must reopen after second save'
+          cycle2_model = model
+          cycle2_store = Metadata::Store.new(cycle2_model)
+          @witness.record(:second_reopen, model: cycle2_model)
+
+          cycle2_located = Connection::ProjectFurniture::ManagedFurniture.locate(cycle2_model, cycle2_store, FI_1)
+          @witness.verify_furniture_identity!(cycle2_located, FI_1)
+          cycle2_meta = cycle2_store.read(cycle2_located['entity'])
+          assert_equal parameters, cycle2_meta.dig('intent', 'parameters')
+          assert_equal material_choices, cycle2_meta.dig('intent', 'materialChoices')
+          assert_equal pre_transform, cycle2_located['entity'].transformation.to_a
         end
+      end
+
+      # PF01 (§ H6): Modifying and saving the same model alters Model#guid without
+      # being confused with an external active document switch.
+      def test_pf01_modifying_and_saving_same_model_guid_change_is_not_external_switch
+        Dir.mktmpdir('granete-pf01') do |dir|
+          path = File.join(dir, 'pf01-model.skp')
+          doc = model
+          result = builder.place_existing_furniture(
+            doc, furniture_instance_id: FI_1, definition: catalog_definition,
+                 parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
+          )
+          assert result['success']
+          assert doc.save(path)
+          guid_after_first_save = doc.guid
+
+          # Modify geometry in the exact same model
+          doc.entities.add_cpoint([10, 20, 30])
+          assert doc.save(path)
+          guid_after_second_save = doc.guid
+
+          # Model identity is object_id and active_model, not guid!
+          assert_equal doc.object_id, Sketchup.active_model.object_id
+          details = {
+            'guid_1' => guid_after_first_save,
+            'guid_2' => guid_after_second_save,
+            'guid_changed' => (guid_after_first_save != guid_after_second_save)
+          }
+          @witness.record(:pf01_guid_check, model: doc, details: details)
+          assert_nil @witness.verify_active_model!(Sketchup.active_model, doc)
+        end
+      end
+
+      # PF02 (§ H6): Ineffective reset / controlled contamination fails pre-placement
+      # guard and preserves witness without reaching place/save.
+      def test_pf02_ineffective_reset_or_controlled_contamination_fails_before_place
+        model.entities.add_cpoint([50, 50, 50])
+
+        err = assert_raises(SmokeWitness::InvariantError) do
+          @witness.verify_reset_precondition!(model)
+        end
+        assert_equal 'MODEL_RESET_PRECONDITION_FAILED', err.code
+        assert_equal 'reset_check_failed', @witness.events.last['phase']
+      end
+
+      # PF03 (§ H6): Controlled active model change is detected at the active model boundary.
+      def test_pf03_controlled_active_model_change_detected_in_phase
+        current_model = model
+        foreign_model = Object.new
+
+        err = assert_raises(SmokeWitness::InvariantError) do
+          @witness.verify_active_model!(foreign_model, current_model)
+        end
+        assert_equal 'ACTIVE_MODEL_CHANGED_UNEXPECTEDLY', err.code
+        assert_equal 'active_model_check_failed', @witness.events.last['phase']
+      end
+
+      # PF04 (§ H6): Missing or duplicate identity emits identity diagnosis, not external race.
+      def test_pf04_missing_or_duplicate_identity_emits_identity_diagnosis
+        empty_loc = { 'entity' => nil, 'duplicates' => 0 }
+        err_missing = assert_raises(SmokeWitness::InvariantError) do
+          @witness.verify_furniture_identity!(empty_loc, FI_1)
+        end
+        assert_equal 'EXPECTED_FURNITURE_IDENTITY_MISSING', err_missing.code
+
+        dup_loc = { 'entity' => Object.new, 'duplicates' => 2 }
+        err_dup = assert_raises(SmokeWitness::InvariantError) do
+          @witness.verify_furniture_identity!(dup_loc, FI_1)
+        end
+        assert_equal 'DUPLICATE_FURNITURE_IDENTITY', err_dup.code
+      end
+
+      # PF07 (§ H6): Restore primitive does not invent identities or auto-restore unprompted (#870/#871).
+      def test_pf07_restoration_and_placement_remain_explicit_without_minting
+        first = builder.place_existing_furniture(
+          model, furniture_instance_id: FI_1, definition: catalog_definition,
+                 parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
+        )
+        assert first['success']
+        assert_equal 1, top_level_furniture.count
+
+        second = builder.place_existing_furniture(
+          model, furniture_instance_id: FI_2, definition: catalog_definition,
+                 parameters: {}, project_id: PROJECT_ID, design_id: DESIGN_ID
+        )
+        assert second['success']
+        assert_equal 2, top_level_furniture.count
+
+        located1 = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_1)
+        located2 = Connection::ProjectFurniture::ManagedFurniture.locate(model, metadata_store, FI_2)
+        assert_equal 1, located1['duplicates']
+        assert_equal 1, located2['duplicates']
+        refute_equal located1['entity'].persistent_id, located2['entity'].persistent_id
       end
 
       # A real UI copy/paste preserves the entity's attribute dictionaries —
