@@ -18,6 +18,7 @@ function sandbox() {
     return elements[id] || (elements[id] = {
       id, style: {}, textContent: '', className: '', hidden: false,
       setAttribute: function (name, value) { this[name] = value; },
+      removeAttribute: function (name) { delete this[name]; },
       addEventListener: (name, callback) => { elements[id].listeners[name] = callback; }, listeners: {}
     });
   }
@@ -589,6 +590,105 @@ test('successful working-copy callbacks publish a committed refresh', () => {
   assert.ok(dialogSource.includes('onCommercialProjectionSynchronization: function (payload)'));
   assert.ok(dialogSource.includes('onCommercialProjectionLocalMutation: function ()'));
   assert.ok(dialogSource.includes('applySynchronization(payload)'));
+});
+
+test('presentation mode toggles, suppresses costs and margins from DOM and accessibility tree', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  const proj = projection(1250, 1000);
+  proj.amounts.directCost = 750;
+  proj.amounts.marginFactor = 1.67;
+  proj.itemCount = 3;
+
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, proj));
+
+  // Normal mode: costs and margins are visible
+  assert.strictEqual(s.window.GraneteCommercialProjection.isPresentationMode(), false);
+  assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, '');
+  assert.strictEqual(s.__elements['commercial-projection-cost-row']['aria-hidden'], undefined);
+  assert.strictEqual(s.__elements['commercial-projection-margin-row'].style.display, '');
+  assert.strictEqual(s.__elements['commercial-projection-margin-row']['aria-hidden'], undefined);
+  assert.strictEqual(s.__elements['commercial-projection-items'].textContent, '3 muebles');
+  assert.strictEqual(s.__elements['commercial-projection-presentation-banner'].style.display, 'none');
+  assert.strictEqual(s.__elements['btn-commercial-projection-presentation']['aria-pressed'], 'false');
+
+  // Toggle presentation mode ON via button click
+  s.__elements['btn-commercial-projection-presentation'].listeners.click();
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.isPresentationMode(), true);
+  assert.strictEqual(s.__elements['btn-commercial-projection-presentation']['aria-pressed'], 'true');
+  assert.strictEqual(s.__elements['btn-commercial-projection-presentation-label'].textContent, 'Salir de presentación');
+  assert.strictEqual(s.__elements['commercial-projection-presentation-banner'].style.display, '');
+  assert.strictEqual(s.__elements['commercial-projection-card']['data-presentation-mode'], 'true');
+
+  // Cost and margin rows are hidden and aria-hidden
+  assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, 'none');
+  assert.strictEqual(s.__elements['commercial-projection-cost-row']['aria-hidden'], 'true');
+  assert.strictEqual(s.__elements['commercial-projection-margin-row'].style.display, 'none');
+  assert.strictEqual(s.__elements['commercial-projection-margin-row']['aria-hidden'], 'true');
+
+  // Admin buttons are hidden and aria-hidden
+  assert.strictEqual(s.__elements['btn-initial-quote'].style.display, 'none');
+  assert.strictEqual(s.__elements['btn-initial-quote']['aria-hidden'], 'true');
+  assert.strictEqual(s.__elements['btn-binding-publish'].style.display, 'none');
+  assert.strictEqual(s.__elements['btn-binding-publish']['aria-hidden'], 'true');
+  assert.strictEqual(s.__elements['btn-design-sync'].style.display, 'none');
+  assert.strictEqual(s.__elements['btn-design-sync']['aria-hidden'], 'true');
+
+  // Customer-safe data remains visible
+  assert.strictEqual(s.__elements['commercial-projection-values'].style.display, '');
+  assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$1,250.00'));
+  assert.strictEqual(s.__elements['commercial-projection-items'].textContent, '3 muebles');
+  assert.ok(s.__elements['commercial-projection-delta'].textContent.includes('$250.00'));
+
+  // Toggle presentation mode OFF via button click
+  s.__elements['btn-commercial-projection-presentation'].listeners.click();
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.isPresentationMode(), false);
+  assert.strictEqual(s.__elements['btn-commercial-projection-presentation']['aria-pressed'], 'false');
+  assert.strictEqual(s.__elements['btn-commercial-projection-presentation-label'].textContent, 'Presentar');
+  assert.strictEqual(s.__elements['commercial-projection-presentation-banner'].style.display, 'none');
+  assert.strictEqual(s.__elements['commercial-projection-card']['data-presentation-mode'], undefined);
+  assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, '');
+  assert.strictEqual(s.__elements['commercial-projection-cost-row']['aria-hidden'], undefined);
+  assert.strictEqual(s.__elements['commercial-projection-margin-row'].style.display, '');
+  assert.strictEqual(s.__elements['commercial-projection-margin-row']['aria-hidden'], undefined);
+});
+
+test('new projection incoming during presentation mode maintains cost and margin privacy', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  s.window.GraneteCommercialProjection.setPresentationMode(true);
+
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  const proj = projection(2000, 1500);
+  proj.amounts.directCost = 1100;
+  proj.amounts.marginFactor = 1.82;
+  proj.itemCount = 5;
+
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, proj));
+
+  assert.strictEqual(s.window.GraneteCommercialProjection.isPresentationMode(), true);
+  assert.ok(s.__elements['commercial-projection-total'].textContent.includes('$2,000.00'));
+  assert.strictEqual(s.__elements['commercial-projection-items'].textContent, '5 muebles');
+  assert.strictEqual(s.__elements['commercial-projection-cost-row'].style.display, 'none');
+  assert.strictEqual(s.__elements['commercial-projection-cost-row']['aria-hidden'], 'true');
+  assert.strictEqual(s.__elements['commercial-projection-margin-row'].style.display, 'none');
+  assert.strictEqual(s.__elements['commercial-projection-margin-row']['aria-hidden'], 'true');
+});
+
+test('singular item count formats as 1 mueble', () => {
+  const s = sandbox();
+  s.window.GraneteCommercialProjection.setBinding(bindingA);
+  const request = s.__calls[s.__calls.length - 1].payload.requestId;
+  const proj = projection(500, 500);
+  proj.itemCount = 1;
+
+  s.window.GraneteCommercialProjection.receive(projectionResponse(request, bindingA, proj));
+
+  assert.strictEqual(s.__elements['commercial-projection-items-row'].style.display, '');
+  assert.strictEqual(s.__elements['commercial-projection-items'].textContent, '1 mueble');
 });
 
 console.log(JSON.stringify({ success: true, testsPassed: passed }));

@@ -394,6 +394,9 @@
               </div>
               <span id="commercial-projection-badge" class="status-badge pending">Estimado</span>
             </div>
+            <div id="commercial-projection-presentation-banner" class="card" style="display: none; margin-top: var(--space-2); margin-bottom: 0; padding: var(--space-2); border-color: var(--border-subtle); background: var(--surface-card-subtle);" role="status">
+              <span style="font-size: var(--text-xs); color: var(--text-secondary);"><strong>Modo presentación activo</strong>: costos, márgenes y acciones administrativas ocultos.</span>
+            </div>
             <div id="commercial-projection-values" style="display: none; margin-top: var(--space-2);">
               <div class="kv-row"><span class="k">Total estimado</span><span class="v" id="commercial-projection-total">--</span></div>
               <div id="commercial-projection-cost-row" class="kv-row" style="display: none;"><span class="k">Costo directo estimado</span><span class="v" id="commercial-projection-cost">--</span></div>
@@ -401,8 +404,15 @@
               <div class="kv-row"><span class="k">Referencia</span><span class="v" id="commercial-projection-reference">Sin cotización de referencia</span></div>
               <div id="commercial-projection-published-row" class="kv-row" style="display: none;"><span class="k">Emitida más reciente</span><span class="v" id="commercial-projection-published">--</span></div>
               <div id="commercial-projection-delta-row" class="kv-row" style="display: none;"><span class="k">Diferencia</span><span class="v" id="commercial-projection-delta">--</span></div>
+              <div id="commercial-projection-items-row" class="kv-row" style="display: none;"><span class="k">Muebles cuantificados</span><span class="v" id="commercial-projection-items">--</span></div>
             </div>
-            <button id="btn-commercial-projection-refresh" class="btn btn-secondary" style="width: auto; margin-top: var(--space-2);">Actualizar presupuesto</button>
+            <div class="commercial-projection-actions" style="display: flex; gap: var(--space-2); margin-top: var(--space-2);">
+              <button id="btn-commercial-projection-refresh" type="button" class="btn btn-secondary btn-sm" style="flex: 1;">Actualizar presupuesto</button>
+              <button id="btn-commercial-projection-presentation" type="button" class="btn btn-secondary btn-sm" aria-pressed="false" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+                <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span id="btn-commercial-projection-presentation-label">Presentar</span>
+              </button>
+            </div>
             <button id="btn-initial-quote" class="btn btn-secondary" style="width: 100%; margin-top: var(--space-2);" disabled>Emitir cotización</button>
             <p id="initial-quote-status" role="status" aria-live="polite" class="subhead" style="margin-top: var(--space-1);"></p>
             <button id="btn-open-in-granete" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-1);">Abrir en Granete</button>

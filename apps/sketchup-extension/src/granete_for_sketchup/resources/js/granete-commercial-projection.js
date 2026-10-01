@@ -17,10 +17,21 @@
   var quotePending = false;
   var quoteWebUrl = null;
   var hostReconciliation = null;
+  var presentationMode = false;
 
   function element(id) { return document.getElementById(id); }
   function show(id, visible) { var node = element(id); if (node) node.style.display = visible ? "" : "none"; }
   function text(id, value) { var node = element(id); if (node) node.textContent = value; }
+  function setAriaHidden(id, hidden) {
+    var node = element(id);
+    if (!node) return;
+    if (hidden) {
+      if (typeof node.setAttribute === "function") node.setAttribute("aria-hidden", "true");
+    } else {
+      if (typeof node.removeAttribute === "function") node.removeAttribute("aria-hidden");
+      else delete node["aria-hidden"];
+    }
+  }
 
   function setState(state, detail) {
     var badge = element("commercial-projection-badge");
@@ -101,10 +112,15 @@
     text("commercial-projection-total", total || (projection.saleAmountsWithheld ? "No disponible para esta organización" : "No disponible"));
 
     var cost = amounts && money(amounts.directCost, projection.currency);
-    show("commercial-projection-cost-row", cost !== null && !projection.costsWithheld);
+    var costVisible = !presentationMode && cost !== null && !projection.costsWithheld;
+    show("commercial-projection-cost-row", costVisible);
+    setAriaHidden("commercial-projection-cost-row", !costVisible);
     if (cost !== null) text("commercial-projection-cost", cost);
+
     var margin = amounts && typeof amounts.marginFactor === "number" ? amounts.marginFactor.toFixed(2) + "×" : null;
-    show("commercial-projection-margin-row", !!margin && !projection.costsWithheld);
+    var marginVisible = !presentationMode && !!margin && !projection.costsWithheld;
+    show("commercial-projection-margin-row", marginVisible);
+    setAriaHidden("commercial-projection-margin-row", !marginVisible);
     if (margin) text("commercial-projection-margin", margin);
 
     var reference = projection.reference;
@@ -130,6 +146,14 @@
       text("commercial-projection-delta", (comparison.absoluteDelta > 0 ? "+" : "") + absolute + percentage);
     }
 
+    var itemCount = typeof projection.itemCount === "number" ? projection.itemCount : null;
+    if (itemCount !== null) {
+      show("commercial-projection-items-row", true);
+      text("commercial-projection-items", itemCount + (itemCount === 1 ? " mueble" : " muebles"));
+    } else {
+      show("commercial-projection-items-row", false);
+    }
+
     if (!lastProjectionMatchConfirmed) {
       var serverDetail = projection.status === "incomplete" ? incompleteReason(projection.issues) + " " : "";
       setState("server_only", serverDetail + "Importe del servidor; no se confirmó la coincidencia con el modelo local.");
@@ -138,6 +162,7 @@
     } else {
       setState("incomplete", incompleteReason(projection.issues));
     }
+    updatePresentationModeUI();
     updateQuoteAction();
   }
 
@@ -156,11 +181,78 @@
       isFinite(lastProjection.amounts.saleTotal);
   }
 
+  function updatePresentationModeUI() {
+    show("commercial-projection-presentation-banner", presentationMode);
+    var toggleBtn = element("btn-commercial-projection-presentation");
+    if (toggleBtn) {
+      if (typeof toggleBtn.setAttribute === "function") {
+        toggleBtn.setAttribute("aria-pressed", presentationMode ? "true" : "false");
+      }
+      toggleBtn.className = "btn " + (presentationMode ? "btn-primary" : "btn-secondary") + " btn-sm";
+    }
+    text("btn-commercial-projection-presentation-label", presentationMode ? "Salir de presentación" : "Presentar");
+    var card = element("commercial-projection-card");
+    if (card) {
+      if (presentationMode) {
+        if (typeof card.setAttribute === "function") card.setAttribute("data-presentation-mode", "true");
+      } else {
+        if (typeof card.removeAttribute === "function") card.removeAttribute("data-presentation-mode");
+      }
+    }
+    var adminIds = [
+      "btn-binding-publish", "binding-publish-confirm", "btn-design-validate",
+      "btn-design-sync", "design-sync-card"
+    ];
+    for (var i = 0; i < adminIds.length; i++) {
+      var id = adminIds[i];
+      if (presentationMode) {
+        show(id, false);
+        setAriaHidden(id, true);
+      } else {
+        setAriaHidden(id, false);
+      }
+    }
+  }
+
+  function setPresentationMode(enabled) {
+    presentationMode = !!enabled;
+    updatePresentationModeUI();
+    if (lastProjection) {
+      renderProjection(lastProjection, lastProjectionMatchConfirmed);
+    } else {
+      updateQuoteAction();
+    }
+  }
+
+  function togglePresentationMode() {
+    setPresentationMode(!presentationMode);
+  }
+
   function updateQuoteAction() {
     var button = element("btn-initial-quote");
     if (!button) return;
+    if (presentationMode) {
+      show("btn-initial-quote", false);
+      setAriaHidden("btn-initial-quote", true);
+      show("initial-quote-status", false);
+      setAriaHidden("initial-quote-status", true);
+      show("btn-open-in-granete", false);
+      setAriaHidden("btn-open-in-granete", true);
+      return;
+    }
+    setAriaHidden("btn-initial-quote", false);
+    setAriaHidden("initial-quote-status", false);
+    show("btn-initial-quote", true);
+    show("initial-quote-status", true);
     button.disabled = !quoteReady();
     button.textContent = quotePending ? "Emitiendo…" : "Emitir cotización";
+    if (quoteWebUrl) {
+      show("btn-open-in-granete", true);
+      setAriaHidden("btn-open-in-granete", false);
+    } else {
+      show("btn-open-in-granete", false);
+      setAriaHidden("btn-open-in-granete", true);
+    }
     if (lastProjection && lastProjection.reference) {
       var frozenTotal = typeof lastProjection.reference.saleTotal === "number" ?
         " · " + money(lastProjection.reference.saleTotal, lastProjection.reference.currency) : "";
@@ -359,6 +451,8 @@
 
   var refresh = element("btn-commercial-projection-refresh");
   if (refresh) refresh.addEventListener("click", request);
+  var togglePresentation = element("btn-commercial-projection-presentation");
+  if (togglePresentation) togglePresentation.addEventListener("click", togglePresentationMode);
   var quote = element("btn-initial-quote");
   if (quote) quote.addEventListener("click", emitQuote);
   var openQuote = element("btn-open-in-granete");
@@ -426,7 +520,10 @@
     setBinding: setBinding, receive: receive, refresh: request,
     setHostReconciliation: setHostReconciliation,
     applySynchronization: applySynchronization, invalidateSession: invalidateSession,
-    receiveQuote: receiveQuote
+    receiveQuote: receiveQuote,
+    setPresentationMode: setPresentationMode,
+    togglePresentationMode: togglePresentationMode,
+    isPresentationMode: function () { return presentationMode; }
   };
   if (window.sketchup && typeof window.sketchup.get_model_binding === "function") window.sketchup.get_model_binding();
 })();
