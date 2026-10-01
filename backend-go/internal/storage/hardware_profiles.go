@@ -24,7 +24,7 @@ import (
 
 func (s *PostgresStore) ListHardwareProfiles(ctx context.Context) ([]domain.HardwareProfile, error) {
 	query := `
-		SELECT id, code, name, description, revision, items, recipe_ref, active, version, created_at, updated_at
+		SELECT id, code, name, description, revision, items, recipe_ref, recipe, active, version, created_at, updated_at
 		FROM hardware_profiles
 		WHERE organization_id = $1
 		ORDER BY code ASC, id ASC;
@@ -51,7 +51,7 @@ func (s *PostgresStore) ListHardwareProfiles(ctx context.Context) ([]domain.Hard
 
 func (s *PostgresStore) GetHardwareProfileByID(ctx context.Context, id string) (*domain.HardwareProfile, error) {
 	query := `
-		SELECT id, code, name, description, revision, items, recipe_ref, active, version, created_at, updated_at
+		SELECT id, code, name, description, revision, items, recipe_ref, recipe, active, version, created_at, updated_at
 		FROM hardware_profiles
 		WHERE id = $1 AND organization_id = $2;
 	`
@@ -75,24 +75,28 @@ func (s *PostgresStore) CreateHardwareProfile(ctx context.Context, p *domain.Har
 	if err != nil {
 		return err
 	}
+	recipeJSON, err := hardwareProfileRecipeBodyArg(p.Recipe)
+	if err != nil {
+		return err
+	}
 	if p.ID != "" {
 		query := `
-			INSERT INTO hardware_profiles (id, code, name, description, revision, items, recipe_ref, active, organization_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO hardware_profiles (id, code, name, description, revision, items, recipe_ref, recipe, active, organization_id)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING created_at, updated_at, version;
 		`
-		if err := s.db(ctx).QueryRow(ctx, query, p.ID, p.Code, p.Name, p.Description, p.Revision, itemsJSON, recipeRefJSON, p.Active, OrgFromCtx(ctx)).
+		if err := s.db(ctx).QueryRow(ctx, query, p.ID, p.Code, p.Name, p.Description, p.Revision, itemsJSON, recipeRefJSON, recipeJSON, p.Active, OrgFromCtx(ctx)).
 			Scan(&p.CreatedAt, &p.UpdatedAt, &p.Version); err != nil {
 			return fmt.Errorf("error creating hardware profile: %w", err)
 		}
 		return nil
 	}
 	query := `
-		INSERT INTO hardware_profiles (code, name, description, revision, items, recipe_ref, active, organization_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO hardware_profiles (code, name, description, revision, items, recipe_ref, recipe, active, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at, version;
 	`
-	if err := s.db(ctx).QueryRow(ctx, query, p.Code, p.Name, p.Description, p.Revision, itemsJSON, recipeRefJSON, p.Active, OrgFromCtx(ctx)).
+	if err := s.db(ctx).QueryRow(ctx, query, p.Code, p.Name, p.Description, p.Revision, itemsJSON, recipeRefJSON, recipeJSON, p.Active, OrgFromCtx(ctx)).
 		Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.Version); err != nil {
 		return fmt.Errorf("error creating hardware profile: %w", err)
 	}
@@ -110,11 +114,15 @@ func (s *PostgresStore) UpdateHardwareProfile(ctx context.Context, id string, ex
 	}
 	query := `
 		UPDATE hardware_profiles
-		SET code = $1, name = $2, description = $3, revision = $4, items = $5, recipe_ref = $6, active = $7, updated_at = CURRENT_TIMESTAMP, version = version + 1
-		WHERE id = $8 AND organization_id = $9 AND version = $10
+		SET code = $1, name = $2, description = $3, revision = $4, items = $5, recipe_ref = $6, recipe = $7, active = $8, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $9 AND organization_id = $10 AND version = $11
 		RETURNING updated_at, version;
 	`
-	err = s.db(ctx).QueryRow(ctx, query, p.Code, p.Name, p.Description, p.Revision, itemsJSON, recipeRefJSON, p.Active, id, OrgFromCtx(ctx), expectedVersion).
+	recipeJSON, err := hardwareProfileRecipeBodyArg(p.Recipe)
+	if err != nil {
+		return err
+	}
+	err = s.db(ctx).QueryRow(ctx, query, p.Code, p.Name, p.Description, p.Revision, itemsJSON, recipeRefJSON, recipeJSON, p.Active, id, OrgFromCtx(ctx), expectedVersion).
 		Scan(&p.UpdatedAt, &p.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -197,7 +205,7 @@ func (s *PostgresStore) ExistingHardwareIDs(ctx context.Context, ids []string) (
 // through tenant handlers; RLS still bounds every tenant-scoped call.
 func (s *PostgresStore) ListActiveHardwareProfilesAnyOrg(ctx context.Context) ([]domain.HardwareProfile, error) {
 	query := `
-		SELECT id, code, name, description, revision, items, recipe_ref, active, version, created_at, updated_at
+		SELECT id, code, name, description, revision, items, recipe_ref, recipe, active, version, created_at, updated_at
 		FROM hardware_profiles
 		WHERE active = TRUE
 		ORDER BY code ASC, id ASC;
@@ -243,6 +251,17 @@ func hardwareProfileRecipeRefArg(recipeRef *domain.ProfileRecipeRef) (interface{
 	return raw, nil
 }
 
+func hardwareProfileRecipeBodyArg(recipe *domain.ProfileRecipeBody) (interface{}, error) {
+	if recipe == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(recipe)
+	if err != nil {
+		return nil, fmt.Errorf("encode hardware profile recipe body: %w", err)
+	}
+	return raw, nil
+}
+
 type hardwareProfileRowScanner interface {
 	Scan(dest ...any) error
 }
@@ -251,7 +270,8 @@ func scanHardwareProfile(row hardwareProfileRowScanner) (*domain.HardwareProfile
 	var p domain.HardwareProfile
 	var itemsRaw []byte
 	var recipeRefRaw []byte
-	if err := row.Scan(&p.ID, &p.Code, &p.Name, &p.Description, &p.Revision, &itemsRaw, &recipeRefRaw, &p.Active, &p.Version, &p.CreatedAt, &p.UpdatedAt); err != nil {
+	var recipeRaw []byte
+	if err := row.Scan(&p.ID, &p.Code, &p.Name, &p.Description, &p.Revision, &itemsRaw, &recipeRefRaw, &recipeRaw, &p.Active, &p.Version, &p.CreatedAt, &p.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal(itemsRaw, &p.Items); err != nil {
@@ -266,6 +286,13 @@ func scanHardwareProfile(row hardwareProfileRowScanner) (*domain.HardwareProfile
 			return nil, fmt.Errorf("decode hardware profile recipe ref: %w", err)
 		}
 		p.RecipeRef = &recipeRef
+	}
+	if recipeRaw != nil {
+		var recipe domain.ProfileRecipeBody
+		if err := json.Unmarshal(recipeRaw, &recipe); err != nil {
+			return nil, fmt.Errorf("decode hardware profile recipe body: %w", err)
+		}
+		p.Recipe = &recipe
 	}
 	return &p, nil
 }

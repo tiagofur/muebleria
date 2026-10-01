@@ -387,6 +387,10 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}", authMW(http.HandlerFunc(server.HandleStandardLibraryReleaseByID)))
 	// #918 (HW-PROFILE): pinned hardware-profile read for an exact release.
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/hardware-profiles", authMW(http.HandlerFunc(server.HandleHardwareProfilesForRelease)))
+	// #955 (LIB-1): Granete platform staff publish surface — the only
+	// writers of Standard library releases.
+	mux.Handle("POST /api/manufacturing-libraries/standard/releases", authMW(http.HandlerFunc(server.HandleCreateStandardLibraryRelease)))
+	mux.Handle("POST /api/manufacturing-libraries/standard/releases/{releaseId}/publish", authMW(http.HandlerFunc(server.HandlePublishStandardLibraryRelease)))
 	// #773 (LIB-2): Manifest and content-addressed resource distribution
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/manifest", authMW(http.HandlerFunc(server.HandleStandardLibraryReleaseManifest)))
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/resources/{resourceId}/blobs/{hash}", authMW(http.HandlerFunc(server.HandleStandardLibraryResourceBlob)))

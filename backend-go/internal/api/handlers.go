@@ -12,6 +12,7 @@ import (
 	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
@@ -2114,6 +2115,13 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.Store.SeedCatalog(r.Context()); err != nil {
 		respondWithInternalError(w, err, "seed")
+		return
+	}
+	// #955: demo hardware profile + real publication of the seeded
+	// Standard draft release (idempotent; keeps the demo chain on real
+	// manifests instead of placeholder hashes).
+	if err := application.SeedDemoStandardRelease(r.Context(), s.Store); err != nil {
+		respondWithInternalError(w, err, "seed demo release")
 		return
 	}
 	w.WriteHeader(http.StatusOK)

@@ -108,7 +108,7 @@ func hardwareRevision(hw *domain.Hardware) string {
 // fail-closed and leaves the previous current release untouched on error.
 func PublishStandardRelease(
 	ctx context.Context,
-	store *storage.PostgresStore,
+	store StandardReleaseStore,
 	releaseID uuid.UUID,
 	publishedBy uuid.UUID,
 ) (*CompilationResult, error) {
@@ -139,6 +139,21 @@ func PublishStandardRelease(
 		return nil, fmt.Errorf("publish standard release %s: %w", release.Version, err)
 	}
 	return result, nil
+}
+
+// StandardReleaseStore is the surface the publish flow needs: satisfied by
+// *storage.PostgresStore and by handler-test stubs.
+type StandardReleaseStore interface {
+	HardwareReader
+	HardwareProfileReader
+	PinnedReleaseReader
+	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
+	PublishReleaseWithManifest(ctx context.Context, releaseID uuid.UUID, manifest *domain.LibraryManifest, manifestBytes []byte, blobs []domain.ResourceBlob, publishedBy *uuid.UUID) error
+	// Demo seed surface (#955): org-scoped like every catalog call; the
+	// seed runs under the initial organization context.
+	GetHardwareProfileByID(ctx context.Context, id string) (*domain.HardwareProfile, error)
+	CreateHardwareProfile(ctx context.Context, p *domain.HardwareProfile) error
+	EnsureSeedPlatformUser(ctx context.Context) (string, error)
 }
 
 // PinnedReleaseReader is the minimal read surface for resolving pinned

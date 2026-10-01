@@ -2236,6 +2236,17 @@ type LibraryResourceRef struct {
 	PackageKind      string  `json:"packageKind"`
 }
 
+type CreateStandardReleaseRequest struct {
+	Version   string  `json:"version"`
+	Changelog *string `json:"changelog,omitempty"`
+}
+
+type StandardReleasePublishResult struct {
+	ReleaseId     string `json:"releaseId"`
+	ManifestHash  string `json:"manifestHash"`
+	ResourceCount int64  `json:"resourceCount"`
+}
+
 type LibraryReleaseSummary struct {
 	ID               string  `json:"id"`
 	LibraryId        string  `json:"libraryId"`

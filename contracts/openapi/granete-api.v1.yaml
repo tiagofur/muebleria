@@ -4768,6 +4768,45 @@
             "$ref": "#/components/responses/ApiError"
           }
         }
+      },
+      "post": {
+        "operationId": "createStandardLibraryRelease",
+        "summary": "Create a Standard library release draft (Granete platform staff)",
+        "description": "Creates a DRAFT release for the Granete Standard manufacturing library. Publishing is a separate deliberate step. Only platform staff may call this — tenants never write library releases. [#955]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStandardReleaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Draft release created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryReleaseSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
       }
     },
     "/manufacturing-libraries/standard/releases/current": {
@@ -4833,6 +4872,54 @@
           },
           "404": {
             "description": "Release not found or not accessible"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/standard/releases/{releaseId}/publish": {
+      "post": {
+        "operationId": "publishStandardLibraryRelease",
+        "summary": "Compile and atomically publish a Standard release (Granete platform staff)",
+        "description": "Gathers active hardware and active #912-valid hardware profiles, compiles the manifest and publishes atomically — the previous current release stays untouched on any error. Fail-closed: an invalid profile rejects the compilation. [#955]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardReleasePublishResult"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
           }
         }
       }
@@ -14404,6 +14491,44 @@
             "description": "Entitlement: 'free' resources are accessible to Free plan; 'standard' are Standard-only"
           }
         }
+      },
+      "CreateStandardReleaseRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "changelog": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "version"
+        ]
+      },
+      "StandardReleasePublishResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "releaseId": {
+            "type": "string"
+          },
+          "manifestHash": {
+            "type": "string"
+          },
+          "resourceCount": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "releaseId",
+          "manifestHash",
+          "resourceCount"
+        ]
       },
       "LibraryReleaseSummary": {
         "type": "object",
