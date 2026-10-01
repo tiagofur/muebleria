@@ -28970,7 +28970,23 @@
                 "blockers": []
               }
             ],
-            "manufacturingFingerprint": "sha256-44006c66d88565e1635f59b3ab6ff43d2a62e2fd4415074237950d40d3feea8c"
+            "manufacturingFingerprint": "sha256-44006c66d88565e1635f59b3ab6ff43d2a62e2fd4415074237950d40d3feea8c",
+            "hardwareProfileDemand": [
+              {
+                "hardwareId": "f9160000-0000-0000-0000-000000000002",
+                "quantity": 4,
+                "sources": [
+                  {
+                    "technicalProfileId": "f9160000-0000-0000-0000-000000000001",
+                    "technicalProfileRevision": "rev-1",
+                    "recipeId": "test:synthetic-fixed-shelf",
+                    "recipeRevision": "test-1",
+                    "relationshipId": "rel-fixed-shelf-01",
+                    "contactCount": 2
+                  }
+                ]
+              }
+            ]
           },
           "preflight": {
             "scope": "authoring-resolve-subset",

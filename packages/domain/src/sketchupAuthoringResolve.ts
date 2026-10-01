@@ -1108,6 +1108,35 @@ function validateResolvedMachining(
   if (!Array.isArray(machining.operations) || !Array.isArray(machining.derivedHardwarePlacements)) {
     problems.push('resolved.machining arrays are required'); return;
   }
+  // hardwareProfileDemand (#917): optional commercial projection of the
+  // resolved profiles. Fail-closed on shape when present.
+  if (machining.hardwareProfileDemand !== undefined) {
+    if (!Array.isArray(machining.hardwareProfileDemand)) {
+      problems.push('resolved.machining.hardwareProfileDemand must be an array when present');
+    } else {
+      for (const [index, value] of machining.hardwareProfileDemand.entries()) {
+        const line = asRecord(value);
+        const demandPath = `resolved.machining.hardwareProfileDemand[${index}]`;
+        if (!line || !isBoundedString(line.hardwareId) || typeof line.quantity !== 'number'
+          || !Number.isFinite(line.quantity) || line.quantity <= 0 || !Array.isArray(line.sources)
+          || line.sources.length === 0) {
+          problems.push(`${demandPath} is invalid`);
+          continue;
+        }
+        for (const [sourceIndex, sourceValue] of line.sources.entries()) {
+          const source = asRecord(sourceValue);
+          const sourcePath = `${demandPath}.sources[${sourceIndex}]`;
+          if (!source || !isBoundedString(source.technicalProfileId) || !isBoundedString(source.technicalProfileRevision)
+            || !isBoundedString(source.recipeId) || !isBoundedString(source.recipeRevision)
+            || !isBoundedString(source.relationshipId)
+            || typeof source.contactCount !== 'number' || !Number.isInteger(source.contactCount)
+            || source.contactCount < 1) {
+            problems.push(`${sourcePath} is invalid`);
+          }
+        }
+      }
+    }
+  }
   if (machining.joineryStatuses !== undefined) {
     if (!Array.isArray(machining.joineryStatuses)) {
       problems.push('resolved.machining.joineryStatuses must be an array when present');
