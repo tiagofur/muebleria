@@ -2115,8 +2115,10 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.Store.SeedCatalog(r.Context()); err != nil {
 		slog.Error("seed catalog failed", "error", err)
-		respondWithInternalError(w, err, "seed")
-		return
+		// Ops diagnostic in the envelope (#964): the seed is a staff/demo
+		// endpoint; the reason is business-safe (typed storage errors).
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"el seed del catálogo demo falló", map[string]any{"reason": err.Error()})
 		return
 	}
 	// #955: demo hardware profile + real publication of the seeded
@@ -2133,8 +2135,8 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	profileID, err := application.SeedDemoForOrg(r.Context(), s.Store, storage.OrgFromCtx(r.Context()), demoPublisher)
 	if err != nil {
 		slog.Error("seed demo release failed", "error", err)
-		respondWithInternalError(w, err, "seed demo release")
-		return
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"el seed del release demo falló", map[string]any{"reason": err.Error()})
 		return
 	}
 	w.WriteHeader(http.StatusOK)

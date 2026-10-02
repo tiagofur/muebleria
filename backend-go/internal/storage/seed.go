@@ -960,6 +960,7 @@ func insertModuleTx(ctx context.Context, tx pgx.Tx, org, id, code, name string, 
 //
 // Idempotent: safe on fresh seeds and on the upgrade path (existing DBs).
 func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
+	seedCompGabCostado, seedCompGabEntrepano, seedCompGabManguete, seedCompGabPiso, seedCompGabPuerta, seedCompGabRespaldo, seedStructGab, seedStructGabPre := SeededIDForOrg(org, seedCompGabCostado), SeededIDForOrg(org, seedCompGabEntrepano), SeededIDForOrg(org, seedCompGabManguete), SeededIDForOrg(org, seedCompGabPiso), SeededIDForOrg(org, seedCompGabPuerta), SeededIDForOrg(org, seedCompGabRespaldo), SeededIDForOrg(org, seedStructGab), SeededIDForOrg(org, seedStructGabPre)
 	var moduleID string
 	var currentStructureID *string
 	err := tx.QueryRow(ctx, `
