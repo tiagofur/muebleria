@@ -232,15 +232,26 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 		// calcLiveProjectBreakdown → resolveBom(..., baseContextForItem(...)).
 		choices := choicesForItem(project, item)
 		baseContext := resolveBaseContextForItem(layoutBase, project, item, &catalog)
-		bom, err := ResolveBomWithContext(
-			module,
-			choices,
-			catalog,
-			baseContext,
-			item.MeasurePresetID,
-			item.StructureRevisionPin,
-			item.CustomDims,
-		)
+		// #974: the design estimate prices the placed physical truth —
+		// explicit dimensions are authoritative and measure presets are
+		// neither required nor consulted (the same #727 authority boundary
+		// as releases). Quotation keeps commercialPresetAuthority and its
+		// preset gate untouched.
+		var bom domain.ResolvedBom
+		var err error
+		if item.DimsAuthoritative {
+			bom, err = ResolveBomForRelease(module, choices, catalog, item.CustomDims, baseContext)
+		} else {
+			bom, err = ResolveBomWithContext(
+				module,
+				choices,
+				catalog,
+				baseContext,
+				item.MeasurePresetID,
+				item.StructureRevisionPin,
+				item.CustomDims,
+			)
+		}
 		if err != nil {
 			return domain.QuoteBreakdown{}, err
 		}
