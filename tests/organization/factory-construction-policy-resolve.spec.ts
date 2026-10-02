@@ -293,16 +293,27 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
   test('R1 congela 4 y no se mueve; R2 congela 2 — part-executions lee la verdad congelada', async ({ page }) => {
     test.setTimeout(240_000);
     const token = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
-    const seeded = await authedFetch(token, '/seed', { method: 'POST' });
-    expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
 
     // Governed catalog through the workspace snapshot (the proven org write
     // path): sides + shelf, BODY group, and the module's OWN fixed-shelf-side
-    // structural binding defaulting to 3.
+    // structural binding defaulting to 3. NOTE: the catalog write happens
+    // BEFORE the seed — the workspace snapshot replaces the org catalog and
+    // would drop the seed's demo hardware rows otherwise (#967 CI).
     const repository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => token });
     const catalog = await repository.getCatalog();
+    // The demo profile's items reference the seed hardware ids; the seed's
+    // own catalog ensure does not create them under EVERY gate organization,
+    // so the snapshot carries them explicitly (active, priced).
+    const demoHardware = [
+      { id: 'a0000003-0000-0000-0000-000000000012', code: 'HER-MIN-15', name: 'Minifix 15', unit: 'piece' as const, costPerUnit: 12.5, active: true },
+      { id: 'a0000003-0000-0000-0000-000000000011', code: 'HER-TAQ-8X30', name: 'Taquete 8x30', unit: 'piece' as const, costPerUnit: 0.8, active: true },
+    ];
     await repository.saveCatalog({
       ...catalog,
+      hardware: [
+        ...catalog.hardware.filter((h) => !demoHardware.some((d) => d.id === h.id)),
+        ...demoHardware,
+      ],
       materials: [
         ...catalog.materials.filter((m) => m.id !== FREEZE_MAT_ID),
         {
@@ -384,6 +395,12 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     });
     const choices: Record<string, string> = { [FREEZE_ROLE]: FREEZE_MAT_ID };
 
+    // The seed LAST: SeedCatalog re-ensures the demo hardware + profile and
+    // publishes the Standard release carrying them — after the catalog
+    // write, never before it.
+    const seeded = await authedFetch(token, '/seed', { method: 'POST' });
+    expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
+
     // The pinned profile applies to the joint targets' faces.
     for (const [componentId, side] of [[FREEZE_SIDE_L, 'front'], [FREEZE_SIDE_R, 'back']] as const) {
       const put = await authedFetch(token, `/catalog/components/${componentId}/side-assignments`, {
@@ -423,12 +440,22 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     const q1 = await client.createInitialProjectQuoteRevision(token, FREEZE_PROJECT, { notes: 'Congelado' }, 'freeze-q1-create');
     await client.publishProjectQuoteRevision(token, FREEZE_PROJECT, q1.id, 'freeze-q1-publish');
     await client.acceptProjectQuoteRevision(token, FREEZE_PROJECT, q1.id, 'freeze-q1-accept');
-    const approved = await client.approveProjectDesignRevisionForProduction(token, FREEZE_PROJECT, design.id, r1.id, { quoteRevisionId: q1.id }, 'freeze-approve-r1-q1');
+    let approved;
+    try {
+      approved = await client.approveProjectDesignRevisionForProduction(token, FREEZE_PROJECT, design.id, r1.id, { quoteRevisionId: q1.id }, 'freeze-approve-r1-q1');
+    } catch (err) {
+      throw new Error(`freeze approve failed: ${JSON.stringify(err)}`);
+    }
     expect(approved.status).toBe('approved');
 
     // Factory policy 4 → R1 freezes THE GOVERNED 4-station truth.
     await saveShelfPolicy(token, 4);
-    const r1Release = await client.createProductionRelease(token, FREEZE_PROJECT, { design_revision_id: r1.id, quote_revision_id: q1.id }, 'freeze-release-r1');
+    let r1Release;
+    try {
+      r1Release = await client.createProductionRelease(token, FREEZE_PROJECT, { design_revision_id: r1.id, quote_revision_id: q1.id }, 'freeze-release-r1');
+    } catch (err) {
+      throw new Error(`R1 create failed: ${JSON.stringify(err)}`);
+    }
 
     const readParts = async (): Promise<{ revision: string; shelfOps: number; payload: string }> => {
       const list = await authedFetch(token, `/projects/${FREEZE_PROJECT}/part-executions`);

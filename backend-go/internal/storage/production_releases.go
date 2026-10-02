@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -303,6 +304,10 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	// the frozen snapshot are one derivation.
 	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority, serverInputs)
 	if err != nil {
+		// Server-side diagnostics: the 409 envelope is business-safe (typed
+		// blocker, unit identities only) — the underlying resolution cause is
+		// for the operator log, never for the client.
+		slog.Error("release snapshot resolution failed", "revision", designRevisionID, "error", err)
 		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
 			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
 	}
