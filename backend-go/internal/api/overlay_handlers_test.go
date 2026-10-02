@@ -20,10 +20,17 @@ import (
 
 // Helper to inject org claims into the request context for testing
 func withOverlayOrgClaims(req *http.Request, orgID, userID string) *http.Request {
+	return withOverlayOrgRoleClaims(req, orgID, userID, domain.RoleAdmin)
+}
+
+// withOverlayOrgRoleClaims is the role-configurable variant (#875 slice 4):
+// the permission matrix refuses visitor/sales mutations server-side.
+func withOverlayOrgRoleClaims(req *http.Request, orgID, userID string, role domain.UserRole) *http.Request {
 	claims := &auth.Claims{
 		OrgID:  orgID,
 		UserID: userID,
-		Role:   string(domain.RoleAdmin),
+		Role:   string(role),
+		Roles:  []string{string(role)},
 	}
 	claims.Subject = userID
 	ctx := context.WithValue(req.Context(), UserContextKey, claims)
@@ -497,6 +504,30 @@ func TestHandleUpdateLibraryOverlay(t *testing.T) {
 
 		if rr.Code != http.StatusPreconditionFailed {
 			t.Fatalf("expected 412 for a stale version, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("Vendedor mutation is 403 server-authority", func(t *testing.T) {
+		store := &stubStore{
+			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+				overlayID: overlay,
+			},
+		}
+		srv := &Server{Store: store}
+
+		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
+			Overrides: map[string]any{"parameters.panelThickness": 18.0},
+		})
+		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(1))
+		req = withOverlayOrgRoleClaims(req, orgA.String(), userID.String(), domain.RoleVendedor)
+		rr := httptest.NewRecorder()
+
+		srv.HandleUpdateLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 for a sales role, got %d: %s", rr.Code, rr.Body.String())
 		}
 	})
 

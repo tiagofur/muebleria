@@ -310,10 +310,27 @@ API (AC3). The issue's "Seguridad, concurrencia y versiones" section.
 
 **Tasks**:
 
-- [ ] T18 — migration 000148 + storage conditional update (ErrVersionConflict)
+- [x] T18 — migration 000148 + storage conditional update (ErrVersionConflict)
   + version in scans; service signature; handler If-Match + 412 + role guards;
   ETag on overlay reads. V1 Go tests: conflict path, missing If-Match 428,
   permission 403, second-user read.
-- [ ] T19 — OpenAPI detail version + regenerate; client If-Match + stale-save
+- [x] T19 — OpenAPI detail version + regenerate; client If-Match + stale-save
   error surfacing; spec call sites updated.
-- [ ] T20 — V2 gate spec (conflict round-trip, second user, vendedor 403).
+- [x] T20 — V2 gate spec (conflict round-trip, second user, vendedor 403).
+
+**Execution record (2026-10-02, slice 4)**: branch
+`feat/875-overlay-ifmatch-permissions` from main `d68faa90`, developed in the
+`../muebles-worktrees/875-slice4` worktree (the main checkout switched
+branches underneath this session once — the worktree convention exists for
+exactly that). V1: api/application/storage green against real disposable
+PostgreSQL, including the new 428/412/403 handler cases, the storage
+conflict-not-found distinction and the version-bump pin; service conflict +
+re-read/retry cases. V2: `overlay-concurrency-permissions.spec.ts` 3/3 —
+stale editor 412 with the refused write proven not to land, re-read+retry
+converges; the second authorized admin reads the same overlay id/version and
+probe key; the org-B vendedor is refused by API. Note: the full storage suite
+run twice against ONE container trips
+`TestMachineOutputSelections_VersionConflictAndList`, which is not idempotent
+against the shared connect-store DB (its own leftover version conflicts) —
+pre-existing test-isolation debt, unrelated to this slice; CI shards use
+fresh containers and are green.
