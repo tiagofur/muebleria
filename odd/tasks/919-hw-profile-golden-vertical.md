@@ -1,7 +1,7 @@
 # ODD — #919 [P1][HW-PROFILE] Golden vertical slice — cabinet → profile → contact → machining + BOM
 
 **Issue**: https://github.com/tiagofur/muebleria/issues/919
-**Status**: PLANNED (2026-10-02, G-ODD 4.0 Delegated Direct; plan reported before code per contract)
+**Status**: IMPLEMENTED_PENDING_REVIEW (2026-10-02)
 **Lane**: Delegated Direct — one artifact
 **Base**: `origin/main` @ `9b74d99d` (post-#963 + post-#965 G-ODD 4.0)
 **Branch (planned)**: `feat/919-hw-profile-golden-vertical`
@@ -48,30 +48,46 @@ the hand computation pins otherwise.
 
 ## 4. Acceptance → tasks
 
-- [ ] **T1 — hand-computed golden fixture**
-  `contracts/hardwareProfileVertical.golden.json`: scenario inputs (catalog
-  slice, assignments, profile, policy) + EXPECTED outputs with the
-  arithmetic documented inline: per-contact station positions; per-hole
-  (face, position, diameter, depth); demand lines; BOM boards + hardware
-  lines with unit prices; requirements lines. No resolver-generated numbers
-  enter this file by construction.
-- [ ] **T2 — Go golden test**: resolve the scenario and match the golden
-  exactly (operations per piece/contact with provenance profile+recipe
-  revision; demand; BOM/requirements). Failures are golden defects OR
-  resolver bugs — never silently regenerated.
-- [ ] **T3 — TS parity**: same fixture consumed by the TS side
-  (`sketchupAuthoringResolve.contract.json` pattern).
-- [ ] **T4 — mutation isolation**: move / duplicate / delete / reorder
-  occurrences + profile change + recipe-revision bump: only the related
-  pieces/lines move; a revision bump changes the technical fingerprint;
-  unrelated operations are untouched.
-- [ ] **T5 — fail-closed pins**: missing profile/recipe →
-  `TECHNICAL_PROFILE_REQUIRED` → no-fabricable (release blocked); BOM and
-  machining stay distinct authorities (demand derives from profile
-  RESOLUTION, never from drilling output).
-- [ ] **T6 — evidence**: V0 (typecheck/drift) + V1 (Go engine + TS domain
-  suites). V2 NOT_RUN — the issue explicitly does not require SketchUp host
-  or PTX for the neutral engine.
+- [x] **T1 — hand-computed golden fixture**
+  `contracts/hardwareProfileVertical.golden.json`: contact scenario with
+  identity bases (every number derivable on paper), stations (count 2,
+  margins 30/30 over [0,100] → distances 30/70), recipe rules with ASSEMBLY
+  frame axes (cam (0,-1,0) projects to +Z; dowel (0,1,0) projects to the
+  contact normal), 4 expected holes with absolute local centers, mutation
+  cases, fail-closed expectation, demand arithmetic (items × 2 contacts)
+  and BOM board/pricing documentation. NO resolver-generated numbers.
+- [x] **T2 — Go golden test**
+  (`hardware_profile_vertical_golden_test.go`): station distances exact,
+  4 operations matched on (participant, rule, station) with absolute local
+  centers + axis + provenance (profile+recipe revision), mutations
+  (margins/count redistribution/revision bumps with geometry-unchanged +
+  operation-identity change), demand (minifix 2, dowel 4), fail-closed
+  without profile (TECHNICAL_PROFILE_REQUIRED, zero operations), mutation
+  ISOLATION across two contacts, and demand cost arithmetic (unit price ×
+  quantity, no double counting).
+- [x] **T3 — TS parity** (`hardwareProfileVerticalGolden.test.ts`): the TS
+  mirror (`deriveFixedShelfOperations`) reproduces the SAME hand-computed
+  numbers from the same fixture: MACHINING_READY, station distances 30/70,
+  holes (30,9)/(70,9) per face/diameter/depth, provenance (technical
+  profile + recipe revision + catalogRuleId = recipe id). 3/3.
+- [x] **T4 — mutation isolation**: margins/count redistribution +
+  revision bumps (geometry-unchanged, identity moves) + two-contact
+  isolation (mutating contact 1 leaves contact 2 byte-identical).
+- [x] **T5 — fail-closed pins**: no verified profile →
+  TECHNICAL_PROFILE_REQUIRED + zero operations (no-fabricable); demand
+  derives from the profile RESOLUTION per verified contact (#917),
+  station-independent.
+- [x] **T6 — evidence**: V0 typecheck clean (domain) + engine suite green;
+  V1: Go engine full + TS domain 124 files / 1754 tests. V2 NOT_RUN — the
+  issue explicitly does not require SketchUp host or PTX for the neutral
+  engine. The release-level integration of the same governed chain carries
+  its own real-PG evidence in PR #963 (freeze + isolation tests).
+
+**Golden findings during implementation** (the fixture corrected ITSELF,
+never the resolver): two hand-arithmetic errors were caught and fixed in
+the fixture — the rule axis is an ASSEMBLY-frame direction projected
+through (along, normal, cross), and the dowel axis must project onto the
+contact normal. Both are now documented in the fixture.
 
 ## 5. Non-goals
 
