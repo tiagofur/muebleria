@@ -388,7 +388,8 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 			SELECT id, project_id, organization_id,
 				COALESCE(furniture_definition_id::text, '') AS furniture_definition_id,
 				origin, COALESCE(origin_furniture_instance_id::text, '') AS origin_furniture_instance_id,
-				lifecycle_status, version, created_at, updated_at
+				lifecycle_status, version, created_at, updated_at,
+				authoring_snapshot
 			FROM furniture_instances
 			WHERE project_id = $1 `+filter+fmt.Sprintf(furnitureInstanceProjectScopeFmt, "$2")+`
 		) fi
@@ -424,14 +425,26 @@ func (s *PostgresStore) ListFurnitureInstanceSummariesByProject(ctx context.Cont
 		var quotedW, quotedH, quotedD *int
 		var moduleW, moduleH, moduleD *int
 		var optionsJSON []byte
+		var authoringSnapshotJSON []byte
 		if err := rows.Scan(
 			&summary.Instance.ID, &summary.Instance.ProjectID, &summary.Instance.OrganizationID,
 			&summary.Instance.FurnitureDefinitionID, &summary.Instance.Origin,
 			&summary.Instance.OriginFurnitureInstanceID, &summary.Instance.LifecycleStatus,
 			&summary.Instance.Version, &summary.Instance.CreatedAt, &summary.Instance.UpdatedAt,
+			&authoringSnapshotJSON,
 			&summary.DisplayName, &quotedW, &quotedH, &quotedD, &optionsJSON, &moduleW, &moduleH, &moduleD,
 		); err != nil {
 			return nil, err
+		}
+		// #977: the captured authoring state re-seeds placement when the live
+		// working item is gone (delete → re-place). Absent column value stays
+		// nil; a malformed snapshot fails closed — recovery never guesses.
+		if len(authoringSnapshotJSON) > 0 && string(authoringSnapshotJSON) != "null" {
+			snapshot := domain.FurnitureInstanceAuthoringSnapshot{}
+			if err := json.Unmarshal(authoringSnapshotJSON, &snapshot); err != nil {
+				return nil, fmt.Errorf("%w: authoring_snapshot de la instancia", domain.ErrInvalidRevisionSnapshot)
+			}
+			summary.Instance.AuthoringSnapshot = &snapshot
 		}
 		if len(optionsJSON) > 0 && string(optionsJSON) != "null" {
 			choices := map[string]string{}

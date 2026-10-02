@@ -87,4 +87,21 @@ type FurnitureInstance struct {
 	// OrganizationID mirrors projects.organization_id for RLS. It is internal
 	// tenant plumbing and never part of the public API DTO.
 	OrganizationID string `json:"-"`
+
+	// AuthoringSnapshot is the #977 recovery seed: the last known authoring
+	// state captured when a design working-copy update drops this unit's
+	// item (#810 Caso 1 delete intent). It is derived plumbing written in the
+	// same transaction as the drop — version/updated_at stay untouched — and
+	// is only read by the placement flow when the live working item is gone.
+	AuthoringSnapshot *FurnitureInstanceAuthoringSnapshot `json:"-"`
+}
+
+// FurnitureInstanceAuthoringSnapshot mirrors the working item's authoring
+// fields verbatim (parameters, material choices, #784 lineage modes) so a
+// re-placed unit re-enters exactly as it was authored, not as catalog
+// defaults. Nil when nothing was captured yet.
+type FurnitureInstanceAuthoringSnapshot struct {
+	Parameters          map[string]any                  `json:"parameters"`
+	MaterialChoices     map[string]string                `json:"material_choices"`
+	MaterialChoiceModes map[string]DesignMaterialChoiceMode `json:"material_choice_modes"`
 }
