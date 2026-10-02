@@ -115,13 +115,21 @@ func TestProvisionDemoProfileMultiOrg(t *testing.T) {
 	}
 
 	// T3 — ONE publication carries BOTH orgs' profiles; each org's loader
-	// resolves its OWN recipes only.
+	// resolves its OWN recipes only. The publish runs under a REAL tenant tx
+	// with a platform-staff actor — the exact authority the seed/publish
+	// handlers run under (#955/000146, widened to profile reads by 000147).
+	// A superuser connection would bypass RLS and hide a compile that cannot
+	// actually see every org's provisioned profile.
 	draftID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
 	if _, err := migrationPool.Exec(ctx, `UPDATE library_releases SET version = '0.1.0-prov-964' WHERE id = $1`, draftID); err != nil {
 		t.Fatalf("retarget draft: %v", err)
 	}
-	if _, err := application.PublishStandardRelease(ctx, adminStore, draftID, uuid.MustParse(userA)); err != nil {
-		t.Fatalf("publish: %v", err)
+	platformActor := storage.TenantActor{OrganizationID: multiOrgInitialOrgID, UserID: userA, MembershipID: membershipA, PlatformAdmin: true}
+	if err := tenantStore.WithinTenantTx(storage.WithOrgCtx(ctx, multiOrgInitialOrgID), platformActor, func(txCtx context.Context) error {
+		_, err := application.PublishStandardRelease(txCtx, tenantStore, draftID, uuid.MustParse(userA))
+		return err
+	}); err != nil {
+		t.Fatalf("publish under the platform tenant tx: %v", err)
 	}
 	release, err := adminStore.GetCurrentPublishedRelease(ctx, uuid.MustParse(domain.GraneteStandardLibraryID))
 	if err != nil {
@@ -201,10 +209,9 @@ func TestProvisionDemoProfileMultiOrg(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("loader B: %v", err)
 	}
-	for _, recipe := range inputsB.SideRecipes {
-		if recipe.CatalogComponentID == compA {
-			t.Fatalf("org B must never see org A's recipe: %+v", inputsB.SideRecipes)
-		}
+	if len(inputsB.SideRecipes) != 1 || inputsB.SideRecipes[0].CatalogComponentID != compB ||
+		inputsB.SideRecipes[0].TechnicalProfileID != idsB.ProfileID {
+		t.Fatalf("org B must resolve its OWN provisioned recipe through the published manifest: %+v", inputsB.SideRecipes)
 	}
 	if inputsB.Policy == nil || inputsB.Policy.ShelfToSide == nil || inputsB.Policy.ShelfToSide.StationsCount != 2 {
 		t.Fatalf("org B policy = %+v", inputsB.Policy)
