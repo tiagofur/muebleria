@@ -54,7 +54,7 @@ func TestDemoSeedPublishesStandardRelease(t *testing.T) {
 	}
 
 	// The pinned read resolves the demo profile with its recipe body.
-	profiles, err := application.HardwareProfilesForRelease(ctx, store, release.ID)
+	profiles, err := store.HardwareProfilesForRelease(ctx, release.ID)
 	if err != nil {
 		t.Fatalf("pinned profiles: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestDemoSeedUnderRuntimeRoleWithPlatformMarker(t *testing.T) {
 	var pinned []domain.HardwareProfile
 	if err := store.WithinTenantTx(ctx, tenantActor, func(txCtx context.Context) error {
 		var readErr error
-		pinned, readErr = application.HardwareProfilesForRelease(txCtx, store, release.ID)
+		pinned, readErr = store.HardwareProfilesForRelease(txCtx, release.ID)
 		return readErr
 	}); err != nil {
 		t.Fatalf("pinned profile read as plain tenant: %v", err)

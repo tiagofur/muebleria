@@ -85,7 +85,7 @@ func TestHardwareProfilePinningThroughStandardRelease(t *testing.T) {
 	}
 
 	// The pinned read resolves the profile at R1 — exact release, no latest.
-	r1Profiles, err := application.HardwareProfilesForRelease(ctx, adminStore, r1ID)
+	r1Profiles, err := adminStore.HardwareProfilesForRelease(ctx, r1ID)
 	if err != nil {
 		t.Fatalf("pinned read R1: %v", err)
 	}
@@ -115,14 +115,14 @@ func TestHardwareProfilePinningThroughStandardRelease(t *testing.T) {
 	}
 
 	// R1 STILL resolves v1 — history never retargets, no latest anywhere.
-	r1After, err := application.HardwareProfilesForRelease(ctx, adminStore, r1ID)
+	r1After, err := adminStore.HardwareProfilesForRelease(ctx, r1ID)
 	if err != nil {
 		t.Fatalf("pinned read R1 after R2: %v", err)
 	}
 	if r1After[0].RecipeRef.RecipeRevision != "test-1" {
 		t.Fatalf("R1 pin mutated after R2: %+v", r1After[0])
 	}
-	r2Profiles, err := application.HardwareProfilesForRelease(ctx, adminStore, r2ID)
+	r2Profiles, err := adminStore.HardwareProfilesForRelease(ctx, r2ID)
 	if err != nil || r2Profiles[0].RecipeRef.RecipeRevision != "test-2" {
 		t.Fatalf("R2 pinned profiles = %+v err=%v", r2Profiles, err)
 	}
