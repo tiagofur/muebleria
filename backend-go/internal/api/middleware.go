@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
@@ -54,6 +55,17 @@ type tenantActorSetter interface {
 }
 
 var errTenantHandlerFailure = errors.New("tenant handler failed")
+
+// capturedBodyForLog caps a captured response body for server-side logging:
+// error envelopes are small, but a misrouted large payload must not flood
+// the log.
+func capturedBodyForLog(body string) string {
+	const max = 2048
+	if len(body) <= max {
+		return body
+	}
+	return body[:max] + "…(truncated)"
+}
 
 // CORSMiddleware only allows origins present in the allowlist. The matched
 // origin is reflected per request; non-matching origins get no Allow-Origin
@@ -155,6 +167,17 @@ func AuthMiddleware(tokens *auth.Authority, users MembershipLookup) func(http.Ha
 				err := runner.WithinTenantTx(r.Context(), actor, func(ctx context.Context) error {
 					serveAuthenticatedRequest(buffer, r.WithContext(ctx), next, users, claims, actor)
 					if buffer.status >= http.StatusInternalServerError && !buffer.commitFailureAudit {
+						// The captured response is discarded below and replaced
+						// by the generic transaction failure, so log what the
+						// handler actually rendered — its envelope carries the
+						// real cause and the sentinel alone does not (#964
+						// seed diagnosis: a 500 with no attributable origin).
+						slog.Error("tenant handler rendered error response",
+							"op", "tenant transaction",
+							"status", buffer.status,
+							"body", capturedBodyForLog(buffer.body.String()),
+							"path", r.URL.Path,
+							"request_id", RequestIDFromContext(r.Context()))
 						return errTenantHandlerFailure
 					}
 					return nil
