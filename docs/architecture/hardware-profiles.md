@@ -93,9 +93,11 @@ cantidades de compra.
    la política `library_resource_blobs_read` llega al blob por
    `definition_hash → refs → release → library`, así que la publicación
    inserta/actualiza la ref de cada recurso dentro de la misma transacción
-   (`storage/manufacturing_library_publish.go`, paso 4). Un ref existente
-   conserva su `resource_revision` pineada y solo refresca el
-   `definition_hash`.
+   (`storage/manufacturing_library_publish.go`, paso 3). La reconciliación es
+   con **autoridad del manifiesto**: inserta las refs que falten y refresca
+   `definition_hash`, `resource_revision` y `package_kind` de las existentes —
+   un draft no tiene nada pineado que conservar; el pin ocurre al publicar
+   (`TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority`).
 8. **Estándar se publica, no se muta.** `library_releases` es una transición
    de un sentido (`UPDATE … WHERE status='draft'`); manifiesto y blobs tienen
    trigger de inmutabilidad. Publicar Standard es superficie de staff Granete:
