@@ -225,6 +225,9 @@ class DesignInspectorBridgeTest < Minitest::Test
     payload = pushed_payloads.fetch(0)
     assert_equal 'conflict', payload['status']
     assert_equal 32, payload['requestId']
+    # #969c: the refusal carries the fresh working version it already read —
+    # the dialog offers an explicit rebase instead of a dead-end discard.
+    assert_equal '2026-09-28T12:00:00.000000Z', payload['workingVersion']
     assert_equal [:get_working_copy], recording.calls.map(&:first), 'a stale token never reaches a PUT'
   end
 

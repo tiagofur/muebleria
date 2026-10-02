@@ -115,7 +115,12 @@ module Granete
 
           working = design_inspector_working_copy(stored.design_id)
           unless working.updated_at == token
-            return [{ 'status' => 'conflict', 'reason' => 'el diseño cambió en el servidor' }, stored, working]
+            # The refusal carries the fresh working version (read-only): with
+            # the background auto-sync the working copy moves without any
+            # user edit, so the dialog can offer an explicit rebase-and-
+            # reapply instead of a dead-end discard. No write happens here.
+            return [{ 'status' => 'conflict', 'reason' => 'el diseño cambió en el servidor',
+                      'workingVersion' => working.updated_at }, stored, working]
           end
 
           [nil, stored, working]
