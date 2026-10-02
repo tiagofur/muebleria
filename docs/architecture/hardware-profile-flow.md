@@ -52,6 +52,12 @@ Componente (definición)    │                             │
 4. **Fail-closed en cada frontera**: perfil inexistente/inactivo, revisión
    faltante, lado incompatible o receta roja dejan la unión no fabricable
    (terminal estructurado), nunca degradan a fallback.
+5. **Publicación Standard**: sólo el staff de plataforma Granete publica
+   (#955): `POST /api/manufacturing-libraries/standard/releases` crea el
+   draft y `POST .../{releaseId}/publish` compila herrajes y perfiles con su
+   cuerpo de receta y publica manifiesto y blobs de forma atómica. La UI de
+   fábrica crea perfiles sin receta a propósito: se pueden asignar, pero no
+   fabrican hasta que un release publicado traiga la receta.
 
 ## Secuencia de entrega
 
@@ -68,6 +74,11 @@ Componente (definición)    │                             │
 | 9 | #920 | Consolidación de docs canónicas | #912–#919 |
 | 10 | #879 | Consumidor CNC nativo (BHX) sobre la salida neutral | salida neutral completa |
 
+Estado 2026-10-01: pasos 1–5 y 7 mergeados (incluida la superficie de
+publicación #955). El paso 6 (#875) está parcial: la política de fábrica
+(`joint.*`/`hardware.*`) aún no alimenta el resolvedor. Pendientes: #919
+(golden vertical) y #879 (consumidor CNC).
+
 ## Handoff para agentes
 
 - Antes de tocar Hardware/Profiles/assignments/recipes/BOM/machining: leer
@@ -78,3 +89,12 @@ Componente (definición)    │                             │
 - Revalidar el estado real del código en cada arranque: este flujo describe
   el objetivo por slice; lo implementado y lo pendiente se distinguen en cada
   issue y su evidencia.
+- Cadena demo ejecutable sin datos de fábrica: `POST /api/seed` siembra
+  `PERF-DEMO-MINIFIX-TAQUETE` con receta embebida y publica el release
+  Standard real → asignar por cara (`PUT
+  /api/catalog/components/{id}/side-assignments`) → resolve → operaciones con
+  provenance + `hardwareProfileDemand`.
+- El CRUD generado usa DELETE por path —
+  `DELETE /api/catalog/hardware-profiles/{id}` y
+  `DELETE /api/catalog/components/{id}/side-assignments/{side}` — el
+  generador ignora query params en DELETE; no reintentes por query.

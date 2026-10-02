@@ -16,7 +16,7 @@
 | **Hardware Profile Item** | Referencia `{hardwareId, quantity, applicationRole?}` dentro de un perfil. Cantidad por aplicación (por contacto). | Dentro del perfil. |
 | **Component Side Assignment** | Declaración de qué perfil aplica a un lado de una definición de componente. El lado es una de las **seis caras canónicas de tablero** (`front/back/left/right/top/bottom`). | Definición del componente en la biblioteca; overridable por overlay de fábrica (#915). |
 | **Relationship / Contact** | Qué piezas concretas están relacionadas y cómo se tocan (motor de uniones #874). | Snapshot de autoría / resolve. |
-| **ContactOperationRecipe** | Receta técnica versionada: reglas por participante (cara de entrada, eje, offsets, Ø, profundidad). **Autoridad de machining** — un solo motor. | Declarada por relación en el wire hoy; su hogar persistente serán las referencias de perfil (#913/#916). |
+| **ContactOperationRecipe** | Receta técnica versionada: reglas por participante (cara de entrada, eje, offsets, Ø, profundidad). **Autoridad de machining** — un solo motor. | Cuerpo embebido en el perfil (`ProfileRecipeBody`, columna `recipe`, migración 000145) y pineado en el release; una relación puede sobreponer recetas explícitas en el wire (#916). |
 | **Machining Operation** | Resultado manufacturable derivado, con provenance (`TechnicalProfileID/Revision`, `RecipeRevision`). | Salida del resolve. |
 | **BOM** | Consumo comercial derivado: líneas de herraje resueltas por `hardwareId` contra el catálogo. | `HardwareLines` → `ResolvedHardwareLine` (#917 extiende a perfiles). |
 
@@ -39,10 +39,13 @@ BOM + manufacturing outputs  (consumo por hardwareId; DXF/CNC adapts)
 ```
 
 **Identidad**: `ContactOperationRecipe.TechnicalProfileID` **es** el ID de un
-HardwareProfile. Los slots de provenance del wire
+HardwareProfile. El resolve ya consume perfiles pineados del release efectivo
+(#916/#918): sintetiza la receta del cuerpo embebido cuando la relación no
+trae override, y los slots de provenance del wire
 (`TechnicalProfileID/TechnicalProfileRevision/RecipeRevision`) se llenan desde
-aquí cuando el resolve consuma perfiles (#916); mientras tanto, producción se
-queda en el terminal honesto `TECHNICAL_PROFILE_REQUIRED`.
+aquí. El terminal `TECHNICAL_PROFILE_REQUIRED` queda para el caso honesto de
+un perfil asignado sin cuerpo de receta — p. ej. creado desde la UI de
+fábrica, que por diseño no edita recetas (superficie Granete, #955).
 
 ## 3. Decisiones de contrato
 
@@ -59,7 +62,9 @@ queda en el terminal honesto `TECHNICAL_PROFILE_REQUIRED`.
    entrada de herramienta la declara la receta (`entryFace` de cada regla).
 4. **La receta es la autoridad de machining** — un solo motor
    (`deriveAuthoringMachining` + reconciliador de contactos). El perfil no
-   calcula perforaciones; referencia la receta y aporta identidad/provenance.
+   calcula perforaciones: lleva el cuerpo de receta embebido
+   (`ProfileRecipeBody`, validado con el contrato #912) y aporta identidad y
+   provenance.
 5. **Precedencia** (de menor a mayor especificidad; wiring en #915/#916):
    1. Default técnico de biblioteca (Standard).
    2. Política/overlay de fábrica para la familia de unión (#775, namespace
@@ -94,6 +99,19 @@ Relationship → Contact → Recipe      Relationship → Contact → Recipe
 BOM: SPAX-4X50 × 2 (precio catálogo) BOM: minifix ×1 + taquete ×1
 ```
 
+Un compuesto SPAX + taquete (tornillo + tarugo en la misma cara) sigue la
+misma forma del compuesto anterior: dos items con roles de aplicación
+distintos y una receta con reglas por participante.
+
+Un mismo componente puede llevar perfiles distintos por cara — cada
+asignación es independiente por cara canónica y falla cerrada por separado
+(p. ej. `front` → minifix + taquete, `top` → SPAX).
+
+La cadena demo es ejecutable sin datos de fábrica: `POST /api/seed` siembra
+`PERF-DEMO-MINIFIX-TAQUETE` (minifix + taquete, receta espejo de las clases
+#911) con su receta embebida y publica el release Standard real
+(`SeedDemoStandardRelease`).
+
 Ver `contracts/hardwareProfile.contract.json` (fixture compartido Go/TS) para
 las formas válidas y cada caso fail-closed.
 
@@ -110,6 +128,8 @@ las formas válidas y cada caso fail-closed.
 - No confundir lado semántico con cara de montaje ni con cara de entrada.
 - No mezclar overlay manufacturero (`LibraryOverlay`, #775) con el overlay
   comercial (`StoreCatalogOverlay`).
+- No publicar (ni sembrar) la biblioteca Standard desde contexto de tenant:
+  la publicación es superficie exclusiva del staff de plataforma (#955).
 
 ## 6. Integraciones
 
@@ -121,8 +141,9 @@ las formas válidas y cada caso fail-closed.
 | #775 (overlay) | El cliente parametriza SU fábrica (cantidades, selección de perfil) en el overlay, namespace `hardware.`; Standard no se muta. |
 | #443 (persistencia) | Tabla/API generadas del perfil: #913. |
 | #784 (defaults de Design) | Selecciona capacidades autorizadas; no sustituye la política de fábrica ni crea perfiles. |
-| #917 (BOM) | Los items del perfil alimentan líneas de consumo resueltas contra el catálogo. |
+| #917 (BOM) | Los items del perfil alimentan `hardwareProfileDemand` (demanda derivada del camino resuelto) y líneas de consumo resueltas contra el catálogo; el wiring al BOM del proyecto es el alcance restante de #917. |
 | #916 (resolve) | El resolve consume el perfil pineado del release efectivo; producción pasa de `nil` a perfiles reales. |
+| #955 (publicación) | Sólo el staff de plataforma Granete publica la biblioteca Standard: draft + publish atómico con perfiles y recetas validadas (ver §7). |
 
 ## 7. Versionado
 
@@ -135,6 +156,12 @@ las formas válidas y cada caso fail-closed.
 - La parametrización de fábrica vive en el overlay con su propia base/rebase;
   un rebase con conflicto semántico (nuevo espesor vs profundidad de receta
   vieja) no activa el candidato.
+- La publicación del release Standard es superficie de plataforma Granete
+  (#955): `POST /api/manufacturing-libraries/standard/releases` crea el draft
+  y `POST /api/manufacturing-libraries/standard/releases/{releaseId}/publish`
+  compila herrajes + perfiles activos validados y publica manifiesto y blobs
+  content-addressed de forma atómica. Autoriza el claim `PlatformAdmin`; un
+  rol de tenant nunca autoriza.
 
 ## 8. Fuera de alcance de este contrato
 
