@@ -77,6 +77,23 @@ func toFurnitureInstanceDTO(instance domain.FurnitureInstance) openapi.Furniture
 	if instance.OriginFurnitureInstanceID != "" {
 		dto.OriginFurnitureInstanceID = &instance.OriginFurnitureInstanceID
 	}
+	if instance.AuthoringSnapshot != nil {
+		snapshot := openapi.FurnitureInstanceAuthoringSnapshot{}
+		if instance.AuthoringSnapshot.Parameters != nil {
+			snapshot.Parameters = instance.AuthoringSnapshot.Parameters
+		}
+		if instance.AuthoringSnapshot.MaterialChoices != nil {
+			snapshot.MaterialChoices = instance.AuthoringSnapshot.MaterialChoices
+		}
+		if instance.AuthoringSnapshot.MaterialChoiceModes != nil {
+			modes := map[string]openapi.DesignMaterialChoiceMode{}
+			for role, mode := range instance.AuthoringSnapshot.MaterialChoiceModes {
+				modes[role] = openapi.DesignMaterialChoiceMode(mode)
+			}
+			snapshot.MaterialChoiceModes = modes
+		}
+		dto.AuthoringSnapshot = &snapshot
+	}
 	return dto
 }
 
