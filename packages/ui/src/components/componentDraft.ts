@@ -215,6 +215,8 @@ const componentDraftRule = objectRule({
     componentId: stringRule,
     joinerySystemId: optionalRule(stringRule),
     stationsCount: optionalRule(numberRule),
+    startMarginMm: optionalRule(numberRule),
+    endMarginMm: optionalRule(numberRule),
     constructiveRole: optionalRule(stringRule),
     connectionFaces: optionalRule(arrayRule(stringRule)),
     provenance: optionalRule(stringRule),
@@ -259,9 +261,6 @@ export function componentToDraft(item: Component): ComponentDraft {
     active: item.active,
     perforations: item.perforations,
   };
-  if (item.constructionOverride) {
-    draft.constructionOverride = item.constructionOverride;
-  }
   return draft;
 }
 

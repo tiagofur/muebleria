@@ -11,8 +11,23 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Component, OptionGroup, MaterialBoard, PlacementDims, FactoryConstructionPolicy } from '@granete/domain';
+import type { Component, ComponentConstructionOverride, OptionGroup, MaterialBoard, PlacementDims, FactoryConstructionPolicy } from '@granete/domain';
 import type { BoardFace } from '@granete/domain';
+
+/**
+ * #875 slice 3: the editor draft opens with the component's STORED station
+ * exception (factory overlay truth) so the panel shows the real inherited/
+ * excepted state instead of an empty override.
+ */
+function draftWithStoredException(
+  base: ComponentDraft,
+  componentId: string,
+  policy?: FactoryConstructionPolicy,
+): ComponentDraft {
+  const stored = policy?.componentOverrides?.[componentId];
+  if (!stored) return base;
+  return { ...base, constructionOverride: { ...stored } };
+}
 import type { ComponentSideAssignmentView, ComponentProfileOption } from './editor/ComponentSideAssignmentsPanel';
 import {
   evaluatePartFormula,
@@ -73,6 +88,15 @@ export interface ComponentsScreenProps {
   readonly onSelectionChange?: (id: string | null) => void;
   /** Factory construction policy (#875). */
   readonly factoryPolicy?: FactoryConstructionPolicy;
+  /** #875 slice 3: per-component station exception (factory overlay truth). */
+  readonly constructionException?: {
+    readonly componentId: string | null;
+    readonly canMutate: boolean;
+    readonly stored?: ComponentConstructionOverride | null;
+    readonly saving: boolean;
+    readonly error: string | null;
+    readonly onSave: (override: ComponentConstructionOverride | null) => void | Promise<void>;
+  };
   /** #915: profiles to offer in the per-face pickers. */
   readonly profileOptions?: readonly ComponentProfileOption[];
   /** #915: per-face profile assignments for the editor (saved components). */
@@ -103,6 +127,7 @@ export function ComponentsScreen({
   onRequestEdit,
   onSelectionChange,
   factoryPolicy,
+  constructionException,
 }: ComponentsScreenProps): ReactNode {
   const formId = useId();
   const [search, setSearch] = useState('');
@@ -284,7 +309,7 @@ export function ComponentsScreen({
     // Entity baseline for dirty compare; keep session draft if present (R3-C1).
     seedEditorDraftFromBaseline(
       draftKey,
-      componentToDraft(component),
+      draftWithStoredException(componentToDraft(component), component.id, factoryPolicy),
       setDraft,
       setInitialDraft,
       isComponentDraft,
@@ -344,7 +369,7 @@ export function ComponentsScreen({
       onRequestEdit(item.id);
       return;
     }
-    const fresh = componentToDraft(item);
+    const fresh = draftWithStoredException(componentToDraft(item), item.id, factoryPolicy);
     setDraft(fresh);
     setInitialDraft(fresh);
     setEditingId(item.id);
@@ -553,6 +578,14 @@ export function ComponentsScreen({
           showInContext={showInContext}
           onShowInContextChange={setShowInContext}
           factoryPolicy={factoryPolicy}
+          constructionException={{
+            componentId: constructionException?.componentId ?? null,
+            canMutate: constructionException?.canMutate ?? false,
+            stored: constructionException?.stored ?? null,
+            saving: constructionException?.saving ?? false,
+            error: constructionException?.error ?? null,
+            onSave: (override) => constructionException?.onSave(override),
+          }}
           profileOptions={profileOptions}
           sideAssignments={sideAssignments}
         />

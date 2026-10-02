@@ -53,6 +53,8 @@ export interface ComponentConstructionOverride {
   readonly connectionFaces?: readonly ConnectionFace[];
   readonly joinerySystemId?: string;
   readonly stationsCount?: number;
+  readonly startMarginMm?: number;
+  readonly endMarginMm?: number;
   readonly provenance?: JoineryProvenance;
 }
 
@@ -248,7 +250,7 @@ export function overlayOverridesToPolicy(overrides: Record<string, unknown> | nu
             provenance: 'factory',
           }
         : DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel,
-      componentOverrides: structured.componentOverrides,
+      componentOverrides: pickStoredComponentOverrides(structured.componentOverrides),
     };
   }
 
@@ -341,6 +343,34 @@ export function restoreInheritance(
   return policy;
 }
 
+/**
+ * The Go parser (#875 slice 3) stores a component entry only when it carries
+ * at least one station-pattern scalar (presence of a stored field IS the
+ * override intent) — the client reader mirrors that drop so both sides derive
+ * identical policy from one overlay. Editor-only fields (role, faces, system)
+ * never fabricate an entry the engine would not see.
+ */
+function pickStoredComponentOverrides(
+  raw: unknown,
+): FactoryConstructionPolicy['componentOverrides'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, ComponentConstructionOverride> = {};
+  for (const [componentId, entry] of Object.entries(
+    raw as Record<string, Partial<ComponentConstructionOverride>>,
+  )) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (
+      entry.stationsCount === undefined &&
+      entry.startMarginMm === undefined &&
+      entry.endMarginMm === undefined
+    ) {
+      continue;
+    }
+    out[componentId] = entry as ComponentConstructionOverride;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 /** Validate construction policy parameters. */
 export function validateConstructionPolicy(policy: FactoryConstructionPolicy): { valid: boolean; issues: string[] } {
   const issues: string[] = [];
@@ -369,6 +399,18 @@ export function validateConstructionPolicy(policy: FactoryConstructionPolicy): {
   }
   if (policy.backPanel.maxSpacingMm < 50 || policy.backPanel.maxSpacingMm > 1000) {
     issues.push('backPanel: maxSpacingMm must be between 50mm and 1000mm');
+  }
+
+  for (const [componentId, entry] of Object.entries(policy.componentOverrides ?? {})) {
+    if (entry.stationsCount !== undefined && (entry.stationsCount < 1 || entry.stationsCount > 10)) {
+      issues.push(`componentOverrides.${componentId}: stationsCount must be between 1 and 10`);
+    }
+    if (entry.startMarginMm !== undefined && (entry.startMarginMm < 10 || entry.startMarginMm > 300)) {
+      issues.push(`componentOverrides.${componentId}: startMarginMm must be between 10mm and 300mm`);
+    }
+    if (entry.endMarginMm !== undefined && (entry.endMarginMm < 10 || entry.endMarginMm > 300)) {
+      issues.push(`componentOverrides.${componentId}: endMarginMm must be between 10mm and 300mm`);
+    }
   }
 
   return { valid: issues.length === 0, issues };

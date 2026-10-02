@@ -8,6 +8,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import {
   type ConnectionFace,
   type ConstructiveRole,
+  type ComponentConstructionOverride,
   type FactoryConstructionPolicy,
   type JoineryProvenance,
   type JoinerySystemId,
@@ -21,6 +22,20 @@ export type ComponentEditorJoineryPanelProps = {
   readonly setDraft: Dispatch<SetStateAction<ComponentDraft>>;
   readonly hidden: boolean;
   readonly factoryPolicy?: FactoryConstructionPolicy;
+  /**
+   * #875 slice 3: the station exception is FACTORY OVERLAY truth, not part of
+   * the component entity. `stored` is the server value for this component;
+   * `onSave(null)` restores inheritance. Editor-only fields (role, faces,
+   * system) stay component-draft state — only the station pattern persists.
+   */
+  readonly constructionException?: {
+    readonly componentId: string | null;
+    readonly canMutate: boolean;
+    readonly stored?: ComponentConstructionOverride | null;
+    readonly saving: boolean;
+    readonly error: string | null;
+    readonly onSave: (override: ComponentConstructionOverride | null) => void | Promise<void>;
+  };
 };
 
 const SYSTEM_OPTIONS: readonly { value: JoinerySystemId; label: string }[] = [
@@ -65,14 +80,27 @@ export function ComponentEditorJoineryPanel({
   setDraft,
   hidden,
   factoryPolicy = DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+  constructionException,
 }: ComponentEditorJoineryPanelProps): ReactNode {
   const override = draft.constructionOverride;
+  const stored = constructionException?.stored ?? null;
   const hasLocalOverride = Boolean(
     override &&
       (override.joinerySystemId !== undefined ||
         override.stationsCount !== undefined ||
+        override.startMarginMm !== undefined ||
+        override.endMarginMm !== undefined ||
         override.constructiveRole !== undefined ||
         (override.connectionFaces && override.connectionFaces.length > 0)),
+  );
+  // Server truth for the station pattern: what the overlay stores for THIS
+  // component is the exception; dirty local edits are exactly that until the
+  // explicit save lands.
+  const storedExceptionActive = Boolean(
+    stored &&
+      (stored.stationsCount !== undefined ||
+        stored.startMarginMm !== undefined ||
+        stored.endMarginMm !== undefined),
   );
 
   const inferredRole = inferConstructiveRole(draft.placement);
@@ -86,7 +114,7 @@ export function ComponentEditorJoineryPanel({
     factoryFamilyRule = factoryPolicy.shelfToSide;
   }
 
-  const effectiveProvenance: JoineryProvenance = hasLocalOverride
+  const effectiveProvenance: JoineryProvenance = storedExceptionActive
     ? 'component'
     : factoryFamilyRule.provenance ?? 'library';
 
@@ -111,7 +139,29 @@ export function ComponentEditorJoineryPanel({
       delete next.constructionOverride;
       return next;
     });
+    if (storedExceptionActive) {
+      void constructionException?.onSave(null);
+    }
   };
+
+  // The overlay entry carries ONLY the station pattern scalars the engine
+  // consumes; role/faces/system stay component-editor state.
+  const handleSaveException = () => {
+    if (!constructionException?.componentId || !override) return;
+    void constructionException.onSave({
+      componentId: constructionException.componentId,
+      stationsCount: override.stationsCount,
+      startMarginMm: override.startMarginMm,
+      endMarginMm: override.endMarginMm,
+      provenance: 'component',
+    });
+  };
+
+  const exceptionDirty =
+    hasLocalOverride &&
+    (override?.stationsCount !== stored?.stationsCount ||
+      override?.startMarginMm !== stored?.startMarginMm ||
+      override?.endMarginMm !== stored?.endMarginMm);
 
   const toggleFace = (face: ConnectionFace) => {
     const currentFaces = override?.connectionFaces ?? [];
@@ -177,11 +227,12 @@ export function ComponentEditorJoineryPanel({
                 : '🏛️ Biblioteca (Estándar Granete)'}
             </span>
 
-            {hasLocalOverride ? (
+            {hasLocalOverride || storedExceptionActive ? (
               <button
                 type="button"
                 className="btn btn--secondary btn--sm"
                 onClick={handleRestoreInheritance}
+                disabled={constructionException?.saving}
                 data-testid="component-restore-inheritance-btn"
                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)' }}
               >
@@ -189,12 +240,31 @@ export function ComponentEditorJoineryPanel({
                 Restaurar herencia
               </button>
             ) : null}
+            {exceptionDirty && constructionException?.componentId ? (
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                onClick={handleSaveException}
+                disabled={constructionException.saving || !constructionException.canMutate}
+                data-testid="component-save-exception-btn"
+                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)' }}
+              >
+                <Factory size={12} aria-hidden />
+                {constructionException.saving ? 'Guardando…' : 'Guardar excepción'}
+              </button>
+            ) : null}
           </div>
         </div>
         <p className="settings-hint" style={{ margin: 0 }}>
-          {hasLocalOverride
-            ? 'Esta pieza tiene configuraciones específicas que anulan la política general del taller.'
-            : 'Esta pieza hereda automáticamente los criterios de ensamble y perforado definidos para el taller.'}
+          {constructionException?.error ? (
+            <span role="alert" data-testid="component-exception-error">{constructionException.error}</span>
+          ) : storedExceptionActive ? (
+            'Esta pieza tiene una excepción guardada en el overlay de la fábrica: gobierna el perforado real de sus uniones.'
+          ) : hasLocalOverride ? (
+            'Configuración sin guardar: usá «Guardar excepción» para fijarla en la política de la fábrica.'
+          ) : (
+            'Esta pieza hereda automáticamente los criterios de ensamble y perforado definidos para el taller.'
+          )}
         </p>
       </div>
 
@@ -295,7 +365,7 @@ export function ComponentEditorJoineryPanel({
               type="number"
               min={1}
               max={8}
-              placeholder={`Heredado (${factoryFamilyRule.stationsCount})`}
+              placeholder={`Heredado (${stored?.stationsCount ?? factoryFamilyRule.stationsCount})`}
               value={override?.stationsCount ?? ''}
               onChange={(e) =>
                 updateOverride({
@@ -305,7 +375,44 @@ export function ComponentEditorJoineryPanel({
               data-testid="component-stations-count-input"
             />
           </div>
+
+          <div className="catalog-form__field">
+            <label htmlFor="component-start-margin">Margen inicial (mm)</label>
+            <input
+              id="component-start-margin"
+              type="number"
+              min={0}
+              placeholder={`Heredado (${stored?.startMarginMm ?? factoryFamilyRule.startMarginMm})`}
+              value={override?.startMarginMm ?? ''}
+              onChange={(e) =>
+                updateOverride({
+                  startMarginMm: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+              data-testid="component-start-margin-input"
+            />
+          </div>
+
+          <div className="catalog-form__field">
+            <label htmlFor="component-end-margin">Margen final (mm)</label>
+            <input
+              id="component-end-margin"
+              type="number"
+              min={0}
+              placeholder={`Heredado (${stored?.endMarginMm ?? factoryFamilyRule.endMarginMm})`}
+              value={override?.endMarginMm ?? ''}
+              onChange={(e) =>
+                updateOverride({
+                  endMarginMm: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+              data-testid="component-end-margin-input"
+            />
+          </div>
         </div>
+        <span className="settings-hint" style={{ marginTop: 4 }}>
+          Los valores guardados son una excepción por componente: pisan la política general de la fábrica para esta pieza.
+        </span>
       </fieldset>
     </div>
   );
