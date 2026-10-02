@@ -581,7 +581,7 @@ run_prepared_automatic_gate() {
     # run, so surface the tail before exiting (#964/#875 diagnosis debt).
     if [ -f "${TMP_ROOT}/backend.log" ]; then
       printf '[organization-gate] backend.log tail (diagnostics):\n' >&2
-      tail -n 120 "${TMP_ROOT}/backend.log" >&2 || true
+      tail -n 4000 "${TMP_ROOT}/backend.log" >&2 || true
     fi
     return 1
   fi
