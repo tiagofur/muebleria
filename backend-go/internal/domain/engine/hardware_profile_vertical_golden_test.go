@@ -2,7 +2,9 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -90,6 +92,8 @@ type verticalGolden struct {
 				ExpectedDistancesMm []float64 `json:"expectedDistancesMm"`
 				Expected            struct {
 					GeometryUnchanged                  bool   `json:"geometryUnchanged"`
+					IdentityChanged                    bool   `json:"identityChanged"`
+					FingerprintInputChanges            bool   `json:"fingerprintInputChanges"`
 					ProvenanceRecipeRevision           string `json:"provenanceRecipeRevision"`
 					ProvenanceTechnicalProfileRevision string `json:"provenanceTechnicalProfileRevision"`
 				} `json:"expected"`
@@ -200,10 +204,10 @@ func TestVerticalGoldenContactOperations(t *testing.T) {
 	}
 	byKey := map[string]NeutralContactOperation{}
 	for _, op := range derived.Operations {
-		byKey[op.Provenance.ParticipantID+"|"+op.Provenance.RuleID+"|"+string(rune('0'+op.Provenance.StationIndex))] = op
+		byKey[fmt.Sprintf("%s|%s|%d", op.Provenance.ParticipantID, op.Provenance.RuleID, op.Provenance.StationIndex)] = op
 	}
 	for _, want := range expected {
-		op, ok := byKey[want.Participant+"|"+want.RuleID+"|"+string(rune('0'+want.StationIndex))]
+		op, ok := byKey[fmt.Sprintf("%s|%s|%d", want.Participant, want.RuleID, want.StationIndex)]
 		if !ok {
 			t.Fatalf("missing hand-computed operation %s/%s/station %d", want.Participant, want.RuleID, want.StationIndex)
 		}
@@ -278,6 +282,16 @@ func TestVerticalGoldenMutations(t *testing.T) {
 					if op.CenterLocalMm != baseDerived.Operations[i].CenterLocalMm ||
 						op.DiameterMm != baseDerived.Operations[i].DiameterMm || op.DepthMm != baseDerived.Operations[i].DepthMm {
 						t.Fatalf("geometry must not change at operation %d", i)
+					}
+					// The declared identity contract: a RECIPE revision bump
+					// moves the technical identity of EVERY operation; a
+					// PROFILE revision bump keeps it (recipe-scoped identity)
+					// while the fingerprint input still carries the profile.
+					if mutation.Expected.IdentityChanged && op.OperationID == baseDerived.Operations[i].OperationID {
+						t.Fatalf("revision bump must change the technical operation identity at operation %d", i)
+					}
+					if mutation.Change.TechnicalProfileRevision != "" && op.OperationID != baseDerived.Operations[i].OperationID {
+						t.Fatalf("profile revision bump must NOT change the recipe-scoped operation identity at operation %d", i)
 					}
 				}
 			}
@@ -369,8 +383,9 @@ func TestVerticalGoldenFailClosedWithoutProfile(t *testing.T) {
 // leave an unrelated contact's operations untouched, and a recipe-revision
 // bump must change the technical operation identity (the fingerprint input)
 // without moving any geometry. The second contact is the same governed joint
-// against a SECOND side panel (same orientation, shifted 150mm along the
-// shelf's cross axis so both bodies are valid and the faces stay coplanar).
+// against a second side panel: B2 intentionally shares B's assembly
+// geometry, because this test validates INDEPENDENT CONTACT STATE (own spec
+// entry, own frame instance, own recipes) — never collision detection.
 func TestVerticalGoldenMutationIsolationAndIdentity(t *testing.T) {
 	golden := loadVerticalGolden(t)
 	boards, contact, spec, recipe := verticalGoldenScenario(t, golden)
@@ -480,7 +495,7 @@ func TestVerticalGoldenDemandCost(t *testing.T) {
 				CostPerUnit float64 `json:"costPerUnit"`
 			} `json:"hardware"`
 			ExpectedHardwareDemand struct {
-				Lines    []struct {
+				Lines []struct {
 					HardwareID string  `json:"hardwareId"`
 					Quantity   float64 `json:"quantity"`
 					UnitCost   float64 `json:"unitCost"`
@@ -511,4 +526,34 @@ func TestVerticalGoldenDemandCost(t *testing.T) {
 	if total != raw.BomScenario.ExpectedHardwareDemand.TotalCost {
 		t.Fatalf("total cost = %v, want %v (no double counting)", total, raw.BomScenario.ExpectedHardwareDemand.TotalCost)
 	}
+}
+
+// #919 review pass: the machining fingerprint INPUT carries the technical
+// profile identity — a profile revision bump moves the fingerprint even
+// though the recipe-scoped OperationID stays stable.
+func TestVerticalGoldenFingerprintInputCarriesProfileRevision(t *testing.T) {
+	golden := loadVerticalGolden(t)
+	base := ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "golden-relationship-1",
+		RecipeRevision:     golden.ContactScenario.Recipe.RecipeRevision,
+		TechnicalProfileID: golden.ContactScenario.Recipe.TechnicalProfileID, TechnicalProfileRevision: "rev-1"}
+	bumped := base
+	bumped.TechnicalProfileRevision = "rev-2"
+	baseJSON, err := json.Marshal(base.canonical())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bumpedJSON, err := json.Marshal(bumped.canonical())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(baseJSON) == string(bumpedJSON) {
+		t.Fatalf("the fingerprint input must carry the technical profile revision: %s", baseJSON)
+	}
+	if !containsField(baseJSON, "technicalProfileRevision") {
+		t.Fatalf("fingerprint input drops technicalProfileRevision: %s", baseJSON)
+	}
+}
+
+func containsField(raw []byte, field string) bool {
+	return len(raw) > 0 && strings.Contains(string(raw), `"`+field+`"`)
 }

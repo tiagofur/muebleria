@@ -4,6 +4,12 @@
  * fixture was derived on paper; the TS mirror must reproduce the contact
  * operations exactly as the Go engine does. A mismatch is a finding, never
  * a regeneration.
+ *
+ * Deliberate independence (#967 review): the expected holes below are
+ * DUPLICATED from the fixture ON PURPOSE. If the fixture and both runtimes
+ * ever agreed on a wrong number, these independent literals are the second
+ * key that turns the disagreement into a visible failure instead of a
+ * shared regression.
  */
 
 import { readFileSync } from 'node:fs';

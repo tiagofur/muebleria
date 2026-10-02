@@ -248,8 +248,7 @@
           "expectedDistancesMm": [
             10,
             70
-          ],
-          "unrelatedOperationCountUnchanged": true
+          ]
         },
         {
           "name": "station count 3 redistributes the pattern",
@@ -270,18 +269,22 @@
           },
           "expected": {
             "geometryUnchanged": true,
-            "provenanceRecipeRevision": "golden-2"
+            "provenanceRecipeRevision": "golden-2",
+            "identityChanged": true
           }
         },
         {
-          "name": "technical profile revision bump changes provenance only",
+          "name": "technical profile revision bump changes provenance and the fingerprint input; operation identity stays recipe-scoped",
           "change": {
             "technicalProfileRevision": "rev-2"
           },
           "expected": {
             "geometryUnchanged": true,
-            "provenanceTechnicalProfileRevision": "rev-2"
-          }
+            "identityChanged": false,
+            "provenanceTechnicalProfileRevision": "rev-2",
+            "fingerprintInputChanges": true
+          },
+          "comment": "Pinned contract: the per-operation OperationID is RECIPE-scoped (a profile revision bump keeps it stable), while the machining fingerprint input carries technicalProfileId/Revision — so the technical fingerprint still moves. Folding the profile revision into the OperationID would be an industrial identity contract change and needs explicit owner authorization; it is deliberately NOT done here."
         }
       ]
     },
