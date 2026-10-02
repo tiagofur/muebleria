@@ -177,7 +177,7 @@ async function saveShelfPolicy(token: string, stations: number): Promise<void> {
   const active = await client.getActiveStandardLibraryOverlay(token);
   if (active) {
     const merged = { ...((active.overrides ?? {}) as Record<string, unknown>), ...overrides };
-    await client.updateLibraryOverlay(token, active.id, { overrides: merged });
+    await client.updateLibraryOverlay(token, active.id, active.version, { overrides: merged });
     return;
   }
   await client.createLibraryOverlay(token, { baseReleaseId: current.id, overrides });
