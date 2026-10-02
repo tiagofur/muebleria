@@ -71,10 +71,20 @@ function buildSandbox() {
     addEventListener: () => {}
   };
 
+  const timers = [];
   const sandbox = {
     console,
-    setTimeout: (fn) => { fn(); return 0; },
-    clearTimeout: () => {},
+    setTimeout: (fn, delay) => {
+      if (typeof delay === 'number' && delay > 500) {
+        timers.push(fn);
+        return timers.length;
+      }
+      fn();
+      return 0;
+    },
+    clearTimeout: (id) => {
+      if (id && timers[id - 1]) timers[id - 1] = null;
+    },
     setInterval: () => 0,
     clearInterval: () => {},
     document: documentMock,
@@ -97,6 +107,7 @@ function buildSandbox() {
   };
   sandbox.__registry = registry;
   sandbox.__bridge = bridgeCalls;
+  sandbox.__timers = timers;
   return sandbox;
 }
 
