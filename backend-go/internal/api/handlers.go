@@ -2114,6 +2114,7 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Store.SeedCatalog(r.Context()); err != nil {
+		slog.Error("seed catalog failed", "error", err)
 		respondWithInternalError(w, err, "seed")
 		return
 	}
@@ -2130,6 +2131,7 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	// platform-only and carries EVERY org's provisioned profile.
 	profileID, err := application.SeedDemoForOrg(r.Context(), s.Store, storage.OrgFromCtx(r.Context()), demoPublisher)
 	if err != nil {
+		slog.Error("seed demo release failed", "error", err)
 		respondWithInternalError(w, err, "seed demo release")
 		return
 	}

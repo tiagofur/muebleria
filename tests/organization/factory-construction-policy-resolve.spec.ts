@@ -527,8 +527,14 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     // same Standard definition shape (its org, its ids).
     await page.context().clearCookies();
     const tokenB = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
+    // Probe: a benign B-authenticated write isolates middleware/tx vs seed.
+    const probe = await authedFetch(tokenB, '/catalog/components', {
+      method: 'POST',
+      body: JSON.stringify({ id: 'b3333333-9640-4000-8000-000000000001', code: 'PROBE-B', name: 'Probe B', placement: 'interno', geometry_kind: 'rectangular_board', thickness_mm: 18, active: true }),
+    });
+    console.log(`[probe] B component write status=${probe.status} body=${await probe.text().catch(() => '')}`);
     const seededB = await authedFetch(tokenB, '/seed', { method: 'POST' });
-    expect(seededB.ok, `seed B: ${seededB.status}`).toBe(true);
+    expect(seededB.ok, `seed B: ${seededB.status} ${await seededB.text().catch(() => '')}`).toBe(true);
     const { profileId: profileB } = (await seededB.json()) as { profileId: string };
     expect(profileB).not.toBe(profileA); // per-org provisioning, never shared
     const moduleIdB = await seedPolicyCatalog(tokenB, 'b', 'ab', profileB);
