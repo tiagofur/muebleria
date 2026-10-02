@@ -16,11 +16,10 @@
  *       the definition default 3 — with purchase demand and a different
  *       machining fingerprint per governed state.
  *
- * The two-factory (A vs B) case of the acceptance needs each organization
- * to hold a recipe-bearing profile; profiles authored by org admins carry
- * no recipe by design (#955 surface), and the platform seed provisions one
- * organization. That gap is named in the ODD; this gate proves the
- * governance mechanics the slice adds.
+ * The two-factory (A vs B) case of the acceptance is the #964 proof: each
+ * organization holds its OWN provisioned recipe-bearing profile (deterministic
+ * per-org ids), and platform staff publish ONE Standard release revision
+ * carrying every org's profile — the pinned truth both resolves read.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -504,19 +503,19 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
 
   test('A/B REAL: cada fábrica resuelve su propio perfil provisionado (#964)', async ({ page }) => {
     test.setTimeout(240_000);
-    // Factory A provisions and saves 4 stations.
+    // Factory A (its owner is the gate's platform staff) provisions AND
+    // publishes the Standard release carrying every org's profile so far.
     const tokenA = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
     const seededA = await authedFetch(tokenA, '/seed', { method: 'POST' });
     expect(seededA.ok, `seed A: ${seededA.status}`).toBe(true);
     const { profileId: profileA } = (await seededA.json()) as { profileId: string };
     const moduleIdA = await seedPolicyCatalog(tokenA, 'a', 'ab', profileA);
     await saveShelfPolicy(tokenA, 4);
-    const a = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleIdA));
-    expect(a.stations).toBe(4);
-    expect(a.fingerprint).toMatch(/^sha256-/);
 
-    // Factory B: its OWN provisioned profile + assignment + policy over the
-    // same Standard definition shape (its org, its ids).
+    // Factory B (org admin, NOT platform staff): its OWN provisioned profile
+    // + assignment + policy over the same Standard definition shape (its
+    // org, its ids). The seed provisions; the publication step is
+    // platform-gated and B's caller correctly skips it.
     await page.context().clearCookies();
     const tokenB = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
     const seededB = await authedFetch(tokenB, '/seed', { method: 'POST' });
@@ -528,7 +527,33 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     const moduleIdB = await seedPolicyCatalog(tokenB, 'b', 'ab', profileB);
     await saveShelfPolicy(tokenB, 2);
 
-    const b = shelfEvidence(await resolveDefinitionDefault(tokenB, moduleIdB));
+    // Platform staff publishes ONE new Standard release revision carrying
+    // EVERY org's provisioned profile (#964): the resolve pins profiles to
+    // the PUBLISHED manifest (#875 slice 2), so B's profile must be compiled
+    // into one before either factory can resolve. Real #955 surface: new
+    // draft + deliberate publish (the seed never recompiles a published
+    // release — immutability).
+    const draft = await authedFetch(tokenA, '/manufacturing-libraries/standard/releases', {
+      method: 'POST',
+      body: JSON.stringify({ version: `gate-ab-${Date.now()}`, changelog: 'A/B per-org provisioning (#964)' }),
+    });
+    const draftBody = await draft.text().catch(() => '');
+    expect(draft.ok, `create draft: ${draft.status} ${draftBody}`).toBe(true);
+    const { id: draftId } = JSON.parse(draftBody) as { id: string };
+    const published = await authedFetch(tokenA, `/manufacturing-libraries/standard/releases/${draftId}/publish`, {
+      method: 'POST',
+    });
+    expect(published.ok, `publish: ${published.status} ${await published.text().catch(() => '')}`).toBe(true);
+
+    // Both factories resolve MACHINING_READY under the SAME published
+    // revision, each through its own provisioned profile + station policy.
+    const a = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleIdA));
+    expect(a.stations).toBe(4);
+    expect(a.fingerprint).toMatch(/^sha256-/);
+
+    await page.context().clearCookies();
+    const tokenB2 = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
+    const b = shelfEvidence(await resolveDefinitionDefault(tokenB2, moduleIdB));
     expect(b.stations).toBe(2);
     expect(b.profileOps).toBe(4);
     expect(b.demand.size).toBeGreaterThan(0);
