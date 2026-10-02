@@ -8,9 +8,11 @@ same factory whether an agent has Gentle-AI or only the repository.
 
 1. Confirm the exact open issue, `status:approved`, acceptance, exclusions, base,
    existing PR, ownership, and remote facts needed for the task.
-2. Select one lane: Direct, ODD, or explicit SDD.
+2. Select one G-ODD topology: **Inline Direct** or **Delegated Direct**.
 3. Run the read-only preflight, read only affected truth sources, and prepare one
-   implementation pass with the required verification.
+   implementation pass with the required verification. For bounded evidence, start
+   with one parallel batch; if the parent would exceed its useful evidence budget,
+   delegate one read-only Explorer.
 4. Keep one writer on the isolated branch. Freeze the candidate and hand its exact
    HEAD/base to a different, fresh reviewer.
 5. Consolidate blockers into one correction round when feasible, revalidate the
@@ -20,12 +22,41 @@ No step creates approval by implication. Search, planning, infrastructure work,
 an issue reservation, an artifact, an Engram memory, or a green test does not
 authorize product changes outside the approved issue.
 
+## ODD topology and evidence budget
+
+G-ODD is one repository-owned workflow with two execution topologies:
+
+| Topology | Use | Durable artifact |
+| --- | --- | --- |
+| **Inline Direct** | Small, mechanical, understood work where the parent has enough context | None |
+| **Delegated Direct** | Exploration-heavy, multi-file, context-heavy, or substantial authorized work | One `odd/tasks/<issue>-<slug>.md` when recovery is valuable |
+
+Delegation does not create a second workflow. The parent remains the coordinator;
+a read-only Explorer maps evidence when the parent budget is exceeded, a Writer
+changes only the explicit allowed edit surface, and a Verifier provides fresh
+read-only verification when risk warrants it.
+
+Evidence budget is a routing heuristic, not a quality cap: begin with one bounded
+parallel batch (roughly up to 3 focused calls / 10k tokens), use bounded line ranges
+and targeted searches, and escalate to one Explorer when evidence would otherwise
+require roughly more than five sequential lookups or a long mapping session. The
+Explorer returns concise path:line evidence; the parent spot-checks the result.
+
+Verification is risk-based:
+- passive/low-risk: structural readback (V0);
+- medium risk: writer self-verification plus applicable V0/V1 evidence;
+- high or unclear risk: writer self-verification plus an independent fresh verifier,
+  with V2 when the real boundary is affected.
+
+These topologies and budgets do not authorize delivery. Push, PR, merge, and release
+remain governed by the issue, repository policy, and human authority.
+
 ## One contract, two adapters
 
 | Runtime | Adapter | Required behavior |
 | --- | --- | --- |
-| Gentle-present | Gentle-AI native ODD/SDD, skills, delegation, and optional Engram mirror | Follow native mechanics without adding a competing Granete workflow |
-| Gentle-absent | `AGENTS.md`, role skills, this contract, `odd/tasks/`, and repository scripts | Reproduce the same authority, lanes, evidence, and delivery gates manually |
+| Gentle-present | Gentle-AI native ODD, skills, delegation, and optional Engram mirror | Follow native mechanics without adding a competing Granete workflow |
+| Gentle-absent | `AGENTS.md`, role skills, this contract, `odd/tasks/`, and repository scripts | Reproduce the same authority, topologies, evidence routing, and delivery gates manually |
 
 Gentle-AI is an implementation of the Granete contract, not a second factory.
 Repository and GitHub authority do not weaken when a native adapter is present.
@@ -38,15 +69,16 @@ resolved from the sources below, then the mirror is refreshed.
 
 ## Lane selection and the single artifact rule
 
-| Lane | Select when | Durable execution artifact |
-| --- | --- | --- |
-| **Direct** | The authorized change is small, understood, and one coherent step | None |
-| **ODD** | Work has at least two meaningful steps or is worth recovering after interruption | Exactly one `odd/tasks/<issue>-<slug>.md` |
-| **Explicit SDD** | The human explicitly requests or accepts formal proposal/spec/design/tasks | Its canonical SDD tasks artifact; never a duplicate ODD task file |
+There is one G-ODD workflow. Choose its topology, not a separate methodology:
 
-Size and risk can change verification and delivery slicing, but do not select SDD.
-Do not create a plan file, session file, review-round file, and task file for the
-same issue. Resume and update the one artifact. Direct work stays artifact-free.
+| Topology | Select when | Durable execution artifact |
+| --- | --- | --- |
+| **Inline Direct** | Small, understood, bounded work that does not need recovery context | None |
+| **Delegated Direct** | Substantial, exploration-heavy, context-heavy, or multi-file work | Exactly one `odd/tasks/<issue>-<slug>.md` when recovery is valuable |
+
+Do not introduce a second SDD/OpenSpec workflow or duplicate planning artifacts.
+Size and risk affect evidence, verification, and delivery slicing; they do not create
+another lane. Resume the same issue artifact when one exists.
 
 `feature_list.json` is a compact catalog of high-level product capabilities. It is
 not a queue, scheduler, issue authority, reservation, ownership record, or source

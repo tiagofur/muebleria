@@ -146,7 +146,7 @@ explicitly requires the historical full harness, never as the default start.
 Then:
 
 1. read the exact approved GitHub issue and current ownership;
-2. choose Direct, ODD, or explicit SDD using the portable contract;
+2. choose the G-ODD topology: Inline Direct or Delegated Direct, using the portable contract;
 3. read the canonical sources for the affected area;
 4. verify prerequisites, base, branch, and existing PR;
 5. do not read a global progress ledger, scan `odd/tasks/`, or select work from

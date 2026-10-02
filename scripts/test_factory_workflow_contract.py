@@ -64,22 +64,24 @@ class WorkflowContractTest(unittest.TestCase):
                 self.assertIn("../../../docs/demo/software-factory-human-start.md", text)
                 self.assertIn('description: "Trigger:', text)
 
-    def test_contract_defines_one_factory_and_three_lanes(self):
+    def test_contract_defines_one_factory_and_g_odd_topologies(self):
         for phrase in (
             "One contract, two adapters",
             "Gentle-present",
             "Gentle-absent",
             "Direct",
             "ODD",
-            "Explicit SDD",
+            "Inline Direct",
+            "Delegated Direct",
             "Exactly one `odd/tasks/<issue>-<slug>.md`",
-            "never a duplicate ODD task file",
+            "Do not introduce a second SDD/OpenSpec workflow",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, self.contract)
         self.assertIn("No durable execution artifact", self.task_convention)
         self.assertIn("Exactly one", self.task_convention)
-        self.assertIn("canonical SDD tasks artifact", self.task_convention)
+        self.assertIn("Direct is always inside G-ODD", self.task_convention)
+        self.assertIn("read-only Explorer", self.task_convention)
 
     def test_execution_and_review_boundaries_are_pinned(self):
         for phrase in (

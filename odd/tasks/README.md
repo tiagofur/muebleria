@@ -5,14 +5,26 @@ work. It is not a backlog, scheduler, approval system, or review authority.
 
 ## Choose the lane first
 
-| Lane | When | Artifact rule |
+| G-ODD topology | When | Artifact rule |
 | --- | --- | --- |
-| Direct | Small, understood work with no recovery value | No durable execution artifact |
-| ODD | Two or more meaningful steps, or progress worth recovering | Exactly one file: `<issue>-<slug>.md` |
-| Explicit SDD | The human explicitly chooses SDD | Use the canonical SDD tasks artifact; do not duplicate it here |
+| Inline Direct | Small, understood work with no recovery value | No durable execution artifact |
+| Delegated Direct | Substantial work, context-heavy exploration, multi-file implementation, or recovery value | Exactly one file: `<issue>-<slug>.md` |
 
-Changing tools does not change lanes. Gentle-AI may manage ODD natively; ZCode or
-another Gentle-absent tool follows this repository contract manually.
+Direct is always inside G-ODD. Changing tools does not change the contract:
+Gentle-AI may execute the topology natively; ZCode or another Gentle-absent tool
+follows the same repository contract manually.
+
+### Evidence and delegation
+
+- Start with one bounded parallel evidence batch; keep searches and reads narrow.
+- When evidence would require more than roughly five sequential lookups, a long
+  mapping session, or a parent context that is no longer useful, delegate one
+  read-only Explorer.
+- Explorer returns concise path:line evidence and does not write, broaden scope,
+  or authorize implementation.
+- A Writer receives an explicit, narrow allowed edit surface and is the only writer.
+- A Verifier is independent/read-only and is used when risk is high or unclear.
+- These budgets are routing heuristics, not file-count limits or quality caps.
 
 ## Ownership and authority
 
@@ -33,16 +45,19 @@ another Gentle-absent tool follows this repository contract manually.
 ## Lifecycle
 
 1. Explore proportionately before writing.
-2. Create this artifact before the first source/process write.
-3. Record scope, non-goals, constraints, acceptance, checks, route, forecast, and
+2. Create this artifact before the first source/process write when the Delegated
+   Direct topology needs durable recovery.
+3. For Inline Direct work, do not create a task artifact merely to satisfy this
+   directory's existence; the issue and PR remain the durable record.
+4. Record scope, non-goals, constraints, acceptance, checks, route, forecast, and
    delivery strategy.
-4. Implement task by task. Check an item only after observing its outcome and
+5. Implement task by task. Check an item only after observing its outcome and
    applicable checks; record the work-unit commit as evidence.
-5. Keep failed, skipped, unavailable, and pending checks explicit.
-6. Hand the exact HEAD/base to a fresh reviewer. Consolidate blockers into one
+6. Keep failed, skipped, unavailable, and pending checks explicit.
+7. Hand the exact HEAD/base to a fresh reviewer. Consolidate blockers into one
    correction round when feasible. If a blocker remains, ask the human whether to
    stop, narrow, extend, or open follow-up scope; never declare success by policy.
-7. Completed artifacts remain in `odd/tasks/` as immutable history. No post-merge cleanup,
+8. Completed artifacts remain in `odd/tasks/` as immutable history. No post-merge cleanup,
    move, archive directory, or follow-up commit is required. GitHub and the PR remain
    authoritative for delivery status.
 
