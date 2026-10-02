@@ -42,30 +42,22 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 	}
 	defer tx.Rollback(ctx)
 
-	// 1. Advance release status from draft to published
-	const updateReleaseQuery = `
-		UPDATE library_releases
-		SET status        = 'published',
-		    manifest_hash = $2,
-		    published_at  = NOW(),
-		    published_by  = $3,
-		    updated_at    = NOW()
+	// 1. Verify release exists and is in draft status before materializing
+	// publication artifacts.
+	const verifyDraftQuery = `
+		SELECT status FROM library_releases
 		WHERE id = $1
-		  AND status = 'draft'`
+		FOR UPDATE`
 
-	tag, err := tx.Exec(ctx, updateReleaseQuery, releaseID, manifest.ManifestHash, publishedBy)
-	if err != nil {
-		return fmt.Errorf("update release %s to published: %w", releaseID, err)
-	}
-	if tag.RowsAffected() == 0 {
-		rel, lookupErr := s.GetReleaseByID(ctx, releaseID)
-		if lookupErr != nil {
+	var currentStatus string
+	if err := tx.QueryRow(ctx, verifyDraftQuery, releaseID).Scan(&currentStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: %s", ErrLibraryReleaseNotFound, releaseID)
 		}
-		if !rel.IsDraft() {
-			return fmt.Errorf("%w: current status is %s", ErrReleaseNotDraft, rel.Status)
-		}
-		return fmt.Errorf("publish release %s: no rows affected", releaseID)
+		return fmt.Errorf("verify release %s status: %w", releaseID, err)
+	}
+	if currentStatus != string(domain.ReleaseStatusDraft) {
+		return fmt.Errorf("%w: current status is %s", ErrReleaseNotDraft, currentStatus)
 	}
 
 	// 2. Insert immutable manifest row
@@ -77,7 +69,54 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 		return fmt.Errorf("insert release manifest: %w", err)
 	}
 
-	// 3. Upsert content-addressed resource blobs (deduplicating across releases)
+	// 3. Materialize library_release_resource_refs for every manifest
+	// resource (#955). The ref row is the only path traversing to
+	// reach a pinned blob (library_resource_blobs_read joins
+	// definition_hash → refs → release → library). Materializing refs BEFORE
+	// inserting blobs ensures PostgreSQL's RLS engine can evaluate
+	// library_resource_blobs_read during ON CONFLICT (sha256) DO NOTHING
+	// without violating RLS policies.
+	const selectRefQuery = `
+		SELECT EXISTS (
+			SELECT 1 FROM library_release_resource_refs
+			WHERE release_id = $1 AND resource_kind = $2 AND resource_id = $3
+		)`
+	const insertRefQuery = `
+		INSERT INTO library_release_resource_refs
+		    (release_id, resource_kind, resource_id, resource_revision, definition_hash, package_kind)
+		VALUES ($1, $2, $3, $4, $5, $6)`
+	const updateRefQuery = `
+		UPDATE library_release_resource_refs
+		SET definition_hash = $3,
+		    resource_revision = $5,
+		    package_kind = $6
+		WHERE release_id = $1
+		  AND resource_kind = $2
+		  AND resource_id = $4`
+
+	for _, r := range manifest.Resources {
+		var exists bool
+		if err := tx.QueryRow(ctx, selectRefQuery, releaseID, r.Kind, r.ID).Scan(&exists); err != nil {
+			return fmt.Errorf("read resource ref %s/%s: %w", r.Kind, r.ID, err)
+		}
+		if exists {
+			if _, err := tx.Exec(ctx, updateRefQuery, releaseID, r.Kind, r.DefinitionHash, r.ID, r.Revision, string(r.PackageKind)); err != nil {
+				return fmt.Errorf("update resource ref %s/%s definition_hash: %w", r.Kind, r.ID, err)
+			}
+			continue
+		}
+		if _, err := tx.Exec(ctx, insertRefQuery,
+			releaseID, r.Kind, r.ID, r.Revision, r.DefinitionHash, string(r.PackageKind),
+		); err != nil {
+			return fmt.Errorf("insert resource ref %s/%s: %w", r.Kind, r.ID, err)
+		}
+	}
+
+	// 4. Content-addressed resource blobs (deduplicating across releases).
+	// Blobs are immutable, so a blob a previous release already wrote is
+	// skipped rather than updated. ON CONFLICT DO NOTHING performs no
+	// conflicting update. Since refs were materialized in step 3,
+	// library_resource_blobs_read successfully finds the active ref link.
 	const insertBlobQuery = `
 		INSERT INTO library_resource_blobs (
 			sha256, resource_kind, resource_id, content_type, size_bytes, content
@@ -93,18 +132,26 @@ func (s *PostgresStore) PublishReleaseWithManifest(
 		}
 	}
 
-	// 4. Update definition_hash on library_release_resource_refs
-	const updateRefQuery = `
-		UPDATE library_release_resource_refs
-		SET definition_hash = $3
-		WHERE release_id = $1
-		  AND resource_kind = $2
-		  AND resource_id = $4`
+	// 5. Seal publication: advance release status from draft to published.
+	// Once published, the RLS write policies (which require status = 'draft' in
+	// USING) lock the release and its refs against any further mutation,
+	// guaranteeing absolute immutability (#772).
+	const updateReleaseQuery = `
+		UPDATE library_releases
+		SET status        = 'published',
+		    manifest_hash = $2,
+		    published_at  = NOW(),
+		    published_by  = $3,
+		    updated_at    = NOW()
+		WHERE id = $1
+		  AND status = 'draft'`
 
-	for _, r := range manifest.Resources {
-		if _, err := tx.Exec(ctx, updateRefQuery, releaseID, r.Kind, r.DefinitionHash, r.ID); err != nil {
-			return fmt.Errorf("update resource ref %s/%s definition_hash: %w", r.Kind, r.ID, err)
-		}
+	tag, err := tx.Exec(ctx, updateReleaseQuery, releaseID, manifest.ManifestHash, publishedBy)
+	if err != nil {
+		return fmt.Errorf("update release %s to published: %w", releaseID, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("publish release %s: no rows affected", releaseID)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
