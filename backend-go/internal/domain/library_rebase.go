@@ -44,8 +44,11 @@ type LibraryOverlay struct {
 	Status            string          `json:"status"` // "active" | "draft" | "rebase_conflict" | "archived"
 	Overrides         json.RawMessage `json:"overrides"`
 	CustomResourceIDs []uuid.UUID     `json:"customResourceIds"`
-	CreatedAt         time.Time       `json:"createdAt"`
-	UpdatedAt         time.Time       `json:"updatedAt"`
+	// Version backs the optimistic-concurrency If-Match contract (#875
+	// slice 4): every overrides update bumps it; a stale token conflicts.
+	Version   int64     `json:"version"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // LibraryOverlayConflict represents a recorded collision requiring explicit human resolution.

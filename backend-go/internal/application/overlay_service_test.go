@@ -56,11 +56,15 @@ func (m *mockOverlayStore) CreateOverlay(_ context.Context, overlay *domain.Libr
 	return overlay, nil
 }
 
-func (m *mockOverlayStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
+func (m *mockOverlayStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
 	o, ok := m.overlays[id]
 	if !ok {
 		return storage.ErrOverlayNotFound
 	}
+	if o.Version != expectedVersion {
+		return storage.ErrVersionConflict
+	}
+	o.Version++
 	o.Overrides = overrides
 	o.CustomResourceIDs = customResourceIDs
 	return nil
@@ -241,24 +245,36 @@ func TestOverlayService_UpdateOverrides_AuthorizationAndPathCheck(t *testing.T) 
 		OrganizationID: orgA,
 		Status:         "active",
 		Overrides:      json.RawMessage(`{"parameters.toeKickHeight": 120}`),
+		Version:        1,
 	}
 
 	// 1. Org B attempting to update Org A's overlay -> ErrUnauthorizedOverlayAccess
-	err := svc.UpdateOverrides(ctx, overlayID, orgB, json.RawMessage(`{"parameters.toeKickHeight": 140}`), nil)
+	err := svc.UpdateOverrides(ctx, overlayID, orgB, 1, json.RawMessage(`{"parameters.toeKickHeight": 140}`), nil)
 	if !errors.Is(err, application.ErrUnauthorizedOverlayAccess) {
 		t.Fatalf("expected ErrUnauthorizedOverlayAccess, got %v", err)
 	}
 
 	// 2. Org A attempting invalid namespace -> ErrInvalidOverridePath
-	err = svc.UpdateOverrides(ctx, overlayID, orgA, json.RawMessage(`{"arbitraryRoot": 42}`), nil)
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 1, json.RawMessage(`{"arbitraryRoot": 42}`), nil)
 	if !errors.Is(err, application.ErrInvalidOverridePath) {
 		t.Fatalf("expected ErrInvalidOverridePath, got %v", err)
 	}
 
 	// 3. Org A updating valid path -> success
-	err = svc.UpdateOverrides(ctx, overlayID, orgA, json.RawMessage(`{"parameters.toeKickHeight": 150}`), nil)
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 1, json.RawMessage(`{"parameters.toeKickHeight": 150}`), nil)
 	if err != nil {
 		t.Fatalf("UpdateOverrides failed: %v", err)
+	}
+
+	// 4. #875 slice 4: a stale expected version conflicts — the second
+	// editor's save can never silently overwrite the first one's.
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 1, json.RawMessage(`{"parameters.toeKickHeight": 999}`), nil)
+	if !errors.Is(err, storage.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict for a stale version, got %v", err)
+	}
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 2, json.RawMessage(`{"parameters.toeKickHeight": 999}`), nil)
+	if err != nil {
+		t.Fatalf("re-read + retry must land: %v", err)
 	}
 }
 

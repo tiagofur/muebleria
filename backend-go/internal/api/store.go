@@ -577,7 +577,7 @@ type Store interface {
 	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
 	GetOverlayByID(ctx context.Context, id uuid.UUID) (*domain.LibraryOverlay, error)
 	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
-	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
+	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
 	UpdateOverlayStatus(ctx context.Context, id uuid.UUID, status string) error
 	UpdateOverlayBaseRelease(ctx context.Context, id uuid.UUID, newBaseReleaseID uuid.UUID, overrides json.RawMessage, status string) error
 	ReplaceOverlayPendingConflicts(ctx context.Context, overlayID uuid.UUID, conflicts []domain.LibraryOverlayConflict) error

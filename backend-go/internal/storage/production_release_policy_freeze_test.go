@@ -202,7 +202,7 @@ func TestProductionReleaseFreezesFactoryConstructionPolicy(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return fx.store.UpdateOverlayOverrides(ctx, overlay.ID, overrides, nil)
+		return fx.store.UpdateOverlayOverrides(ctx, overlay.ID, overlay.Version, overrides, nil)
 	})
 	if err != nil {
 		t.Fatalf("policy change: %v", err)

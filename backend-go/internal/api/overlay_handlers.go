@@ -38,6 +38,12 @@ func (s *Server) HandleCreateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusBadRequest, "invalid organization id in claims")
 		return
 	}
+	// #875 slice 4 (AC3): overlay mutations are factory administration —
+	// admin/ingeniero only, server-authority. Reads stay member-readable.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
+		return
+	}
+
 
 	var req openapi.CreateLibraryOverlayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -147,6 +153,7 @@ func (s *Server) HandleGetActiveLibraryOverlay(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	w.Header().Set("ETag", FormatVersionETag(overlay.Version))
 	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(overlay))
 }
 
@@ -191,6 +198,7 @@ func (s *Server) HandleGetLibraryOverlayByID(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	w.Header().Set("ETag", FormatVersionETag(overlay.Version))
 	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(overlay))
 }
 
@@ -211,6 +219,12 @@ func (s *Server) HandleUpdateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusBadRequest, "invalid organization id")
 		return
 	}
+	// #875 slice 4 (AC3): overlay mutations are factory administration —
+	// admin/ingeniero only, server-authority. Reads stay member-readable.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
+		return
+	}
+
 
 	rawID := r.PathValue("id")
 	overlayUUID, err := uuid.Parse(rawID)
@@ -245,9 +259,22 @@ func (s *Server) HandleUpdateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 		customResUUIDs = append(customResUUIDs, resUUID)
 	}
 
-	if err := s.overlayService().UpdateOverrides(r.Context(), overlayUUID, orgUUID, overridesRaw, customResUUIDs); err != nil {
+	// #875 slice 4 (AC07): two editors of one overlay produce a VISIBLE
+	// version conflict — a stale If-Match updates nothing (412), never a
+	// silent last-write-wins.
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+
+	if err := s.overlayService().UpdateOverrides(r.Context(), overlayUUID, orgUUID, expectedVersion, overridesRaw, customResUUIDs); err != nil {
 		if errors.Is(err, application.ErrUnauthorizedOverlayAccess) || errors.Is(err, storage.ErrOverlayNotFound) {
 			respondWithError(w, http.StatusNotFound, "overlay not found")
+			return
+		}
+		if errors.Is(err, storage.ErrVersionConflict) {
+			respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict,
+				"El overlay cambió en otra sesión. Recargá la configuración y volvé a aplicar tus cambios sobre la versión actual.", nil)
 			return
 		}
 		if errors.Is(err, application.ErrInvalidOverridePath) {
@@ -264,6 +291,7 @@ func (s *Server) HandleUpdateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	w.Header().Set("ETag", FormatVersionETag(updated.Version))
 	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(updated))
 }
 
@@ -284,6 +312,12 @@ func (s *Server) HandleRebaseLibraryOverlay(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusBadRequest, "invalid organization id")
 		return
 	}
+	// #875 slice 4 (AC3): overlay mutations are factory administration —
+	// admin/ingeniero only, server-authority. Reads stay member-readable.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
+		return
+	}
+
 
 	rawID := r.PathValue("id")
 	overlayUUID, err := uuid.Parse(rawID)
@@ -411,6 +445,12 @@ func (s *Server) HandleResolveLibraryOverlayConflict(w http.ResponseWriter, r *h
 		respondWithError(w, http.StatusBadRequest, "invalid organization id")
 		return
 	}
+	// #875 slice 4 (AC3): overlay mutations are factory administration —
+	// admin/ingeniero only, server-authority. Reads stay member-readable.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
+		return
+	}
+
 
 	var userUUID *uuid.UUID
 	if claims.Subject != "" {

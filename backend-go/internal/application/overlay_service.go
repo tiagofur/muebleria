@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #775 [P1][LIB-4]: Organization manufacturing-library overlay and 3-way rebase service.
@@ -30,7 +31,7 @@ type OverlayStore interface {
 	GetOverlayByID(ctx context.Context, id uuid.UUID) (*domain.LibraryOverlay, error)
 	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
 	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
-	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
+	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
 	UpdateOverlayStatus(ctx context.Context, id uuid.UUID, status string) error
 	UpdateOverlayBaseRelease(ctx context.Context, id uuid.UUID, newBaseReleaseID uuid.UUID, overrides json.RawMessage, status string) error
 	ReplaceOverlayPendingConflicts(ctx context.Context, overlayID uuid.UUID, conflicts []domain.LibraryOverlayConflict) error
@@ -139,11 +140,15 @@ func (s *OverlayService) GetActiveOverlay(ctx context.Context, orgID, libraryID 
 	return s.store.GetActiveOverlayByLibrary(ctx, orgID, libraryID)
 }
 
-// UpdateOverrides updates an organization's overrides and custom resource references.
+// UpdateOverrides updates an organization's overrides and custom resource
+// references under OPTIMISTIC CONCURRENCY (#875 slice 4): `expectedVersion`
+// must still be the overlay's current version, or the write is refused so a
+// second editor's save can never silently overwrite the first one's.
 func (s *OverlayService) UpdateOverrides(
 	ctx context.Context,
 	overlayID uuid.UUID,
 	orgID uuid.UUID,
+	expectedVersion int64,
 	overrides json.RawMessage,
 	customResourceIDs []uuid.UUID,
 ) error {
@@ -167,7 +172,10 @@ func (s *OverlayService) UpdateOverrides(
 		}
 	}
 
-	return s.store.UpdateOverlayOverrides(ctx, overlayID, overrides, customResourceIDs)
+	if overlay.Version != expectedVersion {
+		return storage.ErrVersionConflict
+	}
+	return s.store.UpdateOverlayOverrides(ctx, overlayID, expectedVersion, overrides, customResourceIDs)
 }
 
 // RebaseResult models the outcome returned to caller following a 3-way rebase pass.

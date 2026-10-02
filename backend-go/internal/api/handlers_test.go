@@ -1773,7 +1773,7 @@ func (s *stubStore) GetActiveOverlayByLibrary(_ context.Context, orgID, libID uu
 	}
 	return nil, storage.ErrOverlayNotFound
 }
-func (s *stubStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
+func (s *stubStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
 	if s.updateOverlayOverridesErr != nil {
 		return s.updateOverlayOverridesErr
 	}

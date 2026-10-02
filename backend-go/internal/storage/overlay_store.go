@@ -50,7 +50,7 @@ func (s *PostgresStore) CreateOverlay(ctx context.Context, overlay *domain.Libra
 		INSERT INTO library_overlays (
 			id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-		RETURNING id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, created_at, updated_at`
+		RETURNING id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, created_at, updated_at`
 
 	row := s.db(ctx).QueryRow(ctx, query,
 		overlay.ID,
@@ -68,7 +68,7 @@ func (s *PostgresStore) CreateOverlay(ctx context.Context, overlay *domain.Libra
 // GetOverlayByID returns a library overlay by its ID (enforced by RLS).
 func (s *PostgresStore) GetOverlayByID(ctx context.Context, id uuid.UUID) (*domain.LibraryOverlay, error) {
 	const query = `
-		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, created_at, updated_at
+		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, created_at, updated_at
 		FROM library_overlays
 		WHERE id = $1`
 
@@ -86,7 +86,7 @@ func (s *PostgresStore) GetOverlayByID(ctx context.Context, id uuid.UUID) (*doma
 // GetActiveOverlayByLibrary returns the active overlay for an organization and library.
 func (s *PostgresStore) GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error) {
 	const query = `
-		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, created_at, updated_at
+		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, created_at, updated_at
 		FROM library_overlays
 		WHERE organization_id = $1 AND library_id = $2 AND status IN ('active', 'rebase_conflict')
 		ORDER BY created_at DESC
@@ -103,10 +103,16 @@ func (s *PostgresStore) GetActiveOverlayByLibrary(ctx context.Context, organizat
 	return overlay, nil
 }
 
-// UpdateOverlayOverrides updates the overrides payload and custom resources list of an overlay.
+// UpdateOverlayOverrides updates the overrides payload and custom resources
+// list of an overlay under OPTIMISTIC CONCURRENCY (#875 slice 4): the update
+// lands only when `expectedVersion` still matches, and every landing update
+// bumps the version. Zero rows mean either a lost race (ErrVersionConflict —
+// another editor wrote first) or an absent overlay (ErrOverlayNotFound);
+// callers surface the conflict instead of silently overwriting.
 func (s *PostgresStore) UpdateOverlayOverrides(
 	ctx context.Context,
 	id uuid.UUID,
+	expectedVersion int64,
 	overrides json.RawMessage,
 	customResourceIDs []uuid.UUID,
 ) error {
@@ -122,15 +128,23 @@ func (s *PostgresStore) UpdateOverlayOverrides(
 		UPDATE library_overlays
 		SET overrides = $2,
 		    custom_resource_ids = $3,
+		    version = version + 1,
 		    updated_at = NOW()
-		WHERE id = $1`
+		WHERE id = $1 AND version = $4
+		RETURNING version`
 
-	tag, err := s.db(ctx).Exec(ctx, query, id, overrides, customResourceIDsJSON)
+	var newVersion int64
+	err = s.db(ctx).QueryRow(ctx, query, id, overrides, customResourceIDsJSON, expectedVersion).Scan(&newVersion)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			var exists bool
+			if scanErr := s.db(ctx).QueryRow(ctx,
+				`SELECT EXISTS (SELECT 1 FROM library_overlays WHERE id = $1)`, id).Scan(&exists); scanErr == nil && !exists {
+				return ErrOverlayNotFound
+			}
+			return ErrVersionConflict
+		}
 		return fmt.Errorf("update overlay overrides %s: %w", id, err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrOverlayNotFound
 	}
 	return nil
 }
@@ -384,6 +398,7 @@ func scanOverlay(row scannableRow) (*domain.LibraryOverlay, error) {
 		&o.Status,
 		&o.Overrides,
 		&customResourceIDsBytes,
+		&o.Version,
 		&o.CreatedAt,
 		&o.UpdatedAt,
 	)
