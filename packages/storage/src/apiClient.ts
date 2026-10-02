@@ -286,7 +286,7 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
         }
       }
       Object.assign(nextOverrides, policyOverrides);
-      return await this.updateLibraryOverlay(token, activeOverlay.id, {
+      return await this.updateLibraryOverlay(token, activeOverlay.id, activeOverlay.version, {
         overrides: nextOverrides,
       }, signal);
     }

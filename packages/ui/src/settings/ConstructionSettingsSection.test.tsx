@@ -82,6 +82,7 @@ describe('ConstructionSettingsSection (#875)', () => {
           status: 'active',
           overrides: {},
           customResourceIds: [],
+          version: 1,
           createdAt: '2026-09-30T12:00:00Z',
           updatedAt: '2026-09-30T12:00:00Z',
         }}
@@ -154,6 +155,7 @@ describe('ConstructionSettingsSection (#875)', () => {
           status: 'active',
           overrides: {},
           customResourceIds: [],
+          version: 1,
           createdAt: '2026-09-01T00:00:00Z',
           updatedAt: '2026-09-01T00:00:00Z',
         }}
@@ -207,6 +209,7 @@ describe('ConstructionSettingsSection (#875)', () => {
           status: 'rebase_conflict',
           overrides: {},
           customResourceIds: [],
+          version: 1,
           createdAt: '2026-09-01T00:00:00Z',
           updatedAt: '2026-09-01T00:00:00Z',
         }}
@@ -270,6 +273,7 @@ describe('ConstructionSettingsSection (#875)', () => {
           status: 'active',
           overrides: {},
           customResourceIds: [],
+          version: 1,
           createdAt: '2026-09-01T00:00:00Z',
           updatedAt: '2026-09-01T00:00:00Z',
         }}

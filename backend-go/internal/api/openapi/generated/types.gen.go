@@ -2321,6 +2321,7 @@ type LibraryOverlayDetail struct {
 	Status            string         `json:"status"`
 	Overrides         map[string]any `json:"overrides"`
 	CustomResourceIds []string       `json:"customResourceIds"`
+	Version           int64          `json:"version"`
 	CreatedAt         string         `json:"createdAt"`
 	UpdatedAt         string         `json:"updatedAt"`
 }

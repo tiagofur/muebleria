@@ -5186,8 +5186,8 @@
       },
       "patch": {
         "operationId": "updateLibraryOverlay",
-        "summary": "Update manufacturing library overlay overrides",
-        "description": "Updates the overrides and custom resource references for the specified overlay. Rejects unauthorized structural edits. [#775 P1/LIB-4]",
+        "summary": "Update manufacturing library overlay overrides (If-Match guarded)",
+        "description": "Updates the overrides and custom resource references for the specified overlay under optimistic concurrency: If-Match carries the overlay's current version and a stale token returns a version conflict (#875 slice 4). Rejects unauthorized structural edits. [#775 P1/LIB-4]",
         "tags": [
           "manufacturing-library"
         ],
@@ -5200,6 +5200,9 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "requestBody": {
@@ -14875,6 +14878,7 @@
           "status",
           "overrides",
           "customResourceIds",
+          "version",
           "createdAt",
           "updatedAt"
         ],
@@ -14914,6 +14918,11 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Optimistic-concurrency token (#875): every overrides update bumps it; send it back as If-Match on PATCH."
           },
           "createdAt": {
             "type": "string",
