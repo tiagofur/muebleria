@@ -13,7 +13,7 @@ import { describe, expect, test } from 'vitest';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { overlayOverridesToPolicy } from './factoryConstructionPolicy';
+import { overlayOverridesToPolicy, type ComponentConstructionOverride, type FactoryConstructionPolicy } from './factoryConstructionPolicy';
 
 interface ParityRule {
   stationsCount: number;
@@ -21,10 +21,20 @@ interface ParityRule {
   endMarginMm: number;
 }
 
+interface ParityComponentOverride {
+  stationsCount?: number;
+  startMarginMm?: number;
+  endMarginMm?: number;
+}
+
 interface ParityCase {
   name: string;
   overrides: Record<string, unknown>;
-  expected: { floorToSide: ParityRule | null; shelfToSide: ParityRule | null };
+  expected: {
+    floorToSide: ParityRule | null;
+    shelfToSide: ParityRule | null;
+    componentOverrides?: Record<string, ComponentConstructionOverride>;
+  };
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -48,12 +58,33 @@ function effectiveRule(rule: {
   };
 }
 
+/**
+ * The readers keep the stored component entries verbatim (both sides drop
+ * entries with no station scalar); resolving them against the factory family
+ * rule happens where the relationship kind is known.
+ */
+function storedComponentOverrides(
+  overrides: FactoryConstructionPolicy['componentOverrides'],
+): Record<string, Pick<ComponentConstructionOverride, 'stationsCount' | 'startMarginMm' | 'endMarginMm'>> | undefined {
+  if (!overrides) return undefined;
+  const out: Record<string, Pick<ComponentConstructionOverride, 'stationsCount' | 'startMarginMm' | 'endMarginMm'>> = {};
+  for (const [id, entry] of Object.entries(overrides)) {
+    out[id] = { stationsCount: entry.stationsCount, startMarginMm: entry.startMarginMm, endMarginMm: entry.endMarginMm };
+  }
+  return out;
+}
+
 describe('#875 factory construction policy TS/Go parity', () => {
   test.each(fixture.cases)('$name', ({ overrides, expected }) => {
     const policy = overlayOverridesToPolicy(overrides);
     expect({
       floorToSide: effectiveRule(policy.floorToSide),
       shelfToSide: effectiveRule(policy.shelfToSide),
-    }).toEqual(expected);
+      componentOverrides: storedComponentOverrides(policy.componentOverrides),
+    }).toEqual({
+      floorToSide: expected.floorToSide,
+      shelfToSide: expected.shelfToSide,
+      componentOverrides: expected.componentOverrides,
+    });
   });
 });

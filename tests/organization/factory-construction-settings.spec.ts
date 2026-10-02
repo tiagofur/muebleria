@@ -9,7 +9,48 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { GraneteApiClient } from '@granete/storage';
 import { ensurePublishedStandardRelease, required } from './support/api';
+
+const EXCEPTION_COMPONENT_ID = 'b3333333-8755-4333-8444-0000000000c1';
+
+async function apiTokenForA(): Promise<string> {
+  const client = new GraneteApiClient(required('ORGANIZATION_API_BASE'));
+  const login = await client.login({
+    email: required('ORGANIZATION_GATE_EMAIL'),
+    password: required('ORGANIZATION_GATE_PASSWORD'),
+    transport: 'web',
+    org: required('ORGANIZATION_GATE_ORG_A_SLUG'),
+  });
+  return login.token;
+}
+
+async function ensureExceptionComponent(token: string): Promise<void> {
+  const base = required('ORGANIZATION_API_BASE');
+  const body = JSON.stringify({
+    id: EXCEPTION_COMPONENT_ID,
+    code: 'SET-COMP-EXC',
+    name: 'Base Excepción Construcción',
+    placement: 'base',
+    geometry_kind: 'rectangular_board',
+    length_mm: 564,
+    width_mm: 560,
+    thickness_mm: 18,
+    length_formula: '',
+    width_formula: '',
+    x_formula: '',
+    y_formula: '',
+    z_formula: '',
+    default_edges: [],
+    option_roles: ['INTERIOR'],
+    active: true,
+  });
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Request-ID': crypto.randomUUID() };
+  const put = await fetch(`${base}/catalog/components/${EXCEPTION_COMPONENT_ID}`, { method: 'PUT', headers, body });
+  if (put.ok) return;
+  const created = await fetch(`${base}/catalog/components`, { method: 'POST', headers, body });
+  expect(created.ok, `component upsert: ${created.status} ${await created.text().catch(() => '')}`).toBe(true);
+}
 
 async function loginToA(page: Page): Promise<void> {
   await page.goto('/');
@@ -77,34 +118,41 @@ test.describe.serial('Factory Construction Settings (#875) Browser E2E', () => {
     await expect(page.getByTestId('floor-system-select')).toHaveValue('screw-only');
   });
 
-  test('Component editor reflects factory policy and allows component-level override & restore', async ({ page }) => {
+  test('Component editor persists a per-component exception to the overlay; restore deletes it (#875 slice 3)', async ({ page }) => {
     test.setTimeout(60_000);
+    await ensureExceptionComponent(await apiTokenForA());
     await loginToA(page);
 
-    // Open new component editor and select base placement to test floor joinery inheritance
-    await page.goto('/components/new/edit');
-    await page.getByTestId('input-placement').selectOption('base');
-    await expect(page.getByRole('tab', { name: 'Construcción' })).toBeVisible({ timeout: 15_000 });
-
+    // The exception keys on the SAVED component's catalog id.
+    await page.goto(`/components/${EXCEPTION_COMPONENT_ID}/edit`);
     await page.getByRole('tab', { name: 'Construcción' }).click();
 
-    // Verify inheritance from factory policy
+    // Inheritance: no stored exception yet — the badge shows the factory
+    // policy (floor screw-only/4 from the first test) and no restore action.
     const provenanceBadge = page.getByTestId('component-provenance-badge');
     await expect(provenanceBadge).toContainText('Fábrica');
     await expect(page.getByTestId('component-restore-inheritance-btn')).toHaveCount(0);
 
-    // Apply local component override: minifix-only with 5 stations
-    await page.getByTestId('component-joinery-system-select').selectOption('minifix-only');
+    // The exception is explicit overlay truth: set the station pattern and
+    // save it through the panel's own action.
     await page.getByTestId('component-stations-count-input').fill('5');
-
-    // Provenance transitions to Component exception
+    await page.getByTestId('component-save-exception-btn').click();
     await expect(provenanceBadge).toContainText('Componente (Excepción)');
-    await expect(page.getByTestId('component-restore-inheritance-btn')).toBeVisible();
 
-    // Restore inheritance
+    // The exception is overlay truth: it survives a full reload.
+    await page.reload();
+    await page.getByRole('tab', { name: 'Construcción' }).click();
+    await expect(provenanceBadge).toContainText('Componente (Excepción)');
+
+    // «Restaurar herencia» deletes the stored intent — after a reload the
+    // component inherits the factory policy again, with no orphan state.
     await page.getByTestId('component-restore-inheritance-btn').click();
     await expect(provenanceBadge).toContainText('Fábrica');
+    await page.reload();
+    await page.getByRole('tab', { name: 'Construcción' }).click();
+    await expect(provenanceBadge).toContainText('Fábrica');
     await expect(page.getByTestId('component-restore-inheritance-btn')).toHaveCount(0);
+    await expect(page.getByTestId('component-save-exception-btn')).toHaveCount(0);
   });
 
   test('Factory B remains isolated from Factory A manufacturing overlay', async ({ page }) => {

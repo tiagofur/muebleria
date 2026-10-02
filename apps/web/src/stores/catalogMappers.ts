@@ -107,8 +107,6 @@ export function draftToComponent(id: string, draft: ComponentDraft): Component {
     rotateX: draft.rotateX ?? undefined,
     rotateY: draft.rotateY ?? undefined,
     rotateZ: draft.rotateZ ?? undefined,
-    // #875: Component-level construction override
-    constructionOverride: draft.constructionOverride ?? undefined,
   };
 }
 
