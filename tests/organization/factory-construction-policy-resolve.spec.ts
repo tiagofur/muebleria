@@ -32,9 +32,9 @@ const apiBase = required('ORGANIZATION_API_BASE');
 // same shard and must never write different bodies under one id. Each
 // FACTORY gets its own series too — workshop catalog identities are
 // org-scoped rows and the same uuid may not repeat across organizations.
-const idsFor = (tenant: 'a' | 'b', run: 't1' | 'ab') => {
+const idsFor = (tenant: 'a' | 'b', run: 't1' | 'ab' | 'cx') => {
   const n = tenant === 'a' ? '1' : '2';
-  const d = run === 't1' ? '1' : '2';
+  const d = run === 't1' ? '1' : run === 'ab' ? '2' : '3';
   // last group must be exactly 12 hex chars; n splits the tenant series,
   // k the resource kind, d the test run (PUTs against existing ids need
   // If-Match — fresh series per test keep the raw upserts conflict-free).
@@ -96,7 +96,7 @@ async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: strin
 /** The definition-default governed cabinet: fixed-shelf-side STRUCTURE
  * binding whose station parameter defaults to 3 — any resolved pattern that
  * is not 3 came from the factory policy, never from the definition. */
-async function seedPolicyCatalog(token: string, tenant: 'a' | 'b', run: 't1' | 'ab', profileId: string): Promise<string> {
+async function seedPolicyCatalog(token: string, tenant: 'a' | 'b', run: 't1' | 'ab' | 'cx', profileId: string): Promise<string> {
   const { moduleId: MODULE_ID, structureId: STRUCTURE_ID, sideId: SIDE_ID, sideRId: SIDE_R_ID, shelfId: SHELF_ID } = idsFor(tenant, run);
   // Component codes are org-unique too — suffix them with the run.
   const code = (base: string) => `${base}-${run.toUpperCase()}`;
@@ -557,5 +557,61 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     expect(b.profileOps).toBe(4);
     expect(b.demand.size).toBeGreaterThan(0);
     expect(b.fingerprint).not.toBe(a.fingerprint); // A=4 / B=2: the #875 A/B truth
+  });
+
+  test('excepción por componente: pisa la política de fábrica y «Restaurar herencia» la elimina (#875 slice 3)', async ({ page }) => {
+    test.setTimeout(180_000);
+    const tokenA = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
+    const seeded = await authedFetch(tokenA, '/seed', { method: 'POST' });
+    expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
+    const { profileId } = (await seeded.json()) as { profileId: string };
+    const { shelfId: SHELF_ID } = idsFor('a', 'cx');
+    const moduleId = await seedPolicyCatalog(tokenA, 'a', 'cx', profileId);
+
+    // Baseline: the factory pattern 4 governs the governed shelf joint.
+    await saveShelfPolicy(tokenA, 4);
+    const factory = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
+    expect(factory.stations).toBe(4);
+
+    // The component exception rides the STRUCTURED blob — which must keep
+    // carrying the factory family rule, because a version-1 blob REPLACES the
+    // granular-key reading entirely.
+    const active = await client.getActiveStandardLibraryOverlay(tokenA);
+    expect(active, 'active overlay exists after the factory save').toBeTruthy();
+    const base = (active!.overrides ?? {}) as Record<string, unknown>;
+    const factoryShelfRule = {
+      provenance: 'factory', systemId: 'minifix-dowel',
+      stationsCount: 4, startMarginMm: 40, endMarginMm: 40,
+    };
+    const updated = await client.updateLibraryOverlay(tokenA, active!.id, {
+      overrides: {
+        ...base,
+        'joint.constructionPolicy': {
+          version: 1,
+          shelfToSide: factoryShelfRule,
+          componentOverrides: {
+            [SHELF_ID]: { componentId: SHELF_ID, stationsCount: 2, provenance: 'component' },
+          },
+        },
+      },
+    });
+    expect(updated, 'overlay update with the component exception').toBeTruthy();
+
+    // The exception governs the REAL resolve: this component's joint plans 2.
+    const excepted = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
+    expect(excepted.stations, 'the component exception must beat the factory 4').toBe(2);
+    expect(excepted.fingerprint).not.toBe(factory.fingerprint);
+
+    // «Restaurar herencia» deletes the exception INTENT: the factory 4 (and
+    // its exact fingerprint) returns byte-for-byte.
+    await client.updateLibraryOverlay(tokenA, active!.id, {
+      overrides: {
+        ...base,
+        'joint.constructionPolicy': { version: 1, shelfToSide: factoryShelfRule },
+      },
+    });
+    const restored = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
+    expect(restored.stations).toBe(4);
+    expect(restored.fingerprint).toBe(factory.fingerprint);
   });
 });

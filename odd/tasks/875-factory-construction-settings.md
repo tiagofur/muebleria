@@ -313,21 +313,21 @@ instance-level exception of rung 4 stays out of scope).
 
 **Tasks**:
 
-- [ ] T14 — Go: parse `componentOverrides` (per-family rules, fail-closed),
+- [x] T14 — Go: parse `componentOverrides` (per-family rules, fail-closed),
   `FactoryConstructionPolicy.RuleForComponent(componentID, kind)`, precedence
   in `materializeBoundRelationships` + `applyFactoryStationPatterns`
   (boards-sourced catalog map); V1 unit tests (exception beats factory,
   authored stays immune, library last, malformed fail-closed, scoping: a
   component without an exception keeps the factory pattern).
-- [ ] T15 — parity + TS: `factoryConstructionPolicyParity.contract.json`
+- [x] T15 — parity + TS: `factoryConstructionPolicyParity.contract.json`
   component-exception cases consumed by BOTH sides; TS
   `ComponentConstructionOverride` gains optional margins; validation mirrors.
-- [ ] T16 — UI: `ComponentEditorJoineryPanel` wired to the active overlay's
+- [x] T16 — UI: `ComponentEditorJoineryPanel` wired to the active overlay's
   `componentOverrides` through the existing `useFactoryConstructionPolicy`
   save path; provenance badge from server truth (key presence);
   "Restaurar herencia" deletes the component entry (never copies the current
   value as a hidden override).
-- [ ] T17 — V2 browser gate: a new test in
+- [x] T17 — V2 browser gate: a new test in
   `factory-construction-policy-resolve.spec.ts` — factory 4 + component
   exception 2 → resolve 2 for that component; restore → 4; the fingerprint
   changes with the exception and returns after it.
@@ -335,3 +335,16 @@ instance-level exception of rung 4 stays out of scope).
 **Remaining open after this slice** (unchanged): If-Match concurrent-editor
 conflict (AC07), draft/activate lifecycle, second-user/visitor permission
 matrix, user documentation (§3).
+
+**Execution record (2026-10-02)**: implemented on
+`feat/875-component-construction-exceptions` from main `d68faa90`. V1: engine
+package green (parser raw-storage + fail-closed scalars, RuleForComponent C3
+ladder, binding-path and authored-path precedence, scoping guard), full
+domain+application+api green; parity fixture 9 cases Go+TS identical; full
+pnpm typecheck + suites green (the component-exception badge tests updated to
+server-truth semantics). V2: `organization-browser-gate.sh
+factory-construction-policy-resolve.spec.ts` 4/4 — factory 4 + shelf
+exception 2 resolves 2 with a distinct fingerprint; deleting the stored
+intent returns the byte-identical factory-4 fingerprint. A latent slice-1 lie
+was removed in the same pass: `Component.constructionOverride` (entity field
++ payload key) never reached the API — the overlay is the only persistence.
