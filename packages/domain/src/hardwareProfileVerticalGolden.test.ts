@@ -6,10 +6,11 @@
  * a regeneration.
  *
  * Deliberate independence (#967 review): the expected holes below are
- * DUPLICATED from the fixture ON PURPOSE. If the fixture and both runtimes
- * ever agreed on a wrong number, these independent literals are the second
- * key that turns the disagreement into a visible failure instead of a
- * shared regression.
+ * DUPLICATED from the fixture ON PURPOSE — exactly (face, x, y, diameter,
+ * depth) per hole; axis/station-index/provenance stay fixture-read. If the
+ * fixture and both runtimes ever agreed on a wrong number, these
+ * independent literals are the second key that turns the disagreement into
+ * a visible failure instead of a shared regression.
  */
 
 import { readFileSync } from 'node:fs';

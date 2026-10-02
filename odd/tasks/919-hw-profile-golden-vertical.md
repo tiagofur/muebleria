@@ -1,7 +1,7 @@
 # ODD — #919 [P1][HW-PROFILE] Golden vertical slice — cabinet → profile → contact → machining + BOM
 
 **Issue**: https://github.com/tiagofur/muebleria/issues/919
-**Status**: IMPLEMENTED_PENDING_REVIEW (2026-10-02)
+**Status**: IMPLEMENTED_PENDING_REVIEW — Delivery **partial** (review pass 3, 2026-10-02: golden re-scoped to contact-level per owner review; cabinet vertical + occurrence mutations = remaining scope)
 **Lane**: Delegated Direct — one artifact
 **Base**: `origin/main` @ `9b74d99d` (post-#963 + post-#965 G-ODD 4.0)
 **Branch (planned)**: `feat/919-hw-profile-golden-vertical`
@@ -9,12 +9,16 @@
 
 ---
 
-## 1. Outcome
+## 1. Outcome (re-scoped per review pass 3 — Path B)
 
-One reproducible golden proving Granete can declare, from a single domain
-model: **what hardware to buy + where it applies + what operation to
-fabricate** — for a representative cabinet, with expectations computed
-INDEPENDENTLY by hand (never only from the resolver's own output).
+A CONTACT-LEVEL hardware-profile machining golden: hardware-profile →
+governed contact → stations → machining operations → provenance →
+demand/BOM arithmetic, with expectations computed INDEPENDENTLY by hand.
+The TRUE cabinet vertical (one representative entity traversing
+layout → contacts → machining → BOM connected) is REMAINING SCOPE of
+#919, together with the occurrence-level mutations (move, duplicate,
+delete, reorder, profile switch) the issue lists — this delivery pins the
+engine contract the cabinet vertical will stand on.
 
 ## 2. Golden scenario
 
