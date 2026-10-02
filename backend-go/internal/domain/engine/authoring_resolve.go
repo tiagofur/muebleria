@@ -319,7 +319,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		input.Relationships = pruneRemovedAnchorRelationships(input.Relationships, boards)
 	}
 	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, input.EvaluatedParameters, boards, input.Relationships, input.FactoryConstructionPolicy)
-	input.Relationships = applyFactoryStationPatterns(input.Relationships, input.FactoryConstructionPolicy)
+	input.Relationships = applyFactoryStationPatterns(input.Relationships, input.FactoryConstructionPolicy, boards)
 	input.Relationships = injectResolvedSideRecipes(input.Relationships, boards, input.ResolvedSideRecipes)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
@@ -494,13 +494,16 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 		case domain.FurnitureParameterBindingStructureRelationship:
 			// Factory policy first (#875): a factory-provenance rule for this
 			// kind replaces the definition's DEFAULT station pattern —
-			// self-service governance without editing definitions.
+			// self-service governance without editing definitions. The
+			// COMPONENT exception for this binding's catalog component (#875
+			// slice 3) governs before the factory-wide rule: the C3 ladder is
+			// component exception → factory family rule → library default.
 			// Construction-declared families are explicit authored intent and
 			// stay policy-immune. Without a rule the station count is the
 			// parameter's own value (defaults included); unusable values
 			// materialize nothing rather than a fabricated pattern. Authored
 			// equivalents win by kind+source.
-			rule := policy.RuleForKind(binding.Relationship.Kind)
+			rule := policy.RuleForComponent(binding.ComponentID, binding.Relationship.Kind)
 			hasFamilies := len(binding.Relationship.Families) > 0
 			var parameters map[string]any
 			if rule != nil && !hasFamilies {
