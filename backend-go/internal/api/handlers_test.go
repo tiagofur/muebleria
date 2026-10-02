@@ -18,6 +18,7 @@ import (
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -1642,6 +1643,37 @@ func (s *stubStore) GetStandardLibrary(_ context.Context) (*domain.Manufacturing
 	s.stubNotUsed("GetStandardLibrary")
 	return nil, nil
 }
+func (s *stubStore) ReleaseServerResolveInputs(ctx context.Context, orgID string) (*engine.ReleaseServerInputs, error) {
+	return storage.ReleaseServerInputsFromStore(ctx, s, orgID)
+}
+
+func (s *stubStore) HardwareProfilesForRelease(ctx context.Context, releaseID uuid.UUID) ([]domain.HardwareProfile, error) {
+	_, manifestBytes, err := s.GetReleaseManifest(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	var manifest domain.LibraryManifest
+	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
+		return nil, err
+	}
+	profiles := make([]domain.HardwareProfile, 0)
+	for _, ref := range manifest.Resources {
+		if ref.Kind != domain.HardwareProfileResourceKind {
+			continue
+		}
+		blob, err := s.GetResourceBlob(ctx, ref.DefinitionHash)
+		if err != nil {
+			return nil, err
+		}
+		var profile domain.HardwareProfile
+		if err := json.Unmarshal(blob.Content, &profile); err != nil {
+			return nil, err
+		}
+		profiles = append(profiles, profile)
+	}
+	return profiles, nil
+}
+
 func (s *stubStore) GetCurrentPublishedRelease(_ context.Context, _ uuid.UUID) (*domain.LibraryRelease, error) {
 	if s.currentPublishedReleaseErr != nil {
 		return nil, s.currentPublishedReleaseErr

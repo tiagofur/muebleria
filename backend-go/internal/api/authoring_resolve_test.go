@@ -14,6 +14,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 const authoringFixtureModuleID = "22222222-2222-2222-2222-222222222222"
@@ -1694,4 +1695,93 @@ func jsonBytesEqual(a, b []byte) bool {
 		return false
 	}
 	return bytes.Equal(ca.Bytes(), cb.Bytes())
+}
+
+// #875 slice 2: a factory policy the organization explicitly overrode with an
+// unusable pattern rejects the resolve with a structured issue — never a
+// silent inherit; a usable policy rides and an unreadable org degrades.
+func TestAuthoringResolveFactoryPolicyGovernance(t *testing.T) {
+	orgUUID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	standardLib := uuid.MustParse(domain.GraneteStandardLibraryID)
+	newToken := func(t *testing.T, orgID string) string {
+		t.Helper()
+		u := &domain.User{ID: "u1", AccountStatus: domain.AccountStatusActive}
+		token, err := auth.GenerateLegacyWebToken(u.ID, "u@example.com", auth.TokenContext{
+			Roles: []string{"user"}, OrgID: orgID, MembershipID: u.ID + ":" + orgID,
+			MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+		}, furnitureTestSecret)
+		if err != nil {
+			t.Fatalf("generate token: %v", err)
+		}
+		return token
+	}
+	// Stubs run without the tenant transaction, so the org scope must ride
+	// the request context explicitly (production middleware provides it).
+	postWithOrg := func(server *Server, token string, body any) *httptest.ResponseRecorder {
+		handler := AuthMiddleware(mustAuthority(furnitureTestSecret), server.Store)(http.HandlerFunc(server.HandleFurnitureAuthoringResolve))
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest(http.MethodPost, "/api/furniture/authoring/resolve", bytes.NewReader(raw))
+		req = req.WithContext(storage.WithOrgCtx(req.Context(), orgUUID.String()))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	seedOverlay := func(t *testing.T, server *Server, overrides json.RawMessage) {
+		t.Helper()
+		stub, ok := server.Store.(*stubStore)
+		if !ok {
+			t.Fatalf("store is not the test stub")
+		}
+		stub.getOrgByID = &domain.Organization{ID: orgUUID.String(), Name: "Fábrica Test", Slug: "fabrica-test",
+			Type: domain.OrganizationTypeFactory, LicensePlan: domain.LicensePlanTrial,
+			Status: domain.OrganizationStatusActive, CredentialVersion: 1}
+		// The loader degrades honestly before reaching the overlay unless a
+		// published release with a decodable manifest exists.
+		releaseID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+		stub.currentPublishedRelease = &domain.LibraryRelease{ID: releaseID}
+		stub.releaseManifestsByID = map[uuid.UUID]*domain.LibraryManifest{
+			releaseID: {SchemaVersion: domain.LibraryManifestSchemaVersion, Resources: []domain.ManifestResourceRef{}},
+		}
+		stub.overlaysByID = map[uuid.UUID]*domain.LibraryOverlay{
+			uuid.New(): {OrganizationID: orgUUID, LibraryID: standardLib, Status: "active", Overrides: overrides},
+		}
+	}
+
+	t.Run("unusable explicit policy fails with a structured issue", func(t *testing.T) {
+		server, _ := authoringStubServer(t)
+		seedOverlay(t, server, json.RawMessage(`{"joint.floorToSide.stationsCount": 1}`))
+		token := newToken(t, orgUUID.String())
+		rec := postWithOrg(server, token, authoringFixtureRequest(authoringCatalogRevision(t, server),
+			authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "FACTORY_POLICY_INVALID") {
+			t.Fatalf("response must carry the structured code: %s", rec.Body.String())
+		}
+	})
+
+	t.Run("usable policy resolves normally", func(t *testing.T) {
+		server, _ := authoringStubServer(t)
+		seedOverlay(t, server, json.RawMessage(`{"joint.floorToSide.systemId": "screw-only", "joint.floorToSide.stationsCount": 4, "joint.floorToSide.startMarginMm": 40, "joint.floorToSide.endMarginMm": 40}`))
+		token := newToken(t, orgUUID.String())
+		rec := postWithOrg(server, token, authoringFixtureRequest(authoringCatalogRevision(t, server),
+			authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("org without parseable id degrades to inherit", func(t *testing.T) {
+		server, _ := authoringStubServer(t)
+		seedOverlay(t, server, json.RawMessage(`{"joint.floorToSide.stationsCount": 4}`))
+		rec := postWithOrg(server, newToken(t, "org-1"), authoringFixtureRequest(authoringCatalogRevision(t, server),
+			authoringResolveFurniture{FurnitureDefinitionID: authoringFixtureModuleID}))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
 }

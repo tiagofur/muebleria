@@ -1,0 +1,99 @@
+{
+  "contract": "granete.factory-construction-policy-parity.v1",
+  "description": "Overlay overrides -> effective factory station rules (#875 slice 2). The TS client (packages/domain/src/factoryConstructionPolicy.ts overlayOverridesToPolicy) and the Go resolver (backend-go internal/domain/engine factory_construction_policy.go ParseFactoryConstructionPolicy) must derive identical rules from the same overlay JSON. The flat dotted-key shape is deliberate: joint.constructionPolicy is one literal key whose value is the structured blob; joint.<family>.* are granular keys. Both sides fall missing scalars back to the library-default pattern (2 stations, 50/50mm). The Go resolver additionally enforces engine usability (stationsCount integer 2..1000, finite nonnegative margins) and rejects an explicit factory override that fails it; the client surfaces the same bounds as editor validation.",
+  "cases": [
+    {
+      "name": "structured factory floor override",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "floorToSide": {
+            "provenance": "factory",
+            "systemId": "screw-only",
+            "stationsCount": 4,
+            "startMarginMm": 40,
+            "endMarginMm": 40
+          }
+        }
+      },
+      "expected": {
+        "floorToSide": { "stationsCount": 4, "startMarginMm": 40, "endMarginMm": 40 },
+        "shelfToSide": null
+      }
+    },
+    {
+      "name": "structured shelf override only",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "shelfToSide": {
+            "provenance": "factory",
+            "systemId": "minifix-dowel",
+            "stationsCount": 2,
+            "startMarginMm": 60,
+            "endMarginMm": 60,
+            "minifixCode": "HER-MIN-15",
+            "dowelCode": "HER-TAQ-8X30",
+            "withDowels": true
+          }
+        }
+      },
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": { "stationsCount": 2, "startMarginMm": 60, "endMarginMm": 60 }
+      }
+    },
+    {
+      "name": "library provenance inherits",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "floorToSide": { "provenance": "library", "stationsCount": 9, "startMarginMm": 10, "endMarginMm": 10 }
+        }
+      },
+      "expected": { "floorToSide": null, "shelfToSide": null }
+    },
+    {
+      "name": "granular keys",
+      "overrides": {
+        "joint.floorToSide.systemId": "screw-only",
+        "joint.floorToSide.stationsCount": 5,
+        "joint.floorToSide.startMarginMm": 45,
+        "joint.floorToSide.endMarginMm": 45
+      },
+      "expected": {
+        "floorToSide": { "stationsCount": 5, "startMarginMm": 45, "endMarginMm": 45 },
+        "shelfToSide": null
+      }
+    },
+    {
+      "name": "missing scalars fall back to library defaults",
+      "overrides": {
+        "joint.floorToSide.systemId": "screw-only"
+      },
+      "expected": {
+        "floorToSide": { "stationsCount": 2, "startMarginMm": 50, "endMarginMm": 50 },
+        "shelfToSide": null
+      }
+    },
+    {
+      "name": "foreign structured version falls through to granular",
+      "overrides": {
+        "joint.constructionPolicy": { "version": 99, "floorToSide": { "provenance": "factory", "stationsCount": 7 } },
+        "joint.shelfToSide.systemId": "minifix-only",
+        "joint.shelfToSide.stationsCount": 3,
+        "joint.shelfToSide.startMarginMm": 55,
+        "joint.shelfToSide.endMarginMm": 55
+      },
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": { "stationsCount": 3, "startMarginMm": 55, "endMarginMm": 55 }
+      }
+    },
+    {
+      "name": "no overrides inherits everywhere",
+      "overrides": {},
+      "expected": { "floorToSide": null, "shelfToSide": null }
+    }
+  ]
+}

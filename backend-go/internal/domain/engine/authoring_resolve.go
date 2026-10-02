@@ -148,6 +148,11 @@ type AuthoringResolveInput struct {
 	// into fixed-shelf-side relationships that declare none
 	// (authored-override-wins, complete coverage required).
 	ResolvedSideRecipes []ResolvedSideRecipe
+	// FactoryConstructionPolicy carries the organization's factory station
+	// rules (#875) decoded from its active overlay by the api layer. nil
+	// means inherit everywhere: authored intent first, then the definition's
+	// own defaults.
+	FactoryConstructionPolicy *FactoryConstructionPolicy
 }
 
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
@@ -313,7 +318,8 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	if plan.active {
 		input.Relationships = pruneRemovedAnchorRelationships(input.Relationships, boards)
 	}
-	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, input.EvaluatedParameters, boards, input.Relationships)
+	input.Relationships = materializeBoundRelationships(input.Module.ParameterDefinitions, input.EvaluatedParameters, boards, input.Relationships, input.FactoryConstructionPolicy)
+	input.Relationships = applyFactoryStationPatterns(input.Relationships, input.FactoryConstructionPolicy)
 	input.Relationships = injectResolvedSideRecipes(input.Relationships, boards, input.ResolvedSideRecipes)
 	relationshipIssues := validateRelationships(input.Relationships, boards)
 	structural = append(structural, relationshipIssues...)
@@ -436,7 +442,7 @@ func validateBoundOccurrenceCounts(module domain.Module, values map[string]any, 
 	}
 }
 
-func materializeBoundRelationships(definitions []domain.FurnitureParameterDefinition, values map[string]any, boards []layoutBoard, authored []AuthoringRelationship) []AuthoringRelationship {
+func materializeBoundRelationships(definitions []domain.FurnitureParameterDefinition, values map[string]any, boards []layoutBoard, authored []AuthoringRelationship, policy *FactoryConstructionPolicy) []AuthoringRelationship {
 	result := append([]AuthoringRelationship(nil), authored...)
 	has := map[string]bool{}
 	for _, relationship := range result {
@@ -486,12 +492,33 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 				has[key] = true
 			}
 		case domain.FurnitureParameterBindingStructureRelationship:
-			// The station count is the parameter's own value (defaults
-			// included); unusable values materialize nothing rather than a
-			// fabricated pattern. Authored equivalents win by kind+source.
-			count, ok := structureStationCount(definition, values)
-			if !ok {
-				continue
+			// Factory policy first (#875): a factory-provenance rule for this
+			// kind replaces the definition's DEFAULT station pattern —
+			// self-service governance without editing definitions.
+			// Construction-declared families are explicit authored intent and
+			// stay policy-immune. Without a rule the station count is the
+			// parameter's own value (defaults included); unusable values
+			// materialize nothing rather than a fabricated pattern. Authored
+			// equivalents win by kind+source.
+			rule := policy.RuleForKind(binding.Relationship.Kind)
+			hasFamilies := len(binding.Relationship.Families) > 0
+			var parameters map[string]any
+			if rule != nil && !hasFamilies {
+				parameters = map[string]any{
+					"stationCount":  float64(rule.StationsCount),
+					"startMarginMm": rule.StartMarginMm,
+					"endMarginMm":   rule.EndMarginMm,
+				}
+			} else {
+				count, ok := structureStationCount(definition, values)
+				if !ok {
+					continue
+				}
+				parameters = map[string]any{"stationCount": count}
+				if binding.Relationship.Station != nil {
+					parameters["startMarginMm"] = binding.Relationship.Station.StartMarginMm
+					parameters["endMarginMm"] = binding.Relationship.Station.EndMarginMm
+				}
 			}
 			for index, source := range byComponent[binding.ComponentID] {
 				key := binding.Relationship.Kind + "\x00" + source.id
@@ -518,11 +545,6 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 				}
 				if len(targets) == 0 {
 					continue
-				}
-				parameters := map[string]any{"stationCount": count}
-				if binding.Relationship.Station != nil {
-					parameters["startMarginMm"] = binding.Relationship.Station.StartMarginMm
-					parameters["endMarginMm"] = binding.Relationship.Station.EndMarginMm
 				}
 				sourceAnchor := AuthoringRelationshipAnchor{
 					ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole,

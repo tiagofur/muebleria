@@ -137,7 +137,7 @@ func TestRequirementLinesResolvedCollection(t *testing.T) {
 		{Kind: "tableros", MaterialID: "a", Quantity: 1},
 		{Kind: "tableros", MaterialID: "z", Quantity: 1},
 	}
-	got, err := RequirementLinesFromResolvedBOMs(inputs, catalog)
+	got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, nil)
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, %v; want %v", got, err, want)
 	}
@@ -146,7 +146,7 @@ func TestRequirementLinesResolvedCollection(t *testing.T) {
 		t.Fatal("aggregation mutated resolved inputs or catalog")
 	}
 	inputs[0], inputs[1] = inputs[1], inputs[0]
-	got, err = RequirementLinesFromResolvedBOMs(inputs, catalog)
+	got, err = RequirementLinesFromResolvedBOMs(inputs, catalog, nil)
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("reordered collection changed requirements: %v, %v", got, err)
 	}
@@ -176,7 +176,7 @@ func TestRequirementLinesResolvedTypedUnits(t *testing.T) {
 	}
 	// Removing authoring sources proves aggregation cannot rerun either module.
 	catalog.Modules, catalog.Structures, catalog.Components = nil, nil, nil
-	got, err := RequirementLinesFromResolvedBOMs(inputs, catalog)
+	got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, nil)
 	want := []domain.MaterialRequirementLine{
 		{Kind: "herrajes", MaterialID: "hw-perfil", Quantity: 2},
 		{Kind: "tableros", MaterialID: "mat-body", Quantity: 1},
@@ -205,7 +205,7 @@ func TestRequirementLinesResolvedEmptyAndSingleKind(t *testing.T) {
 			} else if kind == "hardware" {
 				want = append(want, domain.MaterialRequirementLine{Kind: "herrajes", MaterialID: "hardware", Quantity: 2})
 			}
-			got, err := RequirementLinesFromResolvedBOMs(inputs, catalog)
+			got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, nil)
 			if err != nil || !reflect.DeepEqual(got, want) {
 				t.Fatalf("got %v, %v; want %v", got, err, want)
 			}
@@ -255,7 +255,7 @@ func TestRequirementLinesResolvedRejectsInvalidTotals(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			inputs, catalog := resolvedRequirementFixture()
 			mutate(inputs, &catalog)
-			got, err := RequirementLinesFromResolvedBOMs(inputs, catalog)
+			got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, nil)
 			if err == nil || got != nil {
 				t.Fatalf("expected failure without partial lines, got %v, %v", got, err)
 			}
@@ -269,11 +269,48 @@ func TestRequirementLinesResolvedExactAreaBoundary(t *testing.T) {
 		ID: "at-limit", MaterialID: "a", Quantity: 1, LengthMm: 6361, WidthMm: maxExactRequirementQuantity / 6361,
 	}}}
 	inputs[1].BOM = domain.ResolvedBom{}
-	if got, err := RequirementLinesFromResolvedBOMs(inputs, catalog); err != nil || len(got) != 1 {
+	if got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, nil); err != nil || len(got) != 1 {
 		t.Fatalf("exact area bound should succeed: %v, %v", got, err)
 	}
 	inputs[1].BOM.BoardParts = []domain.ResolvedBoardPart{{ID: "one-more", MaterialID: "a", Quantity: 1, LengthMm: 1, WidthMm: 1}}
-	if got, err := RequirementLinesFromResolvedBOMs(inputs, catalog); err == nil || got != nil {
+	if got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, nil); err == nil || got != nil {
 		t.Fatalf("one mm2 above exact aggregate bound must fail: %v, %v", got, err)
 	}
+}
+
+func TestRequirementLinesMergeProfileDemandBeforeRounding(t *testing.T) {
+	inputs, catalog := resolvedRequirementFixture()
+	inputs[1].PhysicalQuantity = 3
+	// BOM hardware alone totals 3.0 units -> 2 packages of 2 -> 4 (pinned by
+	// the collection test above). Profile demand (#917) must join the SAME
+	// totals BEFORE package rounding: unit 1 demand x1 + unit 2 demand x3.
+	demand := [][]HardwareProfileDemandLine{
+		{{HardwareID: "hardware", Quantity: 1}},
+		{{HardwareID: "hardware", Quantity: 2}},
+	}
+	got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, demand)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.MaterialRequirementLine{
+		{Kind: "cintillas", MaterialID: "edge", Quantity: 2},
+		{Kind: "herrajes", MaterialID: "hardware", Quantity: 10},
+		{Kind: "tableros", MaterialID: "a", Quantity: 1},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("demand must merge into the same totals pre-rounding: got %+v want %+v", got, want)
+	}
+
+	t.Run("unknown profile demand hardware fails closed", func(t *testing.T) {
+		bad := [][]HardwareProfileDemandLine{{{HardwareID: "hw-ghost", Quantity: 1}}}
+		if got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, bad); err == nil || got != nil {
+			t.Fatalf("demand for catalog-unknown hardware must fail: %+v, %v", got, err)
+		}
+	})
+	t.Run("nonpositive demand quantity fails closed", func(t *testing.T) {
+		bad := [][]HardwareProfileDemandLine{{{HardwareID: "hardware", Quantity: 0}}}
+		if got, err := RequirementLinesFromResolvedBOMs(inputs, catalog, bad); err == nil || got != nil {
+			t.Fatalf("nonpositive demand must fail: %+v, %v", got, err)
+		}
+	})
 }

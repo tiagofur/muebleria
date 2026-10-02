@@ -18,6 +18,11 @@ import (
 // Do not read it from environment, config files, or database lookups by code.
 const GraneteStandardLibraryID = "00000000-0000-0000-0001-000000000001"
 
+// HardwareProfileResourceKind is the library resource kind for a pinned
+// hardware profile definition blob (#912/#918): one contract shared by the
+// publisher, the pinned reads and the resolve inputs.
+const HardwareProfileResourceKind = "hardware_profile"
+
 // GraneteStandardDraftReleaseID is the fixed UUID of the initial Standard draft
 // release seeded by migration 000139. The LIB-2 publisher will populate its
 // resource refs and manifest hash before it can be published.

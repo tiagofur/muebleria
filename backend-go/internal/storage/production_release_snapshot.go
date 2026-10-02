@@ -22,10 +22,16 @@ var ErrReleaseSnapshotUnavailable = errors.New("CONFLICT:el snapshot de fabricac
 // Private frozen content; ProductionRelease remains the sole release authority.
 // Version pins remain nil until the existing resolver supports historical definitions.
 type ReleaseManufacturingUnit struct {
-	Resolved          engine.ResolvedReleaseUnit `json:"resolved"`
-	Parameters        map[string]any             `json:"parameters"`
-	MaterialChoices   map[string]string          `json:"materialChoices"`
-	DefinitionVersion *int                       `json:"definitionVersion"`
+	Resolved          engine.ResolvedReleaseUnit          `json:"resolved"`
+	Parameters        map[string]any                      `json:"parameters"`
+	MaterialChoices   map[string]string                   `json:"materialChoices"`
+	DefinitionVersion *int                                `json:"definitionVersion"`
+	// HardwareProfileDemand freezes the unit's resolved-profile commercial
+	// consumption (#917/#875): additive optional section of schema v2.
+	// Historical rows simply lack the key and keep failing closed exactly
+	// as they always did; the demand source is the profile RESOLUTION, and
+	// the same quantities joined the release requirements pre-rounding.
+	HardwareProfileDemand []engine.HardwareProfileDemandLine `json:"hardwareProfileDemand,omitempty"`
 }
 
 type ReleaseManufacturingSnapshot struct {
@@ -40,16 +46,24 @@ type ReleaseManufacturingSnapshot struct {
 }
 
 func (s *PostgresStore) insertReleaseManufacturingSnapshot(ctx context.Context, release domain.ProductionRelease, items []domain.DesignRevisionItem, collection *engine.ResolvedReleaseCollection, catalog domain.Catalog) error {
-	routing, err := engine.DeriveReleaseRoutingProgram(items, collection.Units, catalog)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrReleaseSnapshotResolution, err)
+	// The routing program (and the per-unit profile demand) is the ONE
+	// derivation the release gates validated — never a second resolve at
+	// freeze time. Missing routing on a fresh snapshot is missing evidence,
+	// not no-CNC: fail closed.
+	routing := collection.Routing
+	if routing == nil {
+		return fmt.Errorf("%w: %v", ErrReleaseSnapshotResolution, "routing program is missing")
 	}
 	snapshot := ReleaseManufacturingSnapshot{SchemaVersion: 2, Release: release, Requirements: collection.Requirements, Routing: routing}
 	for i, unit := range collection.Units {
-		snapshot.Units = append(snapshot.Units, ReleaseManufacturingUnit{Resolved: unit,
-			Parameters: items[i].Parameters, MaterialChoices: items[i].MaterialChoices, DefinitionVersion: items[i].DefinitionVersion})
+		frozen := ReleaseManufacturingUnit{Resolved: unit,
+			Parameters: items[i].Parameters, MaterialChoices: items[i].MaterialChoices, DefinitionVersion: items[i].DefinitionVersion}
+		if i < len(collection.ProfileDemand) {
+			frozen.HardwareProfileDemand = collection.ProfileDemand[i]
+		}
+		snapshot.Units = append(snapshot.Units, frozen)
 	}
-	_, err = s.db(ctx).Exec(ctx, `INSERT INTO production_release_manufacturing_snapshots
+	_, err := s.db(ctx).Exec(ctx, `INSERT INTO production_release_manufacturing_snapshots
   (release_id, project_id, organization_id, schema_version, payload) VALUES ($1,$2,$3,2,$4)`,
 		release.ID, release.ProjectID, release.OrganizationID, jsonbStructArg(snapshot))
 	return err

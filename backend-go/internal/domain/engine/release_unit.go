@@ -74,8 +74,20 @@ func resolveReleaseUnitOpt(item domain.DesignRevisionItem, catalog domain.Catalo
 			}
 			targets[definition.Binding.ComponentID] = true
 		}
+		// Relationship bindings of GOVERNED kinds are allowed since the v2
+		// routing program (#577/#875): the BOM itself never materializes
+		// joints — the frozen routing derive resolves them definition-default
+		// under the org's governed inputs (factory policy + pinned recipes)
+		// and fails closed on any ungoverned joint. Kinds the resolver cannot
+		// govern are still rejected here exactly as before: an
+		// unrepresentable joint never silently fabricates nothing.
 		if definition.Binding != nil && definition.Binding.Relationship != nil {
-			return nil, fmt.Errorf("release unit does not materialize relationship binding %s", definition.Name)
+			switch definition.Binding.Relationship.Kind {
+			case "floor-side", "fixed-shelf-side":
+				// Governed kinds: the frozen routing derive owns them.
+			default:
+				return nil, fmt.Errorf("release unit relationship binding %s carries ungovernable kind %q", definition.Name, definition.Binding.Relationship.Kind)
+			}
 		}
 	}
 	definitions := append([]domain.FurnitureParameterDefinition(nil), module.ParameterDefinitions...)

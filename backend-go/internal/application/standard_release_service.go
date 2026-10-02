@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
-	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // StandardReleaseService orchestrates the Granete Standard publish flow
@@ -146,7 +144,6 @@ func PublishStandardRelease(
 type StandardReleaseStore interface {
 	HardwareReader
 	HardwareProfileReader
-	PinnedReleaseReader
 	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
 	PublishReleaseWithManifest(ctx context.Context, releaseID uuid.UUID, manifest *domain.LibraryManifest, manifestBytes []byte, blobs []domain.ResourceBlob, publishedBy *uuid.UUID) error
 	// Demo seed surface (#955): org-scoped like every catalog call; the
@@ -158,53 +155,3 @@ type StandardReleaseStore interface {
 	ResetManifestlessPublishedRelease(ctx context.Context, releaseID string) (bool, error)
 }
 
-// PinnedReleaseReader is the minimal read surface for resolving pinned
-// profile definitions: satisfied by *storage.PostgresStore and by the API
-// Store subset.
-type PinnedReleaseReader interface {
-	GetReleaseManifest(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryManifest, []byte, error)
-	GetResourceBlob(ctx context.Context, sha256 string) (*domain.ResourceBlob, error)
-}
-
-// HardwareProfilesForRelease resolves the pinned hardware profiles of one
-// exact release — the authoritative pinned read (#918): kind
-// hardware_profile manifest refs are resolved to their content-addressed
-// blobs and decoded with the frozen #912 contract. There is no "latest"
-// variant on purpose: callers pass the design revision's pin (or resolve
-// the release id explicitly before calling).
-func HardwareProfilesForRelease(
-	ctx context.Context,
-	store PinnedReleaseReader,
-	releaseID uuid.UUID,
-) ([]domain.HardwareProfile, error) {
-	_, manifestBytes, err := store.GetReleaseManifest(ctx, releaseID)
-	if err != nil {
-		if errors.Is(err, storage.ErrManifestNotFound) {
-			return nil, fmt.Errorf("release %s has no manifest; it is not a published release", releaseID)
-		}
-		return nil, fmt.Errorf("load release manifest: %w", err)
-	}
-	var manifest domain.LibraryManifest
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		return nil, fmt.Errorf("decode release manifest: %w", err)
-	}
-	profiles := make([]domain.HardwareProfile, 0)
-	for _, ref := range manifest.Resources {
-		if ref.Kind != HardwareProfileResourceKind {
-			continue
-		}
-		blob, err := store.GetResourceBlob(ctx, ref.DefinitionHash)
-		if err != nil {
-			return nil, fmt.Errorf("load pinned profile blob %s: %w", ref.DefinitionHash, err)
-		}
-		var profile domain.HardwareProfile
-		if err := json.Unmarshal(blob.Content, &profile); err != nil {
-			return nil, fmt.Errorf("decode pinned profile %s: %w", ref.ID, err)
-		}
-		if strings.TrimSpace(profile.Revision) == "" {
-			return nil, fmt.Errorf("pinned profile %s has no revision: fail closed", ref.ID)
-		}
-		profiles = append(profiles, profile)
-	}
-	return profiles, nil
-}

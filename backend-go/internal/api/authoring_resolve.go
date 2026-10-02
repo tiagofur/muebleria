@@ -236,19 +236,36 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	sideRecipes, libraryReleaseID, profilesByID := s.resolvedSideRecipes(r)
+	// Server-resolved inputs (#916/#875): the organization's pinned
+	// profiles, synthesized side recipes and factory construction policy,
+	// loaded by the ONE storage loader the release gates share. The org is
+	// the ROW this handler already loaded and license-validated above — the
+	// same org the overlay lookup pins, never a second context read. An
+	// explicitly overridden but unusable factory policy rejects the resolve
+	// with a structured issue — never a silent inherit.
+	serverInputs, policyErr := s.Store.ReleaseServerResolveInputs(r.Context(), org.ID)
+	if policyErr != nil {
+		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+			Code:     "FACTORY_POLICY_INVALID",
+			Message:  "la política de construcción de la fábrica no es utilizable: " + policyErr.Error(),
+			Severity: domain.IssueSeverityError, Path: "factoryPolicy",
+			Remediation: "Corregí o restaurá la herencia de la política en Config → Fabricación → Construcción y uniones.",
+		}})
+		return
+	}
 	result, err := engine.ResolveAuthoringLayout(engine.AuthoringResolveInput{
-		Module:                  *module,
-		Catalog:                 catalog,
-		Dims:                    dims,
-		OptionChoices:           req.Furniture.MaterialChoices,
-		PrecisionMm:             req.Units.PrecisionMm,
-		Occurrences:             occurrences,
-		Relationships:           req.Furniture.Relationships,
-		ManualPlacements:        placements,
-		ManualPlacementsPresent: req.Furniture.HardwarePlacements != nil,
-		EvaluatedParameters:     normalizedParameters,
-		ResolvedSideRecipes:     sideRecipes,
+		Module:                    *module,
+		Catalog:                   catalog,
+		Dims:                      dims,
+		OptionChoices:             req.Furniture.MaterialChoices,
+		PrecisionMm:               req.Units.PrecisionMm,
+		Occurrences:               occurrences,
+		Relationships:             req.Furniture.Relationships,
+		ManualPlacements:          placements,
+		ManualPlacementsPresent:   req.Furniture.HardwarePlacements != nil,
+		EvaluatedParameters:       normalizedParameters,
+		ResolvedSideRecipes:       serverInputs.SideRecipes,
+		FactoryConstructionPolicy: serverInputs.Policy,
 	})
 	if err != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
@@ -266,9 +283,9 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	// Commercial projection of the resolved profiles (#917): derived from
 	// the profile resolution per verified contact — never from the
 	// drilling output.
-	result.Machining.HardwareProfileDemand = deriveHardwareProfileDemand(&result.Machining, profilesByID)
+	result.Machining.HardwareProfileDemand = engine.DeriveHardwareProfileDemand(&result.Machining, serverInputs.ProfilesByID)
 
-	s.writeAuthoringResolveAccepted(w, req, revision, libraryReleaseID, result)
+	s.writeAuthoringResolveAccepted(w, req, revision, serverInputs.LibraryReleaseID, result)
 }
 
 // authoringResolveMaxBodyBytes caps the resolve payload explicitly (contract

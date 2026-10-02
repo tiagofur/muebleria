@@ -555,7 +555,7 @@ func TestAuthoredFixedShelfRecipeReplacesShelfSupportBinding(t *testing.T) {
 	}}
 	relationships := materializeBoundRelationships(
 		[]domain.FurnitureParameterDefinition{definition},
-		map[string]any{"shelfCount": float64(2)}, boards, authored)
+		map[string]any{"shelfCount": float64(2)}, boards, authored, nil)
 	for _, relationship := range relationships {
 		if relationship.Kind == "shelf-support" && relationship.Source.ComponentInstanceID == "shelf-1" {
 			t.Fatalf("authored fixed-shelf source must not keep the shelf-support binding: %+v", relationships)
@@ -581,7 +581,7 @@ func TestFixedShelfBindingMaterializesPerOccurrence(t *testing.T) {
 	}
 	relationships := materializeBoundRelationships(
 		[]domain.FurnitureParameterDefinition{fixedShelfBindingDefinition()},
-		map[string]any{"fixedShelfJoints": float64(3)}, boards, nil)
+		map[string]any{"fixedShelfJoints": float64(3)}, boards, nil, nil)
 	if len(relationships) != 2 {
 		t.Fatalf("relationships = %d, want 2 (one per shelf occurrence): %+v", len(relationships), relationships)
 	}

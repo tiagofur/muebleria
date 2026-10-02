@@ -23,9 +23,8 @@ var (
 	ErrEmptyReleaseResources = errors.New("a standard release must reference at least one canonical resource")
 )
 
-// HardwareProfileResourceKind is the library resource kind for a pinned
-// hardware profile definition blob.
-const HardwareProfileResourceKind = "hardware_profile"
+// HardwareProfileResourceKind aliases the domain library contract constant.
+const HardwareProfileResourceKind = domain.HardwareProfileResourceKind
 
 // HardwareResourceKind is the library resource kind for canonical catalog
 // hardware included in a release.

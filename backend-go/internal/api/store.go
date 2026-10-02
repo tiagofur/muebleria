@@ -9,6 +9,7 @@ import (
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -559,6 +560,11 @@ type Store interface {
 	// Manufacturing Libraries (#772 / LIB-1, #773 / LIB-2)
 	GetStandardLibrary(ctx context.Context) (*domain.ManufacturingLibrary, error)
 	GetCurrentPublishedRelease(ctx context.Context, libraryID uuid.UUID) (*domain.LibraryRelease, error)
+	// ReleaseServerResolveInputs is the ONE loader both resolve surfaces
+	// share (#916/#875): pinned profiles, synthesized side recipes and the
+	// organization's factory construction policy.
+	ReleaseServerResolveInputs(ctx context.Context, orgID string) (*engine.ReleaseServerInputs, error)
+	HardwareProfilesForRelease(ctx context.Context, releaseID uuid.UUID) ([]domain.HardwareProfile, error)
 	GetPublishedReleases(ctx context.Context, libraryID uuid.UUID) ([]*domain.LibraryRelease, error)
 	CreateDraftRelease(ctx context.Context, params storage.CreateDraftReleaseParams) (*domain.LibraryRelease, error)
 	PublishReleaseWithManifest(ctx context.Context, releaseID uuid.UUID, manifest *domain.LibraryManifest, manifestBytes []byte, blobs []domain.ResourceBlob, publishedBy *uuid.UUID) error

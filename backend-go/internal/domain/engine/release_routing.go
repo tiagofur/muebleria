@@ -88,35 +88,53 @@ type ReleaseRoutingProgram struct {
 	Units                   []ReleaseRoutingUnit `json:"units"`
 }
 
+// ReleaseServerInputs carries the server-resolved resolve inputs (#875 slice
+// 2) loaded ONCE by the storage loader (ReleaseServerResolveInputs) and
+// shared by the #477 authoring resolve and the release gates/freeze: the
+// pinned Standard release the profiles came from, the organization's
+// synthesized side recipes (#916), its factory construction policy (#875)
+// and the pinned profiles the commercial demand derives from (#917). A nil
+// pointer or nil members mean "unavailable -> inherit/fail honest", never
+// "guess".
+type ReleaseServerInputs struct {
+	LibraryReleaseID string                                 `json:"libraryReleaseId,omitempty"`
+	SideRecipes      []ResolvedSideRecipe                   `json:"sideRecipes,omitempty"`
+	Policy           *FactoryConstructionPolicy             `json:"policy,omitempty"`
+	ProfilesByID     map[string]domain.HardwareProfile      `json:"profilesById,omitempty"`
+}
+
 // DeriveReleaseRoutingProgram derives the neutral routing program of an exact
-// release collection. Pure and fail-closed: any structural or manufacturing
-// error issue from the authoritative resolve blocks the whole derivation (a
-// release can never commit without complete routing evidence), and a machining
-// operation hosted outside the frozen BOM part identities is an error, never a
-// silent drop.
-func DeriveReleaseRoutingProgram(items []domain.DesignRevisionItem, units []ResolvedReleaseUnit, catalog domain.Catalog) (*ReleaseRoutingProgram, error) {
+// release collection, plus each unit's profile hardware demand (#917) when
+// server inputs carry pinned profiles. Pure and fail-closed: any structural
+// or manufacturing error issue from the authoritative resolve blocks the
+// whole derivation (a release can never commit without complete routing
+// evidence), and a machining operation hosted outside the frozen BOM part
+// identities is an error, never a silent drop.
+func DeriveReleaseRoutingProgram(items []domain.DesignRevisionItem, units []ResolvedReleaseUnit, catalog domain.Catalog, server *ReleaseServerInputs) (*ReleaseRoutingProgram, [][]HardwareProfileDemandLine, error) {
 	if len(items) != len(units) || len(units) == 0 {
-		return nil, fmt.Errorf("routing program requires matching nonempty items and units")
+		return nil, nil, fmt.Errorf("routing program requires matching nonempty items and units")
 	}
 	program := &ReleaseRoutingProgram{
 		Contract:                ReleaseRoutingProgramContract,
 		IndustrialRulesRevision: AuthoringIndustrialRulesRevision(),
 		Units:                   make([]ReleaseRoutingUnit, 0, len(units)),
 	}
+	demand := make([][]HardwareProfileDemandLine, 0, len(units))
 	for i := range units {
-		unitProgram, err := deriveReleaseRoutingUnit(items[i], units[i], catalog)
+		unitProgram, unitDemand, err := deriveReleaseRoutingUnit(items[i], units[i], catalog, server)
 		if err != nil {
-			return nil, fmt.Errorf("routing unit %s: %w", items[i].FurnitureInstanceID, err)
+			return nil, nil, fmt.Errorf("routing unit %s: %w", items[i].FurnitureInstanceID, err)
 		}
 		program.Units = append(program.Units, *unitProgram)
+		demand = append(demand, unitDemand)
 	}
 	if err := ValidateReleaseRoutingProgram(program, units); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return program, nil
+	return program, demand, nil
 }
 
-func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedReleaseUnit, catalog domain.Catalog) (*ReleaseRoutingUnit, error) {
+func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedReleaseUnit, catalog domain.Catalog, server *ReleaseServerInputs) (*ReleaseRoutingUnit, []HardwareProfileDemandLine, error) {
 	var module domain.Module
 	matches := 0
 	for _, candidate := range catalog.Modules {
@@ -126,38 +144,53 @@ func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedRelea
 		}
 	}
 	if matches != 1 {
-		return nil, fmt.Errorf("routing unit requires exactly one matching definition")
+		return nil, nil, fmt.Errorf("routing unit requires exactly one matching definition")
 	}
 
 	dims, err := releaseUnitLayoutDims(module, item)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Definition-default resolve (#477): no authored occurrences, no
-	// relationships, catalog hardware placements materialized as the
-	// effective manual set. Same binding application and part identity
-	// namespace the BOM resolution already used for this unit.
+	// authored relationships, catalog hardware placements materialized as
+	// the effective manual set. Same binding application and part identity
+	// namespace the BOM resolution already used for this unit. Server
+	// inputs (#875 slice 2) inject what the organization contributes to
+	// this exact state: side recipes (#916) into structural
+	// fixed-shelf-side joints and the factory station policy (#875) over
+	// definition-default patterns — the release freezes the SAME governed
+	// resolve the designer saw, never a parallel ungoverned one.
+	var sideRecipes []ResolvedSideRecipe
+	var policy *FactoryConstructionPolicy
+	var profilesByID map[string]domain.HardwareProfile
+	if server != nil {
+		sideRecipes = server.SideRecipes
+		policy = server.Policy
+		profilesByID = server.ProfilesByID
+	}
 	resolved, err := ResolveAuthoringLayout(AuthoringResolveInput{
-		Module:                  module,
-		Catalog:                 catalog,
-		Dims:                    dims,
-		OptionChoices:           item.MaterialChoices,
-		Occurrences:             nil,
-		Relationships:           nil,
-		ManualPlacements:        nil,
-		ManualPlacementsPresent: false,
-		EvaluatedParameters:     unit.EvaluatedParameters,
+		Module:                    module,
+		Catalog:                   catalog,
+		Dims:                      dims,
+		OptionChoices:             item.MaterialChoices,
+		Occurrences:               nil,
+		Relationships:             nil,
+		ManualPlacements:          nil,
+		ManualPlacementsPresent:   false,
+		EvaluatedParameters:       unit.EvaluatedParameters,
+		ResolvedSideRecipes:       sideRecipes,
+		FactoryConstructionPolicy: policy,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(resolved.StructuralIssues) > 0 {
-		return nil, fmt.Errorf("authoring resolve rejected the definition-default state: %s", resolved.StructuralIssues[0].Message)
+		return nil, nil, fmt.Errorf("authoring resolve rejected the definition-default state: %s", resolved.StructuralIssues[0].Message)
 	}
 	for _, issue := range resolved.ValidationIssues {
 		if issue.Severity == domain.IssueSeverityError {
-			return nil, fmt.Errorf("machining derivation issue %s: %s", issue.Code, issue.Message)
+			return nil, nil, fmt.Errorf("machining derivation issue %s: %s", issue.Code, issue.Message)
 		}
 	}
 
@@ -206,18 +239,21 @@ func deriveReleaseRoutingUnit(item domain.DesignRevisionItem, unit ResolvedRelea
 	}
 	for host := range operationsByHost {
 		if !knownHosts[host] {
-			return nil, fmt.Errorf("machining operation host %s is not a frozen part of this unit", host)
+			return nil, nil, fmt.Errorf("machining operation host %s is not a frozen part of this unit", host)
 		}
 	}
 	// Part order is the frozen BOM order (already identity-stable).
 	sort.Slice(parts, func(a, b int) bool { return parts[a].PartID < parts[b].PartID })
 
+	// Commercial projection of the resolved profiles (#917): derived from
+	// the profile resolution per verified contact of THIS unit — never from
+	// the drilling output.
 	return &ReleaseRoutingUnit{
 		FurnitureInstanceID:   item.FurnitureInstanceID,
 		FurnitureDefinitionID: unit.FurnitureDefinitionID,
 		MachiningFingerprint:  resolved.Machining.ManufacturingFingerprint,
 		Parts:                 parts,
-	}, nil
+	}, DeriveHardwareProfileDemand(&resolved.Machining, profilesByID), nil
 }
 
 // releaseUnitLayoutDims recomputes the exact layout dimensions the BOM

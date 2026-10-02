@@ -57,7 +57,7 @@ func routingFixture(t *testing.T) ([]domain.DesignRevisionItem, []ResolvedReleas
 // missing record.
 func TestDeriveReleaseRoutingProgramMachiningEvidence(t *testing.T) {
 	items, units, catalog := routingFixture(t)
-	program, err := DeriveReleaseRoutingProgram(items, units, catalog)
+	program, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,11 +130,11 @@ func TestDeriveReleaseRoutingProgramMachiningEvidence(t *testing.T) {
 // program).
 func TestDeriveReleaseRoutingProgramIdentityAndDeterminism(t *testing.T) {
 	items, units, catalog := routingFixture(t)
-	first, err := DeriveReleaseRoutingProgram(items, units, catalog)
+	first, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := DeriveReleaseRoutingProgram(items, units, catalog)
+	second, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestDeriveReleaseRoutingProgramIdentityAndDeterminism(t *testing.T) {
 // provenance and hole sanity are proven, never assumed.
 func TestValidateReleaseRoutingProgramFailClosed(t *testing.T) {
 	items, units, catalog := routingFixture(t)
-	program, err := DeriveReleaseRoutingProgram(items, units, catalog)
+	program, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestDeriveReleaseRoutingProgramRejectsForeignMachiningHost(t *testing.T) {
 	// machining lands outside the frozen identities.
 	units[0].BOM.BoardParts = nil
 	units[0].BOM.HardwareLines = []domain.ResolvedHardwareLine{{ID: "rail", Quantity: 1}}
-	if _, err := DeriveReleaseRoutingProgram(items, units, catalog); err == nil {
+	if _, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil); err == nil {
 		t.Fatal("machining outside the frozen BOM must fail closed")
 	}
 }
@@ -253,7 +253,7 @@ func TestDeriveReleaseRoutingProgramRejectsForeignMachiningHost(t *testing.T) {
 // when the frozen routing proves them, per-copy part instances.
 func TestDeriveCanonicalPartExecutionsFromFrozenRouting(t *testing.T) {
 	items, units, catalog := routingFixture(t)
-	program, err := DeriveReleaseRoutingProgram(items, units, catalog)
+	program, _, err := DeriveReleaseRoutingProgram(items, units, catalog, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -428,7 +428,7 @@ func TestDeriveReleaseRoutingProgram_RepeatedStructureAndAgregadoComponents(t *t
 	}
 
 	// Verify DeriveReleaseRoutingProgram succeeds and produces matching parts
-	program, err := DeriveReleaseRoutingProgram([]domain.DesignRevisionItem{item}, []ResolvedReleaseUnit{*unit}, catalog)
+	program, _, err := DeriveReleaseRoutingProgram([]domain.DesignRevisionItem{item}, []ResolvedReleaseUnit{*unit}, catalog, nil)
 	if err != nil {
 		t.Fatalf("DeriveReleaseRoutingProgram: %v", err)
 	}
