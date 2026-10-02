@@ -247,18 +247,20 @@ HEAD/base after frozen V0–V2 evidence.
 - [x] **A/B multi-org dependency made formal**: issue #964 tracks per-org
   provisioning of recipe-bearing profiles (the #955 surface + platform seed
   are single-org); the two-factory gate and the #919 vertical depend on it.
-- [ ] **Historical release freeze (review B) — execution recipe recorded,
-  needs one focused pass**: browser/storage proof that a release created
-  under policy 4 freezes 4 (snapshot routing holes + demand) and stays 4
-  after the policy moves to 2, with a second release freezing 2. Recipe:
-  extend `releaseFixtureOptions.seedCatalog` (storage) with the
-  fixed-shelf-side binding + org assignment + a pinning-style publication
-  inside the fixture, create R1 under policy 4 and R2 under policy 2, then
-  assert each snapshot's frozen routing against its freeze-time policy and
-  R1's immutability; the browser leg reads the same truth through
-  `GET /api/projects/{id}/part-executions` (generated from the frozen
-  snapshot). Row immutability itself is already pinned
-  (`TestProductionRelease_ReleaseRowsAreImmutableHistory`).
+- [x] **Historical release freeze (review B) — DONE (2026-10-02)**:
+  `TestProductionReleaseFreezesFactoryConstructionPolicy` (real disposable
+  PostgreSQL) freezes R1 under shelfToSide=4 with EXACTLY the 4-station
+  routing (16/16 holes across 2 units × 2 contacts per rule diameter), its
+  hardwareProfileDemand (4) and the demand-merged requirements (4); moving
+  the policy to 2 leaves R1 byte-identical; R2 freezes exactly 2 stations
+  (8/8) with the same per-contact demand (#917); numbering R1=1/R2=2, no
+  retargeting. Browser leg: the gate's freeze test reads the same frozen
+  truth through `GET /api/projects/{id}/part-executions` — R1's piece rows
+  are byte-identical after the policy change (never a re-resolve) and only
+  R2's own snapshot regenerates them. **Enabler**: release units now accept
+  relationship bindings of the GOVERNED kinds (the routing derive owns
+  them; ungovernable kinds are still rejected in `resolveReleaseUnit`
+  exactly as before — the pre-existing reject test passes untouched).
 
 **Decisions pinned in this plan** (a reviewer may contest with evidence):
 - Policy overrides definition-default station/system values; explicit authored
