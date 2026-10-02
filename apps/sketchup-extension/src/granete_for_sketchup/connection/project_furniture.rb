@@ -284,32 +284,33 @@ module Granete
           end
 
           # Authoritative inputs for placing an existing unit (#389 §8 +
-          # #620): a pending create-and-place intent is resumed verbatim
-          # (recovery, its choices composed with the frozen finish below),
-          # else parameters seed from the quoted display and the board
-          # choices cascade below.
+          # #620). Returns [parameters, choices, lineage modes] — the modes
+          # always ride the SAME source that won the choices, so a re-placed
+          # unit keeps its #784 lineage. A pending create-and-place intent is
+          # resumed verbatim; with a live working item, parameters seed from
+          # the quoted display and the item overlays the frozen choices; #977:
+          # when the item is gone (delete → sync → re-place), the instance's
+          # authoring snapshot replaces it — the unit re-enters with its
+          # authored finishes, lineage and dimensions, never as defaults.
           def placement_inputs(service, intent_store, binding, instance, definition)
             pending = intent_store.fetch(instance.id)
             if pending
               return [pending['parameters'],
-                      compose_effective_choices(instance, pending['material_choices'])]
+                      compose_effective_choices(instance, pending['material_choices']),
+                      pending['materialChoiceModes']]
             end
 
-            [WorkingCopyMerger.placement_parameters(instance, definition),
-             seed_material_choices(service, binding, instance)]
-          end
-
-          # Board choices for placing an existing unit (#620 + #821 R1): the
-          # FROZEN quoted finish from the instance display is the base and an
-          # authored working item OVERLAYS the roles it actually carries. A
-          # partial item (one edited role) must never silently delete the
-          # other frozen commercial options — that drop is exactly the
-          # first-render palette-fallback regression. No UI defaults or
-          # "first material" ever fill absent roles.
-          def seed_material_choices(service, binding, instance)
             working = service.get_working_copy(binding.design_id)
             item = working.items.find { |candidate| candidate.furniture_instance_id == instance.id }
-            compose_effective_choices(instance, item&.material_choices)
+            if item
+              return [WorkingCopyMerger.placement_parameters(instance, definition),
+                      compose_effective_choices(instance, item.material_choices),
+                      item.material_choice_modes]
+            end
+
+            [WorkingCopyMerger.recovery_placement_parameters(instance, definition),
+             compose_effective_choices(instance, instance.authoring_material_choices),
+             instance.authoring_material_choice_modes]
           end
 
           # base = frozen display choices; overlay = explicit authored/intent
@@ -524,7 +525,7 @@ module Granete
             resolved = preview_inputs(context, unit['unit'], missing_manual)
             return resolved unless resolved.is_a?(Array)
 
-            definition, params, choices = resolved
+            definition, params, choices, = resolved
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
             { 'ok' => true, 'code' => 'preview_ready', 'instanceId' => unit['unit'].id,
               'definition' => definition, 'parameters' => params,
@@ -800,16 +801,20 @@ module Granete
 
             # #870: a manually placed missing unit keeps its AUTHORIZED
             # composition — the same source its preview resolved, so the
-            # pinned layout signature still matches.
+            # pinned layout signature still matches. #977: the same
+            # resolution carries the lineage modes (live item on the
+            # recovery lane, authoring snapshot on the delete→re-place
+            # lane) so the re-placed unit re-enters with its #784 lineage.
             inputs = resolve_placement_inputs(binding, instance, definition, missing_manual)
             return inputs unless inputs.is_a?(Array)
 
-            params, choices = inputs
+            params, choices, modes = inputs
             layout = WorkingCopyMerger.resolve_layout(@catalog_provider, definition, params, choices)
             signature_mismatch = composition_mismatch(expected_layout_signature, layout)
             return signature_mismatch if signature_mismatch
 
             insert_physical_unit(model, binding, instance, definition, params, choices, layout,
+                                 material_choice_modes: modes,
                                  transformation: transformation, prepare: transformation.nil?,
                                  preserve_parameters: missing_manual)
           end
@@ -890,7 +895,12 @@ module Granete
           # manual recovery keeps its AUTHORIZED WorkingCopy item verbatim
           # (restore semantics — never re-seeded from the quoted display).
           # Returns [params, choices], or the correlated failure itself
-          # when the backing item no longer exists.
+          # when the backing item no longer exists. #977: returns a
+          # [parameters, choices, modes] triple — the lineage modes ride the
+          # same authoritative inputs (live item for the recovery lane,
+          # authoring snapshot for the delete→re-place lane) so a re-placed
+          # unit keeps its #784 lineage instead of re-entering as fresh
+          # overrides.
           def resolve_placement_inputs(binding, instance, definition, missing_manual)
             unless missing_manual
               return PlacementGuards.placement_inputs(@service, @intent_store, binding, instance, definition)
@@ -899,7 +909,7 @@ module Granete
             recovered = missing_unit_inputs(binding, instance)
             return recovered unless recovered['ok']
 
-            [recovered['parameters'], recovered['material_choices']]
+            [recovered['parameters'], recovered['material_choices'], recovered['material_choice_modes']]
           end
 
           # #870 — manual recovery of a missing_local unit resolves its
@@ -916,7 +926,8 @@ module Granete
             end
 
             { 'ok' => true, 'parameters' => item.parameters || {},
-              'material_choices' => item.material_choices || {} }
+              'material_choices' => item.material_choices || {},
+              'material_choice_modes' => item.material_choice_modes }
           end
 
           # Phase 4 — sync with the FINAL transform: GET → merge by
