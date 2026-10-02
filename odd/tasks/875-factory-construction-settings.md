@@ -2,10 +2,10 @@
 
 **Issue**: https://github.com/tiagofur/muebleria/issues/875  
 **Title**: [P1][WEB-MFG] Factory self-service construction settings and component connection editor in React  
-**Status**: IMPLEMENTED_PENDING_REVIEW — Delivery: **partial** (independent review 2026-09-30: CHANGES_REQUESTED against the complete claim; blockers corrected, remaining scope explicit in §3)  
+**Status**: Delivery **partial** — slice 1 merged (PR #943, 2026-09-30 review round). Slice 2 (factory policy → resolver + demand → BOM, §6) planned 2026-10-01  
 **Lane**: ODD  
-**Base**: `main` @ `faa5449b249eb59d80568ff622249cae1b14be15`  
-**Branch**: `feat/875-factory-construction-settings`  
+**Base (slice 2)**: `origin/main` @ `8957d96b112999654cbda41ab1c4ae98cec4fd39`  
+**Branch (slice 2)**: `feat/875-policy-resolver-demand-bom` (slice 1 ran on `feat/875-factory-construction-settings`, merged)  
 **Writer**: tiagofur  
 
 ---
@@ -50,7 +50,7 @@ Demonstrated in this PR:
 
 Remaining open (why this is partial):
 
-- [ ] **Resolver consumption — the core of the issue**: the saved policy never reaches `deriveAuthoringMachining`/resolve; per the issue, "a form that saves JSON but does not affect the resolver does NOT complete this issue". The next slice must wire the effective policy (pinned overlay) into joinery resolution and demonstrate A=4/B=2 machining differences (AC12/AC01 "obtain their respective results").
+- [ ] **Resolver consumption — the core of the issue**: the saved policy never reaches `deriveAuthoringMachining`/resolve; per the issue, "a form that saves JSON but does not affect the resolver does NOT complete this issue". The next slice must wire the effective policy (pinned overlay) into joinery resolution and demonstrate A=4/B=2 machining differences (AC12/AC01 "obtain their respective results"). **ACTIVE — slice 2, §6.**
 - [ ] Component-level exception persistence: the component override is UI state; it needs a server-side save path (AC03 persistence).
 - [ ] Concurrent-editor conflict proof: the save is a read-modify-write PATCH; a visible-conflict (If-Match/version) test is missing (AC07).
 - [ ] Draft vs activate lifecycle (AC: invalid draft saveable, not activatable; activation semantics over history).
@@ -97,3 +97,143 @@ Remaining open (why this is partial):
   - V0: `python3 scripts/check_openapi_drift.py` passes; `pnpm typecheck` passes across all 7 workspace projects.
   - V1: `@granete/domain` (122 files, 1744 tests pass), `@granete/storage` (18 files, 241 tests pass), `@granete/ui` (181 files, 2050 tests pass), Go backend `TestHandleGetActiveLibraryOverlay` (3/3 pass).
   - V2: `scripts/organization-browser-gate.sh tests/organization/factory-construction-settings.spec.ts` passes (4/4 tests pass in 13.6s with disposable PostgreSQL and real Vite browser gate).
+
+---
+
+## 6. Slice 2 — factory policy → resolver + demand → BOM (planned 2026-10-01)
+
+**Outcome**: the saved `joint.*` construction policy governs joinery resolution
+(station counts, margins, system per joint family) and profile-driven hardware
+demand reaches the frozen project/release BOM. Two factories with the same
+Standard definition resolve different machining (A=4 / B=2 stations) and their
+releases freeze different demand — without editing definitions, without
+mutating Standard, and without retargeting historical releases.
+
+**Verified code map (base `8957d96b`)**:
+
+- Policy model + overlay keys: `packages/domain/src/factoryConstructionPolicy.ts`
+  (structured `joint.constructionPolicy` blob + granular keys, defaults,
+  validation). Save/read UI paths shipped in slice 1 (#943). The Go side still
+  treats overlay overrides as opaque JSON — zero reads on the resolve path.
+- Resolver entry: `backend-go/internal/api/authoring_resolve.go`
+  `HandleFurnitureAuthoringResolve` → `s.resolvedSideRecipes(r)` (#916:
+  published release pin → profiles → component side assignments). The org's
+  overlay is never loaded on this path — the saved policy cannot affect
+  resolution. Org is available in context (`storage.OrgFromCtx`).
+- Engine: `engine.AuthoringResolveInput` (`authoring_resolve.go:134`) already
+  carries the server-injected-input seam (`ResolvedSideRecipes`); station
+  counts today come only from the definition parameter
+  (`structureStationCount`, `authoring_resolve.go:572`).
+- Release side: `storage/production_release_snapshot.go`
+  `insertReleaseManufacturingSnapshot` freezes schema-v2 (Requirements +
+  optional Routing) via `engine.DeriveReleaseRoutingProgram` →
+  `ResolveAuthoringLayout` definition-default — no side recipes, no profiles,
+  no policy: released units can never produce profile-driven machining or
+  demand. `release.OrganizationID` is available at freeze time.
+- Demand exists only on the authoring resolve result
+  (`deriveHardwareProfileDemand`, `authoring_side_recipes.go:96`) and reaches
+  no BOM/requirements consumer.
+
+**Precedence contract** (mirrors the UI provenance ladder
+Biblioteca → Fábrica → Componente/Excepción):
+
+1. Explicit authored intent wins: authored relationship
+   parameters/families/recipes and component-level mandatory constraints.
+2. Factory policy governs everything compatible that did not pin explicitly —
+   including the definition's DEFAULT station/system values. This is what makes
+   the same Standard definition resolve A=4/B=2 per factory.
+3. Library defaults last.
+
+Fail-closed: malformed policy JSON, unknown family keys, or incompatible
+system/hardware references surface as structured resolve issues, never silent
+ignores; no overlay means library defaults, not an error.
+
+**Tasks**:
+
+- [x] **T8 — Go policy model + overlay parser**: typed factory construction
+  policy and `joint.constructionPolicy`/granular-key parsing mirroring
+  `overlayOverridesToPolicy` (flat dotted-key semantics, library-default
+  fallback for absent scalars, engine-usability validation on top).
+  Parity fixtures in `contracts/factoryConstructionPolicyParity.contract.json`
+  consumed by BOTH sides (Go 7/7 + TS 7/7).
+- [x] **T9 — engine input + application**: `AuthoringResolveInput.FactoryConstructionPolicy`;
+  a factory-provenance rule replaces the definition's DEFAULT station
+  pattern in `materializeBoundRelationships` and fills authored
+  floor-side/fixed-shelf-side relationships that declare none
+  (`applyFactoryStationPatterns`, same server-input injection contract as
+  #916); explicit authored counts and construction-declared families stay
+  policy-immune. A/B resolve to different machining → different
+  fingerprints (pinned by the V2 gate).
+- [x] **T10 — authoring-resolve API wiring**: ONE storage loader
+  (`ReleaseServerResolveInputs` → `ReleaseServerInputsFromStore`) loads
+  pinned profiles + #916 side recipes + the org's active-overlay policy for
+  BOTH the authoring resolve and the release gates. No overlay / unparseable
+  org / DB incident → logged honest degradation; an explicitly overridden
+  unusable policy → structured `FACTORY_POLICY_INVALID` (422).
+- [x] **T11 — release-side wiring + demand → BOM**: the gates load the
+  releasing org's inputs; `ResolveReleaseCollection` derives the routing
+  program and per-unit demand INSIDE the gate verdict
+  (`DeriveReleaseRoutingProgram` gained the server inputs),
+  `RequirementLinesFromResolvedBOMs` merges the profile demand into the
+  hardware totals BEFORE package rounding (same validation as BOM lines),
+  and the freeze persists that exact program + per-unit demand as an
+  additive schema-v2 snapshot section (`hardwareProfileDemand`, omitempty —
+  historical rows untouched, no v3).
+- [x] **T12 — V1 tests**: policy parse/edge cases + parity fixture (Go),
+  application/materialize precedence tests, demand merge pre-rounding
+  (10-unit package rounding proof + unknown-hardware fail closed),
+  collection routing derivation + empty-inputs invariance, storage loader
+  happy/degrade/fail-closed (fake reader), handler governance (422 invalid /
+  200 usable / degrade) with the shared-orchestration stub.
+- [x] **T13 — V2 browser proof (resolve leg)**:
+  `tests/organization/factory-construction-policy-resolve.spec.ts`: real
+  browser + real Go + disposable PostgreSQL — one factory, three governed
+  states of the SAME definition (structural fixed-shelf-side binding with
+  station margins, parameter default 3): no policy → 3 stations;
+  `shelfToSide=4` → 4 stations; `shelfToSide=2` → 2 stations. Each
+  definition-default resolve reaches MACHINING_READY through the pinned
+  profile, the drilling pattern physically differs, demand is present and
+  every fingerprint is distinct — the saved overlay demonstrably governs
+  the real resolve. **Named gap**: the two-factory A/B shape of the
+  acceptance needs EACH organization to hold a recipe-bearing profile;
+  org-admin-authored profiles carry no recipe by design (#955 surface) and
+  the platform `/seed` provisions one organization (500 elsewhere), so the
+  cross-factory gate lands with the release-freeze follow-up, which needs
+  the same provisioning story.
+
+**Verification (frozen candidate)**: V0 openapi drift OK + factory script
+unittests OK + workspace typecheck 0 errors. V1 Go full suite with disposable
+PostgreSQL (`scripts/backend-test.sh ./...`: api/storage/engine/application/
+pilotreadiness all ok) + domain TS 1751/1751 + workspace TS suites (web 565,
+storage, ui) + rake verify (SketchUp 6 runs / 3855 asserts, RBZ built).
+V2 org browser gate for the A/B governed resolve (T13). **V2 remaining**:
+the release-freeze leg of the gate (real release freezing `hardwareProfileDemand`
++ merged requirements through the browser flow) and the two-factory A/B
+gate (blocked on per-org recipe-bearing profile provisioning, named above) —
+the mechanics carry V1 evidence (demand merge + collection derive + full
+release suite); the integrated browser proofs are the named follow-up.
+SketchUp host NOT_RUN — out of slice scope (the extension consumes the
+resolve contract unchanged).
+
+**Forecast**: one PR, ~450–600 authored lines (Go model + engine + api,
+fixtures, tests, e2e extension). If the frozen candidate outruns review
+planning, publish T8–T10 as `Refs #875 / Delivery: partial` and stack T11+.
+
+**Delivery strategy**: single candidate on
+`feat/875-policy-resolver-demand-bom` from base `8957d96b`; work-unit commits
+(domain → engine/api → tests+e2e); fresh independent reviewer with exact
+HEAD/base after frozen V0–V2 evidence.
+
+**Decisions pinned in this plan** (a reviewer may contest with evidence):
+- Policy overrides definition-default station/system values; explicit authored
+  per-relationship declarations and component mandatory constraints keep
+  precedence (issue: "afecta a todos los muebles compatibles del contexto
+  efectivo sin editar sus definiciones" + "no forzar métodos a relaciones
+  incompatibles ni a componentes con restricciones obligatorias").
+- Snapshot stays schema-v2 with an additive optional demand section (v2
+  already carries optional Routing); no v3, no historical retarget (release
+  continuity #741; issue: "la nueva versión no retargetea Q/R/releases ni
+  cambia su BOM").
+- Component-level exception persistence, If-Match concurrent-editor conflict,
+  draft/activate lifecycle, permission matrix, and user documentation remain
+  open after this slice (§3) — they are follow-up slices of this same issue.

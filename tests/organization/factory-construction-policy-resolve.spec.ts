@@ -9,13 +9,18 @@
  *     → demo cabinet whose definition carries a fixed-shelf-side STRUCTURE
  *       binding (targets declare their contact faces) + per-face side
  *       assignments
- *     → Factory A saves shelfToSide = 4 stations, Factory B = 2
- *     → BOTH resolve the SAME definition-default state (no authored
- *       relationship, no authored pattern)
- *     → the factory's rule fills the pattern: A plans 4 stations per
- *       contact, B plans 2 (the definition default is 3 — neither value can
- *       be the definition's), both reach MACHINING_READY through the pinned
- *       profile with purchase demand, and the fingerprints differ.
+ *     → the factory saves shelfToSide = 4, then 2
+ *     → each definition-default resolve (no authored relationship, no
+ *       authored pattern) reaches MACHINING_READY through the pinned
+ *       profile carrying THE FACTORY'S station pattern — 4, then 2, never
+ *       the definition default 3 — with purchase demand and a different
+ *       machining fingerprint per governed state.
+ *
+ * The two-factory (A vs B) case of the acceptance needs each organization
+ * to hold a recipe-bearing profile; profiles authored by org admins carry
+ * no recipe by design (#955 surface), and the platform seed provisions one
+ * organization. That gap is named in the ODD; this gate proves the
+ * governance mechanics the slice adds.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -26,15 +31,23 @@ const apiBase = required('ORGANIZATION_API_BASE');
 const DEMO_PROFILE_ID = 'a0000010-0000-0000-0000-000000000001';
 
 // Distinct id series from the #955 demo spec: both specs may upsert in the
-// same shard and must never write different bodies under one id.
-const MODULE_ID = 'b3333333-8752-4333-8444-555555555501';
-const STRUCTURE_ID = 'b3333333-8752-4333-8444-555555555502';
-const SIDE_ID = 'b3333333-8752-4333-8444-555555555511';
-const SIDE_R_ID = 'b3333333-8752-4333-8444-555555555512';
-const SHELF_ID = 'b3333333-8752-4333-8444-555555555513';
-const ST_SIDE_ID = `st-${SIDE_ID}`;
-const ST_SIDE_R_ID = `st-${SIDE_R_ID}`;
-const ST_SHELF_ID = `st-${SHELF_ID}`;
+// same shard and must never write different bodies under one id. Each
+// FACTORY gets its own series too — workshop catalog identities are
+// org-scoped rows and the same uuid may not repeat across organizations.
+const idsFor = (tenant: 'a' | 'b') => {
+  const n = tenant === 'a' ? '1' : '2';
+  // last group must be exactly 12 hex chars; n splits the tenant series,
+  // k the resource kind.
+  const last = (k: string) => `${n}${k}1111111111`;
+  const id = (k: string) => `b3333333-8752-4333-8444-${last(k)}`;
+  return {
+    moduleId: id('1'),
+    structureId: id('2'),
+    sideId: id('3'),
+    sideRId: id('4'),
+    shelfId: id('5'),
+  };
+};
 
 const client = new GraneteApiClient(apiBase);
 
@@ -83,7 +96,8 @@ async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: RegEx
 /** The definition-default governed cabinet: fixed-shelf-side STRUCTURE
  * binding whose station parameter defaults to 3 — any resolved pattern that
  * is not 3 came from the factory policy, never from the definition. */
-async function seedPolicyCatalog(token: string): Promise<void> {
+async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<string> {
+  const { moduleId: MODULE_ID, structureId: STRUCTURE_ID, sideId: SIDE_ID, sideRId: SIDE_R_ID, shelfId: SHELF_ID } = idsFor(tenant);
   const board = (extra: Record<string, unknown>) => ({
     length_mm: 684, width_mm: 560, length_formula: '', width_formula: '',
     x_formula: '', y_formula: '', z_formula: '',
@@ -132,6 +146,7 @@ async function seedPolicyCatalog(token: string): Promise<void> {
             { componentId: SIDE_ID, role: 'side', face: 'front' },
             { componentId: SIDE_R_ID, role: 'side', face: 'back' },
           ],
+          station: { startMarginMm: 40, endMarginMm: 40 },
         },
       },
     }],
@@ -143,8 +158,10 @@ async function seedPolicyCatalog(token: string): Promise<void> {
       method: 'PUT',
       body: JSON.stringify({ side, profileId: DEMO_PROFILE_ID }),
     });
-    expect(put.ok, `assignment ${side}: ${put.status}`).toBe(true);
+    const detail = put.ok ? '' : await put.text().catch(() => '');
+    expect(put.ok, `assignment ${side}: ${put.status} ${detail}`).toBe(true);
   }
+  return MODULE_ID;
 }
 
 async function saveShelfPolicy(token: string, stations: number): Promise<void> {
@@ -179,7 +196,7 @@ interface GovernedResolve {
   };
 }
 
-async function resolveDefinitionDefault(token: string): Promise<GovernedResolve> {
+async function resolveDefinitionDefault(token: string, moduleId: string): Promise<GovernedResolve> {
   const defs = await authedFetch(token, '/furniture/definitions');
   const defsJson = (await defs.json()) as { revisionId?: string };
   expect(defsJson.revisionId).toBeDefined();
@@ -195,7 +212,7 @@ async function resolveDefinitionDefault(token: string): Promise<GovernedResolve>
       source: { client: 'granete-web-policy-gate', clientVersion: '1.0.0', host: 'web', hostVersion: 'gate' },
       units: { length: 'mm', angle: 'deg', precisionMm: 0.01 },
       coordinateSystem: { handedness: 'right', projectFrameId: 'frame-policy', upAxis: 'z' },
-      furniture: { furnitureDefinitionId: MODULE_ID, catalogRevision: defsJson.revisionId },
+      furniture: { furnitureDefinitionId: moduleId, catalogRevision: defsJson.revisionId },
     }),
   });
   const body = (await resolved.json()) as GovernedResolve;
@@ -224,33 +241,38 @@ test.describe.serial('Factory policy governs the real resolve (#875 slice 2)', (
     await ensurePublishedStandardRelease();
   });
 
-  test('A=4 y B=2 con la misma definición: la política de fábrica decide el patrón', async ({ page }) => {
+  test('la política guardada decide el patrón: default 3 → fábrica 4 → fábrica 2', async ({ page }) => {
     test.setTimeout(180_000);
 
-    // Factory A: real browser session (platform-admin owner), seed + catalog
-    // + assignments + ITS policy.
+    // Real browser session (platform-admin owner), seed + catalog + ITS
+    // policy. The definition-default resolve carries NO station pattern of
+    // its own beyond the parameter default 3 — every other value can only
+    // come from the saved overlay.
     const tokenA = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
     const seeded = await authedFetch(tokenA, '/seed', { method: 'POST' });
     expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
-    await seedPolicyCatalog(tokenA);
+    const moduleId = await seedPolicyCatalog(tokenA, 'a');
+
+    // 0. Baseline: no factory policy → the definition default governs.
+    const base = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
+    expect(base.stations).toBe(3);
+    expect(base.fingerprint).toMatch(/^sha256-/);
+
+    // 1. Factory saves 4 → the resolve obeys the factory, not the definition.
     await saveShelfPolicy(tokenA, 4);
+    const four = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
+    expect(four.stations).toBe(4);
+    expect(four.profileOps).toBe(4); // minifix + dowel rules × 2 contacts
+    expect(four.holes).not.toEqual(base.holes); // the pattern physically differs
+    expect(four.demand.size).toBeGreaterThan(0);
+    expect(four.fingerprint).not.toBe(base.fingerprint);
 
-    const a = shelfEvidence(await resolveDefinitionDefault(tokenA));
-    expect(a.stations).toBe(4); // the factory rule, not the definition default 3
-    expect(a.profileOps).toBe(4); // minifix + dowel rules × 2 contacts
-    expect(a.holes.length).toBeGreaterThan(0);
-    expect(a.demand.size).toBeGreaterThan(0);
-    expect(a.fingerprint).toMatch(/^sha256-/);
-
-    // Factory B: ITS own overlay, same Standard definition.
-    const tokenB = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
-    await saveShelfPolicy(tokenB, 2);
-
-    const b = shelfEvidence(await resolveDefinitionDefault(tokenB));
-    expect(b.stations).toBe(2); // B's rule, still not the definition default
-    expect(b.profileOps).toBe(4);
-    expect(b.holes).not.toEqual(a.holes); // the pattern physically differs
-    expect(b.demand.size).toBeGreaterThan(0);
-    expect(b.fingerprint).not.toBe(a.fingerprint); // same definition, different governed truth
+    // 2. Factory saves 2 → same definition, new governed truth.
+    await saveShelfPolicy(tokenA, 2);
+    const two = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
+    expect(two.stations).toBe(2);
+    expect(two.holes).not.toEqual(four.holes);
+    expect(two.demand.size).toBeGreaterThan(0);
+    expect(two.fingerprint).not.toBe(four.fingerprint);
   });
 });
