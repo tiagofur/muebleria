@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -62,7 +63,12 @@ func (s *PostgresStore) CreateOverlay(ctx context.Context, overlay *domain.Libra
 		customResourceIDsJSON,
 	)
 
-	return scanOverlay(row)
+	created, err := scanOverlay(row)
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("library overlay created", "overlay_id", created.ID, "organization_id", created.OrganizationID, "version", created.Version)
+	return created, nil
 }
 
 // GetOverlayByID returns a library overlay by its ID (enforced by RLS).
