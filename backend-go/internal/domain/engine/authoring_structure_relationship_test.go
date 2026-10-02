@@ -39,7 +39,7 @@ func TestStructureRelationshipMaterializesFromParameterValue(t *testing.T) {
 	relationships := materializeBoundRelationships(
 		[]domain.FurnitureParameterDefinition{structureDefinition()},
 		map[string]any{"baseJointStations": float64(4)},
-		structureBoards(), nil)
+		structureBoards(), nil, nil)
 	if len(relationships) != 1 {
 		t.Fatalf("relationships = %+v", relationships)
 	}
@@ -76,7 +76,7 @@ func TestStructureRelationshipMaterializesFromParameterValue(t *testing.T) {
 func TestStructureRelationshipFallsBackToDefaultCount(t *testing.T) {
 	relationships := materializeBoundRelationships(
 		[]domain.FurnitureParameterDefinition{structureDefinition()},
-		map[string]any{}, structureBoards(), nil)
+		map[string]any{}, structureBoards(), nil, nil)
 	if len(relationships) != 1 || relationships[0].Parameters["stationCount"] != float64(3) {
 		t.Fatalf("default count not applied: %+v", relationships)
 	}
@@ -95,7 +95,7 @@ func TestStructureRelationshipAuthoredEquivalentWins(t *testing.T) {
 	relationships := materializeBoundRelationships(
 		[]domain.FurnitureParameterDefinition{structureDefinition()},
 		map[string]any{"baseJointStations": float64(4)},
-		structureBoards(), authored)
+		structureBoards(), authored, nil)
 	if len(relationships) != 1 || relationships[0].RelationshipID != "rel-floor-sides-01" {
 		t.Fatalf("authored equivalent must win over the catalog declaration: %+v", relationships)
 	}
@@ -106,7 +106,7 @@ func TestStructureRelationshipSkipsUnusableValues(t *testing.T) {
 		relationships := materializeBoundRelationships(
 			[]domain.FurnitureParameterDefinition{structureDefinition()},
 			map[string]any{"baseJointStations": value},
-			structureBoards(), nil)
+			structureBoards(), nil, nil)
 		if len(relationships) != 0 {
 			t.Fatalf("%s value materialized a relationship: %+v", name, relationships)
 		}
