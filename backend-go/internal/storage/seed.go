@@ -189,7 +189,6 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// internal references (option members, default edges, hardware lines,
 	// structure links) resolve to the same per-org rows consistently.
 	slog.Info("seed fresh branch", "org", org)
-	slog.Info("seed fresh branch", "org", org)
 	seedEdgeArauco, seedEdgeMaderado, seedEdgeMdf := SeededIDForOrg(org, seedEdgeArauco), SeededIDForOrg(org, seedEdgeMaderado), SeededIDForOrg(org, seedEdgeMdf)
 	seedMatArauco, seedMatMaderado, seedMatMdf := SeededIDForOrg(org, seedMatArauco), SeededIDForOrg(org, seedMatMaderado), SeededIDForOrg(org, seedMatMdf)
 	seedHwBisagra, seedHwJaladera, seedHwPata := SeededIDForOrg(org, seedHwBisagra), SeededIDForOrg(org, seedHwJaladera), SeededIDForOrg(org, seedHwPata)
@@ -199,9 +198,10 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	seedOGInterior, seedOGFrente, seedOGFondo := SeededIDForOrg(org, seedOGInterior), SeededIDForOrg(org, seedOGFrente), SeededIDForOrg(org, seedOGFondo)
 	seedOGBisagra, seedOGCorredera, seedOGZoclo, seedOGZocloPerfil := SeededIDForOrg(org, seedOGBisagra), SeededIDForOrg(org, seedOGCorredera), SeededIDForOrg(org, seedOGZoclo), SeededIDForOrg(org, seedOGZocloPerfil)
 	seedCustPlantilla1, seedCustPlantilla2 := SeededIDForOrg(org, seedCustPlantilla1), SeededIDForOrg(org, seedCustPlantilla2)
-	seedModGab, seedModCaj := SeededIDForOrg(org, seedModGab), SeededIDForOrg(org, seedModCaj)
+	seedModGab, seedModCaj, seedModComp := SeededIDForOrg(org, seedModGab), SeededIDForOrg(org, seedModCaj), SeededIDForOrg(org, seedModComp)
 	seedStruct, seedStructPre := SeededIDForOrg(org, seedStruct), SeededIDForOrg(org, seedStructPre)
 	seedCompPuerta, seedCompEntrepano, seedCompCostado, seedCompBase, seedCompZoclo := SeededIDForOrg(org, seedCompPuerta), SeededIDForOrg(org, seedCompEntrepano), SeededIDForOrg(org, seedCompCostado), SeededIDForOrg(org, seedCompBase), SeededIDForOrg(org, seedCompZoclo)
+	seedProj, seedProjItem, seedProjectTemplate := SeededIDForOrg(org, seedProj), SeededIDForOrg(org, seedProjItem), SeededIDForOrg(org, seedProjectTemplate)
 
 	// --- EDGE BANDS ---
 	// F116 C3/A4: fractional thickness matching the TS seed (0.5 / 2 / 0).
@@ -613,6 +613,16 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 	org := OrgFromCtx(ctx)
 
+	// #964 per-org id mapping for the plinth/upgrade surface: the upserts
+	// target (organization_id, code), so an EXISTING installation keeps its
+	// fixed seed rows (conflict → DO NOTHING/UPDATE wins) while a fresh org
+	// gets per-org mapped rows — either way the ids below never collide on
+	// the global primary keys.
+	seedHwZocloPerfil, seedHwZocloBronce, seedHwZocloNegro := SeededIDForOrg(org, seedHwZocloPerfil), SeededIDForOrg(org, seedHwZocloBronce), SeededIDForOrg(org, seedHwZocloNegro)
+	seedOGZoclo, seedOGZocloPerfil := SeededIDForOrg(org, seedOGZoclo), SeededIDForOrg(org, seedOGZocloPerfil)
+	seedMatArauco, seedMatMaderado := SeededIDForOrg(org, seedMatArauco), SeededIDForOrg(org, seedMatMaderado)
+	seedCompZoclo := SeededIDForOrg(org, seedCompZoclo)
+
 	// #964: the provisioned demo profile's items reference the demo hardware
 	// by its MAPPED per-org id — ensure those rows exist under THIS org
 	// (the fresh branch creates them; the upgrade path must too, or the
@@ -689,13 +699,31 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 		matInterior = seedMatArauco
 	}
 
+	// Resolve the zoclo hardware ids by code for the ZOCLO_PERFIL members:
+	// an existing installation keeps its fixed seed ids (the upsert above
+	// no-ops on the (org, code) conflict) while a fresh org got mapped ones —
+	// members must reference whichever row is really there, never a ghost id.
+	zocloPerfilMembers := make([]string, 0, 3)
+	for _, hw := range []struct{ code, fallback string }{
+		{"HER-ZOC-ALU", seedHwZocloPerfil},
+		{"HER-ZOC-BRO", seedHwZocloBronce},
+		{"HER-ZOC-NEG", seedHwZocloNegro},
+	} {
+		var id string
+		_ = tx.QueryRow(ctx, `SELECT id FROM hardwares WHERE code = $1 AND organization_id = $2 LIMIT 1`, hw.code, org).Scan(&id)
+		if id == "" {
+			id = hw.fallback
+		}
+		zocloPerfilMembers = append(zocloPerfilMembers, id)
+	}
+
 	for _, og := range []struct {
 		id, code, name, kind string
 		required             bool
 		optIDs               []string
 	}{
 		{seedOGZoclo, "ZOCLO", "Melamina de zoclo", "board", false, []string{matFrente, matInterior}},
-		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil, seedHwZocloBronce, seedHwZocloNegro}},
+		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, zocloPerfilMembers},
 	} {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO option_groups (id, organization_id, code, name, kind, required)
@@ -775,6 +803,9 @@ func (s *PostgresStore) ensureComposedGabCatalog(ctx context.Context) error {
 }
 
 func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
+	// #964: the plinth module ids are global PKs — per-org derivation (the
+	// (org, code) upsert below keeps an existing installation's fixed rows).
+	seedModBajoZoclo, seedModBajoPerfil := SeededIDForOrg(org, seedModBajoZoclo), SeededIDForOrg(org, seedModBajoPerfil)
 	// Callers guarantee the composed structure exists (the fresh seed creates
 	// it just above; the upgrade path bails out in ensurePlinthCatalog when it
 	// is absent), so preferring the row by code is a resolution, not a guess.
