@@ -16,7 +16,6 @@ import { expect, test } from '@playwright/test';
 import { required } from './support/api';
 
 const apiBase = required('ORGANIZATION_API_BASE');
-const DEMO_PROFILE_ID = 'a0000010-0000-0000-0000-000000000001';
 
 const MODULE_ID = 'b3333333-2222-4333-8444-555555555501';
 const STRUCTURE_ID = 'b3333333-2222-4333-8444-555555555502';
@@ -145,6 +144,10 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
     // the Standard release (the seed replaces the gate's placeholder flip).
     const seeded = await authedFetch(token!, '/seed', { method: 'POST' });
     expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
+    // #964: the demo profile is provisioned PER ORG — the seed response
+    // carries the caller org's provisioned profile id.
+    const { profileId: provisionedProfileId } = (await seeded.json()) as { profileId: string };
+    expect(provisionedProfileId, 'seed returns the provisioned profile id').toBeTruthy();
 
     // The published release carries a REAL manifest (not the placeholder).
     const current = await authedFetch(token!, '/manufacturing-libraries/standard/releases/current');
@@ -159,7 +162,7 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
     for (const [componentId, side] of [[SIDE_ID, 'front'], [SIDE_R_ID, 'back']] as const) {
       const put = await authedFetch(token!, `/catalog/components/${componentId}/side-assignments`, {
         method: 'PUT',
-        body: JSON.stringify({ side, profileId: DEMO_PROFILE_ID }),
+        body: JSON.stringify({ side, profileId: provisionedProfileId }),
       });
       expect(put.ok, `assignment ${side}: ${put.status}`).toBe(true);
     }
@@ -217,7 +220,7 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
     const profileOps = (machining?.operations ?? []).filter(
       (op) => op.provenance?.relationshipId === 'dp-fixed-shelf');
     expect(profileOps.length).toBe(4); // 2 rules × 2 contacts
-    expect(profileOps.every((op) => op.provenance?.technicalProfileId === DEMO_PROFILE_ID)).toBe(true);
+    expect(profileOps.every((op) => op.provenance?.technicalProfileId === provisionedProfileId)).toBe(true);
 
     const demand = machining?.hardwareProfileDemand ?? [];
     const byHardware = new Map(demand.map((line) => [line.hardwareId, line.quantity]));

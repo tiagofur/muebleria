@@ -2124,12 +2124,17 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	if claims := claimsFromRequest(r); claims != nil && claims.PlatformAdmin {
 		demoPublisher = claims.UserID
 	}
-	if err := application.SeedDemoStandardRelease(r.Context(), s.Store, demoPublisher); err != nil {
+	// #964: provisioning is PER-ORG (deterministic ids under the caller's
+	// organization — the fixed seed ids are global PKs and a second org
+	// collided, the historical /seed 500). The publication stays
+	// platform-only and carries EVERY org's provisioned profile.
+	profileID, err := application.SeedDemoForOrg(r.Context(), s.Store, storage.OrgFromCtx(r.Context()), demoPublisher)
+	if err != nil {
 		respondWithInternalError(w, err, "seed demo release")
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	w.Write([]byte(`{"status":"ok","profileId":"` + profileID + `"}`))
 }
 
 // --- MODULES / TEMPLATES ---

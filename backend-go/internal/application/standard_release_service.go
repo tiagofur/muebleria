@@ -146,10 +146,12 @@ type StandardReleaseStore interface {
 	HardwareProfileReader
 	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
 	PublishReleaseWithManifest(ctx context.Context, releaseID uuid.UUID, manifest *domain.LibraryManifest, manifestBytes []byte, blobs []domain.ResourceBlob, publishedBy *uuid.UUID) error
-	// Demo seed surface (#955): org-scoped like every catalog call; the
-	// seed runs under the initial organization context.
+	// Demo seed surface (#955/#964): org-scoped like every catalog call;
+	// the seed runs under the caller's organization context (per-org
+	// provisioning).
 	GetHardwareProfileByID(ctx context.Context, id string) (*domain.HardwareProfile, error)
 	CreateHardwareProfile(ctx context.Context, p *domain.HardwareProfile) error
+	CreateHardware(ctx context.Context, h *domain.Hardware) error
 	EnsureSeedPlatformUser(ctx context.Context) (string, error)
 	// ResetManifestlessPublishedRelease is strictly a test/demo fixture repair helper (#955).
 	ResetManifestlessPublishedRelease(ctx context.Context, releaseID string) (bool, error)

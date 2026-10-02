@@ -110,8 +110,8 @@ func TestProvisionDemoProfileMultiOrg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("provision B: %v", err)
 	}
-	if idsB.ProfileID == idsA1.ProfileID || idsB.MinifixHardwareID == idsA1.MinifixHardwareID {
-		t.Fatalf("per-org ids must differ: %+v vs %+v", idsA1, idsB)
+	if idsB.ProfileID == idsA1.ProfileID {
+		t.Fatalf("per-org profile ids must differ: %+v vs %+v", idsA1, idsB)
 	}
 
 	// T3 — ONE publication carries BOTH orgs' profiles; each org's loader

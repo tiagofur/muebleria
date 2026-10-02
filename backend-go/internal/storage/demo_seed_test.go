@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+
 	"strings"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestDemoSeedPublishesStandardRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("demo publisher: %v", err)
 	}
-	if err := application.SeedDemoStandardRelease(ctx, store, publisher); err != nil {
+	if _, err := application.SeedDemoForOrg(ctx, store, initialOrgIDForSeedTest(ctx), publisher); err != nil {
 		t.Fatalf("demo seed: %v", err)
 	}
 
@@ -60,7 +61,7 @@ func TestDemoSeedPublishesStandardRelease(t *testing.T) {
 	}
 	var demo *domain.HardwareProfile
 	for i := range profiles {
-		if profiles[i].ID == application.SeedDemoProfileID {
+		if profiles[i].ID == application.ProvisionedDemoIDsForOrg(initialOrgIDForSeedTest(context.Background())).ProfileID {
 			demo = &profiles[i]
 		}
 	}
@@ -76,7 +77,7 @@ func TestDemoSeedPublishesStandardRelease(t *testing.T) {
 	}
 
 	// Idempotency: a second run must not recompile or fail.
-	if err := application.SeedDemoStandardRelease(ctx, store, publisher); err != nil {
+	if _, err := application.SeedDemoForOrg(ctx, store, initialOrgIDForSeedTest(ctx), publisher); err != nil {
 		t.Fatalf("demo seed second run: %v", err)
 	}
 	again, err := store.GetCurrentPublishedRelease(ctx, uuid.MustParse(domain.GraneteStandardLibraryID))
@@ -113,7 +114,7 @@ func TestDemoSeedReplacesGatePlaceholderPublication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("demo publisher: %v", err)
 	}
-	if err := application.SeedDemoStandardRelease(ctx, store, publisher); err != nil {
+	if _, err := application.SeedDemoForOrg(ctx, store, initialOrgIDForSeedTest(ctx), publisher); err != nil {
 		t.Fatalf("demo seed over gate flip: %v", err)
 	}
 	release, err := store.GetCurrentPublishedRelease(ctx, standardLibraryID(t))
@@ -167,7 +168,10 @@ func TestDemoSeedUnderRuntimeRoleWithPlatformMarker(t *testing.T) {
 		PlatformAdmin:  true,
 	}
 	if err := store.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
-		return application.SeedDemoStandardRelease(txCtx, store, "00000000-0000-0000-0000-0000000000fe")
+		if _, err := application.SeedDemoForOrg(txCtx, store, initialOrgIDForSeedTest(txCtx), "00000000-0000-0000-0000-0000000000fe"); err != nil {
+			return err
+		}
+		return nil
 	}); err != nil {
 		t.Fatalf("demo seed under runtime role: %v", err)
 	}
@@ -199,7 +203,7 @@ func TestDemoSeedUnderRuntimeRoleWithPlatformMarker(t *testing.T) {
 	}
 	var demo *domain.HardwareProfile
 	for i := range pinned {
-		if pinned[i].ID == application.SeedDemoProfileID {
+		if pinned[i].ID == application.ProvisionedDemoIDsForOrg(initialOrgIDForSeedTest(context.Background())).ProfileID {
 			demo = &pinned[i]
 		}
 	}
@@ -232,7 +236,7 @@ func TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority(t *testi
 		VALUES ($1, $2, $3, $4, $5, $6)`
 	staleHash := "sha256:00000000000000000000000000000000000000000000000000000000000000aa"
 	if _, err := migrationPool.Exec(ctx, insertStaleRef,
-		releaseID, application.HardwareProfileResourceKind, application.SeedDemoProfileID,
+		releaseID, application.HardwareProfileResourceKind, application.ProvisionedDemoIDsForOrg(initialOrgIDForSeedTest(context.Background())).ProfileID,
 		"stale-draft-revision", staleHash, string(domain.PackageKindStandard),
 	); err != nil {
 		t.Fatalf("insert stale ref: %v", err)
@@ -242,7 +246,7 @@ func TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority(t *testi
 	if err != nil {
 		t.Fatalf("demo publisher: %v", err)
 	}
-	if err := application.SeedDemoStandardRelease(ctx, store, publisher); err != nil {
+	if _, err := application.SeedDemoForOrg(ctx, store, initialOrgIDForSeedTest(ctx), publisher); err != nil {
 		t.Fatalf("demo seed: %v", err)
 	}
 
@@ -252,7 +256,7 @@ func TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority(t *testi
 		SELECT resource_revision, definition_hash, package_kind
 		FROM library_release_resource_refs
 		WHERE release_id = $1 AND resource_kind = $2 AND resource_id = $3
-	`, releaseID, application.HardwareProfileResourceKind, application.SeedDemoProfileID).Scan(&rev, &hash, &pkgKind)
+	`, releaseID, application.HardwareProfileResourceKind, application.ProvisionedDemoIDsForOrg(initialOrgIDForSeedTest(context.Background())).ProfileID).Scan(&rev, &hash, &pkgKind)
 	if err != nil {
 		t.Fatalf("query updated ref: %v", err)
 	}
@@ -265,4 +269,10 @@ func TestPublishReleaseUpdatesExistingResourceRefsWithManifestAuthority(t *testi
 	if pkgKind != string(domain.PackageKindFree) {
 		t.Fatalf("package_kind was not updated from manifest: got %q, want %q", pkgKind, domain.PackageKindFree)
 	}
+}
+
+// initialOrgIDForSeedTest reads the organization the seed test operates in:
+// the harness wraps ctx with the migration-seeded initial org.
+func initialOrgIDForSeedTest(ctx context.Context) string {
+	return storage.InitialOrganizationID
 }

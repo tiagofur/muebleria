@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -34,38 +33,35 @@ const (
 	seedDemoTaqueteID = "a0000003-0000-0000-0000-000000000011" // HER-TAQ-8X30 (SeedCatalog)
 )
 
-// SeedDemoStandardRelease ensures the demo profile exists and — when a
-// platform-staff publisher is given — publishes the seeded Standard draft
-// release through the real compiler. The publisher must be a platform
-// admin: the library write policies (#955) only accept Standard writes
-// under the transactional platform marker, which the auth middleware sets
-// from that claim. A non-platform caller gets the profile only.
-func SeedDemoStandardRelease(ctx context.Context, store StandardReleaseStore, publisherID string) error {
-	// 1. Demo profile (skip when present).
-	if _, err := store.GetHardwareProfileByID(ctx, SeedDemoProfileID); err != nil {
-		if !strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("demo profile check: %w", err)
-		}
-		profile := demoProfile()
-		if err := store.CreateHardwareProfile(ctx, profile); err != nil {
-			return fmt.Errorf("demo profile create: %w", err)
-		}
-		slog.Info("demo hardware profile seeded", "code", profile.Code, "revision", profile.Revision)
+// SeedDemoStandardRelease ensures the CALLER's org has its per-org demo
+// provisioning (#964: deterministic per-org ids — the fixed seed ids are
+// global PKs and a second organization collided, the /seed 500) and — when
+// a platform-staff publisher is given — publishes the seeded Standard draft
+// release through the real compiler. The publication is platform-only
+// (#955) and carries EVERY org's provisioned profile, because the compiler
+// gathers active profiles across organizations. A non-platform caller gets
+// their org's provisioning only. Returns the caller's provisioned profile
+// id.
+func SeedDemoForOrg(ctx context.Context, store StandardReleaseStore, orgID, publisherID string) (string, error) {
+	if err := ProvisionDemoProfileForOrg(ctx, store, orgID); err != nil {
+		return "", err
 	}
 
 	// 2. Publish the seeded Standard draft release through the real
 	// compiler (platform staff only; skip otherwise, or when already
 	// published or absent).
 	if publisherID == "" {
-		return nil
+		ids := ProvisionedDemoIDsForOrg(orgID)
+		return ids.ProfileID, nil
 	}
+	profileID := ProvisionedDemoIDsForOrg(orgID).ProfileID
 	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
 	release, err := store.GetReleaseByID(ctx, releaseID)
 	if err != nil {
 		if errors.Is(err, storage.ErrLibraryReleaseNotFound) {
-			return nil // no seeded draft in this database: nothing to do
+			return profileID, nil // no seeded draft in this database: nothing to do
 		}
-		return fmt.Errorf("demo release load: %w", err)
+		return "", fmt.Errorf("demo release load: %w", err)
 	}
 	if release.Status != domain.ReleaseStatusDraft {
 		// A "published" release with no materialized manifest is not a real
@@ -74,17 +70,17 @@ func SeedDemoStandardRelease(ctx context.Context, store StandardReleaseStore, pu
 		// state and compile for real; a really published release is untouched.
 		reset, err := store.ResetManifestlessPublishedRelease(ctx, releaseID.String())
 		if err != nil {
-			return fmt.Errorf("demo release reset: %w", err)
+			return "", fmt.Errorf("demo release reset: %w", err)
 		}
 		if !reset {
-			return nil // already really published (or withdrawn): never recompile
+			return profileID, nil // already really published (or withdrawn): never recompile
 		}
 	}
 	if _, err := PublishStandardRelease(ctx, store, releaseID, uuid.MustParse(publisherID)); err != nil {
-		return fmt.Errorf("demo release publish: %w", err)
+		return "", fmt.Errorf("demo release publish: %w", err)
 	}
 	slog.Info("demo standard release published", "release", releaseID.String())
-	return nil
+	return profileID, nil
 }
 
 // demoProfile builds the seeded Granete demo profile: minifix + tarugo per

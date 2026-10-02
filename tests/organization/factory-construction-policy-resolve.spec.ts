@@ -34,11 +34,13 @@ const DEMO_PROFILE_ID = 'a0000010-0000-0000-0000-000000000001';
 // same shard and must never write different bodies under one id. Each
 // FACTORY gets its own series too — workshop catalog identities are
 // org-scoped rows and the same uuid may not repeat across organizations.
-const idsFor = (tenant: 'a' | 'b') => {
+const idsFor = (tenant: 'a' | 'b', run: 't1' | 'ab') => {
   const n = tenant === 'a' ? '1' : '2';
+  const d = run === 't1' ? '1' : '2';
   // last group must be exactly 12 hex chars; n splits the tenant series,
-  // k the resource kind.
-  const last = (k: string) => `${n}${k}1111111111`;
+  // k the resource kind, d the test run (PUTs against existing ids need
+  // If-Match — fresh series per test keep the raw upserts conflict-free).
+  const last = (k: string) => `${n}${k}11111111${d}1`;
   const id = (k: string) => `b3333333-8752-4333-8444-${last(k)}`;
   return {
     moduleId: id('1'),
@@ -76,7 +78,7 @@ async function upsert(token: string, pathById: string, collection: string, body:
   }
 }
 
-async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: RegExp): Promise<string> {
+async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: string | RegExp): Promise<string> {
   let browserToken: string | null = null;
   page.on('request', (req) => {
     const auth = req.headers().authorization;
@@ -96,8 +98,10 @@ async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: RegEx
 /** The definition-default governed cabinet: fixed-shelf-side STRUCTURE
  * binding whose station parameter defaults to 3 — any resolved pattern that
  * is not 3 came from the factory policy, never from the definition. */
-async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<string> {
-  const { moduleId: MODULE_ID, structureId: STRUCTURE_ID, sideId: SIDE_ID, sideRId: SIDE_R_ID, shelfId: SHELF_ID } = idsFor(tenant);
+async function seedPolicyCatalog(token: string, tenant: 'a' | 'b', run: 't1' | 'ab', profileId: string): Promise<string> {
+  const { moduleId: MODULE_ID, structureId: STRUCTURE_ID, sideId: SIDE_ID, sideRId: SIDE_R_ID, shelfId: SHELF_ID } = idsFor(tenant, run);
+  // Component codes are org-unique too — suffix them with the run.
+  const code = (base: string) => `${base}-${run.toUpperCase()}`;
   const board = (extra: Record<string, unknown>) => ({
     length_mm: 684, width_mm: 560, length_formula: '', width_formula: '',
     x_formula: '', y_formula: '', z_formula: '',
@@ -106,22 +110,22 @@ async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<stri
     ...extra,
   });
   await upsert(token, `/catalog/components/${SIDE_ID}`, '/catalog/components', board({
-    id: SIDE_ID, code: 'FP-LAT', name: 'Lateral Política', placement: 'lateral_izquierdo',
+    id: SIDE_ID, code: code('FP-LAT'), name: 'Lateral Política', placement: 'lateral_izquierdo',
     geometry_kind: 'rectangular_board', thickness_mm: 18,
     length_formula: 'PH - 2*T', width_formula: 'PD', option_roles: ['LATERAL'],
   }));
   await upsert(token, `/catalog/components/${SIDE_R_ID}`, '/catalog/components', board({
-    id: SIDE_R_ID, code: 'FP-LATD', name: 'Lateral Derecho Política', placement: 'lateral_derecho',
+    id: SIDE_R_ID, code: code('FP-LATD'), name: 'Lateral Derecho Política', placement: 'lateral_derecho',
     geometry_kind: 'rectangular_board', thickness_mm: 18,
     length_formula: 'PH - 2*T', width_formula: 'PD', option_roles: ['LATERAL'],
   }));
   await upsert(token, `/catalog/components/${SHELF_ID}`, '/catalog/components', board({
-    id: SHELF_ID, code: 'FP-ENTRE', name: 'Entrepaño Política', placement: 'interno',
+    id: SHELF_ID, code: code('FP-ENTRE'), name: 'Entrepaño Política', placement: 'interno',
     geometry_kind: 'rectangular_board', thickness_mm: 18,
     length_formula: 'PW - 2*T', width_formula: 'PD - T', option_roles: ['INTERIOR'],
   }));
   await upsert(token, `/catalog/structures/${STRUCTURE_ID}`, '/catalog/structures', {
-    id: STRUCTURE_ID, code: 'FP-CUERPO', name: 'Cuerpo Política',
+    id: STRUCTURE_ID, code: code('FP-CUERPO'), name: 'Cuerpo Política',
     components: [
       { componentId: SIDE_ID, quantity: 1 },
       { componentId: SIDE_R_ID, quantity: 1 },
@@ -129,7 +133,7 @@ async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<stri
     ],
   });
   await upsert(token, `/catalog/modules/${MODULE_ID}`, '/catalog/modules', {
-    id: MODULE_ID, code: 'FP-GAB-600', name: 'Gabinete Política 600',
+    id: MODULE_ID, code: code('FP-GAB-600'), name: 'Gabinete Política 600',
     base_labor_cost: 0, width_mm: 600, height_mm: 720, depth_mm: 560,
     categoryId: '', structure_id: STRUCTURE_ID, furniture_type: '', base_mode: '',
     base_clearance_mm: null, components: [], agregados: [], presets: [],
@@ -156,7 +160,7 @@ async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<stri
   for (const [componentId, side] of [[SIDE_ID, 'front'], [SIDE_R_ID, 'back']] as const) {
     const put = await authedFetch(token, `/catalog/components/${componentId}/side-assignments`, {
       method: 'PUT',
-      body: JSON.stringify({ side, profileId: DEMO_PROFILE_ID }),
+      body: JSON.stringify({ side, profileId }),
     });
     const detail = put.ok ? '' : await put.text().catch(() => '');
     expect(put.ok, `assignment ${side}: ${put.status} ${detail}`).toBe(true);
@@ -226,7 +230,7 @@ function shelfEvidence(result: GovernedResolve): { stations: number; profileOps:
   expect(status?.stage, 'joint must reach MACHINING_READY').toBe('MACHINING_READY');
   const stations = status?.stations?.stationCounts?.[0]?.stationCount ?? 0;
   const ops = (machining?.operations ?? []).filter((op) => op.provenance?.relationshipId === 'parameter-shelfJoints-1');
-  const holes = ops.filter((op) => op.provenance?.technicalProfileId === DEMO_PROFILE_ID).map((op) => op.holes?.length ?? 0);
+  const holes = ops.filter((op) => op.provenance?.technicalProfileId !== undefined).map((op) => op.holes?.length ?? 0);
   return {
     stations,
     profileOps: ops.length,
@@ -251,7 +255,9 @@ test.describe.serial('Factory policy governs the real resolve (#875 slice 2)', (
     const tokenA = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
     const seeded = await authedFetch(tokenA, '/seed', { method: 'POST' });
     expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
-    const moduleId = await seedPolicyCatalog(tokenA, 'a');
+    const { profileId } = (await seeded.json()) as { profileId: string };
+    expect(profileId, 'seed returns the provisioned profile id').toBeTruthy();
+    const moduleId = await seedPolicyCatalog(tokenA, 'a', 't1', profileId);
 
     // 0. Baseline: no factory policy → the definition default governs.
     const base = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
@@ -364,15 +370,14 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
       modules: [
         ...catalog.modules.filter((m) => m.id !== FREEZE_MODULE),
         {
-          ...catalog.modules[0],
+          ...catalog.modules[0]!,
           id: FREEZE_MODULE,
           code: 'FRZ-GAB-600',
           name: 'Gabinete Congelado 600',
           structureId: FREEZE_STRUCT,
           components: [],
           hardwareLines: [],
-          baseMode: '',
-          baseClearanceMm: null,
+          baseMode: 'none' as const,
           externalDims: { width: 600, height: 720, depth: 560 },
           parameterDefinitions: [{
             name: 'shelfJoints', label: 'Fijaciones de entrepaño', type: 'number',
@@ -400,12 +405,14 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     // write, never before it.
     const seeded = await authedFetch(token, '/seed', { method: 'POST' });
     expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
+    const { profileId: freezeProfileId } = (await seeded.json()) as { profileId: string };
+    expect(freezeProfileId, 'seed returns the provisioned profile id').toBeTruthy();
 
     // The pinned profile applies to the joint targets' faces.
     for (const [componentId, side] of [[FREEZE_SIDE_L, 'front'], [FREEZE_SIDE_R, 'back']] as const) {
       const put = await authedFetch(token, `/catalog/components/${componentId}/side-assignments`, {
         method: 'PUT',
-        body: JSON.stringify({ side, profileId: DEMO_PROFILE_ID }),
+        body: JSON.stringify({ side, profileId: freezeProfileId }),
       });
       expect(put.ok, `assignment ${side}: ${put.status}`).toBe(true);
     }
@@ -501,5 +508,36 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     const frozenR2 = await readParts();
     expect(frozenR2.revision).toBe((r2Release as unknown as { id: string }).id);
     expect(frozenR2.revision).not.toBe(frozenR1.revision);
+  });
+
+  test('A/B REAL: cada fábrica resuelve su propio perfil provisionado (#964)', async ({ page }) => {
+    test.setTimeout(240_000);
+    // Factory A provisions and saves 4 stations.
+    const tokenA = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
+    const seededA = await authedFetch(tokenA, '/seed', { method: 'POST' });
+    expect(seededA.ok, `seed A: ${seededA.status}`).toBe(true);
+    const { profileId: profileA } = (await seededA.json()) as { profileId: string };
+    const moduleIdA = await seedPolicyCatalog(tokenA, 'a', 'ab', profileA);
+    await saveShelfPolicy(tokenA, 4);
+    const a = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleIdA));
+    expect(a.stations).toBe(4);
+    expect(a.fingerprint).toMatch(/^sha256-/);
+
+    // Factory B: its OWN provisioned profile + assignment + policy over the
+    // same Standard definition shape (its org, its ids).
+    await page.context().clearCookies();
+    const tokenB = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
+    const seededB = await authedFetch(tokenB, '/seed', { method: 'POST' });
+    expect(seededB.ok, `seed B: ${seededB.status}`).toBe(true);
+    const { profileId: profileB } = (await seededB.json()) as { profileId: string };
+    expect(profileB).not.toBe(profileA); // per-org provisioning, never shared
+    const moduleIdB = await seedPolicyCatalog(tokenB, 'b', 'ab', profileB);
+    await saveShelfPolicy(tokenB, 2);
+
+    const b = shelfEvidence(await resolveDefinitionDefault(tokenB, moduleIdB));
+    expect(b.stations).toBe(2);
+    expect(b.profileOps).toBe(4);
+    expect(b.demand.size).toBeGreaterThan(0);
+    expect(b.fingerprint).not.toBe(a.fingerprint); // A=4 / B=2: the #875 A/B truth
   });
 });
