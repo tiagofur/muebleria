@@ -275,3 +275,45 @@ HEAD/base after frozen V0–V2 evidence.
 - Component-level exception persistence, If-Match concurrent-editor conflict,
   draft/activate lifecycle, permission matrix, and user documentation remain
   open after this slice (§3) — they are follow-up slices of this same issue.
+
+---
+
+## 8. Slice 4 — overlay If-Match concurrency + permission matrix (#875 AC07/AC3)
+
+**Outcome**: two editors of the same factory produce a VISIBLE version
+conflict instead of a silent last-write-wins (AC07), and the mutation
+surfaces of the construction policy enforce the role matrix — an authorized
+second user reads the same configuration; visitor/sales cannot mutate it by
+API (AC3). The issue's "Seguridad, concurrencia y versiones" section.
+
+**Design**:
+
+- Version: `library_overlays.version` (bigint, default 1, bumped by every
+  overrides update — migration 000148, fresh+upgrade). Same strong `"v<N>"`
+  ETag contract the modules already use (`FormatVersionETag`/`RequireIfMatch`).
+- PATCH /overlays/{id} requires If-Match; a stale token → typed 412
+  VERSION_CONFLICT (storage.ErrVersionConflict), 428 without one. Reads
+  return the version in the detail payload (OpenAPI detail schema gains
+  `version`) so the client can always send it back.
+- Client: `updateLibraryOverlay` carries If-Match from the overlay version;
+  `saveConstructionPolicy` passes the active overlay's version. A stale save
+  surfaces the conflict message (hook error state) — reload-and-retry is the
+  recovery, never a silent overwrite.
+- Permissions: the overlay MUTATION endpoints (create, PATCH, rebase,
+  conflict resolve) require `RoleCanMutateCatalog` (admin/ingeniero); reads
+  stay member-readable. Server-authority: the UI flag was never the gate.
+- Evidence: a focused gate spec proves the 412 conflict round-trip (stale
+  writer loses nothing silently; re-read + retry converges), the second
+  authorized user reading the same config, and the vendedor 403 by API.
+  The joinery-status/settings failure taught the suite-order lesson: this
+  spec writes NO persistent overlay state of its own beyond its own keys.
+
+**Tasks**:
+
+- [ ] T18 — migration 000148 + storage conditional update (ErrVersionConflict)
+  + version in scans; service signature; handler If-Match + 412 + role guards;
+  ETag on overlay reads. V1 Go tests: conflict path, missing If-Match 428,
+  permission 403, second-user read.
+- [ ] T19 — OpenAPI detail version + regenerate; client If-Match + stale-save
+  error surfacing; spec call sites updated.
+- [ ] T20 — V2 gate spec (conflict round-trip, second user, vendedor 403).
