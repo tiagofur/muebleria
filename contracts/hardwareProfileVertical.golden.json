@@ -282,7 +282,7 @@
             "geometryUnchanged": true,
             "identityChanged": false,
             "provenanceTechnicalProfileRevision": "rev-2",
-            "fingerprintInputChanges": true
+            "canonicalFingerprintInputChanges": true
           },
           "comment": "Pinned contract: the per-operation OperationID is RECIPE-scoped (a profile revision bump keeps it stable), while the machining fingerprint input carries technicalProfileId/Revision — so the technical fingerprint still moves. Folding the profile revision into the OperationID would be an industrial identity contract change and needs explicit owner authorization; it is deliberately NOT done here."
         }

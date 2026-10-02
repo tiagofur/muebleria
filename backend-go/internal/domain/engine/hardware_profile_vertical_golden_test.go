@@ -93,7 +93,7 @@ type verticalGolden struct {
 				Expected            struct {
 					GeometryUnchanged                  bool   `json:"geometryUnchanged"`
 					IdentityChanged                    bool   `json:"identityChanged"`
-					FingerprintInputChanges            bool   `json:"fingerprintInputChanges"`
+					CanonicalFingerprintInputChanges   bool   `json:"canonicalFingerprintInputChanges"`
 					ProvenanceRecipeRevision           string `json:"provenanceRecipeRevision"`
 					ProvenanceTechnicalProfileRevision string `json:"provenanceTechnicalProfileRevision"`
 				} `json:"expected"`
@@ -292,6 +292,26 @@ func TestVerticalGoldenMutations(t *testing.T) {
 					}
 					if mutation.Change.TechnicalProfileRevision != "" && op.OperationID != baseDerived.Operations[i].OperationID {
 						t.Fatalf("profile revision bump must NOT change the recipe-scoped operation identity at operation %d", i)
+					}
+					if mutation.Expected.CanonicalFingerprintInputChanges && mutation.Change.TechnicalProfileRevision != "" {
+						baseProv := ResolvedMachiningProvenance{SourceKind: "relationship",
+							RelationshipID:           contact.RelationshipID,
+							RecipeRevision:           baseRecipe.RecipeRevision,
+							TechnicalProfileID:       baseRecipe.TechnicalProfileID,
+							TechnicalProfileRevision: baseRecipe.TechnicalProfileRevision}
+						bumpedProv := baseProv
+						bumpedProv.TechnicalProfileRevision = mutation.Change.TechnicalProfileRevision
+						baseInput, err := json.Marshal(baseProv.canonical())
+						if err != nil {
+							t.Fatal(err)
+						}
+						bumpedInput, err := json.Marshal(bumpedProv.canonical())
+						if err != nil {
+							t.Fatal(err)
+						}
+						if string(baseInput) == string(bumpedInput) {
+							t.Fatalf("the canonical fingerprint input must change on a profile revision bump: %s", baseInput)
+						}
 					}
 				}
 			}
@@ -533,27 +553,37 @@ func TestVerticalGoldenDemandCost(t *testing.T) {
 // though the recipe-scoped OperationID stays stable.
 func TestVerticalGoldenFingerprintInputCarriesProfileRevision(t *testing.T) {
 	golden := loadVerticalGolden(t)
-	base := ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "golden-relationship-1",
-		RecipeRevision:     golden.ContactScenario.Recipe.RecipeRevision,
-		TechnicalProfileID: golden.ContactScenario.Recipe.TechnicalProfileID, TechnicalProfileRevision: "rev-1"}
-	bumped := base
-	bumped.TechnicalProfileRevision = "rev-2"
-	baseJSON, err := json.Marshal(base.canonical())
-	if err != nil {
-		t.Fatal(err)
+	asserted := 0
+	for _, mutation := range golden.ContactScenario.Mutations.Cases {
+		if !mutation.Expected.CanonicalFingerprintInputChanges {
+			continue
+		}
+		asserted++
+		if mutation.Change.TechnicalProfileRevision == "" {
+			t.Fatalf("%s: canonical expectation without a bumped revision", mutation.Name)
+		}
+		base := ResolvedMachiningProvenance{SourceKind: "relationship", RelationshipID: "golden-relationship-1",
+			RecipeRevision:           golden.ContactScenario.Recipe.RecipeRevision,
+			TechnicalProfileID:       golden.ContactScenario.Recipe.TechnicalProfileID,
+			TechnicalProfileRevision: golden.ContactScenario.Recipe.TechnicalProfileRevision}
+		bumped := base
+		bumped.TechnicalProfileRevision = mutation.Change.TechnicalProfileRevision
+		baseJSON, err := json.Marshal(base.canonical())
+		if err != nil {
+			t.Fatal(err)
+		}
+		bumpedJSON, err := json.Marshal(bumped.canonical())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(baseJSON) == string(bumpedJSON) {
+			t.Fatalf("%s: the canonical fingerprint input must change on a profile revision bump: %s", mutation.Name, baseJSON)
+		}
+		if !strings.Contains(string(bumpedJSON), mutation.Change.TechnicalProfileRevision) {
+			t.Fatalf("%s: canonical input drops the bumped revision: %s", mutation.Name, bumpedJSON)
+		}
 	}
-	bumpedJSON, err := json.Marshal(bumped.canonical())
-	if err != nil {
-		t.Fatal(err)
+	if asserted == 0 {
+		t.Fatalf("the golden declares no canonicalFingerprintInputChanges expectation")
 	}
-	if string(baseJSON) == string(bumpedJSON) {
-		t.Fatalf("the fingerprint input must carry the technical profile revision: %s", baseJSON)
-	}
-	if !containsField(baseJSON, "technicalProfileRevision") {
-		t.Fatalf("fingerprint input drops technicalProfileRevision: %s", baseJSON)
-	}
-}
-
-func containsField(raw []byte, field string) bool {
-	return len(raw) > 0 && strings.Contains(string(raw), `"`+field+`"`)
 }
