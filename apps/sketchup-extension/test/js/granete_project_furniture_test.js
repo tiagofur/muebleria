@@ -56,18 +56,36 @@ function buildSandbox() {
   const configuratorCalls = [];
   let projectionRefreshes = 0;
 
+  const documentListeners = {};
   const documentMock = {
     getElementById: (id) => (registry[id] = registry[id] || createMockElement(id)),
-    createElement: () => createMockElement('')
+    createElement: () => createMockElement(''),
+    addEventListener: (evt, cb) => {
+      documentListeners[evt] = documentListeners[evt] || [];
+      documentListeners[evt].push(cb);
+    },
+    dispatchEvent: (evt) => {
+      (documentListeners[evt.type] || []).forEach((cb) => cb(evt));
+      return true;
+    }
   };
+
+  class MockCustomEvent {
+    constructor(type, init) {
+      this.type = type;
+      this.detail = (init && init.detail) || {};
+    }
+  }
 
   const sandbox = {
     console,
     setTimeout: (fn) => { timers.push(fn); return timers.length; },
     clearTimeout: (id) => { if (id && timers[id - 1]) timers[id - 1] = null; },
     document: documentMock,
+    CustomEvent: MockCustomEvent,
     JSON,
     window: {
+      CustomEvent: MockCustomEvent,
       sketchup: {
         get_project_furniture: () => bridgeCalls.push({ action: 'get_project_furniture' }),
         begin_placement_preview: (p) => bridgeCalls.push({ action: 'begin_placement_preview', payload: JSON.parse(p) }),
@@ -1001,6 +1019,90 @@ test('debounced auto-sync: invalidate cancels pending debounced timer', () => {
 
   pf.invalidate();
   assert.strictEqual(sandbox.__timers.filter(Boolean).length, 0, 'invalidate must cancel debounced sync timer');
+});
+
+test('debounced auto-sync: operates when model binding is connected even if Project tab was never opened', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+  // Note: pf.renderProjectFurniture is NEVER called; lastPfState is null!
+  pf.scheduleDebouncedSync();
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  assert.strictEqual(activeTimers.length, 1, 'must schedule auto-sync when model is connected even without opening Project tab');
+  activeTimers[0]();
+  const syncCalls = sandbox.__bridge.filter((c) => c.action === 'synchronize_design');
+  assert.strictEqual(syncCalls.length, 1, 'synchronize_design must be dispatched');
+});
+
+test('debounced auto-sync: real granete-mutation-state CustomEvent dispatch triggers auto-sync', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  // Dispatch real CustomEvent with phase: committed
+  sandbox.document.dispatchEvent(new sandbox.CustomEvent('granete-mutation-state', {
+    detail: { phase: 'committed' }
+  }));
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  assert.strictEqual(activeTimers.length, 1, 'committed mutation event must schedule debounced auto-sync');
+});
+
+test('debounced auto-sync: invalidate during in-flight sync discards stale response', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  // Start auto-sync
+  pf.synchronizeDesign({ isAuto: true });
+
+  // Invalidate model context while request is in-flight (e.g. model switched or disconnected)
+  pf.invalidate();
+
+  // Late response arrives
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+
+  assert.strictEqual(sandbox.__projectionRefreshes(), 0, 'must NOT refresh projection on invalidated context');
+  assert.strictEqual(sandbox.__toasts.length, 0, 'must NOT emit toast on invalidated context');
+  const getPfCalls = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture');
+  assert.strictEqual(getPfCalls.length, 0, 'must NOT request project furniture on invalidated context');
+});
+
+test('debounced auto-sync: silent in presentation mode with zero toasts and live projection refresh', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  pf.synchronizeDesign({ isAuto: true });
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+
+  assert.strictEqual(sandbox.__toasts.length, 0, 'zero toasts in auto-sync (presentation mode friendly)');
+  assert.strictEqual(sandbox.__projectionRefreshes(), 1, 'commercial projection must refresh automatically');
 });
 
 for (const { name, fn } of tests) {

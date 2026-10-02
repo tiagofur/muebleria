@@ -178,11 +178,28 @@
     }
   }
 
+  function isModelConnected() {
+    if (deps && typeof deps.isModelConnected === "function") {
+      return !!deps.isModelConnected();
+    }
+    var ui = window.GraneteUI;
+    var binding = ui && ui.modelBinding;
+    if (binding && typeof binding.isConnected === "function") {
+      return !!binding.isConnected();
+    }
+    return lastPfState === "connected";
+  }
+
+  function canAutoSync() {
+    if (!isModelConnected()) return false;
+    if (lastDesignSyncOutcome && lastDesignSyncOutcome.kind === "conflict") return false;
+    if (isMutationActive()) return false;
+    return true;
+  }
+
   function scheduleDebouncedSync(delayMs) {
     cancelDebouncedSync();
-    if (lastPfState !== "connected") return;
-    if (lastDesignSyncOutcome && lastDesignSyncOutcome.kind === "conflict") return;
-    if (isMutationActive()) return;
+    if (!canAutoSync()) return;
 
     var delay = typeof delayMs === "number" ? delayMs : AUTO_SYNC_DELAY_MS;
     debouncedSyncTimer = setTimeout(function () {
@@ -200,8 +217,7 @@
       scheduleDebouncedSync(500);
       return;
     }
-    if (lastPfState !== "connected") return;
-    if (lastDesignSyncOutcome && lastDesignSyncOutcome.kind === "conflict") return;
+    if (!canAutoSync()) return;
 
     synchronizeDesign({ isAuto: true });
   }
@@ -250,6 +266,8 @@
   }
 
   var lastDesignSyncOutcome = null;
+  var syncGeneration = 0;
+  var inFlightSyncGeneration = null;
 
   function synchronizeDesign(options) {
     if (designSyncBusy) return;
@@ -257,6 +275,7 @@
     isAutoSyncInFlight = isAuto;
     cancelDebouncedSync();
     designSyncBusy = true;
+    inFlightSyncGeneration = syncGeneration;
     designSyncBadge.className = "status-badge pending";
     designSyncBadge.textContent = "Sincronizando";
     designSyncStatus.textContent = isAuto ? "Actualizando presupuesto…" : "Sincronizando…";
@@ -267,6 +286,7 @@
     } else {
       designSyncBusy = false;
       isAutoSyncInFlight = false;
+      inFlightSyncGeneration = null;
       lastDesignSyncOutcome = { kind: "error", reason: "La sincronización está disponible sólo dentro de SketchUp." };
       btnDesignSync.disabled = false;
       btnDesignSync.textContent = "Sincronizar diseño";
@@ -275,6 +295,15 @@
   }
 
   function handleSynchronizeDesignResult(result) {
+    if (inFlightSyncGeneration !== null && inFlightSyncGeneration < syncGeneration) {
+      designSyncBusy = false;
+      isAutoSyncInFlight = false;
+      inFlightSyncGeneration = null;
+      btnDesignSync.disabled = false;
+      btnDesignSync.textContent = "Sincronizar diseño";
+      return;
+    }
+    inFlightSyncGeneration = null;
     var wasAuto = isAutoSyncInFlight;
     isAutoSyncInFlight = false;
     designSyncBusy = false;
@@ -791,7 +820,10 @@
     // historical `lastPfState = null` semantic (like modelBinding's
     // isConnected accessor).
     invalidate: function () {
+      syncGeneration += 1;
       cancelDebouncedSync();
+      designSyncBusy = false;
+      isAutoSyncInFlight = false;
       lastPfState = null;
       lastDesignSyncOutcome = null;
     },
