@@ -1,14 +1,11 @@
 # ODD — #964 [P2][LIB] Per-org provisioning of recipe-bearing profiles
 
 **Issue**: https://github.com/tiagofur/muebleria/issues/964
-**Status**: PLANNED (2026-10-02, G-ODD 4.0 Delegated Direct; plan reported before code)
+**Status**: IN_PROGRESS (2026-10-02, G-ODD 4.0 Delegated Direct; plan approved — `status:approved` + traceability comment on the issue)
 **Lane**: Delegated Direct — one artifact
-**Base**: `origin/main` @ the merge of #967 (branch from post-merge main)
-**Branch (planned)**: `feat/964-per-org-profile-provisioning`
+**Base**: `origin/main` @ `54ef1083` (merge of #967)
+**Branch**: `feat/964-per-org-profile-provisioning` (created)
 **Writer**: GLM (ZCode)
-**Approval note**: the issue carries no `status:approved` label yet — the owner's
-green light on this plan comes with the label + traceability comment
-(precedent #961/#920).
 
 ---
 
