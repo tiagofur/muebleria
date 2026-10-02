@@ -93,6 +93,7 @@ export function ComponentEditorForm({
   showInContext,
   onShowInContextChange,
   factoryPolicy,
+  constructionException,
   profileOptions,
   sideAssignments,
 }: ComponentEditorFormProps): ReactNode {
@@ -170,6 +171,7 @@ export function ComponentEditorForm({
         setDraft={setDraft}
         hidden={editorTab !== 'construction'}
         factoryPolicy={factoryPolicy}
+        constructionException={constructionException}
       />
 
       <ComponentSideAssignmentsPanel
