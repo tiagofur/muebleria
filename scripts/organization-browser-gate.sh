@@ -575,7 +575,16 @@ GATE_BROWSER_ENV=("${GATE_BASE_ENV[@]}"
 
 run_prepared_automatic_gate() {
   cd "${ROOT}"
-  "${GATE_BROWSER_ENV[@]}" pnpm exec playwright test --config=playwright.organization.config.ts "$@"
+  if ! "${GATE_BROWSER_ENV[@]}" pnpm exec playwright test --config=playwright.organization.config.ts "$@"; then
+    # The backend log is the only record of server-side causes (seed/RLS/
+    # If-Match rejections log there); the disposable TMP_ROOT dies with the
+    # run, so surface the tail before exiting (#964/#875 diagnosis debt).
+    if [ -f "${TMP_ROOT}/backend.log" ]; then
+      printf '[organization-gate] backend.log tail (diagnostics):\n' >&2
+      tail -n 120 "${TMP_ROOT}/backend.log" >&2 || true
+    fi
+    return 1
+  fi
   printf '[organization-gate] PASS\n'
 }
 
