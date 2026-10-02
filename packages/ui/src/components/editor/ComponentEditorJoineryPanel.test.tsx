@@ -61,7 +61,7 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
     expect(badge.textContent).toContain('Fábrica (Overlay Activo)');
   });
 
-  it('configures a local override, displays Componente badge, and allows restoring inheritance', async () => {
+  it('a dirty local override shows the unsaved hint and the explicit exception save', async () => {
     const user = userEvent.setup();
     let currentDraft: ComponentDraft = {
       ...emptyComponentDraft(),
@@ -80,25 +80,135 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
         currentDraft = updater(currentDraft);
       }
     });
+    const onSave = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ComponentEditorJoineryPanel
+        draft={currentDraft}
+        setDraft={setDraft}
+        hidden={false}
+        constructionException={{
+          componentId: 'comp-piso-1',
+          canMutate: true,
+          stored: null,
+          saving: false,
+          error: null,
+          onSave,
+        }}
+      />,
+    );
+
+    // Server truth: nothing stored for this component yet — the badge stays
+    // inherited and the dirty state asks for the explicit save.
+    const badge = screen.getByTestId('component-provenance-badge');
+    expect(badge.textContent).toContain('Biblioteca (Estándar Granete)');
+    expect(screen.getByTestId('component-save-exception-btn')).toBeTruthy();
+
+    await user.click(screen.getByTestId('component-save-exception-btn'));
+
+    // The overlay entry carries ONLY the station scalars the engine consumes.
+    expect(onSave).toHaveBeenCalledWith({
+      componentId: 'comp-piso-1',
+      stationsCount: 3,
+      startMarginMm: undefined,
+      endMarginMm: undefined,
+      provenance: 'component',
+    });
+  });
+
+  it('a stored exception shows the Componente badge; restore clears draft and persists null', async () => {
+    const user = userEvent.setup();
+    let currentDraft: ComponentDraft = {
+      ...emptyComponentDraft(),
+      code: 'PIEZA-PISO',
+      placement: 'base',
+      constructionOverride: {
+        componentId: 'comp-piso-1',
+        stationsCount: 2,
+        provenance: 'component',
+      },
+    };
+
+    const setDraft = vi.fn((updater) => {
+      if (typeof updater === 'function') {
+        currentDraft = updater(currentDraft);
+      }
+    });
+    const onSave = vi.fn().mockResolvedValue(undefined);
 
     const { rerender } = render(
       <ComponentEditorJoineryPanel
         draft={currentDraft}
         setDraft={setDraft}
         hidden={false}
+        constructionException={{
+          componentId: 'comp-piso-1',
+          canMutate: true,
+          stored: { componentId: 'comp-piso-1', stationsCount: 2, provenance: 'component' },
+          saving: false,
+          error: null,
+          onSave,
+        }}
       />,
     );
 
     const badge = screen.getByTestId('component-provenance-badge');
     expect(badge.textContent).toContain('Componente (Excepción)');
 
-    const restoreBtn = screen.getByTestId('component-restore-inheritance-btn');
-    expect(restoreBtn).toBeTruthy();
+    await user.click(screen.getByTestId('component-restore-inheritance-btn'));
 
-    await user.click(restoreBtn);
-
-    expect(setDraft).toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledWith(null);
     expect(currentDraft.constructionOverride).toBeUndefined();
+
+    // After the restore lands, the stored value is gone: the badge returns to
+    // the factory provenance.
+    rerender(
+      <ComponentEditorJoineryPanel
+        draft={currentDraft}
+        setDraft={setDraft}
+        hidden={false}
+        constructionException={{
+          componentId: 'comp-piso-1',
+          canMutate: true,
+          stored: null,
+          saving: false,
+          error: null,
+          onSave,
+        }}
+      />,
+    );
+    expect(screen.getByTestId('component-provenance-badge').textContent).toContain(
+      'Biblioteca (Estándar Granete)',
+    );
+    expect(screen.queryByTestId('component-save-exception-btn')).toBeNull();
+  });
+
+  it('without a saved component id the exception save is not offered', () => {
+    const draft: ComponentDraft = {
+      ...emptyComponentDraft(),
+      placement: 'base',
+      constructionOverride: { componentId: 'x', stationsCount: 3, provenance: 'component' },
+    };
+    const onSave = vi.fn();
+
+    render(
+      <ComponentEditorJoineryPanel
+        draft={draft}
+        setDraft={vi.fn()}
+        hidden={false}
+        constructionException={{
+          componentId: null,
+          canMutate: true,
+          stored: null,
+          saving: false,
+          error: null,
+          onSave,
+        }}
+      />,
+    );
+
+    expect(screen.queryByTestId('component-save-exception-btn')).toBeNull();
+    expect(screen.getByText(/sin guardar/i)).toBeTruthy();
   });
 
   it('toggles connection faces on and off', async () => {

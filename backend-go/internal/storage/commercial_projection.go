@@ -112,9 +112,13 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		if choices == nil {
 			choices = map[string]string{}
 		}
+		// #974: the estimate prices the placed dimensions — the SketchUp
+		// working copy carries explicit dims and no preset field, so the
+		// preset gate must not apply to it (quotation keeps its own gate).
 		pricingItems = append(pricingItems, domain.ProjectItem{
 			ID: item.FurnitureInstanceID, ModuleID: item.FurnitureDefinitionID, Quantity: 1,
 			OptionChoices: choices, CustomDims: domain.CommercialDimsFromParameters(item.Parameters), BaseMode: baseMode,
+			DimsAuthoritative: true,
 		})
 	}
 	if len(wc.Items) == 0 {

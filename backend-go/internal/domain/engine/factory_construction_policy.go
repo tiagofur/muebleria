@@ -41,11 +41,25 @@ type FactoryJointRule struct {
 	EndMarginMm   float64 `json:"endMarginMm"`
 }
 
+// ComponentConstructionOverride is one catalog component's stored exception
+// scalars (#875 slice 3). Fields are POINTERS on purpose: absent, zero and
+// explicit are distinct states (C3) — each present scalar overrides the
+// factory family rule at consumption time; each absent scalar inherits it.
+type ComponentConstructionOverride struct {
+	StationsCount *float64 `json:"stationsCount,omitempty"`
+	StartMarginMm *float64 `json:"startMarginMm,omitempty"`
+	EndMarginMm   *float64 `json:"endMarginMm,omitempty"`
+}
+
 // FactoryConstructionPolicy carries the factory override per engine-resolvable
 // family. nil rules inherit (authored intent, then library defaults).
+// ComponentOverrides carries per-CATALOG-component exceptions (#875 slice 3):
+// the C3 ladder authored intent → component exception → factory family rule →
+// library default, resolved per scalar in RuleForComponent.
 type FactoryConstructionPolicy struct {
-	FloorToSide *FactoryJointRule `json:"floorToSide,omitempty"`
-	ShelfToSide *FactoryJointRule `json:"shelfToSide,omitempty"`
+	FloorToSide        *FactoryJointRule                        `json:"floorToSide,omitempty"`
+	ShelfToSide        *FactoryJointRule                        `json:"shelfToSide,omitempty"`
+	ComponentOverrides map[string]*ComponentConstructionOverride `json:"componentOverrides,omitempty"`
 }
 
 // Relationship kinds the engine resolves today, mapped to their policy family.
@@ -83,6 +97,63 @@ func (p *FactoryConstructionPolicy) RuleForKind(kind string) *FactoryJointRule {
 	}
 }
 
+// factoryKindResolvable reports whether the engine resolves this relationship
+// kind at all (the same families RuleForKind maps).
+func factoryKindResolvable(kind string) bool {
+	switch kind {
+	case factoryFamilyKindFloorSide, factoryFamilyKindFixedShelfSide:
+		return true
+	default:
+		return false
+	}
+}
+
+// RuleForComponent resolves one component's construction exception for a
+// relationship kind (#875 slice 3, the C3 ladder): the component's stored
+// scalars override the factory-wide family rule per field, each absent field
+// inherits that rule, and the rule itself already fell back to the library
+// defaults at parse. The exception keys on the CATALOG component id of the
+// relationship source; an unknown id is dead config, never an error — the
+// overlay is org-owned intent and catalog components may come and go. Both
+// inputs were bounds-validated at parse, so the resolved pattern is always
+// engine-usable.
+func (p *FactoryConstructionPolicy) RuleForComponent(componentID, kind string) *FactoryJointRule {
+	if p == nil {
+		return nil
+	}
+	factoryRule := p.RuleForKind(kind)
+	if factoryRule == nil && !factoryKindResolvable(kind) {
+		// The engine cannot resolve this kind at all (top-to-side, back-panel
+		// are #874 work): honest absence, never a fabricated pattern.
+		return nil
+	}
+	if componentID == "" {
+		return factoryRule
+	}
+	override := p.ComponentOverrides[componentID]
+	if override == nil {
+		return factoryRule
+	}
+	resolved := FactoryJointRule{
+		StationsCount: factoryPolicyDefaultStationsCount,
+		StartMarginMm: factoryPolicyDefaultMarginMm,
+		EndMarginMm:   factoryPolicyDefaultMarginMm,
+	}
+	if factoryRule != nil {
+		resolved = *factoryRule
+	}
+	if override.StationsCount != nil {
+		resolved.StationsCount = int(*override.StationsCount)
+	}
+	if override.StartMarginMm != nil {
+		resolved.StartMarginMm = *override.StartMarginMm
+	}
+	if override.EndMarginMm != nil {
+		resolved.EndMarginMm = *override.EndMarginMm
+	}
+	return &resolved
+}
+
 // ParseFactoryConstructionPolicy decodes the factory station rules from an
 // organization overlay's overrides JSON. The structured
 // `joint.constructionPolicy` blob wins when it carries version 1 (a foreign
@@ -113,7 +184,11 @@ func ParseFactoryConstructionPolicy(overrides json.RawMessage) (*FactoryConstruc
 			if err != nil {
 				return nil, err
 			}
-			return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf}, nil
+			overrides, err := parseFactoryComponentOverrides(structured["componentOverrides"])
+			if err != nil {
+				return nil, err
+			}
+			return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf, ComponentOverrides: overrides}, nil
 		}
 	}
 
@@ -202,14 +277,85 @@ func factoryScalarOr(raw any, fallback float64, path string) (float64, error) {
 	return value, nil
 }
 
+// parseFactoryComponentOverrides validates the structured blob's
+// per-component exception entries (#875 slice 3) and stores them RAW: the
+// per-scalar resolution against the factory family rule needs the RELATIONSHIP
+// kind, which only exists at consumption (RuleForComponent). Presence is the
+// override intent; a present scalar must be a number within the engine bounds
+// (an explicit unusable decision fails closed exactly like a factory rule —
+// half-applying it silently would be worse than refusing the resolve), an
+// entry with no scalars carries no intent and is dropped, and an unknown
+// component id is dead config, never an error.
+func parseFactoryComponentOverrides(raw any) (map[string]*ComponentConstructionOverride, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	entries, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("joint.constructionPolicy.componentOverrides must be an object")
+	}
+	resolved := make(map[string]*ComponentConstructionOverride, len(entries))
+	for componentID, entryRaw := range entries {
+		entry, ok := entryRaw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("joint.constructionPolicy.componentOverrides.%s must be an object", componentID)
+		}
+		path := "joint.constructionPolicy.componentOverrides." + componentID
+		override := &ComponentConstructionOverride{}
+		if raw := entry["stationsCount"]; raw != nil {
+			value, err := factoryScalarOr(raw, 0, path+".stationsCount")
+			if err != nil {
+				return nil, err
+			}
+			if err := validateFactoryStationsCount(value, path+".stationsCount"); err != nil {
+				return nil, err
+			}
+			stations := value
+			override.StationsCount = &stations
+		}
+		for name, raw := range map[string]any{"startMarginMm": entry["startMarginMm"], "endMarginMm": entry["endMarginMm"]} {
+			if raw == nil {
+				continue
+			}
+			value, err := factoryScalarOr(raw, 0, path+"."+name)
+			if err != nil {
+				return nil, err
+			}
+			if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+				return nil, fmt.Errorf("%s.%s must be a finite nonnegative number", path, name)
+			}
+			if name == "startMarginMm" {
+				override.StartMarginMm = &value
+			} else {
+				override.EndMarginMm = &value
+			}
+		}
+		if override.StationsCount == nil && override.StartMarginMm == nil && override.EndMarginMm == nil {
+			continue
+		}
+		resolved[componentID] = override
+	}
+	if len(resolved) == 0 {
+		return nil, nil
+	}
+	return resolved, nil
+}
+
+// validateFactoryStationsCount enforces the same pattern floor the planner
+// and the factory rules enforce: an integer between 2 and the allocation cap.
+func validateFactoryStationsCount(value float64, path string) error {
+	if value != math.Trunc(value) || value < 2 || value > factoryPolicyMaxStationsCount {
+		return fmt.Errorf("%s must be an integer between 2 and %d", path, factoryPolicyMaxStationsCount)
+	}
+	return nil
+}
+
 // usableFactoryRule validates one family's resolved pattern into an
-// engine-usable rule. stationCount must be an integer >= 2 (the planner's own
-// STATION_PATTERN_INVALID floor) and margins finite nonnegative — the same
-// contract the resolver enforces on authored relationships, so a policy
+// engine-usable rule, reusing the component-exception count bound: a policy
 // value can never smuggle a pattern the authored path would reject.
 func usableFactoryRule(count, start, end float64, path string) (*FactoryJointRule, error) {
-	if count != math.Trunc(count) || count < 2 || count > factoryPolicyMaxStationsCount {
-		return nil, fmt.Errorf("%s.stationsCount must be an integer between 2 and %d", path, factoryPolicyMaxStationsCount)
+	if err := validateFactoryStationsCount(count, path+".stationsCount"); err != nil {
+		return nil, err
 	}
 	for _, margin := range []struct {
 		value float64
@@ -225,18 +371,24 @@ func usableFactoryRule(count, start, end float64, path string) (*FactoryJointRul
 // applyFactoryStationPatterns fills the factory pattern into AUTHORED
 // floor-side/fixed-shelf-side relationships that declare none (#875): the
 // designer anchors the joint, the factory decides how it is built — the same
-// server-input injection contract as #916's recipe synthesis. Authored
+// server-input injection contract as #916's recipe synthesis. The pattern is
+// per component first (#875 slice 3): a component construction exception for
+// the source panel's CATALOG component (resolved through the boards'
+// instance→catalog mapping) beats the factory-wide family rule. Authored
 // explicit stationCount parameters and construction-declared families are
-// explicit intent and stay untouched; with no authored pattern and no
-// factory rule the relationship keeps its honest STATION_PATTERN_INVALID
-// terminal.
-func applyFactoryStationPatterns(relationships []AuthoringRelationship, policy *FactoryConstructionPolicy) []AuthoringRelationship {
+// explicit intent and stay untouched; with no applicable rule the
+// relationship keeps its honest STATION_PATTERN_INVALID terminal.
+func applyFactoryStationPatterns(relationships []AuthoringRelationship, policy *FactoryConstructionPolicy, boards []layoutBoard) []AuthoringRelationship {
 	if policy == nil {
 		return relationships
 	}
+	catalogByInstance := make(map[string]string, len(boards))
+	for _, board := range boards {
+		catalogByInstance[board.id] = board.catalogComponentID
+	}
 	for i := range relationships {
 		relationship := &relationships[i]
-		rule := policy.RuleForKind(relationship.Kind)
+		rule := policy.RuleForComponent(catalogByInstance[relationship.Source.ComponentInstanceID], relationship.Kind)
 		if rule == nil {
 			continue
 		}

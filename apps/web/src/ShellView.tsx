@@ -58,6 +58,7 @@ import type {
   PurchaseOrder,
   Supplier,
   OpsException,
+  ComponentConstructionOverride,
 } from '@granete/domain';
 import {
   applyRoleChoiceToProject,
@@ -1126,6 +1127,35 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     token: session === 'auth' ? authToken : null,
     enabled: navId === 'settings' || navId === 'components',
   });
+
+  // #875 slice 3: a component's station exception lives in the factory overlay
+  // (never in the component entity) — merge the entry into the policy and save
+  // through the same governed overlay path as Config.
+  const saveComponentConstructionException = useCallback(
+    async (componentId: string | null, override: ComponentConstructionOverride | null) => {
+      if (!componentId) return;
+      const policy = factoryConstructionPolicy.policy;
+      const nextOverrides: Record<string, ComponentConstructionOverride> = {
+        ...(policy.componentOverrides ?? {}),
+      };
+      const hasStationScalars =
+        override !== null &&
+        (override.stationsCount !== undefined ||
+          override.startMarginMm !== undefined ||
+          override.endMarginMm !== undefined);
+      if (override !== null && hasStationScalars) {
+        nextOverrides[componentId] = override;
+      } else {
+        delete nextOverrides[componentId];
+      }
+      await factoryConstructionPolicy.savePolicy({
+        ...policy,
+        componentOverrides:
+          Object.keys(nextOverrides).length > 0 ? nextOverrides : undefined,
+      });
+    },
+    [factoryConstructionPolicy],
+  );
   // #914: hardware profiles catalog data (org-scoped, If-Match writes).
   const hardwareProfiles = useHardwareProfiles(
     DEFAULT_API_BASE,
@@ -2569,6 +2599,17 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onSelectionChange={onComponentSelectionChange}
           canMutate={canMutateModules}
           factoryPolicy={factoryConstructionPolicy.policy}
+          constructionException={{
+            componentId: editingComponentId,
+            canMutate: canMutateModules,
+            stored:
+              editingComponentId != null
+                ? factoryConstructionPolicy.policy.componentOverrides?.[editingComponentId] ?? null
+                : null,
+            saving: factoryConstructionPolicy.saving,
+            error: factoryConstructionPolicy.error,
+            onSave: (override) => saveComponentConstructionException(editingComponentId, override),
+          }}
           profileOptions={hardwareProfilesForPicker.profiles.map((p) => ({
             id: p.id, code: p.code, name: p.name, revision: p.revision, active: p.active,
           }))}

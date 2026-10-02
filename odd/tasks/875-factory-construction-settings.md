@@ -278,6 +278,85 @@ HEAD/base after frozen V0–V2 evidence.
 
 ---
 
+## 7. Slice 3 — component-level construction exceptions, end-to-end (2026-10-02)
+
+**Outcome**: a component-level construction exception (the "Componente
+(Excepción)" state of the editor panel) is factory-owned SERVER truth that
+governs the real resolve: the same factory (policy 4) resolves a component
+with an exception at its own pattern (e.g. 2) while everything else keeps the
+factory pattern; "Restaurar herencia" deletes the override INTENT and the
+resolve returns to the factory pattern. Completes the C3 precedence ladder
+for the self-service surfaces: biblioteca → fábrica → componente (the
+instance-level exception of rung 4 stays out of scope).
+
+**Design (grounded in the existing authorities)**:
+
+- Storage: NO new table/column — the exception lives in the factory's OWN
+  overlay blob (`joint.constructionPolicy.componentOverrides[componentId]`),
+  per C2 ("escribe diferencias en el overlay de SU fábrica") and C3 ("No
+  crear cuatro nuevas familias persistentes: integrar las autoridades
+  existentes"). The TS model already declares `componentOverrides` and the
+  reader passes it through; only margins are added (optional, per-scalar
+  fallback to the factory family rule, mirroring `factoryScalarOr`).
+- Precedence: authored explicit stationCount / declared families stay immune
+  (slice-2 contract) → component exception → factory family rule → library
+  default. An exception never overrides mandatory constraints; values reuse
+  the exact `usableFactoryRule` bounds, so a policy value can never smuggle a
+  pattern the authored path would reject.
+- Keying: the CATALOG component id of the relationship SOURCE (the shelf
+  panel), org-scoped by the overlay itself. Unknown ids are dead config, not
+  errors; malformed shapes/numbers fail closed through the existing
+  FACTORY_POLICY_INVALID governance.
+- Both materialization paths are governed: the binding path uses
+  `binding.ComponentID` directly; authored raw relationships map their source
+  instance to the catalog component via the boards already in scope.
+
+**Tasks**:
+
+- [x] T14 — Go: parse `componentOverrides` (per-family rules, fail-closed),
+  `FactoryConstructionPolicy.RuleForComponent(componentID, kind)`, precedence
+  in `materializeBoundRelationships` + `applyFactoryStationPatterns`
+  (boards-sourced catalog map); V1 unit tests (exception beats factory,
+  authored stays immune, library last, malformed fail-closed, scoping: a
+  component without an exception keeps the factory pattern).
+- [x] T15 — parity + TS: `factoryConstructionPolicyParity.contract.json`
+  component-exception cases consumed by BOTH sides; TS
+  `ComponentConstructionOverride` gains optional margins; validation mirrors.
+- [x] T16 — UI: `ComponentEditorJoineryPanel` wired to the active overlay's
+  `componentOverrides` through the existing `useFactoryConstructionPolicy`
+  save path; provenance badge from server truth (key presence);
+  "Restaurar herencia" deletes the component entry (never copies the current
+  value as a hidden override).
+- [x] T17 — V2 browser gate: a new test in
+  `factory-construction-policy-resolve.spec.ts` — factory 4 + component
+  exception 2 → resolve 2 for that component; restore → 4; the fingerprint
+  changes with the exception and returns after it.
+
+**Remaining open after this slice** (unchanged): If-Match concurrent-editor
+conflict (AC07), draft/activate lifecycle, second-user/visitor permission
+matrix, user documentation (§3).
+
+**Execution record (2026-10-02)**: implemented on
+`feat/875-component-construction-exceptions` from main `d68faa90`. V1: engine
+package green (parser raw-storage + fail-closed scalars, RuleForComponent C3
+ladder, binding-path and authored-path precedence, scoping guard), full
+domain+application+api green; parity fixture 9 cases Go+TS identical; full
+pnpm typecheck + suites green (the component-exception badge tests updated to
+server-truth semantics). V2: `organization-browser-gate.sh
+factory-construction-policy-resolve.spec.ts` 4/4 — factory 4 + shelf
+exception 2 resolves 2 with a distinct fingerprint; deleting the stored
+intent returns the byte-identical factory-4 fingerprint.
+`factory-construction-settings.spec.ts` 4/4 — the slice-1 component test now
+exercises the REAL slice-3 contract (saved component → «Guardar excepción» →
+badge Componente through a reload → «Restaurar herencia» deletes the stored
+intent), and `joinery-status.spec.ts` stays green: its CI failure was pure
+cascade (the first settings candidate aborted the serial describe before its
+factory-restore cleanup test, leaking a floor-4 override into it; root cause
+a ComponentEditorForm pass-through that dropped `constructionException` —
+fixed, one consolidated correction round). A latent slice-1 lie was removed
+in the same pass: `Component.constructionOverride` (entity field + payload
+key) never reached the API — the overlay is the only persistence.
+
 ## 8. Slice 4 — overlay If-Match concurrency + permission matrix (#875 AC07/AC3)
 
 **Outcome**: two editors of the same factory produce a VISIBLE version

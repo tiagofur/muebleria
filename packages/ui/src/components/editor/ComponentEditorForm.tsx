@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import type { OptionGroup, PlacementDims, ResolvedBoardPart, FactoryConstructionPolicy } from '@granete/domain';
+import type { ComponentConstructionOverride, OptionGroup, PlacementDims, ResolvedBoardPart, FactoryConstructionPolicy } from '@granete/domain';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import type {
   MaterialColorLookup,
@@ -49,6 +49,18 @@ export type ComponentEditorFormProps = {
   readonly showInContext: boolean;
   readonly onShowInContextChange: (v: boolean) => void;
   readonly factoryPolicy?: FactoryConstructionPolicy;
+  /**
+   * #875 slice 3: the per-component station exception (factory overlay truth).
+   * Mirrors the sideAssignments pattern: server value + explicit save.
+   */
+  readonly constructionException?: {
+    readonly componentId: string | null;
+    readonly canMutate: boolean;
+    readonly stored?: ComponentConstructionOverride | null;
+    readonly saving: boolean;
+    readonly error: string | null;
+    readonly onSave: (override: ComponentConstructionOverride | null) => void | Promise<void>;
+  };
   /** #915: per-face hardware profile assignments (saved components only). */
   readonly profileOptions?: readonly ComponentProfileOption[];
   readonly sideAssignments?: {
@@ -81,6 +93,7 @@ export function ComponentEditorForm({
   showInContext,
   onShowInContextChange,
   factoryPolicy,
+  constructionException,
   profileOptions,
   sideAssignments,
 }: ComponentEditorFormProps): ReactNode {
@@ -158,6 +171,7 @@ export function ComponentEditorForm({
         setDraft={setDraft}
         hidden={editorTab !== 'construction'}
         factoryPolicy={factoryPolicy}
+        constructionException={constructionException}
       />
 
       <ComponentSideAssignmentsPanel

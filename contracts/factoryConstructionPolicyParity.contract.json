@@ -1,6 +1,6 @@
 {
   "contract": "granete.factory-construction-policy-parity.v1",
-  "description": "Overlay overrides -> effective factory station rules (#875 slice 2). The TS client (packages/domain/src/factoryConstructionPolicy.ts overlayOverridesToPolicy) and the Go resolver (backend-go internal/domain/engine factory_construction_policy.go ParseFactoryConstructionPolicy) must derive identical rules from the same overlay JSON. The flat dotted-key shape is deliberate: joint.constructionPolicy is one literal key whose value is the structured blob; joint.<family>.* are granular keys. Both sides fall missing scalars back to the library-default pattern (2 stations, 50/50mm). The Go resolver additionally enforces engine usability (stationsCount integer 2..1000, finite nonnegative margins) and rejects an explicit factory override that fails it; the client surfaces the same bounds as editor validation.",
+  "description": "Overlay overrides -> effective factory station rules (#875 slice 2). The TS client (packages/domain/src/factoryConstructionPolicy.ts overlayOverridesToPolicy) and the Go resolver (backend-go internal/domain/engine factory_construction_policy.go ParseFactoryConstructionPolicy) must derive identical rules from the same overlay JSON. The flat dotted-key shape is deliberate: joint.constructionPolicy is one literal key whose value is the structured blob; joint.<family>.* are granular keys. Both sides fall missing scalars back to the library-default pattern (2 stations, 50/50mm). The Go resolver additionally enforces engine usability (stationsCount integer 2..1000, finite nonnegative margins) and rejects an explicit factory override that fails it; the client surfaces the same bounds as editor validation. Component construction exceptions (#875 slice 3) are stored RAW in the structured blob (componentOverrides[componentId] scalars): both readers keep the stored entries verbatim — the per-scalar resolution against the factory family rule happens where the relationship kind is known (Go RuleForComponent; the Go parser drops entries with no station scalar and the TS reader mirrors that drop).",
   "cases": [
     {
       "name": "structured factory floor override",
@@ -17,7 +17,11 @@
         }
       },
       "expected": {
-        "floorToSide": { "stationsCount": 4, "startMarginMm": 40, "endMarginMm": 40 },
+        "floorToSide": {
+          "stationsCount": 4,
+          "startMarginMm": 40,
+          "endMarginMm": 40
+        },
         "shelfToSide": null
       }
     },
@@ -40,7 +44,11 @@
       },
       "expected": {
         "floorToSide": null,
-        "shelfToSide": { "stationsCount": 2, "startMarginMm": 60, "endMarginMm": 60 }
+        "shelfToSide": {
+          "stationsCount": 2,
+          "startMarginMm": 60,
+          "endMarginMm": 60
+        }
       }
     },
     {
@@ -48,10 +56,18 @@
       "overrides": {
         "joint.constructionPolicy": {
           "version": 1,
-          "floorToSide": { "provenance": "library", "stationsCount": 9, "startMarginMm": 10, "endMarginMm": 10 }
+          "floorToSide": {
+            "provenance": "library",
+            "stationsCount": 9,
+            "startMarginMm": 10,
+            "endMarginMm": 10
+          }
         }
       },
-      "expected": { "floorToSide": null, "shelfToSide": null }
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": null
+      }
     },
     {
       "name": "granular keys",
@@ -62,7 +78,11 @@
         "joint.floorToSide.endMarginMm": 45
       },
       "expected": {
-        "floorToSide": { "stationsCount": 5, "startMarginMm": 45, "endMarginMm": 45 },
+        "floorToSide": {
+          "stationsCount": 5,
+          "startMarginMm": 45,
+          "endMarginMm": 45
+        },
         "shelfToSide": null
       }
     },
@@ -72,14 +92,24 @@
         "joint.floorToSide.systemId": "screw-only"
       },
       "expected": {
-        "floorToSide": { "stationsCount": 2, "startMarginMm": 50, "endMarginMm": 50 },
+        "floorToSide": {
+          "stationsCount": 2,
+          "startMarginMm": 50,
+          "endMarginMm": 50
+        },
         "shelfToSide": null
       }
     },
     {
       "name": "foreign structured version falls through to granular",
       "overrides": {
-        "joint.constructionPolicy": { "version": 99, "floorToSide": { "provenance": "factory", "stationsCount": 7 } },
+        "joint.constructionPolicy": {
+          "version": 99,
+          "floorToSide": {
+            "provenance": "factory",
+            "stationsCount": 7
+          }
+        },
         "joint.shelfToSide.systemId": "minifix-only",
         "joint.shelfToSide.stationsCount": 3,
         "joint.shelfToSide.startMarginMm": 55,
@@ -87,13 +117,89 @@
       },
       "expected": {
         "floorToSide": null,
-        "shelfToSide": { "stationsCount": 3, "startMarginMm": 55, "endMarginMm": 55 }
+        "shelfToSide": {
+          "stationsCount": 3,
+          "startMarginMm": 55,
+          "endMarginMm": 55
+        }
       }
     },
     {
       "name": "no overrides inherits everywhere",
       "overrides": {},
-      "expected": { "floorToSide": null, "shelfToSide": null }
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": null
+      }
+    },
+    {
+      "name": "component exceptions pass through raw",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "shelfToSide": {
+            "provenance": "factory",
+            "stationsCount": 4,
+            "startMarginMm": 40,
+            "endMarginMm": 40
+          },
+          "componentOverrides": {
+            "comp-shelf-a": {
+              "stationsCount": 2
+            },
+            "comp-shelf-b": {
+              "stationsCount": 3,
+              "startMarginMm": 20,
+              "endMarginMm": 25
+            }
+          }
+        }
+      },
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": {
+          "stationsCount": 4,
+          "startMarginMm": 40,
+          "endMarginMm": 40
+        },
+        "componentOverrides": {
+          "comp-shelf-a": {
+            "stationsCount": 2
+          },
+          "comp-shelf-b": {
+            "stationsCount": 3,
+            "startMarginMm": 20,
+            "endMarginMm": 25
+          }
+        }
+      }
+    },
+    {
+      "name": "component exceptions without station scalars are dropped",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "componentOverrides": {
+            "comp-empty": {},
+            "comp-editor-only": {
+              "joinerySystemId": "screw-only",
+              "provenance": "component"
+            },
+            "comp-real": {
+              "stationsCount": 5
+            }
+          }
+        }
+      },
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": null,
+        "componentOverrides": {
+          "comp-real": {
+            "stationsCount": 5
+          }
+        }
+      }
     }
   ]
 }

@@ -635,6 +635,14 @@ type ProjectItem struct {
 	// (#108). nil = live (current revision). Pinned at close time so the BOM of
 	// a closed quote is not silently mutated by later structure edits.
 	StructureRevisionPin *int `json:"structure_revision_pin,omitempty"`
+	// DimsAuthoritative marks an item whose explicit CustomDims are the pricing
+	// truth: measure presets are neither required nor consulted (#974). Set
+	// ONLY by the design commercial projection — the placed dimensions are the
+	// physical truth the estimate must price, and the SketchUp working copy
+	// carries no preset field. Quotation never sets it and keeps the preset
+	// gate. Not serialized: it never travels on the wire and stays out of
+	// projection fingerprints.
+	DimsAuthoritative bool `json:"-"`
 	// FloorStatus is shop-floor progress (PROD-3.1): pending|cut|edged|assembled|installed.
 	// Empty/omitted = pending. Does not affect BOM or pricing.
 	FloorStatus string `json:"floor_status,omitempty"`
