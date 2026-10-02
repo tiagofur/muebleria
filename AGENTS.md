@@ -26,17 +26,23 @@ Granete owns one runtime-independent contract. When Gentle-AI is available it is
 the native adapter; when it is absent, repository docs, skills, and scripts are
 the manual adapter. The outcome and gates are identical.
 
-| Lane | Use | Execution artifact |
+| G-ODD topology | Use | Execution artifact |
 | --- | --- | --- |
-| Direct | Small, understood, single-step change | None |
-| ODD | Substantial authorized work worth recovering | Exactly one `odd/tasks/<issue>-<slug>.md` |
-| Explicit SDD | The human explicitly requests proposal/spec/design/tasks | The canonical SDD tasks artifact; do not also create an ODD task file |
+| Inline Direct | Small, understood, bounded change where the parent already has enough context | None |
+| Delegated Direct | Substantial or context-heavy authorized work; parent coordinates bounded workers | Exactly one `odd/tasks/<issue>-<slug>.md` when recovery is valuable |
+
+Direct is not a workflow outside G-ODD: it is the lightweight execution topology
+inside the same repository-owned contract. Delegated Direct may use a read-only
+Explorer for larger evidence, a Writer for the authorized edit surface, and a
+Verifier when risk requires independent verification.
 
 Every issue has one writer. A different, fresh reviewer evaluates the exact
-HEAD/base. Prefer one well-prepared implementation pass; CI validates the frozen
-candidate and is not the debugging loop. Details, verification levels, and truth
-authority live in the human-start contract. Engram may mirror context but never
-overrides repository, GitHub, code, tests, or remote state.
+HEAD/base. Evidence is gathered proportionately: start with one bounded parallel
+batch; if evidence would exceed the useful parent budget, use one read-only
+Explorer instead of expanding the parent context indefinitely. Verification is
+risk-based and maps onto V0/V1/V2; CI validates the frozen candidate and is not
+the debugging loop. Human-start defines the detailed routing contract. Engram may
+mirror context but never overrides repository, GitHub, code, tests, or remote state.
 
 ## Roles y áreas
 
