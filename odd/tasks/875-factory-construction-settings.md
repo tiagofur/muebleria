@@ -275,3 +275,63 @@ HEAD/base after frozen V0–V2 evidence.
 - Component-level exception persistence, If-Match concurrent-editor conflict,
   draft/activate lifecycle, permission matrix, and user documentation remain
   open after this slice (§3) — they are follow-up slices of this same issue.
+
+---
+
+## 7. Slice 3 — component-level construction exceptions, end-to-end (2026-10-02)
+
+**Outcome**: a component-level construction exception (the "Componente
+(Excepción)" state of the editor panel) is factory-owned SERVER truth that
+governs the real resolve: the same factory (policy 4) resolves a component
+with an exception at its own pattern (e.g. 2) while everything else keeps the
+factory pattern; "Restaurar herencia" deletes the override INTENT and the
+resolve returns to the factory pattern. Completes the C3 precedence ladder
+for the self-service surfaces: biblioteca → fábrica → componente (the
+instance-level exception of rung 4 stays out of scope).
+
+**Design (grounded in the existing authorities)**:
+
+- Storage: NO new table/column — the exception lives in the factory's OWN
+  overlay blob (`joint.constructionPolicy.componentOverrides[componentId]`),
+  per C2 ("escribe diferencias en el overlay de SU fábrica") and C3 ("No
+  crear cuatro nuevas familias persistentes: integrar las autoridades
+  existentes"). The TS model already declares `componentOverrides` and the
+  reader passes it through; only margins are added (optional, per-scalar
+  fallback to the factory family rule, mirroring `factoryScalarOr`).
+- Precedence: authored explicit stationCount / declared families stay immune
+  (slice-2 contract) → component exception → factory family rule → library
+  default. An exception never overrides mandatory constraints; values reuse
+  the exact `usableFactoryRule` bounds, so a policy value can never smuggle a
+  pattern the authored path would reject.
+- Keying: the CATALOG component id of the relationship SOURCE (the shelf
+  panel), org-scoped by the overlay itself. Unknown ids are dead config, not
+  errors; malformed shapes/numbers fail closed through the existing
+  FACTORY_POLICY_INVALID governance.
+- Both materialization paths are governed: the binding path uses
+  `binding.ComponentID` directly; authored raw relationships map their source
+  instance to the catalog component via the boards already in scope.
+
+**Tasks**:
+
+- [ ] T14 — Go: parse `componentOverrides` (per-family rules, fail-closed),
+  `FactoryConstructionPolicy.RuleForComponent(componentID, kind)`, precedence
+  in `materializeBoundRelationships` + `applyFactoryStationPatterns`
+  (boards-sourced catalog map); V1 unit tests (exception beats factory,
+  authored stays immune, library last, malformed fail-closed, scoping: a
+  component without an exception keeps the factory pattern).
+- [ ] T15 — parity + TS: `factoryConstructionPolicyParity.contract.json`
+  component-exception cases consumed by BOTH sides; TS
+  `ComponentConstructionOverride` gains optional margins; validation mirrors.
+- [ ] T16 — UI: `ComponentEditorJoineryPanel` wired to the active overlay's
+  `componentOverrides` through the existing `useFactoryConstructionPolicy`
+  save path; provenance badge from server truth (key presence);
+  "Restaurar herencia" deletes the component entry (never copies the current
+  value as a hidden override).
+- [ ] T17 — V2 browser gate: a new test in
+  `factory-construction-policy-resolve.spec.ts` — factory 4 + component
+  exception 2 → resolve 2 for that component; restore → 4; the fingerprint
+  changes with the exception and returns after it.
+
+**Remaining open after this slice** (unchanged): If-Match concurrent-editor
+conflict (AC07), draft/activate lifecycle, second-user/visitor permission
+matrix, user documentation (§3).
