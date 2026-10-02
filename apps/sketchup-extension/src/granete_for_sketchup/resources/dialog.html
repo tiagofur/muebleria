@@ -1768,6 +1768,9 @@
           // server truth (injected seam; no coupling to the module here).
           refreshDesignInheritance: function () {
             window.GraneteUI.designInspector.refreshInheritance();
+          },
+          isModelConnected: function () {
+            return !!(window.GraneteUI.modelBinding && window.GraneteUI.modelBinding.isConnected());
           }
         });
 

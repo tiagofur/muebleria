@@ -49,14 +49,8 @@ module Granete
                 'parameters' => parameters || {},
                 'material_choices' => material_choices || {}
               }
-              # #784 R3: explicit lineage travels ONLY as a full-parity
-              # statement (keys == material_choices keys) — the backend
-              # rejects partial statements. Absent keeps the legacy shape
-              # (the backend preserves the persisted lineage of unchanged
-              # values).
-              if material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
-                item['material_choice_modes'] = material_choice_modes
-              end
+              modes = contract_material_choice_modes
+              item['material_choice_modes'] = modes if modes
               item['furniture_definition_id'] = furniture_definition_id if furniture_definition_id
               version = Contract.authoritative_definition_version(definition_version)
               item['definition_version'] = version unless version.nil?
@@ -64,6 +58,25 @@ module Granete
               item['technical_client_locator'] = technical_client_locator if technical_client_locator
               item['room_id'] = room_id if room_id
               item
+            end
+
+            private
+
+            # #784 R3: explicit lineage travels ONLY as a full-parity
+            # statement (keys == material_choices keys) — the backend
+            # rejects partial statements. Absent keeps the legacy shape
+            # (the backend preserves the persisted lineage of unchanged
+            # values).
+            def contract_material_choice_modes
+              return nil unless material_choice_modes.is_a?(Hash) && !material_choice_modes.empty?
+
+              choices = material_choices || {}
+              return nil if choices.empty?
+
+              choices.each_key.with_object({}) do |role, modes|
+                mode = material_choice_modes[role]
+                modes[role] = Contract::WorkingCopyContract::MODES.include?(mode) ? mode : 'override'
+              end
             end
           end
 

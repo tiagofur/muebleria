@@ -56,18 +56,36 @@ function buildSandbox() {
   const configuratorCalls = [];
   let projectionRefreshes = 0;
 
+  const documentListeners = {};
   const documentMock = {
     getElementById: (id) => (registry[id] = registry[id] || createMockElement(id)),
-    createElement: () => createMockElement('')
+    createElement: () => createMockElement(''),
+    addEventListener: (evt, cb) => {
+      documentListeners[evt] = documentListeners[evt] || [];
+      documentListeners[evt].push(cb);
+    },
+    dispatchEvent: (evt) => {
+      (documentListeners[evt.type] || []).forEach((cb) => cb(evt));
+      return true;
+    }
   };
+
+  class MockCustomEvent {
+    constructor(type, init) {
+      this.type = type;
+      this.detail = (init && init.detail) || {};
+    }
+  }
 
   const sandbox = {
     console,
     setTimeout: (fn) => { timers.push(fn); return timers.length; },
     clearTimeout: (id) => { if (id && timers[id - 1]) timers[id - 1] = null; },
     document: documentMock,
+    CustomEvent: MockCustomEvent,
     JSON,
     window: {
+      CustomEvent: MockCustomEvent,
       sketchup: {
         get_project_furniture: () => bridgeCalls.push({ action: 'get_project_furniture' }),
         begin_placement_preview: (p) => bridgeCalls.push({ action: 'begin_placement_preview', payload: JSON.parse(p) }),
@@ -950,7 +968,7 @@ test('debounced auto-sync: successful auto-sync suppresses success toast but ref
   assert.strictEqual(sandbox.__projectionRefreshes(), 1, 'auto-sync must refresh GraneteCommercialProjection');
 });
 
-test('debounced auto-sync: conflict prevents auto-sync and surfaces honest error toast', () => {
+test('debounced auto-sync: auto conflict stays silent, records the outcome and blocks further auto-sync', () => {
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   const panel = connectedPanel();
@@ -966,14 +984,36 @@ test('debounced auto-sync: conflict prevents auto-sync and surfaces honest error
     reason: 'server divergence'
   });
 
-  assert.strictEqual(sandbox.__toasts.length, 1, 'conflict must show error toast');
-  assert.strictEqual(sandbox.__toasts[0].type, 'error');
+  assert.strictEqual(sandbox.__toasts.length, 0, 'auto-sync conflict stays silent (presentation mode); the card owns the state');
 
   // New dirty render while in conflict should NOT schedule auto-sync
   sandbox.__timers.length = 0;
   pf.renderProjectFurniture(panel);
   assert.strictEqual(sandbox.__timers.filter(Boolean).length, 0, 'must not auto-sync during unacknowledged conflict');
   assert.strictEqual(el(sandbox, 'design-sync-badge').textContent, 'Conflicto');
+});
+
+test('debounced auto-sync: auto failure stays silent while the card renders the honest error state', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.dirty = 1;
+  pf.renderProjectFurniture(panel);
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  activeTimers[0]();
+
+  pf.handleSynchronizeDesignResult({
+    ok: false,
+    code: 'unreachable',
+    reason: 'down'
+  });
+
+  assert.strictEqual(sandbox.__toasts.length, 0, 'a background auto-sync failure never toasts');
+
+  pf.renderProjectFurniture(panel);
+  assert.strictEqual(el(sandbox, 'design-sync-badge').textContent, 'Error de sincronización', 'the card owns the visible outcome');
+  assert.strictEqual(el(sandbox, 'btn-design-sync').textContent, 'Reintentar sincronización');
 });
 
 test('debounced auto-sync: active mutation suppresses auto-sync', () => {
@@ -1001,6 +1041,187 @@ test('debounced auto-sync: invalidate cancels pending debounced timer', () => {
 
   pf.invalidate();
   assert.strictEqual(sandbox.__timers.filter(Boolean).length, 0, 'invalidate must cancel debounced sync timer');
+});
+
+test('debounced auto-sync: operates when model binding is connected even if Project tab was never opened', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+  // Note: pf.renderProjectFurniture is NEVER called; lastPfState is null!
+  pf.scheduleDebouncedSync();
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  assert.strictEqual(activeTimers.length, 1, 'must schedule auto-sync when model is connected even without opening Project tab');
+  activeTimers[0]();
+  const syncCalls = sandbox.__bridge.filter((c) => c.action === 'synchronize_design');
+  assert.strictEqual(syncCalls.length, 1, 'synchronize_design must be dispatched');
+});
+
+test('debounced auto-sync: real granete-mutation-state CustomEvent dispatch triggers auto-sync', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  // Dispatch real CustomEvent with phase: committed
+  sandbox.document.dispatchEvent(new sandbox.CustomEvent('granete-mutation-state', {
+    detail: { phase: 'committed' }
+  }));
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  assert.strictEqual(activeTimers.length, 1, 'committed mutation event must schedule debounced auto-sync');
+});
+
+test('debounced auto-sync: invalidate during in-flight sync discards stale response', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  // Start auto-sync
+  pf.synchronizeDesign({ isAuto: true });
+
+  // Invalidate model context while request is in-flight (e.g. model switched or disconnected)
+  pf.invalidate();
+
+  // Late response arrives
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+
+  assert.strictEqual(sandbox.__projectionRefreshes(), 0, 'must NOT refresh projection on invalidated context');
+  assert.strictEqual(sandbox.__toasts.length, 0, 'must NOT emit toast on invalidated context');
+  // With no newer sync owning the busy panel, the drain recovers the
+  // card through the same reload every outcome uses — never a
+  // lingering "Sincronizando" badge.
+  const getPfCalls = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture');
+  assert.strictEqual(getPfCalls.length, 1, 'drain must recover through the standard panel reload');
+  assert.strictEqual(el(sandbox, 'btn-design-sync').disabled, false, 'drain must re-enable the sync entry point');
+});
+
+test('debounced auto-sync: stale response is drained even when a newer sync started after invalidation', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  pf.synchronizeDesign({ isAuto: true }); // A in flight
+  pf.invalidate();                        // context invalidated mid-flight; busy guard cleared
+  pf.synchronizeDesign({ isAuto: true }); // B starts: responses carry no token, delivery is FIFO
+
+  // The first response to arrive belongs to the invalidated context.
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+  assert.strictEqual(sandbox.__projectionRefreshes(), 0, 'stale response must be drained even with a newer sync in flight');
+  assert.strictEqual(sandbox.__toasts.length, 0, 'stale response must not toast');
+
+  // The newer sync's own response still applies normally.
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+  assert.strictEqual(sandbox.__projectionRefreshes(), 1, 'the newer sync response applies');
+  const getPfCalls = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture');
+  assert.strictEqual(getPfCalls.length, 1, 'only the newer sync completion reloads the panel');
+});
+
+test('debounced auto-sync: repeated invalidations mid-flight arm a single discard', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  pf.synchronizeDesign({ isAuto: true });
+  pf.invalidate();
+  pf.invalidate(); // a second binding status render during the same flight
+
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+  assert.strictEqual(sandbox.__projectionRefreshes(), 0, 'the single stale response is drained');
+
+  pf.synchronizeDesign({ isAuto: true });
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+  assert.strictEqual(sandbox.__projectionRefreshes(), 1, 'the newer sync must not be swallowed by over-arming');
+});
+
+test('debounced auto-sync: two stale syncs after two invalidations are both drained', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  pf.synchronizeDesign({ isAuto: true }); // A
+  pf.invalidate();
+  pf.synchronizeDesign({ isAuto: true }); // B
+  pf.invalidate();
+
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+
+  assert.strictEqual(sandbox.__projectionRefreshes(), 0, 'both stale responses must be drained');
+  assert.strictEqual(sandbox.__toasts.length, 0, 'drained stale responses never toast');
+  const getPfCalls = sandbox.__bridge.filter((c) => c.action === 'get_project_furniture');
+  assert.strictEqual(getPfCalls.length, 2, 'each drain recovers the panel through the standard reload');
+});
+
+test('debounced auto-sync: silent in presentation mode with zero toasts and live projection refresh', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteUI.modelBinding = {
+    isConnected: () => true
+  };
+  const pf = runModule(sandbox, {
+    isModelConnected: () => true
+  });
+
+  pf.synchronizeDesign({ isAuto: true });
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+
+  assert.strictEqual(sandbox.__toasts.length, 0, 'zero toasts in auto-sync (presentation mode friendly)');
+  assert.strictEqual(sandbox.__projectionRefreshes(), 1, 'commercial projection must refresh automatically');
 });
 
 for (const { name, fn } of tests) {
