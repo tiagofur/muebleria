@@ -12,8 +12,9 @@ type factoryPolicyFixtureCase struct {
 	Name      string          `json:"name"`
 	Overrides json.RawMessage `json:"overrides"`
 	Expected  struct {
-		FloorToSide *FactoryJointRule `json:"floorToSide"`
-		ShelfToSide *FactoryJointRule `json:"shelfToSide"`
+		FloorToSide        *FactoryJointRule                        `json:"floorToSide"`
+		ShelfToSide        *FactoryJointRule                        `json:"shelfToSide"`
+		ComponentOverrides map[string]*ComponentConstructionOverride `json:"componentOverrides"`
 	} `json:"expected"`
 }
 
@@ -42,8 +43,36 @@ func TestParseFactoryConstructionPolicyParityFixture(t *testing.T) {
 				t.Fatalf("rules = %+v, want floor=%+v shelf=%+v",
 					policy, testCase.Expected.FloorToSide, testCase.Expected.ShelfToSide)
 			}
+			if componentOverridesDiffer(policy.ComponentOverrides, testCase.Expected.ComponentOverrides) {
+				t.Fatalf("component overrides = %+v, want %+v", policy.ComponentOverrides, testCase.Expected.ComponentOverrides)
+			}
 		})
 	}
+}
+
+func componentOverridesDiffer(got, want map[string]*ComponentConstructionOverride) bool {
+	if len(got) != len(want) {
+		return true
+	}
+	for id, wantEntry := range want {
+		gotEntry := got[id]
+		if gotEntry == nil {
+			return true
+		}
+		if scalarDiffer(gotEntry.StationsCount, wantEntry.StationsCount) ||
+			scalarDiffer(gotEntry.StartMarginMm, wantEntry.StartMarginMm) ||
+			scalarDiffer(gotEntry.EndMarginMm, wantEntry.EndMarginMm) {
+			return true
+		}
+	}
+	return false
+}
+
+func scalarDiffer(got, want *float64) bool {
+	if got == nil || want == nil {
+		return got != want
+	}
+	return *got != *want
 }
 
 func rulesDiffer(got, want *FactoryJointRule) bool {
