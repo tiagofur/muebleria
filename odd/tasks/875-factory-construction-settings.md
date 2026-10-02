@@ -345,6 +345,14 @@ pnpm typecheck + suites green (the component-exception badge tests updated to
 server-truth semantics). V2: `organization-browser-gate.sh
 factory-construction-policy-resolve.spec.ts` 4/4 — factory 4 + shelf
 exception 2 resolves 2 with a distinct fingerprint; deleting the stored
-intent returns the byte-identical factory-4 fingerprint. A latent slice-1 lie
-was removed in the same pass: `Component.constructionOverride` (entity field
-+ payload key) never reached the API — the overlay is the only persistence.
+intent returns the byte-identical factory-4 fingerprint.
+`factory-construction-settings.spec.ts` 4/4 — the slice-1 component test now
+exercises the REAL slice-3 contract (saved component → «Guardar excepción» →
+badge Componente through a reload → «Restaurar herencia» deletes the stored
+intent), and `joinery-status.spec.ts` stays green: its CI failure was pure
+cascade (the first settings candidate aborted the serial describe before its
+factory-restore cleanup test, leaking a floor-4 override into it; root cause
+a ComponentEditorForm pass-through that dropped `constructionException` —
+fixed, one consolidated correction round). A latent slice-1 lie was removed
+in the same pass: `Component.constructionOverride` (entity field + payload
+key) never reached the API — the overlay is the only persistence.
