@@ -48,8 +48,10 @@ Hardware Profile Demand + BOM  (consumo por hardwareId; DXF/CNC adapters)
 **Identidad**: `ContactOperationRecipe.TechnicalProfileID` **es** el ID de un
 HardwareProfile. Los slots de provenance del wire
 (`TechnicalProfileID/TechnicalProfileRevision/RecipeRevision`) se llenan desde
-el perfil pineado del release vigente (#916); una unión sin perfil sigue
-quedando en el terminal honesto `TECHNICAL_PROFILE_REQUIRED`.
+el perfil pineado del release vigente (#916); una unión sin perfil — o con un
+perfil sin cuerpo de receta, que es lo que produce la UI de fábrica al no
+editar recetas — sigue quedando en el terminal honesto
+`TECHNICAL_PROFILE_REQUIRED`.
 
 **Quién lee qué**: React y SketchUp capturan intención (perfil, lado,
 relación). El backend resuelve la receta, valida la geometría de cada
@@ -123,6 +125,10 @@ Relationship → Contact → Recipe      Relationship → Contact → Recipe
        │                                    │
 BOM: SPAX-4X50 × 2 (precio catálogo) BOM: minifix ×1 + taquete ×1
 ```
+
+Un compuesto SPAX + taquete (tornillo + tarugo en la misma cara) sigue la
+misma forma: dos items con roles de aplicación distintos y una receta con
+reglas por participante.
 
 Ver `contracts/hardwareProfile.contract.json` (fixture compartido Go/TS) para
 las formas válidas y cada caso fail-closed.

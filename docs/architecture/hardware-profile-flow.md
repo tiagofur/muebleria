@@ -83,7 +83,7 @@ Estado a 2026-10-01.
 | 3 | #918 | Kind `hardware_profile` en releases #772/#773 + pinning | #913 | cerrada |
 | 4 | #916 | El resolve consume asignaciones/perfiles del release pineado; terminal→READY con perfiles reales | #918 | cerrada |
 | 5 | #914/#915 | React: catálogo de perfiles + asignación por lado | #913 | cerradas |
-| 6 | #875 | Config de fábrica: parametrización vía overlay (`hardware.`) | #916 + #775 | cerrada |
+| 6 | #875 | Config de fábrica: parametrización vía overlay (`hardware.`) | #916 + #775 | parcial: la política `joint.*`/`hardware.*` aún no alimenta el resolvedor |
 | 7 | #917 | Demanda de compra desde items de perfil | #916 | cerrada |
 | 8 | #955 | Superficie de publicación Standard + seed demo del primer perfil con receta | #918 | cerrada (PR #956) |
 | 9 | #919 | Golden vertical: gabinete → perfil → contacto → machining + demanda | todas | abierta |
@@ -98,6 +98,10 @@ Estado a 2026-10-01.
 - Dónde registrar cosas: herraje (compra) → catálogo Hardware; solución por
   contacto → Hardware Profile; qué lado → Component Side Assignment; cómo se
   mecaniza → ContactOperationRecipe; cuánto se compra → demanda/BOM.
+- El CRUD generado usa DELETE por path —
+  `DELETE /api/catalog/hardware-profiles/{id}` y
+  `DELETE /api/catalog/components/{id}/side-assignments/{side}` — el
+  generador ignora query params en DELETE; no reintentes por query.
 - Revalidar el estado real del código en cada arranque: este flujo describe
   el objetivo por slice; lo implementado y lo pendiente se distinguen en cada
   issue, en el §8 del contrato y en su evidencia.
