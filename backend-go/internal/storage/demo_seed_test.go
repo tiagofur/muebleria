@@ -72,8 +72,11 @@ func TestDemoSeedPublishesStandardRelease(t *testing.T) {
 		demo.Recipe.Variants[0].TargetFace != "front" || demo.Recipe.Variants[1].TargetFace != "back" {
 		t.Fatalf("demo recipe body missing or wrong variants: %+v", demo.Recipe)
 	}
-	if demo.Items[0].HardwareID != "a0000003-0000-0000-0000-000000000012" {
-		t.Fatalf("demo items = %+v", demo.Items)
+	// #964: the profile's items reference the org's OWN seed hardware rows
+	// (mapped per-org ids), never the global fixed ids.
+	wantMinifix := storage.SeededIDForOrg(initialOrgIDForSeedTest(context.Background()), "a0000003-0000-0000-0000-000000000012")
+	if demo.Items[0].HardwareID != wantMinifix {
+		t.Fatalf("demo items = %+v, want minifix %s", demo.Items, wantMinifix)
 	}
 
 	// Idempotency: a second run must not recompile or fail.

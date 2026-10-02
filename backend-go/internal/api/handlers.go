@@ -2117,6 +2117,7 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 		slog.Error("seed catalog failed", "error", err)
 		respondWithInternalError(w, err, "seed")
 		return
+		return
 	}
 	// #955: demo hardware profile + real publication of the seeded
 	// Standard draft release (idempotent; keeps the demo chain on real
@@ -2133,6 +2134,7 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("seed demo release failed", "error", err)
 		respondWithInternalError(w, err, "seed demo release")
+		return
 		return
 	}
 	w.WriteHeader(http.StatusOK)

@@ -224,8 +224,16 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
 
     const demand = machining?.hardwareProfileDemand ?? [];
     const byHardware = new Map(demand.map((line) => [line.hardwareId, line.quantity]));
+    // #964: the demand lines reference the org's OWN seed hardware rows
+    // (mapped per-org ids) — resolve them by their stable catalog codes.
+    const hardwareList = await (await authedFetch(token!, '/catalog/hardware', {})).json() as Array<{ id: string; code: string }>;
+    const byCode = new Map(hardwareList.map((hw) => [hw.code, hw.id]));
+    const minifixID = byCode.get('HER-MIN-15');
+    const taqueteID = byCode.get('HER-TAQ-8X30');
+    expect(minifixID, 'HER-MIN-15 present in the org catalog').toBeTruthy();
+    expect(taqueteID, 'HER-TAQ-8X30 present in the org catalog').toBeTruthy();
     // 1 minifix + 1 tarugo per contact × 2 verified contacts.
-    expect(byHardware.get('a0000003-0000-0000-0000-000000000012')).toBe(2);
-    expect(byHardware.get('a0000003-0000-0000-0000-000000000011')).toBe(2);
+    expect(byHardware.get(minifixID!)).toBe(2);
+    expect(byHardware.get(taqueteID!)).toBe(2);
   });
 });

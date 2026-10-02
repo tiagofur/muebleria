@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // Per-org provisioning of the demo recipe-bearing profile (#964): the seed's
@@ -41,7 +42,7 @@ func ProvisionedDemoIDsForOrg(orgID string) ProvisionedDemoIDs {
 	// MustParse validates the org id AND anchors per-org uniqueness.
 	_ = uuid.MustParse(orgID)
 	return ProvisionedDemoIDs{ProfileID: uuid.NewMD5(DemoProvisioningNamespace,
-		[]byte(orgID + "\x00" + SeedDemoProfileID)).String()}
+		[]byte(orgID+"\x00"+SeedDemoProfileID)).String()}
 }
 
 // ProvisionDemoProfileForOrg idempotently creates the org-scoped demo
@@ -59,5 +60,11 @@ func ProvisionDemoProfileForOrg(ctx context.Context, store interface {
 	profile.ID = ids.ProfileID
 	profile.Code = "PERF-DEMO-" + orgID[:8]
 	profile.Name = "Unión fija minifix + tarugo (demo provisionada)"
+	// The demo hardware rows are the org's OWN seed copies (#964): their ids
+	// derive from the same per-org mapping the catalog seed used.
+	profile.Items = []domain.HardwareProfileItem{
+		{HardwareID: storage.SeededIDForOrg(orgID, seedDemoMinifixID), Quantity: 1, ApplicationRole: "cam"},
+		{HardwareID: storage.SeededIDForOrg(orgID, seedDemoTaqueteID), Quantity: 1, ApplicationRole: "dowel"},
+	}
 	return store.CreateHardwareProfile(ctx, profile)
 }

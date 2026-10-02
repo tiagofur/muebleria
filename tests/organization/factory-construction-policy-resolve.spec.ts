@@ -307,19 +307,11 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     // would drop the seed's demo hardware rows otherwise (#967 CI).
     const repository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => token });
     const catalog = await repository.getCatalog();
-    // The demo profile's items reference the seed hardware ids; the seed's
-    // own catalog ensure does not create them under EVERY gate organization,
-    // so the snapshot carries them explicitly (active, priced).
-    const demoHardware = [
-      { id: 'a0000003-0000-0000-0000-000000000012', code: 'HER-MIN-15', name: 'Minifix 15', unit: 'piece' as const, costPerUnit: 12.5, active: true },
-      { id: 'a0000003-0000-0000-0000-000000000011', code: 'HER-TAQ-8X30', name: 'Taquete 8x30', unit: 'piece' as const, costPerUnit: 0.8, active: true },
-    ];
     await repository.saveCatalog({
       ...catalog,
-      hardware: [
-        ...catalog.hardware.filter((h) => !demoHardware.some((d) => d.id === h.id)),
-        ...demoHardware,
-      ],
+      // NOTE: the seed's demo hardware is NOT in this snapshot on purpose —
+      // the /seed (AFTER this write) re-ensures it with per-org mapped ids.
+      // Carrying the global fixed ids here collides with them (#964).
       materials: [
         ...catalog.materials.filter((m) => m.id !== FREEZE_MAT_ID),
         {
@@ -527,15 +519,11 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     // same Standard definition shape (its org, its ids).
     await page.context().clearCookies();
     const tokenB = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
-    // Probe: a benign B-authenticated write isolates middleware/tx vs seed.
-    const probe = await authedFetch(tokenB, '/catalog/components', {
-      method: 'POST',
-      body: JSON.stringify({ id: 'b3333333-9640-4000-8000-000000000001', code: 'PROBE-B', name: 'Probe B', placement: 'interno', geometry_kind: 'rectangular_board', thickness_mm: 18, active: true }),
-    });
-    console.log(`[probe] B component write status=${probe.status} body=${await probe.text().catch(() => '')}`);
     const seededB = await authedFetch(tokenB, '/seed', { method: 'POST' });
-    expect(seededB.ok, `seed B: ${seededB.status} ${await seededB.text().catch(() => '')}`).toBe(true);
-    const { profileId: profileB } = (await seededB.json()) as { profileId: string };
+    const seededBJson = await seededB.json().catch(() => ({})) as { status?: string; profileId?: string };
+    expect(seededB.ok, `seed B: ${seededB.status} ${JSON.stringify(seededBJson).slice(0, 300)}`).toBe(true);
+    const profileB = seededBJson.profileId!;
+    expect(profileB, 'seed B returns the provisioned profile id').toBeTruthy();
     expect(profileB).not.toBe(profileA); // per-org provisioning, never shared
     const moduleIdB = await seedPolicyCatalog(tokenB, 'b', 'ab', profileB);
     await saveShelfPolicy(tokenB, 2);
