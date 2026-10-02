@@ -140,6 +140,6 @@ test.describe.serial('Overlay concurrency + permissions (#875 slice 4)', () => {
       client.updateLibraryOverlay(vendedorToken, orgBOverlay.id, orgBOverlay.version, {
         overrides: { ...(orgBOverlay.overrides ?? {}), 'parameters.slice4Probe': 'no' },
       }),
-    ).rejects.toThrow(/403|Forbidden|permiso/i);
+    ).rejects.toThrow(/solo administración de fábrica/i);
   });
 });
