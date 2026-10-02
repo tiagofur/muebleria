@@ -29,7 +29,7 @@ func releaseCollectionFixture(t *testing.T) ([]domain.DesignRevisionItem, domain
 func TestResolveReleaseCollectionIdentityAndDemand(t *testing.T) {
 	items, catalog := releaseCollectionFixture(t)
 	before, _ := json.Marshal([]any{items, catalog})
-	result, err := ResolveReleaseCollection("revision-2", items, catalog, nil)
+	result, err := ResolveReleaseCollection("revision-2", items, catalog, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,7 @@ func TestResolveReleaseCollectionIdentityAndDemand(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("assembly or modifying evaluated output mutated source inputs")
 	}
-	reversed, err := ResolveReleaseCollection("revision-2", []domain.DesignRevisionItem{items[1], items[0]}, catalog, nil)
+	reversed, err := ResolveReleaseCollection("revision-2", []domain.DesignRevisionItem{items[1], items[0]}, catalog, nil, nil)
 	if err != nil || reversed.Units[0].FurnitureInstanceID != "unit-2" || !reflect.DeepEqual(reversed.Requirements, want) {
 		t.Fatalf("reordering must preserve physical order and aggregate demand: %+v, %v", reversed, err)
 	}
@@ -93,7 +93,7 @@ func TestResolveReleaseCollectionRejectsWithoutPartialOutput(t *testing.T) {
 			revision := "revision-2"
 			scenario.edit(&revision, &items, &catalog)
 			before, _ := json.Marshal([]any{items, catalog})
-			result, err := ResolveReleaseCollection(revision, items, catalog, nil)
+			result, err := ResolveReleaseCollection(revision, items, catalog, nil, nil)
 			if err == nil || result != nil {
 				t.Fatalf("expected failure with no partial collection, got %+v, %v", result, err)
 			}
@@ -134,7 +134,7 @@ func TestResolveReleaseCollectionBudget(t *testing.T) {
 					}
 				}
 				before, _ := json.Marshal([]any{items, catalog})
-				result, err := ResolveReleaseCollection("revision-2", items, catalog, nil)
+				result, err := ResolveReleaseCollection("revision-2", items, catalog, nil, nil)
 				if over {
 					if result != nil || err == nil || !strings.Contains(err.Error(), "exceeds 10000 work units") {
 						t.Fatalf("expected collection budget rejection, got %+v, %v", result, err)
@@ -169,7 +169,7 @@ func TestResolveReleaseCollectionManufacturingPolicy(t *testing.T) {
 				module.HardwareLines = nil
 			}
 			before, _ := json.Marshal([]any{items, catalog})
-			result, err := ResolveReleaseCollection("revision-2", items, catalog, nil)
+			result, err := ResolveReleaseCollection("revision-2", items, catalog, nil, nil)
 			if hardware {
 				want := []domain.MaterialRequirementLine{{Kind: "herrajes", MaterialID: "hw-perfil", Quantity: 2}}
 				if err != nil || !reflect.DeepEqual(result.Requirements, want) || len(result.Units[0].BOM.BoardParts) != 0 {
@@ -183,5 +183,38 @@ func TestResolveReleaseCollectionManufacturingPolicy(t *testing.T) {
 				t.Fatal("manufacturing policy mutated its inputs")
 			}
 		})
+	}
+}
+
+// #875 slice 2: non-nil server inputs derive the routing program and the
+// per-unit demand INSIDE the collection resolve; empty inputs must change
+// nothing observable versus the legacy nil-server run except the newly
+// derived sections.
+func TestResolveReleaseCollectionDerivesRoutingWithServerInputs(t *testing.T) {
+	items, catalog := releaseCollectionFixture(t)
+	legacy, err := ResolveReleaseCollection("revision-2", items, catalog, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Routing != nil || legacy.ProfileDemand != nil {
+		t.Fatalf("nil server inputs must stay routing-free: %+v", legacy.Routing)
+	}
+	governed, err := ResolveReleaseCollection("revision-2", items, catalog, nil, &ReleaseServerInputs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if governed.Routing == nil || governed.Routing.Contract != ReleaseRoutingProgramContract {
+		t.Fatalf("server inputs must derive the routing program: %+v", governed.Routing)
+	}
+	if len(governed.ProfileDemand) != len(governed.Units) {
+		t.Fatalf("profile demand must be unit-aligned: %d vs %d", len(governed.ProfileDemand), len(governed.Units))
+	}
+	for i, demand := range governed.ProfileDemand {
+		if len(demand) != 0 {
+			t.Fatalf("empty inputs must demand nothing, unit %d: %+v", i, demand)
+		}
+	}
+	if !reflect.DeepEqual(governed.Requirements, legacy.Requirements) {
+		t.Fatalf("empty inputs must not change requirements: %+v vs %+v", governed.Requirements, legacy.Requirements)
 	}
 }

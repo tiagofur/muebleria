@@ -64,7 +64,7 @@ func TestResolveReleaseCollectionPresetModuleUsesExplicitDimensions(t *testing.T
 	item.DesignRevisionID = "revision-727"
 	second := item
 	second.FurnitureInstanceID = "unit-2"
-	result, err := ResolveReleaseCollection("revision-727", []domain.DesignRevisionItem{item, second}, catalog, nil)
+	result, err := ResolveReleaseCollection("revision-727", []domain.DesignRevisionItem{item, second}, catalog, nil, nil)
 	if err != nil {
 		t.Fatalf("collection must resolve preset-bearing modules from explicit dimensions: %v", err)
 	}

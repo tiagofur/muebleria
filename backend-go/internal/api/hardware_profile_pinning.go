@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-
-	"github.com/tiagofur/muebles-backend/internal/application"
 )
 
 // HandleHardwareProfilesForRelease answers GET /api/manufacturing-libraries/standard/releases/{releaseId}/hardware-profiles
@@ -23,7 +21,7 @@ func (s *Server) HandleHardwareProfilesForRelease(w http.ResponseWriter, r *http
 		respondWithError(w, http.StatusBadRequest, "invalid release id")
 		return
 	}
-	profiles, err := application.HardwareProfilesForRelease(r.Context(), s.Store, releaseID)
+	profiles, err := s.Store.HardwareProfilesForRelease(r.Context(), releaseID)
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "no manifest") || strings.Contains(msg, "not found") {

@@ -1,5 +1,7 @@
 package engine
 
+import "github.com/tiagofur/muebles-backend/internal/domain"
+
 // Server-resolved side recipes (#916): the api layer loads the pinned
 // hardware profiles (release-resolved, no latest) and the organization's
 // component side assignments, synthesizes one recipe per
@@ -68,4 +70,43 @@ func injectResolvedSideRecipes(relationships []AuthoringRelationship, boards []l
 		relationship.Recipes = synthesized
 	}
 	return result
+}
+
+// SynthesizeResolvedSideRecipes joins the organization's component side
+// assignments with the pinned profiles into (catalogComponentID, side)-keyed
+// recipes (#916). Exported so the storage inputs loader and handler-test
+// stubs share ONE synthesis; an assignment without an active profile recipe
+// for that face simply synthesizes no recipe — never a guessed fallback.
+func SynthesizeResolvedSideRecipes(assignments []domain.ComponentSideAssignment, profileByID map[string]domain.HardwareProfile) []ResolvedSideRecipe {
+	recipes := make([]ResolvedSideRecipe, 0, len(assignments))
+	for _, assignment := range assignments {
+		profile, ok := profileByID[assignment.ProfileID]
+		if !ok || !profile.Active || profile.Recipe == nil {
+			continue
+		}
+		for _, variant := range profile.Recipe.Variants {
+			if variant.TargetFace != assignment.Side {
+				continue
+			}
+			rules := make([]ContactOperationRule, len(variant.Rules))
+			for i, rule := range variant.Rules {
+				rules[i] = ContactOperationRule{
+					RuleID: rule.RuleID, RuleRevision: rule.RuleRevision,
+					ParticipantRole: rule.ParticipantRole, OperationRole: rule.OperationRole,
+					EntryFace: rule.EntryFace, OffsetMm: rule.OffsetMm, Axis: rule.Axis,
+					DiameterMm: rule.DiameterMm, DepthMm: rule.DepthMm,
+				}
+			}
+			recipes = append(recipes, ResolvedSideRecipe{
+				CatalogComponentID:       assignment.ComponentID,
+				Side:                     assignment.Side,
+				RecipeID:                 profile.Recipe.RecipeID,
+				RecipeRevision:           profile.Recipe.RecipeRevision,
+				TechnicalProfileID:       profile.ID,
+				TechnicalProfileRevision: profile.Revision,
+				Rules:                    rules,
+			})
+		}
+	}
+	return recipes
 }

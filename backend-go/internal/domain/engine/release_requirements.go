@@ -41,18 +41,22 @@ func RequirementLinesFromProject(project domain.Project, catalog domain.Catalog)
 		}
 		inputs = append(inputs, ResolvedRequirementInput{BOM: bom, PhysicalQuantity: item.Quantity})
 	}
-	return RequirementLinesFromResolvedBOMs(inputs, catalog)
+	return RequirementLinesFromResolvedBOMs(inputs, catalog, nil)
 }
 
 // RequirementLinesFromResolvedBOMs aggregates without resolving catalog modules.
 // All rounding happens after collection totals. Callers own coherent catalog
 // selection, physical identity and nonempty manufacturing policy.
-func RequirementLinesFromResolvedBOMs(inputs []ResolvedRequirementInput, catalog domain.Catalog) ([]domain.MaterialRequirementLine, error) {
+// profileDemandPerInput (#917/#875) optionally carries each input's profile
+// hardware demand lines, index-aligned with inputs (nil or short entries
+// contribute nothing); they join the hardware totals under the same catalog
+// validation and the same post-total rounding as BOM hardware lines.
+func RequirementLinesFromResolvedBOMs(inputs []ResolvedRequirementInput, catalog domain.Catalog, profileDemandPerInput [][]HardwareProfileDemandLine) ([]domain.MaterialRequirementLine, error) {
 	areas, edges := map[string]float64{}, map[string]float64{}
 	areaBoundsMm2, edgeBoundsMm := map[string]float64{}, map[string]float64{}
 	consumedHardware := map[string]float64{}
 	maxMetricInteger := math.Min(maxExactRequirementQuantity, float64(int(^uint(0)>>1)))
-	for _, input := range inputs {
+	for inputIndex, input := range inputs {
 		if input.PhysicalQuantity <= 0 || float64(input.PhysicalQuantity) > maxMetricInteger {
 			return nil, fmt.Errorf("physical quantity exceeds supported integer range")
 		}
@@ -98,6 +102,23 @@ func RequirementLinesFromResolvedBOMs(inputs []ResolvedRequirementInput, catalog
 			}
 			if !addRequirementQuantity(consumedHardware, hw.ID, line.Quantity*float64(input.PhysicalQuantity), maxExactRequirementQuantity) {
 				return nil, fmt.Errorf("hardware demand exceeds supported numeric range: %s", hw.ID)
+			}
+		}
+		// Profile-driven demand (#917): the resolved technical profiles'
+		// commercial consumption joins the SAME totals — one purchase line
+		// per hardware, package rounding only after all units contribute.
+		if inputIndex < len(profileDemandPerInput) {
+			for _, line := range profileDemandPerInput[inputIndex] {
+				if !positiveFinite(line.Quantity) {
+					return nil, fmt.Errorf("invalid profile demand quantity: %s", line.HardwareID)
+				}
+				hw, ok := findHardware(catalog, line.HardwareID)
+				if !ok || !hw.Active || (hw.PackageSize != nil && !positiveFinite(*hw.PackageSize)) {
+					return nil, fmt.Errorf("invalid profile demand hardware: %s", line.HardwareID)
+				}
+				if !addRequirementQuantity(consumedHardware, hw.ID, line.Quantity*float64(input.PhysicalQuantity), maxExactRequirementQuantity) {
+					return nil, fmt.Errorf("profile hardware demand exceeds supported numeric range: %s", line.HardwareID)
+				}
 			}
 		}
 	}

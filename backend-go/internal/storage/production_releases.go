@@ -287,12 +287,22 @@ func (s *PostgresStore) evaluateReleaseManufacturingReadiness(ctx context.Contex
 	if err != nil {
 		return nil, err
 	}
-	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority)
+	// Server-resolved inputs (#875 slice 2): the organization's pinned
+	// profiles, synthesized side recipes and factory construction policy —
+	// the SAME loader the authoring resolve uses, so fabrication freezes
+	// the governed resolve, never a parallel ungoverned one. A policy the
+	// factory explicitly overrode with an unusable pattern fails the gate;
+	// load incidents degrade honestly (logged, empty inputs).
+	serverInputs, err := s.ReleaseServerResolveInputs(ctx, projectOrgID)
 	if err != nil {
 		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
-			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
+			fmt.Errorf("%w: %v", ErrReleaseSnapshotResolution, err)
 	}
-	if _, err := engine.DeriveReleaseRoutingProgram(items, collection.Units, catalog); err != nil {
+	// The routing program and per-unit profile demand derive INSIDE the
+	// collection resolve, so the gate verdict, the merged requirements and
+	// the frozen snapshot are one derivation.
+	collection, err := engine.ResolveReleaseCollection(designRevisionID, items, catalog, authority, serverInputs)
+	if err != nil {
 		return &releaseGateOutcome{items: items, preflight: preflightBlockedBySnapshotResolution(preflight, err)},
 			fmt.Errorf("%w: %w", ErrReleaseSnapshotResolution, err)
 	}

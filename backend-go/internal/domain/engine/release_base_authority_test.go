@@ -83,7 +83,7 @@ func TestReleaseBaseAuthority_FrozenContextMatchesPricing(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			collection, err := ResolveReleaseCollection("rev-830", []domain.DesignRevisionItem{item}, catalog, authority)
+			collection, err := ResolveReleaseCollection("rev-830", []domain.DesignRevisionItem{item}, catalog, authority, nil)
 			if err != nil {
 				t.Fatalf("quoted release under frozen %s must resolve: %v", tc.frozenMode, err)
 			}
@@ -104,7 +104,7 @@ func TestReleaseBaseAuthority_QuoteLessKeepsModuleDefaultHonestly(t *testing.T) 
 	for _, tc := range baseAuthorityCases {
 		t.Run(tc.name, func(t *testing.T) {
 			item, catalog := frozenAuthorityItem(t, tc)
-			_, err := ResolveReleaseCollection("rev-830", []domain.DesignRevisionItem{item}, catalog, nil)
+			_, err := ResolveReleaseCollection("rev-830", []domain.DesignRevisionItem{item}, catalog, nil, nil)
 			if err == nil {
 				t.Fatalf("quote-less release must keep rejecting the %s choice the module default %s does not consume", tc.retainedRole, tc.moduleMode)
 			}
@@ -127,7 +127,7 @@ func TestReleaseBaseAuthority_UnboundUnitFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = ResolveReleaseCollection("rev-830", []domain.DesignRevisionItem{item}, catalog, authority)
+	_, err = ResolveReleaseCollection("rev-830", []domain.DesignRevisionItem{item}, catalog, authority, nil)
 	if err == nil {
 		t.Fatal("unbound unit must fail closed under a quoted authority")
 	}
