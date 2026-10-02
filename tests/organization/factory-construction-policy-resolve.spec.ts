@@ -27,7 +27,6 @@ import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { ensurePublishedStandardRelease, putWorkingCopyCurrent, required } from './support/api';
 
 const apiBase = required('ORGANIZATION_API_BASE');
-const DEMO_PROFILE_ID = 'a0000010-0000-0000-0000-000000000001';
 
 // Distinct id series from the #955 demo spec: both specs may upsert in the
 // same shard and must never write different bodies under one id. Each
