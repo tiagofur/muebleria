@@ -43,10 +43,13 @@ class WorkingCopyContractTest < Minitest::Test
     contract_h = item.to_contract_h
     assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'override' }, contract_h['material_choice_modes'])
 
-    # Absent or empty modes do not emit key
+    # Absent or empty modes do not emit the key: the backend preserves
+    # the persisted lineage when the statement is absent entirely.
     item.material_choice_modes = nil
-    refute contract_h.key?('material_choice_modes') if item.to_contract_h.key?('material_choice_modes')
-    assert_nil item.to_contract_h['material_choice_modes']
+    refute item.to_contract_h.key?('material_choice_modes')
+
+    item.material_choice_modes = {}
+    refute item.to_contract_h.key?('material_choice_modes')
 
     # Obsolete roles in modes not in material_choices are pruned
     item.material_choice_modes = { 'INTERIOR' => 'override', 'DELETED_ROLE' => 'design' }
