@@ -64,7 +64,7 @@ function buildSandbox() {
   const sandbox = {
     console,
     setTimeout: (fn) => { timers.push(fn); return timers.length; },
-    clearTimeout: () => {},
+    clearTimeout: (id) => { if (id && timers[id - 1]) timers[id - 1] = null; },
     document: documentMock,
     JSON,
     window: {
@@ -159,7 +159,8 @@ test('registers window.GraneteUI.projectFurniture with the exact public API', ()
     'handlePlacementPreviewStarted', 'handleRestoreFurnitureResult',
     'handleSynchronizeDesignResult', 'init', 'invalidate',
     'onProjectTabVisible', 'pfPlaceFailureMessage', 'renderHostSaveAwareness',
-    'renderProjectFurniture', 'requestProjectFurniture'].sort();
+    'renderProjectFurniture', 'requestProjectFurniture',
+    'cancelDebouncedSync', 'scheduleDebouncedSync', 'synchronizeDesign'].sort();
   assert.deepStrictEqual(api, expected);
   Object.keys(pf).forEach((key) => assert.strictEqual(typeof pf[key], 'function', key + ' must be a function'));
 });
@@ -896,6 +897,110 @@ test('R3 refresh: a failed synchronize_design does not refresh the projection', 
   pf.handleSynchronizeDesignResult({ ok: false, code: 'conflict', reason: 'x' });
   assert.strictEqual(refreshCalls.length, 0,
     'a failed synchronize must not claim new server truth');
+});
+
+test('debounced auto-sync: dirty payload schedules auto-sync timer', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.dirty = 2;
+  pf.renderProjectFurniture(panel);
+  assert.strictEqual(sandbox.__timers.filter(Boolean).length, 1, 'dirty panel must schedule debounced auto-sync');
+  assert.equal(el(sandbox, 'design-sync-badge').textContent, 'Pendiente');
+});
+
+test('debounced auto-sync: consecutive dirty calls collapse into a single scheduled sync', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.dirty = 1;
+  pf.renderProjectFurniture(panel);
+  panel.dirty = 2;
+  pf.renderProjectFurniture(panel);
+  panel.dirty = 3;
+  pf.renderProjectFurniture(panel);
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  assert.strictEqual(activeTimers.length, 1, 'previous timers must be cleared, leaving 1 active timer');
+  // Trigger debounced auto-sync
+  activeTimers[0]();
+  const syncCalls = sandbox.__bridge.filter((c) => c.action === 'synchronize_design');
+  assert.strictEqual(syncCalls.length, 1, 'only one synchronize_design call should be dispatched');
+  assert.strictEqual(el(sandbox, 'design-sync-status').textContent, 'Actualizando presupuesto…');
+});
+
+test('debounced auto-sync: successful auto-sync suppresses success toast but refreshes projection', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.dirty = 1;
+  pf.renderProjectFurniture(panel);
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  assert.strictEqual(activeTimers.length, 1);
+  activeTimers[0]();
+
+  pf.handleSynchronizeDesignResult({
+    ok: true,
+    code: 'synchronized',
+    changes: { added: [FI_1], updated: [], removed: [] }
+  });
+
+  assert.strictEqual(sandbox.__toasts.length, 0, 'auto-sync must not spam with success toast');
+  assert.strictEqual(sandbox.__projectionRefreshes(), 1, 'auto-sync must refresh GraneteCommercialProjection');
+});
+
+test('debounced auto-sync: conflict prevents auto-sync and surfaces honest error toast', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.dirty = 1;
+  pf.renderProjectFurniture(panel);
+
+  const activeTimers = sandbox.__timers.filter(Boolean);
+  activeTimers[0]();
+
+  pf.handleSynchronizeDesignResult({
+    ok: false,
+    code: 'conflict',
+    reason: 'server divergence'
+  });
+
+  assert.strictEqual(sandbox.__toasts.length, 1, 'conflict must show error toast');
+  assert.strictEqual(sandbox.__toasts[0].type, 'error');
+
+  // New dirty render while in conflict should NOT schedule auto-sync
+  sandbox.__timers.length = 0;
+  pf.renderProjectFurniture(panel);
+  assert.strictEqual(sandbox.__timers.filter(Boolean).length, 0, 'must not auto-sync during unacknowledged conflict');
+  assert.strictEqual(el(sandbox, 'design-sync-badge').textContent, 'Conflicto');
+});
+
+test('debounced auto-sync: active mutation suppresses auto-sync', () => {
+  const sandbox = buildSandbox();
+  sandbox.window.GraneteMutation = {
+    phase: () => 'resolving'
+  };
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.dirty = 1;
+  pf.renderProjectFurniture(panel);
+
+  assert.strictEqual(sandbox.__timers.filter(Boolean).length, 0, 'active mutation must suppress auto-sync');
+  const syncCalls = sandbox.__bridge.filter((c) => c.action === 'synchronize_design');
+  assert.strictEqual(syncCalls.length, 0);
+});
+
+test('debounced auto-sync: invalidate cancels pending debounced timer', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const panel = connectedPanel();
+  panel.dirty = 1;
+  pf.renderProjectFurniture(panel);
+  assert.strictEqual(sandbox.__timers.filter(Boolean).length, 1);
+
+  pf.invalidate();
+  assert.strictEqual(sandbox.__timers.filter(Boolean).length, 0, 'invalidate must cancel debounced sync timer');
 });
 
 for (const { name, fn } of tests) {
