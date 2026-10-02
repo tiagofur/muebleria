@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"log/slog"
 	"time"
 
@@ -86,6 +87,19 @@ var (
 // the drilling pipeline must resolve the same holes in both stacks). Defaults
 // follow the 32mm system; the shop adjusts per real hardware in the catalog.
 func seedF64(v float64) *float64 { return &v }
+
+// catalogSeedNamespace is the fixed uuid namespace for per-org catalog seed
+// ids (#964): constant, not configuration.
+var catalogSeedNamespace = uuid.MustParse("a0000096-4000-4964-8000-000000000002")
+
+// SeededIDForOrg derives the stable per-org id for a seed entity whose
+// canonical fixed id is `fixed` (#964): the base-catalog seed ids are global
+// primary keys, so a SECOND organization seeding the same catalog always
+// collided. The same org always derives the same id (idempotent seeds);
+// distinct orgs never collide.
+func SeededIDForOrg(org, fixed string) string {
+	return uuid.NewMD5(catalogSeedNamespace, []byte(org+"\x00"+fixed)).String()
+}
 
 var (
 	seedMachiningBisagra = &domain.HardwareMachiningProfile{
@@ -170,6 +184,25 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// through the OrgFromCtx fallback (initial organization).
 	org := OrgFromCtx(ctx)
 
+	// Per-org id mapping (#964): the seed's fixed ids are global PKs; every
+	// constant is SHADOWED with its org-mapped id so ALL inserts AND their
+	// internal references (option members, default edges, hardware lines,
+	// structure links) resolve to the same per-org rows consistently.
+	slog.Info("seed fresh branch", "org", org)
+	seedEdgeArauco, seedEdgeMaderado, seedEdgeMdf := SeededIDForOrg(org, seedEdgeArauco), SeededIDForOrg(org, seedEdgeMaderado), SeededIDForOrg(org, seedEdgeMdf)
+	seedMatArauco, seedMatMaderado, seedMatMdf := SeededIDForOrg(org, seedMatArauco), SeededIDForOrg(org, seedMatMaderado), SeededIDForOrg(org, seedMatMdf)
+	seedHwBisagra, seedHwJaladera, seedHwPata := SeededIDForOrg(org, seedHwBisagra), SeededIDForOrg(org, seedHwJaladera), SeededIDForOrg(org, seedHwPata)
+	seedHwTornillo, seedHwCorredera, seedHwSoporte := SeededIDForOrg(org, seedHwTornillo), SeededIDForOrg(org, seedHwCorredera), SeededIDForOrg(org, seedHwSoporte)
+	seedHwTaquete, seedHwMinifix, seedHwPlacaBis := SeededIDForOrg(org, seedHwTaquete), SeededIDForOrg(org, seedHwMinifix), SeededIDForOrg(org, seedHwPlacaBis)
+	seedHwZocloPerfil, seedHwZocloBronce, seedHwZocloNegro := SeededIDForOrg(org, seedHwZocloPerfil), SeededIDForOrg(org, seedHwZocloBronce), SeededIDForOrg(org, seedHwZocloNegro)
+	seedOGInterior, seedOGFrente, seedOGFondo := SeededIDForOrg(org, seedOGInterior), SeededIDForOrg(org, seedOGFrente), SeededIDForOrg(org, seedOGFondo)
+	seedOGBisagra, seedOGCorredera, seedOGZoclo, seedOGZocloPerfil := SeededIDForOrg(org, seedOGBisagra), SeededIDForOrg(org, seedOGCorredera), SeededIDForOrg(org, seedOGZoclo), SeededIDForOrg(org, seedOGZocloPerfil)
+	seedCustPlantilla1, seedCustPlantilla2 := SeededIDForOrg(org, seedCustPlantilla1), SeededIDForOrg(org, seedCustPlantilla2)
+	seedModGab, seedModCaj, seedModComp := SeededIDForOrg(org, seedModGab), SeededIDForOrg(org, seedModCaj), SeededIDForOrg(org, seedModComp)
+	seedStruct, seedStructPre := SeededIDForOrg(org, seedStruct), SeededIDForOrg(org, seedStructPre)
+	seedCompPuerta, seedCompEntrepano, seedCompCostado, seedCompBase, seedCompZoclo := SeededIDForOrg(org, seedCompPuerta), SeededIDForOrg(org, seedCompEntrepano), SeededIDForOrg(org, seedCompCostado), SeededIDForOrg(org, seedCompBase), SeededIDForOrg(org, seedCompZoclo)
+	seedProj, seedProjItem, seedProjectTemplate := SeededIDForOrg(org, seedProj), SeededIDForOrg(org, seedProjItem), SeededIDForOrg(org, seedProjectTemplate)
+
 	// --- EDGE BANDS ---
 	// F116 C3/A4: fractional thickness matching the TS seed (0.5 / 2 / 0).
 	for _, e := range []struct {
@@ -184,7 +217,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO edge_bands (id, organization_id, code, name, thickness_mm, cost_per_ml, active, created_at, updated_at)
 			VALUES ($1,$8,$2,$3,$4,$5,true,$6,$7)
-			ON CONFLICT (organization_id, code) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 			e.id, e.code, e.name, e.thickness, e.costPerMl, now, now, org)
 		if err != nil {
 			return fmt.Errorf("seed edge %s: %w", e.code, err)
@@ -205,7 +238,8 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	} {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO material_boards (id, organization_id, code, name, width_mm, length_mm, thickness_mm, grain_default, board_price, waste_percent, default_edge_band_id, preview_color, active, created_at, updated_at)
-			VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,0,$9,NULLIF($10,''),true,$11,$12)`,
+			VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,0,$9,NULLIF($10,''),true,$11,$12)
+			ON CONFLICT DO NOTHING`,
 			m.id, m.code, m.name, m.w, m.l, m.t, m.grain, m.boardPrice, m.defaultEdgeID, m.previewColor, now, now, org)
 		if err != nil {
 			return fmt.Errorf("seed material %s: %w", m.code, err)
@@ -240,7 +274,8 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	} {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO hardwares (id, organization_id, code, name, unit, cost_per_unit, preview_shape, preview_size_mm, preview_diameter_mm, preview_projection_mm, preview_color, preview_roughness, preview_metalness, machining, active, created_at, updated_at)
-			VALUES ($1,$16,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,0),NULLIF($8,0),NULLIF($9,0),NULLIF($10,''),NULLIF($11,0),NULLIF($12,0),$13,true,$14,$15)`,
+			VALUES ($1,$16,$2,$3,$4,$5,NULLIF($6,''),NULLIF($7,0),NULLIF($8,0),NULLIF($9,0),NULLIF($10,''),NULLIF($11,0),NULLIF($12,0),$13,true,$14,$15)
+			ON CONFLICT DO NOTHING`,
 			h.id, h.code, h.name, h.unit, h.costPerUnit, h.previewShape, h.sizeMm, h.diameterMm, h.projectionMm, h.previewColor, h.roughness, h.metalness, hardwareMachiningArg(h.machining), now, now, org)
 		if err != nil {
 			return fmt.Errorf("seed hardware %s: %w", h.code, err)
@@ -263,7 +298,8 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	} {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO option_groups (id, organization_id, code, name, kind, required)
-			VALUES ($1,$6,$2,$3,$4,$5)`,
+			VALUES ($1,$6,$2,$3,$4,$5)
+			ON CONFLICT DO NOTHING`,
 			og.id, og.code, og.name, og.kind, og.required, org)
 		if err != nil {
 			return fmt.Errorf("seed option_group %s: %w", og.code, err)
@@ -279,12 +315,14 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	}
 
 	// --- CUSTOMERS ---
-	_, err = tx.Exec(ctx, `INSERT INTO customers (id, organization_id, name, active, created_at, updated_at) VALUES ($1,$5,$2,true,$3,$4)`,
+	_, err = tx.Exec(ctx, `INSERT INTO customers (id, organization_id, name, active, created_at, updated_at) VALUES ($1,$5,$2,true,$3,$4)
+			ON CONFLICT DO NOTHING`,
 		seedCustPlantilla1, "Cliente Plantilla", now, now, org)
 	if err != nil {
 		return fmt.Errorf("seed customer 1: %w", err)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO customers (id, organization_id, name, active, created_at, updated_at) VALUES ($1,$5,$2,true,$3,$4)`,
+	_, err = tx.Exec(ctx, `INSERT INTO customers (id, organization_id, name, active, created_at, updated_at) VALUES ($1,$5,$2,true,$3,$4)
+			ON CONFLICT DO NOTHING`,
 		seedCustPlantilla2, "Cliente Demo", now, now, org)
 	if err != nil {
 		return fmt.Errorf("seed customer 2: %w", err)
@@ -345,7 +383,8 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// --- STRUCTURE ---
 	_, err = tx.Exec(ctx, `
 		INSERT INTO structures (id, organization_id, code, name, width_mm, height_mm, depth_mm, notes, active, created_at, updated_at)
-		VALUES ($1,$10,$2,$3,$4,$5,$6,$7,true,$8,$9)`,
+		VALUES ($1,$10,$2,$3,$4,$5,$6,$7,true,$8,$9)
+			ON CONFLICT DO NOTHING`,
 		seedStruct, "EST-COMP-600", "Estructura Compuesta 600",
 		600, 720, 560, "", now, now, org)
 	if err != nil {
@@ -353,7 +392,8 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO structure_presets (id, organization_id, structure_id, name, width_mm, height_mm, depth_mm)
-		VALUES ($1,$7,$2,$3,$4,$5,$6)`,
+		VALUES ($1,$7,$2,$3,$4,$5,$6)
+			ON CONFLICT DO NOTHING`,
 		seedStructPre, seedStruct, "Ancho 600", 600, 720, 560, org)
 	if err != nil {
 		return fmt.Errorf("seed struct preset: %w", err)
@@ -377,7 +417,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	_, err = tx.Exec(ctx, `
 		INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, active, created_at, updated_at)
 		VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$12)
-		ON CONFLICT (organization_id, code) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 		seedCompPuerta, "COM-PUE-01", "Puerta", "puerta", "rectangular_board",
 		717, 296, 18, allEdges, []string{"FRENTE"}, now, now, org)
 	if err != nil {
@@ -386,7 +426,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	_, err = tx.Exec(ctx, `
 		INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, active, created_at, updated_at)
 		VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$12)
-		ON CONFLICT (organization_id, code) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 		seedCompEntrepano, "COM-ENT-01", "Entrepaño Regulable", "interno", "rectangular_board",
 		462, 550, 15, wOnlyEdges, []string{"INTERIOR"}, now, now, org)
 	if err != nil {
@@ -395,7 +435,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	_, err = tx.Exec(ctx, `
 		INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, active, created_at, updated_at)
 		VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$12)
-		ON CONFLICT (organization_id, code) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 		seedCompCostado, "COM-COS-01", "Costado Lateral", "lateral_izquierdo", "rectangular_board",
 		720, 560, 18, noEdges, []string{"INTERIOR"}, now, now, org)
 	if err != nil {
@@ -404,7 +444,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	_, err = tx.Exec(ctx, `
 		INSERT INTO components (id, organization_id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, active, created_at, updated_at)
 		VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,$9,$10,true,$11,$12)
-		ON CONFLICT (organization_id, code) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 		seedCompBase, "COM-BAS-01", "Base Estructura", "base", "rectangular_board",
 		564, 560, 18, noEdges, []string{"INTERIOR"}, now, now, org)
 	if err != nil {
@@ -420,7 +460,7 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 			length_formula, width_formula, x_formula, y_formula, z_formula,
 			default_edges, option_roles, active, created_at, updated_at)
 		VALUES ($1,$18,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,true,$16,$17)
-		ON CONFLICT (organization_id, code) DO NOTHING`,
+			ON CONFLICT DO NOTHING`,
 		seedCompZoclo, "COM-ZOC-01", "Zoclo frontal", "custom", "rectangular_board",
 		600, 100, 18, "PW", "B", "0", "0", "0",
 		frontEdgeOnly, []string{"ZOCLO"}, now, now, org)
@@ -433,14 +473,16 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// per-module (below) so different modules can share the same body.
 	_, err = tx.Exec(ctx, `
 		INSERT INTO structure_components (organization_id, structure_id, component_id, quantity, placement_override)
-		VALUES ($5,$1,$2,$3,$4)`,
+		VALUES ($5,$1,$2,$3,$4)
+			ON CONFLICT DO NOTHING`,
 		seedStruct, seedCompCostado, 2, "lateral_izquierdo", org)
 	if err != nil {
 		return fmt.Errorf("seed structure_components costado: %w", err)
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO structure_components (organization_id, structure_id, component_id, quantity, placement_override)
-		VALUES ($5,$1,$2,$3,$4)`,
+		VALUES ($5,$1,$2,$3,$4)
+			ON CONFLICT DO NOTHING`,
 		seedStruct, seedCompBase, 1, "base", org)
 	if err != nil {
 		return fmt.Errorf("seed structure_components base: %w", err)
@@ -461,14 +503,16 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 	// Module-level components: puerta×1 + entrepaño×2 (beyond the body).
 	_, err = tx.Exec(ctx, `
 		INSERT INTO module_components (organization_id, module_id, component_id, quantity, placement_override)
-		VALUES ($5,$1,$2,$3,$4)`,
+		VALUES ($5,$1,$2,$3,$4)
+			ON CONFLICT DO NOTHING`,
 		seedModComp, seedCompPuerta, 1, "puerta", org)
 	if err != nil {
 		return fmt.Errorf("seed module_components puerta: %w", err)
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO module_components (organization_id, module_id, component_id, quantity, placement_override)
-		VALUES ($5,$1,$2,$3,$4)`,
+		VALUES ($5,$1,$2,$3,$4)
+			ON CONFLICT DO NOTHING`,
 		seedModComp, seedCompEntrepano, 2, "interno", org)
 	if err != nil {
 		return fmt.Errorf("seed module_components entrepano: %w", err)
@@ -569,6 +613,29 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 	org := OrgFromCtx(ctx)
 
+	// #964 per-org id mapping for the plinth/upgrade surface: the upserts
+	// target (organization_id, code), so an EXISTING installation keeps its
+	// fixed seed rows (conflict → DO NOTHING/UPDATE wins) while a fresh org
+	// gets per-org mapped rows — either way the ids below never collide on
+	// the global primary keys.
+	seedHwZocloPerfil, seedHwZocloBronce, seedHwZocloNegro := SeededIDForOrg(org, seedHwZocloPerfil), SeededIDForOrg(org, seedHwZocloBronce), SeededIDForOrg(org, seedHwZocloNegro)
+	seedOGZoclo, seedOGZocloPerfil := SeededIDForOrg(org, seedOGZoclo), SeededIDForOrg(org, seedOGZocloPerfil)
+	seedMatArauco, seedMatMaderado := SeededIDForOrg(org, seedMatArauco), SeededIDForOrg(org, seedMatMaderado)
+	seedCompZoclo := SeededIDForOrg(org, seedCompZoclo)
+
+	// #964: the provisioned demo profile's items reference the demo hardware
+	// by its MAPPED per-org id — ensure those rows exist under THIS org
+	// (the fresh branch creates them; the upgrade path must too, or the
+	// release demand validation fails with invalid profile demand hardware).
+	if _, err := s.db(ctx).Exec(ctx, `
+		INSERT INTO hardwares (id, organization_id, code, name, unit, cost_per_unit, active)
+		VALUES ($1,$2,'HER-MIN-15','Minifix 15 mm (juego)','set',4.5,TRUE),
+		       ($3,$2,'HER-TAQ-8X30','Taquete Madera 8x30 mm','piece',0.8,TRUE)
+		ON CONFLICT (organization_id, code) DO NOTHING`,
+		SeededIDForOrg(org, seedHwMinifix), org, SeededIDForOrg(org, seedHwTaquete)); err != nil {
+		return fmt.Errorf("ensure demo hardware: %w", err)
+	}
+
 	// The plinth demo set hangs off the composed structure EST-COMP-600: its
 	// roles, hardware, component and modules only mean something next to that
 	// structure and to each other. A catalog the workshop built itself never
@@ -632,13 +699,31 @@ func (s *PostgresStore) ensurePlinthCatalog(ctx context.Context) error {
 		matInterior = seedMatArauco
 	}
 
+	// Resolve the zoclo hardware ids by code for the ZOCLO_PERFIL members:
+	// an existing installation keeps its fixed seed ids (the upsert above
+	// no-ops on the (org, code) conflict) while a fresh org got mapped ones —
+	// members must reference whichever row is really there, never a ghost id.
+	zocloPerfilMembers := make([]string, 0, 3)
+	for _, hw := range []struct{ code, fallback string }{
+		{"HER-ZOC-ALU", seedHwZocloPerfil},
+		{"HER-ZOC-BRO", seedHwZocloBronce},
+		{"HER-ZOC-NEG", seedHwZocloNegro},
+	} {
+		var id string
+		_ = tx.QueryRow(ctx, `SELECT id FROM hardwares WHERE code = $1 AND organization_id = $2 LIMIT 1`, hw.code, org).Scan(&id)
+		if id == "" {
+			id = hw.fallback
+		}
+		zocloPerfilMembers = append(zocloPerfilMembers, id)
+	}
+
 	for _, og := range []struct {
 		id, code, name, kind string
 		required             bool
 		optIDs               []string
 	}{
 		{seedOGZoclo, "ZOCLO", "Melamina de zoclo", "board", false, []string{matFrente, matInterior}},
-		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, []string{seedHwZocloPerfil, seedHwZocloBronce, seedHwZocloNegro}},
+		{seedOGZocloPerfil, "ZOCLO_PERFIL", "Zoclo perfil (ml)", "hardware", false, zocloPerfilMembers},
 	} {
 		_, err = tx.Exec(ctx, `
 			INSERT INTO option_groups (id, organization_id, code, name, kind, required)
@@ -718,10 +803,13 @@ func (s *PostgresStore) ensureComposedGabCatalog(ctx context.Context) error {
 }
 
 func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
+	// #964: the plinth module ids are global PKs — per-org derivation (the
+	// (org, code) upsert below keeps an existing installation's fixed rows).
+	seedModBajoZoclo, seedModBajoPerfil := SeededIDForOrg(org, seedModBajoZoclo), SeededIDForOrg(org, seedModBajoPerfil)
 	// Callers guarantee the composed structure exists (the fresh seed creates
 	// it just above; the upgrade path bails out in ensurePlinthCatalog when it
 	// is absent), so preferring the row by code is a resolution, not a guess.
-	structID := seedStruct
+	structID := SeededIDForOrg(org, seedStruct)
 	var existingStruct string
 	if err := tx.QueryRow(ctx, `SELECT id FROM structures WHERE code = 'EST-COMP-600' AND organization_id = $1 LIMIT 1`, org).Scan(&existingStruct); err == nil && existingStruct != "" {
 		structID = existingStruct
@@ -732,13 +820,13 @@ func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, org string, now time.Ti
 	_ = tx.QueryRow(ctx, `SELECT id FROM components WHERE code = 'COM-PUE-01' AND organization_id = $1 LIMIT 1`, org).Scan(&compPuertaID)
 	_ = tx.QueryRow(ctx, `SELECT id FROM hardwares WHERE code = 'HER-ZOC-ALU' AND organization_id = $1 LIMIT 1`, org).Scan(&hwZocloID)
 	if compZocloID == "" {
-		compZocloID = seedCompZoclo
+		compZocloID = SeededIDForOrg(org, seedCompZoclo)
 	}
 	if compPuertaID == "" {
-		compPuertaID = seedCompPuerta
+		compPuertaID = SeededIDForOrg(org, seedCompPuerta)
 	}
 	if hwZocloID == "" {
-		hwZocloID = seedHwZocloPerfil
+		hwZocloID = SeededIDForOrg(org, seedHwZocloPerfil)
 	}
 
 	// Melamina zoclo module
@@ -861,10 +949,13 @@ func insertModuleTx(ctx context.Context, tx pgx.Tx, org, id, code, name string, 
 	}
 
 	for _, p := range parts {
+		// #964: fixture part ids are global PKs — derive the per-org id.
+		partID := SeededIDForOrg(org, p.id)
 		_, err := tx.Exec(ctx, `
 			INSERT INTO board_parts (id, organization_id, module_id, code, description, quantity, length_mm, width_mm, option_role, edge_l1, edge_l2, edge_w1, edge_w2)
-			VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-			p.id, id, p.code, p.desc, p.qty, p.len, p.wid, p.role,
+			VALUES ($1,$13,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			ON CONFLICT DO NOTHING`,
+			partID, id, p.code, p.desc, p.qty, p.len, p.wid, p.role,
 			p.l1, p.l2, p.w1, p.w2, org)
 		if err != nil {
 			return fmt.Errorf("seed board part %s->%s: %w", code, p.code, err)
@@ -872,6 +963,8 @@ func insertModuleTx(ctx context.Context, tx pgx.Tx, org, id, code, name string, 
 	}
 
 	for _, hl := range hwLines {
+		// #964: hw line ids are global PKs too — per-org derivation.
+		hl.id = SeededIDForOrg(org, hl.id)
 		var hwIDArg interface{} = nil
 		if hl.hwID != "" {
 			hwIDArg = hl.hwID
@@ -898,6 +991,7 @@ func insertModuleTx(ctx context.Context, tx pgx.Tx, org, id, code, name string, 
 //
 // Idempotent: safe on fresh seeds and on the upgrade path (existing DBs).
 func ensureComposedGabModule(ctx context.Context, tx pgx.Tx, org string, now time.Time) error {
+	seedCompGabCostado, seedCompGabEntrepano, seedCompGabManguete, seedCompGabPiso, seedCompGabPuerta, seedCompGabRespaldo, seedStructGab, seedStructGabPre := SeededIDForOrg(org, seedCompGabCostado), SeededIDForOrg(org, seedCompGabEntrepano), SeededIDForOrg(org, seedCompGabManguete), SeededIDForOrg(org, seedCompGabPiso), SeededIDForOrg(org, seedCompGabPuerta), SeededIDForOrg(org, seedCompGabRespaldo), SeededIDForOrg(org, seedStructGab), SeededIDForOrg(org, seedStructGabPre)
 	var moduleID string
 	var currentStructureID *string
 	err := tx.QueryRow(ctx, `

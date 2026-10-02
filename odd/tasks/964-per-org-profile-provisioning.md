@@ -1,14 +1,57 @@
 # ODD — #964 [P2][LIB] Per-org provisioning of recipe-bearing profiles
 
 **Issue**: https://github.com/tiagofur/muebleria/issues/964
-**Status**: PLANNED (2026-10-02, G-ODD 4.0 Delegated Direct; plan reported before code)
+**Status**: IMPLEMENTED_PENDING_REVIEW (2026-10-02, G-ODD 4.0 Delegated Direct; plan approved — `status:approved` + traceability comment on the issue)
 **Lane**: Delegated Direct — one artifact
-**Base**: `origin/main` @ the merge of #967 (branch from post-merge main)
-**Branch (planned)**: `feat/964-per-org-profile-provisioning`
+**Base**: `origin/main` @ `54ef1083` (merge of #967)
+**Branch**: `feat/964-per-org-profile-provisioning` (created)
 **Writer**: GLM (ZCode)
-**Approval note**: the issue carries no `status:approved` label yet — the owner's
-green light on this plan comes with the label + traceability comment
-(precedent #961/#920).
+
+## Execution record (2026-10-02, T1–T6 evidence)
+
+- T1–T4 as designed, with one implementation deviation: `POST /api/seed`
+  provisions the CALLER's org (`SeedDemoForOrg`); the `organizationIds` body
+  param was not needed — per-org ids are deterministic (`uuid.NewMD5`) and
+  the publication carries EVERY org's active profiles, so repeated per-org
+  seeds compose into one manifest.
+- T5 debugging surfaced TWO further root causes beyond the original
+  fixed-id collision, both fixed:
+  1. the first per-org id mapping pass was incomplete — the fresh seed
+     branch still inserted MOD-COMP-001, the demo project/item/template and
+     the whole plinth surface (zoclo hardware, ZOCLO groups, zoclo
+     component, plinth modules) with FIXED global-PK ids (second-org
+     `modules_pkey`/`projects_pkey`/… collisions). All now derive ids via
+     `SeededIDForOrg`; upgrade upserts keep their `(organization_id, code)`
+     targets so existing installations preserve fixed-id rows.
+  2. the publish compile ran inside the publisher's tenant tx, where
+     000143's strictly org-scoped `hardware_profiles_read` RLS policy made
+     `ListActiveHardwareProfilesAnyOrg` see only the publisher's org — the
+     manifest silently missed the second factory's profile and its resolve
+     stayed at TECHNICAL_PROFILE_REQUIRED. **000147** widens the READ with
+     the transactional `app.platform_admin` marker (#955/000146 idiom);
+     writes and tenant reads stay org-scoped. The multi-org test now
+     publishes under a REAL tenant tx with a platform actor and asserts org
+     B resolves its own recipe (the assertion gap that hid the bug).
+- Observability: the tenant-transaction wrapper logs the captured handler
+  failure (status/body/request id) instead of converting a handler 5xx into
+  an unattributable generic 500.
+- V2 evidence: `organization-browser-gate.sh
+  factory-construction-policy-resolve.spec.ts` → 3/3 PASS (A and B resolve
+  MACHINING_READY under ONE published Standard revision, A=4 / B=2, distinct
+  fingerprints; B's `/seed` returns 200 with its own provisioned profileId).
+  Full org suite 105/106: the one failure
+  (`hardware-3d-catalog.spec.ts` step 8) is the #667 M2 vendedor mutation
+  protection assertion, which passed VACUOUSLY while org B's catalog was
+  empty (the second-org /seed 500 this issue fixes) and now surfaces a real
+  latent UI gap — a real vendedor (created by
+  `prepareAuthoritativeOrganizations`, read back via API) sees hardware
+  "Editar" affordances after the A→B org switch while the server correctly
+  answers 403. Outside this issue's scope; owner decision on the follow-up.
+- V1 evidence: `TestProvisionDemoProfileMultiOrg` (RLS real, strengthened),
+  `TestDemoSeed*` green against disposable PostgreSQL; full storage package
+  green (470s); full backend green except the storage expectation migrated
+  in this branch (re-run green); pnpm typecheck + recursive tests green;
+  OpenAPI drift negative.
 
 ---
 

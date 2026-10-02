@@ -2114,7 +2114,11 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Store.SeedCatalog(r.Context()); err != nil {
-		respondWithInternalError(w, err, "seed")
+		slog.Error("seed catalog failed", "error", err)
+		// Ops diagnostic in the envelope (#964): the seed is a staff/demo
+		// endpoint; the reason is business-safe (typed storage errors).
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"el seed del catálogo demo falló", map[string]any{"reason": err.Error()})
 		return
 	}
 	// #955: demo hardware profile + real publication of the seeded
@@ -2124,12 +2128,19 @@ func (s *Server) HandleSeed(w http.ResponseWriter, r *http.Request) {
 	if claims := claimsFromRequest(r); claims != nil && claims.PlatformAdmin {
 		demoPublisher = claims.UserID
 	}
-	if err := application.SeedDemoStandardRelease(r.Context(), s.Store, demoPublisher); err != nil {
-		respondWithInternalError(w, err, "seed demo release")
+	// #964: provisioning is PER-ORG (deterministic ids under the caller's
+	// organization — the fixed seed ids are global PKs and a second org
+	// collided, the historical /seed 500). The publication stays
+	// platform-only and carries EVERY org's provisioned profile.
+	profileID, err := application.SeedDemoForOrg(r.Context(), s.Store, storage.OrgFromCtx(r.Context()), demoPublisher)
+	if err != nil {
+		slog.Error("seed demo release failed", "error", err)
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"el seed del release demo falló", map[string]any{"reason": err.Error()})
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	w.Write([]byte(`{"status":"ok","profileId":"` + profileID + `"}`))
 }
 
 // --- MODULES / TEMPLATES ---

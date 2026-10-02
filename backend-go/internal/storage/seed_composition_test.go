@@ -80,10 +80,13 @@ func TestSeedDemoProjectResolvesRealBom(t *testing.T) {
 
 	// The Demo plantilla project must resolve a non-empty BOM through the
 	// engine (≥1 board part, no error) — the exact path /calculate uses.
+	// #964: seed ids are per-org derived; the fixed constant is only the
+	// derivation input now.
+	seedProjectID := storage.SeededIDForOrg(actor.OrganizationID, "a0000009-0000-0000-0000-000000000001")
 	var project *domain.Project
 	if err := runtimeStore.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
 		var err error
-		project, err = runtimeStore.GetProjectByID(txCtx, "a0000009-0000-0000-0000-000000000001")
+		project, err = runtimeStore.GetProjectByID(txCtx, seedProjectID)
 		return err
 	}); err != nil {
 		t.Fatalf("get seed project: %v", err)

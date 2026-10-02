@@ -16,11 +16,10 @@
  *       the definition default 3 — with purchase demand and a different
  *       machining fingerprint per governed state.
  *
- * The two-factory (A vs B) case of the acceptance needs each organization
- * to hold a recipe-bearing profile; profiles authored by org admins carry
- * no recipe by design (#955 surface), and the platform seed provisions one
- * organization. That gap is named in the ODD; this gate proves the
- * governance mechanics the slice adds.
+ * The two-factory (A vs B) case of the acceptance is the #964 proof: each
+ * organization holds its OWN provisioned recipe-bearing profile (deterministic
+ * per-org ids), and platform staff publish ONE Standard release revision
+ * carrying every org's profile — the pinned truth both resolves read.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -28,17 +27,18 @@ import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
 import { ensurePublishedStandardRelease, putWorkingCopyCurrent, required } from './support/api';
 
 const apiBase = required('ORGANIZATION_API_BASE');
-const DEMO_PROFILE_ID = 'a0000010-0000-0000-0000-000000000001';
 
 // Distinct id series from the #955 demo spec: both specs may upsert in the
 // same shard and must never write different bodies under one id. Each
 // FACTORY gets its own series too — workshop catalog identities are
 // org-scoped rows and the same uuid may not repeat across organizations.
-const idsFor = (tenant: 'a' | 'b') => {
+const idsFor = (tenant: 'a' | 'b', run: 't1' | 'ab') => {
   const n = tenant === 'a' ? '1' : '2';
+  const d = run === 't1' ? '1' : '2';
   // last group must be exactly 12 hex chars; n splits the tenant series,
-  // k the resource kind.
-  const last = (k: string) => `${n}${k}1111111111`;
+  // k the resource kind, d the test run (PUTs against existing ids need
+  // If-Match — fresh series per test keep the raw upserts conflict-free).
+  const last = (k: string) => `${n}${k}11111111${d}1`;
   const id = (k: string) => `b3333333-8752-4333-8444-${last(k)}`;
   return {
     moduleId: id('1'),
@@ -76,7 +76,7 @@ async function upsert(token: string, pathById: string, collection: string, body:
   }
 }
 
-async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: RegExp): Promise<string> {
+async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: string | RegExp): Promise<string> {
   let browserToken: string | null = null;
   page.on('request', (req) => {
     const auth = req.headers().authorization;
@@ -96,8 +96,10 @@ async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: RegEx
 /** The definition-default governed cabinet: fixed-shelf-side STRUCTURE
  * binding whose station parameter defaults to 3 — any resolved pattern that
  * is not 3 came from the factory policy, never from the definition. */
-async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<string> {
-  const { moduleId: MODULE_ID, structureId: STRUCTURE_ID, sideId: SIDE_ID, sideRId: SIDE_R_ID, shelfId: SHELF_ID } = idsFor(tenant);
+async function seedPolicyCatalog(token: string, tenant: 'a' | 'b', run: 't1' | 'ab', profileId: string): Promise<string> {
+  const { moduleId: MODULE_ID, structureId: STRUCTURE_ID, sideId: SIDE_ID, sideRId: SIDE_R_ID, shelfId: SHELF_ID } = idsFor(tenant, run);
+  // Component codes are org-unique too — suffix them with the run.
+  const code = (base: string) => `${base}-${run.toUpperCase()}`;
   const board = (extra: Record<string, unknown>) => ({
     length_mm: 684, width_mm: 560, length_formula: '', width_formula: '',
     x_formula: '', y_formula: '', z_formula: '',
@@ -106,22 +108,22 @@ async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<stri
     ...extra,
   });
   await upsert(token, `/catalog/components/${SIDE_ID}`, '/catalog/components', board({
-    id: SIDE_ID, code: 'FP-LAT', name: 'Lateral Política', placement: 'lateral_izquierdo',
+    id: SIDE_ID, code: code('FP-LAT'), name: 'Lateral Política', placement: 'lateral_izquierdo',
     geometry_kind: 'rectangular_board', thickness_mm: 18,
     length_formula: 'PH - 2*T', width_formula: 'PD', option_roles: ['LATERAL'],
   }));
   await upsert(token, `/catalog/components/${SIDE_R_ID}`, '/catalog/components', board({
-    id: SIDE_R_ID, code: 'FP-LATD', name: 'Lateral Derecho Política', placement: 'lateral_derecho',
+    id: SIDE_R_ID, code: code('FP-LATD'), name: 'Lateral Derecho Política', placement: 'lateral_derecho',
     geometry_kind: 'rectangular_board', thickness_mm: 18,
     length_formula: 'PH - 2*T', width_formula: 'PD', option_roles: ['LATERAL'],
   }));
   await upsert(token, `/catalog/components/${SHELF_ID}`, '/catalog/components', board({
-    id: SHELF_ID, code: 'FP-ENTRE', name: 'Entrepaño Política', placement: 'interno',
+    id: SHELF_ID, code: code('FP-ENTRE'), name: 'Entrepaño Política', placement: 'interno',
     geometry_kind: 'rectangular_board', thickness_mm: 18,
     length_formula: 'PW - 2*T', width_formula: 'PD - T', option_roles: ['INTERIOR'],
   }));
   await upsert(token, `/catalog/structures/${STRUCTURE_ID}`, '/catalog/structures', {
-    id: STRUCTURE_ID, code: 'FP-CUERPO', name: 'Cuerpo Política',
+    id: STRUCTURE_ID, code: code('FP-CUERPO'), name: 'Cuerpo Política',
     components: [
       { componentId: SIDE_ID, quantity: 1 },
       { componentId: SIDE_R_ID, quantity: 1 },
@@ -129,7 +131,7 @@ async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<stri
     ],
   });
   await upsert(token, `/catalog/modules/${MODULE_ID}`, '/catalog/modules', {
-    id: MODULE_ID, code: 'FP-GAB-600', name: 'Gabinete Política 600',
+    id: MODULE_ID, code: code('FP-GAB-600'), name: 'Gabinete Política 600',
     base_labor_cost: 0, width_mm: 600, height_mm: 720, depth_mm: 560,
     categoryId: '', structure_id: STRUCTURE_ID, furniture_type: '', base_mode: '',
     base_clearance_mm: null, components: [], agregados: [], presets: [],
@@ -156,7 +158,7 @@ async function seedPolicyCatalog(token: string, tenant: 'a' | 'b'): Promise<stri
   for (const [componentId, side] of [[SIDE_ID, 'front'], [SIDE_R_ID, 'back']] as const) {
     const put = await authedFetch(token, `/catalog/components/${componentId}/side-assignments`, {
       method: 'PUT',
-      body: JSON.stringify({ side, profileId: DEMO_PROFILE_ID }),
+      body: JSON.stringify({ side, profileId }),
     });
     const detail = put.ok ? '' : await put.text().catch(() => '');
     expect(put.ok, `assignment ${side}: ${put.status} ${detail}`).toBe(true);
@@ -226,7 +228,7 @@ function shelfEvidence(result: GovernedResolve): { stations: number; profileOps:
   expect(status?.stage, 'joint must reach MACHINING_READY').toBe('MACHINING_READY');
   const stations = status?.stations?.stationCounts?.[0]?.stationCount ?? 0;
   const ops = (machining?.operations ?? []).filter((op) => op.provenance?.relationshipId === 'parameter-shelfJoints-1');
-  const holes = ops.filter((op) => op.provenance?.technicalProfileId === DEMO_PROFILE_ID).map((op) => op.holes?.length ?? 0);
+  const holes = ops.filter((op) => op.provenance?.technicalProfileId !== undefined).map((op) => op.holes?.length ?? 0);
   return {
     stations,
     profileOps: ops.length,
@@ -251,7 +253,9 @@ test.describe.serial('Factory policy governs the real resolve (#875 slice 2)', (
     const tokenA = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
     const seeded = await authedFetch(tokenA, '/seed', { method: 'POST' });
     expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
-    const moduleId = await seedPolicyCatalog(tokenA, 'a');
+    const { profileId } = (await seeded.json()) as { profileId: string };
+    expect(profileId, 'seed returns the provisioned profile id').toBeTruthy();
+    const moduleId = await seedPolicyCatalog(tokenA, 'a', 't1', profileId);
 
     // 0. Baseline: no factory policy → the definition default governs.
     const base = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));
@@ -301,19 +305,11 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     // would drop the seed's demo hardware rows otherwise (#967 CI).
     const repository = new APIWorkspaceRepository(apiBase, { getAccessToken: () => token });
     const catalog = await repository.getCatalog();
-    // The demo profile's items reference the seed hardware ids; the seed's
-    // own catalog ensure does not create them under EVERY gate organization,
-    // so the snapshot carries them explicitly (active, priced).
-    const demoHardware = [
-      { id: 'a0000003-0000-0000-0000-000000000012', code: 'HER-MIN-15', name: 'Minifix 15', unit: 'piece' as const, costPerUnit: 12.5, active: true },
-      { id: 'a0000003-0000-0000-0000-000000000011', code: 'HER-TAQ-8X30', name: 'Taquete 8x30', unit: 'piece' as const, costPerUnit: 0.8, active: true },
-    ];
     await repository.saveCatalog({
       ...catalog,
-      hardware: [
-        ...catalog.hardware.filter((h) => !demoHardware.some((d) => d.id === h.id)),
-        ...demoHardware,
-      ],
+      // NOTE: the seed's demo hardware is NOT in this snapshot on purpose —
+      // the /seed (AFTER this write) re-ensures it with per-org mapped ids.
+      // Carrying the global fixed ids here collides with them (#964).
       materials: [
         ...catalog.materials.filter((m) => m.id !== FREEZE_MAT_ID),
         {
@@ -364,15 +360,14 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
       modules: [
         ...catalog.modules.filter((m) => m.id !== FREEZE_MODULE),
         {
-          ...catalog.modules[0],
+          ...catalog.modules[0]!,
           id: FREEZE_MODULE,
           code: 'FRZ-GAB-600',
           name: 'Gabinete Congelado 600',
           structureId: FREEZE_STRUCT,
           components: [],
           hardwareLines: [],
-          baseMode: '',
-          baseClearanceMm: null,
+          baseMode: 'none' as const,
           externalDims: { width: 600, height: 720, depth: 560 },
           parameterDefinitions: [{
             name: 'shelfJoints', label: 'Fijaciones de entrepaño', type: 'number',
@@ -400,12 +395,14 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     // write, never before it.
     const seeded = await authedFetch(token, '/seed', { method: 'POST' });
     expect(seeded.ok, `seed: ${seeded.status}`).toBe(true);
+    const { profileId: freezeProfileId } = (await seeded.json()) as { profileId: string };
+    expect(freezeProfileId, 'seed returns the provisioned profile id').toBeTruthy();
 
     // The pinned profile applies to the joint targets' faces.
     for (const [componentId, side] of [[FREEZE_SIDE_L, 'front'], [FREEZE_SIDE_R, 'back']] as const) {
       const put = await authedFetch(token, `/catalog/components/${componentId}/side-assignments`, {
         method: 'PUT',
-        body: JSON.stringify({ side, profileId: DEMO_PROFILE_ID }),
+        body: JSON.stringify({ side, profileId: freezeProfileId }),
       });
       expect(put.ok, `assignment ${side}: ${put.status}`).toBe(true);
     }
@@ -501,5 +498,64 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
     const frozenR2 = await readParts();
     expect(frozenR2.revision).toBe((r2Release as unknown as { id: string }).id);
     expect(frozenR2.revision).not.toBe(frozenR1.revision);
+  });
+
+  test('A/B REAL: cada fábrica resuelve su propio perfil provisionado (#964)', async ({ page }) => {
+    test.setTimeout(240_000);
+    // Factory A (its owner is the gate's platform staff) provisions AND
+    // publishes the Standard release carrying every org's profile so far.
+    const tokenA = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_A_OWNER_EMAIL', 'Browser Gate A');
+    const seededA = await authedFetch(tokenA, '/seed', { method: 'POST' });
+    expect(seededA.ok, `seed A: ${seededA.status}`).toBe(true);
+    const { profileId: profileA } = (await seededA.json()) as { profileId: string };
+    const moduleIdA = await seedPolicyCatalog(tokenA, 'a', 'ab', profileA);
+    await saveShelfPolicy(tokenA, 4);
+
+    // Factory B (org admin, NOT platform staff): its OWN provisioned profile
+    // + assignment + policy over the same Standard definition shape (its
+    // org, its ids). The seed provisions; the publication step is
+    // platform-gated and B's caller correctly skips it.
+    await page.context().clearCookies();
+    const tokenB = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
+    const seededB = await authedFetch(tokenB, '/seed', { method: 'POST' });
+    const seededBJson = await seededB.json().catch(() => ({})) as { status?: string; profileId?: string };
+    expect(seededB.ok, `seed B: ${seededB.status} ${JSON.stringify(seededBJson).slice(0, 300)}`).toBe(true);
+    const profileB = seededBJson.profileId!;
+    expect(profileB, 'seed B returns the provisioned profile id').toBeTruthy();
+    expect(profileB).not.toBe(profileA); // per-org provisioning, never shared
+    const moduleIdB = await seedPolicyCatalog(tokenB, 'b', 'ab', profileB);
+    await saveShelfPolicy(tokenB, 2);
+
+    // Platform staff publishes ONE new Standard release revision carrying
+    // EVERY org's provisioned profile (#964): the resolve pins profiles to
+    // the PUBLISHED manifest (#875 slice 2), so B's profile must be compiled
+    // into one before either factory can resolve. Real #955 surface: new
+    // draft + deliberate publish (the seed never recompiles a published
+    // release — immutability).
+    const draft = await authedFetch(tokenA, '/manufacturing-libraries/standard/releases', {
+      method: 'POST',
+      body: JSON.stringify({ version: `gate-ab-${Date.now()}`, changelog: 'A/B per-org provisioning (#964)' }),
+    });
+    const draftBody = await draft.text().catch(() => '');
+    expect(draft.ok, `create draft: ${draft.status} ${draftBody}`).toBe(true);
+    const { id: draftId } = JSON.parse(draftBody) as { id: string };
+    const published = await authedFetch(tokenA, `/manufacturing-libraries/standard/releases/${draftId}/publish`, {
+      method: 'POST',
+    });
+    expect(published.ok, `publish: ${published.status} ${await published.text().catch(() => '')}`).toBe(true);
+
+    // Both factories resolve MACHINING_READY under the SAME published
+    // revision, each through its own provisioned profile + station policy.
+    const a = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleIdA));
+    expect(a.stations).toBe(4);
+    expect(a.fingerprint).toMatch(/^sha256-/);
+
+    await page.context().clearCookies();
+    const tokenB2 = await loginAndCaptureToken(page, 'ORGANIZATION_GATE_B_OWNER_EMAIL', 'Browser Gate B');
+    const b = shelfEvidence(await resolveDefinitionDefault(tokenB2, moduleIdB));
+    expect(b.stations).toBe(2);
+    expect(b.profileOps).toBe(4);
+    expect(b.demand.size).toBeGreaterThan(0);
+    expect(b.fingerprint).not.toBe(a.fingerprint); // A=4 / B=2: the #875 A/B truth
   });
 });
