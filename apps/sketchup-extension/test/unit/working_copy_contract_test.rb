@@ -33,4 +33,23 @@ class WorkingCopyContractTest < Minitest::Test
       assert_equal expected, actual, scenario.fetch('id')
     end
   end
+
+  def test_working_item_material_choice_modes_enforces_full_key_parity_with_material_choices
+    item = PF::Contract::WorkingItem.new(
+      furniture_instance_id: 'fi-1',
+      material_choices: { 'INTERIOR' => 'mat-1', 'FRENTES' => 'mat-2' },
+      material_choice_modes: { 'INTERIOR' => 'design' }
+    )
+    contract_h = item.to_contract_h
+    assert_equal({ 'INTERIOR' => 'design', 'FRENTES' => 'override' }, contract_h['material_choice_modes'])
+
+    # Absent or empty modes do not emit key
+    item.material_choice_modes = nil
+    refute contract_h.key?('material_choice_modes') if item.to_contract_h.key?('material_choice_modes')
+    assert_nil item.to_contract_h['material_choice_modes']
+
+    # Obsolete roles in modes not in material_choices are pruned
+    item.material_choice_modes = { 'INTERIOR' => 'override', 'DELETED_ROLE' => 'design' }
+    assert_equal({ 'INTERIOR' => 'override', 'FRENTES' => 'override' }, item.to_contract_h['material_choice_modes'])
+  end
 end
