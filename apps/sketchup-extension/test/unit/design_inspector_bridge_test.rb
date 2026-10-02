@@ -231,6 +231,69 @@ class DesignInspectorBridgeTest < Minitest::Test
     assert_equal [:get_working_copy], recording.calls.map(&:first), 'a stale token never reaches a PUT'
   end
 
+  # #969d (owner decision: first-click apply): the background auto-sync
+  # advances the working copy without any user edit. When the server's
+  # CURRENT defaults are exactly the ones the draft was based on, the write
+  # auto-advances to the fresh version — the seen intent applies verbatim,
+  # nothing unseen is clobbered (items travel fresh verbatim).
+  def test_stale_token_with_unchanged_defaults_auto_advances_the_write
+    with_model_bound_to(DESIGN_A)
+    working_item = Granete::SketchUpExtension::Connection::ProjectFurniture::Contract::WorkingItem.new(
+      furniture_instance_id: '51000000-0000-0000-0000-0000000000f1',
+      parameters: { 'widthMm' => 600 },
+      material_choices: { 'INTERIOR' => 'mat-white' }
+    )
+    recording = RecordingService.new(WorkingStubWithItems.new(
+                                       updated_at: '2026-09-28T12:00:00.000000Z',
+                                       authoring_defaults: { 'INTERIOR' => 'mat-white' },
+                                       items: [working_item]
+                                     ))
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(recording))
+
+    request = JSON.generate({
+                              'requestId' => 33, 'designId' => DESIGN_A,
+                              'expectedWorkingVersion' => '2026-09-28T10:00:00.000000Z',
+                              'authoringDefaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-oak' } },
+                              'draftBase' => { 'version' => '2026-09-28T10:00:00.000000Z',
+                                               'defaults' => { 'INTERIOR' => 'mat-white' } }
+                            })
+    @bridge.handle_apply_design_defaults(@dialog, request)
+
+    payload = pushed_payloads.fetch(0)
+    assert_equal 'ok', payload['status'], 'the first click lands when defaults did not drift'
+    assert payload['autoAdvanced'], 'the answer is honest about riding a fresher version'
+    put = recording.calls.last.last
+    assert_equal '2026-09-28T12:00:00.000000Z', put[:expected_working_version],
+                 'the write rides the FRESH version, not the stale token'
+    assert_equal [working_item], put[:items], 'items travel verbatim from the fresh read'
+  end
+
+  # A real defaults drift (another actor changed the defaults the draft was
+  # based on) keeps the explicit path: refusal, no write, fresh version for
+  # the dialog's "Actualizar y aplicar".
+  def test_stale_token_with_drifted_defaults_still_refuses
+    with_model_bound_to(DESIGN_A)
+    recording = RecordingService.new(WorkingStub.new(
+                                       updated_at: '2026-09-28T12:00:00.000000Z',
+                                       authoring_defaults: { 'INTERIOR' => 'mat-negro' }
+                                     ))
+    @bridge.instance_variable_set(:@project_furniture_placer, FakePlacer.new(recording))
+
+    request = JSON.generate({
+                              'requestId' => 34, 'designId' => DESIGN_A,
+                              'expectedWorkingVersion' => '2026-09-28T10:00:00.000000Z',
+                              'authoringDefaults' => { 'materialChoices' => { 'INTERIOR' => 'mat-oak' } },
+                              'draftBase' => { 'version' => '2026-09-28T10:00:00.000000Z',
+                                               'defaults' => { 'INTERIOR' => 'mat-blanco' } }
+                            })
+    @bridge.handle_apply_design_defaults(@dialog, request)
+
+    payload = pushed_payloads.fetch(0)
+    assert_equal 'conflict', payload['status']
+    assert_equal '2026-09-28T12:00:00.000000Z', payload['workingVersion']
+    assert_equal [:get_working_copy], recording.calls.map(&:first), 'a defaults drift never auto-writes'
+  end
+
   def test_apply_unbound_answers_without_touching_the_service
     model = FakeModel.new(nil)
     @bridge.define_singleton_method(:active_model) { model }

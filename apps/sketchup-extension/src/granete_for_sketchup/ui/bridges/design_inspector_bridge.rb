@@ -76,14 +76,16 @@ module Granete
           request_id = payload['requestId']
           token = payload['expectedWorkingVersion'].to_s
           merged = payload['authoringDefaults'] || {}
+          draft_base = payload['draftBase'].is_a?(Hash) ? payload['draftBase'] : nil
 
-          refusal, stored, working = design_inspector_apply_context(payload['designId'].to_s, token)
+          refusal, stored, working, write_token =
+            design_inspector_apply_context(payload['designId'].to_s, token, draft_base)
           return execute_bridge(dialog, 'onDesignDefaultsApplied', refusal.merge('requestId' => request_id)) if refusal
 
           updated = design_inspector_placer.service.update_working_copy(
             stored.design_id,
             items: working.items,
-            expected_working_version: token,
+            expected_working_version: write_token,
             authoring_defaults: { 'materialChoices' => merged['materialChoices'] || {} }
           )
           execute_bridge(dialog, 'onDesignDefaultsApplied', {
@@ -92,6 +94,10 @@ module Granete
                            'designId' => stored.design_id,
                            'projectId' => stored.project_id,
                            'workingVersion' => updated.updated_at,
+                           # #969d: the write rode a fresher version than the
+                           # draft's base (background auto-sync advanced it);
+                           # the applied defaults are the seen ones verbatim.
+                           'autoAdvanced' => write_token != token,
                            'authoringDefaults' => { 'materialChoices' => updated.authoring_defaults }
                          })
         rescue StandardError => e
@@ -103,30 +109,47 @@ module Granete
         # Fail-closed preconditions of the ONE write: the model must be bound
         # to the requested design and the client token must still be the
         # authoritative working version (ONE authoritative read gates the
-        # write) — a refusal answers WITHOUT writing. Returns
-        # [refusal_or_nil, stored_or_nil, working_or_nil].
-        def design_inspector_apply_context(requested_design_id, token)
+        # write).
+        # #969d (owner decision: the apply lands on the FIRST click): the
+        # background auto-sync advances the working copy without any user
+        # edit, so a token mismatch AUTO-ADVANCES the write to the fresh
+        # version when the server's CURRENT authoring defaults are exactly
+        # the ones the draft was based on — nothing unseen is clobbered (the
+        # defaults the user saw are unchanged, and the items already travel
+        # verbatim from this fresh read). A real defaults drift keeps the
+        # explicit path: the refusal carries the fresh version for the
+        # dialog's "Actualizar y aplicar". Returns
+        # [refusal_or_nil, stored_or_nil, working_or_nil, write_token_or_nil].
+        def design_inspector_apply_context(requested_design_id, token, draft_base = nil)
           stored = design_inspector_binding_store.read
-          return [{ 'status' => 'unbound' }] if stored.nil?
+          return [{ 'status' => 'unbound' }, nil, nil, nil] if stored.nil?
           if stored.design_id != requested_design_id
-            return [{ 'status' => 'stale_binding', 'designId' => stored.design_id }]
+            return [{ 'status' => 'stale_binding', 'designId' => stored.design_id }, nil, nil, nil]
           end
-          return [{ 'status' => 'conflict', 'reason' => 'token ausente' }] if token.strip.empty?
+          return [{ 'status' => 'conflict', 'reason' => 'token ausente' }, nil, nil, nil] if token.strip.empty?
 
           working = design_inspector_working_copy(stored.design_id)
-          unless working.updated_at == token
-            # The refusal carries the fresh working version (read-only): with
-            # the background auto-sync the working copy moves without any
-            # user edit, so the dialog can offer an explicit rebase-and-
-            # reapply instead of a dead-end discard. No write happens here.
-            return [{ 'status' => 'conflict', 'reason' => 'el diseño cambió en el servidor',
-                      'workingVersion' => working.updated_at }, stored, working]
+          if working.updated_at != token
+            unless draft_base && design_inspector_defaults_unchanged?(working, draft_base)
+              return [{ 'status' => 'conflict', 'reason' => 'el diseño cambió en el servidor',
+                        'workingVersion' => working.updated_at }, stored, working, nil]
+            end
+            token = working.updated_at
           end
 
-          [nil, stored, working]
+          [nil, stored, working, token]
         end
 
         private
+
+        # The draft's seen defaults are provably the server's current ones —
+        # role → material id, order-insensitive deep equality. Absent blocks
+        # normalize to the canonical empty map both sides use.
+        def design_inspector_defaults_unchanged?(working, draft_base)
+          fresh = working.authoring_defaults.is_a?(Hash) ? working.authoring_defaults : {}
+          base = draft_base['defaults'].is_a?(Hash) ? draft_base['defaults'] : {}
+          fresh == base
+        end
 
         def design_inspector_placer
           placer = @project_furniture_placer

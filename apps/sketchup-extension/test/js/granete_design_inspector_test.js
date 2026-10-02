@@ -541,6 +541,26 @@ function run() {
       'a refusal without a fresh version offers no rebase');
   });
 
+  // #969d (owner decision: first-click apply): the apply payload carries the
+  // draft's seen base so the bridge can prove the defaults are unchanged and
+  // auto-advance past a background auto-sync bump.
+  test('R2+#969d: the apply payload rides the draft base for the bridge auto-advance', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payload = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+    assert.strictEqual(payload.draftBase.version, '2026-09-28T10:00:00Z',
+      'the draft base version rides the write');
+    assert.deepStrictEqual(payload.draftBase.defaults,
+      { INTERIOR: 'mat-white', FRENTES: 'mat-oak' },
+      'the defaults the user saw ride the write');
+  });
+
   // #969c: with the background auto-sync the working copy moves without any
   // user edit. A conflict refusal that carried the fresh working version
   // offers the EXPLICIT rebase through the apply button — user consent,

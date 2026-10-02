@@ -773,7 +773,12 @@
       requestId: state.requestId,
       designId: state.designId,
       expectedWorkingVersion: token,
-      authoringDefaults: { materialChoices: merged }
+      authoringDefaults: { materialChoices: merged },
+      // #969d: the draft's seen base rides the write so the bridge can prove
+      // the defaults the user saw are the server's current ones and
+      // auto-advance past a background auto-sync bump — first-click apply.
+      // A real defaults drift still refuses with the explicit rebase offer.
+      draftBase: { version: token, defaults: baseChoices }
     };
     if (window.sketchup && typeof window.sketchup.apply_design_defaults === "function") {
       window.sketchup.apply_design_defaults(JSON.stringify(payload));
