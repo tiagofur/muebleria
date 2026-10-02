@@ -224,6 +224,42 @@ planning, publish T8–T10 as `Refs #875 / Delivery: partial` and stack T11+.
 (domain → engine/api → tests+e2e); fresh independent reviewer with exact
 HEAD/base after frozen V0–V2 evidence.
 
+**Review pass (2026-10-02, PR #963 REQUEST CHANGES → corrections)**:
+
+- [x] **Tenant isolation (the review's blocker) — demonstrated in test, not
+  assumed**: `TestReleaseServerInputsTenantIsolation` (real disposable
+  PostgreSQL, granete_app role, real `WithinTenantTx` per factory). The
+  assignments read is NOT implicit-RLS-only: `ListAllComponentSideAssignments`
+  filters `WHERE organization_id = OrgFromCtx(ctx)` AND the table carries
+  read/write RLS (`app_current_organization_id()`, migration 000144). The
+  test proves: A's assignment synthesizes A's recipe with A's pinned
+  profile; B's cross-org reference attempt is rejected as MISSING (never
+  leaked); B's own post-publication profile synthesizes nothing (not pinned
+  in the release); the overlay policy is filtered by the explicit org
+  argument (A=4, B=2 across orgs through the SAME loader).
+- [x] **OrgFromCtx (review D)**: the authoring resolve handler now passes
+  the org ROW the license gate already loaded and validated (`org.ID`),
+  never a second context read; the release gates pass `projectOrgID` from
+  the locked project row. The empty/unparseable-org degrade is unreachable
+  for authenticated production requests on both surfaces (org-less tokens
+  are rejected 403 before the handler; the store-level degrade only serves
+  direct callers/tests).
+- [x] **A/B multi-org dependency made formal**: issue #964 tracks per-org
+  provisioning of recipe-bearing profiles (the #955 surface + platform seed
+  are single-org); the two-factory gate and the #919 vertical depend on it.
+- [ ] **Historical release freeze (review B) — execution recipe recorded,
+  needs one focused pass**: browser/storage proof that a release created
+  under policy 4 freezes 4 (snapshot routing holes + demand) and stays 4
+  after the policy moves to 2, with a second release freezing 2. Recipe:
+  extend `releaseFixtureOptions.seedCatalog` (storage) with the
+  fixed-shelf-side binding + org assignment + a pinning-style publication
+  inside the fixture, create R1 under policy 4 and R2 under policy 2, then
+  assert each snapshot's frozen routing against its freeze-time policy and
+  R1's immutability; the browser leg reads the same truth through
+  `GET /api/projects/{id}/part-executions` (generated from the frozen
+  snapshot). Row immutability itself is already pinned
+  (`TestProductionRelease_ReleaseRowsAreImmutableHistory`).
+
 **Decisions pinned in this plan** (a reviewer may contest with evidence):
 - Policy overrides definition-default station/system values; explicit authored
   per-relationship declarations and component mandatory constraints keep
