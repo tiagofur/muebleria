@@ -6,7 +6,8 @@
 // nothing is rendered yet and the Proyecto tab reloads exactly once), the
 // per-action in-flight maps (pfPlacing / pfConfirming / pfCancelling /
 // pfRestoring), the #810 design-sync card state (designSyncBusy +
-// lastDesignSyncOutcome), the request/reload orchestration
+// lastDesignSyncOutcome + the #969 stale-response drain), the
+// request/reload orchestration
 // (requestProjectFurniture), the render of every distinct panel state
 // (loading / empty / error / unbound / connected list), the per-unit rows
 // and action lifecycle (Colocar / Reintentar sincronización / Cancelar /
@@ -266,8 +267,15 @@
   }
 
   var lastDesignSyncOutcome = null;
-  var syncGeneration = 0;
-  var inFlightSyncGeneration = null;
+  // #969: bridge responses carry no request token, so staleness is
+  // tracked by COUNT. invalidate() arms exactly one discard per
+  // outstanding synchronize_design response; the first responses to
+  // arrive are drained — even when a newer sync already started and
+  // reset the busy guard — because delivery order is FIFO.
+  // staleSyncArmed keeps repeated invalidations (every binding status
+  // render) from arming the same outstanding response twice.
+  var staleSyncResponses = 0;
+  var staleSyncArmed = false;
 
   function synchronizeDesign(options) {
     if (designSyncBusy) return;
@@ -275,7 +283,7 @@
     isAutoSyncInFlight = isAuto;
     cancelDebouncedSync();
     designSyncBusy = true;
-    inFlightSyncGeneration = syncGeneration;
+    staleSyncArmed = false;
     designSyncBadge.className = "status-badge pending";
     designSyncBadge.textContent = "Sincronizando";
     designSyncStatus.textContent = isAuto ? "Actualizando presupuesto…" : "Sincronizando…";
@@ -286,7 +294,6 @@
     } else {
       designSyncBusy = false;
       isAutoSyncInFlight = false;
-      inFlightSyncGeneration = null;
       lastDesignSyncOutcome = { kind: "error", reason: "La sincronización está disponible sólo dentro de SketchUp." };
       btnDesignSync.disabled = false;
       btnDesignSync.textContent = "Sincronizar diseño";
@@ -295,15 +302,23 @@
   }
 
   function handleSynchronizeDesignResult(result) {
-    if (inFlightSyncGeneration !== null && inFlightSyncGeneration < syncGeneration) {
-      designSyncBusy = false;
-      isAutoSyncInFlight = false;
-      inFlightSyncGeneration = null;
-      btnDesignSync.disabled = false;
-      btnDesignSync.textContent = "Sincronizar diseño";
+    // Drain-first: a response armed by invalidate() belongs to an
+    // invalidated context and is discarded before any handling — the
+    // shared busy slot cannot tell which request a response answers.
+    if (staleSyncResponses > 0) {
+      staleSyncResponses -= 1;
+      staleSyncArmed = false;
+      // A newer sync that started after the invalidation owns the busy
+      // panel and its own completion recovers the card; with no newer
+      // sync in flight, recover through the same reload every outcome
+      // uses instead of leaving a "Sincronizando" badge behind.
+      if (!designSyncBusy) {
+        btnDesignSync.disabled = false;
+        btnDesignSync.textContent = "Sincronizar diseño";
+        requestProjectFurniture();
+      }
       return;
     }
-    inFlightSyncGeneration = null;
     var wasAuto = isAutoSyncInFlight;
     isAutoSyncInFlight = false;
     designSyncBusy = false;
@@ -328,9 +343,14 @@
       requestProjectFurniture();
     } else {
       lastDesignSyncOutcome = { kind: result.code === "conflict" ? "conflict" : "error", reason: result.reason };
-      deps.showToast("error", result.code === "conflict"
-        ? "Conflicto: el diseño cambió en el servidor."
-        : "No se pudo sincronizar el diseño.");
+      // #969: presentation-mode silence covers failures too — a
+      // background auto-sync never toasts; the card owns the visible
+      // outcome on the next panel render.
+      if (!wasAuto) {
+        deps.showToast("error", result.code === "conflict"
+          ? "Conflicto: el diseño cambió en el servidor."
+          : "No se pudo sincronizar el diseño.");
+      }
       requestProjectFurniture();
     }
   }
@@ -820,8 +840,13 @@
     // historical `lastPfState = null` semantic (like modelBinding's
     // isConnected accessor).
     invalidate: function () {
-      syncGeneration += 1;
       cancelDebouncedSync();
+      // Arm the discard BEFORE clearing the busy guard: one discard per
+      // outstanding response, never twice for the same flight.
+      if (designSyncBusy && !staleSyncArmed) {
+        staleSyncResponses += 1;
+        staleSyncArmed = true;
+      }
       designSyncBusy = false;
       isAutoSyncInFlight = false;
       lastPfState = null;
