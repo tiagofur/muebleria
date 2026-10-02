@@ -49,15 +49,15 @@ follows the same repository contract manually.
    Direct topology needs durable recovery.
 3. For Inline Direct work, do not create a task artifact merely to satisfy this
    directory's existence; the issue and PR remain the durable record.
-3. Record scope, non-goals, constraints, acceptance, checks, route, forecast, and
+4. Record scope, non-goals, constraints, acceptance, checks, route, forecast, and
    delivery strategy.
-4. Implement task by task. Check an item only after observing its outcome and
+5. Implement task by task. Check an item only after observing its outcome and
    applicable checks; record the work-unit commit as evidence.
-5. Keep failed, skipped, unavailable, and pending checks explicit.
-6. Hand the exact HEAD/base to a fresh reviewer. Consolidate blockers into one
+6. Keep failed, skipped, unavailable, and pending checks explicit.
+7. Hand the exact HEAD/base to a fresh reviewer. Consolidate blockers into one
    correction round when feasible. If a blocker remains, ask the human whether to
    stop, narrow, extend, or open follow-up scope; never declare success by policy.
-7. Completed artifacts remain in `odd/tasks/` as immutable history. No post-merge cleanup,
+8. Completed artifacts remain in `odd/tasks/` as immutable history. No post-merge cleanup,
    move, archive directory, or follow-up commit is required. GitHub and the PR remain
    authoritative for delivery status.
 
