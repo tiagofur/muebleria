@@ -177,6 +177,7 @@ export async function downloadCuttingArtifactBundles(
   projectName?: string,
   deps?: DownloadDeps,
   mode: 'unified' | 'by-material' = 'unified',
+  zipName?: string,
 ): Promise<CuttingDownloadResult> {
   const [single] = bundles;
   if (bundles.length === 1 && single && mode !== 'by-material') {
@@ -221,7 +222,7 @@ export async function downloadCuttingArtifactBundles(
   }
   const result = await buildCuttingZip(
     entries,
-    ptxZipFileName(projectName),
+    zipName ?? ptxZipFileName(projectName),
     deps,
     bundles.length,
   );

@@ -81,6 +81,13 @@ export type ProductionOrderOptimizationPanelProps = {
   ) => CuttingOutputTargetView | null;
   readonly exportBusy?: boolean;
   /**
+   * #1005 K3 — machining target summary (KDT). Same view contract as the
+   * cutting target; null = no machining selection configured.
+   */
+  readonly machiningOutputTarget?: CuttingOutputTargetView | null;
+  /** Project-level KDT program export (frozen release authority inside). */
+  readonly onExportMachiningKdt?: () => void | Promise<void>;
+  /**
    * #793 — neutral frozen per-piece manufacturing label projection of the
    * release (when this panel prepares an exact liberation). Forwarded to the
    * PTX export so the r5 route consumes its PARTS_INF/PARTS_UDI authority
@@ -135,6 +142,8 @@ export function ProductionOrderOptimizationPanel({
   onExportOptimizer,
   onExportCutPlanDxf,
   onExportCutPlanPtx,
+  machiningOutputTarget,
+  onExportMachiningKdt,
   cuttingOutputTarget = null,
   resolveCuttingOutputTarget,
   exportBusy = false,
@@ -1202,6 +1211,77 @@ export function ProductionOrderOptimizationPanel({
                   </button>
                 </div>
               </div>
+              {onExportMachiningKdt ? (
+                <div
+                  style={{
+                    border: '1px solid var(--border, #ddd)',
+                    borderRadius: 6,
+                    padding: 12,
+                    marginTop: 12,
+                  }}
+                  data-testid="prod-opt-machining-output"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: '1.2em' }}>🪛</span>
+                    <strong style={{ fontSize: '0.95em' }}>Programas KDT (Flexdrill 1200)</strong>
+                  </div>
+                  <p style={{ margin: '4px 0 8px', fontSize: '0.82em', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                    XML KDTPanelFormat — un programa por pieza/cara de mecanizado, desde las perforaciones congeladas de la liberación.
+                  </p>
+                  <p
+                    style={{ margin: '0 0 8px', fontSize: '0.8em', color: 'var(--text-muted)' }}
+                    data-testid="prod-opt-machining-output-summary"
+                  >
+                    Salida configurada:{' '}
+                    {machiningOutputTarget ? (
+                      <strong
+                        style={{ color: 'var(--text-primary)' }}
+                        data-state={machiningOutputTarget.status}
+                      >
+                        {machiningOutputTarget.machineLabel} · {machiningOutputTarget.formatLabel} · {machiningOutputTarget.profileLabel}
+                      </strong>
+                    ) : (
+                      <strong style={{ color: 'var(--text-primary)' }}>sin salida de mecanizado configurada</strong>
+                    )}
+                  </p>
+                  {machiningOutputTarget && !machiningOutputTarget.ready ? (
+                    <p
+                      role="alert"
+                      style={{
+                        margin: '0 0 8px',
+                        fontSize: '0.8em',
+                        color: 'var(--status-warning, #b45309)',
+                        background: 'var(--surface-muted)',
+                        padding: '6px 8px',
+                        borderRadius: 4,
+                      }}
+                      data-testid="prod-opt-machining-output-blocked"
+                      data-blocker-code={machiningOutputTarget.blockerCode}
+                    >
+                      ⚠ {machiningOutputTarget.blockerMessage}{' '}
+                      {machiningOutputTarget.recoveryHint ?? 'Configurá la salida de mecanizado en Ajustes → Ingeniería.'}
+                    </p>
+                  ) : null}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                    <button
+                      type="button"
+                      className="btn btn--primary btn--small"
+                      onClick={() => {
+                        void onExportMachiningKdt?.();
+                      }}
+                      disabled={exportBusy || !machiningOutputTarget?.ready}
+                      data-testid="prod-opt-export-kdt"
+                      title={
+                        !machiningOutputTarget?.ready
+                          ? 'Configurá la salida de mecanizado (KDT) en Ajustes → Ingeniería.'
+                          : undefined
+                      }
+                    >
+                      Descargar programas KDT (.zip)
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
         </div>

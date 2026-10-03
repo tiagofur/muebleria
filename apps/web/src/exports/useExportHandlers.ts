@@ -54,7 +54,7 @@ import {
   downloadCuttingArtifactBundles,
   type CuttingDownloadResult,
 } from '../exportCutPlanPtx';
-import { generateSelectedCuttingOutput } from '@granete/excel';
+import { generateSelectedCuttingOutput, generateSelectedMachiningOutput } from '@granete/excel';
 import { runExport, type ExportDelivery } from './runExport';
 import {
   runWithCuttingOutputAuthority,
@@ -79,6 +79,12 @@ export interface ExportHandlersDeps {
   readonly workspaceSettings: WorkshopSettings | undefined;
   /** #691: scoped request truth; only confirmed-empty may use legacy PTX. */
   readonly cuttingOutputSelectionState: CuttingOutputSelectionState;
+  /**
+   * #1005 K3 — machining twin of the cutting state. There is NO legacy
+   * machining route: without a configured target the KDT export explains
+   * how to configure it (never heuristic holes to a machine).
+   */
+  readonly machiningOutputSelectionState: CuttingOutputSelectionState;
   /**
    * #642/3: existing COST-01/COST-02 shell policy — when false, line amounts
    * are not authorized and render as absence in commercial exports.
@@ -109,6 +115,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     actorRole,
     workspaceSettings,
     cuttingOutputSelectionState,
+    machiningOutputSelectionState,
     showCosts = true,
     toast,
     stampEngineeringGeneration,
@@ -590,6 +597,111 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     [toast, cuttingOutputSelectionState],
   );
 
+  // #1005 K3 — KDTPanelFormat programs for the canonical release. The ONLY
+  // drilling source that may reach a machine is the frozen routing program
+  // (legacy F074 heuristics never fabricate): no canonical authority, a
+  // fetch failure or a join/coverage mismatch is a hard error with zero
+  // files — never a fallback to live/heuristic data.
+  const handleExportMachiningKdt = useCallback(
+    async (projectId?: string) => {
+      const project =
+        projectId != null
+          ? projects.find((p) => p.id === projectId)
+          : selectedProject;
+      if (!project || !catalog) return;
+      if (
+        session === 'auth' &&
+        !canExportProductionForProject(actorRole, project.status)
+      ) {
+        toast({
+          type: 'error',
+          message:
+            'Export de producción solo para Aceptado/En producción y roles de planta/ingeniería',
+        });
+        return;
+      }
+      setExportBusy(true);
+      try {
+        if (!frozenDrillingFetcher) {
+          throw new Error(
+            'La salida KDT requiere una liberación con autoridad canónica (snapshot congelado); no hay ruta congelada para este contexto.',
+          );
+        }
+        const frozen = await frozenDrillingFetcher(project.id);
+        if (!frozen) {
+          throw new Error(
+            'La salida KDT requiere una liberación liberada con snapshot congelado; este proyecto no tiene autoridad canónica.',
+          );
+        }
+        const resolved = resolveProjectDrilling({ project, catalog });
+        const resolutionIssue = resolved.resolutionIssues[0];
+        if (resolutionIssue) {
+          throw new Error(
+            `No se puede exportar KDT: ${resolutionIssue.message} Revise el ítem ${resolutionIssue.projectItemId}.`,
+          );
+        }
+        const drilling = composeFrozenDrilling(project, frozen, resolved);
+        const machiningJob: import('@granete/domain').ResolvedMachiningJob = {
+          jobId: `${project.id}--kdt`,
+          provenance: {
+            projectId: project.id,
+            generatedAt: new Date().toISOString(),
+            productionReleaseId: frozen.releaseId,
+            bomFingerprint: frozen.manufacturingFingerprint,
+          },
+          drilling,
+        };
+        const result: CuttingDownloadResult = await runWithCuttingOutputAuthority(
+          machiningOutputSelectionState,
+          {
+            selected: async (selection) => {
+              const bundles = await generateSelectedMachiningOutput(machiningJob, selection);
+              return downloadCuttingArtifactBundles(
+                bundles,
+                project.name,
+                undefined,
+                'by-material',
+                `programas-kdt-${(project.name || project.id)
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .replace(/^-|-$/g, '')}.zip`,
+              );
+            },
+            legacy: async () => {
+              throw new Error(
+                'Configurá la salida de mecanizado (KDT) en Configuración → Salida de máquina antes de exportar programas.',
+              );
+            },
+          },
+        );
+        toast({
+          type: 'success',
+          message: result.zipped
+            ? `✓ ${result.filesCount} programa${result.filesCount === 1 ? '' : 's'} KDT en ${result.fileName}`
+            : `✓ ${result.fileName}`,
+        });
+      } catch (err) {
+        toast({
+          type: 'error',
+          message:
+            err instanceof Error ? err.message : 'Error al exportar programas KDT',
+        });
+      } finally {
+        setExportBusy(false);
+      }
+    },
+    [
+      projects,
+      selectedProject,
+      catalog,
+      toast,
+      session,
+      actorRole,
+      frozenDrillingFetcher,
+      machiningOutputSelectionState,
+    ],
+  );
+
   const handleReleaseToDelivery = useCallback(
     async (projectId: string) => {
       const project = projects.find((p) => p.id === projectId);
@@ -755,6 +867,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     handleExportCutPlanPdf,
     handleExportCutPlanDxf,
     handleExportCutPlanPtx,
+    handleExportMachiningKdt,
     handleReleaseToDelivery,
     handleExportProductionPack,
     handleExportCommercialQuote,
