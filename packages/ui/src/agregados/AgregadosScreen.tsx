@@ -331,6 +331,7 @@ export function AgregadosScreen({
             catalogComponents={catalogComponents}
             catalogHardware={catalogHardware}
             catalogInput={catalogInput}
+            optionGroups={optionGroups}
             resolveImageUrl={resolveImageUrl}
           />
         )}

@@ -7,7 +7,7 @@
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Component, Hardware } from '@granete/domain';
+import type { Component, Hardware, OptionGroup } from '@granete/domain';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import {
   AgregadoEditorForm,
@@ -88,11 +88,15 @@ function renderForm({
   editorTab = 'components',
   draft = doorDraft(),
   onSetEditorTab,
+  optionGroups,
+  setDraft,
 }: {
   readonly catalogInput?: Module3DCatalogInput;
   readonly editorTab?: AgregadoEditorTab;
   readonly draft?: AgregadoDraft;
   readonly onSetEditorTab?: Dispatch<SetStateAction<AgregadoEditorTab>>;
+  readonly optionGroups?: readonly OptionGroup[];
+  readonly setDraft?: Dispatch<SetStateAction<AgregadoDraft>>;
 }) {
   render(
     <AgregadoEditorForm
@@ -105,11 +109,12 @@ function renderForm({
         (vi.fn() as Dispatch<SetStateAction<AgregadoEditorTab>>)
       }
       draft={draft}
-      setDraft={vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>}
+      setDraft={setDraft ?? (vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>)}
       editingId={null}
       catalogComponents={[mockComponent]}
       catalogHardware={[] as unknown as readonly Hardware[]}
       catalogInput={catalogInput}
+      optionGroups={optionGroups}
     />,
   );
 }
@@ -307,5 +312,90 @@ describe('AgregadoEditorForm — General tab', () => {
     expect(angleInput.value).toBe('110');
     fireEvent.change(angleInput, { target: { value: '95' } });
     expect(setDraft).toHaveBeenCalled();
+  });
+});
+
+describe('AgregadoEditorForm — governed hardware role (S4 #1009)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const hardwareGroups: OptionGroup[] = [
+    {
+      id: 'og-bisagra',
+      code: 'BISAGRA',
+      name: 'Bisagras',
+      kind: 'hardware',
+      required: false,
+      optionIds: [],
+    },
+    {
+      id: 'og-correderea',
+      code: 'CORREDERA',
+      name: 'Correderas',
+      kind: 'hardware',
+      required: false,
+      optionIds: [],
+    },
+    {
+      id: 'og-tablero',
+      code: 'MADERA',
+      name: 'Madera (board — no es rol de herraje)',
+      kind: 'board',
+      required: false,
+      optionIds: [],
+    },
+  ];
+
+  function hwDraft(optionRole: string): AgregadoDraft {
+    const draft = doorDraft();
+    draft.hardwareLines = [{ id: 'hl-1', quantity: 1, optionRole }];
+    return draft;
+  }
+
+  it('renders the role as a select fed by hardware-kind option groups only', () => {
+    renderForm({ editorTab: 'hardware', draft: hwDraft('BISAGRA'), optionGroups: hardwareGroups });
+
+    const roleSelect = screen.getByTestId('agregado-hw-0-role') as HTMLSelectElement;
+    expect(roleSelect.tagName).toBe('SELECT');
+    const values = Array.from(roleSelect.options).map((o) => o.value);
+    expect(values).toContain('BISAGRA');
+    expect(values).toContain('CORREDERA');
+    // Board groups are not hardware roles — never offered.
+    expect(values).not.toContain('MADERA');
+    expect(roleSelect.value).toBe('BISAGRA');
+  });
+
+  it('keeps a saved role outside the catalog visible instead of rewriting it', () => {
+    renderForm({ editorTab: 'hardware', draft: hwDraft('BISAGRS'), optionGroups: hardwareGroups });
+
+    const roleSelect = screen.getByTestId('agregado-hw-0-role') as HTMLSelectElement;
+    expect(roleSelect.value).toBe('BISAGRS');
+    expect(
+      Array.from(roleSelect.options).find((o) => o.value === 'BISAGRS')?.textContent,
+    ).toContain('(guardado)');
+  });
+
+  it('propagates the selection to the draft', () => {
+    const setDraft = vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>;
+    renderForm({
+      editorTab: 'hardware',
+      draft: hwDraft('BISAGRA'),
+      optionGroups: hardwareGroups,
+      setDraft,
+    });
+
+    fireEvent.change(screen.getByTestId('agregado-hw-0-role'), {
+      target: { value: 'CORREDERA' },
+    });
+    expect(setDraft).toHaveBeenCalled();
+  });
+
+  it('degrades to the free-text input when option groups are not provided', () => {
+    renderForm({ editorTab: 'hardware', draft: hwDraft('BISAGRA') });
+
+    const roleInput = screen.getByTestId('agregado-hw-0-role') as HTMLInputElement;
+    expect(roleInput.tagName).toBe('INPUT');
+    expect(roleInput.value).toBe('BISAGRA');
   });
 });
