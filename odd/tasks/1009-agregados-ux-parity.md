@@ -51,7 +51,14 @@ si la aceptación completa (incl. browser proof) está verde. Merge humano.
   agregado en detalle vuelve a la lista. Store sin cambios: los fallos de
   servidor ya toastean (`shared.ts:473-491`). Evidencia: vitest agregados
   28/28, suite ui 2084/2084 (184 files), typecheck workspace 7/7.
-- [ ] S2 → PR 2 (apilado)
+- [x] S2 → PR 2 (rama `feat/1009-agregados-ux-s2`, apilada sobre S1).
+  `draftName` en `EntityEditorLayout` (header del editor: «Editar <entidad> —
+  <nombre guardado>» + código **guardado** estable, no el draft vivo); los 4
+  editores (Muebles/Estructuras/Componentes/Agregados) pasan código+nombre
+  guardados; sentence case en Agregados («Nuevo agregado»). Tests: header
+  estable mientras se edita el código (agregados), título con nombre
+  (ModulesScreen test actualizado), creación sin identidad. Evidencia: suite
+  ui 2086/2086, typecheck 7/7.
 - [ ] S3 → PR 3 (apilado)
 - [ ] S4 → PR 4 (apilado)
 - [ ] S5 → PR 5 (apilado)

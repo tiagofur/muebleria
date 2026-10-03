@@ -293,7 +293,10 @@ describe('ModulesScreen navigation + modals (F021)', () => {
     await user.click(screen.getByRole('button', { name: /^Editar$/ }));
 
     const page = await screen.findByTestId('module-editor-page');
-    expect(within(page).getByText('Editar mueble')).toBeTruthy();
+    // S2 #1009: header carries the saved identity — verb + saved name, and
+    // the stable saved code (not the live draft value).
+    expect(within(page).getByText('Editar mueble — Bajo mesada 600')).toBeTruthy();
+    expect(within(page).getByText('MOD-GAB-01')).toBeTruthy();
     expect(within(page).getByLabelText('Código')).toHaveProperty(
       'value',
       'MOD-GAB-01',

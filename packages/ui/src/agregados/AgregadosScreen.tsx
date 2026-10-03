@@ -220,6 +220,12 @@ export function AgregadosScreen({
     ? (agregados.find((a) => a.id === expandedId) ?? null)
     : null;
 
+  // Saved identity for the editor header — stable while the user edits the
+  // code/name fields (#1009 S2).
+  const editingAgregado = editingId
+    ? (agregados.find((a) => a.id === editingId) ?? null)
+    : null;
+
   return (
     <>
       <EntityEditorLayout
@@ -229,9 +235,10 @@ export function AgregadosScreen({
         discardConfirmTestId="agregado-editor-discard-confirm"
         modalTestId="agregado-modal"
         entityTitle="agregado"
-        createTitle="Nuevo Agregado"
-        editTitle="Editar Agregado"
-        draftCode={draft.code}
+        createTitle="Nuevo agregado"
+        editTitle="Editar agregado"
+        draftCode={editingAgregado?.code}
+        draftName={editingAgregado?.name}
         formId={formId}
         modalOpen={modalOpen}
         confirmDiscard={confirmDiscard}

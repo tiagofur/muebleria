@@ -6,7 +6,7 @@
  * code + name + consequence, and only then calls onDelete.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Agregado } from '@granete/domain';
@@ -71,5 +71,43 @@ describe('AgregadosScreen — delete confirmation (S1 #1009)', () => {
   it('does not render the confirm dialog without a delete request', () => {
     renderScreen();
     expect(screen.queryByTestId('agregado-delete-confirm')).toBeNull();
+  });
+});
+
+describe('AgregadosScreen — editor header identity (S2 #1009)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows saved code + saved name in the editor header, stable while editing', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    const page = await screen.findByTestId('agregado-editor-page');
+
+    // Owner's idea (#1009 I2): the ID is followed by the item name, and the
+    // header identity comes from the saved item, not the live draft.
+    expect(within(page).getByText('Editar agregado — Puerta Batiente')).toBeTruthy();
+    expect(within(page).getByText('AGR-01')).toBeTruthy();
+
+    const codeInput = within(page).getByLabelText('Código') as HTMLInputElement;
+    expect(codeInput.value).toBe('AGR-01');
+    await user.clear(codeInput);
+    await user.type(codeInput, 'AGR-09');
+
+    // The header identity does not flicker while the fields are edited.
+    expect(within(page).getByText('AGR-01')).toBeTruthy();
+    expect(within(page).getByText('Editar agregado — Puerta Batiente')).toBeTruthy();
+  });
+
+  it('shows the plain create title without identity when creating', async () => {
+    const user = userEvent.setup();
+    renderScreen({ openAgregadoId: null });
+
+    await user.click(screen.getByRole('button', { name: /Nuevo agregado/i }));
+    const page = await screen.findByTestId('agregado-editor-page');
+    expect(within(page).getByText('Nuevo agregado')).toBeTruthy();
+    expect(within(page).getByText('NUEVO')).toBeTruthy();
   });
 });

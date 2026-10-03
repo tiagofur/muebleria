@@ -500,7 +500,12 @@ export function ComponentsScreen({
       entityTitle="componente"
       createTitle="Nuevo componente"
       editTitle="Editar componente"
-      draftCode={draft.code}
+      draftCode={editingId
+        ? (normalizedComponents.find((c) => c.id === editingId)?.code)
+        : undefined}
+      draftName={editingId
+        ? (normalizedComponents.find((c) => c.id === editingId)?.name)
+        : undefined}
       formId={formId}
       modalOpen={modalOpen}
       confirmDiscard={confirmDiscard}
