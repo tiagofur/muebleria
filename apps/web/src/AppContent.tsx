@@ -260,6 +260,7 @@ import {
   createSeedWorkspace,
   type JobCostingView,
   type SiteSurveyView,
+  GraneteApiClient,
 } from '@granete/storage';
 import {
   evaluateSelectedCuttingOutputReadiness,
@@ -289,6 +290,8 @@ import {
   computeSelectedProjectBreakdown,
   resolveDisplayBreakdown,
 } from './derivations/breakdown';
+import { useProjectProfileDemand } from './derivations/useProjectProfileDemand';
+import { useProjectsServerEstimates } from './derivations/useProjectsServerEstimates';
 import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
 import { buildHardwareListExport } from './exportHardwareList';
 import {
@@ -1506,6 +1509,28 @@ export function AppContent({
     [stockDebitLinesFor, consumeOnDespachado],
   );
   // F120: quote/dashboard derivations live in useQuoteDerivations.
+  // #989: governed demand + demand-priced card estimates, server-derived at
+  // the shell boundary. The client owns no state — one per shell is safe.
+  const shellApiClient = useMemo(() => new GraneteApiClient(DEFAULT_API_BASE), []);
+  const profileDemand = useProjectProfileDemand({
+    project: selectedProject ?? undefined,
+    catalog: catalog ?? undefined,
+    enabled: session === 'auth' && Boolean(authToken),
+    token: authToken ?? '',
+    transports: {
+      resolve: (token, request, signal) =>
+        shellApiClient.resolveFurnitureAuthoring(token, request, signal),
+      getCatalogRevision: (token, signal) =>
+        shellApiClient.getFurnitureCatalogRevision(token, signal),
+    },
+  });
+  const serverEstimates = useProjectsServerEstimates({
+    projects,
+    enabled: session === 'auth' && Boolean(authToken),
+    token: authToken ?? '',
+    baseUrl: DEFAULT_API_BASE,
+  });
+
   const {
     workshopSettings,
     showCosts,
@@ -1530,6 +1555,8 @@ export function AppContent({
     editingModuleId,
     canViewPortfolioDashboard,
     assignableOwners,
+    profileDemand,
+    serverEstimates,
   });
 
   /** F090: workshop analytics — funnel + warranties for gerente/admin. */

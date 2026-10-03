@@ -25,6 +25,7 @@ import {
 } from '@granete/domain';
 import { computeModuleCostPreview, computeSelectedProjectBreakdown } from './breakdown';
 import type { ProjectProfileDemandState, ProjectProfileDemandStatus } from './useProjectProfileDemand';
+import type { ProjectsServerEstimates } from './useProjectsServerEstimates';
 import {
   aggregatePortfolioByOwner,
   countActiveMaterials,
@@ -52,6 +53,9 @@ export interface QuoteDerivationsDeps {
   /** Governed joinery demand for the selected project (#989): server-derived
    * by the authoring resolve at the shell boundary; absent = no demand path. */
   readonly profileDemand?: ProjectProfileDemandState;
+  /** Served (demand-priced) breakdowns for quote-less projects (#989 slice 2):
+   * the card estimates prefer these over the local manual-lines-only mirror. */
+  readonly serverEstimates?: ProjectsServerEstimates;
 }
 
 export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
@@ -69,6 +73,7 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
     canViewPortfolioDashboard,
     assignableOwners,
     profileDemand,
+    serverEstimates,
   } = deps;
 
   const workshopSettings = resolveWorkshopSettings(workspaceSettings);
@@ -152,11 +157,18 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
         map[project.id] = project.priceSnapshot.breakdown.salePrice;
         continue;
       }
+      // #989 slice 2: the served calculation prices the governed joinery
+      // demand — when it arrived, it beats the local manual-lines-only mirror.
+      const served = serverEstimates?.estimates[project.id];
+      if (served) {
+        map[project.id] = served.salePrice;
+        continue;
+      }
       const quote = computeSelectedProjectBreakdown(project, catalog);
       map[project.id] = quote.breakdown?.salePrice ?? null;
     }
     return map;
-  }, [projects, catalog]);
+  }, [projects, catalog, serverEstimates]);
 
 
   /**
