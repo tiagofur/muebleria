@@ -169,7 +169,9 @@ describe('#995 K2 frozen drilling layer', () => {
     await useExportHandlers(deps).handleExportCutPlanDxf({ projectId: project.id } as CutPlan, 'sheets');
 
     expect(mocks.downloadCutPlanDxf).toHaveBeenCalledTimes(1);
-    const options = mocks.downloadCutPlanDxf.mock.calls[0][4] as {
+    const call = mocks.downloadCutPlanDxf.mock.calls[0];
+    if (!call) throw new Error('downloadCutPlanDxf was not called');
+    const options = call[4] as {
       drilling: { pieceCode: string; holes: { diameterMm: number }[] }[];
     };
     expect(options.drilling[0]?.holes.map((hole) => hole.diameterMm)).toEqual([15, 8]);
@@ -222,7 +224,9 @@ describe('#995 K2 frozen drilling layer', () => {
     await useExportHandlers(deps).handleExportCutPlanDxf({ projectId: project.id } as CutPlan, 'sheets');
 
     expect(mocks.downloadCutPlanDxf).toHaveBeenCalledTimes(1);
-    const options = mocks.downloadCutPlanDxf.mock.calls[0][4] as {
+    const call = mocks.downloadCutPlanDxf.mock.calls[0];
+    if (!call) throw new Error('downloadCutPlanDxf was not called');
+    const options = call[4] as {
       drilling: { holes: unknown[] }[];
     };
     expect(options.drilling[0]?.holes).toEqual(legacyHoles);
