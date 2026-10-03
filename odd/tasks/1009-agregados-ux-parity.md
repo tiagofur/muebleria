@@ -71,5 +71,12 @@ si la aceptación completa (incl. browser proof) está verde. Merge humano.
   Evidencia: suite ui 2089/2089, typecheck 7/7; tests con promesa diferida
   (fallo y éxito). Trampa hallada: el draft persiste en sessionStorage entre
   tests → afterEach limpia storage.
-- [ ] S4 → PR 4 (apilado)
+- [x] S4 → PR 4 (rama `feat/1009-agregados-ux-s4`, apilada sobre S3). El rol
+  de opción de herrajes pasa de texto libre a select gobernado por
+  `optionGroupsForHardware` (patrón ModuleEditorHardwarePanel); valor guardado
+  fuera de catálogo se muestra como «(guardado)» sin reescribirlo; degradación
+  a texto libre sin grupos; `addHardwareLine` defaultea al primer rol del
+  catálogo en vez del hardcodeado «HERRAJE». Evidencia: suite ui 2093/2093,
+  typecheck 7/7; 4 tests nuevos (select sólo con grupos hardware-kind,
+  valor guardado preservado, propagación al draft, fallback input).
 - [ ] S5 → PR 5 (apilado)

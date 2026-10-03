@@ -9,13 +9,15 @@ import {
   type FormEvent,
   type ReactNode,
   type SetStateAction,
+  useMemo,
 } from 'react';
-import type { Component, Hardware, HardwareLine, ModuleComponentInstance } from '@granete/domain';
+import type { Component, Hardware, HardwareLine, ModuleComponentInstance, OptionGroup } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
 import { HardwarePlacementsEditor } from '../../modules/components/HardwarePlacementsEditor';
+import { optionGroupsForHardware } from '../../modules/helpers/moduleRolePickers';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import type { AgregadoDraft } from '../agregadoDraft';
 import { AgregadoEditorGeneralPanel } from './AgregadoEditorGeneralPanel';
@@ -38,6 +40,9 @@ export type AgregadoEditorFormProps = {
    * back to a single-column layout with no preview. */
   readonly catalogInput?: Module3DCatalogInput;
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /** Option groups governing the hardware role select (#1009 S4). When
+   * omitted, the role field degrades to the legacy free-text input. */
+  readonly optionGroups?: readonly OptionGroup[];
   /** #1009 S3: the last save was rejected by the server; the draft is intact. */
   readonly saveFailed?: boolean;
 };
@@ -60,8 +65,14 @@ export function AgregadoEditorForm({
   catalogHardware,
   catalogInput,
   resolveImageUrl,
+  optionGroups,
   saveFailed = false,
 }: AgregadoEditorFormProps): ReactNode {
+
+  const hardwareRoles = useMemo(
+    () => (optionGroups ? optionGroupsForHardware(optionGroups) : []),
+    [optionGroups],
+  );
 
   const addComponentInstance = () => {
     const first = catalogComponents[0];
@@ -95,7 +106,9 @@ export function AgregadoEditorForm({
         {
           id: `hl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
           quantity: 1,
-          optionRole: 'HERRAJE',
+          // S4 #1009: default to the catalog's first hardware role when the
+          // groups are known — never a hardcoded role the catalog may not have.
+          optionRole: hardwareRoles[0]?.code ?? 'HERRAJE',
           hardwareId: first?.id,
         },
       ],
@@ -390,16 +403,46 @@ export function AgregadoEditorForm({
                         </div>
                         <div className="catalog-form__field">
                           <label className="catalog-form__label">Rol de opción</label>
-                          <input
-                            type="text"
-                            className="catalog-form__input"
-                            value={hw.optionRole}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                              updateHardwareLine(idx, { optionRole: e.target.value })
-                            }
-                            placeholder="BISAGRA / CORREDERA / JALADERA"
-                            data-testid={`agregado-hw-${idx}-role`}
-                          />
+                          {hardwareRoles.length > 0 ? (
+                            /* S4 #1009: role is a resolution key for pricing
+                             * and drilling — pick from the catalog's hardware
+                             * option groups instead of free text. A saved value
+                             * outside the catalog stays visible, never
+                             * rewritten. */
+                            <select
+                              className="catalog-form__select"
+                              value={hw.optionRole}
+                              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                                updateHardwareLine(idx, { optionRole: e.target.value })
+                              }
+                              data-testid={`agregado-hw-${idx}-role`}
+                            >
+                              {!hw.optionRole ? (
+                                <option value="">(sin rol)</option>
+                              ) : null}
+                              {!hardwareRoles.some((g) => g.code === hw.optionRole) ? (
+                                <option value={hw.optionRole}>
+                                  {hw.optionRole} (guardado)
+                                </option>
+                              ) : null}
+                              {hardwareRoles.map((g) => (
+                                <option key={g.id} value={g.code}>
+                                  {g.code} — {g.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              className="catalog-form__input"
+                              value={hw.optionRole}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                updateHardwareLine(idx, { optionRole: e.target.value })
+                              }
+                              placeholder="BISAGRA / CORREDERA / JALADERA"
+                              data-testid={`agregado-hw-${idx}-role`}
+                            />
+                          )}
                         </div>
                         <div className="catalog-form__field catalog-form__field--narrow">
                           <label className="catalog-form__label">Cantidad</label>
