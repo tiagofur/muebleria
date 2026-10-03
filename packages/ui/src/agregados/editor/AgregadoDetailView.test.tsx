@@ -3,6 +3,7 @@
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Agregado, Component, Hardware } from '@granete/domain';
 import { AgregadoDetailView } from './AgregadoDetailView';
@@ -220,6 +221,49 @@ describe('AgregadoDetailView', () => {
     expect(btn).toBeTruthy();
     fireEvent.click(btn);
     expect(handleView3D).toHaveBeenCalledWith(mockAgregado);
+  });
+
+  // S1 #1009: Eliminar vive detrás de «Más ▾» (patrón F155 de Muebles), no
+  // como botón destructivo siempre visible en el chrome.
+  it('keeps Eliminar behind the Más overflow menu, never as a direct button', async () => {
+    const user = userEvent.setup();
+    const handleDelete = vi.fn();
+    render(
+      <AgregadoDetailView
+        agregado={mockAgregado}
+        catalogComponents={mockCatalogComponents}
+        catalogHardware={mockCatalogHardware}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={handleDelete}
+        canMutate={true}
+      />,
+    );
+
+    // No direct destructive button in the chrome.
+    expect(screen.queryByTestId('agregado-detail-delete')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Eliminar$/i })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    const deleteItem = screen.getByRole('menuitem', { name: /Eliminar/i });
+    await user.click(deleteItem);
+    expect(handleDelete).toHaveBeenCalledWith('agr-1');
+  });
+
+  it('hides the Más overflow when canMutate is false', () => {
+    render(
+      <AgregadoDetailView
+        agregado={mockAgregado}
+        catalogComponents={mockCatalogComponents}
+        catalogHardware={mockCatalogHardware}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        canMutate={false}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /^Más$/i })).toBeNull();
   });
 });
 
