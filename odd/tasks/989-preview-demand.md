@@ -72,6 +72,34 @@
   identidad sin demanda toEqual; fail-closed ghost/qty-0). Domain suite
   125/125 archivos, 1765 tests PASS; typecheck root PASS.
 
+## Unidad 2 (COMMITTED 1ca1e3b9 — hook + threading, sin caller todavía)
+
+- `ResolvedMachiningV1` gana `hardwareProfileDemand?` tipada (el validador ya
+  la exigía). `apps/web/src/derivations/useProjectProfileDemand.ts`: hook con
+  transporte inyectado (resolve + getCatalogRevision), skip contract espejo de
+  Go, extracción fail-closed, status loading/ready/unavailable/error.
+  `computeSelectedProjectBreakdown` acepta la matriz (3er parámetro);
+  `QuoteDerivationsDeps.profileDemand` opcional + `projectDemandStatus`
+  expuesto. Tests: unit (skip contract, extracción, fail-closed) + suite web
+  570/570 + typecheck PASS.
+
+## Unidad 3 — RESTANTE (plan listo)
+
+1. ShellView/AppContent: instanciar `useProjectProfileDemand` (GraneteApiClient
+   memo pattern de ShellView:975; enabled = session auth + authToken; project =
+   selectedProject; catalog) y pasar `profileDemand` a useQuoteDerivations
+   (AppContent.tsx:1520).
+2. UI honesta: el badge de demanda va en ProjectTotalsAside (fila Herrajes,
+   línea ~200 del camino live; el camino quoteAuthority congelado YA es verdad
+   del snapshot). Threading vía useProjectDetail context (ProjectDetailView*
+   en packages/ui/projects) — 'loading' ⇒ indicador junto a Herrajes (nunca $0
+   silencioso), 'error' ⇒ estado de error, 'unavailable' ⇒ sin cambio.
+3. Browser spec del gate: diseño con joinery gobernado → preview ≡ cotización.
+4. HUD plugin: evidence de lectura (granete-commercial-projection.js ←
+   proyección servida con demanda desde el merge de la demanda comercial).
+5. Absorber sugerencias review #987 si tocan estimado: test HTTP
+   estimado-con-demanda.
+
 ## Unidad 2 — plan listo-para-ejecutar (web)
 
 Hechos: transporte `api.resolveFurnitureAuthoring(token, request, signal)` y
