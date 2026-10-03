@@ -52,6 +52,77 @@ export interface MachineArtifactBundle {
   readonly manifestJson: string;
 }
 
+interface BundleFromBytesRequest {
+  readonly jobId: string;
+  readonly artifactId: string;
+  readonly provenance: ArtifactManifest['provenance'];
+  readonly profile: OutputCompatibilityProfile;
+  readonly adapter: {
+    readonly postprocessorAdapterId: string;
+    readonly adapterVersion: string;
+    readonly implementationDigest: string;
+  };
+  readonly kind: ArtifactKind;
+  readonly schemaVersion: string;
+  readonly fileName: string;
+  readonly bytes: Uint8Array;
+  readonly machineProfile?: {
+    readonly ref: MachineProfileRef;
+    readonly supported: readonly MachineCapability[];
+  };
+  readonly delivery?: ArtifactManifest['delivery'];
+}
+
+async function buildBundleFromBytes(request: BundleFromBytesRequest): Promise<MachineArtifactBundle> {
+  const sha256 = await sha256Hex(request.bytes);
+  const artifact: MachineArtifact = {
+    artifactId: request.artifactId,
+    kind: request.kind,
+    schemaVersion: request.schemaVersion,
+    fileName: request.fileName,
+    bytes: request.bytes,
+    sha256,
+  };
+  const missingProvenance = OPTIONAL_PROVENANCE_FIELDS.filter(
+    (field) => request.provenance[field] === undefined,
+  );
+  const manifest: ArtifactManifest = {
+    manifestSchemaVersion: 'granete.machine-artifact-manifest.v2',
+    artifactSetId: request.artifactId,
+    jobId: request.jobId,
+    provenance: request.provenance,
+    missingProvenance,
+    machineProfile: request.machineProfile?.ref,
+    machineProfileSupportedCapabilities: request.machineProfile?.supported ?? [],
+    outputCompatibilityProfile: request.profile.ref,
+    outputCompatibilityProfileDigest: request.profile.digest,
+    postprocessorAdapter: {
+      postprocessorAdapterId: request.adapter.postprocessorAdapterId,
+      adapterVersion: request.adapter.adapterVersion,
+      implementationDigest: request.adapter.implementationDigest,
+    },
+    compatibilityEvidence: { claim: 'notClaimed' },
+    artifacts: [
+      {
+        artifactId: request.artifactId,
+        kind: request.kind,
+        schemaVersion: request.schemaVersion,
+        fileName: request.fileName,
+        sha256,
+      },
+    ],
+    delivery: request.delivery ?? { mode: 'unified' },
+    createdAt: request.provenance.generatedAt,
+    validationStatus: request.profile.supportStatus,
+    nonProductionValidationArtifact: true,
+  };
+  return {
+    artifact,
+    manifest,
+    manifestJson: `${JSON.stringify(manifest, null, 2)}\n`,
+  };
+}
+
 export async function generateMachineArtifact<Job>(
   request: MachineArtifactRequest<Job>,
 ): Promise<MachineArtifactBundle> {
@@ -63,58 +134,36 @@ export async function generateMachineArtifact<Job>(
   }
 
   const bytes = adapter.serialize(job, profile);
-  const sha256 = await sha256Hex(bytes);
-
-  const artifactId = `${job.jobId}--${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`;
-  const artifact: MachineArtifact = {
-    artifactId,
-    kind: request.kind,
-    schemaVersion: request.schemaVersion,
-    fileName: request.fileName,
-    bytes,
-    sha256,
-  };
-
-  const missingProvenance = OPTIONAL_PROVENANCE_FIELDS.filter(
-    (field) => job.provenance[field] === undefined,
-  );
-
-  const manifest: ArtifactManifest = {
-    manifestSchemaVersion: 'granete.machine-artifact-manifest.v2',
-    artifactSetId: artifactId,
+  return buildBundleFromBytes({
     jobId: job.jobId,
+    artifactId: `${job.jobId}--${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`,
     provenance: job.provenance,
-    missingProvenance,
-    machineProfile: request.machineProfile?.ref,
-    machineProfileSupportedCapabilities: request.machineProfile?.supported ?? [],
-    outputCompatibilityProfile: profile.ref,
-    outputCompatibilityProfileDigest: profile.digest,
-    postprocessorAdapter: {
+    profile,
+    adapter: {
       postprocessorAdapterId: adapter.postprocessorAdapterId,
       adapterVersion: adapter.adapterVersion,
       implementationDigest: adapter.implementationDigest,
     },
-    compatibilityEvidence: { claim: 'notClaimed' },
-    artifacts: [
-      {
-        artifactId,
-        kind: request.kind,
-        schemaVersion: request.schemaVersion,
-        fileName: request.fileName,
-        sha256,
-      },
-    ],
-    delivery: request.delivery ?? { mode: 'unified' },
-    createdAt: job.provenance.generatedAt,
-    validationStatus: profile.supportStatus,
-    nonProductionValidationArtifact: true,
-  };
+    kind: request.kind,
+    schemaVersion: request.schemaVersion,
+    fileName: request.fileName,
+    bytes,
+    machineProfile: request.machineProfile,
+    delivery: request.delivery,
+  });
+}
 
-  return {
-    artifact,
-    manifest,
-    manifestJson: `${JSON.stringify(manifest, null, 2)}\n`,
-  };
+/**
+ * #1005 K3 — bundle assembly from ALREADY-SERIALIZED bytes for per-piece
+ * formats (KDTPanelFormat): the adapter's per-piece path (serializePerPiece)
+ * owns gating and serialization for the whole job; this builder only wraps
+ * each program into its artifact + manifest. Never a bypass of the gates —
+ * the caller must have run them (generateSelectedMachiningOutput does).
+ */
+export async function generateMachineArtifactFromBytes(
+  request: BundleFromBytesRequest,
+): Promise<MachineArtifactBundle> {
+  return buildBundleFromBytes(request);
 }
 
 /** Deterministic manifest comparison key (for tests and evidence packs). */

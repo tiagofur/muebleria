@@ -551,6 +551,9 @@ export function resolvePartDrilling(
     partName,
     lengthMm,
     widthMm,
+    // #1005 K3 — the machining frame (KDT) needs the board thickness; the
+    // resolution always had it in scope, it just never carried it.
+    thicknessMm,
     materialName,
     holes: finalHoles,
     issues,

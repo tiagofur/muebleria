@@ -14,6 +14,9 @@
 
 export type KdtAlignmentEdge = 'x0' | 'yWidth';
 
+/** Artifact manifest schemaVersion for KDTPanelFormat programs. */
+export const KDT_PANEL_FORMAT_SCHEMA_VERSION = 'kdtpanelformat-v1';
+
 export interface KdtPanelIdentity {
   /** PanelLength: dimension along the machine X axis (mm). */
   readonly lengthMm: number;

@@ -13,7 +13,8 @@ import {
   type MachineOutputSelection,
   type ManufacturingLabelProjection,
   ManufacturingOperation,
-  OutputCompatibilityProfile,
+  type OutputCompatibilityProfile,
+  type ResolvedMachiningJob,
   ResolvedManufacturingOutputTarget,
   ValidationError,
 } from '@granete/domain';
@@ -31,7 +32,8 @@ import {
   type ClientMachineProfileData,
 } from './profiles';
 import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
-import { KDT_POSTPROCESSOR_ADAPTER } from './kdtAdapter';
+import { KDT_POSTPROCESSOR_ADAPTER, serializePerPiece } from './kdtAdapter';
+import { KDT_PANEL_FORMAT_SCHEMA_VERSION } from './kdt/document';
 import { SAW_POSTPROCESSOR_ADAPTER } from './sawAdapter';
 import { WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
 import { ptxPartLabelsFromManufacturingProjection } from '../ptx/partLabels';
@@ -185,8 +187,13 @@ export function resolveManufacturingOutputTarget(
   // Machining keeps its existing implementation-level blocker without
   // pretending this says anything about a cutting plan. Cutting readiness is
   // exclusively evaluated by evaluateSelectedCuttingOutputReadiness below.
+  // #1005 K3 — families whose serializer is per-piece capable (kdt today)
+  // have the PROGRAM_GRANULARITY_UNSUPPORTED code filtered from the
+  // synthetic probe: the settings card reports SERIALIZER readiness (the
+  // multi-program generation flow exists since K3), not the empty probe
+  // job's shape. Data/evidence blockers still surface.
   if (operation === 'machining' && adapterExact && reasons.length === 0) {
-    reasons.push(...adapterExact.canSerialize({
+    const probeReasons = adapterExact.canSerialize({
       jobId: 'settings-readiness',
       provenance: { projectId: 'settings-readiness', generatedAt: '1970-01-01T00:00:00.000Z' },
       drilling: {
@@ -198,7 +205,13 @@ export function resolveManufacturingOutputTarget(
         totalHolesCount: 0,
         patterns: [],
       },
-    } as never, profile!).reasons);
+    } as never, profile!).reasons;
+    const perPieceCapable = profile!.formatFamily === 'kdt';
+    reasons.push(
+      ...(perPieceCapable
+        ? probeReasons.filter((reason) => reason.code !== 'PROGRAM_GRANULARITY_UNSUPPORTED')
+        : probeReasons),
+    );
   }
 
   return {
@@ -252,7 +265,7 @@ export function evaluateSelectedCuttingOutputReadiness(
   return { ...resolved, readiness };
 }
 
-import { generateMachineArtifact, type MachineArtifactBundle } from './machineArtifacts';
+import { generateMachineArtifact, generateMachineArtifactFromBytes, type MachineArtifactBundle } from './machineArtifacts';
 import {
   cutFileToken,
   cutPlanForMaterialGroup,
@@ -524,3 +537,153 @@ export async function generateSelectedCuttingOutput(
 }
 
 export { machineOutputBlockerMessageEs } from '@granete/domain';
+/**
+ * #1005 K3 — deterministic industrial file name for one KDT program: short
+ * ASCII `K<hex12>.xml`, hash-bound to the exact job + piece + machining
+ * face, so a regenerated job never keeps a stale file and two pieces never
+ * collide. The descriptive mapping (pieceCode → file) lives in the bundle
+ * manifests — the industrial file name is a lane label, not the label of
+ * the work (same doctrine as the CADmatic 4 lanes). Machine-side filename
+ * constraints stay pendingEvidence; the conservative short form is the
+ * safest candidate until #1005 K4 field evidence refines them.
+ */
+export async function kdtArtifactFileName(
+  jobId: string,
+  pieceCode: string,
+  machiningFace: 'front' | 'back',
+): Promise<string> {
+  const token = (
+    await sha256Hex(`granete:kdt-artifact:${jobId}:${pieceCode}:${machiningFace}`)
+  )
+    .slice(0, 12)
+    .toUpperCase();
+  const extension = 'xml';
+  return `K${token}.${extension}`;
+}
+
+/**
+ * Normal-production machining generation through the EXACT selected target
+ * (#591), one artifact bundle PER PIECE/machining-face (KDTPanelFormat is
+ * one file per panel). Fail-closed doctrine:
+ * - only the per-piece serializer-capable family generates today (kdt);
+ *   other families block with SERIALIZER_NOT_IMPLEMENTED, never a fallback;
+ * - the job-level blockers other than the expected multi-program
+ *   granularity (evidence, job data, unrepresentable operations) throw the
+ *   typed reasons before any file exists;
+ * - every bundle carries its own manifest with the caller's provenance
+ *   (frozen release pins from #995), the exact profile/adapter revisions
+ *   and the per-piece delivery.
+ */
+export async function generateSelectedMachiningOutput(
+  job: ResolvedMachiningJob,
+  selection: MachineOutputSelection,
+): Promise<readonly MachineArtifactBundle[]> {
+  const catalogResolved = resolveManufacturingOutputTarget(selection, 'machining');
+  if (catalogResolved.status !== 'CONFIGURED') {
+    throw new ValidationError('no hay salida de máquina configurada para mecanizado', {
+      status: 'NO_OUTPUT_CONFIGURED',
+    });
+  }
+  const profile = exactProfileForSelection(selection);
+  const adapter = profile ? adapterForFamily(profile.formatFamily) : undefined;
+  if (!profile || !adapter) {
+    throw new ValidationError(
+      machineOutputBlockerMessageEs(
+        catalogResolved.readiness.reasons.length > 0
+          ? catalogResolved.readiness.reasons
+          : [{ code: 'FORMAT_FAMILY_MISMATCH', detail: 'salida de mecanizado no resoluble' }],
+      ),
+      { status: 'BLOCKED', reasons: catalogResolved.readiness.reasons },
+    );
+  }
+  if (adapter !== KDT_POSTPROCESSOR_ADAPTER) {
+    // Only the per-piece serializer-capable family generates today; this is
+    // a capability boundary, never a fallback to another output.
+    throw new ValidationError(
+      machineOutputBlockerMessageEs([
+        {
+          code: 'SERIALIZER_NOT_IMPLEMENTED',
+          detail: `la familia ${profile.formatFamily} todavía no tiene serializer implementado; sólo KDT genera programas hoy (#1005 K3)`,
+        },
+      ]),
+      {
+        status: 'BLOCKED',
+        reasons: [
+          {
+            code: 'SERIALIZER_NOT_IMPLEMENTED',
+            detail: `family ${profile.formatFamily} has no implemented serializer`,
+          },
+        ],
+      },
+    );
+  }
+  const readiness = adapter.canSerialize(job, profile);
+  const fatal = readiness.reasons.filter(
+    (reason) => reason.code !== 'PROGRAM_GRANULARITY_UNSUPPORTED',
+  );
+  if (fatal.length > 0) {
+    throw new ValidationError(machineOutputBlockerMessageEs(fatal), {
+      status: 'BLOCKED',
+      reasons: fatal,
+    });
+  }
+
+  const pieces = serializePerPiece(job, profile);
+  if (pieces.length === 0) {
+    throw new ValidationError(
+      machineOutputBlockerMessageEs([
+        {
+          code: 'JOB_DATA_INVALID',
+          detail: 'el trabajo no produce programas KDT (ninguna pieza con operaciones)',
+        },
+      ]),
+      {
+        status: 'BLOCKED',
+        reasons: [
+          {
+            code: 'JOB_DATA_INVALID',
+            detail: 'the job yields no KDT programs (no piece carries operations)',
+          },
+        ],
+      },
+    );
+  }
+
+  const machineRef = KNOWN_MACHINE_PROFILES.find(
+    (machine) =>
+      machine.ref.machineProfileId === selection.machineProfileId &&
+      machine.ref.machineProfileRevisionId === selection.machineProfileRevisionId,
+  )!;
+  const bundles: MachineArtifactBundle[] = [];
+  for (const piece of pieces) {
+    const fileName = await kdtArtifactFileName(job.jobId, piece.pieceCode, piece.machiningFace);
+    bundles.push(
+      // Bytes already serialized by serializePerPiece (which owns gating);
+      // the builder only wraps each program into artifact + manifest.
+      await generateMachineArtifactFromBytes({
+        jobId: job.jobId,
+        artifactId: `${job.jobId}--${piece.pieceCode}--${piece.machiningFace}--${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`,
+        provenance: job.provenance,
+        profile,
+        adapter: {
+          postprocessorAdapterId: adapter.postprocessorAdapterId,
+          adapterVersion: adapter.adapterVersion,
+          implementationDigest: adapter.implementationDigest,
+        },
+        kind: 'kdt',
+        schemaVersion: KDT_PANEL_FORMAT_SCHEMA_VERSION,
+        fileName,
+        bytes: piece.bytes,
+        delivery: {
+          mode: 'by-piece',
+          piece: { code: piece.pieceCode, machiningFace: piece.machiningFace },
+        },
+        machineProfile: {
+          ref: machineRef.ref,
+          supported: machineRef.supported,
+        },
+      }),
+    );
+  }
+  return bundles;
+}

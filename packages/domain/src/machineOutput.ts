@@ -281,8 +281,10 @@ export interface ArtifactManifest {
     readonly sha256: string;
   }[];
   readonly delivery: {
-    readonly mode: 'unified' | 'by-material';
+    readonly mode: 'unified' | 'by-material' | 'by-piece';
     readonly material?: { readonly code: string; readonly name: string };
+    /** #1005 K3 — present when mode is 'by-piece' (one file per panel/face). */
+    readonly piece?: { readonly code: string; readonly machiningFace: 'front' | 'back' };
   };
   readonly createdAt: string;
   readonly validationStatus: MachineOutputSupportStatus;
