@@ -413,3 +413,16 @@ run twice against ONE container trips
 against the shared connect-store DB (its own leftover version conflicts) —
 pre-existing test-isolation debt, unrelated to this slice; CI shards use
 fresh containers and are green.
+
+**Correction round (2026-10-03, one consolidated)**: CI failed 4× with
+`If-Match inválido` on every overlay save while the identical stage passed
+locally twice. The rejection logging (RequireIfMatch warns the received
+value) + the gate's new backend.log tail on failure caught it from CI alone:
+`mapOverlayDetailToOpenAPI` had left `Version` unset — a batched-edit
+commit dropped that hunk — so every overlay detail serialized the Go zero
+value (`version: 0`); clients echoed it as the If-Match token `"v0"`, which
+the server (correctly) rejects. The create log (DB row version 1) vs the
+client's `v0` 35ms later pinned it. Fixed in d12ba50e; CI green except the
+tracked #972 UI gap. Left in place as permanent aids: the If-Match
+rejection warning and the gate dumping the backend.log tail (4000 lines) on
+failure.
