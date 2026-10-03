@@ -5,7 +5,8 @@
 
 import type { ReactNode } from 'react';
 import type { Agregado, Component, Hardware, OptionGroup } from '@granete/domain';
-import { Box, ChevronLeft, Layers, Pencil, Settings2, Trash2 } from 'lucide-react';
+import { Box, ChevronLeft, Layers, MoreHorizontal, Pencil, Settings2, Trash2 } from 'lucide-react';
+import { DropdownMenu } from '../../common/DropdownMenu';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { optionRoleLabel } from '../../optionGroups/optionRoleLabel';
 
@@ -126,15 +127,24 @@ export function AgregadoDetailView({
               Editar
             </button>
             {onDelete ? (
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={() => onDelete(a.id)}
-                data-testid="agregado-detail-delete"
-              >
-                <Trash2 size={16} strokeWidth={1.5} aria-hidden />
-                Eliminar
-              </button>
+              <DropdownMenu
+                ariaLabel="Más acciones del agregado"
+                triggerLabel="Más"
+                triggerIcon={<MoreHorizontal size={16} strokeWidth={1.5} />}
+                sections={[
+                  {
+                    id: 'main',
+                    items: [
+                      {
+                        id: 'delete',
+                        label: 'Eliminar',
+                        icon: <Trash2 size={16} strokeWidth={1.5} aria-hidden />,
+                        onSelect: () => onDelete(a.id),
+                      },
+                    ],
+                  },
+                ]}
+              />
             ) : null}
           </>
         ) : null}

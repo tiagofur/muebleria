@@ -23,6 +23,7 @@ import type {
 } from '@granete/domain';
 import {
   EntityEditorLayout,
+  ConfirmDialog,
   draftSessionKey,
   seedEditorDraftFromBaseline,
   useDebouncedValue,
@@ -206,6 +207,12 @@ export function AgregadosScreen({
   };
 
   const [view3dItem, setView3dItem] = useState<Agregado | null>(null);
+  // S1 #1009: delete is destructive on a shared library asset — it only runs
+  // after the ConfirmDialog; the detail view just requests it.
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const deleteTarget = confirmDeleteId
+    ? (agregados.find((a) => a.id === confirmDeleteId) ?? null)
+    : null;
 
   const inlineEditMode = modalOpen;
 
@@ -274,7 +281,7 @@ export function AgregadosScreen({
                   onBack={() => setSelectedId(null)}
                   onEdit={handleEdit}
                   onView3D={catalogInput ? (item) => setView3dItem(item) : undefined}
-                  onDelete={canMutate && onDelete ? onDelete : undefined}
+                  onDelete={canMutate && onDelete ? (id) => setConfirmDeleteId(id) : undefined}
                   canMutate={canMutate}
                   optionGroups={optionGroups}
                 />
@@ -308,6 +315,23 @@ export function AgregadosScreen({
           resolveMediaUrl={resolveImageUrl}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={deleteTarget != null}
+        onClose={() => setConfirmDeleteId(null)}
+        title="Eliminar agregado"
+        message={
+          deleteTarget
+            ? `¿Seguro que querés eliminar "${deleteTarget.code} — ${deleteTarget.name}"? Los muebles que lo usen dejarán de resolverlo. Esta acción no se puede deshacer.`
+            : ''
+        }
+        confirmLabel="Eliminar"
+        dataTestId="agregado-delete-confirm"
+        onConfirm={() => {
+          if (confirmDeleteId) onDelete?.(confirmDeleteId);
+          if (confirmDeleteId === expandedId) setSelectedId(null);
+        }}
+      />
     </>
   );
 }
