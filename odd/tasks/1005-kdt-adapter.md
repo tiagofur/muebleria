@@ -3,10 +3,10 @@
 - **Issue**: tiagofur/muebleria#1005 (`status:approved`, autorización del owner
   2026-10-03 «empezamos con la KDT», en sesión; issue fileada el mismo día).
 - **Lane**: Delegated Direct (multi-slice K1→K4, riesgo de taller). Un escritor.
-- **Base**: K1 mergeado como d32b86a3 (PR #1006, 2026-10-03). Rama K2
-  `feat/1005-kdt-serializer-k2` desde d32b86a3, worktree
-  `../muebles-worktrees/1005-kdt-registration`.
-- **Estado**: K1 MERGEADO. K2 IMPLEMENTED_PENDING_REVIEW (K3/K4 pendientes).
+- **Base**: K1 MERGEADO d32b86a3 (PR #1006). K2 MERGEADO 09a0332a (PR
+  #1007, 2026-10-03). Rama K3 `feat/1005-kdt-generation-k3` desde 09a0332a,
+  mismo worktree.
+- **Estado**: K1/K2 MERGEADOS. K3 IMPLEMENTED_PENDING_REVIEW (K4 pendiente).
 
 ## Hechos verificados (2026-10-03, base e997d68e)
 
@@ -130,13 +130,43 @@
   sin superficie (export-layer TS + catálogo; el flujo E2E de generación
   multi-programa es K3).
 
+## K3 — Integración end-to-end (implementado, pendiente de review)
+
+- **Generación por pieza** (excel): `generateSelectedMachiningOutput`
+  resuelve la tupla exacta y produce UN bundle por pieza/cara —
+  `serializePerPiece` es dueño de gates y serialización;
+  `generateMachineArtifactFromBytes` arma artifact+manifest por programa
+  (delivery `by-piece` nueva con code/face, nombres industriales
+  `K<hex12>.xml` deterministas, provenance congelado del caller). Sólo la
+  familia per-piece-capable genera; otras → `SERIALIZER_NOT_IMPLEMENTED`
+  sin fallback. Probe de settings filtra `PROGRAM_GRANULARITY_UNSUPPORTED`
+  para familias per-piece → la tarjeta KDT lee **Configurada**.
+- **Web fail-closed**: `handleExportMachiningKdt` exige el snapshot
+  congelado de una liberación canónica (sin authority, fetch failure o join
+  mismatch ⇒ error duro, cero archivos — nunca heurísticas F074 a una
+  máquina). Estado de selección de mecanizado = gemelo del de corte, sin
+  ruta legacy. `composeFrozenDrilling` ahora lleva thicknessMm (el resolver
+  lo tenía en scope y no lo emitía).
+- **UI**: tarjeta "Programas KDT (Flexdrill 1200)" + botón
+  `prod-opt-export-kdt` en Optimización (mismo contexto de liberación que
+  PTX), deshabilitado hasta target listo; descarga = un ZIP determinista
+  con XML + manifest por pieza.
+- **Browser proof**: `machine-output-selection.spec.ts` — la selección KDT
+  en settings queda guardada y lee Configurada sin blocker (server truth +
+  reload). El E2E completo del botón requiere la siembra de liberación con
+  perforaciones (escala de engineering-cutting-demand) — queda para el
+  smoke de campo K4, que es la validación definitiva.
+- Verificación: typecheck 7/7 · excel 682 · web 581 · Go domain ok ·
+  openapi sin drift.
+
 ## Restante
 
-- **K3**: integración end-to-end — flujo de generación multi-programa
-  (pack por pieza + manifest con artifact por archivo + nombres
-  deterministas + descarga/UI), browser proof.
 - **K4**: readback en máquina real client-b + sign-off (coordinación owner,
-  evidence pack estilo #348). `NOT_TESTED` hasta entonces.
+  evidence pack estilo #348). `NOT_TESTED` hasta entonces. Incluye decidir
+  filenameConstraints con la instalación (los nombres K<hex12> son el
+  candidato conservador).
+- Browser E2E completo del botón (liberación con perforaciones sembradas) —
+  opcional antes de K4, obligatorio para claim de compatibilidad.
 - Follow-up doc: corregir §6.2 del spec (#903) con el contraejemplo Z1.
 
 ## Fuera de alcance
