@@ -265,6 +265,7 @@ module Granete
         def register_motion_callbacks(dialog)
           dialog.add_action_callback('toggle_door_motion') { |_c, p| handle_toggle_door_motion(dialog, p) }
           dialog.add_action_callback('close_all_doors') { handle_close_all_doors(dialog) }
+          dialog.add_action_callback('select_hardware') { |_c, p| handle_select_hardware(dialog, p) }
         end
 
         # The per-furniture update callbacks: the single edit and the #471

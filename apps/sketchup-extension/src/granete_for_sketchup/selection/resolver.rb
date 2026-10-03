@@ -97,13 +97,12 @@ module Granete
         end
 
         # #529: door actors discovered from managed metadata ride the payload
-        # so the Inspector card can offer Abrir/Cerrar per detected door even
-        # when the definition has no doorSwing parameter.
+        # so the Inspector card can offer Abrir/Cerrar per detected door plus
+        # the per-door hardware list (hinge/handle classified via catalog).
         def publish_door_actors(context, entity)
-          scanned = DoorActors.scan(entity, @metadata_store)
-          context.door_actors = scanned.doors.each_with_index.map do |_door, slot_index|
-            { 'slotIndex' => slot_index }
-          end
+          catalog_lookup = @catalog_provider ? ->(hardware_id) { @catalog_provider.find_hardware(hardware_id) } : nil
+          scanned = DoorActors.scan(entity, @metadata_store, catalog_hardware: catalog_lookup)
+          context.door_actors = scanned.door_payloads
         rescue StandardError
           # Discovery is presentation affordance only: a scan failure must
           # never take the whole SelectionContext down.

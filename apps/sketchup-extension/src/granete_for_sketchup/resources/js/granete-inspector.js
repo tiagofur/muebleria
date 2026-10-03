@@ -385,25 +385,88 @@
   // #529: door actors detectados por metadata gestionada en el mueble
   // colocado (el resolver publica doorActors). Sin doorSwing en la
   // definición el lado no está registrado: una puerta abre por izquierda,
-  // dos puertas abren en par (slot 0 izq, slot 1 der). Los herrajes aún no
-  // viajan agrupados por puerta en este canal: el cinemático los mueve por
-  // su host binding, la card los lista como no agrupados.
+  // dos puertas abren en par (slot 0 izq, slot 1 der). Los herrajes
+  // montados viajan clasificados por categoría de catálogo (hinge/handle,
+  // resto 'other') con su identidad gestionada para "Ir al herraje".
   function buildActorDoorAccessories(actors) {
     var doors = [];
     for (var i = 0; i < actors.length; i++) {
-      var slot = actors[i] && actors[i].slotIndex !== undefined ? actors[i].slotIndex : i;
+      var a = actors[i] || {};
+      var slot = a.slotIndex !== undefined ? a.slotIndex : i;
       var side = actors.length === 1 ? "left" : (slot === 0 ? "left" : "right");
+      var hinges = [], handles = [], others = [];
+      var mounted = Array.isArray(a.hardware) ? a.hardware : [];
+      for (var k = 0; k < mounted.length; k++) {
+        var entry = { hardwareId: mounted[k].id };
+        if (mounted[k].category === "hinge") {
+          entry.name = "Bisagra " + (hinges.length + 1);
+          hinges.push(entry);
+        } else if (mounted[k].category === "handle") {
+          entry.name = "Jaladera " + (handles.length + 1);
+          handles.push(entry);
+        } else {
+          entry.name = "Herraje " + (others.length + 1);
+          others.push(entry);
+        }
+      }
       doors.push({
         doorSlotIndex: slot,
         doorLabel: "Puerta " + (Number(slot) + 1) + (actors.length > 1 ? " · " + (side === "left" ? "Izquierda" : "Derecha") : ""),
         swingSide: side,
         hingeFace: side,
         handleFace: side === "left" ? "right" : "left",
-        hinges: [],
-        handles: []
+        hinges: hinges,
+        handles: handles,
+        others: others
       });
     }
     return doors;
+  }
+
+  // Fila de herraje montado detectado en el mueble (canal doorActors):
+  // identidad gestionada + navegación de viewport, sin hechos de colocación
+  // inventados (cara/offsets son del canal autoritativo del servidor).
+  function renderActorAccessoryRow(container, entry) {
+    var row = document.createElement("div");
+    row.className = "door-accessory-row";
+
+    var left = document.createElement("div");
+    left.className = "door-accessory-left";
+    var titleLine = document.createElement("div");
+    titleLine.className = "door-accessory-title-row";
+    var name = document.createElement("span");
+    name.className = "door-accessory-name";
+    name.textContent = entry.name;
+    titleLine.appendChild(name);
+    var badge = document.createElement("span");
+    badge.className = "status-badge neutral";
+    badge.style.marginLeft = "auto";
+    badge.style.fontSize = "var(--text-xs)";
+    badge.textContent = "Montado";
+    titleLine.appendChild(badge);
+    left.appendChild(titleLine);
+    row.appendChild(left);
+
+    var right = document.createElement("div");
+    right.className = "door-accessory-right";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-ghost btn-sm";
+    btn.textContent = "Ir al herraje";
+    btn.addEventListener("click", function () {
+      if (window.sketchup && typeof window.sketchup.select_hardware === "function") {
+        window.sketchup.select_hardware(JSON.stringify({
+          hardwareId: entry.hardwareId,
+          furnitureInstanceRef: selectedContext ? selectedContext.furnitureInstanceRef : null
+        }));
+      } else {
+        deps.showToast("info", "Navegación a herraje: bridge de SketchUp no disponible en este entorno.");
+      }
+    });
+    right.appendChild(btn);
+    row.appendChild(right);
+
+    container.appendChild(row);
   }
 
   function hardwareDisplayName(hw, fallbackIndex, role) {
@@ -631,10 +694,14 @@
 
       if (d.hinges && d.hinges.length) {
         for (var hi = 0; hi < d.hinges.length; hi++) {
-          var hAcc = d.hinges[hi];
-          renderAccessoryRow(group, hAcc, "hinge", hi,
-            (hAcc && (hAcc.placementKind || hAcc.kind)) || (hasExplicit ? "opening-derived" : "derived"),
-            d.doorSlotIndex !== undefined ? d.doorSlotIndex : i);
+          if (hasActors && !hasExplicit) {
+            renderActorAccessoryRow(group, d.hinges[hi]);
+          } else {
+            var hAcc = d.hinges[hi];
+            renderAccessoryRow(group, hAcc, "hinge", hi,
+              (hAcc && (hAcc.placementKind || hAcc.kind)) || (hasExplicit ? "opening-derived" : "derived"),
+              d.doorSlotIndex !== undefined ? d.doorSlotIndex : i);
+          }
         }
       } else {
         var emptyH = document.createElement("div");
@@ -656,9 +723,14 @@
 
       if (d.handles && d.handles.length) {
         for (var jai = 0; jai < d.handles.length; jai++) {
-          renderAccessoryRow(group, d.handles[jai], "handle", jai,
-            (d.handles[jai] && (d.handles[jai].placementKind || d.handles[jai].kind)) || (hasExplicit ? "opening-derived" : "derived"),
-            d.doorSlotIndex !== undefined ? d.doorSlotIndex : i);
+          if (hasActors && !hasExplicit) {
+            renderActorAccessoryRow(group, d.handles[jai]);
+          } else {
+            var jAcc = d.handles[jai];
+            renderAccessoryRow(group, jAcc, "handle", jai,
+              (jAcc && (jAcc.placementKind || jAcc.kind)) || (hasExplicit ? "opening-derived" : "derived"),
+              d.doorSlotIndex !== undefined ? d.doorSlotIndex : i);
+          }
         }
       } else {
         var emptyJ = document.createElement("div");
@@ -667,15 +739,23 @@
         group.appendChild(emptyJ);
       }
 
+      // #529 canal doorActors: herrajes montados no clasificables como
+      // bisagra o jaladera — solo se listan cuando existen.
+      if (hasActors && !hasExplicit && d.others && d.others.length) {
+        var othersSep = document.createElement("div");
+        othersSep.className = "door-accessory-sep";
+        group.appendChild(othersSep);
+        var othersLabel = document.createElement("div");
+        othersLabel.className = "door-accessory-section-label";
+        othersLabel.textContent = "Otros herrajes (" + d.others.length + ")";
+        group.appendChild(othersLabel);
+        for (var oi = 0; oi < d.others.length; oi++) {
+          renderActorAccessoryRow(group, d.others[oi]);
+        }
+      }
+
       doorCard.appendChild(group);
       inspectorOpeningAccessoriesContainer.appendChild(doorCard);
-    }
-
-    if (!hasExplicit) {
-      var foot = document.createElement("div");
-      foot.className = "subhead door-accessory-footer-note";
-      foot.textContent = "💡 Los diseños de bisagras y jaladeras se seleccionan desde la tarjeta \"Herraje\" en cada puerta o desde el catálogo de perfiles.";
-      inspectorOpeningAccessoriesContainer.appendChild(foot);
     }
   }
 

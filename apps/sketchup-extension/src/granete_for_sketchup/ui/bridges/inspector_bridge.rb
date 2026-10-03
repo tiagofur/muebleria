@@ -70,6 +70,40 @@ module Granete
           @logger.error('close_all_doors_failed', error: e)
         end
 
+        # #529 "Ir al herraje": selects the hardware INSTANCE inside the
+        # furniture by its managed identity (instanceRef /
+        # hardwarePlacementId). Selection is viewport view state — no
+        # operation, no metadata mutation.
+        def handle_select_hardware(_dialog, raw_payload = nil)
+          payload = parse_payload(raw_payload)
+          hardware_id = payload['hardwareId']
+          instance_ref = payload['furnitureInstanceRef'] || payload['instanceId']
+
+          model = active_model
+          target_furniture = (instance_ref && search_entities_for_instance(instance_ref)) ||
+                             model&.selection&.first
+
+          unless target_furniture && furniture_metadata?(model, target_furniture)
+            @logger.warn('select_hardware_no_furniture', instance_ref: instance_ref)
+            return
+          end
+
+          entity = Selection::DoorActors.find_hardware_entity(
+            target_furniture, @metadata_store_factory.call(model), hardware_id
+          )
+          unless entity
+            @logger.warn('select_hardware_not_found', hardware_id: hardware_id)
+            return
+          end
+
+          selection = model.selection
+          selection.clear
+          selection.add(entity)
+          @logger.info('select_hardware_executed', hardware_id: hardware_id)
+        rescue StandardError => e
+          @logger.error('select_hardware_failed', error: e)
+        end
+
         private
 
         def presentation_motion_adapter_for(furniture_entity, swing_side, open_angle_deg)
