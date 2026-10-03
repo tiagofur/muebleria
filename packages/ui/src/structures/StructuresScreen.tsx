@@ -426,7 +426,12 @@ export function StructuresScreen({
       entityTitle="estructura"
       createTitle="Nueva estructura"
       editTitle="Editar estructura"
-      draftCode={draft.code}
+      draftCode={editingId
+        ? (normalizedStructures.find((s) => s.id === editingId)?.code)
+        : undefined}
+      draftName={editingId
+        ? (normalizedStructures.find((s) => s.id === editingId)?.name)
+        : undefined}
       formId={formId}
       modalOpen={modalOpen}
       confirmDiscard={confirmDiscard}

@@ -35,6 +35,9 @@ export interface EntityEditorLayoutProps {
   readonly editTitle?: string;
   /** Code of the current draft for header display in edit mode */
   readonly draftCode?: string;
+  /** Saved item name for the inline editor header — stable identity while
+   * the user edits fields (#1009 S2). Editing only; ignored on create. */
+  readonly draftName?: string;
   /** Form element HTML id (used to associate modal footer submit button) */
   readonly formId?: string;
 
@@ -75,6 +78,7 @@ export function EntityEditorLayout({
   createTitle,
   editTitle,
   draftCode,
+  draftName,
   formId,
   modalOpen,
   confirmDiscard,
@@ -96,6 +100,10 @@ export function EntityEditorLayout({
   const editorModalTitle = editingId
     ? (editTitle ?? defaultEditTitle)
     : (createTitle ?? defaultCreateTitle);
+  // Inline editor header keeps the saved identity (code + name) so it does
+  // not flicker while the user edits those very fields (#1009 S2).
+  const editorPageTitle =
+    editingId && draftName ? `${editorModalTitle} — ${draftName}` : editorModalTitle;
 
   const discardModal = (
     <Modal
@@ -159,7 +167,7 @@ export function EntityEditorLayout({
     return (
       <section
         className="catalog-page entity-editor-page"
-        aria-label={editorModalTitle}
+        aria-label={editorPageTitle}
         data-testid={editorPageTestId}
       >
         <header className="workspace-chrome">
@@ -177,7 +185,7 @@ export function EntityEditorLayout({
               <span className="workspace-chrome__code">
                 {editingId ? draftCode || '—' : 'NUEVO'}
               </span>
-              <p className="workspace-chrome__title">{editorModalTitle}</p>
+              <p className="workspace-chrome__title">{editorPageTitle}</p>
             </div>
           </div>
           {headerActions && (

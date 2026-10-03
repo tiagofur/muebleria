@@ -235,7 +235,12 @@ export function ModulesScreen({
       modalSize="lg"
       createTitle="Nuevo mueble"
       editTitle="Editar mueble"
-      draftCode={state.draft.code}
+      draftCode={state.editingId
+        ? (modules.find((m) => m.id === state.editingId)?.code)
+        : undefined}
+      draftName={state.editingId
+        ? (modules.find((m) => m.id === state.editingId)?.name)
+        : undefined}
       formId={formId}
       modalOpen={state.modalOpen}
       confirmDiscard={state.confirmDiscard}
