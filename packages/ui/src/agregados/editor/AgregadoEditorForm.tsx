@@ -38,6 +38,8 @@ export type AgregadoEditorFormProps = {
    * back to a single-column layout with no preview. */
   readonly catalogInput?: Module3DCatalogInput;
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
+  /** #1009 S3: the last save was rejected by the server; the draft is intact. */
+  readonly saveFailed?: boolean;
 };
 
 const TABS: { id: AgregadoEditorTab; label: string }[] = [
@@ -58,6 +60,7 @@ export function AgregadoEditorForm({
   catalogHardware,
   catalogInput,
   resolveImageUrl,
+  saveFailed = false,
 }: AgregadoEditorFormProps): ReactNode {
 
   const addComponentInstance = () => {
@@ -142,6 +145,19 @@ export function AgregadoEditorForm({
         <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {saveFailed ? (
+        <div
+          className="catalog-form__error agregado-editor__save-error"
+          role="alert"
+          data-testid="agregado-editor-save-error"
+        >
+          <p>
+            No se pudo guardar en el servidor. Tus cambios siguen acá —
+            revisá tu conexión e intentá de nuevo.
+          </p>
+        </div>
       ) : null}
 
       {/* Tabs */}
