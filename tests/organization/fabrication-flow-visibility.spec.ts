@@ -25,6 +25,7 @@ const CUSTOMER_ID = 'ccc76868-0000-4000-8000-0000000007e3';
 const FLOW_MAT = '7d0d0000-0000-4000-8000-0000000007e4';
 const FLOW_PANEL = '7e0e0000-0000-4000-8000-0000000007e5';
 const FLOW_STRUCT = '7f0f0000-0000-4000-8000-0000000007e6';
+const FLOW_MODULE = '80800000-0000-4000-8000-0000000007e8';
 const FLOW_BODY_ROLE = 'FLOW-768-BODY';
 const FLOW_CHOICES: Record<string, string> = {};
 
@@ -132,8 +133,20 @@ test.describe.serial('Preparación para fabricar: stepper compacto Ingeniería/P
         },
       ],
       modules: [
-        ...catalog.modules.filter((m) => m.id !== template.id),
-        { ...template, id: template.id, structureId: FLOW_STRUCT, components: [], hardwareLines: [], externalDims: { width: 600, height: 720, depth: depthMm } },
+        // The shared seed module stays untouched: later specs quote it with
+        // empty optionChoices, and the FLOW structure requires an explicit
+        // BODY choice this spec provides. Sharding surfaced the coupling.
+        ...catalog.modules,
+        {
+          ...template,
+          id: FLOW_MODULE,
+          code: 'FLOW-768',
+          name: 'Módulo Flujo 768',
+          structureId: FLOW_STRUCT,
+          components: [],
+          hardwareLines: [],
+          externalDims: { width: 600, height: 720, depth: depthMm },
+        },
       ],
       customers: [
         ...(catalog.customers ?? []).filter((c) => c.id !== CUSTOMER_ID),
@@ -152,7 +165,7 @@ test.describe.serial('Preparación para fabricar: stepper compacto Ingeniería/P
       status: 'draft' as const,
       createdAt: now,
       updatedAt: now,
-      items: [{ id: QUOTE_LINE_ID, moduleId: GATE_MODULE_A_ID, quantity: 2, optionChoices: FLOW_CHOICES }],
+      items: [{ id: QUOTE_LINE_ID, moduleId: FLOW_MODULE, quantity: 2, optionChoices: FLOW_CHOICES }],
     });
 
     const mat = await client.materializeQuoteLineFurniture(
@@ -172,7 +185,7 @@ test.describe.serial('Preparación para fabricar: stepper compacto Ingeniería/P
     await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
-        furniture_definition_id: template.id,
+        furniture_definition_id: FLOW_MODULE,
         parameters: { widthMm: 600, heightMm: 720, depthMm },
         material_choices: { [FLOW_BODY_ROLE]: FLOW_MAT },
       })),
