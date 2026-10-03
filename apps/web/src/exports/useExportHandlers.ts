@@ -40,7 +40,7 @@ import {
   buildOptimizerExport,
   downloadOptimizerXlsx,
 } from '../exportOptimizer';
-import { buildProductionPackExport } from '../exportProductionPack';
+import { buildProductionPackExport, composeFrozenDrilling } from '../exportProductionPack';
 import { buildWallElevationsExport } from '../exportWallElevations';
 import { buildCutListCsvExport } from '../exportCutListCsv';
 import { buildCncPilotExport } from '../exportCncPilot';
@@ -483,7 +483,26 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
         if (drillingIssue) {
           throw new Error(`No se puede exportar DXF: perforación inválida en ${drillingIssue.pieceCode}`);
         }
-        const drilling = resolved.data.patterns;
+        // #995 K2: when the project's canonical release governs, the DXF
+        // drilling layer draws the FROZEN routing holes — never the heuristic
+        // chain. Fail-closed both ways: a transport failure throws (no DXF is
+        // better than wrong holes) and any frozen join/coverage mismatch
+        // throws inside the composer. No canonical authority ⇒ legacy
+        // behavior unchanged.
+        let drilling = resolved.data.patterns;
+        if (frozenDrillingFetcher) {
+          let frozen;
+          try {
+            frozen = await frozenDrillingFetcher(project.id);
+          } catch {
+            throw new Error(
+              'No se pudo obtener el programa de perforación congelado de la liberación canónica: no se exporta un DXF con perforaciones no verificadas',
+            );
+          }
+          if (frozen) {
+            drilling = composeFrozenDrilling(project, frozen, resolved).patterns;
+          }
+        }
         await downloadCutPlanDxf(cutPlan, variant, undefined, undefined, { drilling });
         toast({
           type: 'success',

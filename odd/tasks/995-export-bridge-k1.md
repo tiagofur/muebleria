@@ -61,3 +61,19 @@ el ODD lo nombra en vez de ejecutarlo.
 ## Evidencia (llenar al congelar)
 
 - HEAD/base, paths, V0/V1/V2, delivery.
+
+
+## K2 (2026-10-03, worktree 995-export-bridge-k2) — capa drilling del DXF congelada
+
+`handleExportCutPlanDxf` (#130, fail-closed por diseño) ahora: autoridad
+canónica ⇒ fetch del manufacturing snapshot (mismo frozenDrillingFetcher de
+K1) ⇒ composeFrozenDrilling ⇒ la capa drilling del DXF dibuja los agujeros
+CONGELADOS. Fallo duro doble: transporte (mejor sin DXF que agujeros no
+verificados) y join/cobertura (composer). Sin autoridad canónica ⇒ legacy
+byte-idéntico. Tests: 3 casos (congelado reemplaza heurísticos 5→[15,8],
+transporte bloquea, sin autoridad legacy intacto) en su propio describe con
+reset de mocks (los it top-level NO heredan el beforeEach del describe).
+Web 48 archivos / 581 tests PASS; typecheck PASS.
+
+Retiro total de F074/legacy y convergencia J6: siguen NOMBRADOS — el camino
+legacy queda vivo para drafts/no-canonical hasta decisión de producto.
