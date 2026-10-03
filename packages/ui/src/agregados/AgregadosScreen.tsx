@@ -53,6 +53,8 @@ export interface AgregadosScreenProps {
   readonly onCreate: (agregado: Agregado) => void | Promise<void>;
   readonly onUpdate: (agregado: Agregado) => void | Promise<void>;
   readonly onDelete?: (id: string) => void;
+  /** Deep-copy handler wired to the store (#1009 S5). */
+  readonly onDuplicate?: (id: string) => void;
   readonly canMutate?: boolean;
   readonly openAgregadoId?: string | null;
   readonly onSelectionChange?: (id: string | null) => void;
@@ -71,6 +73,7 @@ export function AgregadosScreen({
   onCreate,
   onUpdate,
   onDelete,
+  onDuplicate,
   canMutate = true,
   openAgregadoId = null,
   onSelectionChange,
@@ -311,6 +314,7 @@ export function AgregadosScreen({
                   onEdit={handleEdit}
                   onView3D={catalogInput ? (item) => setView3dItem(item) : undefined}
                   onDelete={canMutate && onDelete ? (id) => setConfirmDeleteId(id) : undefined}
+                  onDuplicate={canMutate && onDuplicate ? onDuplicate : undefined}
                   canMutate={canMutate}
                   optionGroups={optionGroups}
                 />

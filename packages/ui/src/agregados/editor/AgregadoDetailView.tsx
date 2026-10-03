@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import type { Agregado, Component, Hardware, OptionGroup } from '@granete/domain';
-import { Box, ChevronLeft, Layers, MoreHorizontal, Pencil, Settings2, Trash2 } from 'lucide-react';
+import { Box, ChevronLeft, Copy, Layers, MoreHorizontal, Pencil, Settings2, Trash2 } from 'lucide-react';
 import { DropdownMenu } from '../../common/DropdownMenu';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { optionRoleLabel } from '../../optionGroups/optionRoleLabel';
@@ -18,6 +18,8 @@ export type AgregadoDetailViewProps = {
   readonly onEdit: (a: Agregado) => void;
   readonly onView3D?: (a: Agregado) => void;
   readonly onDelete?: (id: string) => void;
+  /** Deep-copy request — the screen/store owns the copy (#1009 S5). */
+  readonly onDuplicate?: (id: string) => void;
   readonly canMutate: boolean;
   /** Option groups — role labels prefer the group name (#403). */
   readonly optionGroups?: readonly OptionGroup[];
@@ -54,6 +56,7 @@ export function AgregadoDetailView({
   onEdit,
   onView3D,
   onDelete,
+  onDuplicate,
   canMutate,
   optionGroups,
 }: AgregadoDetailViewProps): ReactNode {
@@ -126,7 +129,7 @@ export function AgregadoDetailView({
               <Pencil size={16} strokeWidth={1.5} aria-hidden />
               Editar
             </button>
-            {onDelete ? (
+            {onDelete || onDuplicate ? (
               <DropdownMenu
                 ariaLabel="Más acciones del agregado"
                 triggerLabel="Más"
@@ -135,12 +138,26 @@ export function AgregadoDetailView({
                   {
                     id: 'main',
                     items: [
-                      {
-                        id: 'delete',
-                        label: 'Eliminar',
-                        icon: <Trash2 size={16} strokeWidth={1.5} aria-hidden />,
-                        onSelect: () => onDelete(a.id),
-                      },
+                      ...(onDuplicate
+                        ? [
+                            {
+                              id: 'duplicate',
+                              label: 'Duplicar',
+                              icon: <Copy size={16} strokeWidth={1.5} aria-hidden />,
+                              onSelect: () => onDuplicate(a.id),
+                            },
+                          ]
+                        : []),
+                      ...(onDelete
+                        ? [
+                            {
+                              id: 'delete',
+                              label: 'Eliminar',
+                              icon: <Trash2 size={16} strokeWidth={1.5} aria-hidden />,
+                              onSelect: () => onDelete(a.id),
+                            },
+                          ]
+                        : []),
                     ],
                   },
                 ]}

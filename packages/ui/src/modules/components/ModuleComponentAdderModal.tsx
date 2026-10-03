@@ -41,7 +41,7 @@ export function ModuleComponentAdderModal({
       onClose={onClose}
       title="Agregar componente"
       size="sm"
-      data-testid="component-adder-modal"
+      dataTestId="component-adder-modal"
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>

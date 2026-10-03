@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   createProjectFromTemplate,
+  duplicateAgregado,
   duplicateModule,
   duplicateProject,
   projectToTemplate,
   suggestDuplicateCode,
 } from './duplicate';
 import type {
+  Agregado,
   Module,
   Project,
   ProjectTemplate,
@@ -576,6 +578,93 @@ describe('createProjectFromTemplate (#110 / H15)', () => {
     );
     expect(roundTrip.items.map((i) => i.quantity)).toEqual(
       original.items.map((i) => i.quantity),
+    );
+  });
+});
+
+describe('duplicateAgregado (S5 #1009)', () => {
+  function sampleAgregado(): Agregado {
+    return {
+      id: 'agr-orig',
+      code: 'AGR-PUE-01',
+      name: 'Puerta Batiente',
+      description: 'Puerta con bisagras y jaladera',
+      notes: 'nota original',
+      active: true,
+      externalDims: { width: 600, height: 2000, depth: 18 },
+      components: [
+        {
+          componentId: 'comp-hoja',
+          quantity: 1,
+          overrides: {
+            lengthFormula: 'H - 4',
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-bisagra',
+                anchorFace: 'front',
+                relativePosition: { xMm: 100, yMm: 200 },
+              },
+            ],
+          },
+        },
+      ],
+      hardwareLines: [
+        { id: 'hl-1', quantity: 3, optionRole: 'BISAGRA' },
+      ],
+      presentationMotion: {
+        kind: 'rotate',
+        pivot: 'left',
+        axis: { x: 0, y: 0, z: -1 },
+        openAngleDeg: 95,
+      },
+    };
+  }
+
+  it('copies with a new id/code, «(copia)» name, and fresh hardwareLine ids', () => {
+    const copy = duplicateAgregado(sampleAgregado(), {
+      newId: 'agr-new',
+      newCode: 'AGR-PUE-01-COPY',
+    });
+
+    expect(copy.id).toBe('agr-new');
+    expect(copy.code).toBe('AGR-PUE-01-COPY');
+    expect(copy.name).toBe('Puerta Batiente (copia)');
+    expect(copy.hardwareLines?.[0]?.id).not.toBe('hl-1');
+    expect(copy.hardwareLines?.[0]?.optionRole).toBe('BISAGRA');
+    expect(copy.hardwareLines?.[0]?.quantity).toBe(3);
+  });
+
+  it('preserves the composition deep: instances, overrides and motion', () => {
+    const source = sampleAgregado();
+    const copy = duplicateAgregado(source, { newId: 'agr-new', newCode: 'C2' });
+
+    expect(copy.components?.[0]?.componentId).toBe('comp-hoja');
+    expect(copy.components?.[0]?.overrides?.lengthFormula).toBe('H - 4');
+    expect(copy.components?.[0]?.overrides?.hardwarePlacements?.[0]?.hardwareId).toBe(
+      'hw-bisagra',
+    );
+    expect(copy.presentationMotion).toEqual(source.presentationMotion);
+    expect(copy.externalDims).toEqual(source.externalDims);
+    expect(copy.description).toBe('Puerta con bisagras y jaladera');
+  });
+
+  it('does not share mutable references with the original', () => {
+    const source = sampleAgregado();
+    const copy = duplicateAgregado(source, { newId: 'agr-new', newCode: 'C2' });
+
+    expect(copy.components).not.toBe(source.components);
+    expect(copy.components?.[0]).not.toBe(source.components?.[0]);
+    expect(copy.components?.[0]?.overrides).not.toBe(
+      source.components?.[0]?.overrides,
+    );
+    expect(copy.hardwareLines).not.toBe(source.hardwareLines);
+
+    // Nested placement objects are clones too — no shared references.
+    expect(copy.components?.[0]?.overrides?.hardwarePlacements).not.toBe(
+      source.components?.[0]?.overrides?.hardwarePlacements,
+    );
+    expect(copy.components?.[0]?.overrides?.hardwarePlacements?.[0]).not.toBe(
+      source.components?.[0]?.overrides?.hardwarePlacements?.[0],
     );
   });
 });

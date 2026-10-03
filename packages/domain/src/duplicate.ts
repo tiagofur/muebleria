@@ -4,6 +4,8 @@
  */
 
 import type {
+  Agregado,
+  AgregadoPresentationMotion,
   HardwareLine,
   HardwarePlacement,
   InstallationChecklistItem,
@@ -402,4 +404,64 @@ function copyMeasureDefaults(src: MeasureDefaults): MeasureDefaults {
 
 function copyChecklistItem(item: InstallationChecklistItem): InstallationChecklistItem {
   return { ...item };
+}
+
+export type DuplicateAgregadoOptions = {
+  readonly newId: string;
+  readonly newCode: string;
+  /** Factory for nested hardwareLine ids. Defaults like duplicateModule. */
+  readonly nextNestedId?: () => string;
+};
+
+function clonePresentationMotion(
+  motion: AgregadoPresentationMotion,
+): AgregadoPresentationMotion {
+  if (motion.kind === 'keyframes') {
+    return { ...motion, keyframes: motion.keyframes.map((k) => ({ ...k })) };
+  }
+  return { ...motion };
+}
+
+/**
+ * Deep-copy an agregado (sub-assembly) with a new id/code and fresh
+ * hardwareLine ids. Does not mutate the original. Preserves the full
+ * composition — component instances with their overrides, hardware lines,
+ * reference dims, presentation motion, rigid members, variant sets and
+ * assembly rules (#1009 S5: duplicating a door/drawer must not require
+ * re-authoring pieces, formulas or hardware placement from scratch).
+ */
+export function duplicateAgregado(
+  agregado: Agregado,
+  options: DuplicateAgregadoOptions,
+): Agregado {
+  const nextId = options.nextNestedId ?? defaultNestedId;
+  return {
+    id: options.newId,
+    code: options.newCode,
+    name: `${agregado.name} (copia)`,
+    description: agregado.description,
+    notes: agregado.notes,
+    active: agregado.active,
+    externalDims: agregado.externalDims
+      ? {
+          width: agregado.externalDims.width,
+          height: agregado.externalDims.height,
+          depth: agregado.externalDims.depth,
+        }
+      : undefined,
+    components: agregado.components?.map(cloneComponentInstance),
+    hardwareLines: agregado.hardwareLines?.map((l) =>
+      cloneHardwareLine(l, nextId()),
+    ),
+    commercialKitHardwareId: agregado.commercialKitHardwareId,
+    rigidMembers: agregado.rigidMembers?.map((m) => ({ ...m })),
+    variantSets: agregado.variantSets?.map((v) => ({
+      ...v,
+      variants: [...v.variants],
+    })),
+    compatibilityRules: agregado.compatibilityRules?.map((r) => ({ ...r })),
+    presentationMotion: agregado.presentationMotion
+      ? clonePresentationMotion(agregado.presentationMotion)
+      : undefined,
+  };
 }

@@ -6,6 +6,7 @@
 
 import type { FormEvent, Dispatch, SetStateAction } from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Component, Hardware, OptionGroup } from '@granete/domain';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
@@ -90,6 +91,7 @@ function renderForm({
   onSetEditorTab,
   optionGroups,
   setDraft,
+  catalogComponents = [mockComponent],
 }: {
   readonly catalogInput?: Module3DCatalogInput;
   readonly editorTab?: AgregadoEditorTab;
@@ -97,6 +99,7 @@ function renderForm({
   readonly onSetEditorTab?: Dispatch<SetStateAction<AgregadoEditorTab>>;
   readonly optionGroups?: readonly OptionGroup[];
   readonly setDraft?: Dispatch<SetStateAction<AgregadoDraft>>;
+  readonly catalogComponents?: readonly Component[];
 }) {
   render(
     <AgregadoEditorForm
@@ -111,7 +114,7 @@ function renderForm({
       draft={draft}
       setDraft={setDraft ?? (vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>)}
       editingId={null}
-      catalogComponents={[mockComponent]}
+      catalogComponents={catalogComponents}
       catalogHardware={[] as unknown as readonly Hardware[]}
       catalogInput={catalogInput}
       optionGroups={optionGroups}
@@ -397,5 +400,67 @@ describe('AgregadoEditorForm — governed hardware role (S4 #1009)', () => {
     const roleInput = screen.getByTestId('agregado-hw-0-role') as HTMLInputElement;
     expect(roleInput.tagName).toBe('INPUT');
     expect(roleInput.value).toBe('BISAGRA');
+  });
+});
+
+describe('AgregadoEditorForm — component picker (S5 #1009)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const extraComponent: Component = {
+    id: 'c-base',
+    code: 'PRT-BASE',
+    name: 'Base de Cajón',
+    placement: 'base',
+    geometry: {
+      kind: 'rectangular_board',
+      lengthMm: 0,
+      widthMm: 0,
+      thicknessMm: 15,
+    },
+    defaultEdges: [],
+    optionRoles: ['CAJON'],
+    active: true,
+  };
+
+  it('opens the searchable picker from Añadir Pieza and appends the picked instance', async () => {
+    const user = userEvent.setup();
+    const setDraft = vi.fn();
+    renderForm({
+      setDraft: setDraft as unknown as Dispatch<SetStateAction<AgregadoDraft>>,
+      catalogComponents: [mockComponent, extraComponent],
+    });
+
+    await user.click(screen.getByTestId('agregado-add-component'));
+
+    // Modal mounts through a double-rAF animation bootstrap — findBy waits for it.
+    const modal = await screen.findByTestId('component-adder-modal');
+    expect(modal).toBeTruthy();
+
+    // Search filters the catalog (radio per component, code+name in spans).
+    const search = screen.getByTestId('comp-adder-search') as HTMLInputElement;
+    await user.type(search, 'Base');
+    expect(screen.getByTestId('comp-radio-PRT-BASE')).toBeTruthy();
+    expect(screen.queryByTestId('comp-radio-PRT-STD')).toBeNull();
+
+    await user.click(screen.getByTestId('comp-radio-PRT-BASE'));
+    await user.click(screen.getByTestId('confirm-add-component'));
+
+    expect(setDraft).toHaveBeenCalledTimes(1);
+    const updater = setDraft.mock.calls[0]?.[0] as (prev: AgregadoDraft) => AgregadoDraft;
+    const next = updater(doorDraft());
+    expect(next.components.at(-1)?.componentId).toBe('c-base');
+    expect(next.components.at(-1)?.quantity).toBe(1);
+  });
+
+  it('shows the catalog components without search when the picker opens', async () => {
+    const user = userEvent.setup();
+    const setDraft = vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>;
+    renderForm({ setDraft });
+
+    await user.click(screen.getByTestId('agregado-add-component'));
+    await screen.findByTestId('component-adder-modal');
+    expect(screen.getByTestId('comp-radio-PRT-STD')).toBeTruthy();
   });
 });
