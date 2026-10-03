@@ -1254,8 +1254,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -2244,8 +2243,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -3623,8 +3621,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -4210,8 +4207,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -5206,8 +5202,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -6113,8 +6108,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -7619,8 +7613,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -8589,8 +8582,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -9559,8 +9551,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -10398,8 +10389,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -12058,8 +12048,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -12985,8 +12974,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -13857,8 +13845,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -14784,8 +14771,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -16039,8 +16025,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -16982,8 +16967,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -17883,8 +17867,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -18968,8 +18951,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -20064,8 +20046,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -21158,8 +21139,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -22252,8 +22232,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -23231,8 +23210,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -24404,8 +24382,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -25492,8 +25469,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -26539,8 +26515,7 @@
               }
             ],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": [
           {
@@ -27676,8 +27651,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }
@@ -29019,8 +28993,7 @@
             "status": "clear",
             "issues": [],
             "preflightContract": "granete.manufacturing-preflight.v1"
-          },
-          "doorSwingAccessoriesGroups": []
+          }
         },
         "issues": []
       }

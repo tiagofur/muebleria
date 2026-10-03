@@ -380,17 +380,9 @@ type authoringResolveResponse struct {
 }
 
 type authoringResolveResolved struct {
-	Layout                     engine.FurnitureLayout          `json:"layout"`
-	Machining                  engine.AuthoringMachining        `json:"machining"`
-	Preflight                  authoringResolvePreflight        `json:"preflight"`
-	// DoorSwingAccessoriesGroups (#529) groups hinges/handles per door slot so
-	// the Ruby/SketchUp inspector can render the Apertura y Accesorios card.
-	// Empty array when the definition has no doorSwing parameter.
-	DoorSwingAccessoriesGroups []domain.DoorAccessoryGroup      `json:"doorSwingAccessoriesGroups"`
-	// AgregadoMotions (#529 Slice B) is the authoritative motion definition
-	// per door panel for the 3D viewer.  Nil/absent when the definition has
-	// no doorSwing parameter.
-	AgregadoMotions []engine.ResolvedAgregadoMotion `json:"agregadoMotions,omitempty"`
+	Layout    engine.FurnitureLayout    `json:"layout"`
+	Machining engine.AuthoringMachining `json:"machining"`
+	Preflight authoringResolvePreflight `json:"preflight"`
 }
 
 type authoringResolvePreflight struct {
@@ -469,18 +461,16 @@ func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req author
 		LibraryReleaseID:   libraryReleaseID,
 		Status:             authoringStatusAccepted,
 		NormalizedSnapshot: &result.Normalized,
-		Resolved: &authoringResolveResolved{
-			Layout:    result.Layout,
-			Machining: result.Machining,
-			Preflight: authoringResolvePreflight{
-				Scope:             engine.AuthoringValidationScope,
-				Status:            result.ValidationStatus,
-				Issues:            validationIssues,
-				PreflightContract: engine.ManufacturingPreflightContract,
+			Resolved: &authoringResolveResolved{
+				Layout:    result.Layout,
+				Machining: result.Machining,
+				Preflight: authoringResolvePreflight{
+					Scope:             engine.AuthoringValidationScope,
+					Status:            result.ValidationStatus,
+					Issues:            validationIssues,
+					PreflightContract: engine.ManufacturingPreflightContract,
+				},
 			},
-			DoorSwingAccessoriesGroups: doorSwingGroups(result.DoorSwingAccessoriesGroups),
-			AgregadoMotions:            result.ResolvedAgregadoMotions,
-		},
 		Issues: validationIssues,
 	}
 	body, err := json.Marshal(response)
