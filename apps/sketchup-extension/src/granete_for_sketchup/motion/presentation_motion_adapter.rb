@@ -190,6 +190,11 @@ module Granete
         # free edge then needs a negative rotation about +Z when hinged
         # left, positive when hinged right. (The original implementation
         # assumed min-X was 'left' — every door opened hinge-RIGHT.)
+        #
+        # Host-safe ops only: Vector3d#* in the real API is the CROSS
+        # product (scalar multiply raises "Cannot convert argument to
+        # Geom::Vector3d"); scaling goes through Transformation.scaling +
+        # Vector3d#transform, and the edge via Point3d#+(Vector3d).
         def hinge_edge(door_instance, closed_t, pivot_side)
           origin = closed_t.respond_to?(:origin) ? closed_t.origin : ::Geom::Point3d.new(0, 0, 0)
           width_inches = if door_instance.respond_to?(:definition) && door_instance.definition.respond_to?(:bounds)
@@ -200,7 +205,8 @@ module Granete
                            0.0
                          end
           max_x_edge = if closed_t.respond_to?(:xaxis)
-                         origin + (closed_t.xaxis * width_inches)
+                         scaled = closed_t.xaxis.transform(::Geom::Transformation.scaling(width_inches))
+                         origin + scaled
                        else
                          origin + ::Geom::Vector3d.new(width_inches, 0, 0)
                        end

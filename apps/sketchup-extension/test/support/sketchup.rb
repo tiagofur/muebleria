@@ -93,6 +93,14 @@ module Geom
       t
     end
 
+    def self.scaling(scalar)
+      t = new
+      t.matrix[0] = scalar.to_f
+      t.matrix[5] = scalar.to_f
+      t.matrix[10] = scalar.to_f
+      t
+    end
+
     def self.rotation(point, vector, angle)
       c = Math.cos(angle.to_f)
       s = Math.sin(angle.to_f)
