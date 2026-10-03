@@ -67,8 +67,14 @@ module Granete
           end
         end
 
+        # A door actor is EXACTLY a door slot — placement 'puerta' (local
+        # vocabulary) or 'door' (pilot vocabulary), or the explicit door role.
+        # Substring matching is forbidden: 'FRENTE_CAJON' and 'FRENTE' contain
+        # 'frente' but a drawer front / plain front must NEVER become a door
+        # actor (over-detection also shifts slot indexes and flips the swing
+        # convention of the real doors).
         def door_like?(placement, role)
-          placement == 'puerta' || role.include?('door') || role.include?('frente') || role.include?('front')
+          %w[puerta door].include?(placement) || role == 'door'
         end
       end
     end

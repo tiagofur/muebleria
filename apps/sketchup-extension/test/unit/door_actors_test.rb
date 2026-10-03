@@ -63,6 +63,34 @@ class DoorActorsTest < Minitest::Test
     assert_empty scanned.hardware_by_host
   end
 
+  # NEGATIVE PROOF (#529 regression, owner smoke 2026-10-03): a drawer front
+  # (placement frente_cajon, role FRENTE_CAJON) and a plain front must NEVER
+  # become door actors — substring matching on 'frente' over-detected them,
+  # shifted the real door to slot 1 and flipped its swing to right.
+  def test_drawer_front_and_plain_front_are_never_door_actors
+    furniture = build_furniture do |definition|
+      door_child(definition, 'drawer-front', placement: 'frente_cajon', role: 'FRENTE_CAJON')
+      door_child(definition, 'plain-front', placement: 'frontal', role: 'FRENTE')
+      door_child(definition, 'the-door', placement: 'puerta', role: 'FRENTE')
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 1, scanned.doors.length
+    the_door = furniture.definition.entities.to_a[2]
+    assert_equal [the_door], scanned.doors
+  end
+
+  def test_door_actor_via_door_role_only_is_detected
+    furniture = build_furniture do |definition|
+      door_child(definition, 'pilot-door', placement: 'door', role: 'door')
+    end
+
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
+
+    assert_equal 1, scanned.doors.length
+  end
+
   private
 
   # Yields the furniture definition so the test can add children; returns the
