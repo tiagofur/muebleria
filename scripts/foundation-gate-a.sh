@@ -3,11 +3,17 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGE=all
-if [ "$#" -gt 0 ]; then
-  [ "$#" -eq 2 ] && [ "$1" = --stage ] || { echo 'Usage: foundation-gate-a.sh [--stage all|postgres|browser]' >&2; exit 2; }
-  STAGE="$2"
-fi
+BROWSER_ARGS=()
+usage() { echo 'Usage: foundation-gate-a.sh [--stage all|postgres|browser] [-- <browser-gate args>] (extra args only with --stage browser)' >&2; exit 2; }
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --stage) [ "$#" -ge 2 ] || usage; STAGE="$2"; shift 2 ;;
+    --) shift; BROWSER_ARGS=("$@"); [ "$#" -eq 0 ] && usage; break ;;
+    *) usage ;;
+  esac
+done
 case "$STAGE" in all|postgres|browser) ;; *) echo 'Unknown Foundation stage' >&2; exit 2 ;; esac
+[ "$STAGE" = browser ] || [ "${#BROWSER_ARGS[@]}" -eq 0 ] || usage
 OUTPUT="$(mktemp -d "${TMPDIR:-/tmp}/granete-foundation-gate-a.XXXXXX")"
 cleanup() { rm -rf "${OUTPUT}"; }
 trap cleanup EXIT INT TERM
@@ -49,7 +55,8 @@ if [ "$STAGE" != browser ]; then
 fi
 if [ "$STAGE" != postgres ]; then
   printf '[foundation-gate-a] real browser/auth/MFA/tenant proofs\n'
-  run_no_skip browser scripts/organization-browser-gate.sh
+  # The guarded expansion keeps set -u happy on bash 3.2 (macOS host gates).
+  run_no_skip browser scripts/organization-browser-gate.sh ${BROWSER_ARGS[@]+"${BROWSER_ARGS[@]}"}
 fi
 git diff --check
 printf '[foundation-gate-a] PASS stage=%s (a partial stage alone is not complete Gate A evidence)\n' "$STAGE"

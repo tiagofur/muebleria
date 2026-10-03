@@ -26,6 +26,7 @@ const GATE_MAT = '7a0b0b0b-0000-4000-8000-0000000000f4';
 const GATE_MAT_CODE = 'ENG-740G-BOARD';
 const GATE_PANEL = '7a0b0b0b-0000-4000-8000-0000000000f5';
 const GATE_STRUCT = '7a0b0b0b-0000-4000-8000-0000000000f6';
+const GATE_MODULE = '7a0b0b0b-0000-4000-8000-0000000000f7';
 const GATE_BODY_ROLE = 'ENG-740G-BODY';
 const GATE_CHOICES: Record<string, string> = {};
 
@@ -210,8 +211,20 @@ test.describe.serial('Operational physical gate: Ingeniería → materiales → 
         },
       ],
       modules: [
-        ...catalog.modules.filter((m) => m.id !== template.id),
-        { ...template, id: template.id, structureId: GATE_STRUCT, components: [], hardwareLines: [], externalDims: { width: 600, height: 720, depth: depthMm } },
+        // Keep the shared seed module untouched (same shard-isolation
+        // contract as fabrication-flow-visibility): quote this spec's own
+        // module instead of rewiring the seed for every later resident.
+        ...catalog.modules,
+        {
+          ...template,
+          id: GATE_MODULE,
+          code: 'ENG-740G',
+          name: 'Módulo Ingeniería 740G',
+          structureId: GATE_STRUCT,
+          components: [],
+          hardwareLines: [],
+          externalDims: { width: 600, height: 720, depth: depthMm },
+        },
       ],
       customers: [
         ...(catalog.customers ?? []).filter((c) => c.id !== CUSTOMER_ID),
@@ -230,7 +243,7 @@ test.describe.serial('Operational physical gate: Ingeniería → materiales → 
       status: 'draft' as const,
       createdAt: now,
       updatedAt: now,
-      items: [{ id: QUOTE_LINE_ID, moduleId: GATE_MODULE_A_ID, quantity: 2, optionChoices: GATE_CHOICES }],
+      items: [{ id: QUOTE_LINE_ID, moduleId: GATE_MODULE, quantity: 2, optionChoices: GATE_CHOICES }],
     });
 
     const mat = await client.materializeQuoteLineFurniture(
@@ -250,7 +263,7 @@ test.describe.serial('Operational physical gate: Ingeniería → materiales → 
     await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
-        furniture_definition_id: template.id,
+        furniture_definition_id: GATE_MODULE,
         parameters: { widthMm: 600, heightMm: 720, depthMm },
         material_choices: { [GATE_BODY_ROLE]: GATE_MAT },
       })),

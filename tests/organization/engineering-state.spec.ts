@@ -25,6 +25,7 @@ const STATE_MAT = '73000000-0000-4000-8000-0000000000f3';
 const STATE_MAT_CODE = 'ENG-740-BOARD';
 const STATE_PANEL = '74000000-0000-4000-8000-0000000000f4';
 const STATE_STRUCT = '72000000-0000-4000-8000-0000000000f2';
+const STATE_MODULE = '72000000-0000-4000-8000-0000000000f5';
 const STATE_BODY_ROLE = 'ENG-740-BODY';
 const STATE_CHOICES: Record<string, string> = {};
 
@@ -155,10 +156,14 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
         },
       ],
       modules: [
-        ...catalog.modules.filter((m) => m.id !== template.id),
+        // Keep the shared seed module untouched (shard-isolation contract):
+        // this spec quotes its own module; later residents quote the seed.
+        ...catalog.modules,
         {
           ...template,
-          id: template.id,
+          id: STATE_MODULE,
+          code: 'ENG-740-STATE-MOD',
+          name: 'Módulo Estado Ingeniería 740',
           structureId: STATE_STRUCT,
           components: [],
           hardwareLines: [],
@@ -185,7 +190,7 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
       items: [
         {
           id: QUOTE_LINE_ID,
-          moduleId: GATE_MODULE_A_ID,
+          moduleId: STATE_MODULE,
           quantity: 2,
           optionChoices: STATE_CHOICES,
         },
@@ -209,7 +214,7 @@ test.describe.serial('Engineering durable state: P1 → start → prepare/downlo
     await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
-        furniture_definition_id: template.id,
+        furniture_definition_id: STATE_MODULE,
         parameters: { widthMm: 600, heightMm: 720, depthMm },
         material_choices: { [STATE_BODY_ROLE]: STATE_MAT },
       })),

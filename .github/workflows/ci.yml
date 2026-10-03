@@ -119,10 +119,29 @@ jobs:
       - name: Run unchanged deployment/RLS/fresh/upgrade/atomic/pilot proofs
         run: scripts/foundation-gate-a.sh --stage postgres
 
-  organization-browser:
-    name: Foundation real browser proofs
+  organization-browser-plan:
+    name: Foundation browser shard plan
     needs: impact
     if: ${{ needs.impact.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['organization-browser'] }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prove the exact three-way browser shard partition
+        run: python3 scripts/organization_browser_shard.py verify --shards 3 --timings tests/organization/testdata/browser-shard-timings.json
+
+  organization-browser-shards:
+    name: Foundation real browser shard ${{ matrix.shard }}/3
+    needs: [impact, organization-browser-plan]
+    if: ${{ needs.impact.result == 'success' && needs.organization-browser-plan.result == 'success' && fromJSON(needs.impact.outputs.plan).jobs['organization-browser'] }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -140,8 +159,34 @@ jobs:
           cache-dependency-path: backend-go/go.sum
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      # Full real-browser suite and isolated runtime-role PostgreSQL, not mocks.
-      - run: scripts/foundation-gate-a.sh --stage browser
+      # Each shard runs its own disposable stack (isolated runtime-role
+      # PostgreSQL + backend + Vite); the planner assigns whole spec files so
+      # serial describe groups are never split across shards.
+      - name: Run isolated real-browser shard
+        run: |
+          mapfile -t specs < <(python3 scripts/organization_browser_shard.py files --shards 3 --index "${{ matrix.shard }}" --timings tests/organization/testdata/browser-shard-timings.json)
+          test "${#specs[@]}" -gt 0
+          printf 'browser shard %s/3: %s spec files\n' "${{ matrix.shard }}" "${#specs[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          scripts/foundation-gate-a.sh --stage browser -- "${specs[@]}"
+
+  organization-browser:
+    # Preserves the branch-protection check identity while requiring the shard
+    # plan and every matrix entry, exactly like Go Backend Tests over storage shards.
+    name: Foundation real browser proofs
+    needs: [impact, organization-browser-plan, organization-browser-shards]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require the shard plan and every selected browser shard
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_organization_browser_result.py
 
   sketchup-extension:
     name: SketchUp Extension (Ruby, ${{ matrix.os }})

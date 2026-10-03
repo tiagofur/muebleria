@@ -25,6 +25,7 @@ const CONT_MAT = '7c0c0c0c-0000-4000-8000-0000000000c4';
 const CONT_MAT_CODE = 'PROD-741C-BOARD';
 const CONT_PANEL = '7c0c0c0c-0000-4000-8000-0000000000c5';
 const CONT_STRUCT = '7c0c0c0c-0000-4000-8000-0000000000c6';
+const CONT_MODULE = '7c0c0c0c-0000-4000-8000-0000000000c7';
 const CONT_BODY_ROLE = 'PROD-741C-BODY';
 const CONT_CHOICES: Record<string, string> = {};
 
@@ -180,8 +181,20 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
         },
       ],
       modules: [
-        ...catalog.modules.filter((m) => m.id !== template.id),
-        { ...template, id: template.id, structureId: CONT_STRUCT, components: [], hardwareLines: [], externalDims: { width: 600, height: 720, depth: depthMm } },
+        // Keep the shared seed module untouched (same shard-isolation
+        // contract as fabrication-flow-visibility): this spec quotes its own
+        // CONT module, and later residents quote the seed with empty choices.
+        ...catalog.modules,
+        {
+          ...template,
+          id: CONT_MODULE,
+          code: 'PROD-741C',
+          name: 'Módulo Continuidad 741C',
+          structureId: CONT_STRUCT,
+          components: [],
+          hardwareLines: [],
+          externalDims: { width: 600, height: 720, depth: depthMm },
+        },
       ],
       customers: [
         ...(catalog.customers ?? []).filter((c) => c.id !== CUSTOMER_ID),
@@ -200,7 +213,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
       status: 'draft' as const,
       createdAt: now,
       updatedAt: now,
-      items: [{ id: QUOTE_LINE_ID, moduleId: GATE_MODULE_A_ID, quantity: 2, optionChoices: CONT_CHOICES }],
+      items: [{ id: QUOTE_LINE_ID, moduleId: CONT_MODULE, quantity: 2, optionChoices: CONT_CHOICES }],
     });
 
     const mat = await client.materializeQuoteLineFurniture(
@@ -220,7 +233,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
     await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
-        furniture_definition_id: template.id,
+        furniture_definition_id: CONT_MODULE,
         parameters: { widthMm: 600, heightMm: 720, depthMm },
         material_choices: { [CONT_BODY_ROLE]: CONT_MAT },
       })),
@@ -305,7 +318,7 @@ test.describe.serial('Continuidad P1→P2: nueva revisión sin retarget implíci
     await putWorkingCopyCurrent(client, owner.token, design.id, {
       items: instanceIds.map((instanceId) => ({
         furniture_instance_id: instanceId,
-        furniture_definition_id: template.id,
+        furniture_definition_id: CONT_MODULE,
         parameters: { widthMm: 650, heightMm: 720, depthMm },
         material_choices: { [CONT_BODY_ROLE]: CONT_MAT },
       })),
