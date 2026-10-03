@@ -671,6 +671,29 @@ export type AnchorFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
  * Rides the component-instance overrides JSONB — no dedicated migration (VH-02).
  * Distinct from {@link Perforation} (CNC/machining).
  */
+export type DoorAccessoryRole = 'hinge' | 'handle';
+
+/**
+ * Associates a hardware placement to a specific door within a multi-door
+ * furniture and identifies its role on that door. Populated by the
+ * authoring-resolve engine when the hardware is a door accessory; purely
+ * decorative/grouping metadata for the SketchUp inspector UI — never used as
+ * manufacturing identity (the hardwarePlacementId + catalogHardwareId are
+ * authoritative).
+ */
+export interface DoorAffinity {
+  /** 0-based index that matches the door slot copy (0 = first door, 1 = second). */
+  readonly doorSlotIndex: number;
+  /** Short display label for the inspector (e.g. "Puerta 1 · Izquierda"). */
+  readonly doorLabel: string;
+  /** Raw swing side so badges stay consistent with the mueble-level enum copy. */
+  readonly swingSide: 'left' | 'right';
+  /** Accessory role on the door (hinge = bisagra on the axis; handle = jaladera opposite). */
+  readonly accessoryRole: DoorAccessoryRole;
+  /** Ordinal of this accessory within the same (door, role) group (1st hinge, 2nd hinge…). */
+  readonly accessoryIndex: number;
+}
+
 export interface HardwarePlacement {
   readonly hardwareId: string;
   readonly anchorFace: AnchorFace;
@@ -692,6 +715,11 @@ export interface HardwarePlacement {
    * pilot for thick members. Keep undefined to use the catalog profile.
    */
   readonly derivedMachining?: HardwareMachiningProfile;
+  /**
+   * Optional door affinity for hinges/handles on door boards. Pure UI grouping
+   * metadata. Leave undefined for non-door hardware (connectors, slides, etc.).
+   */
+  readonly doorAffinity?: DoorAffinity;
 }
 
 export interface Component {
