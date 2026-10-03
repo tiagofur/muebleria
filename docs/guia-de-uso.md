@@ -189,6 +189,55 @@ veas el patrón; desactalos o editá sus precios como con cualquier herraje.
 - La altura del **plano** (Posición) manda sobre la del módulo: lo que ves
   en 3D es lo que se cotiza.
 
+## 8b. Config de fábrica — Construcción y uniones
+
+**Quién:** administración o ingeniería de la fábrica. **Dónde:** Config →
+pestaña Ingeniería y Producción → Construcción y uniones; y en Componentes →
+Editar → pestaña Construcción para excepciones por pieza.
+
+La política de construcción define cómo tu taller ensambla y perfora:
+sistema por familia de unión (piso, techo, entrepaño, respaldo), cantidad de
+fijaciones y márgenes. Se aplica a todos los muebles compatibles **sin editar
+cada definición**.
+
+### El ciclo: borrador → activar
+
+1. **Editá** los valores que quieras (por ejemplo, entrepaños: 5 fijaciones,
+   márgenes 35 mm).
+2. **«Guardar borrador»** guarda esos valores **sin cambiar nada** de lo que
+   la fábrica calcula hoy: un borrador incompleto o con errores también se
+   puede guardar.
+3. **«Activar política»** hace efectivo el borrador: el servidor lo valida
+   con el mismo motor que perfora, y si algo no cuadra te lo dice con el
+   detalle. Si valida, pasa a ser la política activa **en un solo paso** —
+   nunca queda publicada por la mitad.
+
+Mientras haya un borrador, el banner lo dice: *«Borrador guardado — no
+gobierna la producción»*. Los cálculos y la producción siguen usando la
+política activa hasta que actives.
+
+### Excepciones por componente
+
+En el editor de componente, la pestaña Construcción permite fijar valores
+**específicos para esa pieza** (por ejemplo, este entrepaño usa 3 fijaciones
+cuando la fábrica define 4). La etiqueta de procedencia te dice siempre de
+dónde sale cada valor: **Biblioteca** (estándar Granete), **Fábrica**
+(política general) o **Componente (Excepción)**. «Restaurar herencia» borra
+la excepción y la pieza vuelve a heredar.
+
+### Historial intacto
+
+Activar una política nueva **no** cambia cotizaciones, diseños aprobados ni
+releases de producción ya congelados: esos siguen con la política con la que
+fueron creados. La política activada rige los cálculos nuevos.
+
+### Dos fábricas, dos políticas (caso A/B)
+
+Cada fábrica tiene su propia política sobre la misma biblioteca Standard:
+la fábrica A puede definir 4 fijaciones por unión y la B 2, sin que Standard
+cambie y sin copiar muebles. Este caso está documentado paso a paso en
+`docs/manufacturing/factory-construction-ab-runbook.md` para soporte.
+
 ## 9. Producción y Taller
 
 Con la cotización **aceptada**:

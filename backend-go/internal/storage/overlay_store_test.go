@@ -103,14 +103,22 @@ func TestOverlayStore_UpdateOverridesAndBaseRelease(t *testing.T) {
 	// Update overrides and custom resources
 	newRes := uuid.New()
 	newOverrides := json.RawMessage(`{"parameters.toeKickHeight": 150}`)
-	err = adminStore.UpdateOverlayOverrides(ctx, overlay.ID, newOverrides, []uuid.UUID{newRes})
+	err = adminStore.UpdateOverlayOverrides(ctx, overlay.ID, 1, newOverrides, []uuid.UUID{newRes})
 	if err != nil {
 		t.Fatalf("UpdateOverlayOverrides failed: %v", err)
+	}
+
+	// #875 slice 4: a stale expected version conflicts instead of winning.
+	if err := adminStore.UpdateOverlayOverrides(ctx, overlay.ID, 1, json.RawMessage(`{"parameters.toeKickHeight": 999}`), nil); !errors.Is(err, storage.ErrVersionConflict) {
+		t.Fatalf("stale version must conflict, got %v", err)
 	}
 
 	fetched, err := adminStore.GetOverlayByID(ctx, overlay.ID)
 	if err != nil {
 		t.Fatalf("GetOverlayByID failed: %v", err)
+	}
+	if fetched.Version != 2 {
+		t.Fatalf("a landing update must bump the version, got %d", fetched.Version)
 	}
 	if string(fetched.Overrides) != string(newOverrides) {
 		t.Fatalf("expected updated overrides %s, got %s", newOverrides, fetched.Overrides)

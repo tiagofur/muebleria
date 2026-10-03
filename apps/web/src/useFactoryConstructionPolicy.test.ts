@@ -57,6 +57,7 @@ describe('useFactoryConstructionPolicy (#875, #944)', () => {
       'joint.floorToSide.systemId': 'screw-only',
     },
     customResourceIds: [],
+    version: 1,
     createdAt: '2026-09-10T00:00:00Z',
     updatedAt: '2026-09-10T00:00:00Z',
   };

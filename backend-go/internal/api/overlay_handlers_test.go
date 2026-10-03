@@ -20,10 +20,17 @@ import (
 
 // Helper to inject org claims into the request context for testing
 func withOverlayOrgClaims(req *http.Request, orgID, userID string) *http.Request {
+	return withOverlayOrgRoleClaims(req, orgID, userID, domain.RoleAdmin)
+}
+
+// withOverlayOrgRoleClaims is the role-configurable variant (#875 slice 4):
+// the permission matrix refuses visitor/sales mutations server-side.
+func withOverlayOrgRoleClaims(req *http.Request, orgID, userID string, role domain.UserRole) *http.Request {
 	claims := &auth.Claims{
 		OrgID:  orgID,
 		UserID: userID,
-		Role:   string(domain.RoleAdmin),
+		Role:   string(role),
+		Roles:  []string{string(role)},
 	}
 	claims.Subject = userID
 	ctx := context.WithValue(req.Context(), UserContextKey, claims)
@@ -371,6 +378,7 @@ func TestHandleUpdateLibraryOverlay(t *testing.T) {
 		LibraryID:      standardID,
 		BaseReleaseID:  uuid.New(),
 		Status:         "active",
+		Version:        1,
 		Overrides:      json.RawMessage(`{"parameters.panelThickness": 15.0}`),
 		CreatedAt:      time.Now().UTC(),
 		UpdatedAt:      time.Now().UTC(),
@@ -393,6 +401,7 @@ func TestHandleUpdateLibraryOverlay(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
 		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(1))
 		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
 		rr := httptest.NewRecorder()
 
@@ -420,6 +429,7 @@ func TestHandleUpdateLibraryOverlay(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
 		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(1))
 		req = withOverlayOrgClaims(req, orgB.String(), userID.String()) // Org B
 		rr := httptest.NewRecorder()
 
@@ -447,8 +457,80 @@ func TestHandleUpdateLibraryOverlay(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
 		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(1))
 		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
 		rr := httptest.NewRecorder()
+	t.Run("Missing If-Match is 428", func(t *testing.T) {
+		store := &stubStore{
+			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+				overlayID: overlay,
+			},
+		}
+		srv := &Server{Store: store}
+
+		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
+			Overrides: map[string]any{"parameters.panelThickness": 18.0},
+		})
+		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+		req.SetPathValue("id", overlayID.String())
+		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+		rr := httptest.NewRecorder()
+
+		srv.HandleUpdateLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusPreconditionRequired {
+			t.Fatalf("expected 428 without If-Match, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("Stale If-Match is a visible 412 conflict", func(t *testing.T) {
+		store := &stubStore{
+			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+				overlayID: overlay,
+			},
+		}
+		srv := &Server{Store: store}
+
+		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
+			Overrides: map[string]any{"parameters.panelThickness": 18.0},
+		})
+		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(99))
+		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+		rr := httptest.NewRecorder()
+
+		srv.HandleUpdateLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusPreconditionFailed {
+			t.Fatalf("expected 412 for a stale version, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("Vendedor mutation is 403 server-authority", func(t *testing.T) {
+		store := &stubStore{
+			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+				overlayID: overlay,
+			},
+		}
+		srv := &Server{Store: store}
+
+		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
+			Overrides: map[string]any{"parameters.panelThickness": 18.0},
+		})
+		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("If-Match", FormatVersionETag(1))
+		req = withOverlayOrgRoleClaims(req, orgA.String(), userID.String(), domain.RoleVendedor)
+		rr := httptest.NewRecorder()
+
+		srv.HandleUpdateLibraryOverlay(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403 for a sales role, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
 
 		srv.HandleUpdateLibraryOverlay(rr, req)
 
@@ -1010,3 +1092,84 @@ func TestHandleGetActiveLibraryOverlay(t *testing.T) {
 	})
 }
 
+
+// #875 slice 5: the policy draft/activate handler protocol — If-Match
+// required, permissions enforced, and the 422 with the parser's issue when
+// an invalid draft is activated.
+func TestHandleSaveAndActivatePolicyDraft(t *testing.T) {
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	orgA := uuid.New()
+	userID := uuid.New()
+	overlayID := uuid.New()
+
+	overlay := &domain.LibraryOverlay{
+		ID:             overlayID,
+		OrganizationID: orgA,
+		LibraryID:      standardID,
+		BaseReleaseID:  uuid.New(),
+		Status:         "active",
+		Overrides:      json.RawMessage(`{}`),
+		Version:        1,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+
+	saveReq := func(version string) *http.Request {
+		bodyBytes, _ := json.Marshal(openapi.SavePolicyDraftRequest{
+			Overrides: map[string]any{"joint.shelfToSide.stationsCount": 1},
+		})
+		req := httptest.NewRequest(http.MethodPut, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+		req.SetPathValue("id", overlayID.String())
+		req.Header.Set("Content-Type", "application/json")
+		if version != "" {
+			req.Header.Set("If-Match", version)
+		}
+		return req
+	}
+
+	t.Run("Save without If-Match is 428", func(t *testing.T) {
+		store := &stubStore{overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{overlayID: overlay}}
+		srv := &Server{Store: store}
+		req := saveReq("")
+		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+		rr := httptest.NewRecorder()
+		srv.HandleSaveLibraryOverlayPolicyDraft(rr, req)
+		if rr.Code != http.StatusPreconditionRequired {
+			t.Fatalf("expected 428, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("Save as vendedor is 403", func(t *testing.T) {
+		store := &stubStore{overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{overlayID: overlay}}
+		srv := &Server{Store: store}
+		req := saveReq(`"v1"`)
+		req = withOverlayOrgRoleClaims(req, orgA.String(), userID.String(), domain.RoleVendedor)
+		rr := httptest.NewRecorder()
+		srv.HandleSaveLibraryOverlayPolicyDraft(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("Save with a valid token stages the draft and returns the detail", func(t *testing.T) {
+		store := &stubStore{overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{overlayID: overlay}}
+		srv := &Server{Store: store}
+		req := saveReq(`"v1"`)
+		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+		rr := httptest.NewRecorder()
+		srv.HandleSaveLibraryOverlayPolicyDraft(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+		var detail openapi.LibraryOverlayDetail
+		if err := json.Unmarshal(rr.Body.Bytes(), &detail); err != nil {
+			t.Fatalf("decode detail: %v", err)
+		}
+		if detail.PolicyDraft == nil {
+			t.Fatalf("the detail must carry the staged draft")
+		}
+		if detail.Version != 2 {
+			t.Fatalf("staging must bump the version, got %d", detail.Version)
+		}
+	})
+}
