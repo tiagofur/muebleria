@@ -49,9 +49,11 @@ module Granete
             return
           end
 
-          adapter = presentation_motion_adapter_for(target_furniture, swing_side, open_angle_deg)
+          adapter = presentation_motion_adapter_for(target_furniture, open_angle_deg)
           motion_id = "door-slot-#{slot_index}"
-          is_open = adapter.toggle_motion(motion_id)
+          # The per-door side arrives with EVERY toggle (card convention /
+          # authored data) — the cached adapter never freezes a side.
+          is_open = adapter.toggle_motion(motion_id, swing_side)
 
           execute_bridge(dialog, 'onDoorMotionToggled', {
                            'doorSlotIndex' => slot_index,
@@ -72,7 +74,7 @@ module Granete
 
         private
 
-        def presentation_motion_adapter_for(furniture_entity, swing_side, open_angle_deg)
+        def presentation_motion_adapter_for(furniture_entity, open_angle_deg)
           @motion_adapters ||= {}
           key = furniture_key(furniture_entity)
           adapter = @motion_adapters[key]
@@ -87,19 +89,12 @@ module Granete
             comp_id = "door-comp-#{idx}"
             component_map[comp_id] = door
 
-            effective_swing = if swing_side == 'pair'
-                                idx.zero? ? 'left' : 'right'
-                              else
-                                swing_side
-                              end
-
             motions << {
               'id' => motion_id,
               'doorSlotIndex' => idx,
               'componentInstanceIds' => [comp_id],
               'motion' => {
                 'kind' => 'rotate',
-                'pivotSide' => effective_swing,
                 'openAngleDeg' => open_angle_deg,
                 'axisLocal' => { 'x' => 0, 'y' => 0, 'z' => 1 }
               }

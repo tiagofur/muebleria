@@ -42,7 +42,10 @@ module Granete
         # @param motion_id_or_agregado_id [String]
         # @param progress [Float] 0.0 = closed, 1.0 = fully open
         # @param furniture_transform [Geom::Transformation, nil]
-        def apply_motion(motion_id_or_agregado_id, progress = 1.0, furniture_transform = nil)
+        # @param side [String, nil] 'left'/'right' hinge side for THIS call —
+        #   the caller knows the per-door side (card convention or authored
+        #   data); a cached adapter must never freeze the first call's side.
+        def apply_motion(motion_id_or_agregado_id, progress = 1.0, furniture_transform = nil, side: nil)
           motion_def = find_motion(motion_id_or_agregado_id)
           return unless motion_def
 
@@ -59,7 +62,7 @@ module Granete
             if progress <= 0.0
               restore_actor_closed_pose(door_instance, comp_id)
             else
-              apply_actor_motion_pose(door_instance, comp_id, motion, progress, furniture_transform)
+              apply_actor_motion_pose(door_instance, comp_id, motion, progress, furniture_transform, side)
             end
           end
         end
@@ -89,12 +92,12 @@ module Granete
         end
 
         # rubocop:disable-next Naming/PredicateMethod
-        def toggle_motion(motion_id, furniture_transform = nil)
+        def toggle_motion(motion_id, side = nil, furniture_transform = nil)
           if open?(motion_id)
             apply_motion(motion_id, 0.0, furniture_transform)
             false
           else
-            apply_motion(motion_id, 1.0, furniture_transform)
+            apply_motion(motion_id, 1.0, furniture_transform, side: side)
             true
           end
         end
@@ -118,11 +121,11 @@ module Granete
           end
         end
 
-        def apply_actor_motion_pose(door_instance, comp_id, motion, progress, furniture_transform)
+        def apply_actor_motion_pose(door_instance, comp_id, motion, progress, furniture_transform, side)
           closed_t = canonical_closed_transform(door_instance)
           return unless closed_t
 
-          rel_t = compute_relative_transform(door_instance, closed_t, motion, progress, furniture_transform)
+          rel_t = compute_relative_transform(door_instance, closed_t, motion, progress, furniture_transform, side)
           return unless rel_t
 
           set_transform(door_instance, rel_t * closed_t)
@@ -148,10 +151,10 @@ module Granete
           end
         end
 
-        def compute_relative_transform(door_instance, closed_t, motion, progress, _furniture_transform)
+        def compute_relative_transform(door_instance, closed_t, motion, progress, _furniture_transform, side)
           case motion['kind']
           when 'rotate'
-            compute_relative_rotate_transform(door_instance, closed_t, motion, progress)
+            compute_relative_rotate_transform(door_instance, closed_t, motion, progress, side)
           when 'translate'
             compute_relative_translate_transform(motion, progress)
           else
@@ -159,10 +162,9 @@ module Granete
           end
         end
 
-        def compute_relative_rotate_transform(door_instance, closed_t, motion, progress)
+        def compute_relative_rotate_transform(door_instance, closed_t, motion, progress, side)
           angle_deg = (motion['openAngleDeg'] || 110.0).to_f * progress
-          pivot_side = motion['pivotSide'] || motion['pivot'] || 'left'
-          pivot_side = pivot_side.to_s.downcase
+          pivot_side = (side || motion['pivotSide'] || motion['pivot'] || 'left').to_s.downcase
 
           # Pivot axis is local vertical (Z) of the furniture frame
           axis_vec = if motion['axisLocal']
@@ -172,15 +174,38 @@ module Granete
                        ::Geom::Vector3d.new(0, 0, 1)
                      end
 
-          # Determine hinge pivot point in furniture coordinates
-          pivot_pt = resolve_pivot_point(door_instance, closed_t, pivot_side)
-
-          # Left swing opens with positive angle (outward)
-          # Right swing opens with negative angle (outward)
-          sign = pivot_side == 'right' ? -1.0 : 1.0
+          pivot_pt, sign = hinge_edge(door_instance, closed_t, pivot_side)
           angle_rad = sign * angle_deg * (Math::PI / 180.0)
 
           ::Geom::Transformation.rotation(pivot_pt, axis_vec, angle_rad)
+        end
+
+        # Hinge edge and rotation sign for one swing side, in furniture
+        # definition space. Frame convention (#414): X = width, Y = depth
+        # with the FRONT at +Y, Z = height. A viewer FACING the furniture
+        # front (standing at +Y, looking along -Y, Z up) has screen-right =
+        # direction x up = (0,-1,0)x(0,0,1) = -X — so the viewer's LEFT is
+        # +X. Therefore hinge-left = MAX-X vertical edge of the door and
+        # hinge-right = the origin (MIN-X) edge; outward (+Y) sweep of the
+        # free edge then needs a negative rotation about +Z when hinged
+        # left, positive when hinged right. (The original implementation
+        # assumed min-X was 'left' — every door opened hinge-RIGHT.)
+        def hinge_edge(door_instance, closed_t, pivot_side)
+          origin = closed_t.respond_to?(:origin) ? closed_t.origin : ::Geom::Point3d.new(0, 0, 0)
+          width_inches = if door_instance.respond_to?(:definition) && door_instance.definition.respond_to?(:bounds)
+                           door_instance.definition.bounds.width
+                         elsif door_instance.respond_to?(:bounds)
+                           door_instance.bounds.width
+                         else
+                           0.0
+                         end
+          max_x_edge = if closed_t.respond_to?(:xaxis)
+                         origin + (closed_t.xaxis * width_inches)
+                       else
+                         origin + ::Geom::Vector3d.new(width_inches, 0, 0)
+                       end
+
+          pivot_side == 'left' ? [max_x_edge, -1.0] : [origin, 1.0]
         end
 
         def compute_relative_translate_transform(motion, progress)
@@ -189,26 +214,6 @@ module Granete
           ax = motion['axisLocal'] || { 'x' => 0, 'y' => 1, 'z' => 0 }
           v = ::Geom::Vector3d.new(ax['x'].to_f * dist_inches, ax['y'].to_f * dist_inches, ax['z'].to_f * dist_inches)
           ::Geom::Transformation.translation(v)
-        end
-
-        def resolve_pivot_point(door_instance, closed_t, pivot_side)
-          origin = closed_t.respond_to?(:origin) ? closed_t.origin : ::Geom::Point3d.new(0, 0, 0)
-          return origin unless pivot_side == 'right'
-
-          # For right side, offset pivot to the right vertical edge of the door
-          width_inches = if door_instance.respond_to?(:definition) && door_instance.definition.respond_to?(:bounds)
-                           door_instance.definition.bounds.width
-                         elsif door_instance.respond_to?(:bounds)
-                           door_instance.bounds.width
-                         else
-                           0.0
-                         end
-
-          if closed_t.respond_to?(:xaxis)
-            origin + (closed_t.xaxis * width_inches)
-          else
-            origin + ::Geom::Vector3d.new(width_inches, 0, 0)
-          end
         end
       end
     end
