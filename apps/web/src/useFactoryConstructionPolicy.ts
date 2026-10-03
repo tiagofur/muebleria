@@ -36,6 +36,9 @@ export function useFactoryConstructionPolicy({
   const [policy, setPolicy] = useState<FactoryConstructionPolicy>(DEFAULT_FACTORY_CONSTRUCTION_POLICY);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  // #875 slice 5: the DRAFT view of the policy (what activation WOULD make
+  // effective) — null while no draft differs from the active policy.
+  const [drafting, setDrafting] = useState(false);
   const [rebasing, setRebasing] = useState(false);
   const [resolvingConflictId, setResolvingConflictId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +123,48 @@ export function useFactoryConstructionPolicy({
     }
   }, [baseUrl, token, activeOverlay]);
 
+  // #875 slice 5: stage the CURRENT editor policy as the overlay's draft.
+  // The active policy keeps governing every resolve — the draft only becomes
+  // effective through activatePolicyDraft, which the server validates with
+  // the engine's own parser before swapping.
+  const savePolicyDraft = useCallback(async (nextPolicy: FactoryConstructionPolicy) => {
+    if (!token || !activeOverlay) return;
+    setDrafting(true);
+    setError(null);
+    try {
+      const client = new GraneteApiClient(baseUrl);
+      const updated = await client.savePolicyDraft(token, activeOverlay, nextPolicy);
+      setActiveOverlay(updated);
+      setPolicy(overlayOverridesToPolicy((updated.overrides ?? {}) as Record<string, unknown>));
+      return updated;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar el borrador de política');
+      throw err;
+    } finally {
+      setDrafting(false);
+    }
+  }, [baseUrl, token, activeOverlay]);
+
+  // #875 slice 5: promote the staged draft — the server validates with the
+  // engine's own policy parser and refuses (422) an unusable policy.
+  const activatePolicyDraft = useCallback(async () => {
+    if (!token || !activeOverlay) return;
+    setDrafting(true);
+    setError(null);
+    try {
+      const client = new GraneteApiClient(baseUrl);
+      const updated = await client.activatePolicy(token, activeOverlay);
+      setActiveOverlay(updated);
+      setPolicy(overlayOverridesToPolicy((updated.overrides ?? {}) as Record<string, unknown>));
+      return updated;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al activar la política de construcción');
+      throw err;
+    } finally {
+      setDrafting(false);
+    }
+  }, [baseUrl, token, activeOverlay]);
+
   const rebaseToRelease = useCallback(async (targetReleaseId: string): Promise<LibraryOverlayRebaseResult | undefined> => {
     if (!token || !activeOverlay) return;
     setRebasing(true);
@@ -190,6 +235,9 @@ export function useFactoryConstructionPolicy({
     policy,
     setPolicy,
     savePolicy,
+    savePolicyDraft,
+    activatePolicyDraft,
+    drafting,
     rebaseToRelease,
     resolveConflict,
     loading,

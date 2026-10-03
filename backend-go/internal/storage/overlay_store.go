@@ -25,6 +25,9 @@ var (
 
 	// ErrOverlayConflictAlreadyResolved is returned when attempting to resolve an already-resolved conflict.
 	ErrOverlayConflictAlreadyResolved = errors.New("library overlay conflict already resolved")
+
+	// ErrNoPolicyDraft is returned when an activation finds no staged draft.
+	ErrNoPolicyDraft = errors.New("library overlay has no policy draft to activate")
 )
 
 // CreateOverlay inserts a new organization library overlay.
@@ -51,7 +54,7 @@ func (s *PostgresStore) CreateOverlay(ctx context.Context, overlay *domain.Libra
 		INSERT INTO library_overlays (
 			id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-		RETURNING id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, created_at, updated_at`
+		RETURNING id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, policy_draft, created_at, updated_at`
 
 	row := s.db(ctx).QueryRow(ctx, query,
 		overlay.ID,
@@ -74,7 +77,7 @@ func (s *PostgresStore) CreateOverlay(ctx context.Context, overlay *domain.Libra
 // GetOverlayByID returns a library overlay by its ID (enforced by RLS).
 func (s *PostgresStore) GetOverlayByID(ctx context.Context, id uuid.UUID) (*domain.LibraryOverlay, error) {
 	const query = `
-		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, created_at, updated_at
+		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, policy_draft, created_at, updated_at
 		FROM library_overlays
 		WHERE id = $1`
 
@@ -92,7 +95,7 @@ func (s *PostgresStore) GetOverlayByID(ctx context.Context, id uuid.UUID) (*doma
 // GetActiveOverlayByLibrary returns the active overlay for an organization and library.
 func (s *PostgresStore) GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error) {
 	const query = `
-		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, created_at, updated_at
+		SELECT id, organization_id, library_id, base_release_id, status, overrides, custom_resource_ids, version, policy_draft, created_at, updated_at
 		FROM library_overlays
 		WHERE organization_id = $1 AND library_id = $2 AND status IN ('active', 'rebase_conflict')
 		ORDER BY created_at DESC
@@ -153,6 +156,93 @@ func (s *PostgresStore) UpdateOverlayOverrides(
 		return fmt.Errorf("update overlay overrides %s: %w", id, err)
 	}
 	return nil
+}
+
+// SavePolicyDraft stages the construction policy draft (#875 slice 5). The
+// ACTIVE overrides keep governing every resolve; the draft only becomes
+// effective through ActivatePolicyDraft. The write is value-agnostic on
+// purpose — an INVALID draft is persistable per the issue contract; the
+// activation gate owns validation. Same optimistic-concurrency contract as
+// every overlay write: stale version conflicts, landing write bumps.
+func (s *PostgresStore) SavePolicyDraft(
+	ctx context.Context,
+	id uuid.UUID,
+	expectedVersion int64,
+	draft json.RawMessage,
+) error {
+	const query = `
+		UPDATE library_overlays
+		SET policy_draft = $2,
+		    version = version + 1,
+		    updated_at = NOW()
+		WHERE id = $1 AND version = $3
+		RETURNING version`
+
+	var newVersion int64
+	err := s.db(ctx).QueryRow(ctx, query, id, draft, expectedVersion).Scan(&newVersion)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return s.overlayWriteZeroRows(ctx, id)
+		}
+		return fmt.Errorf("save policy draft %s: %w", id, err)
+	}
+	return nil
+}
+
+// ActivatePolicyDraft promotes the staged draft into the ACTIVE overrides in
+// ONE atomic UPDATE (#875 slice 5): the caller supplies the merged overrides
+// computed from the draft it validated; this write swaps them in, clears the
+// draft and bumps the version together — there is no intermediate state where
+// the draft is gone but the policy unchanged. The `policy_draft IS NOT NULL`
+// guard plus the version precondition make a retried activation impossible to
+// double-apply: after the first landing, a retry is a stale-version conflict.
+func (s *PostgresStore) ActivatePolicyDraft(
+	ctx context.Context,
+	id uuid.UUID,
+	expectedVersion int64,
+	mergedOverrides json.RawMessage,
+) error {
+	const query = `
+		UPDATE library_overlays
+		SET overrides = $2,
+		    policy_draft = NULL,
+		    version = version + 1,
+		    updated_at = NOW()
+		WHERE id = $1 AND version = $3 AND policy_draft IS NOT NULL
+		RETURNING version`
+
+	var newVersion int64
+	err := s.db(ctx).QueryRow(ctx, query, id, mergedOverrides, expectedVersion).Scan(&newVersion)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			var exists, hasDraft bool
+			if scanErr := s.db(ctx).QueryRow(ctx,
+				`SELECT EXISTS (SELECT 1 FROM library_overlays WHERE id = $1),
+				        EXISTS (SELECT 1 FROM library_overlays WHERE id = $1 AND policy_draft IS NOT NULL)`,
+				id).Scan(&exists, &hasDraft); scanErr == nil {
+				if !exists {
+					return ErrOverlayNotFound
+				}
+				if !hasDraft {
+					return ErrNoPolicyDraft
+				}
+			}
+			return ErrVersionConflict
+		}
+		return fmt.Errorf("activate policy draft %s: %w", id, err)
+	}
+	return nil
+}
+
+// overlayWriteZeroRows distinguishes an absent overlay from a lost version
+// race for the single-precondition writes.
+func (s *PostgresStore) overlayWriteZeroRows(ctx context.Context, id uuid.UUID) error {
+	var exists bool
+	if scanErr := s.db(ctx).QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM library_overlays WHERE id = $1)`, id).Scan(&exists); scanErr == nil && !exists {
+		return ErrOverlayNotFound
+	}
+	return ErrVersionConflict
 }
 
 // UpdateOverlayStatus updates the status of an overlay.
@@ -395,6 +485,7 @@ type scannableRow interface {
 func scanOverlay(row scannableRow) (*domain.LibraryOverlay, error) {
 	var o domain.LibraryOverlay
 	var customResourceIDsBytes []byte
+	var policyDraftBytes []byte
 
 	err := row.Scan(
 		&o.ID,
@@ -405,6 +496,7 @@ func scanOverlay(row scannableRow) (*domain.LibraryOverlay, error) {
 		&o.Overrides,
 		&customResourceIDsBytes,
 		&o.Version,
+		&policyDraftBytes,
 		&o.CreatedAt,
 		&o.UpdatedAt,
 	)
@@ -419,6 +511,9 @@ func scanOverlay(row scannableRow) (*domain.LibraryOverlay, error) {
 	}
 	if o.CustomResourceIDs == nil {
 		o.CustomResourceIDs = make([]uuid.UUID, 0)
+	}
+	if len(policyDraftBytes) > 0 {
+		o.PolicyDraft = json.RawMessage(policyDraftBytes)
 	}
 
 	return &o, nil

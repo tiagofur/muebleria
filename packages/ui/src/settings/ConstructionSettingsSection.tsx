@@ -32,6 +32,12 @@ export interface ConstructionSettingsSectionProps {
   readonly onChange: (nextPolicy: FactoryConstructionPolicy) => void;
   readonly saving?: boolean;
   readonly disabled?: boolean;
+  /** #875 slice 5: the staged draft policy (from the overlay's policyDraft) —
+   * what activation WOULD make effective. Null = no draft staged. */
+  readonly policyDraft?: FactoryConstructionPolicy | null;
+  readonly drafting?: boolean;
+  readonly onSaveDraft?: (nextPolicy: FactoryConstructionPolicy) => void | Promise<unknown>;
+  readonly onActivateDraft?: () => void | Promise<unknown>;
 }
 
 const SYSTEM_OPTIONS: readonly { value: JoinerySystemId; label: string; description: string }[] = [
@@ -57,8 +63,13 @@ export function ConstructionSettingsSection({
   onChange,
   saving = false,
   disabled = false,
+  policyDraft = null,
+  drafting = false,
+  onSaveDraft,
+  onActivateDraft,
 }: ConstructionSettingsSectionProps): ReactNode {
   const validation = validateConstructionPolicy(policy);
+  const draftValidation = policyDraft ? validateConstructionPolicy(policyDraft) : null;
 
   const updateFloor = (partial: Partial<JointFamilyRule>) => {
     onChange({
@@ -334,6 +345,60 @@ export function ConstructionSettingsSection({
           </div>
         </div>
       ) : null}
+
+      {/* #875 slice 5: the DRAFT workflow — edits stage as a draft; the
+          ACTIVE policy keeps governing production until the explicit,
+          server-validated activation. */}
+      <div
+        style={{
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-md)',
+          padding: 'var(--space-3)',
+          background: 'var(--surface-hover)',
+          display: 'grid',
+          gap: 'var(--space-2)',
+        }}
+        data-testid="construction-draft-banner"
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <strong data-testid="construction-draft-badge">
+            {policyDraft ? '📋 Borrador guardado — no gobierna la producción' : 'Sin borrador: la política activa rige los cálculos'}
+          </strong>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {onSaveDraft ? (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm"
+                disabled={drafting || disabled}
+                onClick={() => void onSaveDraft(policy)}
+                data-testid="construction-save-draft-btn"
+                title="Guarda estos valores como borrador; la política activa no cambia hasta que actives"
+              >
+                {drafting ? 'Guardando…' : 'Guardar borrador'}
+              </button>
+            ) : null}
+            {onActivateDraft ? (
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                disabled={drafting || !policyDraft || !draftValidation?.valid}
+                onClick={() => void onActivateDraft?.()}
+                data-testid="construction-activate-btn"
+                title={policyDraft ? 'Hace efectiva la política del borrador para los nuevos cálculos' : 'No hay borrador para activar'}
+              >
+                {drafting ? 'Activando…' : 'Activar política'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <p className="settings-hint" style={{ margin: 0 }}>
+          {policyDraft
+            ? draftValidation && !draftValidation.valid
+              ? 'El borrador tiene errores y no puede activarse: corregilos y guardá el borrador de nuevo.'
+              : 'El borrador está listo: «Activar política» lo hace efectivo para los nuevos cálculos.'
+            : '«Guardar borrador» guarda estos valores sin cambiar la política activa; activarlos es un paso explícito.'}
+        </p>
+      </div>
 
       {/* Regla 1: Piso con Laterales */}
       <div

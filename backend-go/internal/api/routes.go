@@ -399,6 +399,8 @@ func RegisterRoutes(server *Server) http.Handler {
 	mux.Handle("GET /api/manufacturing-libraries/overlays/active", authMW(http.HandlerFunc(server.HandleGetActiveLibraryOverlay)))
 	mux.Handle("GET /api/manufacturing-libraries/overlays/{id}", authMW(http.HandlerFunc(server.HandleGetLibraryOverlayByID)))
 	mux.Handle("PATCH /api/manufacturing-libraries/overlays/{id}", authMW(http.HandlerFunc(server.HandleUpdateLibraryOverlay)))
+	mux.Handle("PUT /api/manufacturing-libraries/overlays/{id}/policy-draft", authMW(http.HandlerFunc(server.HandleSaveLibraryOverlayPolicyDraft)))
+	mux.Handle("POST /api/manufacturing-libraries/overlays/{id}/policy:activate", authMW(http.HandlerFunc(server.HandleActivateLibraryOverlayPolicy)))
 	mux.Handle("POST /api/manufacturing-libraries/overlays/{id}/rebase", authMW(http.HandlerFunc(server.HandleRebaseLibraryOverlay)))
 	mux.Handle("GET /api/manufacturing-libraries/overlays/{id}/conflicts", authMW(http.HandlerFunc(server.HandleListLibraryOverlayConflicts)))
 	mux.Handle("POST /api/manufacturing-libraries/overlays/{id}/conflicts/{conflictId}/resolve", authMW(http.HandlerFunc(server.HandleResolveLibraryOverlayConflict)))

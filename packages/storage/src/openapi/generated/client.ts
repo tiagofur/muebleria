@@ -138,6 +138,7 @@ import type {
   RevokeMembershipSessionsRequest,
   RevokeSessionRequest,
   SalesNetworkReadModel,
+  SavePolicyDraftRequest,
   SecurityAuditEvent,
   SelectOrganizationRequest,
   SessionDirectory,
@@ -318,6 +319,8 @@ export abstract class GeneratedGraneteApiClient {
   getActiveLibraryOverlay(token: string, signal?: AbortSignal): Promise<LibraryOverlayDetail | null> { return this.request("GET", "/manufacturing-libraries/overlays/active", { schemaOrNull: "LibraryOverlayDetail", token, signal }); }
   getLibraryOverlayById(token: string, id: string, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("GET", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}`, { schema: "LibraryOverlayDetail", token, signal }); }
   updateLibraryOverlay(token: string, id: string, version: number, body: UpdateLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("PATCH", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}`, { schema: "LibraryOverlayDetail", token, ifMatch: version, bodySchema: "UpdateLibraryOverlayRequest", body, signal }); }
+  saveLibraryOverlayPolicyDraft(token: string, id: string, version: number, body: SavePolicyDraftRequest, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("PUT", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/policy-draft`, { schema: "LibraryOverlayDetail", token, ifMatch: version, bodySchema: "SavePolicyDraftRequest", body, signal }); }
+  activateLibraryOverlayPolicy(token: string, id: string, version: number, signal?: AbortSignal): Promise<LibraryOverlayDetail> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/policy:activate`, { schema: "LibraryOverlayDetail", token, ifMatch: version, signal }); }
   rebaseLibraryOverlay(token: string, id: string, body: RebaseLibraryOverlayRequest, signal?: AbortSignal): Promise<LibraryOverlayRebaseResult> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/rebase`, { schema: "LibraryOverlayRebaseResult", token, bodySchema: "RebaseLibraryOverlayRequest", body, signal }); }
   listLibraryOverlayConflicts(token: string, id: string, signal?: AbortSignal): Promise<ReadonlyArray<LibraryOverlayConflictDetail>> { return this.request("GET", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/conflicts`, { arrayOf: "LibraryOverlayConflictDetail", token, signal }); }
   resolveLibraryOverlayConflict(token: string, id: string, conflictId: string, body: ResolveLibraryOverlayConflictRequest, signal?: AbortSignal): Promise<LibraryOverlayConflictDetail> { return this.request("POST", `/manufacturing-libraries/overlays/${encodeURIComponent(id)}/conflicts/${encodeURIComponent(conflictId)}/resolve`, { schema: "LibraryOverlayConflictDetail", token, bodySchema: "ResolveLibraryOverlayConflictRequest", body, signal }); }

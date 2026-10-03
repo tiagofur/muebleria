@@ -46,7 +46,11 @@ type LibraryOverlay struct {
 	CustomResourceIDs []uuid.UUID     `json:"customResourceIds"`
 	// Version backs the optimistic-concurrency If-Match contract (#875
 	// slice 4): every overrides update bumps it; a stale token conflicts.
-	Version   int64     `json:"version"`
+	Version int64 `json:"version"`
+	// PolicyDraft stages the construction policy draft (#875 slice 5): the
+	// ACTIVE Overrides keep governing the resolve until the explicit,
+	// validated activation swaps them in. nil = no draft.
+	PolicyDraft json.RawMessage `json:"policyDraft,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
