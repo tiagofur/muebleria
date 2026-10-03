@@ -407,6 +407,15 @@ export {
   describeUnrepresentableOperations,
   type MprOperationKind,
 } from './machines/woodWopMprAdapter';
+export {
+  KDT_POSTPROCESSOR_ADAPTER,
+  KDT_ADAPTER_IMPLEMENTATION_DESCRIPTOR,
+  serializePerPiece,
+  describeKdtOperations,
+  describeUnrepresentableKdtOperations,
+  type KdtOperationKind,
+  type KdtPieceArtifact,
+} from './machines/kdtAdapter';
 
 export {
   generateMachineArtifact,
