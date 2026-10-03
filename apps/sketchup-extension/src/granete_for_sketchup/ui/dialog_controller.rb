@@ -236,11 +236,11 @@ module Granete
           dialog.add_action_callback('insert_furniture') { |_c, p| handle_insert(dialog, p) }
           register_furniture_callbacks(dialog)
           register_authoring_callbacks(dialog)
-          dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
-          dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
+          register_inspection_callbacks(dialog)
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(dialog, p) }
+          register_motion_callbacks(dialog)
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
           register_auth_callbacks(dialog)
@@ -255,6 +255,16 @@ module Granete
           # session credential itself never crosses into the dialog.
           dialog.add_action_callback('refresh_media_url') { |_c, p| handle_refresh_media_url(dialog, p) }
           register_selection_context_menu
+        end
+
+        def register_inspection_callbacks(dialog)
+          dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
+          dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
+        end
+
+        def register_motion_callbacks(dialog)
+          dialog.add_action_callback('toggle_door_motion') { |_c, p| handle_toggle_door_motion(dialog, p) }
+          dialog.add_action_callback('close_all_doors') { handle_close_all_doors(dialog) }
         end
 
         # The per-furniture update callbacks: the single edit and the #471

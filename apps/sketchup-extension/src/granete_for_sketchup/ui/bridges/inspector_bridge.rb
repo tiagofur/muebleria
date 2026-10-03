@@ -6,6 +6,7 @@
 module Granete
   module SketchUpExtension
     module UserInterface
+      # rubocop:disable-next Metrics/ModuleLength
       module InspectorBridge
         FURNITURE_KINDS = %w[furnitureInstance bootstrapIntent].freeze
 
@@ -32,7 +33,134 @@ module Granete
           @logger.error('inspector_select_furniture_failed', error: e)
         end
 
+        def handle_toggle_door_motion(dialog, raw_payload = nil)
+          payload = parse_payload(raw_payload)
+          slot_index = (payload['doorSlotIndex'] || 0).to_i
+          instance_ref = payload['furnitureInstanceRef'] || payload['instanceId']
+          swing_side = payload['swingSide'] || 'left'
+          open_angle_deg = (payload['openAngleDeg'] || 110.0).to_f
+
+          model = active_model
+          target_furniture = (instance_ref && search_entities_for_instance(instance_ref)) ||
+                             model&.selection&.first
+
+          unless target_furniture && furniture_metadata?(model, target_furniture)
+            @logger.warn('toggle_door_motion_no_furniture', instance_ref: instance_ref)
+            return
+          end
+
+          adapter = presentation_motion_adapter_for(target_furniture, swing_side, open_angle_deg)
+          motion_id = "door-slot-#{slot_index}"
+          is_open = adapter.toggle_motion(motion_id)
+
+          execute_bridge(dialog, 'onDoorMotionToggled', {
+                           'doorSlotIndex' => slot_index,
+                           'isOpen' => is_open
+                         })
+          @logger.info('toggle_door_motion_executed', slot_index: slot_index, isOpen: is_open)
+        rescue StandardError => e
+          @logger.error('toggle_door_motion_failed', error: e)
+        end
+
+        def handle_close_all_doors(dialog, _raw_payload = nil)
+          @motion_adapters&.each_value(&:close_all)
+          execute_bridge(dialog, 'onAllDoorsClosed', {})
+          @logger.info('close_all_doors_executed')
+        rescue StandardError => e
+          @logger.error('close_all_doors_failed', error: e)
+        end
+
         private
+
+        def presentation_motion_adapter_for(furniture_entity, swing_side, open_angle_deg)
+          @motion_adapters ||= {}
+          key = furniture_key(furniture_entity)
+          adapter = @motion_adapters[key]
+          return adapter if adapter
+
+          door_entities, hardware_by_host = inspect_furniture_door_actors(furniture_entity)
+          motions = []
+          component_map = {}
+
+          door_entities.each_with_index do |door, idx|
+            motion_id = "door-slot-#{idx}"
+            comp_id = "door-comp-#{idx}"
+            component_map[comp_id] = door
+
+            effective_swing = if swing_side == 'pair'
+                                idx.zero? ? 'left' : 'right'
+                              else
+                                swing_side
+                              end
+
+            motions << {
+              'id' => motion_id,
+              'doorSlotIndex' => idx,
+              'componentInstanceIds' => [comp_id],
+              'motion' => {
+                'kind' => 'rotate',
+                'pivotSide' => effective_swing,
+                'openAngleDeg' => open_angle_deg,
+                'axisLocal' => { 'x' => 0, 'y' => 0, 'z' => 1 }
+              }
+            }
+          end
+
+          adapter = Motion::PresentationMotionAdapter.new(motions, component_map, hardware_by_host)
+          @motion_adapters[key] = adapter
+          adapter
+        end
+
+        def furniture_key(furniture_entity)
+          furniture_entity.respond_to?(:persistent_id) ? furniture_entity.persistent_id : furniture_entity.object_id
+        end
+
+        def inspect_furniture_door_actors(furniture_entity)
+          door_entities = []
+          hardware_by_host = Hash.new { |h, k| h[k] = [] }
+          return [door_entities, hardware_by_host] unless furniture_entity.respond_to?(:definition) &&
+                                                          furniture_entity.definition.respond_to?(:entities)
+
+          model = active_model
+          store = @metadata_store_factory.call(model)
+
+          furniture_entity.definition.entities.each do |child|
+            next unless child.respond_to?(:get_attribute)
+
+            meta = read_safe_metadata(store, child)
+            next unless meta
+
+            categorize_door_actor_child(meta, child, door_entities, hardware_by_host)
+          end
+
+          [door_entities, hardware_by_host]
+        end
+
+        def read_safe_metadata(store, child)
+          store.read(child)
+        rescue StandardError
+          nil
+        end
+
+        # rubocop:disable-next Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        def categorize_door_actor_child(meta, child, door_entities, hardware_by_host)
+          intent = meta['intent'] || {}
+          identity = meta['identity'] || {}
+          child_id = identity['instanceRef'] || identity['componentInstanceId'] || identity['hardwarePlacementId']
+          entity_class = intent['entityClass'] || (intent['hostComponentInstanceId'] ? 'hardware' : 'component')
+
+          if entity_class == 'hardware'
+            host_id = intent['hostComponentInstanceId']
+            hardware_by_host[host_id] << child if host_id
+          else
+            role = (intent['role'] || intent['semanticRole'] || '').to_s.downcase
+            placement = (intent['placement'] || '').to_s.downcase
+            if placement == 'puerta' || role.include?('door') || role.include?('frente') || role.include?('front')
+              door_entities << child
+              hardware_by_host["door-comp-#{door_entities.size - 1}"] = hardware_by_host[child_id] if child_id
+            end
+          end
+        end
 
         def parse_payload(raw_payload)
           if raw_payload.is_a?(String) && !raw_payload.strip.empty?

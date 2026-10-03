@@ -608,7 +608,10 @@
                       Ajuste el lado de apertura para recalcular bisagras y jaladeras.
                     </div>
                   </div>
-                  <span id="opening-count-badge" class="status-badge neutral" style="display: none;">--</span>
+                  <div style="display: flex; align-items: center; gap: var(--space-2);">
+                    <button id="btn-close-all-doors" type="button" class="btn btn-sm btn-ghost" style="display: none;">Cerrar todas</button>
+                    <span id="opening-count-badge" class="status-badge neutral" style="display: none;">--</span>
+                  </div>
                 </div>
                 <div id="inspector-opening-accessories-container" style="margin-top: var(--space-3);"></div>
               </div>
@@ -1509,6 +1512,18 @@
 
           onMaterialChoiceApplied: function (payload) {
             window.GraneteUI.inspector.onMaterialChoiceApplied(payload);
+          },
+
+          onDoorMotionToggled: function (payload) {
+            if (window.GraneteUI.inspector && window.GraneteUI.inspector.onDoorMotionToggled) {
+              window.GraneteUI.inspector.onDoorMotionToggled(payload);
+            }
+          },
+
+          onAllDoorsClosed: function () {
+            if (window.GraneteUI.inspector && window.GraneteUI.inspector.onAllDoorsClosed) {
+              window.GraneteUI.inspector.onAllDoorsClosed();
+            }
           }
         };
 

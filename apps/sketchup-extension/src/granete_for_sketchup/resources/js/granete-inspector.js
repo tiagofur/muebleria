@@ -136,6 +136,7 @@
   var inspectorOpeningAccessoriesContainer = document.getElementById("inspector-opening-accessories-container");
   var openingAccessoriesSummary = document.getElementById("opening-accessories-summary");
   var openingCountBadge = document.getElementById("opening-count-badge");
+  var btnCloseAllDoors = document.getElementById("btn-close-all-doors");
   var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
   var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
   // #784 R3b: the draft footer (pending count + Descartar + Aplicar) lives
@@ -521,11 +522,20 @@
     }
 
     if (!doors || doors.length === 0) {
+      if (btnCloseAllDoors) btnCloseAllDoors.style.display = "none";
       if (openingAccessoriesSummary) {
         openingAccessoriesSummary.textContent =
           "No hay puertas para esta combinación. Modifique la cantidad de puertas para ver sus accesorios.";
       }
       return;
+    }
+    if (btnCloseAllDoors) {
+      btnCloseAllDoors.style.display = "inline-block";
+      btnCloseAllDoors.onclick = function() {
+        if (window.sketchup && typeof window.sketchup.close_all_doors === "function") {
+          window.sketchup.close_all_doors();
+        }
+      };
     }
     if (openingAccessoriesSummary) {
       openingAccessoriesSummary.textContent =
@@ -551,6 +561,32 @@
       swingBadge.style.marginLeft = "auto";
       swingBadge.textContent = "Abre: " + swingLabel(d.swingSide);
       header.appendChild(swingBadge);
+
+      // Botón interactivo Abrir / Cerrar puerta (#529)
+      var slotIdx = d.doorSlotIndex !== undefined ? d.doorSlotIndex : i;
+      var btnMotion = document.createElement("button");
+      btnMotion.type = "button";
+      var isSlotOpen = !!(window.GraneteUI && window.GraneteUI.doorMotionStates && window.GraneteUI.doorMotionStates[slotIdx]);
+      btnMotion.className = isSlotOpen ? "btn btn-sm btn-secondary door-toggle-motion-btn" : "btn btn-sm btn-ghost door-toggle-motion-btn";
+      btnMotion.style.marginLeft = "var(--space-2)";
+      btnMotion.setAttribute("data-door-slot", String(slotIdx));
+      btnMotion.textContent = isSlotOpen ? "Cerrar" : "Abrir";
+      btnMotion.onclick = (function(slot, side) {
+        return function(e) {
+          e.stopPropagation();
+          if (window.sketchup && typeof window.sketchup.toggle_door_motion === "function") {
+            window.sketchup.toggle_door_motion(JSON.stringify({
+              doorSlotIndex: slot,
+              swingSide: side,
+              furnitureInstanceRef: ctx ? ctx.furnitureInstanceRef : null
+            }));
+          } else {
+            deps.showToast("info", "Cinemática: bridge de SketchUp no disponible en este entorno.");
+          }
+        };
+      })(slotIdx, d.swingSide);
+      header.appendChild(btnMotion);
+
       doorCard.appendChild(header);
 
       var group = document.createElement("div");
@@ -1680,6 +1716,25 @@
     // #784 R3b: the restore lands in the draft (mode design).
     applyRoleRestore: function (instanceId, role, designDefaultId) {
       applyRoleRestore(instanceId, role, designDefaultId);
+    },
+    onDoorMotionToggled: function (payload) {
+      var p = typeof payload === "string" ? JSON.parse(payload) : (payload || {});
+      var slot = p.doorSlotIndex !== undefined ? p.doorSlotIndex : 0;
+      if (!window.GraneteUI.doorMotionStates) window.GraneteUI.doorMotionStates = {};
+      window.GraneteUI.doorMotionStates[slot] = !!p.isOpen;
+      var btn = document.querySelector('.door-toggle-motion-btn[data-door-slot="' + slot + '"]');
+      if (btn) {
+        btn.textContent = p.isOpen ? "Cerrar" : "Abrir";
+        btn.className = p.isOpen ? "btn btn-sm btn-secondary door-toggle-motion-btn" : "btn btn-sm btn-ghost door-toggle-motion-btn";
+      }
+    },
+    onAllDoorsClosed: function () {
+      window.GraneteUI.doorMotionStates = {};
+      var btns = document.querySelectorAll('.door-toggle-motion-btn');
+      for (var bi = 0; bi < btns.length; bi++) {
+        btns[bi].textContent = "Abrir";
+        btns[bi].className = "btn btn-sm btn-ghost door-toggle-motion-btn";
+      }
     },
     getDefinition: function () { return inspectorDef; },
     getMaterialsCard: function () { return inspectorMaterialsCard; },

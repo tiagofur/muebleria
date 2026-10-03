@@ -150,6 +150,7 @@ module Granete
         #   hinges        — array of hinge placement hashes
         #   handle        — the jaladera placement hash, or nil
         # Callers must treat a missing/empty array as "no door data yet".
+        # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
         def door_accessories_payload
           placements = @door_hardware_placements || []
           with_affinity = placements.select do |p|
@@ -175,10 +176,10 @@ module Granete
             end
             {
               'doorSlotIndex' => slot_idx,
-              'doorLabel'     => first_aff[:doorLabel] || first_aff['doorLabel'],
-              'swingSide'     => (hinges.first || {})[face_key],
-              'hinges'        => hinges,
-              'handle'        => handle
+              'doorLabel' => first_aff[:doorLabel] || first_aff['doorLabel'],
+              'swingSide' => (hinges.first || {})[face_key],
+              'hinges' => hinges,
+              'handle' => handle
             }
           end
         end
