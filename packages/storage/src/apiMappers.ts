@@ -3332,6 +3332,23 @@ export function breakdownFromApi(raw: Record<string, unknown>): QuoteBreakdown {
   };
 }
 
+const PRESENTATION_MOTION_KINDS = new Set(['rotate', 'translate', 'keyframes']);
+
+/**
+ * #529: presentation opening kinematics authored on the Agregado. Presentation
+ * payload is stored/echoed opaquely by the backend, so the mapper validates the
+ * minimal honest shape (object + known kind) and drops anything else — a
+ * malformed blob never poisons the catalog in memory.
+ */
+function presentationMotionFromApi(raw: unknown):
+  | import('@granete/domain').AgregadoPresentationMotion
+  | undefined {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const kind = (raw as Record<string, unknown>).kind;
+  if (typeof kind !== 'string' || !PRESENTATION_MOTION_KINDS.has(kind)) return undefined;
+  return raw as import('@granete/domain').AgregadoPresentationMotion;
+}
+
 export function agregadoToApi(a: import('@granete/domain').Agregado): Record<string, unknown> {
   const dims = a.externalDims;
   return {
@@ -3345,6 +3362,7 @@ export function agregadoToApi(a: import('@granete/domain').Agregado): Record<str
     depth_mm: dims?.depth ?? 0,
     components: (a.components ?? []).map(componentInstanceToApi),
     hardware_lines: (a.hardwareLines ?? []).map(hardwareLineToApi),
+    ...(a.presentationMotion ? { presentation_motion: a.presentationMotion } : {}),
     active: a.active !== false,
   };
 }
@@ -3369,6 +3387,9 @@ export function agregadoFromApi(raw: Record<string, unknown>): import('@granete/
     hardwareLines: Array.isArray(hardwareLinesRaw)
       ? (hardwareLinesRaw as Record<string, unknown>[]).map(hardwareLineFromApi)
       : [],
+    presentationMotion: presentationMotionFromApi(
+      raw.presentation_motion ?? raw.presentationMotion,
+    ),
     active: raw.active !== false,
   };
 }

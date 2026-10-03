@@ -52,6 +52,41 @@ func containsAgregadoID(list []domain.Agregado, id string) bool {
 	return false
 }
 
+// #529: the presentation opening kinematics must survive the storage
+// round-trip (create → read → update → read) and a create without one must
+// read back nil, never an empty non-nil shell.
+func TestAgregados_PresentationMotionRoundTrip(t *testing.T) {
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	id, code := uniqueID("agr-pm"), uniqueID("AGR-PUE-PM")
+	t.Cleanup(func() { cleanupConnectStoreFixture(t, `DELETE FROM agregados WHERE id = $1`, id) })
+
+	rotate := map[string]any{"kind": "rotate", "pivot": "left", "axis": map[string]any{"x": 0.0, "y": 0.0, "z": 1.0}, "openAngleDeg": 110.0}
+	in := &domain.Agregado{ID: id, Code: code, Name: "Puerta Izquierda PM", Active: true, PresentationMotion: rotate}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.CreateAgregado(txCtx, in) })
+
+	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, id) })
+	if got.PresentationMotion == nil || got.PresentationMotion["kind"] != "rotate" || got.PresentationMotion["openAngleDeg"] != 110.0 {
+		t.Fatalf("rotate motion lost after create: %+v", got.PresentationMotion)
+	}
+
+	upd := *in
+	upd.PresentationMotion = map[string]any{"kind": "translate", "axis": map[string]any{"x": 0.0, "y": 1.0, "z": 0.0}, "distanceMm": 400.0}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, &upd) })
+	again := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, id) })
+	if again.PresentationMotion == nil || again.PresentationMotion["kind"] != "translate" || again.PresentationMotion["distanceMm"] != 400.0 {
+		t.Fatalf("translate motion lost after update: %+v", again.PresentationMotion)
+	}
+
+	noMotion := *in
+	noMotion.PresentationMotion = nil
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, &noMotion) })
+	cleared := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, id) })
+	if cleared.PresentationMotion != nil {
+		t.Fatalf("expected nil presentation motion after clearing update, got %+v", cleared.PresentationMotion)
+	}
+}
+
 func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
 	store, _ := migratedConnectStore(t)
 	actor := connectStoreInitialActor
