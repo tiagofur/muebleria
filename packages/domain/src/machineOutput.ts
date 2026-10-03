@@ -164,8 +164,10 @@ export interface AdapterBlockReason {
   readonly code:
     | 'FIELD_FORMAT_EVIDENCE_REQUIRED'
     | 'FORMAT_FAMILY_MISMATCH'
+    | 'JOB_DATA_INVALID'
     | 'OPERATION_NOT_REPRESENTABLE'
     | 'PROFILE_DIGEST_MISMATCH'
+    | 'PROGRAM_GRANULARITY_UNSUPPORTED'
     | 'SERIALIZER_NOT_IMPLEMENTED'
     | `ptx_compile.${string}`;
   readonly detail: string;

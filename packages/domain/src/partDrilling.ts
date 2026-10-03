@@ -33,6 +33,12 @@ export interface PartDrillingPattern {
   readonly partName: string;
   readonly lengthMm: number;
   readonly widthMm: number;
+  /**
+   * #1005 K2 — board thickness in mm (face to face). Optional for backward
+   * compatibility with producers that predate the field; consumers that need
+   * the machining frame (KDT adapter) fail closed when it is absent.
+   */
+  readonly thicknessMm?: number;
   readonly materialName: string;
   readonly holes: readonly HoleDefinition[];
 }
@@ -213,6 +219,7 @@ export function generatePartDrillingData(input: {
       partName: row.partName || row.description || `Pieza ${index + 1}`,
       lengthMm: row.lengthMm,
       widthMm: row.widthMm,
+      thicknessMm: row.thicknessMm ?? DEFAULT_BOARD_THICKNESS_MM,
       materialName: row.materialName ?? 'Sin material',
       holes,
     });
