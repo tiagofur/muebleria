@@ -773,6 +773,57 @@ export interface ModuleComponentInstance {
   };
 }
 
+// --- Presentation motion types (Slice B / #529) ---
+
+/** Which face of the agregado's local bounding box the pivot is on. */
+export type AgregadoPivotSide = 'left' | 'right' | 'top' | 'bottom';
+
+/** Unit direction vector in the agregado's local coordinate frame. */
+export interface AgregadoLocalAxis {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/** Rotation about a fixed pivot edge or a custom point — e.g. a hinged door swing. */
+export interface AgregadoRotateMotion {
+  readonly kind: 'rotate';
+  readonly pivot: AgregadoPivotSide | { readonly localMm: [number, number, number] };
+  readonly axis: AgregadoLocalAxis;
+  readonly openAngleDeg: number;
+}
+
+/** Linear translation along a local axis — e.g. a sliding door or drawer. */
+export interface AgregadoTranslateMotion {
+  readonly kind: 'translate';
+  readonly axis: AgregadoLocalAxis;
+  readonly distanceMm: number;
+}
+
+/** A single keyframe in a multi-step motion sequence. */
+export interface AgregadoMotionKeyframe {
+  readonly progress: number; // 0..1
+  readonly translationMm: [number, number, number];
+  readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
+}
+
+/** Fully authored keyframe sequence for complex motions (fold-down, flip-up, etc.). */
+export interface AgregadoKeyframedMotion {
+  readonly kind: 'keyframes';
+  readonly keyframes: readonly AgregadoMotionKeyframe[];
+}
+
+/**
+ * How this sub-assembly moves in the 3D presentation (open/close animation).
+ * Presentation-only — never reaches BOM, CNC, or cost calculation.
+ */
+export type AgregadoPresentationMotion =
+  | AgregadoRotateMotion
+  | AgregadoTranslateMotion
+  | AgregadoKeyframedMotion;
+
+// --- Agregado entity ---
+
 /**
  * A reusable sub-assembly composed of ComponentInstances + HardwareLines.
  * Examples: a drawer, a door with hinges and handle, a divider panel group.
@@ -802,6 +853,11 @@ export interface Agregado {
   readonly variantSets?: readonly AgregadoVariantSet[];
   /** Rules for selecting and validating variants based on available space */
   readonly compatibilityRules?: readonly AssemblyCompatibilityRule[];
+  /**
+   * How this sub-assembly moves in the 3D presentation (door swing, drawer slide,
+   * fold-down panel, etc.). Presentation-only — never reaches BOM or cost (#529).
+   */
+  readonly presentationMotion?: AgregadoPresentationMotion;
 }
 
 /**
