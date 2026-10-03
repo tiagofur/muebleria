@@ -15,7 +15,7 @@ export const MAX_FURNITURE_PARAMETER_RECEIVED_VALUE_LENGTH = 128;
 
 const PARAMETER_FIELDS = new Set([
   'name', 'label', 'sortOrder', 'type', 'defaultValue', 'required', 'unit', 'category',
-  'min', 'max', 'step', 'maxLength', 'options', 'integer', 'binding',
+  'min', 'max', 'step', 'maxLength', 'options', 'optionLabels', 'integer', 'binding',
 ]);
 const BINDING_FIELDS = new Set(['version', 'kind', 'componentId', 'dimension', 'relationship']);
 const RELATIONSHIP_FIELDS = new Set(['kind', 'sourceRole', 'targets']);
@@ -298,6 +298,11 @@ function parsedDefinitionShapeIssues(parsed: readonly unknown[]): FurnitureParam
     if (definition.options !== undefined &&
         (!Array.isArray(definition.options) || definition.options.some((option) => typeof option !== 'string'))) {
       issues.push({ parameter, field: 'options', message: 'must be an array of strings' });
+    }
+    if (definition.optionLabels !== undefined &&
+        (definition.optionLabels === null || typeof definition.optionLabels !== 'object' || Array.isArray(definition.optionLabels) ||
+         Object.values(definition.optionLabels as Record<string, unknown>).some((val) => typeof val !== 'string'))) {
+      issues.push({ parameter, field: 'optionLabels', message: 'must be a string map' });
     }
     if (definition.binding !== undefined &&
         (definition.binding === null || typeof definition.binding !== 'object' || Array.isArray(definition.binding))) {
