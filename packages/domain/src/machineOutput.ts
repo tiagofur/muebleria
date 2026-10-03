@@ -109,7 +109,7 @@ export interface ResolvedMachiningJob {
 // OutputCompatibilityProfile — receiving-software syntax dimensions
 // ---------------------------------------------------------------------------
 
-export type OutputFormatFamily = 'ptx' | 'saw' | 'mpr';
+export type OutputFormatFamily = 'ptx' | 'saw' | 'mpr' | 'kdt';
 
 /**
  * Status of one serialization dimension. `FIELD_FORMAT_EVIDENCE_REQUIRED`
@@ -228,7 +228,16 @@ export class AdapterSerializationBlocked extends DomainError {
 // Machine artifacts and manifests (manufacturing contract §12)
 // ---------------------------------------------------------------------------
 
-export type ArtifactKind = 'ptx' | 'saw' | 'mpr' | 'dxf' | 'csv' | 'pdf' | 'label' | 'other';
+export type ArtifactKind =
+  | 'ptx'
+  | 'saw'
+  | 'mpr'
+  | 'kdt'
+  | 'dxf'
+  | 'csv'
+  | 'pdf'
+  | 'label'
+  | 'other';
 
 export interface ArtifactCompatibilityEvidence {
   readonly claim: CompatibilityEvidenceClaim;

@@ -5,7 +5,7 @@ import {
   type PtxCutPlanExportInput,
 } from '@granete/excel';
 import type { MachineArtifactBundle } from '@granete/excel';
-import type { CutPlan } from '@granete/domain';
+import type { ArtifactKind, CutPlan } from '@granete/domain';
 import { downloadOptimizerXlsx, type DownloadDeps } from './exportOptimizer';
 
 export interface DownloadCutPlanPtxOptions {
@@ -28,7 +28,8 @@ export interface CuttingDownloadResult {
   readonly filesCount: number;
   readonly materialsCount: number;
   readonly zipped: boolean;
-  readonly kind: 'ptx' | 'saw' | 'mpr' | 'dxf' | 'csv' | 'pdf' | 'label' | 'other';
+  /** Domain union: a local copy drifted once `kdt` joined (#1005). */
+  readonly kind: ArtifactKind;
 }
 
 export function ptxFileName(projectName?: string): string {

@@ -4,6 +4,8 @@ import {
   canonicalProfileData,
   CLIENT_A_BHX050_PROFILE,
   CLIENT_A_HPP250_PROFILE,
+  CLIENT_B_KDT_FLEXDRILL_1200_PROFILE,
+  KDT_FLEXDRILL_1200_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
@@ -17,6 +19,7 @@ import {
 } from './profiles';
 import { sha256Hex } from './digest';
 import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
+import { KDT_POSTPROCESSOR_ADAPTER } from './kdtAdapter';
 
 const ALL_PROFILES = [
   PTX_GENERIC_PROFILE,
@@ -29,6 +32,7 @@ const ALL_PROFILES = [
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
+  KDT_FLEXDRILL_1200_PROFILE,
 ];
 
 describe('machine output profiles', () => {
@@ -104,6 +108,20 @@ describe('machine output profiles', () => {
     expect(MPR_WOODWOP_PROFILE.pendingEvidence).toContain('macroSyntax');
   });
 
+  it('KDT r1 declara cero dimensiones evidenciadas y registra las preguntas abiertas del spec (#1005)', () => {
+    expect(KDT_FLEXDRILL_1200_PROFILE.dimensions).toEqual({});
+    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('operationTypeNos');
+    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('alignmentFacePolicy');
+    // Preguntas abiertas del spec (§15): nunca se asumen, bloquean el
+    // subconjunto dependiente hasta que una fuente las resuelva.
+    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('typeNo4Semantics');
+    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('alignmentFacePolicy');
+    expect(KDT_FLEXDRILL_1200_PROFILE.targetSoftware?.provenance).toBe(
+      'FIELD_VERIFICATION_REQUIRED',
+    );
+    expect(KDT_FLEXDRILL_1200_PROFILE.evidenceUri).toBe('docs/machines/kdt-xml-format.md');
+  });
+
   it('every profile starts NOT_TESTED — no validation claim from data', () => {
     for (const profile of ALL_PROFILES) {
       expect(profile.supportStatus).toBe('NOT_TESTED');
@@ -116,6 +134,9 @@ describe('machine output profiles', () => {
     expect(CLIENT_A_HPP250_PROFILE.identity.model).toBe('HPP 250');
     expect(CLIENT_A_BHX050_PROFILE.identity.model).toBe('BHX 050');
     expect(CLIENT_A_HPP250_PROFILE.identity.provenance).toBe('OWNER_CONFIRMED');
+    expect(CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.supported).toEqual([]);
+    expect(CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.identity.model).toBe('Flexdrill 1200');
+    expect(CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.identity.provenance).toBe('OWNER_CONFIRMED');
   });
 
   it('CADmatic 4 r5 (current) has direct TS parity with the shared catalog consumed by Go', () => {
@@ -158,5 +179,55 @@ describe('machine output profiles', () => {
         supportStatus: 'NOT_TESTED',
         provenance: CLIENT_A_HPP250_PROFILE.identity.provenance,
       });
+  });
+
+  it('KDT r1 (current) has direct TS parity with the shared catalog consumed by Go (#1005)', () => {
+    const catalog = JSON.parse(
+      readFileSync(
+        new URL('../../../../contracts/machineOutputCatalog.contract.json', import.meta.url),
+        'utf8',
+      ),
+    ) as {
+      outputProfiles: Array<Record<string, unknown>>;
+      adapters: Array<Record<string, unknown>>;
+      machines: Array<Record<string, unknown>>;
+      formatFamilyOperations: Record<string, string[]>;
+    };
+    expect(catalog.formatFamilyOperations.kdt).toEqual(['machining']);
+    expect(
+      catalog.outputProfiles.find(
+        (entry) => entry.outputCompatibilityProfileId === 'kdt-flexdrill-1200',
+      ),
+    ).toEqual({
+      outputCompatibilityProfileId: KDT_FLEXDRILL_1200_PROFILE.ref.outputCompatibilityProfileId,
+      revisionId: KDT_FLEXDRILL_1200_PROFILE.ref.revisionId,
+      formatFamily: KDT_FLEXDRILL_1200_PROFILE.formatFamily,
+      supportStatus: KDT_FLEXDRILL_1200_PROFILE.supportStatus,
+      digest: KDT_FLEXDRILL_1200_PROFILE.digest,
+    });
+    expect(
+      catalog.adapters.find((entry) => entry.postprocessorAdapterId === 'granete-kdt'),
+    ).toEqual({
+      postprocessorAdapterId: KDT_POSTPROCESSOR_ADAPTER.postprocessorAdapterId,
+      adapterVersion: KDT_POSTPROCESSOR_ADAPTER.adapterVersion,
+      implementationDigest: KDT_POSTPROCESSOR_ADAPTER.implementationDigest,
+      producedFormatFamily: KDT_POSTPROCESSOR_ADAPTER.producedFormatFamily,
+      serializerImplemented: false,
+    });
+    expect(
+      catalog.machines.find(
+        (entry) =>
+          entry.machineProfileId === CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.ref.machineProfileId,
+      ),
+    ).toEqual({
+      machineProfileId: CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.ref.machineProfileId,
+      machineProfileRevisionId: CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.ref.machineProfileRevisionId,
+      manufacturerFamily: CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.identity.manufacturerFamily,
+      model: CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.identity.model,
+      role: CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.identity.role,
+      operations: ['machining'],
+      supportStatus: 'NOT_TESTED',
+      provenance: CLIENT_B_KDT_FLEXDRILL_1200_PROFILE.identity.provenance,
+    });
   });
 });
