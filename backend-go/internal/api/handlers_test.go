@@ -1647,6 +1647,10 @@ func (s *stubStore) ReleaseServerResolveInputs(ctx context.Context, orgID string
 	return storage.ReleaseServerInputsFromStore(ctx, s, orgID)
 }
 
+func (s *stubStore) DeriveLiveProfileDemand(ctx context.Context, project *domain.Project, catalog domain.Catalog) ([][]engine.HardwareProfileDemandLine, error) {
+	return nil, nil
+}
+
 func (s *stubStore) HardwareProfilesForRelease(ctx context.Context, releaseID uuid.UUID) ([]domain.HardwareProfile, error) {
 	_, manifestBytes, err := s.GetReleaseManifest(ctx, releaseID)
 	if err != nil {

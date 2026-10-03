@@ -1776,7 +1776,17 @@ func (s *Server) HandleProjectCalculate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	breakdown, err := engine.CalcProjectBreakdown(*p, catalog)
+	// #986: the governed resolve's commercial demand joins the live estimate —
+	// the same derivation the release freeze and the quote snapshots run.
+	// Derivation failures are business-input failures (a governed joint that
+	// cannot resolve), surfaced like the rest of the calculation errors.
+	profileDemand, err := s.Store.DeriveLiveProfileDemand(r.Context(), p, catalog)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	breakdown, err := engine.CalcProjectBreakdownWithProfileDemand(*p, catalog, profileDemand)
 	if err != nil {
 		// Calculation errors are business-validation failures (bad inputs), not
 		// internal leaks — surface a clean, actionable message.

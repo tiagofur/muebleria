@@ -199,7 +199,16 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 			}
 		}
 	}
-	breakdown, err := engine.CalcProjectBreakdown(pricingProject, catalog)
+	// #986: the governed resolve's commercial demand joins the frozen price —
+	// same derivation the release freeze persists. Q1 pricing items are the
+	// project's quote-line-backed items: item.ID IS the stable line identity.
+	profileDemand, demandProvenance, err := s.deriveSnapshotProfileDemand(ctx, pricingProject.Items, catalog, func(item domain.ProjectItem) string {
+		return item.ID
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
+	}
+	breakdown, err := engine.CalcProjectBreakdownWithProfileDemand(pricingProject, catalog, profileDemand)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
 	}
@@ -208,7 +217,7 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	lines, err := buildQuoteCommercialLines(pricingProject, catalog, items)
+	lines, err := buildQuoteCommercialLines(pricingProject, catalog, items, profileDemand)
 	if err != nil {
 		return nil, err
 	}
@@ -220,6 +229,7 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 		breakdown,
 		lines,
 		units,
+		demandProvenance,
 	)
 }
 
@@ -315,7 +325,20 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 		Items:          pricingItems,
 	}
 
-	breakdown, err := engine.CalcProjectBreakdown(pricingProject, catalog)
+	// #986: requote pricing items ARE physical units (item.ID =
+	// FurnitureInstanceID); demand resolves per unit and its provenance joins
+	// the item's stable quote line.
+	lineByInstance := make(map[string]string, len(items))
+	for _, item := range items {
+		lineByInstance[item.FurnitureInstanceID] = item.QuoteLineID
+	}
+	profileDemand, demandProvenance, err := s.deriveSnapshotProfileDemand(ctx, pricingProject.Items, catalog, func(item domain.ProjectItem) string {
+		return lineByInstance[item.ID]
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
+	}
+	breakdown, err := engine.CalcProjectBreakdownWithProfileDemand(pricingProject, catalog, profileDemand)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
 	}
@@ -324,7 +347,7 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 	if err != nil {
 		return nil, err
 	}
-	lines, err := buildQuoteCommercialLines(pricingProject, catalog, items)
+	lines, err := buildQuoteCommercialLines(pricingProject, catalog, items, profileDemand)
 	if err != nil {
 		return nil, err
 	}
@@ -336,18 +359,96 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 		breakdown,
 		lines,
 		units,
+		demandProvenance,
 	)
+}
+
+// deriveSnapshotProfileDemand derives the per-item profile hardware demand for
+// one pricing project (#986) plus its frozen per-unit provenance keyed by quote line.
+// Inputs come from the shared org loader (#875): no published release ⇒ empty
+// profiles ⇒ nil demand and the pricing stays byte-identical to the pre-demand
+// engine. lineIDForItem resolves the stable commercial identity of one pricing
+// item; a pricing item carrying demand whose line identity cannot be resolved
+// fails the snapshot — demand without provenance is unauditable commercial
+// truth.
+func (s *PostgresStore) deriveSnapshotProfileDemand(
+	ctx context.Context,
+	pricingItems []domain.ProjectItem,
+	catalog domain.Catalog,
+	lineIDForItem func(domain.ProjectItem) string,
+) ([][]engine.HardwareProfileDemandLine, []domain.QuoteCommercialProfileDemand, error) {
+	inputs, err := s.ReleaseServerResolveInputs(ctx, OrgFromCtx(ctx))
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(inputs.ProfilesByID) == 0 {
+		return nil, nil, nil
+	}
+	matrix := make([][]engine.HardwareProfileDemandLine, 0, len(pricingItems))
+	provenance := []domain.QuoteCommercialProfileDemand{}
+	for _, item := range pricingItems {
+		demand, err := engine.DeriveQuoteUnitProfileDemand(engine.ProjectItemAsDemandUnit(item), catalog, inputs)
+		if err != nil {
+			return nil, nil, err
+		}
+		matrix = append(matrix, demand)
+		if len(demand) == 0 {
+			continue
+		}
+		lineID := lineIDForItem(item)
+		if strings.TrimSpace(lineID) == "" {
+			return nil, nil, fmt.Errorf("%w: la demanda de herrajes por perfil de la unidad %s no tiene línea comercial estable", domain.ErrInvalidRevisionSnapshot, item.ID)
+		}
+		// ONE provenance entry per physical pricing unit — two units of the
+		// same quote line stay two entries, so the frozen trail always adds up
+		// against the priced demand instead of hiding the per-unit split.
+		lines := make([]domain.QuoteCommercialDemandLine, 0, len(demand))
+		for _, demandLine := range demand {
+			lines = append(lines, quoteCommercialDemandLineFromEngine(demandLine))
+		}
+		provenance = append(provenance, domain.QuoteCommercialProfileDemand{
+			QuoteLineID:  lineID,
+			UnitQuantity: item.Quantity,
+			Lines:        lines,
+		})
+	}
+	return matrix, provenance, nil
+}
+
+// quoteCommercialDemandLineFromEngine mirrors one engine demand line into the
+// frozen domain shape, source by source.
+func quoteCommercialDemandLineFromEngine(line engine.HardwareProfileDemandLine) domain.QuoteCommercialDemandLine {
+	converted := domain.QuoteCommercialDemandLine{
+		HardwareID: line.HardwareID,
+		Quantity:   line.Quantity,
+		Sources:    make([]domain.QuoteCommercialDemandSource, 0, len(line.Sources)),
+	}
+	for _, source := range line.Sources {
+		converted.Sources = append(converted.Sources, domain.QuoteCommercialDemandSource{
+			TechnicalProfileID:       source.TechnicalProfileID,
+			TechnicalProfileRevision: source.TechnicalProfileRevision,
+			RecipeID:                 source.RecipeID,
+			RecipeRevision:           source.RecipeRevision,
+			RelationshipID:           source.RelationshipID,
+			ContactCount:             source.ContactCount,
+		})
+	}
+	return converted
 }
 
 // buildQuoteCommercialLines freezes stable commercial grouping, explicit
 // quantity and authoritative per-line amount contributions. Pricing is run
 // with the exact inputs for each line and zero fixed labor; the snapshot-level
-// fixed labor is therefore added exactly once.
-func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Catalog, items []CreateQuoteRevisionItemCommand) ([]domain.QuoteCommercialLine, error) {
+// fixed labor is therefore added exactly once. profileDemandPerItem is the
+// #986 matrix derived for the SAME pricing items — every line's amounts include
+// its units' profile demand so the line sums keep matching the authoritative
+// snapshot breakdown exactly.
+func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Catalog, items []CreateQuoteRevisionItemCommand, profileDemandPerItem [][]engine.HardwareProfileDemandLine) ([]domain.QuoteCommercialLine, error) {
 	type lineInput struct {
 		instanceIDs []string
 		active      int
 		items       []domain.ProjectItem
+		demand      [][]engine.HardwareProfileDemandLine
 	}
 	byLine := map[string]*lineInput{}
 	lineByInstance := make(map[string]string, len(items))
@@ -366,7 +467,7 @@ func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Cat
 			line.active++
 		}
 	}
-	for _, item := range pricingProject.Items {
+	for i, item := range pricingProject.Items {
 		lineID := item.ID
 		if mapped := lineByInstance[item.ID]; mapped != "" {
 			lineID = mapped
@@ -376,6 +477,9 @@ func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Cat
 			return nil, fmt.Errorf("%w: la línea %s no tiene unidades físicas congeladas", domain.ErrInvalidRevisionSnapshot, lineID)
 		}
 		line.items = append(line.items, item)
+		if i < len(profileDemandPerItem) {
+			line.demand = append(line.demand, profileDemandPerItem[i])
+		}
 	}
 
 	lines := make([]domain.QuoteCommercialLine, 0, len(byLine))
@@ -387,7 +491,7 @@ func buildQuoteCommercialLines(pricingProject domain.Project, catalog domain.Cat
 			lineProject.PriceSnapshot = nil
 			lineProject.LaborFixedCost = 0
 			lineProject.Items = input.items
-			breakdown, err := engine.CalcProjectBreakdown(lineProject, catalog)
+			breakdown, err := engine.CalcProjectBreakdownWithProfileDemand(lineProject, catalog, input.demand)
 			if err != nil {
 				return nil, fmt.Errorf("%w: línea %s: %s", domain.ErrInvalidRevisionSnapshot, lineID, err.Error())
 			}

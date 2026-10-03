@@ -97,7 +97,7 @@ func fixtureCommercialSnapshot(projectID string, items []storage.CreateQuoteRevi
 	snapshot, err := domain.BuildQuoteCommercialSnapshot(time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC), "MXN",
 		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture customer"},
 		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture project"},
-		domain.QuoteBreakdown{MarginFactor: 1}, lines, units)
+		domain.QuoteBreakdown{MarginFactor: 1}, lines, units, nil)
 	if err != nil {
 		panic(err)
 	}

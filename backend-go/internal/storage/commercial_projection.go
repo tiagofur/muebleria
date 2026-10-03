@@ -168,9 +168,21 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 			LaborFixedCost: envelope.LaborFixedCost, Status: "draft", Items: pricingItems,
 			KitchenLayout: pricingLayout, ProjectLevelChoices: levelChoices,
 		}
-		breakdown, calcErr := engine.CalcProjectBreakdown(pricingProject, catalog)
-		if calcErr != nil {
-			result.Issues = append(result.Issues, "pricing_inputs_incomplete:"+calcErr.Error())
+		// #986: the governed resolve's commercial demand joins the live
+		// projection — same derivation contract as the quote snapshots. A
+		// derivation failure degrades exactly like incomplete pricing inputs:
+		// the projection surfaces the issue and never prices partial truth.
+		profileDemand, demandErr := s.DeriveLiveProfileDemand(ctx, &pricingProject, catalog)
+		var breakdown domain.QuoteBreakdown
+		var calcErr error
+		if demandErr == nil {
+			breakdown, calcErr = engine.CalcProjectBreakdownWithProfileDemand(pricingProject, catalog, profileDemand)
+			if calcErr != nil {
+				demandErr = calcErr
+			}
+		}
+		if demandErr != nil {
+			result.Issues = append(result.Issues, "pricing_inputs_incomplete:"+demandErr.Error())
 		} else {
 			projectionFingerprint, hashErr := hashJSON(struct {
 				Working string         `json:"working"`

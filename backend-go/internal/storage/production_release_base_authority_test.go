@@ -55,7 +55,7 @@ func frozenBaseCommercialSnapshot(projectID string, items []storage.CreateQuoteR
 		time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC), "MXN",
 		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture customer"},
 		domain.QuoteCommercialIdentity{ID: projectID, Name: "Fixture project"},
-		domain.QuoteBreakdown{MarginFactor: 1}, ordered, units)
+		domain.QuoteBreakdown{MarginFactor: 1}, ordered, units, nil)
 	if err != nil {
 		panic(err)
 	}

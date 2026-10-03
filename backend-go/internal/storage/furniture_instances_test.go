@@ -923,7 +923,7 @@ func TestFurnitureInstances_ListSummariesFrozenQuoteChoicesAuthority(t *testing.
 				{GroupCode: "INTERIOR", GroupLabel: "Interior", ChoiceID: frozenInterior, ChoiceLabel: "Arauco Blanco Frosty 15mm"},
 			},
 			PricingContext: &domain.QuoteCommercialPricingContext{BaseMode: "none", BaseClearanceMm: &zeroClearance, StructureIndependent: true},
-		}})
+		}}, nil)
 	if err != nil {
 		t.Fatalf("build frozen snapshot: %v", err)
 	}
@@ -1050,7 +1050,7 @@ func TestFurnitureInstances_ListSummariesFrozenEmptySnapshotUnit(t *testing.T) {
 			ModuleCode: "BASE-900", ModuleName: "Gabinete Base 900", LifecycleStatus: "active",
 			Options:        []domain.QuoteCommercialOption{},
 			PricingContext: &domain.QuoteCommercialPricingContext{BaseMode: "none", BaseClearanceMm: &zeroClearance, StructureIndependent: true},
-		}})
+		}}, nil)
 	if err != nil {
 		t.Fatalf("build empty-options snapshot: %v", err)
 	}

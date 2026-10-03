@@ -189,6 +189,29 @@ export function calcHardwareLineCost(
   };
 }
 
+/**
+ * Profile hardware demand pricing (#917/#986): the governed resolve's
+ * commercial consumption prices through the SAME validation and unit price as
+ * manual hardware lines — additive to the same total, one quantity multiplier
+ * per pricing item. Mirrors engine.CalcProjectBreakdownWithProfileDemand's
+ * demand loop; invalid demand hardware fails closed, never a silent zero.
+ */
+export function calcProfileDemandHardwareTotal(
+  demandLines: ReadonlyArray<{ readonly hardwareId: string; readonly quantity: number }>,
+  catalog: Catalog,
+  quantityMultiplier = 1,
+): number {
+  let total = 0;
+  for (const line of demandLines) {
+    total += calcHardwareLineCost(
+      { id: line.hardwareId, quantity: line.quantity, optionRole: '', hardwareId: line.hardwareId },
+      catalog,
+      quantityMultiplier,
+    ).hardwareCost;
+  }
+  return total;
+}
+
 /** Line cost for a resolved board part or hardware line (PRD §13.2). */
 export function calcLineCost(
   line: ResolvedBoardPart | ResolvedHardwareLine,
