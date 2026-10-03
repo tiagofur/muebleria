@@ -177,7 +177,7 @@ async function saveShelfPolicy(token: string, stations: number): Promise<void> {
   const active = await client.getActiveStandardLibraryOverlay(token);
   if (active) {
     const merged = { ...((active.overrides ?? {}) as Record<string, unknown>), ...overrides };
-    await client.updateLibraryOverlay(token, active.id, { overrides: merged });
+    await client.updateLibraryOverlay(token, active.id, active.version, { overrides: merged });
     return;
   }
   await client.createLibraryOverlay(token, { baseReleaseId: current.id, overrides });
@@ -583,7 +583,7 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
       provenance: 'factory', systemId: 'minifix-dowel',
       stationsCount: 4, startMarginMm: 40, endMarginMm: 40,
     };
-    const updated = await client.updateLibraryOverlay(tokenA, active!.id, {
+    const updated = await client.updateLibraryOverlay(tokenA, active!.id, active!.version, {
       overrides: {
         ...base,
         'joint.constructionPolicy': {
@@ -604,7 +604,8 @@ test.describe.serial('Historical release freeze (#875 slice 2 review pass B)', (
 
     // «Restaurar herencia» deletes the exception INTENT: the factory 4 (and
     // its exact fingerprint) returns byte-for-byte.
-    await client.updateLibraryOverlay(tokenA, active!.id, {
+    // The exception save bumped the overlay version: restore over THAT one.
+    await client.updateLibraryOverlay(tokenA, active!.id, updated.version, {
       overrides: {
         ...base,
         'joint.constructionPolicy': { version: 1, shelfToSide: factoryShelfRule },

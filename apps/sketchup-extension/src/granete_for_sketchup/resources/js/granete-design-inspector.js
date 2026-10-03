@@ -64,6 +64,11 @@
     // bridge remains the authority that refuses a stale token).
     draftBase: null,
     draftStale: false,
+    // #969-c: the fresh working version a conflict refusal carried back —
+    // the background auto-sync moves the working copy without any user
+    // edit, so a refused Apply offers an EXPLICIT rebase (user consent;
+    // never a silent one). null = no rebase offered (keep Descartar-only).
+    rebaseVersion: null,
     // #784 R3: the server-side per-item inheritance projection
     // {furnitureInstanceId: {role: {mode, applied, designDefault, needsRollout}}}
     // — the ONLY badge authority. Never derived client-side.
@@ -601,11 +606,22 @@
     }
     if (conflict) {
       pendingEl.textContent = conflict;
-      applyEl.disabled = true;
+      // #969-c: a refusal that carried the fresh working version offers the
+      // explicit rebase through the SAME apply button — the user consents
+      // to applying the seen draft onto the newer server state.
+      if (state.rebaseVersion) {
+        applyEl.textContent = "Actualizar y aplicar";
+        applyEl.disabled = state.applyInFlight;
+      } else {
+        applyEl.textContent = "Aplicar";
+        applyEl.disabled = true;
+      }
     } else if (state.draftStale) {
+      applyEl.textContent = "Aplicar";
       pendingEl.textContent = "El diseño cambió en el servidor; tus cambios quedaron sobre la versión anterior.";
       applyEl.disabled = false;
     } else {
+      applyEl.textContent = "Aplicar";
       pendingEl.textContent = pending === 1 ? "1 cambio pendiente" : pending + " cambios pendientes";
       // #784 R2 final review: Aplicar disabled while the apply is in flight.
       applyEl.disabled = state.applyInFlight;
@@ -695,6 +711,7 @@
     state.draft = {};
     state.draftBase = null;
     state.draftStale = false;
+    state.rebaseVersion = null;
     state.conflict = null; // a fresh start after a deliberate discard
     render();
   }
@@ -713,6 +730,21 @@
     if (state.applyInFlight) return; // one user Apply = one request
     var pending = pendingCount();
     if (pending === 0 || !state.connected) return;
+    // #969-c: a conflicted Apply that carries a fresh version IS the user's
+    // explicit rebase consent — pin the seen draft onto the fresh state and
+    // proceed under the same one-write rule. Never a silent rebase: this
+    // path only runs from the "Actualizar y aplicar" click.
+    if (state.conflict && state.rebaseVersion) {
+      if (state.draftBase) {
+        state.draftBase.version = state.rebaseVersion;
+      } else {
+        state.draftBase = { version: state.rebaseVersion, defaults: shallowCopy(state.defaults) };
+      }
+      state.workingVersion = state.rebaseVersion;
+      state.draftStale = false;
+      state.conflict = null;
+      state.rebaseVersion = null;
+    }
     // #784 R2 final review: the Apply token is the DRAFT BASE version —
     // the working copy state the pending edits were made against — never
     // a silently refreshed newer version.
@@ -734,13 +766,19 @@
     }
     state.requestId += 1;
     state.conflict = null;
+    state.rebaseVersion = null;
     state.applyInFlight = true;
     render(); // Aplicar disabled immediately
     var payload = {
       requestId: state.requestId,
       designId: state.designId,
       expectedWorkingVersion: token,
-      authoringDefaults: { materialChoices: merged }
+      authoringDefaults: { materialChoices: merged },
+      // #969d: the draft's seen base rides the write so the bridge can prove
+      // the defaults the user saw are the server's current ones and
+      // auto-advance past a background auto-sync bump — first-click apply.
+      // A real defaults drift still refuses with the explicit rebase offer.
+      draftBase: { version: token, defaults: baseChoices }
     };
     if (window.sketchup && typeof window.sketchup.apply_design_defaults === "function") {
       window.sketchup.apply_design_defaults(JSON.stringify(payload));
@@ -771,6 +809,7 @@
         state.draft = {};
         state.draftBase = null;
         state.draftStale = false;
+        state.rebaseVersion = null;
         state.conflict = null;
         state.inheritance = {};
         state.inheritanceSummary = {};
@@ -791,6 +830,7 @@
           state.draft = {};
           state.draftBase = null;
           state.draftStale = false;
+          state.rebaseVersion = null;
           state.conflict = null;
           state.inheritance = {};
           state.inheritanceSummary = {};
@@ -850,6 +890,7 @@
         state.defaults = choices;
         state.workingVersion = payload.workingVersion || null;
         state.status = "ready";
+        state.rebaseVersion = null;
         state.conflict = null;
         requestInheritance();
         render();
@@ -895,11 +936,15 @@
         state.draft = {};
         state.draftBase = null;
         state.draftStale = false;
+        state.rebaseVersion = null;
         state.conflict = null;
         requestInheritance();
         render();
       } else if (payload.status === "conflict" || payload.status === "error") {
         state.conflict = payload.reason || "No se pudo aplicar el cambio.";
+        // #969-c: only a refusal (conflict) knows the fresh server state —
+        // a transport error cannot offer a rebase it never read.
+        state.rebaseVersion = payload.status === "conflict" ? (payload.workingVersion || null) : null;
         render();
       } else if (payload.status === "unbound" || payload.status === "stale_binding") {
         state.connected = false;
@@ -912,6 +957,7 @@
         state.draft = {};
         state.draftBase = null;
         state.draftStale = false;
+        state.rebaseVersion = null;
         state.conflict = null;
         state.status = "idle";
         hide();

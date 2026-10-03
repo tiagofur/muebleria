@@ -2328,6 +2328,8 @@ type LibraryOverlayDetail struct {
 	Status            string         `json:"status"`
 	Overrides         map[string]any `json:"overrides"`
 	CustomResourceIds []string       `json:"customResourceIds"`
+	Version           int64          `json:"version"`
+	PolicyDraft       map[string]any `json:"policyDraft,omitempty"`
 	CreatedAt         string         `json:"createdAt"`
 	UpdatedAt         string         `json:"updatedAt"`
 }
@@ -2341,6 +2343,10 @@ type CreateLibraryOverlayRequest struct {
 type UpdateLibraryOverlayRequest struct {
 	Overrides         map[string]any `json:"overrides,omitempty"`
 	CustomResourceIds []string       `json:"customResourceIds,omitempty"`
+}
+
+type SavePolicyDraftRequest struct {
+	Overrides map[string]any `json:"overrides"`
 }
 
 type RebaseLibraryOverlayRequest struct {

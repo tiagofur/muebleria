@@ -56,11 +56,42 @@ func (m *mockOverlayStore) CreateOverlay(_ context.Context, overlay *domain.Libr
 	return overlay, nil
 }
 
-func (m *mockOverlayStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
+func (m *mockOverlayStore) SavePolicyDraft(_ context.Context, id uuid.UUID, expectedVersion int64, draft json.RawMessage) error {
 	o, ok := m.overlays[id]
 	if !ok {
 		return storage.ErrOverlayNotFound
 	}
+	if o.Version != expectedVersion {
+		return storage.ErrVersionConflict
+	}
+	o.Version++
+	o.PolicyDraft = draft
+	return nil
+}
+
+func (m *mockOverlayStore) ActivatePolicyDraft(_ context.Context, id uuid.UUID, expectedVersion int64, mergedOverrides json.RawMessage) error {
+	o, ok := m.overlays[id]
+	if !ok {
+		return storage.ErrOverlayNotFound
+	}
+	if o.Version != expectedVersion {
+		return storage.ErrVersionConflict
+	}
+	o.Version++
+	o.Overrides = mergedOverrides
+	o.PolicyDraft = nil
+	return nil
+}
+
+func (m *mockOverlayStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
+	o, ok := m.overlays[id]
+	if !ok {
+		return storage.ErrOverlayNotFound
+	}
+	if o.Version != expectedVersion {
+		return storage.ErrVersionConflict
+	}
+	o.Version++
 	o.Overrides = overrides
 	o.CustomResourceIDs = customResourceIDs
 	return nil
@@ -241,24 +272,36 @@ func TestOverlayService_UpdateOverrides_AuthorizationAndPathCheck(t *testing.T) 
 		OrganizationID: orgA,
 		Status:         "active",
 		Overrides:      json.RawMessage(`{"parameters.toeKickHeight": 120}`),
+		Version:        1,
 	}
 
 	// 1. Org B attempting to update Org A's overlay -> ErrUnauthorizedOverlayAccess
-	err := svc.UpdateOverrides(ctx, overlayID, orgB, json.RawMessage(`{"parameters.toeKickHeight": 140}`), nil)
+	err := svc.UpdateOverrides(ctx, overlayID, orgB, 1, json.RawMessage(`{"parameters.toeKickHeight": 140}`), nil)
 	if !errors.Is(err, application.ErrUnauthorizedOverlayAccess) {
 		t.Fatalf("expected ErrUnauthorizedOverlayAccess, got %v", err)
 	}
 
 	// 2. Org A attempting invalid namespace -> ErrInvalidOverridePath
-	err = svc.UpdateOverrides(ctx, overlayID, orgA, json.RawMessage(`{"arbitraryRoot": 42}`), nil)
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 1, json.RawMessage(`{"arbitraryRoot": 42}`), nil)
 	if !errors.Is(err, application.ErrInvalidOverridePath) {
 		t.Fatalf("expected ErrInvalidOverridePath, got %v", err)
 	}
 
 	// 3. Org A updating valid path -> success
-	err = svc.UpdateOverrides(ctx, overlayID, orgA, json.RawMessage(`{"parameters.toeKickHeight": 150}`), nil)
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 1, json.RawMessage(`{"parameters.toeKickHeight": 150}`), nil)
 	if err != nil {
 		t.Fatalf("UpdateOverrides failed: %v", err)
+	}
+
+	// 4. #875 slice 4: a stale expected version conflicts — the second
+	// editor's save can never silently overwrite the first one's.
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 1, json.RawMessage(`{"parameters.toeKickHeight": 999}`), nil)
+	if !errors.Is(err, storage.ErrVersionConflict) {
+		t.Fatalf("expected ErrVersionConflict for a stale version, got %v", err)
+	}
+	err = svc.UpdateOverrides(ctx, overlayID, orgA, 2, json.RawMessage(`{"parameters.toeKickHeight": 999}`), nil)
+	if err != nil {
+		t.Fatalf("re-read + retry must land: %v", err)
 	}
 }
 
@@ -523,3 +566,135 @@ func TestOverlayService_ExecuteRebase_TargetReleaseMustBePublished(t *testing.T)
 	}
 }
 
+
+// #875 slice 5: the construction policy draft/activate lifecycle — an
+// invalid draft persists, activation validates with the ENGINE's own parser
+// (422-equivalent error), a valid activation swaps + clears atomically, and
+// foreign keys survive the merge.
+func TestOverlayServicePolicyDraftLifecycle(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("an invalid draft persists (incomplete is conservable)", func(t *testing.T) {
+		svc, overlay, orgA := newPolicyDraftService(t)
+		if err := svc.SavePolicyDraft(ctx, overlay.ID, orgA, 1,
+			json.RawMessage(`{"joint.shelfToSide.stationsCount": 1}`)); err != nil {
+			t.Fatalf("an invalid VALUE draft must persist: %v", err)
+		}
+		if overlay.Version != 2 || overlay.PolicyDraft == nil {
+			t.Fatalf("the staged draft must persist with a bumped version: v%d draft=%+v", overlay.Version, overlay.PolicyDraft)
+		}
+	})
+
+	t.Run("a foreign key is refused at save", func(t *testing.T) {
+		svc, overlay, orgA := newPolicyDraftService(t)
+		err := svc.SavePolicyDraft(ctx, overlay.ID, orgA, 1,
+			json.RawMessage(`{"parameters.someSetting": 3}`))
+		if !errors.Is(err, application.ErrInvalidPolicyDraft) {
+			t.Fatalf("non-policy key must be refused: %v", err)
+		}
+		if overlay.Version != 1 || overlay.PolicyDraft != nil {
+			t.Fatalf("a refused save must not touch the overlay: v%d draft=%+v", overlay.Version, overlay.PolicyDraft)
+		}
+	})
+
+	t.Run("activating an invalid draft is refused", func(t *testing.T) {
+		svc, overlay, orgA := newPolicyDraftService(t)
+		if err := svc.SavePolicyDraft(ctx, overlay.ID, orgA, 1,
+			json.RawMessage(`{"joint.shelfToSide.stationsCount": 1}`)); err != nil {
+			t.Fatalf("save invalid draft: %v", err)
+		}
+		err := svc.ActivatePolicyDraft(ctx, overlay.ID, orgA, 2)
+		if !errors.Is(err, application.ErrInvalidPolicyDraft) {
+			t.Fatalf("invalid draft activation must be refused, got %v", err)
+		}
+		// The refused activation leaves the draft staged and the active
+		// overrides untouched (nothing partial).
+		if overlay.Version != 2 || overlay.PolicyDraft == nil {
+			t.Fatalf("refused activation must be a no-op: v%d draft=%+v", overlay.Version, overlay.PolicyDraft)
+		}
+		var activeAfter map[string]any
+		if err := json.Unmarshal(overlay.Overrides, &activeAfter); err != nil {
+			t.Fatalf("decode overrides: %v", err)
+		}
+		if activeAfter["foreign.customKey"] != "keep-me" || len(activeAfter) != 1 {
+			t.Fatalf("refused activation must not touch the overrides: %+v", activeAfter)
+		}
+	})
+
+	t.Run("activating without a draft is refused", func(t *testing.T) {
+		svc, overlay, orgA := newPolicyDraftService(t)
+		if err := svc.ActivatePolicyDraft(ctx, overlay.ID, orgA, 1); !errors.Is(err, application.ErrNoPolicyDraft) {
+			t.Fatalf("expected ErrNoPolicyDraft, got %v", err)
+		}
+	})
+
+	t.Run("a valid draft activates: overrides swap, draft clears, foreign keys survive", func(t *testing.T) {
+		svc, overlay, orgA := newPolicyDraftService(t)
+		if err := svc.SavePolicyDraft(ctx, overlay.ID, orgA, 1,
+			json.RawMessage(`{"joint.shelfToSide.stationsCount": 5}`)); err != nil {
+			t.Fatalf("save valid draft: %v", err)
+		}
+		if err := svc.ActivatePolicyDraft(ctx, overlay.ID, orgA, 2); err != nil {
+			t.Fatalf("activate valid draft: %v", err)
+		}
+		// The in-memory mock IS the persisted row: overrides carry the
+		// activated policy, the draft is gone, the foreign key survived.
+		var active map[string]any
+		if err := json.Unmarshal(overlay.Overrides, &active); err != nil {
+			t.Fatalf("decode overrides: %v", err)
+		}
+		if active["joint.shelfToSide.stationsCount"] != float64(5) {
+			t.Fatalf("the activated policy must govern: %+v", active)
+		}
+		if active["foreign.customKey"] != "keep-me" {
+			t.Fatalf("foreign keys must survive activation: %+v", active)
+		}
+		if overlay.PolicyDraft != nil {
+			t.Fatalf("activation must clear the draft: %+v", overlay.PolicyDraft)
+		}
+		if overlay.Version != 3 {
+			t.Fatalf("save(2) + activate(3) must bump twice, got %d", overlay.Version)
+		}
+	})
+
+	t.Run("a stale version conflicts", func(t *testing.T) {
+		svc, overlay, orgA := newPolicyDraftService(t)
+		if err := svc.SavePolicyDraft(ctx, overlay.ID, orgA, 1,
+			json.RawMessage(`{"joint.shelfToSide.stationsCount": 5}`)); err != nil {
+			t.Fatalf("save: %v", err)
+		}
+		if err := svc.ActivatePolicyDraft(ctx, overlay.ID, orgA, 1); !errors.Is(err, storage.ErrVersionConflict) {
+			t.Fatalf("stale activation must conflict, got %v", err)
+		}
+		// The conflict left the FIRST staged draft intact (nothing partial).
+		if overlay.PolicyDraft == nil || overlay.Version != 2 {
+			t.Fatalf("conflict must be a no-op: v%d draft=%+v", overlay.Version, overlay.PolicyDraft)
+		}
+	})
+}
+
+func newPolicyDraftService(t *testing.T) (*application.OverlayService, *domain.LibraryOverlay, uuid.UUID) {
+	t.Helper()
+	return newPolicyDraftServiceWithForeign(t)
+}
+
+// newPolicyDraftServiceWithForeign seeds one active overlay carrying a
+// foreign (non-construction) key, and returns the service, the overlay (for
+// direct in-memory mock reads) and its owning organization.
+func newPolicyDraftServiceWithForeign(t *testing.T) (*application.OverlayService, *domain.LibraryOverlay, uuid.UUID) {
+	t.Helper()
+	store := newMockOverlayStore()
+	overlayID := uuid.New()
+	orgID := uuid.New()
+	overlay, err := store.CreateOverlay(context.Background(), &domain.LibraryOverlay{
+		ID:             overlayID,
+		OrganizationID: orgID,
+		Status:         "active",
+		Overrides:      json.RawMessage(`{"foreign.customKey": "keep-me"}`),
+		Version:        1,
+	})
+	if err != nil {
+		t.Fatalf("seed overlay: %v", err)
+	}
+	return application.NewOverlayService(store), overlay, orgID
+}

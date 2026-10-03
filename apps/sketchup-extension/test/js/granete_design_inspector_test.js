@@ -537,6 +537,83 @@ function run() {
     assert.ok(ctx.body().textContent.includes('cambió en el servidor'), 'honest conflict message');
     assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, true,
       'no repeat apply against a stale token');
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').textContent, 'Aplicar',
+      'a refusal without a fresh version offers no rebase');
+  });
+
+  // #969d (owner decision: first-click apply): the apply payload carries the
+  // draft's seen base so the bridge can prove the defaults are unchanged and
+  // auto-advance past a background auto-sync bump.
+  test('R2+#969d: the apply payload rides the draft base for the bridge auto-advance', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payload = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+    assert.strictEqual(payload.draftBase.version, '2026-09-28T10:00:00Z',
+      'the draft base version rides the write');
+    assert.deepStrictEqual(payload.draftBase.defaults,
+      { INTERIOR: 'mat-white', FRENTES: 'mat-oak' },
+      'the defaults the user saw ride the write');
+  });
+
+  // #969c: with the background auto-sync the working copy moves without any
+  // user edit. A conflict refusal that carried the fresh working version
+  // offers the EXPLICIT rebase through the apply button — user consent,
+  // never a silent rebase — and the retry rides the fresh token.
+  test('R2+#969c: conflict with a fresh version offers Actualizar y aplicar; retry rides the fresh token', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payload = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+
+    mod.onDesignDefaultsApplied({ requestId: payload.requestId, status: 'conflict',
+      reason: 'el diseño cambió en el servidor', workingVersion: '2026-09-28T12:00:00Z' });
+    assert.ok(ctx.body().textContent.includes('cambió en el servidor'), 'honest conflict message');
+    const applyBtn = ctx.document.getElementById('design-inspector-apply');
+    assert.strictEqual(applyBtn.disabled, false, 'the rebase path is actionable');
+    assert.strictEqual(applyBtn.textContent, 'Actualizar y aplicar', 'the explicit rebase label');
+
+    applyBtn.click();
+    const applies = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults');
+    assert.strictEqual(applies.length, 2, 'exactly one retry');
+    assert.strictEqual(applies[1][1].expectedWorkingVersion, '2026-09-28T12:00:00Z',
+      'the retry rides the fresh working version');
+    assert.deepStrictEqual(applies[1][1].authoringDefaults.materialChoices,
+      { INTERIOR: 'mat-white', FRENTES: 'mat-white' },
+      'the same seen draft applies onto the fresh state');
+
+    // The confirmed answer closes the loop exactly like a first-apply ok.
+    mod.onDesignDefaultsApplied({ requestId: applies[1][1].requestId, status: 'ok', designId: 'd-a',
+      workingVersion: '2026-09-28T13:00:00Z',
+      authoringDefaults: { materialChoices: { INTERIOR: 'mat-oak', FRENTES: 'mat-white' } } });
+    assert.strictEqual(ctx.document.getElementById('design-inspector-footer').style.display, 'none');
+    assert.strictEqual(applyBtn.textContent, 'Aplicar', 'the resting label is restored');
+  });
+
+  test('R2+#969c: an error answer never offers a rebase it cannot know', () => {
+    const ctx = createSandbox();
+    ctx.picker = null;
+    initModuleR2(ctx);
+    const mod = readyState(ctx);
+    mod.render();
+    ctx.document.getElementById('design-inspector-change-FRENTES').click();
+    ctx.picker.onApply('mat-white');
+    ctx.document.getElementById('design-inspector-apply').click();
+    const payload = ctx.sketchupCalls.filter((c) => c[0] === 'apply_design_defaults')[0][1];
+    mod.onDesignDefaultsApplied({ requestId: payload.requestId, status: 'error', reason: 'unreachable' });
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').disabled, true,
+      'a transport error keeps the apply disabled');
+    assert.strictEqual(ctx.document.getElementById('design-inspector-apply').textContent, 'Aplicar');
   });
 
   // --- FINAL REVIEW R2 BLOCKER: the draft is PINNED to the working-copy

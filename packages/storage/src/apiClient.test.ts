@@ -591,6 +591,7 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
         status: 'active',
         overrides: { 'joint.floorToSide.stationsCount': 4 },
         customResourceIds: [],
+        version: 1,
         createdAt: '2026-09-30T12:00:00Z',
         updatedAt: '2026-09-30T12:00:00Z',
       };
@@ -618,6 +619,7 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
           'parameters.someSetting': 'also-keep-me',
         },
         customResourceIds: [],
+        version: 1,
         createdAt: '2026-09-30T12:00:00Z',
         updatedAt: '2026-09-30T12:00:00Z',
       };
@@ -657,6 +659,7 @@ describe('GraneteApiClient generated runtime boundary (#448)', () => {
           'joint.constructionPolicy': { version: 1, floorToSide: { provenance: 'factory', stationsCount: 4 } },
         },
         customResourceIds: [],
+        version: 1,
         createdAt: '2026-09-30T12:00:00Z',
         updatedAt: '2026-09-30T12:00:00Z',
       };

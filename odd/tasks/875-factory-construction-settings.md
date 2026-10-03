@@ -356,3 +356,138 @@ a ComponentEditorForm pass-through that dropped `constructionException` —
 fixed, one consolidated correction round). A latent slice-1 lie was removed
 in the same pass: `Component.constructionOverride` (entity field + payload
 key) never reached the API — the overlay is the only persistence.
+
+## 8. Slice 4 — overlay If-Match concurrency + permission matrix (#875 AC07/AC3)
+
+**Outcome**: two editors of the same factory produce a VISIBLE version
+conflict instead of a silent last-write-wins (AC07), and the mutation
+surfaces of the construction policy enforce the role matrix — an authorized
+second user reads the same configuration; visitor/sales cannot mutate it by
+API (AC3). The issue's "Seguridad, concurrencia y versiones" section.
+
+**Design**:
+
+- Version: `library_overlays.version` (bigint, default 1, bumped by every
+  overrides update — migration 000148, fresh+upgrade). Same strong `"v<N>"`
+  ETag contract the modules already use (`FormatVersionETag`/`RequireIfMatch`).
+- PATCH /overlays/{id} requires If-Match; a stale token → typed 412
+  VERSION_CONFLICT (storage.ErrVersionConflict), 428 without one. Reads
+  return the version in the detail payload (OpenAPI detail schema gains
+  `version`) so the client can always send it back.
+- Client: `updateLibraryOverlay` carries If-Match from the overlay version;
+  `saveConstructionPolicy` passes the active overlay's version. A stale save
+  surfaces the conflict message (hook error state) — reload-and-retry is the
+  recovery, never a silent overwrite.
+- Permissions: the overlay MUTATION endpoints (create, PATCH, rebase,
+  conflict resolve) require `RoleCanMutateCatalog` (admin/ingeniero); reads
+  stay member-readable. Server-authority: the UI flag was never the gate.
+- Evidence: a focused gate spec proves the 412 conflict round-trip (stale
+  writer loses nothing silently; re-read + retry converges), the second
+  authorized user reading the same config, and the vendedor 403 by API.
+  The joinery-status/settings failure taught the suite-order lesson: this
+  spec writes NO persistent overlay state of its own beyond its own keys.
+
+**Tasks**:
+
+- [x] T18 — migration 000148 + storage conditional update (ErrVersionConflict)
+  + version in scans; service signature; handler If-Match + 412 + role guards;
+  ETag on overlay reads. V1 Go tests: conflict path, missing If-Match 428,
+  permission 403, second-user read.
+- [x] T19 — OpenAPI detail version + regenerate; client If-Match + stale-save
+  error surfacing; spec call sites updated.
+- [x] T20 — V2 gate spec (conflict round-trip, second user, vendedor 403).
+
+**Execution record (2026-10-02, slice 4)**: branch
+`feat/875-overlay-ifmatch-permissions` from main `d68faa90`, developed in the
+`../muebles-worktrees/875-slice4` worktree (the main checkout switched
+branches underneath this session once — the worktree convention exists for
+exactly that). V1: api/application/storage green against real disposable
+PostgreSQL, including the new 428/412/403 handler cases, the storage
+conflict-not-found distinction and the version-bump pin; service conflict +
+re-read/retry cases. V2: `overlay-concurrency-permissions.spec.ts` 3/3 —
+stale editor 412 with the refused write proven not to land, re-read+retry
+converges; the second authorized admin reads the same overlay id/version and
+probe key; the org-B vendedor is refused by API. Note: the full storage suite
+run twice against ONE container trips
+`TestMachineOutputSelections_VersionConflictAndList`, which is not idempotent
+against the shared connect-store DB (its own leftover version conflicts) —
+pre-existing test-isolation debt, unrelated to this slice; CI shards use
+fresh containers and are green.
+
+**Correction round (2026-10-03, one consolidated)**: CI failed 4× with
+`If-Match inválido` on every overlay save while the identical stage passed
+locally twice. The rejection logging (RequireIfMatch warns the received
+value) + the gate's new backend.log tail on failure caught it from CI alone:
+`mapOverlayDetailToOpenAPI` had left `Version` unset — a batched-edit
+commit dropped that hunk — so every overlay detail serialized the Go zero
+value (`version: 0`); clients echoed it as the If-Match token `"v0"`, which
+the server (correctly) rejects. The create log (DB row version 1) vs the
+client's `v0` 35ms later pinned it. Fixed in d12ba50e; CI green except the
+tracked #972 UI gap. Left in place as permanent aids: the If-Match
+rejection warning and the gate dumping the backend.log tail (4000 lines) on
+failure.
+
+---
+
+## 9. Slice 5 — policy draft/activate lifecycle + user documentation (2026-10-03)
+
+**Outcome**: a factory admin can stage the construction policy as a DRAFT —
+including an incomplete/invalid one — without touching what the resolve
+governs today; activation is an explicit, server-validated, atomic step that
+makes the draft the effective policy for NEW resolves while history stays
+pinned. Plus the user/support documentation that reproduces the A/B case
+without its author. Closes #875's two remaining open rows.
+
+**Design**:
+
+- Storage: `library_overlays.policy_draft JSONB NULL` (migration 000149) —
+  the draft is staged on the SAME overlay row (the authority), never a new
+  persistent family. The ACTIVE `overrides` keep governing every resolve
+  until activation.
+- Draft save: `PUT …/overlays/{id}/policy-draft` (If-Match, admin/ingeniero)
+  persists the policy keys EVEN IF INVALID — the contract's "borrador
+  inválido se puede conservar". Bumps version.
+- Activation: `POST …/overlays/{id}/policy:activate` (If-Match,
+  admin/ingeniero) validates the STORED draft server-side with the engine's
+  own policy parser (the honest usability validation), 422 with the issue
+  when invalid; on valid, ONE atomic UPDATE merges the draft keys into
+  overrides (construction-owned keys only — foreign `joint.*` and
+  `parameters.*` untouched) and clears the draft. No partial publish, no
+  duplicate versions; failure/retry changes nothing.
+- History: activation only writes the overlay row — frozen releases/Q/R stay
+  byte-identical (slice-2 pinning; the freeze gate already proves policy
+  changes never retarget). Editable contexts pick the activated policy on
+  their next resolve — the joinery live panel IS the impact surface.
+- Detail schema gains `policyDraft` (nullable).
+
+**Tasks**:
+
+- [x] T21 — migration 000149 + storage SavePolicyDraft/ActivatePolicyDraft
+  (atomic, versioned) + service (validation via engine parser) + handlers +
+  tests (invalid draft persists, activate invalid 422, activate valid swaps
+  and clears, foreign keys preserved, permissions).
+- [x] T22 — OpenAPI (policyDraft + 2 operations) + regenerate + client +
+  hook (draft state, saveDraft, activate) + section UI (draft banner,
+  «Guardar borrador» / «Activar política», issues display) + tests.
+- [x] T23 — V2 gate: save INVALID draft → resolve unchanged; activate → 422;
+  fix draft → activate → resolve now governed by it; the frozen parts stay
+  byte-identical through activation.
+- [x] T24 — user documentation: Config → Construcción walkthrough in
+  `docs/guia-de-uso.md` (draft/activate, excepciones, restaurar herencia) +
+  the A/B support runbook reproducing the acceptance case step by step.
+
+**Execution record (2026-10-03, slice 5)**: stacked on slice 4
+(`feat/875-policy-draft-activate` from `d755a2e3`). V1: service lifecycle
+tests (invalid draft persists with a version bump; foreign keys refused at
+save; invalid activation refused leaving the draft staged and the overrides
+untouched; no-draft activation; valid activation swaps/clears with foreign
+keys surviving; stale conflicts) + handler protocol tests (428/403/staging
+detail). V2: `policy-draft-lifecycle.spec.ts` 4/4 — invalid draft persists
+with the resolve-irrelevant active policy untouched; invalid activation
+refused with nothing partial; valid activation swaps into the ACTIVE
+overrides (read back through the active-overlay read), draft cleared,
+version bumped; second activation without a new draft refused. Neighbor
+gates green (settings 4 + concurrency 3 + policy-resolve 4 = 11/11).
+docs/guia-de-uso.md §8b + docs/manufacturing/factory-construction-ab-runbook.md
+reproduce the A/B case without the original author. #875 acceptance rows are
+now all covered across slices 1–5; the issue closes with this PR.
