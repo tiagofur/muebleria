@@ -249,6 +249,7 @@ import {
   startEngineeringCommand,
   useEngineeringState,
 } from './engineeringState';
+import { overlayOverridesToPolicy } from '@granete/domain';
 import { useFactoryConstructionPolicy } from './useFactoryConstructionPolicy';
 import { useHardwareProfiles } from './useHardwareProfiles';
 import { useComponentSideAssignments } from './useComponentSideAssignments';
@@ -2455,6 +2456,17 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                   onResolveConflict: factoryConstructionPolicy.resolveConflict,
                   onChange: factoryConstructionPolicy.setPolicy,
                   saving: factoryConstructionPolicy.saving,
+                  policyDraft:
+                    factoryConstructionPolicy.activeOverlay?.policyDraft != null
+                      ? overlayOverridesToPolicy(
+                          factoryConstructionPolicy.activeOverlay.policyDraft as Record<string, unknown>,
+                        )
+                      : null,
+                  drafting: factoryConstructionPolicy.drafting,
+                  onSaveDraft: (nextPolicy) =>
+                    factoryConstructionPolicy.savePolicyDraft(nextPolicy),
+                  onActivateDraft: () =>
+                    factoryConstructionPolicy.activatePolicyDraft(),
                 }
               : null
           }

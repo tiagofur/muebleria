@@ -297,5 +297,41 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
       overrides: policyOverrides,
     }, signal);
   }
+
+  /**
+   * #875 slice 5: stage the construction policy DRAFT on the overlay — the
+   * active policy keeps governing every resolve until the explicit
+   * activation. Values are intentionally unvalidated server-side: an
+   * incomplete draft persists; activation owns validation.
+   */
+  async savePolicyDraft(
+    token: string,
+    overlay: LibraryOverlayDetail,
+    policy: FactoryConstructionPolicy,
+    signal?: AbortSignal,
+  ): Promise<LibraryOverlayDetail> {
+    const policyOverrides = policyToOverlayOverrides(policy);
+    const existingOverrides = (overlay.overrides ?? {}) as Record<string, unknown>;
+    const draftOverrides: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(policyOverrides)) {
+      if (isConstructionPolicyOwnedKey(k)) {
+        draftOverrides[k] = v;
+      }
+    }
+    // The draft carries the policy's own keys verbatim (the structured blob
+    // + granular keys) — foreign overlay keys are NOT part of a draft.
+    return await this.saveLibraryOverlayPolicyDraft(token, overlay.id, overlay.version, {
+      overrides: draftOverrides,
+    }, signal);
+  }
+
+  /** #875 slice 5: promote the staged draft to the active policy (atomic). */
+  async activatePolicy(
+    token: string,
+    overlay: LibraryOverlayDetail,
+    signal?: AbortSignal,
+  ): Promise<LibraryOverlayDetail> {
+    return await this.activateLibraryOverlayPolicy(token, overlay.id, overlay.version, signal);
+  }
 }
 
