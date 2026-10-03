@@ -74,7 +74,7 @@ class WorkflowTopologyTest(unittest.TestCase):
         text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         for fragment in (
             "storage-shard-plan:", "storage-shards:", "backend-go-other:", "backend-go:",
-            "shard: [1, 2, 3]", "scripts/backend-test-storage-shard.sh 3",
+            "shard: [1, 2, 3, 4]", "scripts/backend-test-storage-shard.sh 4",
             "verify_storage_shard_plan.py", "ci_backend_go_result.py",
             "grep -Fvx 'github.com/tiagofur/muebles-backend/internal/storage'",
         ):
@@ -85,7 +85,7 @@ class WorkflowTopologyTest(unittest.TestCase):
         self.assertNotIn("go test -p 1 -timeout=30m -v ./...", text)
 
     def test_committed_before_timings_are_parseable_top_level_hints(self):
-        timings = ROOT / "backend-go/testdata/storage-before-81a7896.timings"
+        timings = ROOT / "backend-go/testdata/storage-2026-10-03.timings"
         roots = [line for line in timings.read_text(encoding="utf-8").splitlines() if line]
         self.assertTrue(roots)
         self.assertTrue(all(line.startswith("--- PASS: Test") and "/" not in line.split(" ")[2] for line in roots))

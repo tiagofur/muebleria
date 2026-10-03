@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COUNT="${1:?usage: backend-test-storage-shard.sh <count> <one-based-index> [hash|lpt] [timing-log]}"
 INDEX="${2:?usage: backend-test-storage-shard.sh <count> <one-based-index> [hash|lpt] [timing-log]}"
 STRATEGY="${3:-lpt}"
-TIMINGS="${4:-${ROOT}/backend-go/testdata/storage-before-81a7896.timings}"
+TIMINGS="${4:-${ROOT}/backend-go/testdata/storage-2026-10-03.timings}"
 if [[ "${TIMINGS}" != /* ]]; then
   TIMINGS="${ROOT}/${TIMINGS}"
 fi
