@@ -1,0 +1,59 @@
+{
+  "description": "#986 — profile hardware demand prices through the SAME hardware line cost as manual lines: additive to the same total, one quantity multiplier per pricing item, fail-closed on invalid demand hardware. Consumed by backend-go (engine) and packages/domain (pricing).",
+  "catalog": {
+    "hardware": [
+      { "id": "hw-manual", "code": "HER-MAN", "name": "Bisagra manual", "unit": "piece", "costPerUnit": 25, "active": true },
+      { "id": "hw-prof", "code": "PRF-MINIFIX", "name": "Minifix de perfil", "unit": "piece", "costPerUnit": 2.5, "active": true },
+      { "id": "hw-retired", "code": "HER-OLD", "name": "Retirado", "unit": "piece", "costPerUnit": 1, "active": false }
+    ]
+  },
+  "cases": [
+    {
+      "name": "manual lines plus demand, one multiplier",
+      "quantityMultiplier": 2,
+      "manualHardwareLines": [
+        { "id": "hl1", "quantity": 4, "optionRole": "BISAGRA", "hardwareId": "hw-manual" }
+      ],
+      "profileDemandLines": [
+        { "hardwareId": "hw-prof", "quantity": 4 }
+      ],
+      "expectedHardwareTotal": 220
+    },
+    {
+      "name": "demand only",
+      "quantityMultiplier": 3,
+      "manualHardwareLines": [],
+      "profileDemandLines": [
+        { "hardwareId": "hw-prof", "quantity": 2 }
+      ],
+      "expectedHardwareTotal": 15
+    },
+    {
+      "name": "several demand lines aggregate additively",
+      "quantityMultiplier": 1,
+      "manualHardwareLines": [],
+      "profileDemandLines": [
+        { "hardwareId": "hw-prof", "quantity": 2 },
+        { "hardwareId": "hw-prof", "quantity": 0.5 }
+      ],
+      "expectedHardwareTotal": 6.25
+    }
+  ],
+  "failClosed": [
+    {
+      "name": "ghost hardware",
+      "quantityMultiplier": 1,
+      "profileDemandLines": [{ "hardwareId": "hw-ghost", "quantity": 1 }]
+    },
+    {
+      "name": "zero quantity",
+      "quantityMultiplier": 1,
+      "profileDemandLines": [{ "hardwareId": "hw-prof", "quantity": 0 }]
+    },
+    {
+      "name": "inactive hardware",
+      "quantityMultiplier": 1,
+      "profileDemandLines": [{ "hardwareId": "hw-retired", "quantity": 1 }]
+    }
+  ]
+}

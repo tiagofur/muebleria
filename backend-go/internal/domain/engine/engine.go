@@ -183,6 +183,23 @@ func CalcBoardLineCost(part domain.BoardPart, material domain.MaterialBoard, edg
 }
 
 func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domain.QuoteBreakdown, error) {
+	return CalcProjectBreakdownWithProfileDemand(project, catalog, nil)
+}
+
+// CalcProjectBreakdownWithProfileDemand prices the live project truth plus the
+// per-item profile hardware demand (#917/#986). profileDemandPerItem is
+// index-aligned with project.Items and comes from the ONE governed derivation
+// (DeriveQuoteUnitProfileDemand — the same one the release freeze persists);
+// nil or short entries contribute nothing, so a project without demand prices
+// byte-identically to CalcProjectBreakdown. Demand quantities join the SAME
+// hardware total through the SAME catalog validation and unit price as manual
+// lines — additive, one quantity multiplier per item, no new rounding stage
+// (the engine never rounds; display layers do).
+func CalcProjectBreakdownWithProfileDemand(
+	project domain.Project,
+	catalog domain.Catalog,
+	profileDemandPerItem [][]HardwareProfileDemandLine,
+) (domain.QuoteBreakdown, error) {
 	if project.MarginFactor <= 0 {
 		return domain.QuoteBreakdown{}, errors.New("margin factor must be > 0")
 	}
@@ -213,7 +230,7 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 		return domain.QuoteBreakdown{}, err
 	}
 
-	for _, item := range project.Items {
+	for i, item := range project.Items {
 		// Mirrors TS calcLiveProjectBreakdown: reject non-positive item qty.
 		if item.Quantity <= 0 {
 			return domain.QuoteBreakdown{}, fmt.Errorf(
@@ -300,6 +317,25 @@ func CalcProjectBreakdown(project domain.Project, catalog domain.Catalog) (domai
 				return domain.QuoteBreakdown{}, err
 			}
 			hardwareTotal += lineCost.HardwareCost
+		}
+
+		// Profile-driven demand (#917/#986): the governed resolve's commercial
+		// consumption prices through the same validation and unit price as
+		// manual lines. A demand hardware that is missing, inactive or carries
+		// a non-positive quantity fails the quote exactly like a broken manual
+		// line — never a silent zero.
+		if i < len(profileDemandPerItem) {
+			for _, demandLine := range profileDemandPerItem[i] {
+				lineCost, err := CalcHardwareLineCost(domain.ResolvedHardwareLine{
+					ID:         demandLine.HardwareID,
+					Quantity:   demandLine.Quantity,
+					HardwareID: demandLine.HardwareID,
+				}, catalog, item.Quantity)
+				if err != nil {
+					return domain.QuoteBreakdown{}, fmt.Errorf("profile hardware demand %s: %w", demandLine.HardwareID, err)
+				}
+				hardwareTotal += lineCost.HardwareCost
+			}
 		}
 
 		laborModular += float64(item.Quantity) * module.BaseLaborCost
