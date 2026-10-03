@@ -527,6 +527,59 @@ type HardwarePlacement struct {
 	RelativePosition HardwareRelPosition  `json:"relativePosition"`
 	RotationDeg      *HardwareRotationDeg `json:"rotationDeg,omitempty"`
 	Scale            *float64             `json:"scale,omitempty"`
+	// PartRole optionally distinguishes multi-part hardware (e.g. minifix cam vs bolt).
+	PartRole string `json:"partRole,omitempty"`
+	// DerivedMachining replaces the catalog technical profile for this specific
+	// placement when the physical application differs from the generic
+	// footprint (F129). Leave nil to use the catalog profile.
+	DerivedMachining *HardwareMachiningProfile `json:"derivedMachining,omitempty"`
+	// DoorAffinity groups hinges/handles by door and swing side for the
+	// SketchUp inspector UI. Pure presentation metadata; never used as
+	// manufacturing identity. Nil for non-door hardware.
+	DoorAffinity *DoorAffinity `json:"doorAffinity,omitempty"`
+}
+
+// DoorAccessoryRole identifies a door-accessory kind in a grouped inspector view.
+type DoorAccessoryRole string
+
+const (
+	DoorAccessoryHinge  DoorAccessoryRole = "hinge"
+	DoorAccessoryHandle DoorAccessoryRole = "handle"
+)
+
+// DoorAffinity associates a HardwarePlacement to a specific door (by slot index)
+// and identifies its role on that door — published by authoring-resolve so the
+// SketchUp inspector can group accessories per-door without guessing.
+type DoorAffinity struct {
+	DoorSlotIndex int               `json:"doorSlotIndex"`
+	DoorLabel     string            `json:"doorLabel"`
+	SwingSide     string            `json:"swingSide"` // "left" | "right"
+	AccessoryRole DoorAccessoryRole `json:"accessoryRole"`
+	AccessoryIndex int              `json:"accessoryIndex"`
+}
+
+// HardwareAccessoryRow is one row-level accessory rendered inside a door group
+// on the inspector card. Pure presentation shape for the Ruby→JS bridge.
+type HardwareAccessoryRow struct {
+	HardwarePlacementID string               `json:"hardwarePlacementId"`
+	CatalogHardwareID   string               `json:"catalogHardwareId,omitempty"`
+	HardwareName        string               `json:"hardwareName,omitempty"`
+	AnchorFace          string               `json:"anchorFace"`
+	OffsetMm            [2]float64           `json:"offsetMm"`
+	PlacementKind       string               `json:"placementKind"`
+	RotationDeg         *HardwareRotationDeg `json:"rotationDeg,omitempty"`
+}
+
+// DoorAccessoryGroup publishes the resolved swing side plus grouped hinge/handle
+// placements for one door inside a furniture's inspector view.
+type DoorAccessoryGroup struct {
+	DoorSlotIndex int                 `json:"doorSlotIndex"`
+	DoorLabel     string              `json:"doorLabel"`
+	SwingSide     string              `json:"swingSide"`
+	HingeFace     string              `json:"hingeFace"`
+	HandleFace    string              `json:"handleFace"`
+	Hinges        []HardwareAccessoryRow `json:"hinges"`
+	Handles       []HardwareAccessoryRow `json:"handles"`
 }
 
 // HardwareRelPosition is the 2D position on the face plane (mm or formula).

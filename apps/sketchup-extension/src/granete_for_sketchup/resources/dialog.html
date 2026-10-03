@@ -597,6 +597,22 @@
                 <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
               </div>
 
+              <!-- #529: Card condicional Apertura y Accesorios. Se muestra
+                   únicamente si el furnitureDefinition tiene doorSwing o
+                   doorAccessories publicado por authoring-resolve. -->
+              <div class="card" id="inspector-opening-accessories-card" style="display: none;">
+                <div class="card-header-row">
+                  <div>
+                    <div class="card-title">Apertura y Accesorios</div>
+                    <div id="opening-accessories-summary" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs);">
+                      Ajuste el lado de apertura para recalcular bisagras y jaladeras.
+                    </div>
+                  </div>
+                  <span id="opening-count-badge" class="status-badge neutral" style="display: none;">--</span>
+                </div>
+                <div id="inspector-opening-accessories-container" style="margin-top: var(--space-3);"></div>
+              </div>
+
               <div class="card" id="inspector-materials-card" style="display: none;">
                 <div class="card-title">Materiales del Taller</div>
                 <div id="inspector-materials-container" style="margin-top: var(--space-2);"></div>
@@ -669,6 +685,12 @@
                 <h3 id="hw-def-name" style="font-size: var(--text-sm); margin: 0;">--</h3>
                 <span id="hw-provenance-badge" class="status-badge">--</span>
               </div>
+              <!-- #529: Afinidad a puerta — solo visible para herrajes con doorAffinity
+                   (bisagras / jaladeras de puerta). -->
+              <div id="hw-door-affinity-row" class="kv-row" style="display: none;">
+                <span class="k">Pertenece a</span>
+                <span id="hw-door-affinity-val" class="v">--</span>
+              </div>
               <!-- Raw placement/host IDs stay in the collapsed "Detalle
                    técnico" (renderChildFacts): diagnostics, not product noise. -->
               <div class="kv-row">
@@ -687,6 +709,9 @@
                 </div>
                 <div id="hw-derived-locked-note" class="subhead" style="display: none; color: var(--text-muted); font-size: var(--text-xs); margin-top: var(--space-1);">
                   Los herrajes derivados se calculan por regla de ingeniería y no admiten edición manual.
+                </div>
+                <div id="hw-opening-derived-note" class="subhead" style="display: none; color: var(--text-muted); font-size: var(--text-xs); margin-top: var(--space-1);">
+                  Al cambiar la apertura del mueble, la posición de este herraje se recalcula.
                 </div>
               </div>
 

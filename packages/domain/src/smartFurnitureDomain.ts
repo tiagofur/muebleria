@@ -207,6 +207,13 @@ export interface FurnitureParameter {
   readonly step?: number;
   readonly maxLength?: number;
   readonly options?: readonly string[];
+  /**
+   * Human-readable labels for enum `options` in display order. Maps each raw
+   * option value to its user-facing copy (e.g. Spanish). Optional — the raw
+   * value acts as fallback if absent. Pure presentation, never part of the
+   * canonical parameter identity or persisted value.
+   */
+  readonly optionLabels?: Readonly<Record<string, string>>;
   readonly integer?: boolean;
   readonly sortOrder?: number;
   readonly binding?: FurnitureParameterBinding;
