@@ -426,3 +426,52 @@ client's `v0` 35ms later pinned it. Fixed in d12ba50e; CI green except the
 tracked #972 UI gap. Left in place as permanent aids: the If-Match
 rejection warning and the gate dumping the backend.log tail (4000 lines) on
 failure.
+
+---
+
+## 9. Slice 5 — policy draft/activate lifecycle + user documentation (2026-10-03)
+
+**Outcome**: a factory admin can stage the construction policy as a DRAFT —
+including an incomplete/invalid one — without touching what the resolve
+governs today; activation is an explicit, server-validated, atomic step that
+makes the draft the effective policy for NEW resolves while history stays
+pinned. Plus the user/support documentation that reproduces the A/B case
+without its author. Closes #875's two remaining open rows.
+
+**Design**:
+
+- Storage: `library_overlays.policy_draft JSONB NULL` (migration 000149) —
+  the draft is staged on the SAME overlay row (the authority), never a new
+  persistent family. The ACTIVE `overrides` keep governing every resolve
+  until activation.
+- Draft save: `PUT …/overlays/{id}/policy-draft` (If-Match, admin/ingeniero)
+  persists the policy keys EVEN IF INVALID — the contract's "borrador
+  inválido se puede conservar". Bumps version.
+- Activation: `POST …/overlays/{id}/policy:activate` (If-Match,
+  admin/ingeniero) validates the STORED draft server-side with the engine's
+  own policy parser (the honest usability validation), 422 with the issue
+  when invalid; on valid, ONE atomic UPDATE merges the draft keys into
+  overrides (construction-owned keys only — foreign `joint.*` and
+  `parameters.*` untouched) and clears the draft. No partial publish, no
+  duplicate versions; failure/retry changes nothing.
+- History: activation only writes the overlay row — frozen releases/Q/R stay
+  byte-identical (slice-2 pinning; the freeze gate already proves policy
+  changes never retarget). Editable contexts pick the activated policy on
+  their next resolve — the joinery live panel IS the impact surface.
+- Detail schema gains `policyDraft` (nullable).
+
+**Tasks**:
+
+- [ ] T21 — migration 000149 + storage SavePolicyDraft/ActivatePolicyDraft
+  (atomic, versioned) + service (validation via engine parser) + handlers +
+  tests (invalid draft persists, activate invalid 422, activate valid swaps
+  and clears, foreign keys preserved, permissions).
+- [ ] T22 — OpenAPI (policyDraft + 2 operations) + regenerate + client +
+  hook (draft state, saveDraft, activate) + section UI (draft banner,
+  «Guardar borrador» / «Activar política», issues display) + tests.
+- [ ] T23 — V2 gate: save INVALID draft → resolve unchanged; activate → 422;
+  fix draft → activate → resolve now governed by it; the frozen parts stay
+  byte-identical through activation.
+- [ ] T24 — user documentation: Config → Construcción walkthrough in
+  `docs/guia-de-uso.md` (draft/activate, excepciones, restaurar herencia) +
+  the A/B support runbook reproducing the acceptance case step by step.
