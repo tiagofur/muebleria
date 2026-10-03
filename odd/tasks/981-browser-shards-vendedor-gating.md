@@ -50,7 +50,23 @@ AmbientMaterials ya gateaba correctamente (precedente interno).
 - CustomersScreen (sin prop canMutate) queda documentada como deuda.
 - No se toca matriz de roles ni autoridad server-side (ya correcta).
 
+## Auditoría cross-spec (lo que el sharding destapó)
+
+Bisección empírica (4 rondas, pares mínimos en stacks desechables):
+`fabrication-flow-visibility` reescribía el módulo semilla GATE-MOD-A
+in-place (estructura propia, `components: []`) y lo dejaba así; cualquier
+residente posterior que cotizara el semilla con `optionChoices: {}`
+fallaba con "El estado comercial de la obra no produce una revisión
+válida". La suite completa sólo sobrevivía porque otro vecino
+alfabético reescribía el módulo de nuevo antes. El patrón estaba
+copiado en 5 specs: fabrication, engineering-cutting-demand,
+engineering-physical-gate, engineering-state y
+production-release-continuity. Los 5 ahora siembran módulo propio
+(id + código comercial únicos), como demo-golden-path y
+production-release-discovery ya hacían.
+
 ## Verificación
 
 - Unit: 24/24 vitest en las 3 pantallas con test + 72 unittest de scripts.
-- E2E local por shard (stack desechable real, igual que CI): ver cuerpo del PR.
+- Typecheck del workspace completo.
+- E2E local por shard (stack desechable real, igual que CI): ver PR.
