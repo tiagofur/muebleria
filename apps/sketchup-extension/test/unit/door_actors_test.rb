@@ -63,56 +63,32 @@ class DoorActorsTest < Minitest::Test
     assert_empty scanned.hardware_by_host
   end
 
-  # #529: door_payloads carry the per-door hardware with hinge/handle
-  # classified from the CATALOG category — never from names. Unresolvable
-  # hardware stays 'other'.
-  def test_door_payloads_classify_hardware_via_catalog
-    catalog = lambda do |hw_id|
-      case hw_id
-      when 'hw-hinge-35' then { 'category' => 'Hinge' }
-      when 'hw-pull-128' then { 'previewShape' => 'bar-pull' }
-      end
-    end
+  # NEGATIVE PROOF (#529 regression, owner smoke 2026-10-03): a drawer front
+  # (placement frente_cajon, role FRENTE_CAJON) and a plain front must NEVER
+  # become door actors — substring matching on 'frente' over-detected them,
+  # shifted the real door to slot 1 and flipped its swing to right.
+  def test_drawer_front_and_plain_front_are_never_door_actors
     furniture = build_furniture do |definition|
-      door_child(definition, 'door-left', placement: 'puerta', role: 'FRENTE')
-      hinge_child(definition, 'hinge-1', host: 'door-left', hardware_definition_id: 'hw-hinge-35')
-      hinge_child(definition, 'hinge-2', host: 'door-left', hardware_definition_id: 'hw-hinge-35')
-      handle_child(definition, 'handle-1', host: 'door-left', hardware_definition_id: 'hw-pull-128')
-      hinge_child(definition, 'mystery-1', host: 'door-left', hardware_definition_id: 'hw-unknown')
-    end
-
-    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store, catalog_hardware: catalog)
-
-    payload = scanned.door_payloads.first
-    assert_equal 0, payload['slotIndex']
-    categories = payload['hardware'].map { |entry| entry['category'] }
-    assert_equal %w[hinge hinge handle other], categories
-    assert(payload['hardware'].all? { |entry| entry['id'].to_s.start_with?('hw-inst-') })
-  end
-
-  def test_door_payloads_without_catalog_lookup_classify_as_other
-    furniture = build_furniture do |definition|
-      door_child(definition, 'door-left', placement: 'puerta', role: 'FRENTE')
-      hinge_child(definition, 'hinge-1', host: 'door-left', hardware_definition_id: 'hw-hinge-35')
+      door_child(definition, 'drawer-front', placement: 'frente_cajon', role: 'FRENTE_CAJON')
+      door_child(definition, 'plain-front', placement: 'frontal', role: 'FRENTE')
+      door_child(definition, 'the-door', placement: 'puerta', role: 'FRENTE')
     end
 
     scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
 
-    assert_equal(['other'], scanned.door_payloads.first['hardware'].map { |entry| entry['category'] })
+    assert_equal 1, scanned.doors.length
+    the_door = furniture.definition.entities.to_a[2]
+    assert_equal [the_door], scanned.doors
   end
 
-  def test_find_hardware_entity_resolves_navigation_target
+  def test_door_actor_via_door_role_only_is_detected
     furniture = build_furniture do |definition|
-      door_child(definition, 'door-left', placement: 'puerta', role: 'FRENTE')
-      hinge_child(definition, 'hinge-1', host: 'door-left')
+      door_child(definition, 'pilot-door', placement: 'door', role: 'door')
     end
 
-    entity = Granete::SketchUpExtension::Selection::DoorActors.find_hardware_entity(furniture, @store,
-                                                                                    'hw-inst-hinge-1')
-    refute_nil entity
+    scanned = Granete::SketchUpExtension::Selection::DoorActors.scan(furniture, @store)
 
-    assert_nil Granete::SketchUpExtension::Selection::DoorActors.find_hardware_entity(furniture, @store, 'hw-inst-nope')
-    assert_nil Granete::SketchUpExtension::Selection::DoorActors.find_hardware_entity(furniture, @store, nil)
+    assert_equal 1, scanned.doors.length
   end
 
   private
