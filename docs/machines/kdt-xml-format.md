@@ -203,11 +203,14 @@ campos específicos del tipo.
 | `1` | `Vertical Hole` | Taladro desde cara superior (eje Z) |
 | `2` | `Horizontal Hole` | Taladro desde un canto (eje X o Y) |
 | `3` | `Line` | Ranura/dado lineal en una cara |
+| `5` | `Circle` | Recorte circular (observado 1 vez — ver §6.6) |
 | `6` | `Rect` | Bolsillo rectangular |
 | `7` | `Path` | Ruta libre de fresado (polilínea) |
 
-> TypeNo 4 y 5 no fueron observados en la muestra de 417 archivos.
-> `FIELD_VERIFICATION_REQUIRED` sobre su existencia y uso.
+> TypeNo 4 no fue observado en la muestra de 417 archivos:
+> `FIELD_VERIFICATION_REQUIRED` sobre su existencia y uso. TypeNo 5 (`Circle`)
+> apareció una sola vez (EN72268A.xml — entrepaño con recorte circular); su
+> semántica de `Width`/`Empty`/`Correction` requiere confirmación de operador.
 
 ---
 
@@ -353,6 +356,30 @@ enchape en esquina.
     <!-- más <Line> o potencialmente <Arc> (no observado en muestra) -->
   </Vertexes>
 </CAD>
+
+### 6.6 TypeNo 5 — Circle (observado 1 vez)
+
+Recorte circular. Una sola aparición en la muestra: `EN72268A.xml`
+("Entrepaño Fijo 16mm") — un círculo de `Radius 85` con `Depth 16.6`
+(> `PanelThickness 16.5` ⇒ pasante). Semántica de `Width`, `Empty` y
+`Correction` en un círculo sin confirmar (pregunta abierta #1).
+
+```xml
+<CAD>
+  <TypeNo>5</TypeNo>
+  <TypeName>Circle</TypeName>
+  <Radius>85</Radius>        <!-- radio del recorte en mm -->
+  <Depth>16.6</Depth>        <!-- profundidad (> PanelThickness = pasante) -->
+  <CenterX>461</CenterX>     <!-- centro del círculo, marco del panel -->
+  <CenterY>155</CenterY>
+  <Empty>0</Empty>           <!-- sin confirmar en círculo -->
+  <Width>8</Width>           <!-- sin confirmar en círculo -->
+  <Correction>3</Correction> <!-- sin confirmar en círculo (Path usa 0/1/2) -->
+</CAD>
+```
+
+> Único uso observado de `CenterX`/`CenterY` en todo el corpus: los demás
+> tipos se posicionan con `X1`/`Y1`.
 ```
 
 #### Comportamiento de `Close` y `Depth`
@@ -561,7 +588,7 @@ El adapter de Granete deberá:
 
 | # | Pregunta | Prioridad |
 |---|----------|-----------|
-| 1 | ¿Existen TypeNo 4 y 5? ¿Qué operaciones representan? | Alta — antes de implementar el adapter |
+| 1 | ¿Existe TypeNo 4? (TypeNo 5 = `Circle` se observó una vez: EN72268A, `Radius 85`, `Depth 16.6`, `Width 8`, `Empty 0`, `Correction 3` — confirmar qué significan `Width` y `Empty` en un recorte circular) | Alta — antes de implementar el adapter |
 | 2 | Cuando `HoleNo > 1`, ¿cómo funciona el patrón de `IntervalX/Y`? Siempre fue 1 en la muestra. | Media |
 | 3 | ¿Existe `<Arc>` como hijo de `<Vertexes>` en Path? ¿Cuáles son sus campos? | Media |
 | 4 | ¿Cómo selecciona Promob el `AlignmentFace`? ¿Es siempre el canto frontal/visible? | Alta — para implementar la lógica en Granete |
