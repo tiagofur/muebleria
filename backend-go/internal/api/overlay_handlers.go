@@ -535,6 +535,7 @@ func mapOverlayDetailToOpenAPI(o *domain.LibraryOverlay) openapi.LibraryOverlayD
 		Status:            o.Status,
 		Overrides:         overridesMap,
 		CustomResourceIds: customResStrings,
+		Version:           o.Version,
 		CreatedAt:         o.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:         o.UpdatedAt.Format(time.RFC3339),
 	}
