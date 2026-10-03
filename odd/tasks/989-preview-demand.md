@@ -5,7 +5,9 @@
 - **Lane**: Delegated Direct. Un escritor.
 - **Base**: `origin/main` @ `e6dab065` (post #988). Rama
   `feat/989-preview-demand`, worktree `../muebles-worktrees/989-preview-demand`.
-- **Estado**: MAPPED_PENDING_DESIGN_DECISION (actualizar).
+- **Estado**: IN_PROGRESS — opción (B) RATIFICADA por el ODD según contrato de
+  la issue (cumple server authority + paridad + estados honestos). Unidad 1
+  COMMITTED (e7082d34). Unidad 2 con plan listo (abajo).
 
 ## Hechos verificados (T1, 2026-10-03)
 
@@ -61,3 +63,40 @@
 4. Absorber sugerencias del review de #987: (b) test E2E Q1-con-demanda + test
    HTTP estimado-con-demanda en este slice si toca estimado; (c) skip
    preset-driven observable.
+
+
+## Unidad 1 (COMMITTED e7082d34)
+
+- `calcProjectBreakdownWithProfileDemand` TS (pricing.ts) + barrels +
+  tests espejo con números a mano en engine.test.ts (160→180, venta 1272.6;
+  identidad sin demanda toEqual; fail-closed ghost/qty-0). Domain suite
+  125/125 archivos, 1765 tests PASS; typecheck root PASS.
+
+## Unidad 2 — plan listo-para-ejecutar (web)
+
+Hechos: transporte `api.resolveFurnitureAuthoring(token, request, signal)` y
+`api.getFurnitureCatalogRevision(token, signal)` YA existen en el api client
+web (usados por ProjectDesignsScreen:521/1168). Request builder en domain:
+`buildWebAuthoringResolveRequest` (webAuthoringResolve.ts:45). La demanda viaja
+en `response.resolved.machining.hardwareProfileDemand` (validador en
+sketchupAuthoringResolve.ts:1111).
+
+1. `apps/web/src/derivations/useProjectProfileDemand.ts`: hook con useQuery
+   `['project-profile-demand', catalogRevision, items-fingerprint]` —
+   Promise.all de resolve por item del proyecto (definitionId + params
+   escalares + choices del PROJECT item); extrae hardwareProfileDemand con
+   shape-check fail-closed; devuelve `{ demandByItemId, status:
+   'loading'|'ready'|'unavailable'|'error' }`. 'unavailable' = org sin
+   release/perfiles (resolve 200 con demand ausente en TODOS los items) —
+   preview byte-idéntico.
+2. `computeSelectedProjectBreakdown(project, catalog, profileDemandPerItem?)`:
+   tercer parámetro matriz index-aligned (item.id ↔ matrix por orden de
+   project.items), resultado + `demandStatus` para la UI.
+3. ShellView/AppContent: pasar `demandStatus` al display del hardwareTotal —
+   loading ⇒ indicador explícito (nunca $0 silencioso); error ⇒ estado de
+   error del preview; unavailable ⇒ sin cambio visual.
+4. Tests: derivación con demanda (números a mano), hook con transporte mock,
+   regresión sin demanda.
+5. Browser spec: diseño con joinery gobernado → preview ≡ cotización.
+6. HUD plugin: evidence de lectura (granete-commercial-projection.js ←
+   proyección servida con demanda desde el merge de la demanda comercial).
