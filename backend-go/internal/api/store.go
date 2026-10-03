@@ -223,6 +223,9 @@ type Store interface {
 	// projections like the SketchUp furniture definitions endpoint).
 	ListModules(ctx context.Context) ([]domain.Module, error)
 	GetFullCatalog(ctx context.Context) (domain.Catalog, error)
+	// DeriveLiveProfileDemand (#986): per-item profile hardware demand for the
+	// live pricing truth — the same derivation the release freeze persists.
+	DeriveLiveProfileDemand(ctx context.Context, project *domain.Project, catalog domain.Catalog) ([][]engine.HardwareProfileDemandLine, error)
 	GetModuleByID(ctx context.Context, id string) (*domain.Module, error)
 	CreateModule(ctx context.Context, m *domain.Module) error
 	UpdateModule(ctx context.Context, id string, expectedVersion int64, m *domain.Module) error

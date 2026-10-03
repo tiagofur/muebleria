@@ -115,18 +115,51 @@ type QuoteCommercialDesignSource struct {
 	WorkingFingerprint string `json:"workingFingerprint"`
 }
 
+// QuoteCommercialProfileDemand freezes the provenance of the profile-driven
+// hardware demand one quote line contributed to its frozen breakdown (#917/
+// #986): what the governed resolve consumed per hardware, with the profile,
+// recipe, relationship and contact trail — commercial truth auditing reads
+// this; nothing ever recomputes it for a frozen revision. Lines are per
+// physical unit (the breakdown applies the line's own quantity multiplier).
+type QuoteCommercialProfileDemand struct {
+	QuoteLineID  string                      `json:"quoteLineId"`
+	UnitQuantity int                         `json:"unitQuantity"`
+	Lines        []QuoteCommercialDemandLine `json:"lines"`
+}
+
+// QuoteCommercialDemandLine mirrors the engine demand aggregation for one
+// catalog hardware inside one quote line.
+type QuoteCommercialDemandLine struct {
+	HardwareID string                        `json:"hardwareId"`
+	Quantity   float64                       `json:"quantity"`
+	Sources    []QuoteCommercialDemandSource `json:"sources"`
+}
+
+// QuoteCommercialDemandSource mirrors one engine demand source: the resolved
+// profile (id+revision), the recipe that produced the operations
+// (id+revision), the relationship and how many contacts were verified.
+type QuoteCommercialDemandSource struct {
+	TechnicalProfileID       string `json:"technicalProfileId"`
+	TechnicalProfileRevision string `json:"technicalProfileRevision"`
+	RecipeID                 string `json:"recipeId,omitempty"`
+	RecipeRevision           string `json:"recipeRevision,omitempty"`
+	RelationshipID           string `json:"relationshipId"`
+	ContactCount             int    `json:"contactCount"`
+}
+
 // QuoteCommercialSnapshot is the complete frozen commercial payload of one
 // exact QuoteRevision.
 type QuoteCommercialSnapshot struct {
-	Schema       string                       `json:"schema"`
-	CapturedAt   time.Time                    `json:"capturedAt"`
-	Currency     string                       `json:"currency"`
-	Customer     QuoteCommercialIdentity      `json:"customer"`
-	Project      QuoteCommercialIdentity      `json:"project"`
-	Breakdown    QuoteBreakdown               `json:"breakdown"`
-	Lines        []QuoteCommercialLine        `json:"lines"`
-	Units        []QuoteCommercialUnit        `json:"units"`
-	DesignSource *QuoteCommercialDesignSource `json:"designSource,omitempty"`
+	Schema        string                         `json:"schema"`
+	CapturedAt    time.Time                      `json:"capturedAt"`
+	Currency      string                         `json:"currency"`
+	Customer      QuoteCommercialIdentity        `json:"customer"`
+	Project       QuoteCommercialIdentity        `json:"project"`
+	Breakdown     QuoteBreakdown                 `json:"breakdown"`
+	Lines         []QuoteCommercialLine          `json:"lines"`
+	Units         []QuoteCommercialUnit          `json:"units"`
+	DesignSource  *QuoteCommercialDesignSource   `json:"designSource,omitempty"`
+	ProfileDemand []QuoteCommercialProfileDemand `json:"profileDemand,omitempty"`
 }
 
 // ValidateQuoteCommercialSnapshot enforces the structural contract fail-closed:
@@ -159,6 +192,32 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 		for _, c := range source.WorkingFingerprint[7:] {
 			if !strings.ContainsRune("0123456789abcdef", c) {
 				return fmt.Errorf("%w: design working-copy fingerprint is invalid", ErrInvalidRevisionSnapshot)
+			}
+		}
+	}
+	for _, demand := range snapshot.ProfileDemand {
+		if strings.TrimSpace(demand.QuoteLineID) == "" {
+			return fmt.Errorf("%w: profile demand provenance has no quote line identity", ErrInvalidRevisionSnapshot)
+		}
+		if demand.UnitQuantity <= 0 {
+			return fmt.Errorf("%w: profile demand provenance %s has no positive unit quantity", ErrInvalidRevisionSnapshot, demand.QuoteLineID)
+		}
+		if len(demand.Lines) == 0 {
+			return fmt.Errorf("%w: profile demand provenance %s has no demand lines", ErrInvalidRevisionSnapshot, demand.QuoteLineID)
+		}
+		for _, line := range demand.Lines {
+			if strings.TrimSpace(line.HardwareID) == "" || line.Quantity <= 0 ||
+				math.IsNaN(line.Quantity) || math.IsInf(line.Quantity, 0) {
+				return fmt.Errorf("%w: profile demand provenance %s has an invalid hardware line", ErrInvalidRevisionSnapshot, demand.QuoteLineID)
+			}
+			if len(line.Sources) == 0 {
+				return fmt.Errorf("%w: profile demand provenance %s has a hardware line without provenance", ErrInvalidRevisionSnapshot, demand.QuoteLineID)
+			}
+			for _, source := range line.Sources {
+				if strings.TrimSpace(source.TechnicalProfileID) == "" || strings.TrimSpace(source.TechnicalProfileRevision) == "" ||
+					strings.TrimSpace(source.RelationshipID) == "" || source.ContactCount <= 0 {
+					return fmt.Errorf("%w: profile demand provenance %s has an incomplete source", ErrInvalidRevisionSnapshot, demand.QuoteLineID)
+				}
 			}
 		}
 	}
@@ -351,7 +410,11 @@ func RedactQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) *QuoteComm
 
 // BuildQuoteCommercialSnapshot assembles and validates the frozen payload from
 // already-authoritative inputs. Pure: it never mutates its arguments.
-func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, customer, project QuoteCommercialIdentity, breakdown QuoteBreakdown, lines []QuoteCommercialLine, units []QuoteCommercialUnit) (*QuoteCommercialSnapshot, error) {
+// profileDemand (#986) carries the frozen provenance of the profile-driven
+// hardware demand behind the breakdown; nil keeps the snapshot shape
+// byte-identical to the pre-demand payload (additive optional section under
+// schema v1 — existing frozen revisions never grow one).
+func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, customer, project QuoteCommercialIdentity, breakdown QuoteBreakdown, lines []QuoteCommercialLine, units []QuoteCommercialUnit, profileDemand []QuoteCommercialProfileDemand) (*QuoteCommercialSnapshot, error) {
 	lines = append([]QuoteCommercialLine(nil), lines...)
 	units = append([]QuoteCommercialUnit(nil), units...)
 	for i := range lines {
@@ -377,15 +440,27 @@ func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, custome
 		}
 		return units[i].QuoteLineID < units[j].QuoteLineID
 	})
+	provenance := append([]QuoteCommercialProfileDemand(nil), profileDemand...)
+	for i := range provenance {
+		provenance[i].Lines = append([]QuoteCommercialDemandLine(nil), provenance[i].Lines...)
+		for j := range provenance[i].Lines {
+			provenance[i].Lines[j].Sources = append([]QuoteCommercialDemandSource(nil), provenance[i].Lines[j].Sources...)
+		}
+		sort.Slice(provenance[i].Lines, func(a, b int) bool {
+			return provenance[i].Lines[a].HardwareID < provenance[i].Lines[b].HardwareID
+		})
+	}
+	sort.SliceStable(provenance, func(i, j int) bool { return provenance[i].QuoteLineID < provenance[j].QuoteLineID })
 	snapshot := &QuoteCommercialSnapshot{
-		Schema:     QuoteCommercialSnapshotSchema,
-		CapturedAt: capturedAt,
-		Currency:   currency,
-		Customer:   customer,
-		Project:    project,
-		Breakdown:  breakdown,
-		Lines:      lines,
-		Units:      units,
+		Schema:        QuoteCommercialSnapshotSchema,
+		CapturedAt:    capturedAt,
+		Currency:      currency,
+		Customer:      customer,
+		Project:       project,
+		Breakdown:     breakdown,
+		Lines:         lines,
+		Units:         units,
+		ProfileDemand: provenance,
 	}
 	if err := ValidateQuoteCommercialSnapshot(snapshot); err != nil {
 		return nil, err

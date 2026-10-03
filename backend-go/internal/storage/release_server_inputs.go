@@ -102,6 +102,22 @@ func ReleaseServerInputsFromStore(ctx context.Context, store ReleaseServerInputs
 	return inputs, nil
 }
 
+// DeriveLiveProfileDemand derives the per-item profile hardware demand matrix
+// for one live project's pricing (#986) — the estimate path. Same derivation
+// contract as the commercial snapshots: the shared org inputs feed the release
+// freeze's derivation; units outside the release-unit contract contribute no
+// demand, units inside it fail closed on resolve errors.
+func (s *PostgresStore) DeriveLiveProfileDemand(ctx context.Context, project *domain.Project, catalog domain.Catalog) ([][]engine.HardwareProfileDemandLine, error) {
+	if project == nil {
+		return nil, nil
+	}
+	inputs, err := s.ReleaseServerResolveInputs(ctx, OrgFromCtx(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return engine.DeriveProjectProfileDemand(project.Items, catalog, inputs)
+}
+
 // HardwareProfilesForRelease resolves the pinned hardware profiles of one
 // exact release — the authoritative pinned read (#918), moved from the
 // application layer so storage's release inputs loader shares the ONE decode:
