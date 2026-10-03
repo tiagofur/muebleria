@@ -130,6 +130,8 @@ export function composeFrozenDrilling(
       partName: legacy.partName,
       lengthMm: legacy.lengthMm,
       widthMm: legacy.widthMm,
+      // #1005 K3 — floor identity thickness reaches the machining frame.
+      thicknessMm: legacy.thicknessMm,
       materialName: legacy.materialName,
       holes,
     };

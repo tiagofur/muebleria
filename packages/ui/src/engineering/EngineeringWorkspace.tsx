@@ -199,6 +199,8 @@ export function EngineeringWorkspace({
   onExportCutPlanPdf,
   onExportCutPlanDxf,
   onExportCutPlanPtx,
+  machiningOutputTarget,
+  onExportMachiningKdt,
   manufacturingLabels,
   partLabels,
   cuttingOutputTarget,
@@ -291,6 +293,9 @@ export function EngineeringWorkspace({
   readonly partLabels?: readonly unknown[];
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
+  /** #1005 K3 — machining (KDT) target summary + project-level export. */
+  readonly machiningOutputTarget?: CuttingOutputTargetView | null;
+  readonly onExportMachiningKdt?: () => void | Promise<void>;
   readonly resolveCuttingOutputTarget?: (
     cutPlan: import('@granete/domain').CutPlan,
   ) => CuttingOutputTargetView | null;
@@ -742,6 +747,8 @@ export function EngineeringWorkspace({
             manufacturingLabels={manufacturingLabels}
             partLabels={partLabels}
             cuttingOutputTarget={cuttingOutputTarget}
+            machiningOutputTarget={machiningOutputTarget}
+            onExportMachiningKdt={onExportMachiningKdt}
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             exportBusy={exportBusy}
           />

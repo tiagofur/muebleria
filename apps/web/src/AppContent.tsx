@@ -830,6 +830,54 @@ export function AppContent({
     machineOutputResolved,
     machineOutputScopeKey,
   ]);
+  // #1005 K3 — machining twin of the cutting state: same scoped truth,
+  // keyed on the machining record. No legacy route exists for machining.
+  const machiningOutputSelectionState = useMemo<CuttingOutputSelectionState>(() => {
+    let state: CuttingOutputSelectionState;
+    if (currentMachineOutputRequestState.status === 'loading') {
+      state = {
+        status: 'loading',
+        scopeKey: currentMachineOutputRequestState.scopeKey,
+      };
+    } else if (currentMachineOutputRequestState.status === 'error') {
+      state = {
+        status: 'error',
+        scopeKey: currentMachineOutputRequestState.scopeKey,
+        error: currentMachineOutputRequestState.error,
+      };
+    } else {
+      const record = machineOutputSelections.machining;
+      const resolved = machineOutputResolved.machining;
+      if (!record) {
+        state = { status: 'empty', scopeKey: currentMachineOutputRequestState.scopeKey };
+      } else if (
+        resolved?.status === 'CONFIGURED' &&
+        resolved.readiness.ready
+      ) {
+        state = {
+          status: 'configured',
+          scopeKey: currentMachineOutputRequestState.scopeKey,
+          selection: record.selection,
+        };
+      } else {
+        state = {
+          status: 'blocked',
+          scopeKey: currentMachineOutputRequestState.scopeKey,
+          selection: record.selection,
+          reason:
+            resolved?.status === 'CONFIGURED'
+              ? machineOutputBlockerMessageEs(resolved.readiness.reasons)
+              : 'La selección de salida de mecanizado no coincide con el catálogo vigente.',
+        };
+      }
+    }
+    return forCurrentMachineOutputScope(state, machineOutputScopeKey);
+  }, [
+    currentMachineOutputRequestState,
+    machineOutputSelections,
+    machineOutputResolved,
+    machineOutputScopeKey,
+  ]);
   // Optimización: display summary of the #591 cutting target. Everything is
   // derived from the authoritative resolver + catalog — the panel only
   // presents it and never infers compatibility.
@@ -896,6 +944,71 @@ export function AppContent({
     };
   }, [cuttingOutputSelectionState, machineOutputResolved, machineOutputReadModel]);
 
+  // #1005 K3 — machining target summary for the Optimización panel (same
+  // view contract as cutting; format label comes from the catalog family).
+  const machiningOutputTarget = useMemo<CuttingOutputTargetView | null>(() => {
+    if (machiningOutputSelectionState.status === 'empty') return null;
+    if (machiningOutputSelectionState.status === 'loading') {
+      return {
+        status: 'loading',
+        machineLabel: 'Salida de mecanizado',
+        formatLabel: 'KDT',
+        profileLabel: 'Cargando configuración…',
+        ready: false,
+        blockerMessage: 'Esperá a que termine de cargar la configuración.',
+      };
+    }
+    if (machiningOutputSelectionState.status === 'error') {
+      return {
+        status: 'error',
+        machineLabel: 'Salida de mecanizado',
+        formatLabel: 'KDT',
+        profileLabel: 'Configuración no disponible',
+        ready: false,
+        blockerMessage: machiningOutputSelectionState.error,
+      };
+    }
+    const resolved = machineOutputResolved.machining;
+    if (!resolved || resolved.status !== 'CONFIGURED') {
+      return {
+        status: 'configured-blocked',
+        machineLabel: 'Salida de mecanizado',
+        formatLabel: 'KDT',
+        profileLabel: 'Configuración bloqueada',
+        ready: false,
+        blockerMessage:
+          machiningOutputSelectionState.status === 'blocked'
+            ? machiningOutputSelectionState.reason
+            : 'La salida configurada no está disponible.',
+      };
+    }
+    const profile = machineOutputReadModel?.catalog?.outputProfiles.find(
+      (p) =>
+        p.outputCompatibilityProfileId ===
+        resolved.selection.outputCompatibilityProfileId,
+    );
+    return {
+      status:
+        machiningOutputSelectionState.status === 'blocked'
+          ? 'stale'
+          : 'configured-ready',
+      machineLabel: resolved.machineLabel,
+      formatLabel: (profile?.formatFamily ?? 'kdt').toUpperCase(),
+      profileLabel: resolved.profileLabel,
+      ready: machiningOutputSelectionState.status === 'configured',
+      blockerMessage:
+        machiningOutputSelectionState.status === 'blocked'
+          ? machiningOutputSelectionState.reason
+          : '',
+      blockerCode:
+        resolved.readiness.reasons[0]?.code,
+      recoveryHint:
+        machiningOutputSelectionState.status === 'blocked'
+          ? 'Volvé a seleccionar la versión vigente en Ajustes → Ingeniería.'
+          : undefined,
+    };
+  }, [machiningOutputSelectionState, machineOutputResolved, machineOutputReadModel]);
+
   const resolveCuttingOutputTargetForPlan = useCallback(
     (
       cutPlan: CutPlan,
@@ -933,6 +1046,7 @@ export function AppContent({
     },
     [
       cuttingOutputSelectionState,
+    machiningOutputSelectionState,
       cuttingOutputTarget,
       machineOutputReadModel,
     ],
@@ -3149,6 +3263,7 @@ export function AppContent({
     handleExportCutPlanPdf,
     handleExportCutPlanDxf,
     handleExportCutPlanPtx,
+    handleExportMachiningKdt,
     handleReleaseToDelivery,
     handleExportProductionPack,
     handleExportCommercialQuote,
@@ -3163,6 +3278,7 @@ export function AppContent({
     actorRole,
     workspaceSettings: workspace?.settings,
     cuttingOutputSelectionState,
+    machiningOutputSelectionState,
     showCosts,
     toast,
     stampEngineeringGeneration,
@@ -3351,6 +3467,7 @@ export function AppContent({
       onRetry: refreshMachineOutput,
     },
     cuttingOutputTarget,
+    machiningOutputTarget,
     resolveCuttingOutputTarget: resolveCuttingOutputTargetForPlan,
     addProjectItem,
     agregados,
@@ -3449,6 +3566,7 @@ export function AppContent({
     handleExportCutPlanPdf,
     handleExportCutPlanDxf,
     handleExportCutPlanPtx,
+    handleExportMachiningKdt,
     handleExportDespiecePdf,
     handleExportElevations,
     handleExportHardwareList,

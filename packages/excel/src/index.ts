@@ -448,5 +448,7 @@ export {
 
 export {
   generateSelectedCuttingOutput,
+  generateSelectedMachiningOutput,
+  kdtArtifactFileName,
   machineOutputBlockerMessageEs,
 } from './machines/outputSelectionResolver';

@@ -488,6 +488,9 @@ export interface ShellViewCtx {
   ) => Promise<void>;
   /** #591 display summary of the configured cutting target (Optimización). */
   readonly cuttingOutputTarget?: CuttingOutputTargetView | null;
+  /** #1005 K3 — machining (KDT) target summary + project-level export. */
+  readonly machiningOutputTarget?: CuttingOutputTargetView | null;
+  readonly handleExportMachiningKdt: (projectId?: string | undefined) => Promise<void>;
   readonly resolveCuttingOutputTarget?: (
     cutPlan: import('@granete/domain').CutPlan,
   ) => CuttingOutputTargetView | null;
@@ -779,6 +782,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     handleExportCutPlanDxf,
     handleExportCutPlanPtx,
     cuttingOutputTarget = null,
+    machiningOutputTarget = null,
+    handleExportMachiningKdt,
     resolveCuttingOutputTarget,
     handleExportDespiecePdf,
     handleExportElevations,
@@ -1936,6 +1941,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               );
             }}
             cuttingOutputTarget={cuttingOutputTarget}
+            machiningOutputTarget={machiningOutputTarget}
+            onExportMachiningKdt={
+              canExportProduction
+                ? () => {
+                    void handleExportMachiningKdt(engProject.id);
+                  }
+                : undefined
+            }
             resolveCuttingOutputTarget={resolveCuttingOutputTarget}
             canImportNesting={canMarkProduced || canExportProductionUnion}
             onImportNesting={(result) => { importNestingResult(engProject.id, result); }}
