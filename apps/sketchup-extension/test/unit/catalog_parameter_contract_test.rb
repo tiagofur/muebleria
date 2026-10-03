@@ -100,6 +100,44 @@ class CatalogParameterContractTest < Minitest::Test
     end
   end
 
+  # #529 regression (production smoke 2026-10-03): the served catalog now
+  # carries optionLabels on enum parameters; the missing key here failed the
+  # closed shape and marked the WHOLE catalog unavailable on the plugin.
+  def test_accepts_option_labels_string_map_on_enum_parameters
+    definition = valid_definition
+    definition['parameters'] << {
+      'name' => 'doorSwing', 'label' => 'Apertura', 'type' => 'enum',
+      'defaultValue' => 'left', 'required' => false, 'category' => 'metadata',
+      'options' => %w[left right pair],
+      'optionLabels' => { 'left' => 'Izquierda', 'right' => 'Derecha', 'pair' => 'Doble (batiente)' }
+    }
+
+    assert_same definition, Contract.validate_definition!(definition, 'definition')
+  end
+
+  def test_rejects_malformed_option_labels
+    mutations = [
+      ['not-a-map', 'must be a string map'],
+      [{ 'left' => 5 }, 'must be a string map'],
+      [[], 'must be a string map'],
+      [nil, 'must be a string map']
+    ]
+
+    mutations.each do |labels, message|
+      definition = valid_definition
+      definition['parameters'] << {
+        'name' => 'doorSwing', 'label' => 'Apertura', 'type' => 'enum',
+        'defaultValue' => 'left', 'required' => false, 'category' => 'metadata',
+        'options' => %w[left right pair], 'optionLabels' => labels
+      }
+      error = assert_raises(Contract::ContractError) do
+        Contract.validate_definition!(definition, 'definition')
+      end
+      assert_equal 'definition.parameters[1].optionLabels', error.path
+      assert_includes error.message, message
+    end
+  end
+
   def test_closed_relationship_shapes_and_component_condition_parity
     relationship = {
       'kind' => 'shelfSupport', 'sourceRole' => 'shelf',
