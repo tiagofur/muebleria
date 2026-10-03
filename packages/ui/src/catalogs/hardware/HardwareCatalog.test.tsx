@@ -45,6 +45,24 @@ function setup(hardware: readonly Hardware[] = [sampleHardware]) {
 }
 
 describe('HardwareCatalog — create flow', () => {
+  it('canMutate=false oculta las acciones de fila (Editar/Desactivar), no solo "Nuevo herraje" (#972)', () => {
+    render(
+      <HardwareCatalog
+        hardware={[sampleHardware]}
+        canMutate={false}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /Nuevo herraje/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Editar /i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Desactivar /i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Reactivar /i })).toBeNull();
+  });
+
   it('opens the create modal from the header button and submits the draft', async () => {
     const user = userEvent.setup();
     const { onCreate } = setup();
