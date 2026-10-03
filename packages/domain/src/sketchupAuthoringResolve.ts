@@ -290,12 +290,34 @@ export type ResolvedMachiningOperationV1 = {
   readonly holes: readonly ResolveHoleV1[];
 };
 
+/** One governed source behind a demand line (#917): profile, recipe,
+ * relationship and how many contacts were verified. */
+export type ResolvedHardwareProfileDemandSourceV1 = {
+  readonly technicalProfileId: string;
+  readonly technicalProfileRevision: string;
+  readonly recipeId: string;
+  readonly recipeRevision: string;
+  readonly relationshipId: string;
+  readonly contactCount: number;
+};
+
+/** Per-unit profile hardware demand line (#917): the governed resolve's
+ * commercial consumption for ONE physical unit, aggregated by hardware. */
+export type ResolvedHardwareProfileDemandLineV1 = {
+  readonly hardwareId: string;
+  readonly quantity: number;
+  readonly sources: readonly ResolvedHardwareProfileDemandSourceV1[];
+};
+
 export type ResolvedMachiningV1 = {
   readonly operations: readonly ResolvedMachiningOperationV1[];
   readonly derivedHardwarePlacements: readonly DerivedHardwarePlacement[];
   readonly manufacturingFingerprint: string;
   /** J1-B per-relationship joinery states (#874); absent when none declared. */
   readonly joineryStatuses?: readonly FingerprintJoineryStatus[];
+  /** Commercial projection of the resolved profiles (#917); absent when no
+   * pinned profiles governed any contact. Fail-closed validated. */
+  readonly hardwareProfileDemand?: readonly ResolvedHardwareProfileDemandLineV1[];
 };
 
 /**
