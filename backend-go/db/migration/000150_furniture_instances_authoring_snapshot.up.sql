@@ -1,4 +1,4 @@
--- 000148_furniture_instances_authoring_snapshot.up.sql
+-- 000150_furniture_instances_authoring_snapshot.up.sql
 -- #977: deleting a furniture unit in SketchUp drops its design working item
 -- (#810 Caso 1) — the only durable carrier of the authored material choices,
 -- lineage modes and parameters. Re-placing the surviving FurnitureInstance
