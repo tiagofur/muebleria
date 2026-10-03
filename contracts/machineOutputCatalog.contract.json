@@ -10,6 +10,9 @@
     ],
     "mpr": [
       "machining"
+    ],
+    "kdt": [
+      "machining"
     ]
   },
   "machines": [
@@ -31,6 +34,18 @@
       "manufacturerFamily": "WEEKE (HOMAG)",
       "model": "BHX 050",
       "role": "cnc-drilling-machining-center",
+      "operations": [
+        "machining"
+      ],
+      "supportStatus": "NOT_TESTED",
+      "provenance": "OWNER_CONFIRMED"
+    },
+    {
+      "machineProfileId": "client-b-machine-c-kdt-flexdrill1200",
+      "machineProfileRevisionId": "r1",
+      "manufacturerFamily": "KDT",
+      "model": "Flexdrill 1200",
+      "role": "cnc-drilling-line",
       "operations": [
         "machining"
       ],
@@ -80,6 +95,13 @@
       "formatFamily": "mpr",
       "supportStatus": "NOT_TESTED",
       "digest": "28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1"
+    },
+    {
+      "outputCompatibilityProfileId": "kdt-flexdrill-1200",
+      "revisionId": "r1",
+      "formatFamily": "kdt",
+      "supportStatus": "NOT_TESTED",
+      "digest": "6a3015f7462772696d8fb64a22da90065ac7a863758229b9fab56a2710ad7055"
     }
   ],
   "adapters": [
@@ -102,6 +124,13 @@
       "adapterVersion": "0.1.0",
       "implementationDigest": "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782",
       "producedFormatFamily": "mpr",
+      "serializerImplemented": false
+    },
+    {
+      "postprocessorAdapterId": "granete-kdt",
+      "adapterVersion": "0.1.0",
+      "implementationDigest": "401c9fc8f7c77c708fa655441d7b40a6e22d0257d7fb9e0e6acac2dd356b97a9",
+      "producedFormatFamily": "kdt",
       "serializerImplemented": false
     }
   ]
