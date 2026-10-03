@@ -98,10 +98,14 @@ func TestGetFullCatalogRejectsDirectSQLInvalidParameterDefinitions(t *testing.T)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pool := multiOrgFreshMigrationDB(t)
-			// Applied through CURRENT (000142, #497): the typed-definition
-			// rejection is schema-version-independent and the catalog read now
-			// scans version on modules.
-			identityApplyThrough(t, pool, 142)
+			// Applied through the CURRENT head (000142 at #497, re-pinned to
+			// 000151 when presentation_motion joined the agregados catalog
+			// read): the typed-definition rejection under test is
+			// schema-version-independent and the catalog read scans version
+			// on modules. The pin exists only to keep this proof on a fixed,
+			// explicit schema state — bump it whenever the catalog read
+			// starts requiring newer columns.
+			identityApplyThrough(t, pool, 151)
 			_, err := pool.Exec(context.Background(), `INSERT INTO modules (id,organization_id,code,name,parameter_definitions) VALUES (gen_random_uuid(),$1,$2,$2,$3::jsonb)`, multiOrgInitialOrgID, "BAD-"+tt.name, tt.raw)
 			if err != nil {
 				t.Fatalf("seed direct SQL: %v", err)
