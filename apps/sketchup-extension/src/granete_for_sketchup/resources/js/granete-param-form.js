@@ -168,7 +168,8 @@
         p.options.forEach(function (optVal) {
           var opt = document.createElement("option");
           opt.value = optVal;
-          opt.textContent = optVal;
+          opt.textContent =
+            p.optionLabels && p.optionLabels[optVal] ? p.optionLabels[optVal] : optVal;
           if (optVal === val) opt.selected = true;
           select.appendChild(opt);
         });

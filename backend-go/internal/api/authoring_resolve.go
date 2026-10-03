@@ -461,16 +461,16 @@ func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req author
 		LibraryReleaseID:   libraryReleaseID,
 		Status:             authoringStatusAccepted,
 		NormalizedSnapshot: &result.Normalized,
-		Resolved: &authoringResolveResolved{
-			Layout:    result.Layout,
-			Machining: result.Machining,
-			Preflight: authoringResolvePreflight{
-				Scope:             engine.AuthoringValidationScope,
-				Status:            result.ValidationStatus,
-				Issues:            validationIssues,
-				PreflightContract: engine.ManufacturingPreflightContract,
+			Resolved: &authoringResolveResolved{
+				Layout:    result.Layout,
+				Machining: result.Machining,
+				Preflight: authoringResolvePreflight{
+					Scope:             engine.AuthoringValidationScope,
+					Status:            result.ValidationStatus,
+					Issues:            validationIssues,
+					PreflightContract: engine.ManufacturingPreflightContract,
+				},
 			},
-		},
 		Issues: validationIssues,
 	}
 	body, err := json.Marshal(response)
@@ -660,6 +660,15 @@ func validateMaterialChoices(choices map[string]string, catalog domain.Catalog) 
 		}}
 	}
 	return nil
+}
+
+// doorSwingGroups ensures the serialized door-swing groups field is always an
+// array (never JSON null) so clients can range over it unconditionally.
+func doorSwingGroups(groups []domain.DoorAccessoryGroup) []domain.DoorAccessoryGroup {
+	if groups == nil {
+		return []domain.DoorAccessoryGroup{}
+	}
+	return groups
 }
 
 type authoringCatalogSnapshot struct {

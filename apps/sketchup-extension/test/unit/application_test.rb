@@ -179,7 +179,7 @@ class ApplicationTest < Minitest::Test
     expected_callbacks = %w[
       adopt_binding_base apply_design_defaults authoring_mutation
       begin_catalog_placement_preview begin_placement_preview
-      bootstrap_project_design cancel_placement_instance close_dialog component_viewport_move
+      bootstrap_project_design cancel_placement_instance close_all_doors close_dialog component_viewport_move
       confirm_placement_instance
       connect_model connect_with_code create_project_furniture delete_selected_furniture dialog_ready
       emit_initial_quote enroll
@@ -190,7 +190,7 @@ class ApplicationTest < Minitest::Test
       place_furniture_instance poll_enrollment preflight_review prepare_hardware_mount publish_design_revision
       refresh_media_url refresh_model_binding
       rescan_duplicates restore_furniture_instance select_furniture select_project_furniture
-      synchronize_design update_furniture update_furniture_batch
+      synchronize_design toggle_door_motion update_furniture update_furniture_batch
       validate_design_revision validate_managed_furniture_identity
     ]
     assert_equal expected_callbacks, first_dialog.callbacks.keys.sort

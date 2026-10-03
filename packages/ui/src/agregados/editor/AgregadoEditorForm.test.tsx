@@ -252,4 +252,60 @@ describe('AgregadoEditorForm — General tab', () => {
       screen.getByTestId('agregado-general-count-hardware').textContent,
     ).toBe('2');
   });
+
+  it('allows configuring presentation motion and open angle in the General tab (#529)', () => {
+    let draft = createEmptyAgregadoDraft();
+    const setDraft = vi.fn((updater) => {
+      draft = typeof updater === 'function' ? updater(draft) : updater;
+    });
+
+    const renderWithDraft = (d: AgregadoDraft) =>
+      render(
+        <AgregadoEditorForm
+          formId="form-1"
+          error={null}
+          onSubmit={vi.fn()}
+          editorTab="general"
+          setEditorTab={vi.fn()}
+          draft={d}
+          setDraft={setDraft}
+          editingId={null}
+          catalogComponents={[mockComponent]}
+          catalogHardware={[]}
+        />,
+      );
+
+    const { rerender } = renderWithDraft(draft);
+
+    const motionSelect = screen.getByTestId('agregado-field-motion-type') as HTMLSelectElement;
+    expect(motionSelect.value).toBe('none');
+    expect(screen.queryByTestId('agregado-field-open-angle')).toBeNull();
+
+    // Select rotate_left
+    fireEvent.change(motionSelect, { target: { value: 'rotate_left' } });
+    expect(setDraft).toHaveBeenCalled();
+
+    // Rerender with updated draft
+    draft = { ...draft, motionType: 'rotate_left', openAngleDeg: 110 };
+    rerender(
+      <AgregadoEditorForm
+        formId="form-1"
+        error={null}
+        onSubmit={vi.fn()}
+        editorTab="general"
+        setEditorTab={vi.fn()}
+        draft={draft}
+        setDraft={setDraft}
+        editingId={null}
+        catalogComponents={[mockComponent]}
+        catalogHardware={[]}
+      />,
+    );
+
+    const angleInput = screen.getByTestId('agregado-field-open-angle') as HTMLInputElement;
+    expect(angleInput).toBeTruthy();
+    expect(angleInput.value).toBe('110');
+    fireEvent.change(angleInput, { target: { value: '95' } });
+    expect(setDraft).toHaveBeenCalled();
+  });
 });

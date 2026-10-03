@@ -157,6 +157,8 @@ describe('ComponentsScreen', () => {
       optionRoles: 'FRENTE',
       notes: '',
       active: true,
+      canOpen: false,
+      maxOpeningAngleDeg: '110',
     });
   });
 
@@ -191,6 +193,38 @@ describe('ComponentsScreen', () => {
     expect(onUpdate).toHaveBeenCalledWith('c1', expect.objectContaining({
       name: 'Puerta Modificada',
       code: 'COM-PUE-01',
+    }));
+  });
+
+  it('allows configuring canOpen and maxOpeningAngleDeg for opening components (#529)', () => {
+    const onUpdate = vi.fn();
+    render(
+      <ComponentsScreen
+        components={mockComponents}
+        optionGroups={mockOptionGroups}
+        onCreate={vi.fn()}
+        onUpdate={onUpdate}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    // Open detail of COM-PUE-01 (placement: 'puerta')
+    fireEvent.click(screen.getByText('COM-PUE-01'));
+    fireEvent.click(screen.getByTestId('component-detail-edit'));
+
+    const canOpenCheckbox = screen.getByTestId('input-can-open') as HTMLInputElement;
+    expect(canOpenCheckbox.checked).toBe(true);
+
+    const angleInput = screen.getByTestId('input-max-opening-angle') as HTMLInputElement;
+    expect(angleInput.value).toBe('110');
+
+    fireEvent.change(angleInput, { target: { value: '95' } });
+    fireEvent.click(screen.getByTestId('save-btn'));
+
+    expect(onUpdate).toHaveBeenCalledWith('c1', expect.objectContaining({
+      canOpen: true,
+      maxOpeningAngleDeg: '95',
     }));
   });
 

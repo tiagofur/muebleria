@@ -207,6 +207,12 @@ export interface Hardware {
    * Omitted = no exact model associated (generic procedural preview).
    */
   readonly visualAsset?: HardwareVisualAssetBinding;
+  /**
+   * Maximum physical opening angle in degrees for kinematic hardware
+   * (e.g. hinges: 110, 95, 155, 170; lift flaps: 107). Omitted for
+   * non-rotational hardware (slides, pulls, legs).
+   */
+  readonly maxOpeningAngleDeg?: number;
 }
 
 /**
@@ -671,6 +677,29 @@ export type AnchorFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
  * Rides the component-instance overrides JSONB — no dedicated migration (VH-02).
  * Distinct from {@link Perforation} (CNC/machining).
  */
+export type DoorAccessoryRole = 'hinge' | 'handle';
+
+/**
+ * Associates a hardware placement to a specific door within a multi-door
+ * furniture and identifies its role on that door. Populated by the
+ * authoring-resolve engine when the hardware is a door accessory; purely
+ * decorative/grouping metadata for the SketchUp inspector UI — never used as
+ * manufacturing identity (the hardwarePlacementId + catalogHardwareId are
+ * authoritative).
+ */
+export interface DoorAffinity {
+  /** 0-based index that matches the door slot copy (0 = first door, 1 = second). */
+  readonly doorSlotIndex: number;
+  /** Short display label for the inspector (e.g. "Puerta 1 · Izquierda"). */
+  readonly doorLabel: string;
+  /** Raw swing side so badges stay consistent with the mueble-level enum copy. */
+  readonly swingSide: 'left' | 'right';
+  /** Accessory role on the door (hinge = bisagra on the axis; handle = jaladera opposite). */
+  readonly accessoryRole: DoorAccessoryRole;
+  /** Ordinal of this accessory within the same (door, role) group (1st hinge, 2nd hinge…). */
+  readonly accessoryIndex: number;
+}
+
 export interface HardwarePlacement {
   readonly hardwareId: string;
   readonly anchorFace: AnchorFace;
@@ -692,6 +721,11 @@ export interface HardwarePlacement {
    * pilot for thick members. Keep undefined to use the catalog profile.
    */
   readonly derivedMachining?: HardwareMachiningProfile;
+  /**
+   * Optional door affinity for hinges/handles on door boards. Pure UI grouping
+   * metadata. Leave undefined for non-door hardware (connectors, slides, etc.).
+   */
+  readonly doorAffinity?: DoorAffinity;
 }
 
 export interface Component {
@@ -711,6 +745,10 @@ export interface Component {
   readonly rotateX?: number;
   readonly rotateY?: number;
   readonly rotateZ?: number;
+  /** Whether this component represents an opening front (door, flap) in presentation. */
+  readonly canOpen?: boolean;
+  /** Maximum opening angle in degrees (e.g. 90, 110). Default 110 for doors. */
+  readonly maxOpeningAngleDeg?: number;
 }
 
 export interface ModuleComponentInstance {
@@ -745,6 +783,57 @@ export interface ModuleComponentInstance {
   };
 }
 
+// --- Presentation motion types (Slice B / #529) ---
+
+/** Which face of the agregado's local bounding box the pivot is on. */
+export type AgregadoPivotSide = 'left' | 'right' | 'top' | 'bottom';
+
+/** Unit direction vector in the agregado's local coordinate frame. */
+export interface AgregadoLocalAxis {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+}
+
+/** Rotation about a fixed pivot edge or a custom point — e.g. a hinged door swing. */
+export interface AgregadoRotateMotion {
+  readonly kind: 'rotate';
+  readonly pivot: AgregadoPivotSide | { readonly localMm: [number, number, number] };
+  readonly axis: AgregadoLocalAxis;
+  readonly openAngleDeg: number;
+}
+
+/** Linear translation along a local axis — e.g. a sliding door or drawer. */
+export interface AgregadoTranslateMotion {
+  readonly kind: 'translate';
+  readonly axis: AgregadoLocalAxis;
+  readonly distanceMm: number;
+}
+
+/** A single keyframe in a multi-step motion sequence. */
+export interface AgregadoMotionKeyframe {
+  readonly progress: number; // 0..1
+  readonly translationMm: [number, number, number];
+  readonly rotationDeg?: { readonly x?: number; readonly y?: number; readonly z?: number };
+}
+
+/** Fully authored keyframe sequence for complex motions (fold-down, flip-up, etc.). */
+export interface AgregadoKeyframedMotion {
+  readonly kind: 'keyframes';
+  readonly keyframes: readonly AgregadoMotionKeyframe[];
+}
+
+/**
+ * How this sub-assembly moves in the 3D presentation (open/close animation).
+ * Presentation-only — never reaches BOM, CNC, or cost calculation.
+ */
+export type AgregadoPresentationMotion =
+  | AgregadoRotateMotion
+  | AgregadoTranslateMotion
+  | AgregadoKeyframedMotion;
+
+// --- Agregado entity ---
+
 /**
  * A reusable sub-assembly composed of ComponentInstances + HardwareLines.
  * Examples: a drawer, a door with hinges and handle, a divider panel group.
@@ -774,6 +863,11 @@ export interface Agregado {
   readonly variantSets?: readonly AgregadoVariantSet[];
   /** Rules for selecting and validating variants based on available space */
   readonly compatibilityRules?: readonly AssemblyCompatibilityRule[];
+  /**
+   * How this sub-assembly moves in the 3D presentation (door swing, drawer slide,
+   * fold-down panel, etc.). Presentation-only — never reaches BOM or cost (#529).
+   */
+  readonly presentationMotion?: AgregadoPresentationMotion;
 }
 
 /**

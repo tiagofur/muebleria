@@ -14,6 +14,10 @@ module Geom
       [x, y, z]
     end
 
+    def +(other)
+      Point3d.new(x + other.x.to_f, y + other.y.to_f, z + other.z.to_f)
+    end
+
     # Host-faithful API shape: Point3d#transform(transformation) returns a
     # NEW transformed point. SketchUp's Geom::Transformation has no #transform
     # instance method — modeling only the real surface keeps phantom-method
@@ -31,6 +35,10 @@ module Geom
   Vector3d = Struct.new(:x, :y, :z) do
     def to_a
       [x, y, z]
+    end
+
+    def *(scalar)
+      Vector3d.new(x * scalar.to_f, y * scalar.to_f, z * scalar.to_f)
     end
 
     # Host-faithful: Vector3d#transform applies the direction (3x3) part
@@ -82,6 +90,53 @@ module Geom
       t.matrix[3] = vector.x.to_f
       t.matrix[7] = vector.y.to_f
       t.matrix[11] = vector.z.to_f
+      t
+    end
+
+    def self.rotation(point, vector, angle)
+      c = Math.cos(angle.to_f)
+      s = Math.sin(angle.to_f)
+      len = Math.sqrt((vector.x.to_f**2) + (vector.y.to_f**2) + (vector.z.to_f**2))
+      len = 1.0 if len.zero?
+      ux = vector.x.to_f / len
+      uy = vector.y.to_f / len
+      uz = vector.z.to_f / len
+
+      r00 = c + (ux * ux * (1 - c))
+      r01 = (ux * uy * (1 - c)) - (uz * s)
+      r02 = (ux * uz * (1 - c)) + (uy * s)
+
+      r10 = (uy * ux * (1 - c)) + (uz * s)
+      r11 = c + (uy * uy * (1 - c))
+      r12 = (uy * uz * (1 - c)) - (ux * s)
+
+      r20 = (uz * ux * (1 - c)) - (uy * s)
+      r21 = (uz * uy * (1 - c)) + (ux * s)
+      r22 = c + (uz * uz * (1 - c))
+
+      px = point.x.to_f
+      py = point.y.to_f
+      pz = point.z.to_f
+
+      tx = px - ((r00 * px) + (r01 * py) + (r02 * pz))
+      ty = py - ((r10 * px) + (r11 * py) + (r12 * pz))
+      tz = pz - ((r20 * px) + (r21 * py) + (r22 * pz))
+
+      t = new
+      t.matrix[0] = r00
+      t.matrix[1] = r01
+      t.matrix[2] = r02
+      t.matrix[3] = tx
+
+      t.matrix[4] = r10
+      t.matrix[5] = r11
+      t.matrix[6] = r12
+      t.matrix[7] = ty
+
+      t.matrix[8] = r20
+      t.matrix[9] = r21
+      t.matrix[10] = r22
+      t.matrix[11] = tz
       t
     end
 

@@ -79,6 +79,11 @@ module Granete
         attr_reader :kind, *ATTRIBUTES
         attr_accessor :selection_count
         attr_writer :capabilities
+        # #529: door-swing placements (arrays of raw placement hashes with
+        # doorAffinity). Carried outside ATTRIBUTES so the ATTRIBUTES contract
+        # stays stable; the resolver sets this when the Go layout produces
+        # doorAffinity data. Nil and [] both produce doorAccessories: [].
+        attr_writer :door_hardware_placements
 
         def initialize(kind:, **fields)
           raise ArgumentError, "kind must be one of #{KINDS.join(', ')}" unless KINDS.include?(kind)
@@ -124,7 +129,59 @@ module Granete
           end
           payload['selectionCount'] = selection_count if selection_count.to_i > 1
           payload.delete('semanticPath') if payload['semanticPath'] && payload['semanticPath'].empty?
+          # #529: door-swing accessories grouped by door slot. The Go resolver
+          # will populate doorAffinity on hardware placements when it produces
+          # door-swing data; until then the array is always empty (no Go output
+          # for doorAffinity yet in this worktree).
+          payload['doorAccessories'] = door_accessories_payload if kind == 'furniture'
           payload
+        end
+
+        private
+
+        # #529: groups the furniture's hardware placements by door slot using
+        # the doorAffinity annotation the Go resolver will publish per
+        # placement. Until Go produces doorAffinity, every placement lacks the
+        # field and the result is always []. When Go starts emitting it, each
+        # entry carries:
+        #   doorSlotIndex — 0-based door index within the furniture
+        #   doorLabel     — human label from Go (e.g. "Puerta izquierda")
+        #   swingSide     — anchorFace of the hinge group (the bisagra side)
+        #   hinges        — array of hinge placement hashes
+        #   handle        — the jaladera placement hash, or nil
+        # Callers must treat a missing/empty array as "no door data yet".
+        # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        def door_accessories_payload
+          placements = @door_hardware_placements || []
+          with_affinity = placements.select do |p|
+            p[:doorAffinity] || p['doorAffinity']
+          end
+          return [] if with_affinity.empty?
+
+          grouped = with_affinity.group_by do |p|
+            aff = p[:doorAffinity] || p['doorAffinity']
+            aff[:doorSlotIndex] || aff['doorSlotIndex']
+          end
+          grouped.sort_by { |slot_idx, _| slot_idx }.map do |slot_idx, ps|
+            affinity_key = ps.first[:doorAffinity] ? :doorAffinity : 'doorAffinity'
+            face_key     = ps.first[:anchorFace]   ? :anchorFace   : 'anchorFace'
+            first_aff    = ps.first[affinity_key]
+            hinges = ps.select do |p|
+              role = p[affinity_key][:accessoryRole] || p[affinity_key]['accessoryRole']
+              role == 'hinge'
+            end
+            handle = ps.find do |p|
+              role = p[affinity_key][:accessoryRole] || p[affinity_key]['accessoryRole']
+              role == 'handle'
+            end
+            {
+              'doorSlotIndex' => slot_idx,
+              'doorLabel' => first_aff[:doorLabel] || first_aff['doorLabel'],
+              'swingSide' => (hinges.first || {})[face_key],
+              'hinges' => hinges,
+              'handle' => handle
+            }
+          end
         end
       end
     end

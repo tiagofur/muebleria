@@ -85,6 +85,10 @@
   var hwPlacementCard = document.getElementById("hw-placement-card");
   var hwDefName = document.getElementById("hw-def-name");
   var hwProvenanceBadge = document.getElementById("hw-provenance-badge");
+  // #529: pertence a puerta (bisagra/jaladera) y nota de derivación por apertura.
+  var hwDoorAffinityRow = document.getElementById("hw-door-affinity-row");
+  var hwDoorAffinityVal = document.getElementById("hw-door-affinity-val");
+  var hwOpeningDerivedNote = document.getElementById("hw-opening-derived-note");
   var hwFaceVal = document.getElementById("hw-face-val");
   var hwOffsetInput = document.getElementById("hw-offset-input");
   var btnApplyHwOffset = document.getElementById("btn-apply-hw-offset");
@@ -195,17 +199,48 @@
         if (hwFaceVal) hwFaceVal.textContent = formatAnchorFace(context.anchorFace);
 
         var isManual = context.placementKind === "manual";
-        var isDerived = context.placementKind === "derived";
+        var isDerived = context.placementKind === "derived" || context.placementKind === "opening-derived";
+        var doorAffinity = context.doorAffinity;
+        var isDoorAccessory = !!doorAffinity ||
+          (context.hardwareCategory === "hinge" || context.hardwareCategory === "handle" ||
+           context.category === "hinge" || context.category === "handle");
         if (hwProvenanceBadge) {
           if (isManual) {
             hwProvenanceBadge.textContent = "Manual";
             hwProvenanceBadge.className = "status-badge success";
+          } else if (isDerived && isDoorAccessory) {
+            hwProvenanceBadge.textContent = "Derivado · Apertura";
+            hwProvenanceBadge.className = "status-badge neutral";
           } else if (isDerived) {
             hwProvenanceBadge.textContent = "Derivado";
             hwProvenanceBadge.className = "status-badge pending";
           } else {
             hwProvenanceBadge.textContent = "Desconocido";
             hwProvenanceBadge.className = "status-badge";
+          }
+        }
+
+        // #529: fila "Pertenece a puerta" (agrupación por apertura). Solo para
+        // bisagras y jaladeras con doorAffinity (fuente: authoring-resolve /
+        // Ruby bridge). El resto mantiene la card como estaba.
+        if (hwDoorAffinityRow) {
+          if (doorAffinity && (doorAffinity.accessoryRole === "hinge" || doorAffinity.accessoryRole === "handle")) {
+            hwDoorAffinityRow.style.display = "flex";
+            var roleCopy = doorAffinity.accessoryRole === "hinge" ? "Bisagra " : "Jaladera ";
+            var ordinal = doorAffinity.accessoryIndex !== undefined && doorAffinity.accessoryIndex !== null
+              ? (" " + (Number(doorAffinity.accessoryIndex) + 1)) : "";
+            hwDoorAffinityVal.textContent =
+              (doorAffinity.doorLabel || ("Puerta " + (Number(doorAffinity.doorSlotIndex || 0) + 1))) +
+              " · " + roleCopy.trim() + ordinal;
+          } else if (isDoorAccessory) {
+            // Sin doorAffinity explícito pero sabemos que es bisagra/jaladera
+            // → mostramos hint indicando que la asignación vendrá tras Apply.
+            hwDoorAffinityRow.style.display = "flex";
+            var hintRole = (context.hardwareCategory === "hinge" || context.category === "hinge") ? "Bisagra" : "Jaladera";
+            hwDoorAffinityVal.textContent =
+              "Pendiente de Aplicar · " + hintRole + " se vinculará a su puerta al confirmar el diseño.";
+          } else {
+            hwDoorAffinityRow.style.display = "none";
           }
         }
 
@@ -220,7 +255,11 @@
           hwOffsetInput.disabled = !isManual;
         }
         if (btnApplyHwOffset) btnApplyHwOffset.disabled = !isManual;
-        if (hwDerivedLockedNote) hwDerivedLockedNote.style.display = isDerived ? "block" : "none";
+        if (hwDerivedLockedNote) hwDerivedLockedNote.style.display = (isDerived && !isDoorAccessory) ? "block" : "none";
+        // #529: nota solo para accesorios de puerta derivados.
+        if (hwOpeningDerivedNote) {
+          hwOpeningDerivedNote.style.display = (isDerived && isDoorAccessory) ? "block" : "none";
+        }
 
         if (hwReplacementSelect) {
           hwReplacementSelect.disabled = !isManual;

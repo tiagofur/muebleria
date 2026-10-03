@@ -383,6 +383,24 @@ export function Hardware3DSection({
                   </label>
                 </div>
 
+                {draft.previewShape === 'hinge' ? (
+                  <div className="catalog-form__row">
+                    <label className="catalog-form__field">
+                      <span>Ángulo máx. de apertura (°)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={180}
+                        step={1}
+                        placeholder="ej. 110"
+                        value={draft.maxOpeningAngleDeg}
+                        onChange={(e) => setDraft({ ...draft, maxOpeningAngleDeg: e.target.value })}
+                        data-testid="hardware-form-max-opening-angle"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
                 <div className="catalog-form__row">
                   <label className="catalog-form__field">
                     <span>Color</span>

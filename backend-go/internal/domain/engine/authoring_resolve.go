@@ -106,6 +106,9 @@ type AuthoringManualPlacement struct {
 	AnchorFace              string                      `json:"anchorFace"`
 	OffsetMm                [2]float64                  `json:"offsetMm"`
 	RotationDeg             *domain.HardwareRotationDeg `json:"rotationDeg,omitempty"`
+	// DoorAffinity groups this placement under a door slot for the SketchUp
+	// inspector "Apertura y Accesorios" card (#529). Nil for non-door hardware.
+	DoorAffinity *domain.DoorAffinity `json:"doorAffinity,omitempty"`
 }
 
 // NormalizedAuthoringComponent is the server-normalized occurrence echo.
@@ -158,12 +161,22 @@ type AuthoringResolveInput struct {
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
 // non-empty means the snapshot was rejected (no resolved result is usable).
 type AuthoringResolveResult struct {
-	Layout           FurnitureLayout
-	Normalized       NormalizedAuthoringIntent
-	Machining        AuthoringMachining
-	ValidationStatus string
-	ValidationIssues []domain.ContractIssue
-	StructuralIssues []domain.ContractIssue
+	Layout                     FurnitureLayout
+	Normalized                 NormalizedAuthoringIntent
+	Machining                  AuthoringMachining
+	ValidationStatus           string
+	ValidationIssues           []domain.ContractIssue
+	StructuralIssues           []domain.ContractIssue
+	// DoorSwingAccessoriesGroups (#529) groups hinges/handles by door and swing
+	// side so the SketchUp inspector can render the Apertura y Accesorios card
+	// with authoritative provenance. One entry per door slot; empty slices when
+	// the definition has no doorSwing parameter. Pure presentation metadata —
+	// manufacturing truth remains in HardwarePlacements + Machining.
+	DoorSwingAccessoriesGroups []domain.DoorAccessoryGroup
+	// ResolvedAgregadoMotions (#529 Slice B) carries the authoritative motion
+	// definition for each door panel so the 3D viewer can animate open/close.
+	// Nil when the definition has no doorSwing parameter.
+	ResolvedAgregadoMotions []ResolvedAgregadoMotion
 }
 
 // plannedCopy is one occurrence slot of a planned template.
@@ -345,12 +358,40 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	// 7. Normalized snapshot (stateless receipt).
 	normalized := buildNormalizedIntent(input, layout, boards, effectivePlacements)
 
+	// 8. Door Swing & Door Accessories (#529): authoritative grouping of
+	// hinges/handles per door plus derived swing side. Pure presentation
+	// metadata; manufacturing truth is never rebuilt from this section.
+	doorGroups := computeDoorSwingAccessories(
+		input.Module.ParameterDefinitions,
+		input.EvaluatedParameters,
+		boards,
+		effectivePlacements,
+		input.Catalog,
+	)
+	// Annotate placements with door affinity so downstream (normalized, API
+	// response, hardware child view) can surface "Pertenece a Puerta 1…"
+	// without re-deriving the grouping.
+	stampDoorAffinity(normalized.HardwarePlacements, doorGroups)
+
+	// Collect the door boards in the same order computeDoorSwingAccessories
+	// uses (FRENTE boards, stable index) so computeDoorSwingMotions can pair
+	// each motion with its board's component-instance ID.
+	var doorBoardPtrs []*layoutBoard
+	for i := range boards {
+		if isDoorBoard(&boards[i]) {
+			doorBoardPtrs = append(doorBoardPtrs, &boards[i])
+		}
+	}
+	agregadoMotions := computeDoorSwingMotions(doorBoardPtrs, doorGroups)
+
 	return &AuthoringResolveResult{
-		Layout:           layout,
-		Normalized:       normalized,
-		Machining:        machining,
-		ValidationStatus: validationStatusFor(manufacturing),
-		ValidationIssues: manufacturing,
+		Layout:                     layout,
+		Normalized:                 normalized,
+		Machining:                  machining,
+		ValidationStatus:           validationStatusFor(manufacturing),
+		ValidationIssues:           manufacturing,
+		DoorSwingAccessoriesGroups: doorGroups,
+		ResolvedAgregadoMotions:    agregadoMotions,
 	}, nil
 }
 

@@ -94,9 +94,14 @@ export function ComponentEditorGeneralPanel({
             <select
               id={`${formId}-placement`}
               value={draft.placement}
-              onChange={(e) =>
-                setDraft((prev) => ({ ...prev, placement: e.target.value }))
-              }
+              onChange={(e) => {
+                const nextPlacement = e.target.value;
+                setDraft((prev) => ({
+                  ...prev,
+                  placement: nextPlacement,
+                  canOpen: nextPlacement === 'puerta' ? true : prev.canOpen,
+                }));
+              }}
               required
               data-testid="input-placement"
             >
@@ -111,6 +116,45 @@ export function ComponentEditorGeneralPanel({
               ))}
             </select>
           </div>
+
+          <div className="catalog-form__field" data-testid="component-kinematics-field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer', fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-medium)', color: 'var(--text-primary)' }}>
+              <input
+                type="checkbox"
+                checked={draft.canOpen}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    canOpen: e.target.checked,
+                  }))
+                }
+                data-testid="input-can-open"
+              />
+              <span>Elemento móvil (puede abrirse en presentación 3D)</span>
+            </label>
+          </div>
+
+          {draft.canOpen ? (
+            <div className="catalog-form__field" data-testid="component-max-angle-field">
+              <label htmlFor={`${formId}-max-angle`}>Ángulo máx. de apertura (°)</label>
+              <input
+                id={`${formId}-max-angle`}
+                type="number"
+                min={0}
+                max={180}
+                step={1}
+                value={draft.maxOpeningAngleDeg}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    maxOpeningAngleDeg: e.target.value,
+                  }))
+                }
+                data-testid="input-max-opening-angle"
+                placeholder="110"
+              />
+            </div>
+          ) : null}
 
           <div className="catalog-form__field">
             <label htmlFor={`${formId}-notes`}>Notas / Descripción técnica</label>

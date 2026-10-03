@@ -27,6 +27,7 @@ function hardwarePreviewFields(
   | 'previewMetalness'
   | 'previewClearcoat'
   | 'partFinishes'
+  | 'maxOpeningAngleDeg'
 > {
   const shape = HARDWARE_SHAPES.includes(draft.previewShape)
     ? (draft.previewShape as Hardware['previewShape'])
@@ -37,6 +38,8 @@ function hardwarePreviewFields(
     base: draft.partFinishes?.base || undefined,
     grip: draft.partFinishes?.grip || undefined,
   });
+  const angle = Number(draft.maxOpeningAngleDeg);
+  const maxOpeningAngleDeg = Number.isFinite(angle) && angle > 0 ? angle : undefined;
   return {
     ...(shape ? { previewShape: shape } : {}),
     ...(color ? { previewColor: color } : {}),
@@ -47,6 +50,7 @@ function hardwarePreviewFields(
     ...(draft.previewMetalness ? { previewMetalness: parseDraftNum(draft.previewMetalness, true) } : {}),
     ...(draft.previewClearcoat ? { previewClearcoat: parseDraftNum(draft.previewClearcoat, true) } : {}),
     ...(partFinishes ? { partFinishes } : {}),
+    ...(maxOpeningAngleDeg ? { maxOpeningAngleDeg } : {}),
   };
 }
 
@@ -117,6 +121,7 @@ export function createHardwareActions(ctx: CatalogStoreCtx): HardwareSlice {
               partFinishes: _dpf,
               machining: _dma,
               visualAsset: _dva,
+              maxOpeningAngleDeg: _dmoa,
               ...rest
             } = h;
             return {
