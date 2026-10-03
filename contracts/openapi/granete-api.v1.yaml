@@ -5238,6 +5238,94 @@
         }
       }
     },
+    "/manufacturing-libraries/overlays/{id}/policy-draft": {
+      "put": {
+        "operationId": "saveLibraryOverlayPolicyDraft",
+        "summary": "Stage the construction policy draft (If-Match guarded)",
+        "description": "Stages the construction policy draft on the overlay WITHOUT touching the active overrides — the resolve keeps being governed by the active policy until activation. Values are intentionally unvalidated (an incomplete draft persists); only construction-policy keys are accepted. Requires the overlay's current version as If-Match (#875 slice 5).",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePolicyDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Draft staged; the overlay detail carries policyDraft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOverlayDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/overlays/{id}/policy:activate": {
+      "post": {
+        "operationId": "activateLibraryOverlayPolicy",
+        "summary": "Activate the staged construction policy (If-Match guarded)",
+        "description": "Promotes the staged draft to the ACTIVE construction policy in one atomic write — only when the engine's own policy validation accepts it (422 with the issue otherwise). Activation changes what NEW resolves compute; frozen releases and quotations stay pinned to their historical revisions. Requires the overlay's current version as If-Match (#875 slice 5).",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Policy activated; the detail shows the merged overrides and no draft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryOverlayDetail"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/manufacturing-libraries/overlays/{id}/rebase": {
       "post": {
         "operationId": "rebaseLibraryOverlay",
@@ -14924,6 +15012,11 @@
             "format": "int64",
             "description": "Optimistic-concurrency token (#875): every overrides update bumps it; send it back as If-Match on PATCH."
           },
+          "policyDraft": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Staged construction policy draft (#875 slice 5): keys the activation would replace. The ACTIVE overrides govern the resolve until activation. Absent when no draft is staged."
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -14972,6 +15065,20 @@
             }
           }
         }
+      },
+      "SavePolicyDraftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "overrides": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Construction-policy keys to stage (joint.*). Values are intentionally unvalidated: an incomplete draft persists; activation owns validation."
+          }
+        },
+        "required": [
+          "overrides"
+        ]
       },
       "RebaseLibraryOverlayRequest": {
         "type": "object",

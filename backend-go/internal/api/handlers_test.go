@@ -1773,6 +1773,35 @@ func (s *stubStore) GetActiveOverlayByLibrary(_ context.Context, orgID, libID uu
 	}
 	return nil, storage.ErrOverlayNotFound
 }
+func (s *stubStore) SavePolicyDraft(_ context.Context, id uuid.UUID, expectedVersion int64, draft json.RawMessage) error {
+	if s.overlaysByID != nil {
+		if o, ok := s.overlaysByID[id]; ok {
+			if o.Version != expectedVersion {
+				return storage.ErrVersionConflict
+			}
+			o.Version++
+			o.PolicyDraft = draft
+			return nil
+		}
+	}
+	return storage.ErrOverlayNotFound
+}
+
+func (s *stubStore) ActivatePolicyDraft(_ context.Context, id uuid.UUID, expectedVersion int64, mergedOverrides json.RawMessage) error {
+	if s.overlaysByID != nil {
+		if o, ok := s.overlaysByID[id]; ok {
+			if o.Version != expectedVersion {
+				return storage.ErrVersionConflict
+			}
+			o.Version++
+			o.Overrides = mergedOverrides
+			o.PolicyDraft = nil
+			return nil
+		}
+	}
+	return storage.ErrOverlayNotFound
+}
+
 func (s *stubStore) UpdateOverlayOverrides(_ context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error {
 	if s.updateOverlayOverridesErr != nil {
 		return s.updateOverlayOverridesErr

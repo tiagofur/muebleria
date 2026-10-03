@@ -295,6 +295,132 @@ func (s *Server) HandleUpdateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(updated))
 }
 
+// HandleSaveLibraryOverlayPolicyDraft handles
+// PUT /api/manufacturing-libraries/overlays/{id}/policy-draft (#875 slice 5).
+// Stages the construction policy draft WITHOUT touching what the resolve
+// governs: values are intentionally unvalidated (an incomplete draft
+// persists per the issue contract); only structural key scoping is enforced.
+// If-Match guarded, admin/ingeniero only.
+func (s *Server) HandleSaveLibraryOverlayPolicyDraft(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	orgUUID, err := uuid.Parse(claims.OrgID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid organization id")
+		return
+	}
+	// #875 slice 4 (AC3): overlay mutations are factory administration —
+	// admin/ingeniero only, server-authority. Reads stay member-readable.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
+		return
+	}
+
+	overlayUUID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid overlay id")
+		return
+	}
+	var req openapi.SavePolicyDraftRequest
+	if !decodeGeneratedJSONBody(w, r, &req) {
+		return
+	}
+	draft, err := json.Marshal(req.Overrides)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid overrides format")
+		return
+	}
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	if err := s.overlayService().SavePolicyDraft(r.Context(), overlayUUID, orgUUID, expectedVersion, draft); err != nil {
+		respondOverlayPolicyWriteError(w, err, "save policy draft")
+		return
+	}
+	updated, err := s.Store.GetOverlayByID(r.Context(), overlayUUID)
+	if err != nil {
+		respondWithInternalError(w, err, "fetch updated overlay")
+		return
+	}
+	w.Header().Set("ETag", FormatVersionETag(updated.Version))
+	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(updated))
+}
+
+// HandleActivateLibraryOverlayPolicy handles
+// POST /api/manufacturing-libraries/overlays/{id}/policy:activate (#875 slice 5).
+// Promotes the staged draft to the ACTIVE policy in one atomic write — but
+// only when the ENGINE's own parser accepts it: an invalid draft stays a
+// draft (422 with the parser's issue). Activation changes what NEW resolves
+// compute; frozen releases/quotes stay byte-identical (they are pinned).
+func (s *Server) HandleActivateLibraryOverlayPolicy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || claims.OrgID == "" {
+		respondWithError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	orgUUID, err := uuid.Parse(claims.OrgID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid organization id")
+		return
+	}
+	// #875 slice 4 (AC3): overlay mutations are factory administration —
+	// admin/ingeniero only, server-authority. Reads stay member-readable.
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
+		return
+	}
+
+	overlayUUID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid overlay id")
+		return
+	}
+	expectedVersion, ok := RequireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	if err := s.overlayService().ActivatePolicyDraft(r.Context(), overlayUUID, orgUUID, expectedVersion); err != nil {
+		respondOverlayPolicyWriteError(w, err, "activate policy draft")
+		return
+	}
+	updated, err := s.Store.GetOverlayByID(r.Context(), overlayUUID)
+	if err != nil {
+		respondWithInternalError(w, err, "fetch updated overlay")
+		return
+	}
+	w.Header().Set("ETag", FormatVersionETag(updated.Version))
+	respondWithJSON(w, http.StatusOK, mapOverlayDetailToOpenAPI(updated))
+}
+
+// respondOverlayPolicyWriteError maps the draft/activate service errors to
+// their typed public contracts.
+func respondOverlayPolicyWriteError(w http.ResponseWriter, err error, op string) {
+	switch {
+	case errors.Is(err, application.ErrUnauthorizedOverlayAccess), errors.Is(err, storage.ErrOverlayNotFound):
+		respondWithError(w, http.StatusNotFound, "overlay not found")
+	case errors.Is(err, storage.ErrVersionConflict):
+		respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict,
+			"El overlay cambió en otra sesión. Recargá la configuración y volvé a intentar sobre la versión actual.", nil)
+	case errors.Is(err, application.ErrNoPolicyDraft):
+		respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict,
+			"No hay un borrador de política para activar.", nil)
+	case errors.Is(err, application.ErrInvalidPolicyDraft):
+		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
+	default:
+		respondWithInternalError(w, err, op)
+	}
+}
+
 // HandleRebaseLibraryOverlay handles POST /api/manufacturing-libraries/overlays/{id}/rebase.
 func (s *Server) HandleRebaseLibraryOverlay(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -518,6 +644,10 @@ func mapOverlayDetailToOpenAPI(o *domain.LibraryOverlay) openapi.LibraryOverlayD
 	if len(o.Overrides) > 0 && string(o.Overrides) != "{}" {
 		_ = json.Unmarshal(o.Overrides, &overridesMap)
 	}
+	var policyDraftMap map[string]any
+	if len(o.PolicyDraft) > 0 && string(o.PolicyDraft) != "null" {
+		_ = json.Unmarshal(o.PolicyDraft, &policyDraftMap)
+	}
 
 	var customResStrings []string
 	for _, id := range o.CustomResourceIDs {
@@ -536,6 +666,7 @@ func mapOverlayDetailToOpenAPI(o *domain.LibraryOverlay) openapi.LibraryOverlayD
 		Overrides:         overridesMap,
 		CustomResourceIds: customResStrings,
 		Version:           o.Version,
+		PolicyDraft:       policyDraftMap,
 		CreatedAt:         o.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:         o.UpdatedAt.Format(time.RFC3339),
 	}

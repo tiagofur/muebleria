@@ -578,6 +578,8 @@ type Store interface {
 	GetOverlayByID(ctx context.Context, id uuid.UUID) (*domain.LibraryOverlay, error)
 	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
 	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
+	SavePolicyDraft(ctx context.Context, id uuid.UUID, expectedVersion int64, draft json.RawMessage) error
+	ActivatePolicyDraft(ctx context.Context, id uuid.UUID, expectedVersion int64, mergedOverrides json.RawMessage) error
 	UpdateOverlayStatus(ctx context.Context, id uuid.UUID, status string) error
 	UpdateOverlayBaseRelease(ctx context.Context, id uuid.UUID, newBaseReleaseID uuid.UUID, overrides json.RawMessage, status string) error
 	ReplaceOverlayPendingConflicts(ctx context.Context, overlayID uuid.UUID, conflicts []domain.LibraryOverlayConflict) error

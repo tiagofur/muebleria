@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -19,6 +20,13 @@ import (
 
 var (
 	ErrUnauthorizedOverlayAccess    = errors.New("unauthorized access to library overlay")
+
+	// ErrNoPolicyDraft: activation without a staged draft.
+	ErrNoPolicyDraft = errors.New("library overlay has no policy draft to activate")
+
+	// ErrInvalidPolicyDraft: the staged draft fails the engine's own policy
+	// validation — activation refuses it with the parser's issue.
+	ErrInvalidPolicyDraft = errors.New("policy draft is not activatable")
 	ErrBaseReleaseNotPublished      = errors.New("target base release must be in published status")
 	ErrBaseReleaseLibraryMismatch   = errors.New("target base release does not belong to the upstream library lineage")
 	ErrRebasePendingConflictsRemain = errors.New("overlay has unresolved rebase conflicts blocking activation/publication")
@@ -32,6 +40,8 @@ type OverlayStore interface {
 	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
 	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
 	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
+	SavePolicyDraft(ctx context.Context, id uuid.UUID, expectedVersion int64, draft json.RawMessage) error
+	ActivatePolicyDraft(ctx context.Context, id uuid.UUID, expectedVersion int64, mergedOverrides json.RawMessage) error
 	UpdateOverlayStatus(ctx context.Context, id uuid.UUID, status string) error
 	UpdateOverlayBaseRelease(ctx context.Context, id uuid.UUID, newBaseReleaseID uuid.UUID, overrides json.RawMessage, status string) error
 	ReplaceOverlayPendingConflicts(ctx context.Context, overlayID uuid.UUID, conflicts []domain.LibraryOverlayConflict) error
@@ -176,6 +186,119 @@ func (s *OverlayService) UpdateOverrides(
 		return storage.ErrVersionConflict
 	}
 	return s.store.UpdateOverlayOverrides(ctx, overlayID, expectedVersion, overrides, customResourceIDs)
+}
+
+// policyDraftOwnedKeyPrefixes/policyDraftOwnedKeys mirror the TS client's
+// CONSTRUCTION_POLICY_OWNED_KEY_PREFIXES/KEYS (factoryConstructionPolicy.ts):
+// activation replaces EXACTLY these keys in the active overrides — foreign
+// `joint.*` overrides (e.g. component exceptions) and `parameters.*` survive.
+var policyDraftOwnedKeyPrefixes = []string{
+	"joint.floorToSide.", "joint.topToSide.", "joint.shelfToSide.", "joint.backPanel.",
+}
+
+const policyDraftOwnedKeyBlob = "joint.constructionPolicy"
+
+func policyDraftOwnsKey(key string) bool {
+	if key == policyDraftOwnedKeyBlob {
+		return true
+	}
+	for _, prefix := range policyDraftOwnedKeyPrefixes {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// SavePolicyDraft stages the construction policy draft (#875 slice 5). The
+// draft must be a JSON object of construction-policy-owned keys (structural
+// scoping only — this endpoint is the POLICY draft, not a shadow overlay
+// writer); VALUES are intentionally unvalidated so an incomplete draft can
+// persist per the issue contract. Validation belongs to activation.
+func (s *OverlayService) SavePolicyDraft(
+	ctx context.Context,
+	overlayID uuid.UUID,
+	orgID uuid.UUID,
+	expectedVersion int64,
+	draft json.RawMessage,
+) error {
+	overlay, err := s.store.GetOverlayByID(ctx, overlayID)
+	if err != nil {
+		return err
+	}
+	if overlay.OrganizationID != orgID {
+		return ErrUnauthorizedOverlayAccess
+	}
+	if overlay.Version != expectedVersion {
+		return storage.ErrVersionConflict
+	}
+	var keys map[string]any
+	if err := json.Unmarshal(draft, &keys); err != nil {
+		return fmt.Errorf("%w: draft must be a JSON object: %v", ErrInvalidPolicyDraft, err)
+	}
+	for key := range keys {
+		if !policyDraftOwnsKey(key) {
+			return fmt.Errorf("%w: key %q is outside the construction policy namespace", ErrInvalidPolicyDraft, key)
+		}
+	}
+	return s.store.SavePolicyDraft(ctx, overlayID, expectedVersion, draft)
+}
+
+// ActivatePolicyDraft promotes the staged draft (#875 slice 5): the stored
+// draft is validated with the ENGINE'S OWN policy parser — the honest gate,
+// activatable exactly when the resolver can consume it — then merged into the
+// active overrides (owned keys only) and cleared in one atomic write under
+// the same optimistic-concurrency token. The merged result is recomputed from
+// the row the version precondition still guards, so a concurrent writer can
+// never be silently overwritten.
+func (s *OverlayService) ActivatePolicyDraft(
+	ctx context.Context,
+	overlayID uuid.UUID,
+	orgID uuid.UUID,
+	expectedVersion int64,
+) error {
+	overlay, err := s.store.GetOverlayByID(ctx, overlayID)
+	if err != nil {
+		return err
+	}
+	if overlay.OrganizationID != orgID {
+		return ErrUnauthorizedOverlayAccess
+	}
+	if overlay.Version != expectedVersion {
+		return storage.ErrVersionConflict
+	}
+	if len(overlay.PolicyDraft) == 0 {
+		return ErrNoPolicyDraft
+	}
+	if _, err := engine.ParseFactoryConstructionPolicy(overlay.PolicyDraft); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidPolicyDraft, err)
+	}
+
+	var active, draft map[string]any
+	if err := json.Unmarshal(overlay.Overrides, &active); err != nil {
+		return fmt.Errorf("decode active overrides: %w", err)
+	}
+	if active == nil {
+		active = map[string]any{}
+	}
+	if err := json.Unmarshal(overlay.PolicyDraft, &draft); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidPolicyDraft, err)
+	}
+	merged := make(map[string]any, len(active)+len(draft))
+	for key, value := range active {
+		if policyDraftOwnsKey(key) {
+			continue
+		}
+		merged[key] = value
+	}
+	for key, value := range draft {
+		merged[key] = value
+	}
+	mergedJSON, err := json.Marshal(merged)
+	if err != nil {
+		return fmt.Errorf("merge policy draft: %w", err)
+	}
+	return s.store.ActivatePolicyDraft(ctx, overlayID, expectedVersion, mergedJSON)
 }
 
 // RebaseResult models the outcome returned to caller following a 3-way rebase pass.
