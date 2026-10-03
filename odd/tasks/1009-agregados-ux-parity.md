@@ -45,6 +45,23 @@ si la aceptación completa (incl. browser proof) está verde. Merge humano.
 - [x] Protocolo: preflight PREFLIGHT_OK_NOT_VERIFIED (tree dirty preexistente:
       `.agents/tasks/`, `.github/workflows/cleanup-actions.yml` — no míos);
       sin otro writer (PRs abiertos: #1008 dominio SketchUp, ajeno).
+- [x] **Browser proof (2026-10-03, rama S5 servida por el vite dev local,
+      modo invitado)**: creado AGR-PUE-01 desde la UI («NUEVO / Nuevo agregado»,
+      sentence case S2 ✓); guardado con toast; detalle muestra «Más ▾» con
+      Duplicar+Eliminar (S1 ✓) — sin botón destructivo visible; Duplicar creó
+      `AGR-PUE-01-COPY — Puerta Batiente Izquierda (copia)` (S5 ✓); Eliminar
+      mostró el ConfirmDialog con código+nombre+consecuencia y la copia se
+      borró con toast «Agregado eliminado» (S1 ✓ end-to-end); editor en modo
+      edición muestra «AGR-PUE-01 · Editar agregado — Puerta Batiente
+      Izquierda» y el header conserva el código guardado tras editar el campo
+      (S2 ✓); picker «Agregar componente» abre con el catálogo real y agrega
+      la pieza elegida (S5 ✓); el rol de herrajes renderiza SELECT con default
+      gobernado BISAGRA (S4 ✓ — el catálogo invitado tiene grupos hardware).
+      Screenshots en los artifacts de la sesión. Restante post-merge:
+      re-corrida `$impeccable critique` sobre main para medir mejora vs 24/40.
+- [x] S1 → PR 1 (#1010) · S2 → PR 2 (#1011) · S3 → PR 3 (#1013) ·
+      S4 → PR 4 (#1014) · S5 → PR 5 (#1015) — cadena apilada
+      main ← s1 ← s2 ← s3 ← s4 ← s5.
 - [x] S1 → PR 1 (rama `feat/1009-agregados-ux-s1`). Eliminar detrás de
   «Más ▾» (DropdownMenu, patrón ModuleDetailView F155) + ConfirmDialog
   compartido a nivel pantalla con código+nombre+consecuencia; borrar el
