@@ -160,3 +160,37 @@ El mapeo fino del desglose cambió el terreno del issue:
 
 (El plan de ShellView/badge queda como referencia histórica abajo; el badge
 sólo tiene sentido cuando exista un consumidor live que muestre demanda.)
+
+## Slice 2 (2026-10-03, worktree 989-cards-estimates) — tarjetas con demanda
+
+Decisión: fetch perezoso por tarjeta del endpoint EXISTENTE
+(POST /projects/{id}/calculate, demand-priced desde el merge comercial),
+cacheado por react-query con fingerprint {id, updatedAt} por proyecto —
+cero superficie nueva de servidor; el detalle seleccionado mantiene su
+flujo de autoridad congelada intacto.
+
+- `useProjectsServerEstimates` (apps/web/derivations): sólo proyectos SIN
+  snapshot congelado; allSettled con degradación honesta (ready /
+  partial-error / error); piezas puras exportadas y testeadas
+  (quoteLessProjects, estimateStatus, fetchProjectBreakdown).
+- Threading: `QuoteDerivationsDeps.serverEstimates` → projectEstimates
+  prefiere el número servido sobre el espejo local (snapshot congelado
+  sigue primero). AppContent instancia los hooks (client memo por shell).
+- Web 48 archivos / 574 tests PASS (4 nuevos); typecheck root PASS.
+- RESTANTE nombrado: comparador de escenarios (demanda por escenario varía
+  con dims — requiere decisiones propias) y browser proof E2E de tarjetas
+  (los números ya están probados a nivel PG por el merge comercial).
+
+### Corrección CI (shard 1: production-release-continuity console-strict)
+
+El fetch especulativo disparaba /calculate para TODOS los drafts; un proyecto
+incalculable (items con módulos ausentes) respondía 400 y el console.error
+NATIVO del navegador rompía los specs console-strict (lección #943 otra vez:
+el log nativo de non-2xx no se puede suprimir desde JS). Fix: filtro
+locallyComputable — el espejo local es el espejo de paridad del cálculo
+servido, así que un proyecto cuyo cálculo local TIRA es exactamente el que el
+server respondería 400, y se salta en vez de fetchearse (los gates de UI como
+items vacíos NO son predictores de 400: el engine computa ceros). Residual
+documentado: un 400 causado SÓLO por la derivación de demanda server-side
+(perfiles con unión rota) no es predecible localmente — orgs sin release no
+lo disparan.
