@@ -198,7 +198,9 @@ describe('resolveManufacturingOutputTarget', () => {
 
   it('at most one target per operation — the resolver returns a single tuple, never a list', () => {
     for (const machine of KNOWN_MACHINE_PROFILES) {
-      expect(machine.identity.opaqueClientKey).toBe('client-a');
+      // client-a (HPP 250 / BHX 050) y client-b (KDT Flexdrill 1200, #1005):
+      // el catálogo sólo registra máquinas con dossier en el repo.
+      expect(['client-a', 'client-b']).toContain(machine.identity.opaqueClientKey);
     }
     const result = resolveManufacturingOutputTarget(cuttingSelection('ptx-generic'), 'cutting');
     expect(Array.isArray((result as { selection?: unknown }).selection)).toBe(false);

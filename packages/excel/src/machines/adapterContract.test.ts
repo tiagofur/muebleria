@@ -5,10 +5,11 @@ import {
   type PostprocessorAdapter,
 } from '@granete/domain';
 import { buildFixtureCuttingJob, buildFixtureMachiningJob } from './machineOutputFixtures';
+import { KDT_POSTPROCESSOR_ADAPTER } from './kdtAdapter';
 import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
 import { SAW_POSTPROCESSOR_ADAPTER } from './sawAdapter';
 import { WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
-import { PTX_GENERIC_PROFILE, SAW_HOMAG_PROFILE } from './profiles';
+import { KDT_FLEXDRILL_1200_PROFILE, PTX_GENERIC_PROFILE, SAW_HOMAG_PROFILE } from './profiles';
 import { sha256Hex } from './digest';
 
 /**
@@ -88,5 +89,27 @@ describe('PostprocessorAdapter contract invariant', () => {
     const readiness = WOODWOP_MPR_POSTPROCESSOR_ADAPTER.canSerialize(job, complete);
     expect(readiness.ready).toBe(false);
     assertReadyImpliesSerializable(WOODWOP_MPR_POSTPROCESSOR_ADAPTER, job, complete);
+  });
+
+  it('KDT on a fully evidenced synthetic profile: ready stays false (serializer unimplemented, #1005)', () => {
+    const job = buildFixtureMachiningJob();
+    const complete: OutputCompatibilityProfile = {
+      ...KDT_FLEXDRILL_1200_PROFILE,
+      ref: { outputCompatibilityProfileId: 'kdt-flexdrill-1200-test-complete', revisionId: 'rX' },
+      dimensions: {
+        fileExtension: 'xml',
+        encoding: 'utf-8',
+        lineEnding: 'crlf',
+        decimalPlaces: 0,
+        unit: 'mm',
+        coordinateConvention: 'bottom-left-top-face',
+        operationTypeNos: '1,2',
+        alignmentFacePolicy: 'sample',
+      },
+      pendingEvidence: [],
+    };
+    const readiness = KDT_POSTPROCESSOR_ADAPTER.canSerialize(job, complete);
+    expect(readiness.ready).toBe(false);
+    assertReadyImpliesSerializable(KDT_POSTPROCESSOR_ADAPTER, job, complete);
   });
 });

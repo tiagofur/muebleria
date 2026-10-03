@@ -20,6 +20,8 @@ import {
 import {
   CLIENT_A_BHX050_PROFILE,
   CLIENT_A_HPP250_PROFILE,
+  CLIENT_B_KDT_FLEXDRILL_1200_PROFILE,
+  KDT_FLEXDRILL_1200_PROFILE,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
   PTX_CADMATIC_4_R5_PROFILE,
@@ -29,6 +31,7 @@ import {
   type ClientMachineProfileData,
 } from './profiles';
 import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
+import { KDT_POSTPROCESSOR_ADAPTER } from './kdtAdapter';
 import { SAW_POSTPROCESSOR_ADAPTER } from './sawAdapter';
 import { WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
 import { ptxPartLabelsFromManufacturingProjection } from '../ptx/partLabels';
@@ -37,6 +40,7 @@ import type { PtxPartLabelData } from '../ptx/partLabels';
 export const KNOWN_MACHINE_PROFILES: readonly ClientMachineProfileData[] = [
   CLIENT_A_HPP250_PROFILE,
   CLIENT_A_BHX050_PROFILE,
+  CLIENT_B_KDT_FLEXDRILL_1200_PROFILE,
 ];
 
 export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
@@ -52,6 +56,11 @@ export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
+  // #1005 K1 — fail-closed registration: the KDTPanelFormat serializer does
+  // not exist yet, so selections persist but generation stays blocked with
+  // SERIALIZER_NOT_IMPLEMENTED until the K2 serializer + evidenced profile
+  // revision land together.
+  KDT_FLEXDRILL_1200_PROFILE,
 ];
 
 function adapterForFamily(family: string) {
@@ -62,6 +71,8 @@ function adapterForFamily(family: string) {
       return SAW_POSTPROCESSOR_ADAPTER;
     case 'mpr':
       return WOODWOP_MPR_POSTPROCESSOR_ADAPTER;
+    case 'kdt':
+      return KDT_POSTPROCESSOR_ADAPTER;
     default:
       return undefined;
   }

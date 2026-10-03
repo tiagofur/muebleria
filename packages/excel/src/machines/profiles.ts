@@ -514,7 +514,70 @@ export const MPR_WOODWOP_PROFILE: OutputCompatibilityProfile = {
 };
 
 // ---------------------------------------------------------------------------
-// Client A machine profiles (identity data only — zero inferred capabilities)
+// Output compatibility profiles — KDT family (KDTPanelFormat XML)
+// ---------------------------------------------------------------------------
+
+/**
+ * Syntax dimensions the KDT serializer will require before it can emit
+ * bytes. Mirrored by the adapter's requiredDimensions (tests assert they
+ * stay equal).
+ */
+export const KDT_REQUIRED_DIMENSIONS = [
+  'fileExtension',
+  'encoding',
+  'lineEnding',
+  'decimalPlaces',
+  'unit',
+  'coordinateConvention',
+  'operationTypeNos',
+  'alignmentFacePolicy',
+] as const;
+
+/**
+ * Dimensions that remain open questions in the format spec
+ * (docs/machines/kdt-xml-format.md §15) even after the 417-sample study —
+ * they block the dependent serializer subset until a source resolves them.
+ */
+const KDT_SPEC_OPEN_QUESTIONS = [
+  'filenameConstraints',
+  'typeNo4Semantics',
+  'typeNo5CircleSemantics',
+  'vertexArcSemantics',
+  'holeIntervalPatternSemantics',
+  'planeIdValues',
+] as const;
+
+/**
+ * `kdt-flexdrill-1200` r1 — KDTPanelFormat XML per-piece machining program
+ * for the KDT Flexdrill 1200 (client-b `machine-c`, #1005).
+ *
+ * EVIDENCE STATUS: the format is documented from 417 real production XML
+ * samples (docs/machines/kdt-xml-format.md + docs/machines/client-b/samples/),
+ * but this registration revision carries ZERO evidenced dimensions: the
+ * serializer itself does not exist yet (#1005 K2), and publishing the
+ * evidenced values is that slice's job (new revision, never an in-place
+ * edit). Serialization fails closed on SERIALIZER_NOT_IMPLEMENTED even on a
+ * fully evidenced profile.
+ */
+export const KDT_FLEXDRILL_1200_PROFILE: OutputCompatibilityProfile = {
+  ref: { outputCompatibilityProfileId: 'kdt-flexdrill-1200', revisionId: 'r1' },
+  formatFamily: 'kdt',
+  targetSoftware: {
+    name: 'KDT Flexdrill 1200 (KDTPanelFormat import)',
+    // The exact control-software version that validates the XML on the
+    // machine is open question §15.5 of the spec — never claimed from the
+    // Promob/plugin versions that produced the samples.
+    provenance: 'FIELD_VERIFICATION_REQUIRED',
+  },
+  dimensions: {},
+  pendingEvidence: [...KDT_REQUIRED_DIMENSIONS, ...KDT_SPEC_OPEN_QUESTIONS],
+  supportStatus: 'NOT_TESTED',
+  digest: '6a3015f7462772696d8fb64a22da90065ac7a863758229b9fab56a2710ad7055',
+  evidenceUri: 'docs/machines/kdt-xml-format.md',
+};
+
+// ---------------------------------------------------------------------------
+// Client machine profiles (identity data only — zero inferred capabilities)
 // ---------------------------------------------------------------------------
 
 export interface ClientMachineProfileData {
@@ -571,4 +634,28 @@ export const CLIENT_A_BHX050_PROFILE: ClientMachineProfileData = {
     provenance: 'OWNER_CONFIRMED',
   },
   evidenceUri: 'docs/machines/client-a/machine-a-bhx050.md',
+};
+
+/**
+ * `machine-c` KDT Flexdrill 1200 (client-b) — horizontal multi-spindle
+ * drilling line consuming KDTPanelFormat XML (#903 dossier, #1005 adapter).
+ * Identity comes from the owner-provided production samples; control
+ * software version and physical limits stay FIELD_VERIFICATION_REQUIRED in
+ * the dossier, so zero capabilities are declared.
+ */
+export const CLIENT_B_KDT_FLEXDRILL_1200_PROFILE: ClientMachineProfileData = {
+  ref: {
+    machineProfileId: 'client-b-machine-c-kdt-flexdrill1200',
+    machineProfileRevisionId: 'r1',
+  },
+  supported: [],
+  identity: {
+    opaqueClientKey: 'client-b',
+    machineKey: 'machine-c',
+    manufacturerFamily: 'KDT',
+    model: 'Flexdrill 1200',
+    role: 'cnc-drilling-line',
+    provenance: 'OWNER_CONFIRMED',
+  },
+  evidenceUri: 'docs/machines/client-b/machine-c-kdt-flexdrill1200.md',
 };

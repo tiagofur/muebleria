@@ -76,6 +76,7 @@ function profileHumanLabel(profileId: string, family: string): string {
   if (profileId.startsWith('ptx-cadmatic-')) return `PTX · CADmatic ${profileId.slice(-1)}`;
   if (profileId === 'saw-homag') return `SAW (HOMAG) · ${family.toUpperCase()}`;
   if (profileId === 'mpr-woodwop') return 'MPR · woodWOP';
+  if (profileId === 'kdt-flexdrill-1200') return 'KDT XML · Flexdrill 1200';
   return `${profileId} (${family})`;
 }
 
