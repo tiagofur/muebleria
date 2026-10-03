@@ -116,6 +116,7 @@ import type {
   ProjectDesignReconciliationResult,
   ProjectFurnitureWorkspace,
   ProjectFurnitureWorkspaceRequest,
+  ProjectManufacturingSnapshot,
   ProjectQuoteRequoteResult,
   ProjectWorkshopOccurrences,
   ProvisionOrganizationRequest,
@@ -273,6 +274,7 @@ export abstract class GeneratedGraneteApiClient {
   getProjectProductionRelease(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ProductionRelease> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}`, { schema: "ProductionRelease", token, signal }); }
   getProjectWorkshopOccurrences(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ProjectWorkshopOccurrences> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/workshop-occurrences`, { schema: "ProjectWorkshopOccurrences", token, signal }); }
   getProjectProductionReleaseCuttingDemand(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ReleaseCuttingDemand> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/cutting-demand`, { schema: "ReleaseCuttingDemand", token, signal }); }
+  getProjectProductionManufacturingSnapshot(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ProjectManufacturingSnapshot> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/manufacturing-snapshot`, { schema: "ProjectManufacturingSnapshot", token, signal }); }
   getProjectProductionReleaseEngineering(token: string, projectId: string, releaseId: string, signal?: AbortSignal): Promise<ReleaseEngineeringState> { return this.request("GET", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/engineering`, { schema: "ReleaseEngineeringState", token, signal }); }
   startProjectProductionReleaseEngineering(token: string, projectId: string, releaseId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ReleaseEngineeringState> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/engineering:start`, { schema: "ReleaseEngineeringState", token, idempotencyKey: key, signal }); }
   completeProjectProductionReleaseEngineering(token: string, projectId: string, releaseId: string, version: number, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<ReleaseEngineeringState> { return this.request("POST", `/projects/${encodeURIComponent(projectId)}/production-releases/${encodeURIComponent(releaseId)}/engineering:complete`, { schema: "ReleaseEngineeringState", token, ifMatch: version, idempotencyKey: key, signal }); }

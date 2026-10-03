@@ -11,6 +11,7 @@ import (
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -455,6 +456,131 @@ func (s *Server) HandleProjectWorkshopOccurrences(w http.ResponseWriter, r *http
 		return
 	}
 	respondWithJSON(w, http.StatusOK, toWorkshopOccurrencesDTO(view))
+}
+
+// HandleProjectProductionManufacturingSnapshot serves the EXACT release's
+// frozen manufacturing routing program (export bridge K1): the machine-neutral
+// operations and board-local holes the release gates validated, with machining
+// provenance. Factory engineering content — the same industrial-preparation
+// guard as the cutting demand and the workshop occurrences. Historical
+// schema-v1 rows carry no routing program and answer the typed unavailable
+// error; there is never a legacy fallback for frozen evidence.
+func (s *Server) HandleProjectProductionManufacturingSnapshot(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFromRequest(r)
+	if claims == nil {
+		respondWithError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanReleaseProduction), "no tenés permiso para ver el programa de fabricación congelado de esta obra") {
+		return
+	}
+	projectID := r.PathValue("projectId")
+	if !isValidUUID(projectID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "ID inválido", nil)
+		return
+	}
+	releaseID := r.PathValue("releaseId")
+	if !isValidUUID(releaseID) {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "releaseId inválido", nil)
+		return
+	}
+	snapshot, err := s.Store.GetProductionReleaseManufacturingSnapshot(r.Context(), projectID, releaseID)
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrReleaseSnapshotUnavailable):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound,
+				"Esta obra todavía no tiene una liberación congelada",
+				map[string]any{"blocker": "release_snapshot_unavailable"})
+		default:
+			respondWithProductionReleaseError(w, err)
+		}
+		return
+	}
+	respondWithJSON(w, http.StatusOK, toManufacturingSnapshotDTO(snapshot))
+}
+
+func routingProvenanceDTO(p engine.ResolvedMachiningProvenance) openapi.ManufacturingRoutingProvenance {
+	dto := openapi.ManufacturingRoutingProvenance{SourceKind: p.SourceKind}
+	stringPtr := func(v string) *string {
+		if v == "" {
+			return nil
+		}
+		return &v
+	}
+	dto.RelationshipId = stringPtr(p.RelationshipID)
+	dto.FamilyId = stringPtr(p.FamilyID)
+	dto.CatalogRuleId = stringPtr(p.CatalogRuleID)
+	dto.RecipeRevision = stringPtr(p.RecipeRevision)
+	dto.TechnicalProfileId = stringPtr(p.TechnicalProfileID)
+	dto.TechnicalProfileRevision = stringPtr(p.TechnicalProfileRevision)
+	dto.HardwarePlacementId = stringPtr(p.HardwarePlacementID)
+	return dto
+}
+
+func routingHolesDTO(holes []engine.ReleaseRoutingHole) []openapi.ManufacturingRoutingHole {
+	out := make([]openapi.ManufacturingRoutingHole, 0, len(holes))
+	for _, hole := range holes {
+		out = append(out, openapi.ManufacturingRoutingHole{
+			Face: hole.Face, XMm: hole.XMm, YMm: hole.YMm,
+			DiameterMm: hole.DiameterMm, DepthMm: hole.DepthMm, Type: hole.Type,
+		})
+	}
+	return out
+}
+
+func toManufacturingSnapshotDTO(snapshot *storage.ReleaseManufacturingSnapshot) openapi.ProjectManufacturingSnapshot {
+	if snapshot == nil || snapshot.Routing == nil {
+		// Callers only reach the DTO on a served snapshot; schema-v1 rows are
+		// rejected upstream as release_snapshot_unavailable. Defensive empty
+		// program instead of a nil dereference.
+		return openapi.ProjectManufacturingSnapshot{}
+	}
+	units := make([]openapi.ManufacturingRoutingUnit, 0, len(snapshot.Routing.Units))
+	for _, unit := range snapshot.Routing.Units {
+		parts := make([]openapi.ManufacturingRoutingPart, 0, len(unit.Parts))
+		for _, part := range unit.Parts {
+			operations := make([]openapi.ManufacturingRoutingOperation, 0, len(part.Operations))
+			for _, operation := range part.Operations {
+				operations = append(operations, openapi.ManufacturingRoutingOperation{
+					OperationId: operation.OperationID,
+					Provenance:  routingProvenanceDTO(operation.Provenance),
+					Operation:   operation.Operation,
+					Holes:       routingHolesDTO(operation.Holes),
+				})
+			}
+			parts = append(parts, openapi.ManufacturingRoutingPart{
+				PartId:           part.PartID,
+				Cut:              part.Cut,
+				EdgeBandingSides: part.EdgeBandingSides,
+				CncRequired:      part.CncRequired,
+				Operations:       operations,
+			})
+		}
+		units = append(units, openapi.ManufacturingRoutingUnit{
+			FurnitureInstanceId:   unit.FurnitureInstanceID,
+			FurnitureDefinitionId: unit.FurnitureDefinitionID,
+			MachiningFingerprint:  unit.MachiningFingerprint,
+			Parts:                 parts,
+		})
+	}
+	return openapi.ProjectManufacturingSnapshot{
+		SchemaVersion: int64(snapshot.SchemaVersion),
+		Release: openapi.ManufacturingReleaseIdentity{
+			ID:                       snapshot.Release.ID,
+			ReleaseNumber:            int64(snapshot.Release.ReleaseNumber),
+			Status:                   string(snapshot.Release.Status),
+			ManufacturingFingerprint: snapshot.Release.ManufacturingFingerprint,
+		},
+		Routing: openapi.ManufacturingRoutingProgram{
+			Contract:                snapshot.Routing.Contract,
+			IndustrialRulesRevision: snapshot.Routing.IndustrialRulesRevision,
+			Units:                   units,
+		},
+	}
 }
 
 func toWorkshopOccurrencesDTO(view *storage.WorkshopOccurrenceProjectionView) openapi.ProjectWorkshopOccurrences {

@@ -3111,6 +3111,30 @@ export function AppContent({
   );
 
 
+  // #995: the canonical release's frozen routing program for the pack's
+  // drilling annex — server truth for the exact released holes.
+  const frozenDrillingFetcher = useCallback(
+    async (projectId: string) => {
+      if (session !== 'auth' || !authToken) return null;
+      const project = projects.find((p) => p.id === projectId);
+      const authority = project ? releaseAuthorityOf(project) : undefined;
+      if (authority?.source !== 'canonical') return null;
+      const snapshot = await shellApiClient.getProjectProductionManufacturingSnapshot(
+        authToken,
+        projectId,
+        authority.releaseId,
+      );
+      return {
+        releaseId: authority.releaseId,
+        manufacturingFingerprint:
+          authority.manufacturingFingerprint ??
+          snapshot.release.manufacturingFingerprint,
+        snapshot,
+      };
+    },
+    [session, authToken, projects, shellApiClient],
+  );
+
   // F120: the 14 export/workflow handlers live in useExportHandlers.
   const {
     handleExportOptimizer,
@@ -3133,6 +3157,7 @@ export function AppContent({
     projects,
     selectedProject,
     catalog,
+    frozenDrillingFetcher,
     customers,
     session,
     actorRole,

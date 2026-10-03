@@ -3513,6 +3513,56 @@
         }
       }
     },
+    "/projects/{projectId}/production-releases/{releaseId}/manufacturing-snapshot": {
+      "get": {
+        "operationId": "getProjectProductionManufacturingSnapshot",
+        "summary": "Frozen manufacturing routing program of the exact release (export bridge K1)",
+        "description": "The EXACT release's frozen machine-neutral routing program (granete.release-manufacturing-program.v1): per physical unit, per released part, the resolved operations and board-local holes with machining provenance. This is WHAT must be drilled, frozen at release time and validated by the release gates; machine adapters own any later translation. Uses EXACT releaseId; never falls back to latest. Historical schema-v1 rows have no routing program and answer the typed unavailable error.",
+        "tags": [
+          "projects"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The frozen routing program of the exact release.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectManufacturingSnapshot"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/projects/{projectId}/production-releases/{releaseId}/engineering": {
       "get": {
         "operationId": "getProjectProductionReleaseEngineering",
@@ -10271,6 +10321,233 @@
             "items": {
               "$ref": "#/components/schemas/ReleaseCuttingDemandUnit"
             }
+          }
+        }
+      },
+      "ProjectManufacturingSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "release",
+          "routing"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "integer",
+            "description": "Frozen snapshot schema version; routing exists from v2."
+          },
+          "release": {
+            "$ref": "#/components/schemas/ManufacturingReleaseIdentity"
+          },
+          "routing": {
+            "$ref": "#/components/schemas/ManufacturingRoutingProgram"
+          }
+        }
+      },
+      "ManufacturingReleaseIdentity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "releaseNumber",
+          "status",
+          "manufacturingFingerprint"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "releaseNumber": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          },
+          "manufacturingFingerprint": {
+            "type": "string"
+          }
+        }
+      },
+      "ManufacturingRoutingProgram": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contract",
+          "industrialRulesRevision",
+          "units"
+        ],
+        "properties": {
+          "contract": {
+            "type": "string",
+            "description": "granete.release-manufacturing-program.v1"
+          },
+          "industrialRulesRevision": {
+            "type": "string"
+          },
+          "units": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingRoutingUnit"
+            }
+          }
+        }
+      },
+      "ManufacturingRoutingUnit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "furnitureInstanceId",
+          "furnitureDefinitionId",
+          "machiningFingerprint",
+          "parts"
+        ],
+        "properties": {
+          "furnitureInstanceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "furnitureDefinitionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "machiningFingerprint": {
+            "type": "string",
+            "description": "The #477 resolve fingerprint frozen at P1 time."
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingRoutingPart"
+            }
+          }
+        }
+      },
+      "ManufacturingRoutingPart": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "partId",
+          "cut",
+          "cncRequired",
+          "operations"
+        ],
+        "properties": {
+          "partId": {
+            "type": "string"
+          },
+          "cut": {
+            "type": "boolean"
+          },
+          "edgeBandingSides": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cncRequired": {
+            "type": "boolean",
+            "description": "EXPLICIT resolved verdict of the authoritative derivation; false is a resolved no-CNC, never missing evidence."
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingRoutingOperation"
+            }
+          }
+        }
+      },
+      "ManufacturingRoutingOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "provenance",
+          "operation",
+          "holes"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ManufacturingRoutingProvenance"
+          },
+          "operation": {
+            "type": "string",
+            "description": "cut | edge_banding | drill (neutral intent)."
+          },
+          "holes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManufacturingRoutingHole"
+            }
+          }
+        }
+      },
+      "ManufacturingRoutingProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceKind"
+        ],
+        "properties": {
+          "sourceKind": {
+            "type": "string"
+          },
+          "relationshipId": {
+            "type": "string"
+          },
+          "familyId": {
+            "type": "string"
+          },
+          "catalogRuleId": {
+            "type": "string"
+          },
+          "recipeRevision": {
+            "type": "string"
+          },
+          "technicalProfileId": {
+            "type": "string"
+          },
+          "technicalProfileRevision": {
+            "type": "string"
+          },
+          "hardwarePlacementId": {
+            "type": "string"
+          }
+        }
+      },
+      "ManufacturingRoutingHole": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "face",
+          "xMm",
+          "yMm",
+          "diameterMm",
+          "depthMm",
+          "type"
+        ],
+        "properties": {
+          "face": {
+            "type": "string"
+          },
+          "xMm": {
+            "type": "number"
+          },
+          "yMm": {
+            "type": "number"
+          },
+          "diameterMm": {
+            "type": "number"
+          },
+          "depthMm": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string"
           }
         }
       },

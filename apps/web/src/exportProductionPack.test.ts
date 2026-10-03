@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Project, ProjectDrillingResult } from '@granete/domain';
 import JSZip from 'jszip';
 import { createSeedWorkspace } from '@granete/storage/seed';
 import {
@@ -6,7 +7,7 @@ import {
   optimizeCutPlan,
   type MachineOutputSelection,
 } from '@granete/domain';
-import { buildProductionPackExport, productionPackFileName } from './exportProductionPack';
+import { buildProductionPackExport, productionPackFileName, composeFrozenDrilling, type FrozenDrillingSource } from './exportProductionPack';
 
 const cadmatic4Selection: MachineOutputSelection = {
   operation: 'cutting',
@@ -189,5 +190,96 @@ describe('buildProductionPackExport (Issue #134)', () => {
     );
     expect(legacy).toHaveBeenCalledTimes(1);
     expect(selected).not.toHaveBeenCalled();
+  });
+});
+
+describe('composeFrozenDrilling (#995 export bridge K1)', () => {
+  const legacyResolved = () => ({
+    patterns: [
+      {
+        pieceCode: 'MOD-L1', moduleCode: 'MOD', partName: 'Lateral',
+        lengthMm: 720, widthMm: 560, materialName: 'MDF',
+        holes: [{ face: 'top', xMm: 100, yMm: 100, diameterMm: 5, depthMm: 12, type: 'through' as never }],
+      },
+    ],
+    resolutionIssues: [],
+    links: [
+      { partId: 'part-1', labelRef: 'MOD-L1', partCode: 'L1', moduleCode: 'MOD', part: { description: 'Lateral' } },
+    ] as never,
+    data: {} as never,
+  }) as never as ProjectDrillingResult;
+  const frozen = () => ({
+    releaseId: 'rel-1',
+    manufacturingFingerprint: 'fp-1',
+    snapshot: {
+      schemaVersion: 2,
+      release: { id: 'rel-1', releaseNumber: 1, status: 'approved', manufacturingFingerprint: 'fp-1' },
+      routing: {
+        contract: 'granete.release-manufacturing-program.v1',
+        industrialRulesRevision: 'rr-1',
+        units: [
+          {
+            furnitureInstanceId: 'unit-1',
+            furnitureDefinitionId: 'mod-1',
+            machiningFingerprint: 'mf-1',
+            parts: [
+              {
+                partId: 'part-1',
+                cut: true,
+                cncRequired: true,
+                operations: [
+                  {
+                    operationId: 'op-1',
+                    provenance: {
+                      sourceKind: 'relationship',
+                      relationshipId: 'rel-shelf',
+                      technicalProfileId: 'prof-1',
+                      technicalProfileRevision: 'rev-1',
+                    },
+                    operation: 'drill',
+                    holes: [
+                      { face: 'side', xMm: 40, yMm: 100, diameterMm: 15, depthMm: 13, type: 'housing' },
+                      { face: 'side', xMm: 40, yMm: 200, diameterMm: 8, depthMm: 17, type: 'dowel' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  }) as never as FrozenDrillingSource;
+  const project = { id: 'proj-1', name: 'Obra' } as never as Project;
+
+  it('replaces heuristic holes with the frozen ones and pins the release identity', () => {
+    const data = composeFrozenDrilling(project, frozen(), legacyResolved());
+    expect(data.source).toBe('frozen-release');
+    expect(data.releaseId).toBe('rel-1');
+    expect(data.manufacturingFingerprint).toBe('fp-1');
+    expect(data.totalPiecesCount).toBe(1);
+    expect(data.totalHolesCount).toBe(2);
+    expect(data.patterns[0]?.pieceCode).toBe('MOD-L1');
+    expect(data.patterns[0]?.holes.map((hole) => hole.diameterMm)).toEqual([15, 8]);
+  });
+
+  it('fails closed on a covered-parts count mismatch', () => {
+    const broken = frozen() as unknown as {
+      releaseId: string;
+      manufacturingFingerprint: string;
+      snapshot: { routing: { units: { parts: { partId: string }[] }[] } };
+    };
+    broken.snapshot.routing.units[0]!.parts = [];
+    expect(() => composeFrozenDrilling(project, broken as never, legacyResolved())).toThrow(/cubierta|cubre/);
+  });
+
+  it('fails closed when the released part identity cannot be joined', () => {
+    const broken = frozen() as unknown as {
+      releaseId: string;
+      manufacturingFingerprint: string;
+      snapshot: { routing: { units: { parts: { partId: string }[] }[] } };
+    };
+    broken.snapshot.routing.units[0]!.parts[0]!.partId = 'part-missing';
+    expect(() => composeFrozenDrilling(project, broken as never, legacyResolved())).toThrow(/no tiene routing congelado/);
   });
 });

@@ -695,6 +695,7 @@ func RegisterRoutes(server *Server) http.Handler {
 	// release don't hit this endpoint — the frontend skips the query.
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}/workshop-occurrences", authMW(http.HandlerFunc(server.HandleProjectWorkshopOccurrences)))
 	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}/cutting-demand", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectProductionReleaseCuttingDemand))))
+	mux.Handle("GET /api/projects/{projectId}/production-releases/{releaseId}/manufacturing-snapshot", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleProjectProductionManufacturingSnapshot))))
 	// #740 PR 1: durable Engineering state of the exact release. Reads never
 	// write; start is idempotent; complete is final, version-guarded (If-Match)
 	// and requires the frozen routing evidence. None of it authorizes

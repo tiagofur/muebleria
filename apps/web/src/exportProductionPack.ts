@@ -34,7 +34,13 @@ import {
   generateSelectedCuttingOutput,
   type MachineArtifactBundle,
 } from '@granete/excel';
-import type { MachineOutputSelection } from '@granete/domain';
+import type {
+  HoleDefinition,
+  MachineOutputSelection,
+  ProjectDrillingData,
+  ProjectDrillingResult,
+} from '@granete/domain';
+import type { ProjectManufacturingSnapshot } from '@granete/storage';
 import {
   CuttingOutputUnavailableError,
   runWithCuttingOutputAuthority,
@@ -55,6 +61,91 @@ export interface ProductionPackCuttingOutputOptions {
   readonly cuttingOutputState: CuttingOutputSelectionState;
   readonly generateSelected?: typeof generateSelectedCuttingOutput;
   readonly generateLegacy?: typeof ptxCutPlanExport;
+}
+
+/**
+ * #995 export bridge K1: the frozen routing program of the project's
+ * canonical production release. When present, the pack's drilling annex is
+ * composed from the EXACT holes the release gates validated (with the
+ * release identity pinned), never from the legacy heuristic chain.
+ */
+export interface FrozenDrillingSource {
+  readonly releaseId: string;
+  readonly manufacturingFingerprint: string;
+  readonly snapshot: ProjectManufacturingSnapshot;
+}
+
+/**
+ * Pure composition: legacy resolution keeps the floor identity (piece codes,
+ * dims, material) while the holes are REPLACED by the frozen routing holes
+ * matched through the shared part identity. Fail-closed: a released part
+ * whose identity cannot be joined, or a frozen/routed count mismatch, throws
+ * — never a silent partial truth.
+ */
+export function composeFrozenDrilling(
+  project: Project,
+  frozen: FrozenDrillingSource,
+  resolved: ProjectDrillingResult,
+): ProjectDrillingData {
+  const holesByPart = new Map<string, HoleDefinition[]>();
+  for (const unit of frozen.snapshot.routing.units) {
+    for (const part of unit.parts) {
+      const holes = part.operations
+        .filter((operation) => operation.operation === 'drill')
+        .flatMap((operation) =>
+          operation.holes.map((hole) => ({
+            // The frozen wire carries the SAME face/type vocabulary the
+            // resolver emitted (#477); the generated openapi type widens both
+            // to string, so the boundary cast restates the real domain union.
+            face: hole.face as HoleDefinition['face'],
+            xMm: hole.xMm,
+            yMm: hole.yMm,
+            diameterMm: hole.diameterMm,
+            depthMm: hole.depthMm,
+            type: hole.type as HoleDefinition['type'],
+          })),
+        );
+      holesByPart.set(part.partId, holes);
+    }
+  }
+  if (resolved.links.length !== frozen.snapshot.routing.units.reduce((sum, unit) => sum + unit.parts.length, 0)) {
+    throw new Error(
+      `el programa congelado cubre ${frozen.snapshot.routing.units.reduce((sum, unit) => sum + unit.parts.length, 0)} piezas y el despiece identifica ${resolved.links.length}`,
+    );
+  }
+  let totalHoles = 0;
+  const patterns = resolved.links.map((link, index) => {
+    const holes = holesByPart.get(link.partId);
+    if (!holes) {
+      throw new Error(`la partida liberada ${link.partId} no tiene routing congelado`);
+    }
+    const legacy = resolved.patterns[index];
+    if (!legacy) {
+      throw new Error(`el despiece no identifica la partida liberada ${link.partId}`);
+    }
+    totalHoles += holes.length;
+    return {
+      pieceCode: legacy.pieceCode,
+      moduleCode: legacy.moduleCode,
+      partName: legacy.partName,
+      lengthMm: legacy.lengthMm,
+      widthMm: legacy.widthMm,
+      materialName: legacy.materialName,
+      holes,
+    };
+  });
+  return {
+    schema: 'muebles.drilling-data.v1',
+    projectId: project.id,
+    projectName: project.name,
+    generatedAt: new Date().toISOString(),
+    totalPiecesCount: patterns.length,
+    totalHolesCount: totalHoles,
+    patterns,
+    source: 'frozen-release',
+    releaseId: frozen.releaseId,
+    manufacturingFingerprint: frozen.manufacturingFingerprint,
+  };
 }
 
 /** Safe default file name: pack-produccion-{projectName}.zip */
@@ -86,6 +177,10 @@ export async function buildProductionPackExport(
   catalog: Catalog,
   customerName?: string,
   cuttingOptions?: ProductionPackCuttingOutputOptions,
+  /** #995: the canonical release's frozen routing program. Present ⇒ the
+   * drilling annex composes from frozen evidence; absent ⇒ legacy behavior
+   * byte-identical. */
+  frozen?: FrozenDrillingSource,
 ): Promise<ExportProductionPackResult> {
   const issues = collectExportIssues(project, catalog);
   if (issues.length > 0) {
@@ -174,13 +269,25 @@ export async function buildProductionPackExport(
     // F130: perforaciones por pieza desde la fuente real (motor F128 + reglas
     // F129); mismo schema muebles.drilling-data.v1 que el reporte individual.
     try {
-      const drilling = resolveProjectDrilling({ project, catalog }).data;
+      const resolved = resolveProjectDrilling({ project, catalog });
+      // #995: frozen evidence replaces the heuristic holes when the project's
+      // canonical release governs; the legacy chain keeps everything else.
+      const drilling = frozen
+        ? composeFrozenDrilling(project, frozen, resolved)
+        : resolved.data;
       zip.file(
         `perforaciones_${baseName}.json`,
         JSON.stringify(drilling, null, 2),
       );
-    } catch {
-      // unresolvable project keeps the rest of the pack intact
+    } catch (error) {
+      // Unresolvable project keeps the rest of the pack intact — surfaced in
+      // the omissions note, never silently: a frozen-composition failure is
+      // missing evidence, and the operator must see it.
+      if (frozen) {
+        omissions.push(
+          `perforaciones congeladas: ${error instanceof Error ? error.message : 'error desconocido'}`,
+        );
+      }
     }
     if (elevationsBuffer) {
       zip.file(
