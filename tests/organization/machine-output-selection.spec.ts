@@ -200,6 +200,40 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     );
   });
 
+  test('KDT: la selección de mecanizado queda Configurada con el serializer K2 (#1005)', async ({ page }) => {
+    test.setTimeout(90_000);
+    const { repository } = await api();
+    await loginToA(page);
+    await openEngineeringSettings(page);
+
+    await page.getByTestId('machine-output-machining-machine').selectOption({ label: 'KDT Flexdrill 1200' });
+    await page.getByTestId('machine-output-machining-profile').selectOption({ label: 'KDT XML · Flexdrill 1200 · r2' });
+    // Server truth first (the autosave flash races the UI).
+    await expect
+      .poll(
+        async () => {
+          const readModel = await repository.getMachineOutputSelections();
+          return readModel.selections.find((s) => s.selection.selection.operation === 'machining')
+            ?.selection.selection.outputCompatibilityProfileId;
+        },
+        { timeout: 15_000 },
+      )
+      .toBe('kdt-flexdrill-1200');
+
+    await page.reload();
+    await page.getByTestId('settings-tab-tab-ingenieria').click();
+    await expect(page.getByTestId('machine-output-machining-status')).toHaveText('Candidato — no validado en máquina');
+    // #1005 K3: the per-piece serializer is implemented — the settings probe
+    // filters PROGRAM_GRANULARITY_UNSUPPORTED, so the card reads Configurada
+    // (never the K2-era structural blocker).
+    await expect(page.getByTestId('machine-output-machining-readiness')).toHaveText('Configurada');
+    await expect(page.getByTestId('machine-output-machining-blocked')).toHaveCount(0);
+    const readModel = await repository.getMachineOutputSelections();
+    const machining = readModel.selections.find((s) => s.selection.selection.operation === 'machining');
+    expect(machining!.blockers).toEqual([]);
+    expect(machining!.selection.selection.outputCompatibilityProfileRevisionId).toBe('r2');
+  });
+
   test('CADmatic 4 r5 candidate: settings pin + candidate copy + fail-closed export without label authority', async ({ page }) => {
     test.setTimeout(90_000);
 
