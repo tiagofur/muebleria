@@ -44,6 +44,7 @@ const CUSTOMER_ID = 'aaa77739-0000-4000-8000-000000000e03';
 const STRUCT_ID = 'aaa77739-0000-4000-8000-000000000e04';
 const PANEL_COMP_ID = 'aaa77739-0000-4000-8000-000000000e05';
 const MAT_ID = 'aaa77739-0000-4000-8000-000000000e06';
+const MODULE_ID = 'aaa77739-0000-4000-8000-000000000e08';
 const MAT_CODE = 'ENG-739-TAB';
 const MAT_NAME = 'MDF Prueba 739';
 const DEPTH_MM = 590;
@@ -227,10 +228,14 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
         },
       ],
       modules: [
-        ...catalog.modules.filter((m) => m.id !== template.id),
+        // Keep the shared seed module untouched (shard-isolation contract):
+        // this spec quotes its own module; later residents quote the seed.
+        ...catalog.modules,
         {
           ...template,
-          id: template.id,
+          id: MODULE_ID,
+          code: 'ENG-739-MOD',
+          name: 'Módulo Ingeniería 739',
           structureId: STRUCT_ID,
           components: [],
           hardwareLines: [],
@@ -255,7 +260,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
       createdAt: now,
       updatedAt: now,
       items: [
-        { id: QUOTE_LINE_ID, moduleId: template.id, quantity: 3, optionChoices: { 'ENG-739-BODY': MAT_ID } },
+        { id: QUOTE_LINE_ID, moduleId: MODULE_ID, quantity: 3, optionChoices: { 'ENG-739-BODY': MAT_ID } },
       ],
     });
 
@@ -266,7 +271,7 @@ test.describe.serial('Engineering frozen cutting demand → plan → real PDF + 
     const design = await client.createProjectDesign(token, PROJECT_ID, { name: 'Cocina 739' }, 'eng739-design-cutting');
     const workingItem = (instanceId: string, widthMm: number) => ({
       furniture_instance_id: instanceId,
-      furniture_definition_id: template.id,
+      furniture_definition_id: MODULE_ID,
       parameters: { widthMm, heightMm: 720, depthMm: DEPTH_MM },
       material_choices: { 'ENG-739-BODY': MAT_ID },
     });
