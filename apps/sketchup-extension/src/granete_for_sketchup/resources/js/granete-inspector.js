@@ -382,6 +382,30 @@
     return doors;
   }
 
+  // #529: door actors detectados por metadata gestionada en el mueble
+  // colocado (el resolver publica doorActors). Sin doorSwing en la
+  // definición el lado no está registrado: una puerta abre por izquierda,
+  // dos puertas abren en par (slot 0 izq, slot 1 der). Los herrajes aún no
+  // viajan agrupados por puerta en este canal: el cinemático los mueve por
+  // su host binding, la card los lista como no agrupados.
+  function buildActorDoorAccessories(actors) {
+    var doors = [];
+    for (var i = 0; i < actors.length; i++) {
+      var slot = actors[i] && actors[i].slotIndex !== undefined ? actors[i].slotIndex : i;
+      var side = actors.length === 1 ? "left" : (slot === 0 ? "left" : "right");
+      doors.push({
+        doorSlotIndex: slot,
+        doorLabel: "Puerta " + (Number(slot) + 1) + (actors.length > 1 ? " · " + (side === "left" ? "Izquierda" : "Derecha") : ""),
+        swingSide: side,
+        hingeFace: side,
+        handleFace: side === "left" ? "right" : "left",
+        hinges: [],
+        handles: []
+      });
+    }
+    return doors;
+  }
+
   function hardwareDisplayName(hw, fallbackIndex, role) {
     if (hw && hw.displayName) return hw.displayName;
     if (hw && hw.hardwareName) return hw.hardwareName;
@@ -487,10 +511,12 @@
         window.GraneteUI.library.findDefinitionById(ctx.furnitureDefinitionId) : null);
     var params = overrideParams || inspectorParams || (ctx.parameters || {});
 
-    // Gate: mostramos la card SOLO si la definición tiene el parámetro
-    // doorSwing o el contexto publicó doorAccessories.
+    // Gate: mostramos la card SOLO si hay algo que abrir: la definición
+    // tiene doorSwing, el contexto publicó doorAccessories, o el resolver
+    // detectó actores de puerta en el mueble colocado (metadata gestionada).
     var hasExplicit = Array.isArray(ctx.doorAccessories) && ctx.doorAccessories.length > 0;
-    if (!hasExplicit && !hasDoorSwingParameter(def)) {
+    var hasActors = Array.isArray(ctx.doorActors) && ctx.doorActors.length > 0;
+    if (!hasExplicit && !hasActors && !hasDoorSwingParameter(def)) {
       inspectorOpeningAccessoriesCard.style.display = "none";
       inspectorOpeningAccessoriesContainer.innerHTML = "";
       return;
@@ -499,7 +525,9 @@
     inspectorOpeningAccessoriesCard.style.display = "block";
     inspectorOpeningAccessoriesContainer.innerHTML = "";
 
-    var doors = hasExplicit ? ctx.doorAccessories : buildFallbackDoorAccessories(def, params);
+    var doors = hasExplicit
+      ? ctx.doorAccessories
+      : (hasActors ? buildActorDoorAccessories(ctx.doorActors) : buildFallbackDoorAccessories(def, params));
     var totalHinges = 0;
     var totalHandles = 0;
     if (doors) {
@@ -541,7 +569,9 @@
       openingAccessoriesSummary.textContent =
         hasExplicit
           ? "Los herrajes marcados \"Derivado · Apertura\" se recalculan al cambiar la apertura. Los manuales se conservan."
-          : "Previsualización de apertura y accesorios (se materializan al hacer clic en Aplicar).";
+          : (hasActors
+            ? "Apertura de presentación: el frente y sus herrajes montados se mueven solidarios. La pose es transitoria y nunca altera el diseño."
+            : "Previsualización de apertura y accesorios (se materializan al hacer clic en Aplicar).");
     }
 
     for (var i = 0; i < doors.length; i++) {

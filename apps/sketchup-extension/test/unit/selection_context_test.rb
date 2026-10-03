@@ -61,6 +61,23 @@ class SelectionContextTest < Minitest::Test
     assert context.capabilities.supported?('canReviewPreflight')
   end
 
+  # #529: furniture resolved from a definition WITHOUT a doorSwing parameter
+  # still publishes the opening door actors discovered from managed metadata,
+  # so the Inspector card can offer Abrir/Cerrar on real library furniture.
+  def test_furniture_payload_publishes_door_actors_discovered_from_metadata
+    definition = @provider.find_definition('kitchen-base-standard')
+    @builder.insert_furniture(@model, definition, { 'widthMm' => 700 })
+    furniture = @model.active_entities.instances.first
+
+    payload = @resolver.resolve(furniture).to_payload
+
+    assert payload.key?('doorActors')
+    assert_kind_of Array, payload['doorActors']
+    payload['doorActors'].each do |actor|
+      assert actor.key?('slotIndex')
+    end
+  end
+
   # NEGATIVE PROOF: no ID namespace may collapse into another. Every key
   # keeps its own value end-to-end through the payload.
   def test_identity_namespaces_never_collapse

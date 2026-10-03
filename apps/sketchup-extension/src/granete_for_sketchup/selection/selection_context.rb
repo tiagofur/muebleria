@@ -84,6 +84,11 @@ module Granete
         # stays stable; the resolver sets this when the Go layout produces
         # doorAffinity data. Nil and [] both produce doorAccessories: [].
         attr_writer :door_hardware_placements
+        # #529: opening door actors discovered from managed metadata
+        # (DoorActors.scan) — array of {slotIndex} hashes published on the
+        # furniture payload so the Inspector card can render Abrir/Cerrar per
+        # detected door even without a doorSwing parameter.
+        attr_writer :door_actors
 
         def initialize(kind:, **fields)
           raise ArgumentError, "kind must be one of #{KINDS.join(', ')}" unless KINDS.include?(kind)
@@ -134,6 +139,7 @@ module Granete
           # door-swing data; until then the array is always empty (no Go output
           # for doorAffinity yet in this worktree).
           payload['doorAccessories'] = door_accessories_payload if kind == 'furniture'
+          payload['doorActors'] = Array(@door_actors) if kind == 'furniture'
           payload
         end
 
