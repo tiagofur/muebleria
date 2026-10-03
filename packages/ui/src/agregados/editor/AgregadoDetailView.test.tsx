@@ -104,10 +104,52 @@ describe('AgregadoDetailView', () => {
     expect(screen.getByTestId('agregado-detail-chrome')).toBeTruthy();
     expect(screen.getByText('Cajón Estándar')).toBeTruthy();
     expect(screen.getByTestId('agregado-summary').textContent).toBe(
-      '500 × 200 × 450 mm',
+      '500 × 200 × 450 mm · Sin apertura',
     );
     expect(screen.getByTestId('agregado-detail-components')).toBeTruthy();
     expect(screen.getByTestId('agregado-detail-hardware')).toBeTruthy();
+  });
+
+  // #529: la apertura autorizada se ve en el detalle sin entrar a Editar.
+  it('shows the authored opening in the detail without editing (#529)', () => {
+    const withRotate: Agregado = {
+      ...mockAgregado,
+      presentationMotion: {
+        kind: 'rotate',
+        pivot: 'right',
+        axis: { x: 0, y: 0, z: -1 },
+        openAngleDeg: 95,
+      },
+    };
+    const { rerender } = render(
+      <AgregadoDetailView
+        agregado={withRotate}
+        catalogComponents={mockCatalogComponents}
+        catalogHardware={mockCatalogHardware}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    expect(screen.getByTestId('agregado-detail-apertura').textContent).toContain('Batiente derecha · 95°');
+    expect(screen.getByTestId('agregado-summary').textContent).toContain('Batiente derecha · 95°');
+
+    const withDrawer: Agregado = {
+      ...mockAgregado,
+      presentationMotion: { kind: 'translate', axis: { x: 0, y: 1, z: 0 }, distanceMm: 400 },
+    };
+    rerender(
+      <AgregadoDetailView
+        agregado={withDrawer}
+        catalogComponents={mockCatalogComponents}
+        catalogHardware={mockCatalogHardware}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        canMutate={true}
+      />,
+    );
+    expect(screen.getByTestId('agregado-detail-apertura').textContent).toContain('Cajón extraíble · 400 mm');
   });
 
   it('counts and displays both bulk hardware and positioned 3D hardware', () => {

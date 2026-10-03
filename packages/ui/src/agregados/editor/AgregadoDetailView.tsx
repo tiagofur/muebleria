@@ -28,6 +28,23 @@ function dimsSummary(a: Agregado): string {
   return `${d.width} × ${d.height} × ${d.depth} mm`;
 }
 
+/**
+ * #529: human summary of the authored opening kinematics for the read-only
+ * detail view (mirrors the editor's vocabulary; presentation-only).
+ */
+export function aperturaSummary(a: Agregado): string {
+  const m = a.presentationMotion;
+  if (!m) return 'Sin apertura';
+  switch (m.kind) {
+    case 'rotate':
+      return `Batiente ${m.pivot === 'right' ? 'derecha' : 'izquierda'} · ${m.openAngleDeg}°`;
+    case 'translate':
+      return `Cajón extraíble · ${m.distanceMm} mm`;
+    default:
+      return 'Apertura por trayectoria (keyframes)';
+  }
+}
+
 export function AgregadoDetailView({
   agregado: a,
   catalogComponents,
@@ -73,7 +90,7 @@ export function AgregadoDetailView({
             <h2 className="workspace-chrome__title">{a.name}</h2>
           </div>
           <p className="workspace-chrome__subtitle" data-testid="agregado-summary">
-            {dimsSummary(a)}
+            {dimsSummary(a)} · {aperturaSummary(a)}
           </p>
         </div>
       </div>
@@ -234,6 +251,10 @@ export function AgregadoDetailView({
         <div>
           <dt>Profundidad (D)</dt>
           <dd>{a.externalDims?.depth ?? '—'} mm</dd>
+        </div>
+        <div data-testid="agregado-detail-apertura">
+          <dt>Apertura</dt>
+          <dd>{aperturaSummary(a)}</dd>
         </div>
       </dl>
       {a.description && (
