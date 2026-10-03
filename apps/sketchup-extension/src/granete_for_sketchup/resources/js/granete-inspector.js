@@ -135,7 +135,6 @@
   var inspectorOpeningAccessoriesCard = document.getElementById("inspector-opening-accessories-card");
   var inspectorOpeningAccessoriesContainer = document.getElementById("inspector-opening-accessories-container");
   var openingAccessoriesSummary = document.getElementById("opening-accessories-summary");
-  var openingCountBadge = document.getElementById("opening-count-badge");
   var btnCloseAllDoors = document.getElementById("btn-close-all-doors");
   var inspectorSummaryDims = document.getElementById("inspector-summary-dims");
   var inspectorSummaryParts = document.getElementById("inspector-summary-parts");
@@ -302,9 +301,9 @@
       updateInspectorSummary();
       validateInteractiveClient(inspectorDef, inspectorParams);
       // #529: doorSwing / doorCount / doorComponentId / joinerySystemId pueden
-      // cambiar la agrupación de la card Apertura y Accesorios (labels de
-      // apertura, badges de derivado, recuento de puertas). Repintado local
-      // sin tocar los snapshots confirmados: no aplicamos, solo mostramos.
+      // cambiar el listado de puertas de la card Apertura (doorSwing/doorCount
+      // alteran lado y cantidad). Repintado local sin tocar los snapshots
+      // confirmados: no aplicamos, solo mostramos.
       if (name === "doorSwing" || name === "doorCount" || name === "doorComponentId" ||
           name === "joinerySystemId" || name === "drawerSlideId" || name === "handleComponentId") {
         renderOpeningAccessoriesCard(selectedContext, inspectorParams);
@@ -328,22 +327,6 @@
   //      honest interactive preview even before Apply is clicked.
   // ------------------------------------------------------------------
 
-  var FACE_LABELS = { front: "Frente", back: "Contrafrente",
-                      left: "Izquierda", right: "Derecha",
-                      top: "Arriba", bottom: "Abajo" };
-
-  function roleLabel(role) {
-    if (role === "hinge") return "Bisagra";
-    if (role === "handle") return "Jaladera";
-    return "Herraje";
-  }
-
-  function swingLabel(side) {
-    if (side === "left") return "Izquierda";
-    if (side === "right") return "Derecha";
-    return side || "—";
-  }
-
   function resolveSwingForDoor(doorIndex, doorCount, doorSwing) {
     var swing = doorSwing === "right" || doorSwing === "left" ? doorSwing : null;
     if (doorSwing === "pair" && doorCount >= 2) {
@@ -361,7 +344,10 @@
     return false;
   }
 
-  function buildFallbackDoorAccessories(def, params) {
+  // #529: puertas por abrir, sin más. El lado sólo se muestra cuando es un
+  // hecho del canal (parámetro doorSwing o par de puertas); en una puerta
+  // única sin dato registrado la convención es interna del botón.
+  function buildFallbackDoors(def, params) {
     if (!hasDoorSwingParameter(def)) return null;
     var doorCount = Number(params.doorCount);
     if (!doorCount || doorCount < 1) doorCount = 1;
@@ -371,198 +357,25 @@
       var side = resolveSwingForDoor(i, doorCount, doorSwing);
       doors.push({
         doorSlotIndex: i,
-        doorLabel: "Puerta " + (i + 1) + " · " + (side === "left" ? "Izquierda" : "Derecha"),
-        swingSide: side,
-        hingeFace: side,              // bisagra = lado del eje
-        handleFace: side === "left" ? "right" : "left", // jaladera = lado opuesto
-        hinges: [],
-        handles: []
+        doorLabel: "Puerta " + (i + 1) + (doorCount > 1 ? " · " + (side === "left" ? "Izquierda" : "Derecha") : ""),
+        swingSide: side
       });
     }
     return doors;
   }
 
-  // #529: door actors detectados por metadata gestionada en el mueble
-  // colocado (el resolver publica doorActors). Sin doorSwing en la
-  // definición el lado no está registrado: una puerta abre por izquierda,
-  // dos puertas abren en par (slot 0 izq, slot 1 der). Los herrajes
-  // montados viajan clasificados por categoría de catálogo (hinge/handle,
-  // resto 'other') con su identidad gestionada para "Ir al herraje".
-  function buildActorDoorAccessories(actors) {
+  function buildActorDoors(actors) {
     var doors = [];
     for (var i = 0; i < actors.length; i++) {
-      var a = actors[i] || {};
-      var slot = a.slotIndex !== undefined ? a.slotIndex : i;
+      var slot = actors[i] && actors[i].slotIndex !== undefined ? actors[i].slotIndex : i;
       var side = actors.length === 1 ? "left" : (slot === 0 ? "left" : "right");
-      var hinges = [], handles = [], others = [];
-      var mounted = Array.isArray(a.hardware) ? a.hardware : [];
-      for (var k = 0; k < mounted.length; k++) {
-        var entry = { hardwareId: mounted[k].id };
-        if (mounted[k].category === "hinge") {
-          entry.name = "Bisagra " + (hinges.length + 1);
-          hinges.push(entry);
-        } else if (mounted[k].category === "handle") {
-          entry.name = "Jaladera " + (handles.length + 1);
-          handles.push(entry);
-        } else {
-          entry.name = "Herraje " + (others.length + 1);
-          others.push(entry);
-        }
-      }
       doors.push({
         doorSlotIndex: slot,
         doorLabel: "Puerta " + (Number(slot) + 1) + (actors.length > 1 ? " · " + (side === "left" ? "Izquierda" : "Derecha") : ""),
-        swingSide: side,
-        hingeFace: side,
-        handleFace: side === "left" ? "right" : "left",
-        hinges: hinges,
-        handles: handles,
-        others: others
+        swingSide: side
       });
     }
     return doors;
-  }
-
-  // Fila de herraje montado detectado en el mueble (canal doorActors):
-  // identidad gestionada + navegación de viewport, sin hechos de colocación
-  // inventados (cara/offsets son del canal autoritativo del servidor).
-  function renderActorAccessoryRow(container, entry) {
-    var row = document.createElement("div");
-    row.className = "door-accessory-row";
-
-    var left = document.createElement("div");
-    left.className = "door-accessory-left";
-    var titleLine = document.createElement("div");
-    titleLine.className = "door-accessory-title-row";
-    var name = document.createElement("span");
-    name.className = "door-accessory-name";
-    name.textContent = entry.name;
-    titleLine.appendChild(name);
-    var badge = document.createElement("span");
-    badge.className = "status-badge neutral";
-    badge.style.marginLeft = "auto";
-    badge.style.fontSize = "var(--text-xs)";
-    badge.textContent = "Montado";
-    titleLine.appendChild(badge);
-    left.appendChild(titleLine);
-    row.appendChild(left);
-
-    var right = document.createElement("div");
-    right.className = "door-accessory-right";
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-ghost btn-sm";
-    btn.textContent = "Ir al herraje";
-    btn.addEventListener("click", function () {
-      if (window.sketchup && typeof window.sketchup.select_hardware === "function") {
-        window.sketchup.select_hardware(JSON.stringify({
-          hardwareId: entry.hardwareId,
-          furnitureInstanceRef: selectedContext ? selectedContext.furnitureInstanceRef : null
-        }));
-      } else {
-        deps.showToast("info", "Navegación a herraje: bridge de SketchUp no disponible en este entorno.");
-      }
-    });
-    right.appendChild(btn);
-    row.appendChild(right);
-
-    container.appendChild(row);
-  }
-
-  function hardwareDisplayName(hw, fallbackIndex, role) {
-    if (hw && hw.displayName) return hw.displayName;
-    if (hw && hw.hardwareName) return hw.hardwareName;
-    if (hw && hw.hardwareCode) return hw.hardwareCode;
-    return roleLabel(role) + " " + (Number(fallbackIndex) + 1);
-  }
-
-  function formatOffset(hw) {
-    if (!hw) return "—";
-    var pos = hw.relativePosition || hw.offsetMm || hw.position || {};
-    var x = pos.xMm !== undefined ? pos.xMm : (pos.x !== undefined ? pos.x : null);
-    var y = pos.yMm !== undefined ? pos.yMm : (pos.y !== undefined ? pos.y : null);
-    if (x === null && y === null) return "—";
-    var parts = [];
-    if (x !== null) parts.push("X: " + x + " mm");
-    if (y !== null) parts.push("Y: " + y + " mm");
-    return parts.join("  ·  ");
-  }
-
-  function provenanceClass(kind) {
-    if (kind === "derived" || kind === "opening-derived") return "neutral";
-    if (kind === "manual") return "valid";
-    return "pending";
-  }
-
-  function provenanceLabel(kind, role) {
-    if (kind === "opening-derived" ||
-        (kind === "derived" && (role === "hinge" || role === "handle"))) {
-      return "Derivado · Apertura";
-    }
-    if (kind === "derived") return "Derivado";
-    if (kind === "manual") return "Manual";
-    return kind ? kind : "—";
-  }
-
-  function renderAccessoryRow(container, acc, role, fallbackIndex, provenanceKind, doorSlotIndex) {
-    var row = document.createElement("div");
-    row.className = "door-accessory-row";
-
-    var left = document.createElement("div");
-    left.className = "door-accessory-left";
-
-    var titleLine = document.createElement("div");
-    titleLine.className = "door-accessory-title-row";
-
-    var ordinal = document.createElement("span");
-    ordinal.className = "subhead door-accessory-ordinal";
-    ordinal.textContent = String(Number(fallbackIndex) + 1).padStart(2, "0");
-    titleLine.appendChild(ordinal);
-
-    var name = document.createElement("span");
-    name.className = "door-accessory-name";
-    name.textContent = hardwareDisplayName(acc, fallbackIndex, role);
-    titleLine.appendChild(name);
-
-    var prov = document.createElement("span");
-    prov.className = "status-badge " + provenanceClass(provenanceKind);
-    prov.style.marginLeft = "auto";
-    prov.style.fontSize = "var(--text-xs)";
-    prov.textContent = provenanceLabel(provenanceKind, role);
-    titleLine.appendChild(prov);
-
-    left.appendChild(titleLine);
-
-    var metaLine = document.createElement("div");
-    metaLine.className = "subhead door-accessory-meta";
-    var face = (acc && (acc.anchorFace || acc.face)) || (role === "hinge" ? acc && acc.anchorFace : acc && acc.anchorFace) || "—";
-    var faceDisplay = FACE_LABELS[face] || face;
-    metaLine.textContent = "Cara: " + faceDisplay + "  ·  " + formatOffset(acc);
-    left.appendChild(metaLine);
-
-    row.appendChild(left);
-
-    var right = document.createElement("div");
-    right.className = "door-accessory-right";
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-ghost btn-sm";
-    btn.textContent = "Ir al herraje";
-    var targetId = (acc && (acc.hardwarePlacementId || acc.id || acc.placementId)) || null;
-    btn.addEventListener("click", function () {
-      if (targetId && window.GraneteUI && window.GraneteUI.inspectorChild &&
-          typeof window.GraneteUI.inspectorChild.navigateToHardware === "function") {
-        window.GraneteUI.inspectorChild.navigateToHardware(targetId);
-      } else if (targetId && window.sketchup && typeof window.sketchup.select_hardware === "function") {
-        window.sketchup.select_hardware(targetId, doorSlotIndex !== undefined ? String(doorSlotIndex) : null);
-      } else {
-        deps.showToast("info", "Navegación a herraje: selector Ruby/Bridge no disponible todavía.");
-      }
-    });
-    right.appendChild(btn);
-    row.appendChild(right);
-
-    container.appendChild(row);
   }
 
   function renderOpeningAccessoriesCard(context, overrideParams) {
@@ -574,12 +387,13 @@
         window.GraneteUI.library.findDefinitionById(ctx.furnitureDefinitionId) : null);
     var params = overrideParams || inspectorParams || (ctx.parameters || {});
 
-    // Gate: mostramos la card SOLO si hay algo que abrir: la definición
-    // tiene doorSwing, el contexto publicó doorAccessories, o el resolver
-    // detectó actores de puerta en el mueble colocado (metadata gestionada).
-    var hasExplicit = Array.isArray(ctx.doorAccessories) && ctx.doorAccessories.length > 0;
+    // Gate: la card existe sólo si hay algo que abrir — puertas detectadas
+    // por metadata (doorActors), doorSwing en la definición, o doorAccessories
+    // del resolve. Nada de herrajes: la cinemática los mueve solidarios por
+    // host binding; listarlos no aporta en esta vista.
     var hasActors = Array.isArray(ctx.doorActors) && ctx.doorActors.length > 0;
-    if (!hasExplicit && !hasActors && !hasDoorSwingParameter(def)) {
+    var hasServerDoors = Array.isArray(ctx.doorAccessories) && ctx.doorAccessories.length > 0;
+    if (!hasActors && !hasServerDoors && !hasDoorSwingParameter(def)) {
       inspectorOpeningAccessoriesCard.style.display = "none";
       inspectorOpeningAccessoriesContainer.innerHTML = "";
       return;
@@ -588,40 +402,19 @@
     inspectorOpeningAccessoriesCard.style.display = "block";
     inspectorOpeningAccessoriesContainer.innerHTML = "";
 
-    var doors = hasExplicit
-      ? ctx.doorAccessories
-      : (hasActors ? buildActorDoorAccessories(ctx.doorActors) : buildFallbackDoorAccessories(def, params));
-    var totalHinges = 0;
-    var totalHandles = 0;
-    if (doors) {
-      for (var di = 0; di < doors.length; di++) {
-        totalHinges += (doors[di].hinges ? doors[di].hinges.length : 0);
-        totalHandles += (doors[di].handles ? doors[di].handles.length : 0);
-      }
-    }
-
-    if (openingCountBadge) {
-      var doorCount = doors ? doors.length : 0;
-      openingCountBadge.style.display = doorCount ? "inline-flex" : "none";
-      if (doorCount) {
-        openingCountBadge.textContent =
-          doorCount + " puert" + (doorCount === 1 ? "a" : "as") +
-          (totalHinges ? " · " + totalHinges + " bisagras" : "") +
-          (totalHandles ? " · " + totalHandles + " jaladera" + (totalHandles === 1 ? "" : "s") : "");
-        openingCountBadge.className = "status-badge neutral";
-      }
-    }
+    var doors = hasActors
+      ? buildActorDoors(ctx.doorActors)
+      : (hasServerDoors ? ctx.doorAccessories : buildFallbackDoors(def, params));
 
     if (!doors || doors.length === 0) {
       if (btnCloseAllDoors) btnCloseAllDoors.style.display = "none";
-      if (openingAccessoriesSummary) {
-        openingAccessoriesSummary.textContent =
-          "No hay puertas para esta combinación. Modifique la cantidad de puertas para ver sus accesorios.";
-      }
+      if (openingAccessoriesSummary) openingAccessoriesSummary.textContent = "Sin puertas.";
       return;
     }
+
     if (btnCloseAllDoors) {
-      btnCloseAllDoors.style.display = "inline-block";
+      // Con una sola puerta el botón de la fila ya cierra: no duplicar.
+      btnCloseAllDoors.style.display = doors.length > 1 ? "inline-block" : "none";
       btnCloseAllDoors.onclick = function() {
         if (window.sketchup && typeof window.sketchup.close_all_doors === "function") {
           window.sketchup.close_all_doors();
@@ -630,17 +423,13 @@
     }
     if (openingAccessoriesSummary) {
       openingAccessoriesSummary.textContent =
-        hasExplicit
-          ? "Los herrajes marcados \"Derivado · Apertura\" se recalculan al cambiar la apertura. Los manuales se conservan."
-          : (hasActors
-            ? "Apertura de presentación: el frente y sus herrajes montados se mueven solidarios. La pose es transitoria y nunca altera el diseño."
-            : "Previsualización de apertura y accesorios (se materializan al hacer clic en Aplicar).");
+        "Vista de presentación: abrir o cerrar no modifica el diseño.";
     }
 
     for (var i = 0; i < doors.length; i++) {
       var d = doors[i];
-      var doorCard = document.createElement("div");
-      doorCard.className = "door-group-card";
+      var row = document.createElement("div");
+      row.className = "door-group-card";
 
       var header = document.createElement("div");
       header.className = "door-group-header";
@@ -648,20 +437,12 @@
       title.className = "door-group-title";
       title.textContent = d.doorLabel || ("Puerta " + (i + 1));
       header.appendChild(title);
-      var swingBadge = document.createElement("span");
-      var badgeSide = d.swingSide === "right" ? "warning" : "info";
-      swingBadge.className = "status-badge " + badgeSide;
-      swingBadge.style.marginLeft = "auto";
-      swingBadge.textContent = "Abre: " + swingLabel(d.swingSide);
-      header.appendChild(swingBadge);
 
-      // Botón interactivo Abrir / Cerrar puerta (#529)
       var slotIdx = d.doorSlotIndex !== undefined ? d.doorSlotIndex : i;
       var btnMotion = document.createElement("button");
       btnMotion.type = "button";
       var isSlotOpen = !!(window.GraneteUI && window.GraneteUI.doorMotionStates && window.GraneteUI.doorMotionStates[slotIdx]);
       btnMotion.className = isSlotOpen ? "btn btn-sm btn-secondary door-toggle-motion-btn" : "btn btn-sm btn-ghost door-toggle-motion-btn";
-      btnMotion.style.marginLeft = "var(--space-2)";
       btnMotion.setAttribute("data-door-slot", String(slotIdx));
       btnMotion.textContent = isSlotOpen ? "Cerrar" : "Abrir";
       btnMotion.onclick = (function(slot, side) {
@@ -680,82 +461,8 @@
       })(slotIdx, d.swingSide);
       header.appendChild(btnMotion);
 
-      doorCard.appendChild(header);
-
-      var group = document.createElement("div");
-      group.className = "door-accessory-group";
-
-      var hingesLabel = document.createElement("div");
-      hingesLabel.className = "door-accessory-section-label";
-      hingesLabel.textContent =
-        "Bisagras (" + (d.hinges ? d.hinges.length : 0) + ") · " +
-        "Cara eje: " + (FACE_LABELS[d.hingeFace] || d.hingeFace || "—");
-      group.appendChild(hingesLabel);
-
-      if (d.hinges && d.hinges.length) {
-        for (var hi = 0; hi < d.hinges.length; hi++) {
-          if (hasActors && !hasExplicit) {
-            renderActorAccessoryRow(group, d.hinges[hi]);
-          } else {
-            var hAcc = d.hinges[hi];
-            renderAccessoryRow(group, hAcc, "hinge", hi,
-              (hAcc && (hAcc.placementKind || hAcc.kind)) || (hasExplicit ? "opening-derived" : "derived"),
-              d.doorSlotIndex !== undefined ? d.doorSlotIndex : i);
-          }
-        }
-      } else {
-        var emptyH = document.createElement("div");
-        emptyH.className = "subhead door-accessory-empty";
-        emptyH.textContent = "Sin bisagras para esta puerta.";
-        group.appendChild(emptyH);
-      }
-
-      var sep = document.createElement("div");
-      sep.className = "door-accessory-sep";
-      group.appendChild(sep);
-
-      var handlesLabel = document.createElement("div");
-      handlesLabel.className = "door-accessory-section-label";
-      handlesLabel.textContent =
-        "Jaladeras (" + (d.handles ? d.handles.length : 0) + ") · " +
-        "Cara: " + (FACE_LABELS[d.handleFace] || d.handleFace || "—");
-      group.appendChild(handlesLabel);
-
-      if (d.handles && d.handles.length) {
-        for (var jai = 0; jai < d.handles.length; jai++) {
-          if (hasActors && !hasExplicit) {
-            renderActorAccessoryRow(group, d.handles[jai]);
-          } else {
-            var jAcc = d.handles[jai];
-            renderAccessoryRow(group, jAcc, "handle", jai,
-              (jAcc && (jAcc.placementKind || jAcc.kind)) || (hasExplicit ? "opening-derived" : "derived"),
-              d.doorSlotIndex !== undefined ? d.doorSlotIndex : i);
-          }
-        }
-      } else {
-        var emptyJ = document.createElement("div");
-        emptyJ.className = "subhead door-accessory-empty";
-        emptyJ.textContent = "Sin jaladera para esta puerta.";
-        group.appendChild(emptyJ);
-      }
-
-      // #529 canal doorActors: herrajes montados no clasificables como
-      // bisagra o jaladera — solo se listan cuando existen.
-      if (hasActors && !hasExplicit && d.others && d.others.length) {
-        var othersSep = document.createElement("div");
-        othersSep.className = "door-accessory-sep";
-        group.appendChild(othersSep);
-        var othersLabel = document.createElement("div");
-        othersLabel.className = "door-accessory-section-label";
-        othersLabel.textContent = "Otros herrajes (" + d.others.length + ")";
-        group.appendChild(othersLabel);
-        for (var oi = 0; oi < d.others.length; oi++) {
-          renderActorAccessoryRow(group, d.others[oi]);
-        }
-      }
-
-      doorCard.appendChild(group);
-      inspectorOpeningAccessoriesContainer.appendChild(doorCard);
+      row.appendChild(header);
+      inspectorOpeningAccessoriesContainer.appendChild(row);
     }
   }
 

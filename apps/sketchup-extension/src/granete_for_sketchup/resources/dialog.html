@@ -597,21 +597,19 @@
                 <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
               </div>
 
-              <!-- #529: Card condicional Apertura y Accesorios. Se muestra
-                   únicamente si el furnitureDefinition tiene doorSwing o
-                   doorAccessories publicado por authoring-resolve. -->
+              <!-- #529: Card condicional de Apertura. Se muestra únicamente
+                   si el mueble tiene puertas detectadas (metadata gestionada,
+                   parámetro doorSwing o doorAccessories del resolve). Solo
+                   listado de puertas + pose de presentación. -->
               <div class="card" id="inspector-opening-accessories-card" style="display: none;">
                 <div class="card-header-row">
                   <div>
-                    <div class="card-title">Apertura y Accesorios</div>
+                    <div class="card-title">Apertura</div>
                     <div id="opening-accessories-summary" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs);">
-                      Ajuste el lado de apertura para recalcular bisagras y jaladeras.
+                      Vista de presentación: abrir o cerrar no modifica el diseño.
                     </div>
                   </div>
-                  <div style="display: flex; align-items: center; gap: var(--space-2);">
-                    <button id="btn-close-all-doors" type="button" class="btn btn-sm btn-ghost" style="display: none;">Cerrar todas</button>
-                    <span id="opening-count-badge" class="status-badge neutral" style="display: none;">--</span>
-                  </div>
+                  <button id="btn-close-all-doors" type="button" class="btn btn-sm btn-ghost" style="display: none;">Cerrar todas</button>
                 </div>
                 <div id="inspector-opening-accessories-container" style="margin-top: var(--space-3);"></div>
               </div>
