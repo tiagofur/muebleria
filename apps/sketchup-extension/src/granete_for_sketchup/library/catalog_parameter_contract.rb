@@ -26,7 +26,8 @@ module Granete
           imageUrl thumbnailUrl previewUrl parameters estimatedPartCount estimatedHardwareCount materialRoles
         ].freeze
         PARAMETER_KEYS = %w[
-          name label sortOrder type defaultValue required unit category min max step options integer maxLength binding
+          name label sortOrder type defaultValue required unit category min max step
+          options optionLabels integer maxLength binding
         ].freeze
         BINDING_KEYS = %w[version kind componentId dimension relationship].freeze
         RELATIONSHIP_KEYS = %w[kind sourceRole targets].freeze
@@ -184,6 +185,16 @@ module Granete
           elsif !options.nil? && options != []
             fail_at("#{path}.options", 'options require type enum')
           end
+
+          # #529 optionLabels (display copy for enum options): pure
+          # presentation — a closed string map, mirroring the TS/Go
+          # validators (parity; a missing key here failed the WHOLE catalog
+          # fail-closed on the plugin side).
+          return unless parameter.key?('optionLabels')
+
+          labels = parameter['optionLabels']
+          valid = labels.is_a?(Hash) && labels.keys.all?(String) && labels.values.all?(String)
+          fail_at("#{path}.optionLabels", 'must be a string map') unless valid
         end
 
         def validate_reserved_dimension!(parameter, path)
