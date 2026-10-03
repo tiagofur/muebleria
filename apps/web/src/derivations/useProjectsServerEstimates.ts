@@ -3,6 +3,32 @@ import { useQuery } from '@tanstack/react-query';
 import { breakdownFromApi } from '@granete/storage';
 import type { Project, QuoteBreakdown } from '@granete/domain';
 
+import { calcProjectBreakdownWithProfileDemand } from '@granete/domain';
+
+interface CatalogLike {
+  readonly modules: readonly { readonly id: string }[];
+}
+
+/**
+ * Speculative fetches must never produce console noise: the browser logs a
+ * NATIVE console.error for any non-2xx response, and several gate surfaces
+ * are console-strict. The local mirror is the parity mirror of the served
+ * calculation — a project it cannot compute is exactly one the server would
+ * answer 400, so it is skipped instead of fetched.
+ */
+export function locallyComputable(
+  project: Project,
+  catalog: CatalogLike | undefined,
+): boolean {
+  if (!catalog) return false;
+  try {
+    calcProjectBreakdownWithProfileDemand(project, catalog as never);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * #989 slice 2: demand-priced estimates for the project cards. Quote-less
  * drafts have no frozen snapshot, so their card estimate was local
@@ -25,6 +51,7 @@ export interface ProjectsServerEstimates {
 
 interface ServerEstimatesDeps {
   readonly projects: readonly Project[];
+  readonly catalog: CatalogLike | undefined;
   readonly enabled: boolean;
   readonly token: string;
   readonly baseUrl: string;
@@ -33,8 +60,13 @@ interface ServerEstimatesDeps {
 
 /** Quote-less projects are the ones whose card estimate comes from the live
  * calculation; projects with a frozen snapshot already carry the demand. */
-export function quoteLessProjects(projects: readonly Project[]): Project[] {
-  return projects.filter((project) => !project.priceSnapshot);
+export function quoteLessProjects(
+  projects: readonly Project[],
+  catalog: CatalogLike | undefined,
+): Project[] {
+  return projects.filter(
+    (project) => !project.priceSnapshot && locallyComputable(project, catalog),
+  );
 }
 
 export function estimateStatus(failures: number, total: number): ProjectsServerEstimatesStatus {
@@ -64,8 +96,8 @@ export async function fetchProjectBreakdown(
 }
 
 export function useProjectsServerEstimates(deps: ServerEstimatesDeps): ProjectsServerEstimates {
-  const { projects, enabled, token, baseUrl, fetchImpl = globalThis.fetch } = deps;
-  const targets = quoteLessProjects(projects);
+  const { projects, catalog, enabled, token, baseUrl, fetchImpl = globalThis.fetch } = deps;
+  const targets = quoteLessProjects(projects, catalog);
 
   const query = useQuery({
     // The fingerprint pins the served truth: any project edit (updatedAt) or

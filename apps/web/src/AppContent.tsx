@@ -1526,6 +1526,7 @@ export function AppContent({
   });
   const serverEstimates = useProjectsServerEstimates({
     projects,
+    catalog: catalog ?? undefined,
     enabled: session === 'auth' && Boolean(authToken),
     token: authToken ?? '',
     baseUrl: DEFAULT_API_BASE,

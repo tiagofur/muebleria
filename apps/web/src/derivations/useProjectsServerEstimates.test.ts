@@ -35,10 +35,26 @@ const breakdown = (salePrice: number): QuoteBreakdown =>
   }) as QuoteBreakdown;
 
 describe('quoteLessProjects', () => {
+  const catalog = { modules: [{ id: 'mod-1' }] };
+
   it('only targets projects without a frozen snapshot', () => {
     const frozen = project({ id: 'frozen', priceSnapshot: { breakdown: breakdown(10) } as Project['priceSnapshot'] });
     const draft = project({ id: 'draft' });
-    expect(quoteLessProjects([frozen, draft]).map((p) => p.id)).toEqual(['draft']);
+    expect(quoteLessProjects([frozen, draft], catalog).map((p) => p.id)).toEqual(['draft']);
+  });
+
+  it('skips projects the local mirror cannot compute (the server would 400 them)', () => {
+    const uncomputable = project({
+      id: 'junk',
+      items: [{ id: 'i1', moduleId: 'mod-missing', quantity: 1, optionChoices: {} } as Project['items'][number]],
+    });
+    const computable = project({
+      id: 'ok',
+      items: [],
+    });
+    expect(quoteLessProjects([uncomputable, computable], catalog).map((p) => p.id)).toEqual(['ok']);
+    // Without a catalog nothing is provably computable: skip everything.
+    expect(quoteLessProjects([computable], undefined)).toEqual([]);
   });
 });
 

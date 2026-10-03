@@ -180,3 +180,17 @@ flujo de autoridad congelada intacto.
 - RESTANTE nombrado: comparador de escenarios (demanda por escenario varía
   con dims — requiere decisiones propias) y browser proof E2E de tarjetas
   (los números ya están probados a nivel PG por el merge comercial).
+
+### Corrección CI (shard 1: production-release-continuity console-strict)
+
+El fetch especulativo disparaba /calculate para TODOS los drafts; un proyecto
+incalculable (items con módulos ausentes) respondía 400 y el console.error
+NATIVO del navegador rompía los specs console-strict (lección #943 otra vez:
+el log nativo de non-2xx no se puede suprimir desde JS). Fix: filtro
+locallyComputable — el espejo local es el espejo de paridad del cálculo
+servido, así que un proyecto cuyo cálculo local TIRA es exactamente el que el
+server respondería 400, y se salta en vez de fetchearse (los gates de UI como
+items vacíos NO son predictores de 400: el engine computa ceros). Residual
+documentado: un 400 causado SÓLO por la derivación de demanda server-side
+(perfiles con unión rota) no es predecible localmente — orgs sin release no
+lo disparan.
