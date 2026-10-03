@@ -56,6 +56,8 @@ import {
   structureFromApi,
   workshopSettingsToApi,
   workshopSettingsFromApi,
+  agregadoToApi,
+  agregadoFromApi,
 } from './apiMappers';
 import { MATERIAL_MANUFACTURER_UNSET } from '@granete/domain';
 import type {
@@ -97,6 +99,33 @@ describe('apiMappers', () => {
     const api = edgeToApi(edge);
     expect(api.preview_color).toBe('#F5F5F0');
     expect(edgeFromApi(api)).toMatchObject({ previewColor: '#F5F5F0' });
+  });
+
+  it('round-trips agregado presentationMotion (snake_case wire, #529)', () => {
+    const base = {
+      id: 'agr-1', code: 'AGR-PUE-IZQ', name: 'Puerta Izquierda', active: true,
+    } as import('@granete/domain').Agregado;
+    const motion = {
+      kind: 'rotate' as const,
+      pivot: 'left' as const,
+      axis: { x: 0, y: 0, z: 1 },
+      openAngleDeg: 110,
+    };
+    const api = agregadoToApi({ ...base, presentationMotion: motion });
+    expect(api.presentation_motion).toEqual(motion);
+    expect(agregadoFromApi(api).presentationMotion).toEqual(motion);
+
+    // camelCase wire tolerated on read
+    expect(agregadoFromApi({ ...api, presentation_motion: undefined, presentationMotion: motion }).presentationMotion)
+      .toEqual(motion);
+
+    // absent → undefined; malformed blob dropped, never poisoned
+    expect(agregadoFromApi({ ...api, presentation_motion: undefined }).presentationMotion).toBeUndefined();
+    expect(agregadoFromApi({ ...api, presentation_motion: { kind: 'spin' } }).presentationMotion).toBeUndefined();
+    expect(agregadoFromApi({ ...api, presentation_motion: 'rotate' }).presentationMotion).toBeUndefined();
+
+    // absent on write → no wire key (backend NULLs the column on update)
+    expect(agregadoToApi(base).presentation_motion).toBeUndefined();
   });
 
   it('maps material camelCase ↔ snake_case', () => {

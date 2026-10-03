@@ -14,7 +14,7 @@ import (
 
 func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, error) {
 	query := `
-		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, current_revision_id, created_at, updated_at
+		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, presentation_motion, current_revision_id, created_at, updated_at
 		FROM agregados
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -41,7 +41,7 @@ func (s *PostgresStore) ListAgregados(ctx context.Context) ([]domain.Agregado, e
 
 func (s *PostgresStore) GetAgregadoByID(ctx context.Context, id string) (*domain.Agregado, error) {
 	query := `
-		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, current_revision_id, created_at, updated_at
+		SELECT id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, presentation_motion, current_revision_id, created_at, updated_at
 		FROM agregados
 		WHERE id = $1 AND organization_id = $2;
 	`
@@ -73,13 +73,18 @@ func (s *PostgresStore) CreateAgregado(ctx context.Context, a *domain.Agregado) 
 		hwLinesJSON = []byte("[]")
 	}
 
+	presentationMotionJSON, err := marshalPresentationMotion(a.PresentationMotion)
+	if err != nil {
+		return fmt.Errorf("error marshaling agregado presentation motion: %w", err)
+	}
+
 	query := `
-		INSERT INTO agregados (id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, organization_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+		INSERT INTO agregados (id, code, name, description, notes, width_mm, height_mm, depth_mm, components, hardware_lines, active, presentation_motion, organization_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 	`
 	_, err = s.db(ctx).Exec(ctx, query,
 		a.ID, a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
-		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, OrgFromCtx(ctx),
+		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, presentationMotionJSON, OrgFromCtx(ctx),
 	)
 	if err != nil {
 		return fmt.Errorf("error creating agregado: %w", err)
@@ -104,14 +109,19 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, a *domain
 		hwLinesJSON = []byte("[]")
 	}
 
+	presentationMotionJSON, err := marshalPresentationMotion(a.PresentationMotion)
+	if err != nil {
+		return fmt.Errorf("error marshaling agregado presentation motion: %w", err)
+	}
+
 	query := `
 		UPDATE agregados
-		SET code = $1, name = $2, description = $3, notes = $4, width_mm = $5, height_mm = $6, depth_mm = $7, components = $8, hardware_lines = $9, active = $10, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $11 AND organization_id = $12;
+		SET code = $1, name = $2, description = $3, notes = $4, width_mm = $5, height_mm = $6, depth_mm = $7, components = $8, hardware_lines = $9, active = $10, presentation_motion = $11, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $12 AND organization_id = $13;
 	`
 	tag, err := s.db(ctx).Exec(ctx, query,
 		a.Code, a.Name, nullIfEmpty(a.Description), nullIfEmpty(a.Notes),
-		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, id, OrgFromCtx(ctx),
+		a.WidthMm, a.HeightMm, a.DepthMm, componentsJSON, hwLinesJSON, a.Active, presentationMotionJSON, id, OrgFromCtx(ctx),
 	)
 	if err != nil {
 		return fmt.Errorf("error updating agregado: %w", err)
@@ -165,15 +175,25 @@ func (s *PostgresStore) DeleteAgregado(ctx context.Context, id string) error {
 	return nil
 }
 
+// marshalPresentationMotion maps a nil map to a NULL jsonb (absent
+// presentation pose) and otherwise encodes the kinematics object (#529).
+func marshalPresentationMotion(m map[string]any) ([]byte, error) {
+	if len(m) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(m)
+}
+
 func scanAgregado(r rowScanner) (domain.Agregado, error) {
 	var a domain.Agregado
 	var desc *string
 	var notes *string
 	var componentsRaw []byte
 	var hwLinesRaw []byte
+	var presentationMotionRaw []byte
 	err := r.Scan(
 		&a.ID, &a.Code, &a.Name, &desc, &notes, &a.WidthMm, &a.HeightMm, &a.DepthMm, &componentsRaw, &hwLinesRaw, &a.Active,
-		&a.CurrentRevisionID, &a.CreatedAt, &a.UpdatedAt,
+		&presentationMotionRaw, &a.CurrentRevisionID, &a.CreatedAt, &a.UpdatedAt,
 	)
 	if err != nil {
 		return a, err
@@ -195,6 +215,13 @@ func scanAgregado(r rowScanner) (domain.Agregado, error) {
 	}
 	if a.HardwareLines == nil {
 		a.HardwareLines = []domain.HardwareLine{}
+	}
+	// #529 presentation kinematics: jsonb guarantees valid JSON; a non-object
+	// payload is an honest storage error, never silently dropped.
+	if len(presentationMotionRaw) > 0 && string(presentationMotionRaw) != "null" {
+		if err := json.Unmarshal(presentationMotionRaw, &a.PresentationMotion); err != nil {
+			return a, fmt.Errorf("decoding agregado presentation_motion: %w", err)
+		}
 	}
 	return a, nil
 }

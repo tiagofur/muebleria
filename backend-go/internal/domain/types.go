@@ -511,10 +511,15 @@ type Agregado struct {
 	RigidMembers            []AgregadoRigidMember       `json:"rigid_members,omitempty"`
 	VariantSets             []AgregadoVariantSet        `json:"variant_sets,omitempty"`
 	CompatibilityRules      []AssemblyCompatibilityRule `json:"compatibility_rules,omitempty"`
-	CurrentRevisionID       *string                     `json:"current_revision_id,omitempty"`
-	Active                  bool                        `json:"active"`
-	CreatedAt               time.Time                   `json:"created_at"`
-	UpdatedAt               time.Time                   `json:"updated_at"`
+	// PresentationMotion carries the #529 opening kinematics authored in the
+	// catalog UI (rotate/translate/keyframes). Presentation-only pass-through:
+	// the backend stores and echoes it but never interprets it — hosts replay
+	// it as a transient visual pose that never touches manufacturing truth.
+	PresentationMotion map[string]any `json:"presentation_motion,omitempty"`
+	CurrentRevisionID  *string        `json:"current_revision_id,omitempty"`
+	Active             bool           `json:"active"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
 }
 
 // HardwarePlacement attaches a visible hardware instance to a component face for
