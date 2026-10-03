@@ -1123,6 +1123,67 @@ type ReleaseCuttingDemand struct {
 	Units                    []ReleaseCuttingDemandUnit `json:"units"`
 }
 
+type ProjectManufacturingSnapshot struct {
+	SchemaVersion int64                        `json:"schemaVersion"`
+	Release       ManufacturingReleaseIdentity `json:"release"`
+	Routing       ManufacturingRoutingProgram  `json:"routing"`
+}
+
+type ManufacturingReleaseIdentity struct {
+	ID                       string `json:"id"`
+	ReleaseNumber            int64  `json:"releaseNumber"`
+	Status                   string `json:"status"`
+	ManufacturingFingerprint string `json:"manufacturingFingerprint"`
+}
+
+type ManufacturingRoutingProgram struct {
+	Contract                string                     `json:"contract"`
+	IndustrialRulesRevision string                     `json:"industrialRulesRevision"`
+	Units                   []ManufacturingRoutingUnit `json:"units"`
+}
+
+type ManufacturingRoutingUnit struct {
+	FurnitureInstanceId   string                     `json:"furnitureInstanceId"`
+	FurnitureDefinitionId string                     `json:"furnitureDefinitionId"`
+	MachiningFingerprint  string                     `json:"machiningFingerprint"`
+	Parts                 []ManufacturingRoutingPart `json:"parts"`
+}
+
+type ManufacturingRoutingPart struct {
+	PartId           string                          `json:"partId"`
+	Cut              bool                            `json:"cut"`
+	EdgeBandingSides []string                        `json:"edgeBandingSides,omitempty"`
+	CncRequired      bool                            `json:"cncRequired"`
+	Operations       []ManufacturingRoutingOperation `json:"operations"`
+}
+
+type ManufacturingRoutingOperation struct {
+	OperationId string                         `json:"operationId"`
+	Provenance  ManufacturingRoutingProvenance `json:"provenance"`
+	Operation   string                         `json:"operation"`
+	Holes       []ManufacturingRoutingHole     `json:"holes"`
+}
+
+type ManufacturingRoutingProvenance struct {
+	SourceKind               string  `json:"sourceKind"`
+	RelationshipId           *string `json:"relationshipId,omitempty"`
+	FamilyId                 *string `json:"familyId,omitempty"`
+	CatalogRuleId            *string `json:"catalogRuleId,omitempty"`
+	RecipeRevision           *string `json:"recipeRevision,omitempty"`
+	TechnicalProfileId       *string `json:"technicalProfileId,omitempty"`
+	TechnicalProfileRevision *string `json:"technicalProfileRevision,omitempty"`
+	HardwarePlacementId      *string `json:"hardwarePlacementId,omitempty"`
+}
+
+type ManufacturingRoutingHole struct {
+	Face       string  `json:"face"`
+	XMm        float64 `json:"xMm"`
+	YMm        float64 `json:"yMm"`
+	DiameterMm float64 `json:"diameterMm"`
+	DepthMm    float64 `json:"depthMm"`
+	Type       string  `json:"type"`
+}
+
 type ProjectWorkshopOccurrences struct {
 	ReleaseID                 string                         `json:"release_id"`
 	ReleaseNumber             int64                          `json:"release_number"`

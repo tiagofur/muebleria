@@ -63,6 +63,14 @@ import {
 
 export interface ExportHandlersDeps {
   readonly projects: readonly Project[];
+  /** #995: fetches the canonical release's frozen routing program for a
+   * project, or null when the project has no canonical release authority. */
+  readonly frozenDrillingFetcher?: (
+    projectId: string,
+  ) => Promise<
+    | null
+    | import('../exportProductionPack').FrozenDrillingSource
+  >;
   readonly selectedProject: Project | null | undefined;
   readonly catalog: Catalog | null;
   readonly customers: readonly Customer[];
@@ -95,6 +103,7 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
     projects,
     selectedProject,
     catalog,
+    frozenDrillingFetcher,
     customers,
     session,
     actorRole,
@@ -610,11 +619,27 @@ export function useExportHandlers(deps: ExportHandlersDeps) {
       let omissionNote = '';
       await runExport({
         build: async () => {
+          // #995: when the project's canonical release governs, the drilling
+          // annex composes from the FROZEN routing program. A fetch failure
+          // degrades to the legacy annex and is surfaced in the omissions
+          // note — never a silent downgrade.
+          let frozen;
+          if (frozenDrillingFetcher) {
+            try {
+              frozen = await frozenDrillingFetcher(project.id);
+            } catch (error) {
+              omissionNote = ' (perforaciones congeladas no disponibles: fallback local)';
+              if (session === 'auth') {
+                console.warn('[export] frozen drilling fetch failed', error);
+              }
+            }
+          }
           const result = await buildProductionPackExport(
             project,
             catalog,
             resolveCustomerName(project.customerId, customers),
             { cuttingOutputState: cuttingOutputSelectionState },
+            frozen ?? undefined,
           );
           if (result.ok && result.omissions.length > 0) {
             omissionNote = ` (sin: ${result.omissions.join(', ')})`;

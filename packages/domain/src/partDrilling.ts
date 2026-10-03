@@ -45,6 +45,12 @@ export interface ProjectDrillingData {
   readonly totalPiecesCount: number;
   readonly totalHolesCount: number;
   readonly patterns: readonly PartDrillingPattern[];
+  /** #995 export bridge: set ONLY when the holes come from the release's
+   * frozen routing program (source of truth marker). Legacy payloads omit
+   * every field — byte-identical to the pre-bridge export. */
+  readonly source?: 'frozen-release';
+  readonly releaseId?: string;
+  readonly manufacturingFingerprint?: string;
 }
 
 function pieceCode(row: ProductionCutRow, index: number): string {

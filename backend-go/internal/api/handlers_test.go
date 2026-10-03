@@ -1651,6 +1651,10 @@ func (s *stubStore) DeriveLiveProfileDemand(ctx context.Context, project *domain
 	return nil, nil
 }
 
+func (s *stubStore) GetProductionReleaseManufacturingSnapshot(ctx context.Context, projectID, releaseID string) (*storage.ReleaseManufacturingSnapshot, error) {
+	return nil, storage.ErrReleaseSnapshotUnavailable
+}
+
 func (s *stubStore) HardwareProfilesForRelease(ctx context.Context, releaseID uuid.UUID) ([]domain.HardwareProfile, error) {
 	_, manifestBytes, err := s.GetReleaseManifest(ctx, releaseID)
 	if err != nil {

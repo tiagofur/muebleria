@@ -567,6 +567,9 @@ type Store interface {
 	// share (#916/#875): pinned profiles, synthesized side recipes and the
 	// organization's factory construction policy.
 	ReleaseServerResolveInputs(ctx context.Context, orgID string) (*engine.ReleaseServerInputs, error)
+	// GetProductionReleaseManufacturingSnapshot (export bridge K1): the exact
+	// release's frozen manufacturing snapshot — routing program included.
+	GetProductionReleaseManufacturingSnapshot(ctx context.Context, projectID, releaseID string) (*storage.ReleaseManufacturingSnapshot, error)
 	HardwareProfilesForRelease(ctx context.Context, releaseID uuid.UUID) ([]domain.HardwareProfile, error)
 	GetPublishedReleases(ctx context.Context, libraryID uuid.UUID) ([]*domain.LibraryRelease, error)
 	CreateDraftRelease(ctx context.Context, params storage.CreateDraftReleaseParams) (*domain.LibraryRelease, error)
