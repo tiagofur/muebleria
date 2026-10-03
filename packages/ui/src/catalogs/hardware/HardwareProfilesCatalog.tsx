@@ -347,30 +347,34 @@ export function HardwareProfilesCatalog({
                 </div>
               </>
             )}
-            getRowActions={(row) => (
-              <>
-                <button
-                  type="button"
-                  className="btn btn--small btn--ghost"
-                  aria-label={`Editar ${row.code}`}
-                  onClick={() => startEdit(row)}
-                >
-                  <Pencil size={14} strokeWidth={1.5} aria-hidden />
-                  Editar
-                </button>
-                {row.active ? (
-                  <button
-                    type="button"
-                    className="btn btn--small btn--ghost btn--danger"
-                    aria-label={`Desactivar ${row.code}`}
-                    onClick={() => onDeactivate(row.id, row.version)}
-                  >
-                    <EyeOff size={14} strokeWidth={1.5} aria-hidden />
-                    Desactivar
-                  </button>
-                ) : null}
-              </>
-            )}
+            getRowActions={
+              canMutate
+                ? (row) => (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      aria-label={`Editar ${row.code}`}
+                      onClick={() => startEdit(row)}
+                    >
+                      <Pencil size={14} strokeWidth={1.5} aria-hidden />
+                      Editar
+                    </button>
+                    {row.active ? (
+                      <button
+                        type="button"
+                        className="btn btn--small btn--ghost btn--danger"
+                        aria-label={`Desactivar ${row.code}`}
+                        onClick={() => onDeactivate(row.id, row.version)}
+                      >
+                        <EyeOff size={14} strokeWidth={1.5} aria-hidden />
+                        Desactivar
+                      </button>
+                    ) : null}
+                  </>
+                )
+                : undefined
+            }
           />
         )}
       </div>

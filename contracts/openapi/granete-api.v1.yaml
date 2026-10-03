@@ -9384,6 +9384,35 @@
           },
           "display": {
             "$ref": "#/components/schemas/FurnitureInstanceDisplay"
+          },
+          "authoring_snapshot": {
+            "$ref": "#/components/schemas/FurnitureInstanceAuthoringSnapshot"
+          }
+        }
+      },
+      "FurnitureInstanceAuthoringSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "#977 recovery seed: the last authoring state captured when a design working-copy update dropped this unit's item (delete intent #810 Caso 1). Read by placement flows when the live working item is gone so a re-placed unit re-enters with its authored finishes and dimensions instead of catalog defaults. Absent when nothing was captured. Internal recovery plumbing: never user-editable and never part of business identity.",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "description": "Authored parameter map verbatim from the dropped working item (dimension keys for parametric modules).",
+            "additionalProperties": true
+          },
+          "material_choices": {
+            "type": "object",
+            "description": "Authored option choices by role (option group code -> catalog entity id), verbatim from the dropped working item.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "material_choice_modes": {
+            "type": "object",
+            "description": "#784 lineage modes by role, verbatim from the dropped working item; absent when the item carried no explicit statement.",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DesignMaterialChoiceMode"
+            }
           }
         }
       },

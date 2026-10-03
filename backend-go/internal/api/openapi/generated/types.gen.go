@@ -871,16 +871,23 @@ const (
 )
 
 type FurnitureInstance struct {
-	ID                        string                           `json:"id"`
-	ProjectID                 string                           `json:"project_id"`
-	FurnitureDefinitionID     *string                          `json:"furniture_definition_id,omitempty"`
-	Origin                    FurnitureInstanceOrigin          `json:"origin"`
-	OriginFurnitureInstanceID *string                          `json:"origin_furniture_instance_id,omitempty"`
-	LifecycleStatus           FurnitureInstanceLifecycleStatus `json:"lifecycle_status"`
-	Version                   int64                            `json:"version"`
-	CreatedAt                 string                           `json:"created_at"`
-	UpdatedAt                 string                           `json:"updated_at"`
-	Display                   *FurnitureInstanceDisplay        `json:"display,omitempty"`
+	ID                        string                              `json:"id"`
+	ProjectID                 string                              `json:"project_id"`
+	FurnitureDefinitionID     *string                             `json:"furniture_definition_id,omitempty"`
+	Origin                    FurnitureInstanceOrigin             `json:"origin"`
+	OriginFurnitureInstanceID *string                             `json:"origin_furniture_instance_id,omitempty"`
+	LifecycleStatus           FurnitureInstanceLifecycleStatus    `json:"lifecycle_status"`
+	Version                   int64                               `json:"version"`
+	CreatedAt                 string                              `json:"created_at"`
+	UpdatedAt                 string                              `json:"updated_at"`
+	Display                   *FurnitureInstanceDisplay           `json:"display,omitempty"`
+	AuthoringSnapshot         *FurnitureInstanceAuthoringSnapshot `json:"authoring_snapshot,omitempty"`
+}
+
+type FurnitureInstanceAuthoringSnapshot struct {
+	Parameters          map[string]any                      `json:"parameters,omitempty"`
+	MaterialChoices     map[string]string                   `json:"material_choices,omitempty"`
+	MaterialChoiceModes map[string]DesignMaterialChoiceMode `json:"material_choice_modes,omitempty"`
 }
 
 type FurnitureInstanceDisplay struct {

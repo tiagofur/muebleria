@@ -431,6 +431,107 @@ class ProjectFurnitureTest < Minitest::Test
     assert_equal '/textures/moscato.jpg', front.material_texture_url
   end
 
+  # #977 — the owner repro: delete the unit, the auto-sync drops its working
+  # item (#810 Caso 1), then re-place. Without the authoring snapshot the
+  # unit re-entered with catalog defaults (no finishes, 600mm). The snapshot
+  # the backend captured at the drop is the overlay: authored finishes,
+  # lineage modes and dimensions survive the round trip.
+  def test_replaced_unit_after_delete_seeds_finishes_modes_and_dims_from_authoring_snapshot
+    snapshot = {
+      'parameters' => { 'widthMm' => 650, 'shelfCount' => 2 },
+      'material_choices' => { 'FRENTES' => 'moscato-id' },
+      'material_choice_modes' => { 'FRENTES' => 'override' }
+    }
+    # Unquoted project: the display knows no finishes and only the module
+    # default 600mm — everything authored lives in the snapshot.
+    stub_project_furniture([instance_body(FI_1, 'design', display_choices: nil, display_dims: [600, 720, 560])
+                              .merge('authoring_snapshot' => snapshot)])
+    stub_working_copy(working_copy_body([]))
+
+    result = @placer.place(FI_1, transformation: accepted_preview_transform)
+
+    assert result['ok'], result.inspect
+    located = PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)
+    assert located['entity'], 'the unit is back in the file'
+
+    resolve = @catalog.layout_resolves.last
+    assert_equal 650, resolve['parameters']['widthMm'],
+                 'the snapshot dims drove the resolve, not the 600 display default'
+    assert_equal 2, resolve['parameters']['shelfCount']
+    assert_equal({ 'FRENTES' => 'moscato-id' }, resolve['choices'],
+                 'the snapshot finishes drove the resolve, not an empty unquoted display')
+
+    metadata = MS.new(@model).read(located['entity'])
+    # normalize_parameters completes definition defaults (height/depth); the
+    # authored snapshot keys must all survive verbatim.
+    snapshot['parameters'].each do |key, value|
+      assert_equal value, metadata.dig('intent', 'parameters')[key],
+                   "authored parameter #{key} survived the round trip"
+    end
+    assert_equal snapshot['material_choices'], metadata.dig('intent', 'materialChoices')
+    assert_equal snapshot['material_choice_modes'], metadata.dig('intent', 'materialChoiceModes'),
+                 'the #784 lineage rides the intent so the re-added item keeps its modes'
+  end
+
+  # #977 — a live working item still wins over the (older) snapshot: the
+  # snapshot is the fallback for the delete→re-place lane only.
+  def test_live_working_item_wins_over_stale_authoring_snapshot
+    snapshot = {
+      'parameters' => { 'widthMm' => 450 },
+      'material_choices' => { 'FRENTES' => 'stale-id' }
+    }
+    instance = PF::Contract.parse_instance!(
+      instance_body(FI_1, 'design', display_choices: nil)
+        .merge('authoring_snapshot' => snapshot)
+    )
+    item = restore_item(parameters: { 'widthMm' => 650 },
+                        choices: { 'FRENTES' => 'moscato-id' })
+    item['material_choice_modes'] = { 'FRENTES' => 'override' }
+    stub_working_copy(working_copy_body([item]))
+    service = PF::Service.new(transport: @transport, auth_provider: FakeAuth.new, logger: NullLogger.new)
+    binding = MB::Binding.new(project_id: PROJECT_ID, design_id: DESIGN_ID, base_revision_id: REVISION_R1)
+
+    params, choices, modes = PF::PlacementGuards.placement_inputs(
+      service, PF::IntentStore.new, binding, instance, @catalog.find_definition(DEFINITION_ID)
+    )
+
+    assert_equal 600, params['widthMm'], 'the live-item lane keeps the display-seeded params'
+    assert_equal({ 'FRENTES' => 'moscato-id' }, choices, 'the live item choices win')
+    assert_equal({ 'FRENTES' => 'override' }, modes, 'the live item modes win')
+  end
+
+  # #977 — the snapshot contract parse is fail-closed: absent keeps every
+  # recovery field nil; a malformed capture (unknown lineage mode) raises
+  # instead of letting recovery guess.
+  def test_parse_instance_authoring_snapshot_fail_closed
+    base = instance_body(FI_1, 'design', display_choices: nil).slice(
+      'id', 'project_id', 'origin', 'lifecycle_status'
+    )
+
+    plain = PF::Contract.parse_instance!(base.dup)
+    assert_nil plain.authoring_parameters
+    assert_nil plain.authoring_material_choices
+    assert_nil plain.authoring_material_choice_modes
+
+    snapshotted = PF::Contract.parse_instance!(base.merge(
+                                                 'authoring_snapshot' => {
+                                                   'parameters' => { 'widthMm' => 650 },
+                                                   'material_choices' => { 'FRENTES' => 'mat-1' },
+                                                   'material_choice_modes' => { 'FRENTES' => 'override' }
+                                                 }
+                                               ))
+    assert_equal({ 'widthMm' => 650 }, snapshotted.authoring_parameters)
+    assert_equal({ 'FRENTES' => 'mat-1' }, snapshotted.authoring_material_choices)
+    assert_equal({ 'FRENTES' => 'override' }, snapshotted.authoring_material_choice_modes)
+
+    e = assert_raises(PF::Contract::ContractError) do
+      PF::Contract.parse_instance!(base.merge(
+                                     'authoring_snapshot' => { 'material_choice_modes' => { 'FRENTES' => 'bogus' } }
+                                   ))
+    end
+    assert_includes e.message, 'material_choice_modes'
+  end
+
   # #821 R1 — the pending create-and-place intent composes with the frozen
   # finish under the SAME authority rule (it is a delta, not a full snapshot:
   # the roles it omits keep the commercial truth), and the FIRST render

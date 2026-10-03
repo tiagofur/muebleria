@@ -24,6 +24,12 @@ module Granete
                                    keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
                                 :display_name, :display_dimensions, :display_material_choices,
+                                # #977 recovery seed captured when the design
+                                # working copy dropped this unit's item —
+                                # re-placement overlays it when the live item
+                                # is gone (nil when nothing was captured).
+                                :authoring_parameters, :authoring_material_choices,
+                                :authoring_material_choice_modes,
                                 keyword_init: true)
           # #784 R3: one role's server-side inheritance projection — the ONLY
           # badge authority (mode is persisted lineage, never derived from
@@ -138,14 +144,44 @@ module Granete
             end
 
             name, dims, choices = parse_display!(entry['display'])
+            authoring = parse_authoring_snapshot!(entry['authoring_snapshot'])
 
             Instance.new(
               id: entry['id'], project_id: entry['project_id'],
               furniture_definition_id: definition_id, origin: entry['origin'],
               lifecycle_status: entry['lifecycle_status'],
               display_name: name, display_dimensions: dims,
-              display_material_choices: choices
+              display_material_choices: choices,
+              authoring_parameters: authoring[0],
+              authoring_material_choices: authoring[1],
+              authoring_material_choice_modes: authoring[2]
             )
+          end
+
+          # #977: fail-closed parse of the instance's authoring snapshot.
+          # Absent/nil keeps every recovery field nil; a present-but-invalid
+          # block raises — recovery never guesses from a malformed capture.
+          def self.parse_authoring_snapshot!(snapshot)
+            return [nil, nil, nil] if snapshot.nil?
+
+            raise ContractError, 'authoring_snapshot inválido' unless snapshot.is_a?(Hash)
+
+            parameters = snapshot['parameters']
+            unless parameters.nil? || parameters.is_a?(Hash)
+              raise ContractError, 'authoring_snapshot parameters inválidos'
+            end
+
+            choices = snapshot['material_choices']
+            unless choices.nil? || (choices.is_a?(Hash) && choices.values.all?(String))
+              raise ContractError, 'authoring_snapshot material_choices inválidos'
+            end
+
+            modes = snapshot['material_choice_modes']
+            unless modes.nil? || (modes.is_a?(Hash) && modes.values.all? { |m| WorkingCopyContract::MODES.include?(m) })
+              raise ContractError, 'authoring_snapshot material_choice_modes inválidos'
+            end
+
+            [parameters, choices, modes]
           end
 
           # Working-copy (GET/PUT) parsing: same fail-closed rules, split
@@ -563,6 +599,17 @@ module Granete
               parameters['depthMm'] = dims[2] if dims[2]
             end
             parameters
+          end
+
+          # #977: with no live working item the authoring snapshot's
+          # parameters are the unit's truth — the display's module-default
+          # dims would reset a 450mm unit to the catalog 600. Absent
+          # snapshot keeps the historical placement_parameters seed.
+          def recovery_placement_parameters(instance, definition)
+            snapshot = instance.authoring_parameters
+            return snapshot.dup if snapshot.is_a?(Hash) && !snapshot.empty?
+
+            placement_parameters(instance, definition)
           end
 
           def catalog_parameters(definition, selected_parameters = {})

@@ -163,9 +163,10 @@ describe('HardwareProfilesCatalog (#914)', () => {
     expect(props.onDeactivate).toHaveBeenCalledWith('p-1', 3);
   });
 
-  it('hides the create action when canMutate is false (row actions stay read-only)', () => {
+  it('hides the create action and every row action when canMutate is false (#972)', () => {
     setup({ canMutate: false });
     expect(screen.queryByTestId('hardware-profile-create-btn')).toBeNull();
-    expect(screen.getByRole('button', { name: /Editar PERF-SPAX-50/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Editar PERF-SPAX-50/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Desactivar PERF-SPAX-50/i })).toBeNull();
   });
 });

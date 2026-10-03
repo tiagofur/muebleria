@@ -1439,8 +1439,12 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 	previousChoices := map[string]map[string]string{}
 	previousSources := map[string]map[string]domain.DesignMaterialProvenance{}
 	previousModes := map[string]map[string]domain.DesignMaterialChoiceMode{}
+	// #977: the full previous item (parameters included) feeds the authoring
+	// snapshot written when this update drops the item — the delete intent
+	// must not be the last writer of the unit's authored state.
+	previousParameters := map[string]map[string]any{}
 	rows, err := s.db(ctx).Query(ctx, `
-		SELECT furniture_instance_id::text, material_choices, material_choice_sources, material_choice_modes
+		SELECT furniture_instance_id::text, material_choices, material_choice_sources, material_choice_modes, parameters
 		FROM design_working_items WHERE design_id = $1
 	`, cmd.DesignID)
 	if err != nil {
@@ -1448,14 +1452,15 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 	}
 	for rows.Next() {
 		var id string
-		var choicesRaw, sourcesRaw, modesRaw []byte
-		if err := rows.Scan(&id, &choicesRaw, &sourcesRaw, &modesRaw); err != nil {
+		var choicesRaw, sourcesRaw, modesRaw, parametersRaw []byte
+		if err := rows.Scan(&id, &choicesRaw, &sourcesRaw, &modesRaw, &parametersRaw); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		var choices map[string]string
 		var sources map[string]domain.DesignMaterialProvenance
 		var modes map[string]domain.DesignMaterialChoiceMode
+		var parameters map[string]any
 		_ = json.Unmarshal(choicesRaw, &choices)
 		if len(sourcesRaw) > 0 && string(sourcesRaw) != "null" {
 			_ = json.Unmarshal(sourcesRaw, &sources)
@@ -1463,7 +1468,11 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 		if len(modesRaw) > 0 && string(modesRaw) != "null" {
 			_ = json.Unmarshal(modesRaw, &modes)
 		}
+		if len(parametersRaw) > 0 && string(parametersRaw) != "null" {
+			_ = json.Unmarshal(parametersRaw, &parameters)
+		}
 		previousChoices[id], previousSources[id], previousModes[id] = choices, sources, modes
+		previousParameters[id] = parameters
 	}
 	rows.Close()
 
@@ -1657,6 +1666,41 @@ func (s *PostgresStore) UpdateDesignWorkingCopy(ctx context.Context, cmd UpdateD
 		)
 		if err != nil {
 			return nil, fmt.Errorf("insert working item: %w", err)
+		}
+	}
+
+	// 5b. #977 authoring snapshots: this update is the conscious delete intent
+	// (#810 Caso 1) for every previous item absent from the new set. The unit's
+	// authored state would otherwise die with the dropped row — re-placement
+	// could only seed finishes from a quote line the project may not have.
+	// Same transaction as the drop; version/updated_at stay untouched so a
+	// background sync can never poison a concurrent instance command's
+	// If-Match. Terminal instances keep whatever snapshot they already carry.
+	kept := make(map[string]bool, len(cmd.Items))
+	for _, item := range cmd.Items {
+		kept[item.FurnitureInstanceID] = true
+	}
+	for id, parameters := range previousParameters {
+		if kept[id] || !isValidUUID(id) {
+			continue
+		}
+		snapshot := domain.FurnitureInstanceAuthoringSnapshot{
+			Parameters:      parameters,
+			MaterialChoices: previousChoices[id],
+		}
+		if modes := previousModes[id]; len(modes) > 0 {
+			snapshot.MaterialChoiceModes = modes
+		}
+		snapshotJSON, err := json.Marshal(snapshot)
+		if err != nil {
+			return nil, fmt.Errorf("%w: authoring snapshot serialization error: %v", domain.ErrSerializationFailed, err)
+		}
+		if _, err := s.db(ctx).Exec(ctx, `
+			UPDATE furniture_instances
+			SET authoring_snapshot = $1
+			WHERE id = $2::uuid AND project_id = $3 AND lifecycle_status = 'active'
+		`, snapshotJSON, id, projectID); err != nil {
+			return nil, fmt.Errorf("snapshot dropped working item: %w", err)
 		}
 	}
 

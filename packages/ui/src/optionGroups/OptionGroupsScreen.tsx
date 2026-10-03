@@ -408,28 +408,32 @@ export function OptionGroupsScreen({
                 </div>
               </>
             )}
-            getRowActions={(row) => (
-              <>
-                <button
-                  type="button"
-                  className="btn btn--small btn--ghost"
-                  aria-label={`Editar ${row.code}`}
-                  onClick={() => startEdit(row)}
-                >
-                  <Pencil size={14} strokeWidth={1.5} aria-hidden />
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--small btn--ghost btn--danger"
-                  aria-label={`Eliminar ${row.code}`}
-                  onClick={() => requestDelete(row.id)}
-                >
-                  <Trash2 size={14} strokeWidth={1.5} aria-hidden />
-                  Eliminar
-                </button>
-              </>
-            )}
+            getRowActions={
+              canMutate
+                ? (row) => (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      aria-label={`Editar ${row.code}`}
+                      onClick={() => startEdit(row)}
+                    >
+                      <Pencil size={14} strokeWidth={1.5} aria-hidden />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost btn--danger"
+                      aria-label={`Eliminar ${row.code}`}
+                      onClick={() => requestDelete(row.id)}
+                    >
+                      <Trash2 size={14} strokeWidth={1.5} aria-hidden />
+                      Eliminar
+                    </button>
+                  </>
+                )
+                : undefined
+            }
           />
         )}
       </div>

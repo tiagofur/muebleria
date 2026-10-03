@@ -409,8 +409,7 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
     });
   });
 
-  it('8. Sin permiso canMutate se desactivan botones de mutación 3D', async () => {
-    const user = userEvent.setup();
+  it('8. Sin permiso canMutate no existen entradas de mutación (fila con binding 3D incluida, #972)', async () => {
     const service = makeMockService();
 
     render(
@@ -425,12 +424,13 @@ describe('Hardware 3D Catalog UI (#667 M2)', () => {
       />,
     );
 
-    await user.click(screen.getByText(sampleHardwareWithBinding.code));
-    await user.click(screen.getByRole('button', { name: `Editar ${sampleHardwareWithBinding.code}` }));
-
-    expect(screen.getByTestId('hardware-change-asset-btn')).toBeDisabled();
-    expect(screen.getByTestId('hardware-add-revision-btn')).toBeDisabled();
-    expect(screen.getByTestId('hardware-unbind-asset-btn')).toBeDisabled();
+    expect(screen.getByText(sampleHardwareWithBinding.code)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Nuevo herraje/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: `Editar ${sampleHardwareWithBinding.code}` })).toBeNull();
+    expect(screen.queryByRole('button', { name: `Desactivar ${sampleHardwareWithBinding.code}` })).toBeNull();
+    expect(screen.queryByTestId('hardware-change-asset-btn')).toBeNull();
+    expect(screen.queryByTestId('hardware-add-revision-btn')).toBeNull();
+    expect(screen.queryByTestId('hardware-unbind-asset-btn')).toBeNull();
   });
 
   it('9. C2 - Reintento tras pérdida de respuesta de finalize recupera la revisión exacta sin re-subir bytes ni duplicar', async () => {
