@@ -600,40 +600,44 @@ export function MaterialsCatalog({
                   resolveImageUrl={resolveImageUrl}
                 />
               )}
-              getRowActions={(row) => (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn--small btn--ghost"
-                    aria-label={`Editar ${row.code}`}
-                    onClick={() => startEdit(row)}
-                  >
-                    <Pencil size={14} strokeWidth={1.5} aria-hidden />
-                    Editar
-                  </button>
-                  {row.active ? (
-                    <button
-                      type="button"
-                      className="btn btn--small btn--ghost btn--danger"
-                      aria-label={`Desactivar ${row.code}`}
-                      onClick={() => onDeactivate(row.id)}
-                    >
-                      <EyeOff size={14} strokeWidth={1.5} aria-hidden />
-                      Desactivar
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn btn--small btn--ghost"
-                      aria-label={`Reactivar ${row.code}`}
-                      onClick={() => onReactivate(row.id)}
-                    >
-                      <Eye size={14} strokeWidth={1.5} aria-hidden />
-                      Reactivar
-                    </button>
-                  )}
-                </>
-              )}
+              getRowActions={
+                canMutate
+                  ? (row) => (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn--small btn--ghost"
+                        aria-label={`Editar ${row.code}`}
+                        onClick={() => startEdit(row)}
+                      >
+                        <Pencil size={14} strokeWidth={1.5} aria-hidden />
+                        Editar
+                      </button>
+                      {row.active ? (
+                        <button
+                          type="button"
+                          className="btn btn--small btn--ghost btn--danger"
+                          aria-label={`Desactivar ${row.code}`}
+                          onClick={() => onDeactivate(row.id)}
+                        >
+                          <EyeOff size={14} strokeWidth={1.5} aria-hidden />
+                          Desactivar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn btn--small btn--ghost"
+                          aria-label={`Reactivar ${row.code}`}
+                          onClick={() => onReactivate(row.id)}
+                        >
+                          <Eye size={14} strokeWidth={1.5} aria-hidden />
+                          Reactivar
+                        </button>
+                      )}
+                    </>
+                  )
+                  : undefined
+              }
             />
           )}
         </div>
