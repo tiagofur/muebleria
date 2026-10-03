@@ -128,3 +128,35 @@ sketchupAuthoringResolve.ts:1111).
 5. Browser spec: diseño con joinery gobernado → preview ≡ cotización.
 6. HUD plugin: evidence de lectura (granete-commercial-projection.js ←
    proyección servida con demanda desde el merge de la demanda comercial).
+
+
+## Re-scoping con hechos (post-unidad 2, 2026-10-03)
+
+El mapeo fino del desglose cambió el terreno del issue:
+
+1. **El panel de totales del detalle YA cumple**: muestra `quoteAuthority`
+   — snapshot congelado servido (demand-priced desde el merge de la demanda
+   comercial) cuando hay cotización, o bloqueado EXPLÍCITO ('empty'/'error')
+   cuando no. Nadie renderiza el cálculo local como verdad comercial
+   (`resolveDisplayBreakdown` sólo tiene callers de test).
+2. **HUD del plugin YA cumple** (proyección servida).
+3. Los números locales vivos user-visible restantes: **estimaciones en
+   tarjetas de proyecto** (projectEstimates F022 — drafts sin cotización) y
+   **comparador de escenarios** (scenarioCompare). Ambos necesitan demanda
+   por-proyecto/por-escenario ⇒ decisión de producto pendiente del owner:
+   batch server (summaries) vs fetch por tarjeta (N resolves cacheados) vs
+   documentar la estimación como manual-only.
+4. Métricas del dashboard: legacy documentado pendiente del read model.
+
+## Slice 1 (este PR) — Delivery: partial
+
+- Unidades 1-2 (infraestructura: espejo + hook + threading) commiteadas.
+- Evidencia de cumplimiento del panel y del HUD (lectura de camino + tests
+  existentes del snapshot con demanda).
+- Alcance restante NOMBRADO: consumidor user-visible (tarjetas/escenarios —
+  decisión del owner), browser proof end-to-end, evidence HTML del badge.
+
+## Unidad 3 original — REEMPLAZADA por el re-scoping
+
+(El plan de ShellView/badge queda como referencia histórica abajo; el badge
+sólo tiene sentido cuando exista un consumidor live que muestre demanda.)
