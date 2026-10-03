@@ -11,7 +11,6 @@ import { SAW_POSTPROCESSOR_ADAPTER } from './sawAdapter';
 import { WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
 import { KDT_FLEXDRILL_1200_PROFILE, PTX_GENERIC_PROFILE, SAW_HOMAG_PROFILE } from './profiles';
 import { sha256Hex } from './digest';
-
 /**
  * Contract invariant: for every adapter, `canSerialize(job, profile).ready
  * === true` MUST guarantee that `serialize(job, profile)` executes without
@@ -91,25 +90,32 @@ describe('PostprocessorAdapter contract invariant', () => {
     assertReadyImpliesSerializable(WOODWOP_MPR_POSTPROCESSOR_ADAPTER, job, complete);
   });
 
-  it('KDT on a fully evidenced synthetic profile: ready stays false (serializer unimplemented, #1005)', () => {
+  it('KDT on the real r2 profile: ready=true → serialize executes the per-piece writer (#1005 K2)', async () => {
+    // El fixture sigue la convención canónica de caras y produce EXACTAMENTE
+    // un programa (grupo back-up), así que ready=true garantiza serialización.
     const job = buildFixtureMachiningJob();
-    const complete: OutputCompatibilityProfile = {
-      ...KDT_FLEXDRILL_1200_PROFILE,
-      ref: { outputCompatibilityProfileId: 'kdt-flexdrill-1200-test-complete', revisionId: 'rX' },
-      dimensions: {
-        fileExtension: 'xml',
-        encoding: 'utf-8',
-        lineEnding: 'crlf',
-        decimalPlaces: 0,
-        unit: 'mm',
-        coordinateConvention: 'bottom-left-top-face',
-        operationTypeNos: '1,2',
-        alignmentFacePolicy: 'sample',
+    assertReadyImpliesSerializable(KDT_POSTPROCESSOR_ADAPTER, job, KDT_FLEXDRILL_1200_PROFILE);
+    const bytes = KDT_POSTPROCESSOR_ADAPTER.serialize(job, KDT_FLEXDRILL_1200_PROFILE);
+    expect(new TextDecoder().decode(bytes)).toContain('<KDTPanelFormat>');
+    // One program per piece/face-group: a multi-program job NEVER serializes
+    // through the interface path — it must go through serializePerPiece (K3).
+    const multiPiece = {
+      ...job,
+      drilling: {
+        ...job.drilling,
+        patterns: [
+          job.drilling.patterns[0]!,
+          { ...job.drilling.patterns[0]!, pieceCode: 'MOD-1-P02' },
+        ],
       },
-      pendingEvidence: [],
     };
-    const readiness = KDT_POSTPROCESSOR_ADAPTER.canSerialize(job, complete);
-    expect(readiness.ready).toBe(false);
-    assertReadyImpliesSerializable(KDT_POSTPROCESSOR_ADAPTER, job, complete);
+    const multiReadiness = KDT_POSTPROCESSOR_ADAPTER.canSerialize(
+      multiPiece,
+      KDT_FLEXDRILL_1200_PROFILE,
+    );
+    expect(multiReadiness.ready).toBe(false);
+    expect(() => KDT_POSTPROCESSOR_ADAPTER.serialize(multiPiece, KDT_FLEXDRILL_1200_PROFILE)).toThrow(
+      AdapterSerializationBlocked,
+    );
   });
 });

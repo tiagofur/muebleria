@@ -548,18 +548,11 @@ const KDT_SPEC_OPEN_QUESTIONS = [
 ] as const;
 
 /**
- * `kdt-flexdrill-1200` r1 — KDTPanelFormat XML per-piece machining program
- * for the KDT Flexdrill 1200 (client-b `machine-c`, #1005).
- *
- * EVIDENCE STATUS: the format is documented from 417 real production XML
- * samples (docs/machines/kdt-xml-format.md + docs/machines/client-b/samples/),
- * but this registration revision carries ZERO evidenced dimensions: the
- * serializer itself does not exist yet (#1005 K2), and publishing the
- * evidenced values is that slice's job (new revision, never an in-place
- * edit). Serialization fails closed on SERIALIZER_NOT_IMPLEMENTED even on a
- * fully evidenced profile.
+ * `kdt-flexdrill-1200` r1 — HISTORICAL (#1005 K1 registration): the
+ * zero-evidence fail-closed revision. Selections pinned to it surface a
+ * stale-revision blocker — never an automatic retarget to r2.
  */
-export const KDT_FLEXDRILL_1200_PROFILE: OutputCompatibilityProfile = {
+export const KDT_FLEXDRILL_1200_PROFILE_R1: OutputCompatibilityProfile = {
   ref: { outputCompatibilityProfileId: 'kdt-flexdrill-1200', revisionId: 'r1' },
   formatFamily: 'kdt',
   targetSoftware: {
@@ -573,6 +566,51 @@ export const KDT_FLEXDRILL_1200_PROFILE: OutputCompatibilityProfile = {
   pendingEvidence: [...KDT_REQUIRED_DIMENSIONS, ...KDT_SPEC_OPEN_QUESTIONS],
   supportStatus: 'NOT_TESTED',
   digest: '6a3015f7462772696d8fb64a22da90065ac7a863758229b9fab56a2710ad7055',
+  evidenceUri: 'docs/machines/kdt-xml-format.md',
+};
+
+/**
+ * `kdt-flexdrill-1200` r2 — the K2 serializer revision (#1005): every
+ * syntax dimension the writer consumes is now EVIDENCED as repo
+ * implementation (same evidence class as `ptx-generic` r1), derived from
+ * the 417-sample corpus study:
+ *
+ * - fileExtension xml / encoding utf-8 / lineEnding crlf / unit mm /
+ *   decimalPlaces 2 (exact-representability preflight, never rounding);
+ * - coordinateConvention 'granete-front-up-r1': the transform policy of
+ *   packages/excel/src/machines/kdt/transform.ts (board axes, face frames,
+ *   front-up/back-up proper rotations, per-face file split);
+ * - alignmentFacePolicy 'granete-quadrant-2-r1': the X=0 edge carries the
+ *   single AlignmentFace in both orientations;
+ * - operationTypeNos '1,2': the subset the resolved machining model can
+ *   reach (TypeNo 3/6/7 stay OPERATION_NOT_REPRESENTABLE).
+ *
+ * EVIDENCE STATUS: repo implementation only — supportStatus stays
+ * NOT_TESTED and the receiving-side unknowns (control-software version
+ * check, filename constraints, TypeNo 4/5 semantics, Arc, interval
+ * patterns, PlaneID values) remain pendingEvidence until field evidence
+ * (#1005 K4) resolves them.
+ */
+export const KDT_FLEXDRILL_1200_PROFILE: OutputCompatibilityProfile = {
+  ref: { outputCompatibilityProfileId: 'kdt-flexdrill-1200', revisionId: 'r2' },
+  formatFamily: 'kdt',
+  targetSoftware: {
+    name: 'KDT Flexdrill 1200 (KDTPanelFormat import)',
+    provenance: 'FIELD_VERIFICATION_REQUIRED',
+  },
+  dimensions: {
+    fileExtension: 'xml',
+    encoding: 'utf-8',
+    lineEnding: 'crlf',
+    decimalPlaces: 2,
+    unit: 'mm',
+    coordinateConvention: 'granete-front-up-r1',
+    operationTypeNos: '1,2',
+    alignmentFacePolicy: 'granete-quadrant-2-r1',
+  },
+  pendingEvidence: [...KDT_SPEC_OPEN_QUESTIONS],
+  supportStatus: 'NOT_TESTED',
+  digest: 'd11d92c35fb481e158cebc336a6c7c419c39b89366e5939dea39787b1bc8b77e',
   evidenceUri: 'docs/machines/kdt-xml-format.md',
 };
 

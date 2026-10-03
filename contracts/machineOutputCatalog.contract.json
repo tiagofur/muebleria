@@ -98,10 +98,10 @@
     },
     {
       "outputCompatibilityProfileId": "kdt-flexdrill-1200",
-      "revisionId": "r1",
+      "revisionId": "r2",
       "formatFamily": "kdt",
       "supportStatus": "NOT_TESTED",
-      "digest": "6a3015f7462772696d8fb64a22da90065ac7a863758229b9fab56a2710ad7055"
+      "digest": "d11d92c35fb481e158cebc336a6c7c419c39b89366e5939dea39787b1bc8b77e"
     }
   ],
   "adapters": [
@@ -128,10 +128,10 @@
     },
     {
       "postprocessorAdapterId": "granete-kdt",
-      "adapterVersion": "0.1.0",
-      "implementationDigest": "401c9fc8f7c77c708fa655441d7b40a6e22d0257d7fb9e0e6acac2dd356b97a9",
+      "adapterVersion": "0.2.0",
+      "implementationDigest": "b9b824c7f86b16603f4d90e278d5920d26b816fdcff9007804ae64e3f0a5d17f",
       "producedFormatFamily": "kdt",
-      "serializerImplemented": false
+      "serializerImplemented": true
     }
   ]
 }

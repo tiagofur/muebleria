@@ -6,6 +6,7 @@ import {
   CLIENT_A_HPP250_PROFILE,
   CLIENT_B_KDT_FLEXDRILL_1200_PROFILE,
   KDT_FLEXDRILL_1200_PROFILE,
+  KDT_FLEXDRILL_1200_PROFILE_R1,
   MPR_WOODWOP_PROFILE,
   PTX_CADMATIC_3_PROFILE,
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
@@ -33,6 +34,7 @@ const ALL_PROFILES = [
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
   KDT_FLEXDRILL_1200_PROFILE,
+  KDT_FLEXDRILL_1200_PROFILE_R1,
 ];
 
 describe('machine output profiles', () => {
@@ -108,14 +110,30 @@ describe('machine output profiles', () => {
     expect(MPR_WOODWOP_PROFILE.pendingEvidence).toContain('macroSyntax');
   });
 
-  it('KDT r1 declara cero dimensiones evidenciadas y registra las preguntas abiertas del spec (#1005)', () => {
-    expect(KDT_FLEXDRILL_1200_PROFILE.dimensions).toEqual({});
-    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('operationTypeNos');
-    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('alignmentFacePolicy');
-    // Preguntas abiertas del spec (§15): nunca se asumen, bloquean el
-    // subconjunto dependiente hasta que una fuente las resuelva.
-    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('typeNo4Semantics');
-    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toContain('alignmentFacePolicy');
+  it('KDT r1 (histórica) declara cero dimensiones; r2 lleva las dimensiones del writer (#1005 K2)', () => {
+    expect(KDT_FLEXDRILL_1200_PROFILE_R1.dimensions).toEqual({});
+    expect(KDT_FLEXDRILL_1200_PROFILE_R1.ref.revisionId).toBe('r1');
+    expect(KDT_FLEXDRILL_1200_PROFILE.dimensions).toEqual({
+      fileExtension: 'xml',
+      encoding: 'utf-8',
+      lineEnding: 'crlf',
+      decimalPlaces: 2,
+      unit: 'mm',
+      coordinateConvention: 'granete-front-up-r1',
+      operationTypeNos: '1,2',
+      alignmentFacePolicy: 'granete-quadrant-2-r1',
+    });
+    // Lo pendiente es del RECEPTOR y del corpus (§15), no de la sintaxis que
+    // este repo implementa: el estado de campo NO se promueve por metadata.
+    expect(KDT_FLEXDRILL_1200_PROFILE.pendingEvidence).toEqual([
+      'filenameConstraints',
+      'typeNo4Semantics',
+      'typeNo5CircleSemantics',
+      'vertexArcSemantics',
+      'holeIntervalPatternSemantics',
+      'planeIdValues',
+    ]);
+    expect(KDT_FLEXDRILL_1200_PROFILE.supportStatus).toBe('NOT_TESTED');
     expect(KDT_FLEXDRILL_1200_PROFILE.targetSoftware?.provenance).toBe(
       'FIELD_VERIFICATION_REQUIRED',
     );
@@ -181,7 +199,7 @@ describe('machine output profiles', () => {
       });
   });
 
-  it('KDT r1 (current) has direct TS parity with the shared catalog consumed by Go (#1005)', () => {
+  it('KDT r2 (current) has direct TS parity with the shared catalog consumed by Go (#1005)', () => {
     const catalog = JSON.parse(
       readFileSync(
         new URL('../../../../contracts/machineOutputCatalog.contract.json', import.meta.url),
@@ -212,7 +230,7 @@ describe('machine output profiles', () => {
       adapterVersion: KDT_POSTPROCESSOR_ADAPTER.adapterVersion,
       implementationDigest: KDT_POSTPROCESSOR_ADAPTER.implementationDigest,
       producedFormatFamily: KDT_POSTPROCESSOR_ADAPTER.producedFormatFamily,
-      serializerImplemented: false,
+      serializerImplemented: true,
     });
     expect(
       catalog.machines.find(

@@ -56,10 +56,13 @@ export const KNOWN_OUTPUT_PROFILES: readonly OutputCompatibilityProfile[] = [
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
-  // #1005 K1 — fail-closed registration: the KDTPanelFormat serializer does
-  // not exist yet, so selections persist but generation stays blocked with
-  // SERIALIZER_NOT_IMPLEMENTED until the K2 serializer + evidenced profile
-  // revision land together.
+  // #1005 K2 — r2 (serializer revision) is the CURRENT selectable revision:
+  // the KDTPanelFormat writer/reader are implemented and golden-proven;
+  // settings readiness still surfaces PROGRAM_GRANULARITY_UNSUPPORTED on the
+  // synthetic probe until the K3 per-piece generation flow lands. r1 stays
+  // an immutable historical constant (KDT_FLEXDRILL_1200_PROFILE_R1), and
+  // selections pinned to it surface a stale-revision blocker — never an
+  // automatic retarget to r2.
   KDT_FLEXDRILL_1200_PROFILE,
 ];
 

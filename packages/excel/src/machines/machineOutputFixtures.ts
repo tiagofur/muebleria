@@ -97,10 +97,18 @@ const FIXTURE_MACHINING_PATTERN = {
   partName: 'Pieza Sintetica Panel 001',
   lengthMm: 600,
   widthMm: 400,
+  thicknessMm: 18,
   materialName: 'Tablero Sintetico A 18mm',
 } as const;
 
-/** Synthetic drilling job: 600×400×18 board, vertical + horizontal + mixed types. */
+/**
+ * Synthetic drilling job: 600×400×18 board, vertical + horizontal + mixed
+ * types. #1005 K2: every hole follows the canonical face-plane convention
+ * (front/back → x along width, y along length; left/right → x along
+ * thickness, y along length; top/bottom → x along width, y along thickness)
+ * — the previous edge coordinates ignored the convention and placed holes
+ * outside the 18mm thickness axis.
+ */
 export function buildFixtureMachiningJob(): ResolvedMachiningJob {
   const drilling: ProjectDrillingData = {
     schema: 'muebles.drilling-data.v1',
@@ -113,14 +121,17 @@ export function buildFixtureMachiningJob(): ResolvedMachiningJob {
       {
         ...FIXTURE_MACHINING_PATTERN,
         holes: [
-          // Vertical drilling through the large face (front/back convention).
+          // Vertical drilling through the large face (front/back convention:
+          // x along width ≤ 400, y along length ≤ 600).
           { face: 'back', xMm: 50, yMm: 50, diameterMm: 8, depthMm: 12, type: 'dowel' },
-          { face: 'back', xMm: 550, yMm: 50, diameterMm: 8, depthMm: 12, type: 'dowel' },
+          { face: 'back', xMm: 50, yMm: 550, diameterMm: 8, depthMm: 12, type: 'dowel' },
           { face: 'back', xMm: 300, yMm: 350, diameterMm: 35, depthMm: 11.5, type: 'hinge' },
           { face: 'back', xMm: 300, yMm: 200, diameterMm: 5, depthMm: 10, type: 'shelf' },
-          // Horizontal drilling into edge faces (left / top).
-          { face: 'left', xMm: 300, yMm: 100, diameterMm: 8, depthMm: 34, type: 'minifix' },
-          { face: 'top', xMm: 100, yMm: 300, diameterMm: 4, depthMm: 12, type: 'screw' },
+          // Horizontal drilling into edge faces: left → x along thickness
+          // (centered at 9 = 18/2, y along length); top → x along width,
+          // y along thickness (centered at 9).
+          { face: 'left', xMm: 9, yMm: 100, diameterMm: 8, depthMm: 34, type: 'minifix' },
+          { face: 'top', xMm: 100, yMm: 9, diameterMm: 4, depthMm: 12, type: 'screw' },
         ],
       },
     ],

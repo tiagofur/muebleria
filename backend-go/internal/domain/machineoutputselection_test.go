@@ -103,18 +103,19 @@ func validKdtMachiningSelection() MachineOutputSelection {
 		MachineProfileID:            "client-b-machine-c-kdt-flexdrill1200",
 		MachineProfileRevisionID:    "r1",
 		OutputProfileID:             "kdt-flexdrill-1200",
-		OutputProfileRevisionID:     "r1",
-		OutputProfileDigest:         machineOutputString("6a3015f7462772696d8fb64a22da90065ac7a863758229b9fab56a2710ad7055"),
+		OutputProfileRevisionID:     "r2",
+		OutputProfileDigest:         machineOutputString("d11d92c35fb481e158cebc336a6c7c419c39b89366e5939dea39787b1bc8b77e"),
 		AdapterID:                   "granete-kdt",
-		AdapterVersion:              "0.1.0",
-		AdapterImplementationDigest: "401c9fc8f7c77c708fa655441d7b40a6e22d0257d7fb9e0e6acac2dd356b97a9",
+		AdapterVersion:              "0.2.0",
+		AdapterImplementationDigest: "b9b824c7f86b16603f4d90e278d5920d26b816fdcff9007804ae64e3f0a5d17f",
 	}
 }
 
-// #1005 K1: the kdt family registers fail-closed — the exact tuple validates
-// against the catalog while generation stays blocked on the unimplemented
-// serializer. There is never a fallback to another profile.
-func TestKdtSelectionValidatesButStaysBlockedOnSerializer(t *testing.T) {
+// #1005 K2: the kdt tuple validates against the catalog with the r2
+// serializer revision implemented — structural blockers are empty (the
+// generation FLOW is #1005 K3, not a catalog blocker). There is never a
+// fallback to another profile.
+func TestKdtSelectionValidatesWithImplementedSerializer(t *testing.T) {
 	catalog, err := ParseMachineOutputCatalog()
 	if err != nil {
 		t.Fatalf("parse embedded catalog: %v", err)
@@ -122,9 +123,8 @@ func TestKdtSelectionValidatesButStaysBlockedOnSerializer(t *testing.T) {
 	if err := ValidateMachineOutputSelection(catalog, validKdtMachiningSelection()); err != nil {
 		t.Fatalf("expected valid kdt tuple, got %v", err)
 	}
-	blockers := ResolveMachineOutputBlockers(catalog, validKdtMachiningSelection())
-	if len(blockers) != 1 || blockers[0].Code != "SERIALIZER_NOT_IMPLEMENTED" {
-		t.Fatalf("expected exactly SERIALIZER_NOT_IMPLEMENTED, got %v", blockers)
+	if blockers := ResolveMachineOutputBlockers(catalog, validKdtMachiningSelection()); len(blockers) != 0 {
+		t.Fatalf("implemented serializer must not block, got %v", blockers)
 	}
 
 	// A kdt profile is machining-only: selecting it against cutting fails closed.
