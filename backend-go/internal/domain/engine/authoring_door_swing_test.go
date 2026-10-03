@@ -315,3 +315,147 @@ func TestComputeDoorSwingAccessories_HardwareNamePopulated(t *testing.T) {
 		t.Errorf("HardwareName = %q, want Bisagra Test", groups[0].Hinges[0].HardwareName)
 	}
 }
+
+// --- computeDoorSwingMotions -----------------------------------------------
+
+// buildMotionGroups is a helper that builds a minimal DoorAccessoryGroup slice
+// and the matching door board pointers from a swing string (left | right | pair).
+func buildMotionInputs(swing string) ([]*layoutBoard, []domain.DoorAccessoryGroup) {
+	switch swing {
+	case doorSwingLeft:
+		door := makeDoorBoard("door-L")
+		g := domain.DoorAccessoryGroup{
+			DoorSlotIndex: 0,
+			DoorLabel:     "Puerta 1",
+			SwingSide:     "left",
+			HingeFace:     "left",
+			HandleFace:    "right",
+			Hinges:        []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-h1"}},
+			Handles:       []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-j1"}},
+		}
+		return []*layoutBoard{&door}, []domain.DoorAccessoryGroup{g}
+
+	case doorSwingRight:
+		door := makeDoorBoard("door-R")
+		g := domain.DoorAccessoryGroup{
+			DoorSlotIndex: 0,
+			DoorLabel:     "Puerta 1",
+			SwingSide:     "right",
+			HingeFace:     "right",
+			HandleFace:    "left",
+			Hinges:        []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-h1"}},
+			Handles:       []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-j1"}},
+		}
+		return []*layoutBoard{&door}, []domain.DoorAccessoryGroup{g}
+
+	case doorSwingPair:
+		doorL := makeDoorBoard("door-L")
+		doorR := makeDoorBoard("door-R")
+		gL := domain.DoorAccessoryGroup{
+			DoorSlotIndex: 0,
+			DoorLabel:     "Puerta 1",
+			SwingSide:     "left",
+			HingeFace:     "left",
+			HandleFace:    "right",
+			Hinges:        []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-h1"}},
+			Handles:       []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-j1"}},
+		}
+		gR := domain.DoorAccessoryGroup{
+			DoorSlotIndex: 1,
+			DoorLabel:     "Puerta 2",
+			SwingSide:     "right",
+			HingeFace:     "right",
+			HandleFace:    "left",
+			Hinges:        []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-h2"}},
+			Handles:       []domain.HardwareAccessoryRow{{HardwarePlacementID: "hp-j2"}},
+		}
+		return []*layoutBoard{&doorL, &doorR}, []domain.DoorAccessoryGroup{gL, gR}
+	}
+	return nil, nil
+}
+
+// TestComputeDoorSwingMotions_LeftSwing verifies that doorSwing="left" produces
+// a single rotate motion with pivotSide "left" and axisLocal Z = +1.
+func TestComputeDoorSwingMotions_LeftSwing(t *testing.T) {
+	boards, groups := buildMotionInputs(doorSwingLeft)
+	motions := computeDoorSwingMotions(boards, groups)
+
+	if len(motions) != 1 {
+		t.Fatalf("expected 1 motion for left swing, got %d", len(motions))
+	}
+	m := motions[0]
+	if m.Motion.Kind != "rotate" {
+		t.Errorf("motion.kind = %q, want rotate", m.Motion.Kind)
+	}
+	if m.Motion.PivotSide != "left" {
+		t.Errorf("motion.pivotSide = %q, want left", m.Motion.PivotSide)
+	}
+	if m.Motion.OpenAngleDeg != 110.0 {
+		t.Errorf("motion.openAngleDeg = %v, want 110.0", m.Motion.OpenAngleDeg)
+	}
+	if m.Motion.AxisLocal[2] != 1.0 {
+		t.Errorf("motion.axisLocal[2] = %v, want 1.0 (Z=+1 for left hinge)", m.Motion.AxisLocal[2])
+	}
+}
+
+// TestComputeDoorSwingMotions_RightSwing verifies that doorSwing="right" produces
+// a single rotate motion with pivotSide "right" and axisLocal Z = -1.
+func TestComputeDoorSwingMotions_RightSwing(t *testing.T) {
+	boards, groups := buildMotionInputs(doorSwingRight)
+	motions := computeDoorSwingMotions(boards, groups)
+
+	if len(motions) != 1 {
+		t.Fatalf("expected 1 motion for right swing, got %d", len(motions))
+	}
+	m := motions[0]
+	if m.Motion.Kind != "rotate" {
+		t.Errorf("motion.kind = %q, want rotate", m.Motion.Kind)
+	}
+	if m.Motion.PivotSide != "right" {
+		t.Errorf("motion.pivotSide = %q, want right", m.Motion.PivotSide)
+	}
+	if m.Motion.OpenAngleDeg != 110.0 {
+		t.Errorf("motion.openAngleDeg = %v, want 110.0", m.Motion.OpenAngleDeg)
+	}
+	if m.Motion.AxisLocal[2] != -1.0 {
+		t.Errorf("motion.axisLocal[2] = %v, want -1.0 (Z=-1 for right hinge)", m.Motion.AxisLocal[2])
+	}
+}
+
+// TestComputeDoorSwingMotions_PairSwing verifies that doorSwing="pair" produces
+// exactly two motions: one with pivotSide "left" (Z=+1) and one with "right" (Z=-1).
+func TestComputeDoorSwingMotions_PairSwing(t *testing.T) {
+	boards, groups := buildMotionInputs(doorSwingPair)
+	motions := computeDoorSwingMotions(boards, groups)
+
+	if len(motions) != 2 {
+		t.Fatalf("expected 2 motions for pair swing, got %d", len(motions))
+	}
+
+	// door[0] must be left
+	m0 := motions[0]
+	if m0.Motion.PivotSide != "left" {
+		t.Errorf("motions[0].pivotSide = %q, want left", m0.Motion.PivotSide)
+	}
+	if m0.Motion.AxisLocal[2] != 1.0 {
+		t.Errorf("motions[0].axisLocal[2] = %v, want 1.0", m0.Motion.AxisLocal[2])
+	}
+
+	// door[1] must be right
+	m1 := motions[1]
+	if m1.Motion.PivotSide != "right" {
+		t.Errorf("motions[1].pivotSide = %q, want right", m1.Motion.PivotSide)
+	}
+	if m1.Motion.AxisLocal[2] != -1.0 {
+		t.Errorf("motions[1].axisLocal[2] = %v, want -1.0", m1.Motion.AxisLocal[2])
+	}
+}
+
+// TestComputeDoorSwingMotions_EmptyGroups verifies that nil is returned when
+// groups is empty.
+func TestComputeDoorSwingMotions_EmptyGroups(t *testing.T) {
+	motions := computeDoorSwingMotions(nil, nil)
+	if motions != nil {
+		t.Errorf("expected nil for empty groups, got %v", motions)
+	}
+}
