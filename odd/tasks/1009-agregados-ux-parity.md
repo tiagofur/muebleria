@@ -79,4 +79,15 @@ si la aceptación completa (incl. browser proof) está verde. Merge humano.
   catálogo en vez del hardcodeado «HERRAJE». Evidencia: suite ui 2093/2093,
   typecheck 7/7; 4 tests nuevos (select sólo con grupos hardware-kind,
   valor guardado preservado, propagación al draft, fallback input).
-- [ ] S5 → PR 5 (apilado)
+- [x] S5 → PR 5 (rama `feat/1009-agregados-ux-s5`, apilada sobre S4).
+  Duplicar: `duplicateAgregado` en domain/duplicate.ts (deep-copy: nueva
+  id/código sugerido `-COPY`, nombre «(copia)», ids de hardwareLines
+  regenerados, overrides/placements/motion/clonados) + store action
+  `duplicateAgregado` (patrón duplicateModuleById) + ítem «Duplicar» en el
+  menú «Más ▾» del detalle (parity ModuleDetailView) + wiring
+  ShellView/AppContent. Picker: «Añadir Pieza» abre `ModuleComponentAdderModal`
+  reutilizado (búsqueda por código/nombre/rol, radio + cantidad) en vez de
+  insertar `catalogComponents[0]`. Bug hallado y corregido: el modal pasaba
+  `data-testid` (kebab) en vez de `dataTestId` al Modal — testid muerto desde
+  siempre, nunca testado. Evidencia: domain 1768/1768, ui 2096/2096, apps/web
+  581/581, typecheck 7/7.

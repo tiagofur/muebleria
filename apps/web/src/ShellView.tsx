@@ -453,6 +453,7 @@ export interface ShellViewCtx {
   readonly deleteStructure: (id: string) => Promise<void>;
   readonly deleteTemplate: (templateId: string) => void;
   readonly dismissGuestImport: () => void;
+  readonly duplicateAgregado: (id: string) => void;
   readonly duplicateModuleById: (id: string) => void;
   readonly duplicateProjectById: (id: string) => void;
   readonly duplicateWithScenarioB: (projectId: string, role: string, choiceId: string) => void;
@@ -749,6 +750,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     deleteStructure,
     deleteTemplate,
     dismissGuestImport,
+    duplicateAgregado,
     duplicateModuleById,
     duplicateProjectById,
     duplicateWithScenarioB,
@@ -2647,6 +2649,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreate={createAgregado}
           onUpdate={updateAgregado}
           onDelete={deleteAgregado}
+          onDuplicate={duplicateAgregado}
           canMutate={canMutateModules}
           optionGroups={optionGroups}
           catalogMaterials={materials}

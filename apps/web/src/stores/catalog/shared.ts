@@ -140,6 +140,8 @@ export interface CatalogState {
   readonly updateAgregado: (item: Agregado) => void;
   /** Auth: also DELETE /catalog/agregados/{id}. */
   readonly deleteAgregado: (id: string) => Promise<void>;
+  /** Deep-copy with a fresh id/code and regenerated nested ids (#1009 S5). */
+  readonly duplicateAgregado: (id: string) => void;
 
   // --- Customers ---
   readonly createCustomer: (

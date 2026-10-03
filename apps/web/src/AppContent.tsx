@@ -1780,6 +1780,7 @@ export function AppContent({
     },
     [catalogActions, editingModuleId],
   );
+  const duplicateAgregado = catalogActions.duplicateAgregado;
   const duplicateModuleById = catalogActions.duplicateModuleById;
   const createStructure = catalogActions.createStructure;
   const updateStructure = catalogActions.updateStructure;
@@ -3420,6 +3421,7 @@ export function AppContent({
     deleteStructure,
     deleteTemplate,
     dismissGuestImport,
+    duplicateAgregado,
     duplicateModuleById,
     duplicateProjectById,
     duplicateWithScenarioB,

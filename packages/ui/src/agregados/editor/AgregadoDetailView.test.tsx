@@ -250,6 +250,28 @@ describe('AgregadoDetailView', () => {
     expect(handleDelete).toHaveBeenCalledWith('agr-1');
   });
 
+  // S5 #1009: Duplicar vive en el mismo menú (parity con ModuleDetailView).
+  it('offers Duplicar in the Más menu and forwards the id', async () => {
+    const user = userEvent.setup();
+    const handleDuplicate = vi.fn();
+    render(
+      <AgregadoDetailView
+        agregado={mockAgregado}
+        catalogComponents={mockCatalogComponents}
+        catalogHardware={mockCatalogHardware}
+        onBack={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={handleDuplicate}
+        canMutate={true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Más$/i }));
+    await user.click(screen.getByRole('menuitem', { name: /Duplicar/i }));
+    expect(handleDuplicate).toHaveBeenCalledWith('agr-1');
+  });
+
   it('hides the Más overflow when canMutate is false', () => {
     render(
       <AgregadoDetailView

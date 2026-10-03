@@ -10,10 +10,12 @@ import {
   type ReactNode,
   type SetStateAction,
   useMemo,
+  useState,
 } from 'react';
 import type { Component, Hardware, HardwareLine, ModuleComponentInstance, OptionGroup } from '@granete/domain';
 import { Plus, Trash2 } from 'lucide-react';
 import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
+import { ModuleComponentAdderModal } from '../../modules/components/ModuleComponentAdderModal';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
 import { HardwarePlacementsEditor } from '../../modules/components/HardwarePlacementsEditor';
@@ -74,14 +76,44 @@ export function AgregadoEditorForm({
     [optionGroups],
   );
 
-  const addComponentInstance = () => {
-    const first = catalogComponents[0];
-    if (!first) return;
+  // S5 #1009: «Añadir Pieza» opens a searchable picker instead of blindly
+  // appending the catalog's first component (ModuleComponentAdderModal parity).
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
+  const [pickerComponentId, setPickerComponentId] = useState('');
+  const [pickerQty, setPickerQty] = useState(1);
+
+  const filteredPickerComponents = useMemo(() => {
+    const q = pickerSearch.trim().toLocaleLowerCase('es-UY');
+    if (!q) return catalogComponents.filter((c) => c.active);
+    return catalogComponents.filter(
+      (c) =>
+        c.active &&
+        (`${c.code} ${c.name}`.toLocaleLowerCase('es-UY').includes(q) ||
+          c.optionRoles.some((r) => r.toLocaleLowerCase('es-UY').includes(q))),
+    );
+  }, [catalogComponents, pickerSearch]);
+
+  const openComponentPicker = () => {
+    setPickerComponentId('');
+    setPickerQty(1);
+    setPickerSearch('');
+    setPickerOpen(true);
+  };
+
+  const confirmComponentPick = () => {
+    if (!pickerComponentId) return;
     setDraft((prev) => ({
       ...prev,
-      components: [...prev.components, { componentId: first.id, quantity: 1 }],
+      components: [
+        ...prev.components,
+        { componentId: pickerComponentId, quantity: pickerQty },
+      ],
     }));
+    setPickerOpen(false);
   };
+
+  const addComponentInstance = openComponentPicker;
 
   const removeComponentInstance = (idx: number) => {
     setDraft((prev) => ({
@@ -148,12 +180,13 @@ export function AgregadoEditorForm({
   );
 
   return (
-    <form
-      id={formId}
-      onSubmit={onSubmit}
-      className="catalog-form agregado-editor"
-      noValidate
-    >
+    <>
+      <form
+        id={formId}
+        onSubmit={onSubmit}
+        className="catalog-form agregado-editor"
+        noValidate
+      >
       {error ? (
         <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
@@ -544,6 +577,21 @@ export function AgregadoEditorForm({
           </div>
         </div>
       )}
-    </form>
+      </form>
+
+      <ModuleComponentAdderModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        componentSearch={pickerSearch}
+        onSearchChange={setPickerSearch}
+        filteredComponents={filteredPickerComponents}
+        newCompId={pickerComponentId}
+        onSelect={setPickerComponentId}
+        newCompQty={pickerQty}
+        onQtyChange={setPickerQty}
+        optionGroups={optionGroups}
+        onConfirm={confirmComponentPick}
+      />
+    </>
   );
 }

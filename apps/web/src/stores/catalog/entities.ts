@@ -5,6 +5,7 @@
 
 import {
   bumpStructureRevision,
+  duplicateAgregado,
   duplicateModule as deepCopyModule,
   suggestDuplicateCode,
 } from '@granete/domain';
@@ -32,6 +33,7 @@ type EntitiesSlice = Pick<
   | 'createAgregado'
   | 'updateAgregado'
   | 'deleteAgregado'
+  | 'duplicateAgregado'
 >;
 
 export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
@@ -271,6 +273,24 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
       if (ok) {
         ctx.toast({ type: 'info', message: 'Agregado eliminado' });
       }
+    },
+
+    duplicateAgregado: (id) => {
+      const source = ctx.get().catalog?.agregados?.find((a) => a.id === id);
+      if (!source) return;
+      const newCode = suggestDuplicateCode(
+        source.code,
+        (ctx.get().catalog?.agregados ?? []).map((a) => a.code),
+      );
+      const copy = duplicateAgregado(source, {
+        newId: ctx.newId(),
+        newCode,
+        nextNestedId: ctx.newId,
+      });
+      ctx.saveAndToast(
+        (c) => ({ ...c, agregados: [...(c.agregados ?? []), copy] }),
+        `✓ Duplicado como ${newCode}`,
+      );
     },
   };
 }

@@ -363,6 +363,7 @@ export {
 
 export type {
   CreateProjectFromTemplateOptions,
+  DuplicateAgregadoOptions,
   DuplicateModuleOptions,
   DuplicateProjectOptions,
   ProjectToTemplateOptions,
@@ -370,6 +371,7 @@ export type {
 export {
   suggestDuplicateCode,
   duplicateModule,
+  duplicateAgregado,
   duplicateProject,
   createProjectFromTemplate,
   projectToTemplate,
