@@ -1,12 +1,18 @@
 package engine
 
-// authoring_door_swing.go — #529 door-swing accessory grouping
+// authoring_door_swing.go — #529 door-swing accessory grouping + motion
 //
 // computeDoorSwingAccessories derives the authoritative DoorAccessoryGroup
 // list from the resolved effective placements and the furniture's doorSwing
 // parameter.  The result is pure presentation metadata: manufacturing truth
 // stays in HardwarePlacements + Machining and is never rebuilt from this
 // section.
+//
+// computeDoorSwingMotions derives the ResolvedAgregadoMotion list from the
+// DoorAccessoryGroup list (Slice B MVP — rotate only, 110 °):
+//   doorSwing = left  → kind "rotate", pivotSide "left",  axisLocal [0,0, 1], openAngleDeg 110
+//   doorSwing = right → kind "rotate", pivotSide "right", axisLocal [0,0,-1], openAngleDeg 110
+//   doorSwing = pair  → TWO motions: left (axis Z=+1) and right (axis Z=-1)
 //
 // stampDoorAffinity back-annotates the normalized hardware placement list
 // with the door-affinity so the API layer and SketchUp inspector can surface
@@ -197,6 +203,92 @@ func computeDoorSwingAccessories(
 	}
 
 	return groups
+}
+
+// MotionKeyframe is one pose sample on an animation timeline.
+type MotionKeyframe struct {
+	Progress      float64    `json:"progress"`
+	TranslationMm [3]float64 `json:"translationMm"`
+	RotationDeg   *struct {
+		X *float64 `json:"x,omitempty"`
+		Y *float64 `json:"y,omitempty"`
+		Z *float64 `json:"z,omitempty"`
+	} `json:"rotationDeg,omitempty"`
+}
+
+// ResolvedMotionDef describes a single motion (rotate | translate | keyframes)
+// for one agregado instance in the authoring-resolve response (Slice B MVP).
+type ResolvedMotionDef struct {
+	// Kind is "rotate" | "translate" | "keyframes".
+	Kind         string           `json:"kind"`
+	PivotSide    string           `json:"pivotSide,omitempty"`
+	PivotLocalMm [3]float64       `json:"pivotLocalMm,omitempty"`
+	AxisLocal    [3]float64       `json:"axisLocal"`
+	OpenAngleDeg float64          `json:"openAngleDeg,omitempty"`
+	DistanceMm   float64          `json:"distanceMm,omitempty"`
+	Keyframes    []MotionKeyframe `json:"keyframes,omitempty"`
+}
+
+// ResolvedAgregadoMotion pairs one resolved motion definition with the
+// component/hardware instance IDs it governs.  Published in the
+// authoringResolveResolved envelope (#529 Slice B).
+type ResolvedAgregadoMotion struct {
+	// AgregadoInstanceID is the resolved component-instance ID of the moving part.
+	AgregadoInstanceID string `json:"agregadoInstanceId"`
+	// Motion describes how the part moves.
+	Motion ResolvedMotionDef `json:"motion"`
+	// ComponentInstanceIDs lists the component instance IDs that belong to
+	// this motion (the door panel board(s)).
+	ComponentInstanceIDs []string `json:"componentInstanceIds"`
+	// HardwarePlacementIDs optionally lists hardware placements that move with
+	// the panel (hinges, handle, etc.). Populated from the DoorAccessoryGroup.
+	HardwarePlacementIDs []string `json:"hardwarePlacementIds,omitempty"`
+}
+
+// computeDoorSwingMotions derives a ResolvedAgregadoMotion for every door
+// slot in groups (Slice B MVP — rotate only, 110 °). The door boards slice
+// must be in the same order as the groups produced by computeDoorSwingAccessories.
+// Returns nil when groups is empty.
+func computeDoorSwingMotions(doorBoards []*layoutBoard, groups []domain.DoorAccessoryGroup) []ResolvedAgregadoMotion {
+	if len(groups) == 0 {
+		return nil
+	}
+	motions := make([]ResolvedAgregadoMotion, 0, len(groups))
+	for i, g := range groups {
+		// Axis direction: left-hinge → rotate about +Z; right-hinge → −Z.
+		axisZ := 1.0
+		if g.SwingSide == doorSwingRight {
+			axisZ = -1.0
+		}
+
+		// Gather hardware placement IDs from the group rows.
+		var hwIDs []string
+		for _, row := range g.Hinges {
+			hwIDs = append(hwIDs, row.HardwarePlacementID)
+		}
+		for _, row := range g.Handles {
+			hwIDs = append(hwIDs, row.HardwarePlacementID)
+		}
+
+		// Component instance ID of the door board for this slot.
+		instanceID := ""
+		if i < len(doorBoards) && doorBoards[i] != nil {
+			instanceID = doorBoards[i].id
+		}
+
+		motions = append(motions, ResolvedAgregadoMotion{
+			AgregadoInstanceID: instanceID,
+			Motion: ResolvedMotionDef{
+				Kind:         "rotate",
+				PivotSide:    g.SwingSide,
+				AxisLocal:    [3]float64{0, 0, axisZ},
+				OpenAngleDeg: 110,
+			},
+			ComponentInstanceIDs: []string{instanceID},
+			HardwarePlacementIDs: hwIDs,
+		})
+	}
+	return motions
 }
 
 // stampDoorAffinity back-annotates each AuthoringManualPlacement in the

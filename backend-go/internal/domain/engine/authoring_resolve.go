@@ -173,6 +173,10 @@ type AuthoringResolveResult struct {
 	// the definition has no doorSwing parameter. Pure presentation metadata —
 	// manufacturing truth remains in HardwarePlacements + Machining.
 	DoorSwingAccessoriesGroups []domain.DoorAccessoryGroup
+	// ResolvedAgregadoMotions (#529 Slice B) carries the authoritative motion
+	// definition for each door panel so the 3D viewer can animate open/close.
+	// Nil when the definition has no doorSwing parameter.
+	ResolvedAgregadoMotions []ResolvedAgregadoMotion
 }
 
 // plannedCopy is one occurrence slot of a planned template.
@@ -369,6 +373,17 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	// without re-deriving the grouping.
 	stampDoorAffinity(normalized.HardwarePlacements, doorGroups)
 
+	// Collect the door boards in the same order computeDoorSwingAccessories
+	// uses (FRENTE boards, stable index) so computeDoorSwingMotions can pair
+	// each motion with its board's component-instance ID.
+	var doorBoardPtrs []*layoutBoard
+	for i := range boards {
+		if isDoorBoard(&boards[i]) {
+			doorBoardPtrs = append(doorBoardPtrs, &boards[i])
+		}
+	}
+	agregadoMotions := computeDoorSwingMotions(doorBoardPtrs, doorGroups)
+
 	return &AuthoringResolveResult{
 		Layout:                     layout,
 		Normalized:                 normalized,
@@ -376,6 +391,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		ValidationStatus:           validationStatusFor(manufacturing),
 		ValidationIssues:           manufacturing,
 		DoorSwingAccessoriesGroups: doorGroups,
+		ResolvedAgregadoMotions:    agregadoMotions,
 	}, nil
 }
 
