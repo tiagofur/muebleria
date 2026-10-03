@@ -232,6 +232,7 @@ export function calcLineCost(
 function calcLiveProjectBreakdown(
   project: Project,
   catalog: Catalog,
+  profileDemandPerItem?: ReadonlyArray<readonly ProfileDemandLine[] | undefined>,
 ): QuoteBreakdown {
   if (!(project.marginFactor > 0)) {
     throw new ValidationError(
@@ -251,7 +252,7 @@ function calcLiveProjectBreakdown(
   let hardwareTotal = 0;
   let laborModular = 0;
 
-  for (const item of project.items) {
+  for (const [itemIndex, item] of project.items.entries()) {
     if (!(item.quantity > 0)) {
       throw new ValidationError(
         `Project item quantity must be > 0 (got ${item.quantity})`,
@@ -295,6 +296,14 @@ function calcLiveProjectBreakdown(
     for (const hw of bom.hardwareLines) {
       const line = calcHardwareLineCost(hw, catalog, item.quantity);
       hardwareTotal += line.hardwareCost;
+    }
+
+    // Profile hardware demand (#917/#986): the governed resolve's commercial
+    // consumption prices through the same validation and unit price —
+    // additive, one multiplier per item, fail-closed on invalid demand.
+    const demandLines = profileDemandPerItem?.[itemIndex];
+    if (demandLines?.length) {
+      hardwareTotal += calcProfileDemandHardwareTotal(demandLines, catalog, item.quantity);
     }
 
     laborModular += item.quantity * (module.baseLaborCost ?? 0);
@@ -469,8 +478,31 @@ export function calcProjectBreakdown(
   project: Project,
   catalog: Catalog,
 ): QuoteBreakdown {
+  return calcProjectBreakdownWithProfileDemand(project, catalog);
+}
+
+/**
+ * One pricing unit's profile hardware demand (#917/#986): the TS mirror of the
+ * engine's HardwareProfileDemandLine pricing-relevant shape. Index-aligned
+ * with project.items; nil/short entries contribute nothing.
+ */
+export type ProfileDemandLine = { readonly hardwareId: string; readonly quantity: number };
+
+/**
+ * Live/frozen breakdown plus the per-item governed joinery demand (#986) —
+ * the TS mirror of engine.CalcProjectBreakdownWithProfileDemand. Demand joins
+ * the SAME hardware total through the SAME validation and unit price as
+ * manual lines; a project without demand entries prices byte-identically to
+ * calcProjectBreakdown. Frozen snapshots are returned untouched: they already
+ * carry whatever truth they froze.
+ */
+export function calcProjectBreakdownWithProfileDemand(
+  project: Project,
+  catalog: Catalog,
+  profileDemandPerItem?: ReadonlyArray<readonly ProfileDemandLine[] | undefined>,
+): QuoteBreakdown {
   if (isProjectClosed(project.status) && project.priceSnapshot) {
     return project.priceSnapshot.breakdown;
   }
-  return calcLiveProjectBreakdown(project, catalog);
+  return calcLiveProjectBreakdown(project, catalog, profileDemandPerItem);
 }

@@ -40,6 +40,9 @@ export {
   calcLineCost,
   calcMaterialCostPerM2,
   calcProjectBreakdown,
+  calcProjectBreakdownWithProfileDemand,
+  calcProfileDemandHardwareTotal,
+  type ProfileDemandLine,
   captureQuoteSnapshot,
   transitionProjectStatus,
 } from './pricing';

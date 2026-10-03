@@ -11,7 +11,7 @@ import type {
   QuoteBreakdown,
   Workspace,
 } from '@granete/domain';
-import { calcProjectBreakdown, defaultMeasurePresetId } from '@granete/domain';
+import { calcProjectBreakdown, calcProjectBreakdownWithProfileDemand, defaultMeasurePresetId, type ProfileDemandLine } from '@granete/domain';
 import {
   canShowPricePreview,
   canShowProjectPricePreview,
@@ -126,6 +126,10 @@ export function resolveDisplayBreakdown(
 export function computeSelectedProjectBreakdown(
   project: Project | undefined,
   catalog: Workspace['catalog'],
+  /** Per-item governed joinery demand (#989): index-aligned with
+   * project.items, server-derived by the authoring resolve. Absent or short
+   * entries price exactly as before — byte-identical regression. */
+  profileDemandPerItem?: ReadonlyArray<readonly ProfileDemandLine[] | undefined>,
 ): {
   breakdown: QuoteBreakdown | null;
   previewBlocked: boolean;
@@ -157,7 +161,7 @@ export function computeSelectedProjectBreakdown(
   }
 
   try {
-    const breakdown = calcProjectBreakdown(project, catalog);
+    const breakdown = calcProjectBreakdownWithProfileDemand(project, catalog, profileDemandPerItem);
     return { breakdown, previewBlocked: false, missingGroups: [], breakdownError: null };
   } catch (e) {
     const reason =

@@ -24,6 +24,7 @@ import {
   rolesCanViewCosts,
 } from '@granete/domain';
 import { computeModuleCostPreview, computeSelectedProjectBreakdown } from './breakdown';
+import type { ProjectProfileDemandState, ProjectProfileDemandStatus } from './useProjectProfileDemand';
 import {
   aggregatePortfolioByOwner,
   countActiveMaterials,
@@ -48,6 +49,9 @@ export interface QuoteDerivationsDeps {
   readonly editingModuleId: string | null;
   readonly canViewPortfolioDashboard: boolean;
   readonly assignableOwners: readonly { id: string; name: string; role?: string }[];
+  /** Governed joinery demand for the selected project (#989): server-derived
+   * by the authoring resolve at the shell boundary; absent = no demand path. */
+  readonly profileDemand?: ProjectProfileDemandState;
 }
 
 export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
@@ -64,6 +68,7 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
     editingModuleId,
     canViewPortfolioDashboard,
     assignableOwners,
+    profileDemand,
   } = deps;
 
   const workshopSettings = resolveWorkshopSettings(workspaceSettings);
@@ -109,15 +114,23 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
   const projectQuote = useMemo(
     () =>
       catalog
-        ? computeSelectedProjectBreakdown(selectedProject ?? undefined, catalog)
+        ? computeSelectedProjectBreakdown(
+            selectedProject ?? undefined,
+            catalog,
+            profileDemand?.status === 'ready' ? profileDemand.matrix : undefined,
+          )
         : {
             breakdown: null as QuoteBreakdown | null,
             previewBlocked: false,
             missingGroups: [] as readonly string[],
             breakdownError: null as string | null,
           },
-    [selectedProject, catalog],
+    [selectedProject, catalog, profileDemand],
   );
+  /** #989: honest demand state for the display — 'loading' must never read as
+   * a quiet $0 hardware line; 'unavailable' means the org has no governed
+   * demand path and the preview is complete as-is. */
+  const projectDemandStatus: ProjectProfileDemandStatus = profileDemand?.status ?? 'unavailable';
 
   /** F047: m² / herrajes summary — same gate as price preview. */
   const materialSummary = useMemo((): ProjectMaterialSummary | null => {
@@ -206,6 +219,7 @@ export function useQuoteDerivations(deps: QuoteDerivationsDeps) {
     modulePreview,
     moduleEstimates,
     projectQuote,
+    projectDemandStatus,
     materialSummary,
     projectEstimates,
     dashboardStats,

@@ -19,6 +19,7 @@ import {
   calcHardwareLineCost,
   calcLineCost,
   calcProjectBreakdown,
+  calcProjectBreakdownWithProfileDemand,
   captureQuoteSnapshot,
   formatEdgeBandingInstruction,
   formatOptimizerPartDescription,
@@ -2980,5 +2981,74 @@ describe('3D Component spatial positioning & CAD variables', () => {
     expect(part.z).toBe(100);
     expect(part.rotateY).toBe(90);
   });
-});
+})
+describe('calcProjectBreakdownWithProfileDemand (#986/#989)', () => {
+  const demandWorld = () => {
+    const { module, catalog } = miniModuleWithPart({
+      lengthMm: 800,
+      widthMm: 600,
+      edges: NO_EDGES,
+      hardwareLines: [{ id: 'h1', quantity: 4, optionRole: 'BISAGRA' }],
+    });
+    const mod = { ...module, baseLaborCost: 350 };
+    const cat: Catalog = {
+      ...catalog,
+      modules: [mod],
+      hardware: [
+        ...catalog.hardware,
+        { id: 'hw-prof', code: 'PRF-1', name: 'Minifix de perfil', unit: 'piece' as const, costPerUnit: 2.5, active: true },
+      ],
+    };
+    const project: Project = {
+      id: 'proj-1',
+      name: 'P',
+      customerId: 'C',
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 200,
+      status: 'draft',
+      items: [
+        { id: 'i1', moduleId: mod.id, quantity: 2, optionChoices: { INTERIOR: 'mat-a', BISAGRA: 'hw-a' } },
+      ],
+      createdAt: '2026-10-03T00:00:00.000Z',
+      updatedAt: '2026-10-03T00:00:00.000Z',
+    };
+    return { project, cat };
+  };
 
+  it('prices governed demand additively through the same hardware cost (hand numbers mirror Go)', () => {
+    const { project, cat } = demandWorld();
+    // Baseline manual truth: 4 hinges × $20 × 2 units = 160; board 0.48m²×$100×2 = 96.
+    const baseline = calcProjectBreakdown(project, cat);
+    expect(baseline.hardwareTotal).toBeCloseTo(160, 6);
+    expect(baseline.directCost).toBeCloseTo(256, 6);
+
+    // The governed resolve demanded 4 minifix per unit: 4 × $2.5 × 2 = 20 joins
+    // the SAME total — 180 — with one multiplier and no extra rounding stage.
+    const withDemand = calcProjectBreakdownWithProfileDemand(project, cat, [
+      [{ hardwareId: 'hw-prof', quantity: 4 }],
+    ]);
+    expect(withDemand.hardwareTotal).toBeCloseTo(180, 6);
+    expect(withDemand.directCost).toBeCloseTo(276, 6);
+    // Sale = 276 × 1.35 + 700 + 200 = 1272.6 — demand carries margin too.
+    expect(withDemand.salePrice).toBeCloseTo(1272.6, 6);
+  });
+
+  it('prices byte-identically without demand entries', () => {
+    const { project, cat } = demandWorld();
+    const direct = calcProjectBreakdown(project, cat);
+    expect(calcProjectBreakdownWithProfileDemand(project, cat)).toEqual(direct);
+    expect(calcProjectBreakdownWithProfileDemand(project, cat, [])).toEqual(direct);
+    expect(calcProjectBreakdownWithProfileDemand(project, cat, [undefined])).toEqual(direct);
+  });
+
+  it('fails closed on ghost or zero-quantity demand', () => {
+    const { project, cat } = demandWorld();
+    expect(() =>
+      calcProjectBreakdownWithProfileDemand(project, cat, [[{ hardwareId: 'hw-ghost', quantity: 1 }]]),
+    ).toThrow();
+    expect(() =>
+      calcProjectBreakdownWithProfileDemand(project, cat, [[{ hardwareId: 'hw-prof', quantity: 0 }]]),
+    ).toThrow();
+  });
+});
