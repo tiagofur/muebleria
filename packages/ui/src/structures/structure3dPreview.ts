@@ -8,16 +8,20 @@ import type {
   DimensionPreset,
   OptionChoices,
   ResolvedBoardPart,
+  ResolvedHardwarePlacement,
   Structure,
 } from '@granete/domain';
 import { resolveComposedModule } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
+import { resolveModuleHardwarePlacements } from '../preview3d/project3dPreview';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
 import type { StructureDraft } from './structureDraft';
 
 export type Structure3DPreviewResult = {
   readonly parts: readonly ResolvedBoardPart[];
+  /** Board-local hardware placements resolved against `parts` (empty = none renderable). */
+  readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   readonly width: number;
   readonly height: number;
   readonly depth: number;
@@ -173,8 +177,24 @@ export function resolveStructure3DPreview(
       },
     );
 
+    // Structure components + agregado instances expand inside tempStructure, so
+    // the placement resolver iterates them via options.structures (prefixed
+    // part-ids match the engine's expansion). VH-08: preview-only, never the
+    // cut path.
+    const resolvedHardwarePlacements = resolveModuleHardwarePlacements(
+      { structureId: tempStructure.id },
+      resolvedBoardParts,
+      catalogInput.hardware,
+      {
+        structures: [tempStructure],
+        agregados: catalogInput.agregados,
+        optionChoices,
+      },
+    );
+
     return {
       parts: resolvedBoardParts,
+      resolvedHardwarePlacements,
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
@@ -191,6 +211,7 @@ export function resolveStructure3DPreview(
         : 'No se pudo resolver el armado 3D de la estructura.';
     return {
       parts: [],
+      resolvedHardwarePlacements: [],
       width: dims.width,
       height: dims.height,
       depth: dims.depth,

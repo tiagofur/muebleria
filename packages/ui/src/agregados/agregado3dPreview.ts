@@ -9,9 +9,10 @@
  * (length/width/x/y/z/rotation) — edited via InstanceOverridesEditor — are
  * honored and the preview updates live as the draft changes.
  *
- * Fase 3 of `docs/agregados-subassemblies-plan.md`. V1: pieces only (board
- * parts). Hardware 3D meshes and real textures are follow-ups, mirroring how
- * `resolveStructure3DPreview` / StructureEditorComponentsPanel behave.
+ * Fase 3 of `docs/agregados-subassemblies-plan.md`. Renders pieces plus
+ * parametric hardware placements (jaladeras/bisagras per piece, reused from
+ * `resolveModuleHardwarePlacements`); real textures are follow-ups, mirroring
+ * how `resolveStructure3DPreview` / StructureEditorComponentsPanel behave.
  */
 
 import type {
@@ -19,16 +20,20 @@ import type {
   DimensionPreset,
   OptionChoices,
   ResolvedBoardPart,
+  ResolvedHardwarePlacement,
   Structure,
 } from '@granete/domain';
 import { resolveComposedModule } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { defaultOptionChoicesForModule } from '../modules/moduleHelpers';
+import { resolveModuleHardwarePlacements } from '../preview3d/project3dPreview';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
 import type { AgregadoDraft } from './agregadoDraft';
 
 export type Agregado3DPreviewResult = {
   readonly parts: readonly ResolvedBoardPart[];
+  /** Board-local hardware placements resolved against `parts` (empty = none renderable). */
+  readonly resolvedHardwarePlacements: readonly ResolvedHardwarePlacement[];
   readonly width: number;
   readonly height: number;
   readonly depth: number;
@@ -158,8 +163,20 @@ export function resolveAgregado3DPreview(
       },
     );
 
+    // Draft components expand with the engine's '' prefix, so the placement
+    // resolver's synthetic-module path (module.components only) links each
+    // placement to its own board part by id. VH-08: preview-only, never the
+    // cut path.
+    const resolvedHardwarePlacements = resolveModuleHardwarePlacements(
+      { components: draft.components },
+      resolvedBoardParts,
+      catalogInput.hardware,
+      { optionChoices },
+    );
+
     return {
       parts: resolvedBoardParts,
+      resolvedHardwarePlacements,
       width: dims.width,
       height: dims.height,
       depth: dims.depth,
@@ -174,6 +191,7 @@ export function resolveAgregado3DPreview(
         : 'No se pudo resolver el armado 3D del agregado.';
     return {
       parts: [],
+      resolvedHardwarePlacements: [],
       width: dims.width,
       height: dims.height,
       depth: dims.depth,

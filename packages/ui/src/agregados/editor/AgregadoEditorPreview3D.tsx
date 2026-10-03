@@ -3,8 +3,9 @@
  *
  * Mirrors the structure-components-3d block of StructureEditorComponentsPanel:
  * resolves the agregado draft into board parts on every draft change and renders
- * a Furniture3DViewer. Pieces only (V1); hardware 3D meshes and real textures
- * are follow-ups consistent with the structure editor behavior.
+ * a Furniture3DViewer. Parametric hardware placements (jaladeras/bisagras con
+ * posición por pieza) render too, reusing the shared HardwareMesh path; real
+ * textures are follow-ups consistent with the structure editor embed.
  */
 
 import { useMemo, type ReactNode } from 'react';
@@ -59,6 +60,8 @@ export function AgregadoEditorPreview3D({
             width={preview.width}
             height={preview.height}
             depth={preview.depth}
+            resolvedHardwarePlacements={preview.resolvedHardwarePlacements}
+            hardwareCatalog={catalogInput.hardware}
             testId="agregado-editor-3d-viewer"
           />
         </div>
