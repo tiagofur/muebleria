@@ -116,50 +116,8 @@ module Granete
         end
 
         def inspect_furniture_door_actors(furniture_entity)
-          door_entities = []
-          hardware_by_host = Hash.new { |h, k| h[k] = [] }
-          return [door_entities, hardware_by_host] unless furniture_entity.respond_to?(:definition) &&
-                                                          furniture_entity.definition.respond_to?(:entities)
-
-          model = active_model
-          store = @metadata_store_factory.call(model)
-
-          furniture_entity.definition.entities.each do |child|
-            next unless child.respond_to?(:get_attribute)
-
-            meta = read_safe_metadata(store, child)
-            next unless meta
-
-            categorize_door_actor_child(meta, child, door_entities, hardware_by_host)
-          end
-
-          [door_entities, hardware_by_host]
-        end
-
-        def read_safe_metadata(store, child)
-          store.read(child)
-        rescue StandardError
-          nil
-        end
-
-        # rubocop:disable-next Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-        def categorize_door_actor_child(meta, child, door_entities, hardware_by_host)
-          intent = meta['intent'] || {}
-          identity = meta['identity'] || {}
-          child_id = identity['instanceRef'] || identity['componentInstanceId'] || identity['hardwarePlacementId']
-          entity_class = intent['entityClass'] || (intent['hostComponentInstanceId'] ? 'hardware' : 'component')
-
-          if entity_class == 'hardware'
-            host_id = intent['hostComponentInstanceId']
-            hardware_by_host[host_id] << child if host_id
-          else
-            role = (intent['role'] || intent['semanticRole'] || '').to_s.downcase
-            placement = (intent['placement'] || '').to_s.downcase
-            if placement == 'puerta' || role.include?('door') || role.include?('frente') || role.include?('front')
-              door_entities << child
-              hardware_by_host["door-comp-#{door_entities.size - 1}"] = hardware_by_host[child_id] if child_id
-            end
-          end
+          scanned = Selection::DoorActors.scan(furniture_entity, @metadata_store_factory.call(active_model))
+          [scanned.doors, scanned.hardware_by_host]
         end
 
         def parse_payload(raw_payload)

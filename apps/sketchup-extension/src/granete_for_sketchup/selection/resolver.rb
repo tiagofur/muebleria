@@ -17,6 +17,7 @@ module Granete
       # are only read from their OWN metadata keys; until that binding
       # exists they stay nil while the local refs (instanceRef/projectRef/
       # sourceRevisionRef) carry the locator truth.
+      # rubocop:disable-next Metrics/ClassLength
       class Resolver
         FURNITURE_METADATA_KINDS = %w[furnitureInstance bootstrapIntent].freeze
         CHILD_METADATA_KINDS = %w[componentInstance partInstance].freeze
@@ -72,7 +73,7 @@ module Granete
           definition_id = intent['furnitureDefinitionId']
           definition = find_definition(definition_id)
 
-          SelectionContext.new(
+          context = SelectionContext.new(
             kind: 'furniture',
             furniture_instance_id: identity['furnitureInstanceId'],
             furniture_instance_ref: identity['instanceRef'],
@@ -91,6 +92,22 @@ module Granete
             parameters: intent['parameters'] || {},
             material_choices: intent['materialChoices'] || {}
           )
+          publish_door_actors(context, entity)
+          context
+        end
+
+        # #529: door actors discovered from managed metadata ride the payload
+        # so the Inspector card can offer Abrir/Cerrar per detected door even
+        # when the definition has no doorSwing parameter.
+        def publish_door_actors(context, entity)
+          scanned = DoorActors.scan(entity, @metadata_store)
+          context.door_actors = scanned.doors.each_with_index.map do |_door, slot_index|
+            { 'slotIndex' => slot_index }
+          end
+        rescue StandardError
+          # Discovery is presentation affordance only: a scan failure must
+          # never take the whole SelectionContext down.
+          context.door_actors = []
         end
 
         def child_context(entity, metadata)
