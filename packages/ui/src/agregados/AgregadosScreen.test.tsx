@@ -6,7 +6,8 @@
  * code + name + consequence, and only then calls onDelete.
  */
 
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Agregado } from '@granete/domain';
@@ -37,10 +38,15 @@ function renderScreen(overrides: Partial<Parameters<typeof AgregadosScreen>[0]> 
   );
 }
 
+// The editor draft persists in sessionStorage keyed by entity id — clear it so
+// tests don't inherit each other's drafts.
+function cleanDraftStorage() {
+  sessionStorage.clear();
+  cleanup();
+}
+
 describe('AgregadosScreen — delete confirmation (S1 #1009)', () => {
-  afterEach(() => {
-    cleanup();
-  });
+  afterEach(cleanDraftStorage);
 
   it('asks for confirmation with code + name and consequence before deleting', async () => {
     const user = userEvent.setup();
@@ -75,9 +81,7 @@ describe('AgregadosScreen — delete confirmation (S1 #1009)', () => {
 });
 
 describe('AgregadosScreen — editor header identity (S2 #1009)', () => {
-  afterEach(() => {
-    cleanup();
-  });
+  afterEach(cleanDraftStorage);
 
   it('shows saved code + saved name in the editor header, stable while editing', async () => {
     const user = userEvent.setup();
@@ -109,5 +113,75 @@ describe('AgregadosScreen — editor header identity (S2 #1009)', () => {
     const page = await screen.findByTestId('agregado-editor-page');
     expect(within(page).getByText('Nuevo agregado')).toBeTruthy();
     expect(within(page).getByText('NUEVO')).toBeTruthy();
+  });
+});
+
+describe('AgregadosScreen — save contract (S3 #1009)', () => {
+  afterEach(cleanDraftStorage);
+
+  it('opens the editor for the selected item', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    expect(await screen.findByTestId('agregado-editor-page')).toBeTruthy();
+  });
+
+  it('keeps the editor open with the draft and shows a banner when the save fails', async () => {
+    const user = userEvent.setup();
+    let rejectSave!: (err: Error) => void;
+    const onUpdate = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    renderScreen({ onUpdate });
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    await screen.findByTestId('agregado-editor-page');
+
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    // In flight: Guardar busy + disabled, Cancelar locked.
+    const saveBtn = screen.getByTestId('agregado-save-btn') as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    expect(saveBtn.textContent).toContain('Guardando');
+    expect(
+      (screen.getByTestId('agregado-editor-cancel') as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    await act(async () => {
+      rejectSave(new Error('network down'));
+    });
+
+    // Rejected: editor stays open, draft intact, banner visible, controls back.
+    expect(screen.getByTestId('agregado-editor-page')).toBeTruthy();
+    expect(screen.getByTestId('agregado-editor-save-error').textContent).toContain(
+      'No se pudo guardar',
+    );
+    expect(
+      (screen.getByLabelText('Código') as HTMLInputElement).value,
+    ).toBe('AGR-01');
+    expect((screen.getByTestId('agregado-save-btn') as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the editor only after the save settles successfully', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn(() => Promise.resolve());
+    renderScreen({ onUpdate });
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    await screen.findByTestId('agregado-editor-page');
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('agregado-editor-page')).toBeNull(),
+    );
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('agregado-editor-save-error')).toBeNull();
   });
 });

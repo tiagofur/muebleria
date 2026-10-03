@@ -93,6 +93,17 @@
   gap: var(--space-4);
 }
 
+/* #1009 S3: rejected-save banner (mirrors module-editor__stale layout). */
+.agregado-editor__save-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.agregado-editor__save-error p {
+  margin: 0;
+}
+
 .agregado-editor__panel {
   display: flex;
   flex-direction: column;

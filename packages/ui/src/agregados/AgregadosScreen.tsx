@@ -48,8 +48,10 @@ export interface AgregadosScreenProps {
   readonly agregados: readonly Agregado[];
   readonly catalogComponents: readonly Component[];
   readonly catalogHardware: readonly Hardware[];
-  readonly onCreate: (agregado: Agregado) => void;
-  readonly onUpdate: (agregado: Agregado) => void;
+  /** Save handlers settle before the editor closes (#1009 S3): a rejected
+   * save keeps the editor open with the draft intact. */
+  readonly onCreate: (agregado: Agregado) => void | Promise<void>;
+  readonly onUpdate: (agregado: Agregado) => void | Promise<void>;
   readonly onDelete?: (id: string) => void;
   readonly canMutate?: boolean;
   readonly openAgregadoId?: string | null;
@@ -159,6 +161,7 @@ export function AgregadosScreen({
     setEditingId(null);
     setEditorTab('general');
     setError(null);
+    setSaveFailed(false);
     setModalOpen(true);
     seededEditIdRef.current = 'new';
   };
@@ -169,13 +172,16 @@ export function AgregadosScreen({
     setEditingId(item.id);
     setEditorTab('general');
     setError(null);
+    setSaveFailed(false);
     setModalOpen(true);
     seededEditIdRef.current = item.id;
   };
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setError(null);
+    setSaveFailed(false);
 
     if (!draft.code.trim()) {
       setError('El código es obligatorio.');
@@ -197,13 +203,24 @@ export function AgregadosScreen({
       return;
     }
 
-    if (editingId) {
-      onUpdate(draftToAgregado(editingId, draft));
-    } else {
-      const newId = `agr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      onCreate(draftToAgregado(newId, draft));
-    }
-    forceCloseEditor();
+    // #1009 S3: the save settles BEFORE the editor closes — a rejected save
+    // keeps the editor open with the draft intact (parity with Muebles #497).
+    setSaving(true);
+    void (async () => {
+      try {
+        if (editingId) {
+          await onUpdate(draftToAgregado(editingId, draft));
+        } else {
+          const newId = `agr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          await onCreate(draftToAgregado(newId, draft));
+        }
+        setSaving(false);
+        forceCloseEditor();
+      } catch {
+        setSaving(false);
+        setSaveFailed(true);
+      }
+    })();
   };
 
   const [view3dItem, setView3dItem] = useState<Agregado | null>(null);
@@ -213,6 +230,9 @@ export function AgregadosScreen({
   const deleteTarget = confirmDeleteId
     ? (agregados.find((a) => a.id === confirmDeleteId) ?? null)
     : null;
+  // S3 #1009: save-in-flight feedback + rejected-save surface.
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const inlineEditMode = modalOpen;
 
@@ -254,6 +274,7 @@ export function AgregadosScreen({
               type="button"
               className="btn"
               onClick={closeModal}
+              disabled={saving}
               data-testid="agregado-editor-cancel"
             >
               Cancelar
@@ -262,9 +283,10 @@ export function AgregadosScreen({
               type="submit"
               className="btn btn--primary"
               form={formId}
+              disabled={saving}
               data-testid="agregado-save-btn"
             >
-              Guardar
+              {saving ? 'Guardando…' : 'Guardar'}
             </button>
           </>
         }
@@ -299,6 +321,7 @@ export function AgregadosScreen({
           <AgregadoEditorForm
             formId={formId}
             error={error}
+            saveFailed={saveFailed}
             onSubmit={onSubmit}
             editorTab={editorTab as AgregadoEditorTab}
             setEditorTab={setEditorTab as Dispatch<SetStateAction<AgregadoEditorTab>>}

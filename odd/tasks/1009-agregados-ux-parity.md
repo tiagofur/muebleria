@@ -59,6 +59,17 @@ si la aceptación completa (incl. browser proof) está verde. Merge humano.
   estable mientras se edita el código (agregados), título con nombre
   (ModulesScreen test actualizado), creación sin identidad. Evidencia: suite
   ui 2086/2086, typecheck 7/7.
-- [ ] S3 → PR 3 (apilado)
+- [x] S3 → PR 3 (rama `feat/1009-agregados-ux-s3`, apilada sobre S2). El save
+  ahora se espera ANTES de cerrar el editor (paridad #497): rechazo mantiene
+  el editor abierto con el draft intacto + banner «No se pudo guardar…»
+  (`agregado-editor-save-error`); Guardar busy/disabled «Guardando…» y
+  Cancelar bloqueado durante el vuelo; props onCreate/onUpdate ahora
+  `void | Promise<void>` (el store ya devolvía la promesa de saveAndToast —
+  el bug era el submit fire-and-forget). Nota de alcance: agregados no lleva
+  token de versión/If-Match (contrato #497 de Module solamente), así que no
+  existe VERSION_CONFLICT acá; el banner es el genérico de fallo de guardado.
+  Evidencia: suite ui 2089/2089, typecheck 7/7; tests con promesa diferida
+  (fallo y éxito). Trampa hallada: el draft persiste en sessionStorage entre
+  tests → afterEach limpia storage.
 - [ ] S4 → PR 4 (apilado)
 - [ ] S5 → PR 5 (apilado)
