@@ -106,4 +106,35 @@ describe('draftToComponent', () => {
     const entity = draftToComponent('c-new', draft);
     expect(entity.perforations).toBeUndefined();
   });
+
+  it('maps canOpen and maxOpeningAngleDeg from draft to component entity (#529)', () => {
+    const draft: ComponentDraft = {
+      code: 'COM-DOOR',
+      name: 'Puerta Derecha',
+      placement: 'puerta',
+      lengthMm: 717,
+      widthMm: 296,
+      thicknessMm: 18,
+      lengthFormula: '',
+      widthFormula: '',
+      xFormula: '',
+      yFormula: '',
+      zFormula: '',
+      rotateX: null,
+      rotateY: null,
+      rotateZ: null,
+      edgeL1: true,
+      edgeL2: true,
+      edgeW1: true,
+      edgeW2: true,
+      optionRoles: 'FRENTE',
+      notes: '',
+      active: true,
+      canOpen: true,
+      maxOpeningAngleDeg: '95',
+    };
+    const entity = draftToComponent('c-door', draft);
+    expect(entity.canOpen).toBe(true);
+    expect(entity.maxOpeningAngleDeg).toBe(95);
+  });
 });

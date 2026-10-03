@@ -269,4 +269,25 @@ describe('HardwareCatalog — Vista 3D (F069/F080)', () => {
     );
     expect(screen.queryByTestId('hardware-form-part-finishes')).toBeNull();
   });
+
+  it('exposes maxOpeningAngleDeg input when shape is hinge and saves it (#529)', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = setup();
+    await openEditWithShape(user);
+
+    const shapeSelect = screen.getByTestId('hardware-form-shape') as HTMLSelectElement;
+    await user.selectOptions(shapeSelect, 'hinge');
+
+    const angleInput = screen.getByTestId('hardware-form-max-opening-angle') as HTMLInputElement;
+    expect(angleInput).toBeTruthy();
+    await user.clear(angleInput);
+    await user.type(angleInput, '110');
+    expect(angleInput.value).toBe('110');
+
+    await user.click(screen.getByRole('button', { name: /guardar/i }));
+    expect(onUpdate).toHaveBeenCalledWith(
+      'hw-1',
+      expect.objectContaining({ maxOpeningAngleDeg: '110' }),
+    );
+  });
 });

@@ -157,6 +157,64 @@ export function AgregadoEditorGeneralPanel({
             </div>
           </fieldset>
 
+          <fieldset className="catalog-form__fieldset" data-testid="agregado-kinematics-fieldset">
+            <legend className="catalog-form__legend">
+              Cinemática y Apertura (3D)
+            </legend>
+            <p className="catalog-form__hint">
+              Define el tipo de movimiento de presentación (abrir/cerrar) en Granete for SketchUp.
+              No altera BOM, despiece ni fabricación.
+            </p>
+            <div className="catalog-form__row">
+              <div className="catalog-form__field">
+                <label className="catalog-form__label" htmlFor={`${formId}-motion-type`}>
+                  Tipo de movimiento
+                </label>
+                <select
+                  id={`${formId}-motion-type`}
+                  className="catalog-form__input"
+                  value={draft.motionType}
+                  onChange={(e) =>
+                    setDraft((prev) => ({
+                      ...prev,
+                      motionType: e.target.value as AgregadoDraft['motionType'],
+                    }))
+                  }
+                  data-testid="agregado-field-motion-type"
+                >
+                  <option value="none">Sin movimiento (fijo)</option>
+                  <option value="rotate_left">Puerta batiente · Eje Izquierdo</option>
+                  <option value="rotate_right">Puerta batiente · Eje Derecho</option>
+                  <option value="translate">Cajón extraíble (deslizante)</option>
+                </select>
+              </div>
+
+              {draft.motionType === 'rotate_left' || draft.motionType === 'rotate_right' ? (
+                <div className="catalog-form__field">
+                  <label className="catalog-form__label" htmlFor={`${formId}-open-angle`}>
+                    Ángulo máx. de apertura (°)
+                  </label>
+                  <input
+                    id={`${formId}-open-angle`}
+                    type="number"
+                    className="catalog-form__input"
+                    value={draft.openAngleDeg}
+                    onChange={(e) =>
+                      setDraft((prev) => ({
+                        ...prev,
+                        openAngleDeg: Math.max(0, Math.min(180, Number(e.target.value) || 0)),
+                      }))
+                    }
+                    min={0}
+                    max={180}
+                    step={1}
+                    data-testid="agregado-field-open-angle"
+                  />
+                </div>
+              ) : null}
+            </div>
+          </fieldset>
+
           <div className="catalog-form__field">
             <label className="catalog-form__label" htmlFor={`${formId}-desc`}>
               Descripción

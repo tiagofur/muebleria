@@ -166,6 +166,10 @@ export interface ComponentDraft {
   optionRoles: string;
   notes: string;
   active: boolean;
+  /** Whether this component represents an opening front (door, flap) in presentation. */
+  canOpen?: boolean;
+  /** Maximum opening angle in degrees (e.g. 90, 110). Default 110. */
+  maxOpeningAngleDeg?: string;
   /**
    * Round-trip only — no CNC editor yet. Preserved so update does not wipe
    * existing perforations on the entity (C2).
@@ -198,6 +202,8 @@ export function emptyComponentDraft(): ComponentDraft {
     optionRoles: '',
     notes: '',
     active: true,
+    canOpen: false,
+    maxOpeningAngleDeg: '110',
   };
 }
 
@@ -207,6 +213,7 @@ const componentDraftRule = objectRule({
   lengthMm: numberRule, widthMm: numberRule, thicknessMm: numberRule,
   rotateX: nullableRule(numberRule), rotateY: nullableRule(numberRule), rotateZ: nullableRule(numberRule),
   edgeL1: booleanRule, edgeL2: booleanRule, edgeW1: booleanRule, edgeW2: booleanRule, active: booleanRule,
+  canOpen: optionalRule(booleanRule), maxOpeningAngleDeg: optionalRule(stringRule),
   perforations: optionalRule(arrayRule(objectRule({
     id: stringRule, relativePosition: objectRule({ xPercent: numberRule, yPercent: numberRule }), diameterMm: numberRule,
     depthMm: numberRule, type: enumRule('through', 'blind', 'dowel', 'shelf_pin', 'hinge_cup'),
@@ -259,6 +266,8 @@ export function componentToDraft(item: Component): ComponentDraft {
     optionRoles: item.optionRoles.join(', '),
     notes: item.notes ?? '',
     active: item.active,
+    canOpen: item.canOpen ?? (item.placement === 'puerta'),
+    maxOpeningAngleDeg: item.maxOpeningAngleDeg !== undefined ? String(item.maxOpeningAngleDeg) : '110',
     perforations: item.perforations,
   };
   return draft;

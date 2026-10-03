@@ -47,6 +47,11 @@ export type HardwareDraft = {
    * Null = no exact model associated (generic procedural preview).
    */
   visualAsset: HardwareVisualAssetBinding | null;
+  /**
+   * Maximum physical opening angle in degrees for kinematic hardware (e.g. 110, 95).
+   * Empty string or undefined = not specified / not rotational.
+   */
+  maxOpeningAngleDeg?: string;
 };
 
 export const emptyPartFinishes = (): { body: string; base: string; grip: string } => ({
@@ -74,6 +79,7 @@ export const emptyDraft = (): HardwareDraft => ({
   partFinishes: emptyPartFinishes(),
   machining: null,
   visualAsset: null,
+  maxOpeningAngleDeg: '',
 });
 
 export function toDraft(item: Hardware): HardwareDraft {
@@ -101,5 +107,6 @@ export function toDraft(item: Hardware): HardwareDraft {
     },
     machining: item.machining ?? null,
     visualAsset: item.visualAsset ? { ...item.visualAsset } : null,
+    maxOpeningAngleDeg: item.maxOpeningAngleDeg !== undefined ? String(item.maxOpeningAngleDeg) : '',
   };
 }

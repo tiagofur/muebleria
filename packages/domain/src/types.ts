@@ -207,6 +207,12 @@ export interface Hardware {
    * Omitted = no exact model associated (generic procedural preview).
    */
   readonly visualAsset?: HardwareVisualAssetBinding;
+  /**
+   * Maximum physical opening angle in degrees for kinematic hardware
+   * (e.g. hinges: 110, 95, 155, 170; lift flaps: 107). Omitted for
+   * non-rotational hardware (slides, pulls, legs).
+   */
+  readonly maxOpeningAngleDeg?: number;
 }
 
 /**
@@ -739,6 +745,10 @@ export interface Component {
   readonly rotateX?: number;
   readonly rotateY?: number;
   readonly rotateZ?: number;
+  /** Whether this component represents an opening front (door, flap) in presentation. */
+  readonly canOpen?: boolean;
+  /** Maximum opening angle in degrees (e.g. 90, 110). Default 110 for doors. */
+  readonly maxOpeningAngleDeg?: number;
 }
 
 export interface ModuleComponentInstance {
