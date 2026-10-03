@@ -257,6 +257,10 @@ export function StructureEditorComponentsPanel({
                   width={preview.width}
                   height={preview.height}
                   depth={preview.depth}
+                  resolvedHardwarePlacements={
+                    preview.resolvedHardwarePlacements
+                  }
+                  hardwareCatalog={catalogInput?.hardware}
                   testId="structure-components-3d-viewer"
                 />
               </div>

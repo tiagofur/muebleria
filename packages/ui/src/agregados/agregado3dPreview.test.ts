@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Component } from '@granete/domain';
+import type { Component, Hardware } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { DEFAULT_MODULE_FOOTPRINT_MM } from '../preview3d/project3dLayout';
 import { resolveAgregado3DPreview } from './agregado3dPreview';
@@ -59,6 +59,33 @@ const mockCatalogInput: Module3DCatalogInput = {
       optionIds: ['mat-1'],
     },
   ],
+};
+
+const jaladera: Hardware = {
+  id: 'hw-jal-1',
+  code: 'JAL-128',
+  name: 'Jaladera Barra 128',
+  unit: 'piece',
+  costPerUnit: 12,
+  active: true,
+  previewShape: 'bar-pull',
+  previewSizeMm: 128,
+  previewProjectionMm: 32,
+  previewColor: '#333333',
+};
+
+const tornilloCostOnly: Hardware = {
+  id: 'hw-torn-1',
+  code: 'TOR-4X30',
+  name: 'Tornillo 4x30',
+  unit: 'piece',
+  costPerUnit: 0.5,
+  active: true,
+};
+
+const catalogInputConHerrajes: Module3DCatalogInput = {
+  ...mockCatalogInput,
+  hardware: [jaladera, tornilloCostOnly],
 };
 
 function doorDraft(overrides?: Partial<AgregadoDraft>): AgregadoDraft {
@@ -130,5 +157,86 @@ describe('resolveAgregado3DPreview', () => {
     expect(res.width).toBe(DEFAULT_MODULE_FOOTPRINT_MM.width);
     expect(res.height).toBe(DEFAULT_MODULE_FOOTPRINT_MM.height);
     expect(res.depth).toBe(DEFAULT_MODULE_FOOTPRINT_MM.depth);
+  });
+
+  it('resolves per-piece hardware placements linked to their board part', () => {
+    const draft = doorDraft({
+      components: [
+        {
+          componentId: 'c-puerta',
+          quantity: 1,
+          placementOverride: 'puerta',
+          overrides: {
+            hardwarePlacements: [
+              {
+                hardwareId: 'hw-jal-1',
+                anchorFace: 'front',
+                relativePosition: { xMm: 300, yMm: 360 },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const res = resolveAgregado3DPreview(draft, catalogInputConHerrajes);
+
+    expect(res.error).toBeNull();
+    expect(res.parts).toHaveLength(1);
+    expect(res.resolvedHardwarePlacements).toHaveLength(1);
+
+    const placement = res.resolvedHardwarePlacements[0]!;
+    // Links to the door part produced by the draft component ('' engine prefix).
+    expect(placement.componentInstanceId).toBe('c-puerta-copy-0');
+    expect(placement.hardwareId).toBe('hw-jal-1');
+    // Front face: +Y normal, standoff = previewProjectionMm.
+    expect(placement.localNormal).toEqual([0, 1, 0]);
+    expect(placement.standoffMm).toBe(32);
+    // Board-local mm: X along the width, Y on the 18mm face, Z along the length.
+    expect(placement.localPosition).toEqual([300, 18, 360]);
+  });
+
+  it('renders nothing for cost-only or missing placement hardware (VH-09)', () => {
+    const draftWith = (hardwareId: string) =>
+      doorDraft({
+        components: [
+          {
+            componentId: 'c-puerta',
+            quantity: 1,
+            placementOverride: 'puerta',
+            overrides: {
+              hardwarePlacements: [
+                {
+                  hardwareId,
+                  anchorFace: 'front',
+                  relativePosition: { xMm: 300, yMm: 360 },
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+    const costOnly = resolveAgregado3DPreview(
+      draftWith('hw-torn-1'),
+      catalogInputConHerrajes,
+    );
+    expect(costOnly.error).toBeNull();
+    expect(costOnly.parts).toHaveLength(1);
+    expect(costOnly.resolvedHardwarePlacements).toEqual([]);
+
+    const missing = resolveAgregado3DPreview(
+      draftWith('hw-inexistente'),
+      catalogInputConHerrajes,
+    );
+    expect(missing.error).toBeNull();
+    expect(missing.resolvedHardwarePlacements).toEqual([]);
+  });
+
+  it('returns empty placements when no piece carries them', () => {
+    const res = resolveAgregado3DPreview(doorDraft(), catalogInputConHerrajes);
+
+    expect(res.error).toBeNull();
+    expect(res.resolvedHardwarePlacements).toEqual([]);
   });
 });

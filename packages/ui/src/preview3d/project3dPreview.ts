@@ -472,7 +472,8 @@ export function resolveModuleAssemblies(
  * placement/role); out of scope here.
  */
 export function resolveModuleHardwarePlacements(
-  module: Module,
+  /** Pick: synthetic drafts (agregado/structure editor previews) pass only these fields. */
+  module: Pick<Module, 'structureId' | 'components' | 'agregados'>,
   boardParts: readonly ResolvedBoardPart[],
   hardwareCatalog: readonly Hardware[],
   /**

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Agregado, Component } from '@granete/domain';
+import type { Agregado, Component, Hardware } from '@granete/domain';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import { resolveStructure3DPreview } from './structure3dPreview';
 import { emptyStructureDraft, type StructureDraft } from './structureDraft';
@@ -76,6 +76,31 @@ const mockCatalogInput: Module3DCatalogInput = {
     },
   ],
 };
+
+const jaladera: Hardware = {
+  id: 'hw-jal-1',
+  code: 'JAL-128',
+  name: 'Jaladera Barra 128',
+  unit: 'piece',
+  costPerUnit: 12,
+  active: true,
+  previewShape: 'bar-pull',
+  previewSizeMm: 128,
+  previewProjectionMm: 32,
+  previewColor: '#333333',
+};
+
+function placementOn(hardwareId: string) {
+  return {
+    hardwarePlacements: [
+      {
+        hardwareId,
+        anchorFace: 'front' as const,
+        relativePosition: { xMm: 400, yMm: 350 },
+      },
+    ],
+  };
+}
 
 describe('resolveStructure3DPreview with Agregados', () => {
   it('resolves stacked agregados into 3D board parts with distinct Z coordinates', () => {
@@ -180,5 +205,115 @@ describe('resolveStructure3DPreview with Agregados', () => {
     expect(part.rotateX).toBe(45);
     expect(part.rotateY).toBe(90);
     expect(part.rotateZ).toBe(0);
+  });
+
+  it('resolves hardware placements on structure components linked to their part', () => {
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST-JAL',
+      name: 'Estructura con Jaladera',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      components: [
+        {
+          componentId: 'c-frente',
+          quantity: 1,
+          overrides: placementOn('hw-jal-1'),
+        },
+      ],
+    };
+
+    const res = resolveStructure3DPreview(draft, {
+      ...mockCatalogInput,
+      hardware: [jaladera],
+    });
+
+    expect(res.error).toBeNull();
+    expect(res.parts).toHaveLength(1);
+    expect(res.resolvedHardwarePlacements).toHaveLength(1);
+
+    const placement = res.resolvedHardwarePlacements[0]!;
+    expect(placement.componentInstanceId).toBe('c-frente-copy-0');
+    expect(placement.hardwareId).toBe('hw-jal-1');
+    expect(placement.localNormal).toEqual([0, 1, 0]);
+    expect(placement.standoffMm).toBe(32);
+  });
+
+  it('resolves hardware placements carried by agregado components per unit', () => {
+    const baseComponent = mockAgregado.components?.[0];
+    if (!baseComponent) throw new Error('fixture mockAgregado sin componentes');
+    const agregadoConPlacements: Agregado = {
+      ...mockAgregado,
+      components: [
+        {
+          ...baseComponent,
+          overrides: {
+            ...baseComponent.overrides,
+            ...placementOn('hw-jal-1'),
+          },
+        },
+      ],
+    };
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST-CAJ-JAL',
+      name: 'Cajonera con Jaladeras',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      agregados: [
+        {
+          id: 'inst-1',
+          agregadoId: 'agr-cajones-3',
+          name: 'Columna de 3 Cajones',
+          quantity: 3,
+          layoutDirection: 'vertical',
+          gapMm: 3,
+          position: { zFormula: '100' },
+          dimensions: { widthFormula: 'W - 36', heightFormula: '600' },
+        },
+      ],
+    };
+
+    const res = resolveStructure3DPreview(draft, {
+      ...mockCatalogInput,
+      hardware: [jaladera],
+      agregados: [agregadoConPlacements],
+    });
+
+    expect(res.error).toBeNull();
+    expect(res.parts).toHaveLength(3);
+    // One jaladera per agregado unit, each linked to its own prefixed part.
+    expect(res.resolvedHardwarePlacements).toHaveLength(3);
+    expect(res.resolvedHardwarePlacements.map((p) => p.componentInstanceId)).toEqual([
+      'agr-agr-cajones-3-u0c-frente-copy-0',
+      'agr-agr-cajones-3-u1c-frente-copy-0',
+      'agr-agr-cajones-3-u2c-frente-copy-0',
+    ]);
+  });
+
+  it('renders nothing when the placement hardware is cost-only (VH-09)', () => {
+    const draft: StructureDraft = {
+      ...emptyStructureDraft(),
+      code: 'EST-COST',
+      name: 'Estructura Cost-Only',
+      widthMm: 800,
+      heightMm: 720,
+      depthMm: 500,
+      components: [
+        {
+          componentId: 'c-frente',
+          quantity: 1,
+          overrides: placementOn('hw-sin-forma'),
+        },
+      ],
+    };
+
+    const res = resolveStructure3DPreview(draft, mockCatalogInput);
+
+    expect(res.error).toBeNull();
+    expect(res.parts).toHaveLength(1);
+    expect(res.resolvedHardwarePlacements).toEqual([]);
   });
 });
