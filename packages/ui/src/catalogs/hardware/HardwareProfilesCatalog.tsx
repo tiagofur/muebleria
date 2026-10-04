@@ -12,9 +12,10 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import type { Hardware } from '@granete/domain';
-import { Eye, EyeOff, Layers, Pencil, Plus, SearchX } from 'lucide-react';
+import { suggestDuplicateCode, type Hardware } from '@granete/domain';
+import { Copy, Eye, EyeOff, Layers, Pencil, Plus, SearchX } from 'lucide-react';
 import {
+  ConfirmDialog,
   EmptyState,
   PageHeader,
   PageToolbar,
@@ -97,6 +98,8 @@ export function HardwareProfilesCatalog({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingVersion, setEditingVersion] = useState<number>(1);
+  // K2 #1032: destructive actions ask first; the row button only requests.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<HardwareProfileRow | null>(null);
   const [draft, setDraft] = useState<HardwareProfileDraft>(emptyProfileDraft());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -131,6 +134,21 @@ export function HardwareProfilesCatalog({
     setEditingId(row.id);
     setEditingVersion(row.version);
     setDraft(toProfileDraft(row));
+    setError(null);
+    setModalOpen(true);
+  };
+
+  // K2 #1032: duplicate via the create flow — prefilled, disambiguated code;
+  // the copy is a NEW profile (no version history carried over).
+  const startDuplicate = (row: HardwareProfileRow) => {
+    const next = {
+      ...toProfileDraft(row),
+      code: suggestDuplicateCode(row.code, profiles.map((p) => p.code)),
+      name: `${row.name} (copia)`,
+    };
+    setEditingId(null);
+    setEditingVersion(1);
+    setDraft(next);
     setError(null);
     setModalOpen(true);
   };
@@ -360,12 +378,21 @@ export function HardwareProfilesCatalog({
                       <Pencil size={14} strokeWidth={1.5} aria-hidden />
                       Editar
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      aria-label={`Duplicar ${row.code}`}
+                      onClick={() => startDuplicate(row)}
+                    >
+                      <Copy size={14} strokeWidth={1.5} aria-hidden />
+                      Duplicar
+                    </button>
                     {row.active ? (
                       <button
                         type="button"
                         className="btn btn--small btn--ghost btn--danger"
                         aria-label={`Desactivar ${row.code}`}
-                        onClick={() => onDeactivate(row.id, row.version)}
+                        onClick={() => setConfirmDeactivate(row)}
                       >
                         <EyeOff size={14} strokeWidth={1.5} aria-hidden />
                         Desactivar
@@ -391,6 +418,22 @@ export function HardwareProfilesCatalog({
         saving={saving}
         onSubmit={handleSubmit}
         onClose={closeModal}
+      />
+
+      <ConfirmDialog
+        open={confirmDeactivate != null}
+        onClose={() => setConfirmDeactivate(null)}
+        title="Desactivar perfil de herrajes"
+        message={
+          confirmDeactivate
+            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? El perforado de esta pieza volverá a la regla general de la fábrica.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        dataTestId="hardware-profile-deactivate-confirm"
+        onConfirm={() => {
+          if (confirmDeactivate) onDeactivate(confirmDeactivate.id, confirmDeactivate.version);
+        }}
       />
     </section>
   );

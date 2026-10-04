@@ -18,9 +18,11 @@ import {
   filterMaterialBoardsByCategory,
   isValidPreviewColor,
   normalizePreviewColor,
+  suggestDuplicateCode,
   UNCATEGORIZED_FILTER,
 } from '@granete/domain';
 import {
+  Copy,
   Eye,
   EyeOff,
   Layers,
@@ -30,6 +32,7 @@ import {
 } from 'lucide-react';
 import {
   CatalogImage,
+  ConfirmDialog,
   EmptyState,
   formatMoneyDisplay,
   PageHeader,
@@ -150,6 +153,8 @@ export function MaterialsCatalog({
   const [error, setError] = useState<string | null>(null);
   // K1 #1032: save-in-flight flag shared by the form modal footer.
   const [saving, setSaving] = useState(false);
+  // K2 #1032: destructive actions ask first; the row button only requests.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<MaterialBoard | null>(null);
   const [edgeCreateOpen, setEdgeCreateOpen] = useState(false);
   const [tileSuggestBusy, setTileSuggestBusy] = useState(false);
   const [tileSuggestMsg, setTileSuggestMsg] = useState<string | null>(null);
@@ -280,6 +285,24 @@ export function MaterialsCatalog({
   const startEdit = (item: MaterialBoard) => {
     const next = toDraft(item);
     setEditingId(item.id);
+    setDraft(next);
+    setError(null);
+    setPreview3dOpen(hasPreview3dConfig(next));
+    setTileSuggestMsg(null);
+    setEdgeCreateOpen(false);
+    setModalOpen(true);
+  };
+
+  // K2 #1032: duplicate via the create flow — the form opens prefilled with
+  // the source values and a disambiguated code; saving creates a new item.
+  const startDuplicate = (item: MaterialBoard) => {
+    const next = toDraft(item);
+    next.code = suggestDuplicateCode(
+      item.code,
+      materials.map((m) => m.code),
+    );
+    next.name = `${item.name} (copia)`;
+    setEditingId(null);
     setDraft(next);
     setError(null);
     setPreview3dOpen(hasPreview3dConfig(next));
@@ -628,12 +651,21 @@ export function MaterialsCatalog({
                         <Pencil size={14} strokeWidth={1.5} aria-hidden />
                         Editar
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn--small btn--ghost"
+                        aria-label={`Duplicar ${row.code}`}
+                        onClick={() => startDuplicate(row)}
+                      >
+                        <Copy size={14} strokeWidth={1.5} aria-hidden />
+                        Duplicar
+                      </button>
                       {row.active ? (
                         <button
                           type="button"
                           className="btn btn--small btn--ghost btn--danger"
                           aria-label={`Desactivar ${row.code}`}
-                          onClick={() => onDeactivate(row.id)}
+                          onClick={() => setConfirmDeactivate(row)}
                         >
                           <EyeOff size={14} strokeWidth={1.5} aria-hidden />
                           Desactivar
@@ -707,6 +739,22 @@ export function MaterialsCatalog({
         onCreated={(newId) => {
           setDraft((d) => ({ ...d, defaultEdgeBandId: newId }));
           setEdgeCreateOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDeactivate != null}
+        onClose={() => setConfirmDeactivate(null)}
+        title="Desactivar material"
+        message={
+          confirmDeactivate
+            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? Los muebles y cotizaciones que lo usan conservan su copia; podés reactivarlo cuando quieras.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        dataTestId="material-deactivate-confirm"
+        onConfirm={() => {
+          if (confirmDeactivate) onDeactivate(confirmDeactivate.id);
         }}
       />
     </section>
