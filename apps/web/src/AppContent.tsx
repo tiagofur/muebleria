@@ -196,7 +196,6 @@ import {
   PageLoading,
   buildProductionOrderReadiness,
   type CommandPaletteItem,
-  type SurveyHandlers,
   type ProjectOverviewNav,
   type CuttingOutputTargetView,
 } from '@granete/ui';
@@ -205,7 +204,6 @@ import {
   LocalStorageWorkspaceRepository,
   breakdownFromApi,
   createSeedWorkspace,
-  type SiteSurveyView,
   GraneteApiClient,
 } from '@granete/storage';
 import type {
