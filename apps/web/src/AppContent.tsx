@@ -117,7 +117,6 @@ import {
   type WarehouseProjectInput,
   releaseAuthorityOf,
   releaseBomItemsToProjectItems,
-  completeInstallation,
   buildMaterialRequirements,
   materializeRequirements,
   reserveProjectMaterials,
