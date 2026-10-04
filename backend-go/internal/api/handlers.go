@@ -2,13 +2,10 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
@@ -18,103 +15,6 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
-
-// actorCanViewCosts resolves COST-01/COST-02 for the request actor (F039 + F044).
-func (s *Server) actorCanViewCosts(r *http.Request) bool {
-	roles := actorRoles(claimsFromRequest(r))
-	ws, err := s.Store.GetWorkshopSettings(r.Context())
-	flag := false
-	if err == nil {
-		flag = ws.VendedorCanViewCosts
-	}
-	return domain.AnyRole(roles, func(r domain.UserRole) bool {
-		return domain.RoleCanViewCosts(r, flag)
-	})
-}
-
-// maxJSONBodyBytes caps request bodies to avoid OOM from huge payloads (issue #20).
-const maxJSONBodyBytes = 1 << 20 // 1 MiB
-
-type Server struct {
-	Store          Store
-	JWTSecret      string
-	allowedOrigins []string
-	rateLimitRPS   float64
-	rateLimitBurst int
-	// MediaDir filesystem root for catalog images (F040). Empty disables upload.
-	MediaDir string
-	// Tokens mints and validates ver5 credentials under the exact HS256 policy
-	// (#460). When nil, a single-key authority is derived lazily from JWTSecret
-	// (tests and minimal embedders); production always sets it from config so
-	// issuer/keyring come from the environment.
-	Tokens *auth.Authority
-	// RefreshCredentials is configured from the independent
-	// REFRESH_TOKEN_PEPPER. Production refuses to boot without it.
-	RefreshCredentials *auth.RefreshCredentials
-	// WebRefreshCookieInsecureLocalDev drops the Secure attribute from the Web
-	// refresh cookie (#460 SEC-4A). Zero value = Secure (fail-closed default);
-	// only config may opt local dev/gates out, and production can never.
-	WebRefreshCookieInsecureLocalDev bool
-	// MediaTokens signs/validates resource-scoped media read grants under the
-	// dedicated MEDIA_SIGNING_KEY (#460 SEC-3). Nil fails closed: a server
-	// built without one neither mints nor accepts media grants.
-	MediaTokens *auth.MediaAuthority
-	// hardwareAssetLimits holds the configurable per-representation byte caps
-	// for hardware 3D asset uploads (#667 M1); nil = package defaults.
-	hardwareAssetLimits map[domain.HardwareAssetRepresentation]int64
-	// hardwareAssetUnlink is a TEST seam over the collector's file removal:
-	// when set it replaces removeHardwareAssetPath so regressions can stop
-	// the collector inside its critical section. nil in production.
-	hardwareAssetUnlink func(ownerOrgID, storageKey string) error
-	// MFASecrets encrypts TOTP secrets and keys recovery verifiers under the
-	// dedicated MFA_ENCRYPTION_KEYS keyring (#460 SEC-7). Nil fails closed:
-	// every MFA endpoint refuses to operate, and step-up-gated commands stay
-	// blocked — no plaintext fallback ever exists.
-	MFASecrets        *auth.MFASecrets
-	mfaAttemptLimiter *userRateLimiter
-	authorityOnce     sync.Once
-	lazyAuthority     *auth.Authority
-}
-
-func NewServer(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int) *Server {
-	return &Server{
-		Store:             store,
-		JWTSecret:         jwtSecret,
-		allowedOrigins:    allowedOrigins,
-		rateLimitRPS:      rateLimitRPS,
-		rateLimitBurst:    rateLimitBurst,
-		mfaAttemptLimiter: newUserRateLimiter(mfaAttemptEvery, mfaAttemptBurst),
-	}
-}
-
-// NewServerWithMedia is NewServer plus media storage directory (F040).
-func NewServerWithMedia(store Store, jwtSecret string, allowedOrigins []string, rateLimitRPS float64, rateLimitBurst int, mediaDir string) *Server {
-	s := NewServer(store, jwtSecret, allowedOrigins, rateLimitRPS, rateLimitBurst)
-	s.MediaDir = mediaDir
-	return s
-}
-
-// tokenAuthority resolves the minting/validation authority. A server built
-// with only a secret gets the implicit single-key ring under the legacy kid,
-// matching the default config of a deployment without JWT_KEYRING.
-func (s *Server) tokenAuthority() *auth.Authority {
-	s.authorityOnce.Do(func() {
-		if s.Tokens != nil {
-			s.lazyAuthority = s.Tokens
-			return
-		}
-		keyring, err := auth.SingleKeyKeyring(s.JWTSecret)
-		if err != nil {
-			panic("auth: invalid server JWT secret: " + err.Error())
-		}
-		authority, err := auth.NewAuthority(keyring, "")
-		if err != nil {
-			panic("auth: building token authority: " + err.Error())
-		}
-		s.lazyAuthority = authority
-	})
-	return s.lazyAuthority
-}
 
 // sessionClientType maps the login transport to the registry client type.
 func sessionClientType(transport string) domain.SessionClientType {
@@ -268,75 +168,6 @@ func setAuthExpiryMetadata(response *LoginResponse, authStartedAt time.Time, tra
 }
 
 // Helpers para JSON
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithAPIError(w, code, defaultErrorCode(code), message, nil)
-}
-
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, err := json.Marshal(payload)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal server error"))
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	w.Write(response)
-}
-
-// respondWithInternalError logs the real error server-side via structured slog
-// but returns a generic message to the client. Internal error strings (DB driver text,
-// constraint names, etc.) must never reach the client (#5).
-func respondWithInternalError(w http.ResponseWriter, err error, op string) {
-	if total, denied := storage.RecordRLSDenial(err); denied {
-		slog.Warn("postgres authorization denied", "op", op, "sqlstate", "42501", "rls_denial_total", total, "request_id", requestIDFromWriter(w))
-		respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-		return
-	}
-	slog.Error("internal server error", "op", op, "error", err, "request_id", requestIDFromWriter(w))
-	respondWithError(w, http.StatusInternalServerError, "error interno del servidor")
-}
-
-// decodeJSONBody limits the request body and decodes JSON into dst.
-// On failure it writes an error response and returns false (issue #20).
-func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	return decodeJSONBodyWithPolicy(w, r, dst, false)
-}
-
-// decodeGeneratedJSONBody is the request-side counterpart of the generated
-// response validator. It is intentionally used only by migrated OpenAPI
-// operations so legacy endpoints keep their published compatibility surface.
-func decodeGeneratedJSONBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	return decodeJSONBodyWithPolicy(w, r, dst, true)
-}
-
-func decodeJSONBodyWithPolicy(w http.ResponseWriter, r *http.Request, dst any, rejectUnknown bool) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
-	dec := json.NewDecoder(r.Body)
-	if rejectUnknown {
-		dec.DisallowUnknownFields()
-	}
-	if err := dec.Decode(dst); err != nil {
-		var maxErr *http.MaxBytesError
-		if errors.As(err, &maxErr) {
-			respondWithError(w, http.StatusRequestEntityTooLarge, "request body too large")
-			return false
-		}
-		// EOF / unexpected EOF also map to invalid body.
-		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-			respondWithError(w, http.StatusBadRequest, "invalid request body")
-			return false
-		}
-		respondWithError(w, http.StatusBadRequest, "invalid request body")
-		return false
-	}
-	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		respondWithError(w, http.StatusBadRequest, "request body must contain exactly one JSON value")
-		return false
-	}
-	return true
-}
-
 // --- AUTH ---
 
 type loginCredentials struct {
@@ -390,135 +221,6 @@ func authTransportFromClaims(claims *auth.Claims) openapi.AuthTransport {
 		return openapi.AuthTransportSketchup
 	}
 	return openapi.AuthTransportWeb
-}
-
-// PublicUserDTO is the safe public representation of a user, guaranteeing
-// that internal secrets (such as password hashes) are never serialized (OC-005).
-// PublicUserDTO is the identity projection: roles live in the membership
-// (sent as the `roles` sibling in auth responses) and licensing in the
-// organization — users.role/users.license_* were dropped (000090).
-type PublicUserDTO struct {
-	ID            string               `json:"id"`
-	Email         string               `json:"email"`
-	Name          string               `json:"name"`
-	AccountStatus domain.AccountStatus `json:"account_status"`
-	PlatformAdmin bool                 `json:"platform_admin"`
-	CreatedAt     time.Time            `json:"created_at"`
-	UpdatedAt     time.Time            `json:"updated_at"`
-}
-
-func ToPublicUserDTO(u *domain.User) PublicUserDTO {
-	if u == nil {
-		return PublicUserDTO{}
-	}
-	return PublicUserDTO{
-		ID:            u.ID,
-		Email:         u.Email,
-		Name:          u.Name,
-		AccountStatus: u.AccountStatus,
-		PlatformAdmin: u.PlatformAdmin,
-		CreatedAt:     u.CreatedAt,
-		UpdatedAt:     u.UpdatedAt,
-	}
-}
-
-func ToPublicUserDTOs(users []domain.User) []PublicUserDTO {
-	if users == nil {
-		return []PublicUserDTO{}
-	}
-	out := make([]PublicUserDTO, len(users))
-	for i, u := range users {
-		out[i] = ToPublicUserDTO(&u)
-	}
-	return out
-}
-
-func toOpenAPIUser(u *domain.User) openapi.User {
-	created, updated := u.CreatedAt.UTC().Format(time.RFC3339Nano), u.UpdatedAt.UTC().Format(time.RFC3339Nano)
-	out := openapi.User{ID: u.ID, Email: u.Email, NormalizedEmail: u.NormalizedEmail, Name: u.Name, AccountStatus: openapi.AccountStatus(u.AccountStatus), PlatformAdmin: u.PlatformAdmin, CreatedAt: created, UpdatedAt: updated}
-	if u.EmailVerifiedAt != nil {
-		value := u.EmailVerifiedAt.UTC().Format(time.RFC3339Nano)
-		out.EmailVerifiedAt = &value
-	}
-	if u.LastLoginAt != nil {
-		value := u.LastLoginAt.UTC().Format(time.RFC3339Nano)
-		out.LastLoginAt = &value
-	}
-	return out
-}
-
-func toOpenAPIOrganization(o domain.Organization) openapi.OrganizationSummary {
-	license := openapi.License{Plan: string(o.LicensePlan), Status: string(domain.LicenseStatusAt(o.LicensePlan, o.LicenseExpiresAt, time.Now()))}
-	if o.LicenseExpiresAt != nil {
-		value := o.LicenseExpiresAt.UTC().Format(time.RFC3339Nano)
-		license.ExpiresAt = &value
-	}
-	return openapi.OrganizationSummary{ID: o.ID, Name: o.Name, Slug: o.Slug, Type: string(o.Type), Status: openapi.OrganizationStatus(o.Status), License: license}
-}
-
-type LicenseDTO = openapi.License
-type LoginResponse = openapi.LoginResponse
-type OrgSummaryDTO = openapi.OrganizationSummary
-type MembershipDTO = openapi.Membership
-
-func toOrgSummaryDTO(o domain.Organization) OrgSummaryDTO {
-	return toOpenAPIOrganization(o)
-}
-
-func toMembershipDTOs(list []domain.MembershipWithOrg) []MembershipDTO {
-	out := make([]MembershipDTO, 0, len(list))
-	for _, m := range list {
-		if m.Status != domain.MembershipStatusActive || m.Organization.Status != domain.OrganizationStatusActive {
-			continue
-		}
-		roles := make([]string, len(m.Roles))
-		for i, role := range m.Roles {
-			roles[i] = string(role)
-		}
-		out = append(out, MembershipDTO{
-			ID: m.ID, OrganizationID: m.OrganizationID, UserID: m.UserID,
-			Status: openapi.MembershipStatus(m.Status), Roles: roles,
-			JoinedAt:     m.JoinedAt.UTC().Format(time.RFC3339Nano),
-			Organization: toOrgSummaryDTO(m.Organization), Version: m.Version,
-		})
-	}
-	return out
-}
-
-func (s *Server) audit(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) {
-	// Best-effort: an audit write failure must not fail the request; it is
-	// logged server-side instead.
-	if details == nil {
-		details = map[string]interface{}{}
-	}
-	requestID := RequestIDFromContext(ctx)
-	if requestID != "" {
-		details["request_id"] = requestID
-	}
-	if err := s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
-		EventType:      eventType,
-		SchemaVersion:  1,
-		RequestID:      requestID,
-		ActorUserID:    actorUserID,
-		OrganizationID: organizationID,
-		IP:             ip,
-		Details:        details,
-	}); err != nil {
-		slog.Warn("security audit write failed", "event_type", eventType, "error", err)
-	}
-}
-
-func (s *Server) auditRequired(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) error {
-	if details == nil {
-		details = map[string]interface{}{}
-	}
-	requestID := RequestIDFromContext(ctx)
-	if requestID != "" {
-		details["request_id"] = requestID
-	}
-	return s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
-		EventType: eventType, SchemaVersion: 1, RequestID: requestID, ActorUserID: actorUserID, OrganizationID: organizationID, IP: ip, Details: details,
-	})
 }
 
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -1391,20 +1093,6 @@ type createProjectResponse struct {
 
 // respondWithProjectCreateError maps the create-path storage failures:
 // duplicate id → 409 (existing idempotent-create contract), invisible
-// customer → the neutral 404 also used for missing rows (never a cross-org
-// oracle, #712 §8), anything else → 500.
-func respondWithProjectCreateError(w http.ResponseWriter, err error) {
-	if isDuplicateKey(err) {
-		respondWithError(w, http.StatusConflict, "El registro ya existe")
-		return
-	}
-	if errors.Is(err, storage.ErrCustomerNotFound) {
-		respondWithError(w, http.StatusNotFound, "El cliente indicado no existe")
-		return
-	}
-	respondWithInternalError(w, err, "handler")
-}
-
 func isValidUUID(value string) bool {
 	value = strings.TrimSpace(value)
 	if len(value) != 36 {
@@ -2795,14 +2483,6 @@ func (s *Server) HandleProjectTemplateByID(w http.ResponseWriter, r *http.Reques
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
-}
-
-func rolesToStrings(roles []domain.UserRole) []string {
-	out := make([]string, len(roles))
-	for i, role := range roles {
-		out[i] = string(role)
-	}
-	return out
 }
 
 // HandleMe: GET /api/auth/me — current session snapshot for the shell:
