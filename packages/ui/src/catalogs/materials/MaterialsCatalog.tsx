@@ -448,11 +448,13 @@ export function MaterialsCatalog({
       {
         key: 'thickness',
         header: 'Espesor (mm)',
+        numeric: true,
         render: (r) => r.thicknessMm,
       },
       {
         key: 'dimensions',
         header: 'Medidas (mm)',
+        numeric: true,
         render: (r) => {
           const areaM2 = (r.lengthMm * r.widthMm) / 1_000_000;
           return `${r.lengthMm} × ${r.widthMm} (${areaM2.toFixed(2)} m²)`;
@@ -461,16 +463,19 @@ export function MaterialsCatalog({
       {
         key: 'boardPrice',
         header: 'Precio Hoja',
+        numeric: true,
         render: (r) => formatMoneyDisplay(r.boardPrice),
       },
       {
         key: 'waste',
         header: 'Merma (%)',
+        numeric: true,
         render: (r) => `${r.wastePercent}%`,
       },
       {
         key: 'cost',
         header: 'Costo/m²',
+        numeric: true,
         render: (r) => formatMoneyDisplay(r.costPerM2),
       },
       {

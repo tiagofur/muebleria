@@ -23,6 +23,12 @@
    and touch targets moved to common/dataTable.css (F1 UI 1c). Feature-scoped
    actions/details stay below. */
 
+/* K5 #1032: numeric columns read right-aligned with tabular figures. */
+.catalog-table th.catalog-table__num,
+.catalog-table td.catalog-table__num {
+  text-align: right;
+}
+
 /* Expand affordance — the row opens; its affordance is the chevron
    (design.md §4.2/§6.4). Decorative: the row itself is the control. */
 .catalog-table__expander-head {
@@ -369,11 +375,6 @@
   color: var(--text-primary);
 }
 
-.catalog-form__hint {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
 
 .catalog-form__nested {
   display: flex;
@@ -701,6 +702,7 @@
 
 .catalog-form__hint {
   margin: 0;
+  max-width: 72ch;
   font-size: var(--text-sm);
   color: var(--text-secondary);
 }

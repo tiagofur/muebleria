@@ -210,11 +210,13 @@ export function EdgesCatalog({
       {
         key: 'thickness',
         header: 'Espesor (mm)',
+        numeric: true,
         render: (r) => r.thicknessMm,
       },
       {
         key: 'cost',
         header: 'Costo/ML',
+        numeric: true,
         render: (r) => formatMoneyDisplay(r.costPerMl),
       },
       {
