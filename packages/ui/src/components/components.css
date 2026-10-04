@@ -717,14 +717,33 @@
   transition: stroke var(--duration-fast) var(--ease-out);
 }
 
+/* C2 #1019: invisible fat hit stroke behind each edge — the visible 10-unit
+   line renders ~14px on screen, under any pointer/touch standard. */
+.plank-edge-diagram__edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 30;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* Hover from the fat hit area styles the visible edge (adjacent sibling). */
+.plank-edge-diagram__edge-hit:hover + .plank-edge-diagram__edge {
+  stroke: var(--brand-400);
+}
+
 .plank-edge-diagram__edge:hover {
   stroke: var(--brand-400);
 }
 
+/* C2 #1019: real keyboard focus indicator. The previous drop-shadow(0 0 0 …)
+   painted nothing (and --shadow-focus is box-shadow syntax, invalid there).
+   Thickening + recoloring the stroke is unambiguous for a line-button. */
 .plank-edge-diagram__edge:focus-visible {
   outline: none;
-  /* Simulate the focus ring via a drop-shadow on the stroke. */
-  filter: drop-shadow(0 0 0 var(--shadow-focus));
+  stroke: var(--brand-600);
+  stroke-width: 18;
 }
 
 .plank-edge-diagram__edge--on {
