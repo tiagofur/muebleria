@@ -138,6 +138,29 @@ export function HardwareMachiningSection({
     });
   };
 
+  // Kind switch must replace the whole operation: fields the new kind does not
+  // apply (depthMm, innerDiameterMm) have to disappear — merging over the
+  // previous operation leaves them behind and validateMachiningProfile rejects
+  // a through_hole carrying depthMm (or a non-counterbore carrying innerØ).
+  const replaceOperation = (
+    partIndex: number,
+    opIndex: number,
+    next: MachiningOperation,
+  ) => {
+    setParts({
+      parts: parts.map((part, i) =>
+        i === partIndex
+          ? {
+              ...part,
+              operations: part.operations.map((op, j) =>
+                j === opIndex ? next : op,
+              ),
+            }
+          : part,
+      ),
+    });
+  };
+
   const removeOperation = (partIndex: number, opIndex: number) => {
     setParts({
       parts: parts.map((part, i) =>
@@ -245,7 +268,7 @@ export function HardwareMachiningSection({
                           value={op.kind}
                           onChange={(e) => {
                             const kind = e.target.value as MachiningOperationKind;
-                            updateOperation(partIndex, opIndex, {
+                            replaceOperation(partIndex, opIndex, {
                               ...newOperation(kind),
                               id: op.id,
                               label: op.label,
