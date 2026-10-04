@@ -271,7 +271,8 @@ describe('catalogStore — materials', () => {
     try {
       const store = createCatalogStore({ deps });
       store.getState().setCatalog(seedCatalog());
-      store.getState().createMaterial(materialDraft);
+      // K1 #1032: the rejection surfaces to the caller — accept it here.
+      store.getState().createMaterial(materialDraft).catch(() => {});
       await flush();
       expect(toasts.find((t) => t.type === 'error')).toBeDefined();
       expect(toasts.find((t) => t.type === 'success')).toBeUndefined();
@@ -297,7 +298,7 @@ describe('catalogStore — edges', () => {
       costPerMl: 5,
       previewColor: '',
       notes: '',
-    });
+    }).catch(() => {});
     expect(id).toBe('edge-1');
     expect(store.getState().catalog!.edges.some((e) => e.id === 'edge-1')).toBe(true);
   });
@@ -1128,6 +1129,7 @@ describe('catalogStore — F116 bugfixes', () => {
     const store = createCatalogStore({ deps: failing.deps });
     store.getState().setCatalog(seedCatalog());
 
+    // K1 #1032: the rejection surfaces to the caller — accept it here.
     store.getState().createEdge({
       code: 'EDGE-X',
       name: 'Edge X',
@@ -1135,7 +1137,7 @@ describe('catalogStore — F116 bugfixes', () => {
       costPerMl: 10,
       notes: '',
       previewColor: '',
-    });
+    }).catch(() => {});
     await flush();
 
     const messages = failing.toasts.map((t) => t.message);
@@ -1236,7 +1238,9 @@ describe('catalogStore — save serialization (P1-4)', () => {
     const store = createCatalogStore({ deps });
     store.getState().setCatalog(seedCatalog());
 
-    store.getState().createMaterial(materialDraft);
+    // K1 #1032: createMaterial surfaces the rejection to the caller — the
+    // fire-and-forget queue exercise must accept it explicitly.
+    store.getState().createMaterial(materialDraft).catch(() => {});
     await new Promise((r) => setTimeout(r, 0));
     store.getState().createMaterial({ ...materialDraft, code: 'MAT-NEW-2' });
     await new Promise((r) => setTimeout(r, 0));
@@ -1364,7 +1368,8 @@ describe('catalogStore — save serialization (P1-4)', () => {
       store.getState().setCatalog(seedCatalog());
 
       // 1. A starts a write and its response is held pending
-      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' });
+      // (K1 #1032: its eventual rejection surfaces to the caller — accepted here).
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' }).catch(() => {});
       expect(callCount).toBe(1);
 
       // 2. B applies a different change and is queued
@@ -1420,7 +1425,8 @@ describe('catalogStore — save serialization (P1-4)', () => {
       const store = createCatalogStore({ deps });
       store.getState().setCatalog(seedCatalog());
 
-      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' });
+      // K1 #1032: the rejection surfaces to the caller — accept it here.
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-FAIL-A' }).catch(() => {});
       const bPromise = store.getState().createHardware({
         code: 'HW-B',
         name: 'Hardware B',
@@ -1468,7 +1474,9 @@ describe('catalogStore — save serialization (P1-4)', () => {
       const store = createCatalogStore({ deps });
       store.getState().setCatalog(seedCatalog());
 
-      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' });
+      // K1 #1032: the post-logout ContextInvalidated rejection surfaces to
+      // the caller — the silence after logout is exactly what's under test.
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' }).catch(() => {});
 
       // User logs out before rejection
       useWorkspaceStore.setState({ session: null });
@@ -1499,7 +1507,9 @@ describe('catalogStore — save serialization (P1-4)', () => {
       const store = createCatalogStore({ deps });
       store.getState().setCatalog(seedCatalog());
 
-      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' });
+      // K1 #1032: the post-switch ContextInvalidated rejection is accepted
+      // here — not overwriting the new org catalog is what's under test.
+      store.getState().createMaterial({ ...materialDraft, code: 'MAT-A' }).catch(() => {});
 
       // Org switch happens before rejection
       const newOrgCatalog: Catalog = {
