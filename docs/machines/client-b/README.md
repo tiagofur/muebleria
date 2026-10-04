@@ -24,3 +24,11 @@
   producción completa con 9 tipos de piezas. Ver
   [`../kdt-xml-format.md`](../kdt-xml-format.md) para la especificación
   completa del formato.
+
+## Validación de campo (#1005 K4)
+
+- [`k4-field-validation/`](./k4-field-validation/) — protocolo de
+  import/readback con la Flexdrill 1200 real, valores esperados congelados
+  del fixture `fixture-kdt-field-001` (hashes verificados por CI contra el
+  código) y checklist/sign-off del operador. `NOT_TESTED` hasta ejecutar la
+  sesión.

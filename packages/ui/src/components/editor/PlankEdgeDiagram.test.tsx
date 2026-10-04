@@ -61,3 +61,21 @@ describe('PlankEdgeDiagram', () => {
     expect(svg?.getAttribute('aria-label') ?? '').toContain('480');
   });
 });
+
+describe('PlankEdgeDiagram — pointer hit area (C2 #1019)', () => {
+  const allOff = { L1: false, L2: false, W1: false, W2: false };
+
+  it('toggles the edge from the invisible fat hit stroke', () => {
+    const onToggle = vi.fn();
+    render(<PlankEdgeDiagram edges={allOff} onToggle={onToggle} lengthMm={720} widthMm={480} />);
+    fireEvent.click(screen.getByTestId('edge-hit-L1'));
+    expect(onToggle).toHaveBeenCalledWith('L1');
+  });
+
+  it('renders no hit strokes when disabled', () => {
+    render(
+      <PlankEdgeDiagram edges={allOff} onToggle={vi.fn()} lengthMm={720} widthMm={480} disabled />,
+    );
+    expect(screen.queryByTestId('edge-hit-L1')).toBeNull();
+  });
+});

@@ -6,9 +6,63 @@
 
 La BHX 050 es un destino CNC obligatorio y separado del DXF. Se reutiliza el [dossier de client-a/machine-a](../client-a/machine-a-bhx050.md) y su [checklist](../client-a/intake-checklist.md); no se crea otro registro de la instalación. El dossier confirma modelo/familia, no versión de software, formato exacto, tooling ni límites. HPP 250 es machine-b del mismo cliente: ni su perfil ni su evidencia sirven como homologación BHX; Client B sigue separado.
 
+### B1.3 Investigación de formato woodWOP-MPR (2026-10-03)
+
+El [`woodwop-mpr/`](./woodwop-mpr/) reúne la especificación **pública
+oficial** del formato — HOMAG *Description woodWOP-file* 9-080-42-7190-D00
+(2006), copias en el directorio — con el subconjunto de perforado citado
+campo por campo (`<100 \Werkstck\`, `<102 \BohrVert\`, `<103 \BohrHoriz\`),
+el mapeo Granete→MPR bajo la misma política de transformación de KDT, y el
+**generador candidato** (`packages/excel/src/machines/woodWopMpr/`): writer
++ lector independiente verificados por round-trip y correspondencia 1:1 con
+el fixture `fixture-kdt-field-001`. Es material `PUBLIC_REFERENCE_ONLY`:
+ordena la hipótesis para diferir contra las muestras reales del kit de
+recolección — no valida la instalación ni abre el adapter
+(`serializerImplemented` sigue `false`; el perfil sigue en r1).
+
 Reutilizar [perfiles/adapters](../../architecture/machine-profiles-and-adapters.md), [construcción/uniones](../../architecture/factory-construction-and-joinery.md) y [proyección DXF](../../manufacturing/dxf-cut-plan-projection.md). #351/PR #588 aporta contratos; #591/PR #592, selección persistida que excluyó sintaxis MPR; #503, artefactos/Ingeniería; #739, snapshot congelado; #789, etiquetas/cncDrawingRef. No reabrir bases cerradas ni crear otro registry, motor de uniones o store de selección. Inspeccionar las implementaciones vigentes antes de extenderlas.
 
 Objetivo: piezas y operaciones neutrales completas → plan de montajes de la instalación → adapter nativo versionado → programas/manifest → receptor OEM → validación independiente. **woodWOP/MPR es la familia inicial a contrastar**, no una aceptación ya comprobada. La integración no exige convertir DXF a MPR, no reconstruye operaciones desde CIRCLE y no es un generador NC/G-code genérico. La compilación final de macros al control queda en el software OEM confirmado.
+
+### B1.1 Kit de recolección (2026-10-03)
+
+El [`b1-woodwop-evidence-kit.md`](./b1-woodwop-evidence-kit.md) concreta la
+recolección de muestras: preparar con el woodWOP del cliente los programas
+del fixture congelado `fixture-kdt-field-001` (mismas 12 operaciones que el
+kit K4 de KDT — un fixture, dos receptores), sanitizar, y capturar
+versión/herramientas/caras/pinzas. Con la Muestra A/B aceptada arranca B2
+con evidencia primaria; sin muestras, B2 sigue bloqueado
+(`NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED`).
+
+### B1.2 Mapa de consumidores (actualizado 2026-10-03, post-#1005 K1-K3)
+
+El camino KDT generalizó el pipeline de mecanizado. Estado del seam para
+BHX:
+
+- **Seleccionable y persistido**: el catálogo ya tiene la máquina
+  `client-a-machine-a-bhx050`, el perfil `mpr-woodwop@r1` y el adapter
+  `woodwop-mpr@0.1.0` (`serializerImplemented: false`); la tupla valida y
+  persiste, la generación bloquea con `SERIALIZER_NOT_IMPLEMENTED`
+  (la tarjeta de settings lee «Bloqueado» — correcto hasta tener evidencia).
+- **Flujo de generación existente y fail-closed**:
+  `generateSelectedMachiningOutput` resuelve la tupla exacta y produce
+  bundles por pieza (manifest `by-piece`, provenance congelado, nombres
+  industriales deterministas). Hoy la frontera de capacidad sólo deja pasar
+  a la familia per-piece implementada (kdt) — abrir woodWOP es extender esa
+  frontera cuando el serializer exista, nunca un fallback.
+- **Entrada lista**: `ProjectDrillingData` con las seis caras bajo el marco
+  canónico (proyecciones axis-aligned de `hardwarePlacement`) +
+  `thicknessMm` cableado end-to-end desde el despiece y desde el snapshot
+  congelado de la liberación (mismo camino frozen-only que KDT: sin
+  autoridad canónica, cero archivos — nunca heurísticas F074 a una máquina).
+- **Fixture compartido**: `fixture-kdt-field-001` (3 programas, 12
+  operaciones, expectativas valor-por-valor y hashes pinned bajo test) es
+  el vector expected que el futuro serializer MPR debe reproducir en su
+  gramática — mismo fixture, dos receptores.
+- **Delta restante para B2** (nada de esto existe hoy): dimensiones del
+  perfil evidenciadas desde muestras reales (kit B1.1), serializer +
+  lector independiente (BHX02), el subconjunto que la evidencia habilite
+  (BHX03-BHX06) y el readback de instalación bajo #352 (BHX12).
 
 ## B2. Evidencia que falta y fuentes primarias
 

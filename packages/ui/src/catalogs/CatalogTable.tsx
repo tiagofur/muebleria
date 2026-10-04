@@ -12,6 +12,8 @@ export interface CatalogColumn<T> {
   readonly key: string;
   readonly header: string;
   readonly render: (row: T) => ReactNode;
+  /** K5 #1032: numeric cells align right with tabular figures (DESIGN.md 7.2). */
+  readonly numeric?: boolean;
 }
 
 export interface CatalogTableProps<T extends { readonly id: string }> {
@@ -64,7 +66,11 @@ export function CatalogTable<T extends { readonly id: string }>({
               </th>
             ) : null}
             {columns.map((col) => (
-              <th key={col.key} scope="col">
+              <th
+                key={col.key}
+                scope="col"
+                className={col.numeric ? 'catalog-table__num' : undefined}
+              >
                 {col.header}
               </th>
             ))}
@@ -131,7 +137,12 @@ export function CatalogTable<T extends { readonly id: string }>({
                     </td>
                   ) : null}
                   {columns.map((col) => (
-                    <td key={col.key}>{col.render(row)}</td>
+                    <td
+                      key={col.key}
+                      className={col.numeric ? 'catalog-table__num' : undefined}
+                    >
+                      {col.render(row)}
+                    </td>
                   ))}
                   {getRowActions ? (
                     <td className="catalog-table__actions-cell">

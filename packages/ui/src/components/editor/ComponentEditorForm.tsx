@@ -73,6 +73,8 @@ export type ComponentEditorFormProps = {
     readonly onSet: (side: BoardFace, profileId: string) => void | Promise<void>;
     readonly onRemove: (side: BoardFace) => void | Promise<void>;
   };
+  /** #1019 C1: the last save was rejected by the server; the draft is intact. */
+  readonly saveFailed?: boolean;
 };
 
 export function ComponentEditorForm({
@@ -96,6 +98,7 @@ export function ComponentEditorForm({
   constructionException,
   profileOptions,
   sideAssignments,
+  saveFailed = false,
 }: ComponentEditorFormProps): ReactNode {
   const roleCount = countOptionRoles(draft.optionRoles);
   const optionsMissing = roleCount === 0;
@@ -117,6 +120,19 @@ export function ComponentEditorForm({
         <p className="catalog-form__error" data-testid="form-error" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {saveFailed ? (
+        <div
+          className="catalog-form__error component-editor__save-error"
+          role="alert"
+          data-testid="component-editor-save-error"
+        >
+          <p>
+            No se pudo guardar en el servidor. Tus cambios siguen acá —
+            revisá tu conexión e intentá de nuevo.
+          </p>
+        </div>
       ) : null}
 
       <WorkspaceTabs

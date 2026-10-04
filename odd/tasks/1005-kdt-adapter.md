@@ -173,3 +173,37 @@
 
 Igual que la issue: validación física sin coordinación del taller, otros
 modelos KDT, G-code universal, retiro F074/J6 de #995.
+
+## K4 — Kit de validación de campo (implementado; sesión física pendiente del owner)
+
+- **Estado**: K1/K2/K3 MERGEADOS. K4 en dos mitades: el kit de campo
+  (código+docs, ESTE PR) y la sesión física en la Flexdrill 1200 del
+  client-b, coordinada por el owner — `NOT_TESTED` permanece hasta
+  entonces; nada se promueve por metadata.
+- **Fixture congelado** `fixture-kdt-field-001`
+  (`machines/kdt/fieldFixture.ts`): 2 piezas sintéticas (600×400×18), 12
+  agujeros, 3 programas (Face A / Face B / sólo-cantos) cubriendo TypeNo 1
+  desde ambas caras, TypeNo 2 en los cuatro cuadrantes y Z1 centrado.
+  Identidad sintética, timestamps fijos: bytes y manifests deterministas.
+- **Expectativas a mano** (`KDT_FIELD_EXPECTATIONS`): la tabla
+  valor-por-valor que el operador verifica en la máquina — y que los tests
+  confrontan contra la salida real del pipeline (atrapó un error mío de
+  cómputo Y1 en P02 antes de llegar al taller: exactamente su propósito).
+- **Hashes pinned** (`KDT_FIELD_PROGRAM_SHA256`) + paridad doc↔código por
+  test: `expected-values.md` cita los 3 sha256 y CI falla si el doc y el
+  fixture divergen (patrón 670-E: evidence head == code).
+- **Protocolo de campo** (`docs/machines/client-b/k4-field-validation/`):
+  README (pre-sesión, import I1-I7 sin corte productivo, clasificación
+  blocker/warning/unsupported, salida NOT_TESTED→VALIDATED/PARTIAL/
+  UNSUPPORTED, captura de las preguntas abiertas §15, sanitización),
+  `expected-values.md` (tablas por programa + hashes) y
+  `operator-checklist.md` (acta imprimible con sign-off).
+- Cross-link desde `docs/machines/client-b/README.md`.
+- **Incidente de entorno**: el worktree `1005-kdt-registration` se encontró
+  destruido (sin .git, vaciado) al arrancar K4 — los dos archivos nuevos
+  del fixture sobrevivieron y se recuperaron; todo lo demás estaba
+  mergeado. El nuevo worktree es `1005-kdt-field-kit`. Sin pérdida.
+- Verificación: excel 686 (4 nuevos: 3 programas exactos, valor-por-valor,
+  determinismo de hashes, paridad doc) · typecheck 7/7.
+- **Restante**: ejecutar la sesión (owner + taller), acta firmada, y el PR
+  de resultados que actualice dossier/matriz/perfil si corresponde.

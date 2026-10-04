@@ -70,20 +70,15 @@ export function createMaterialsActions(ctx: CatalogStoreCtx): MaterialsSlice {
         ...materialPreviewFinishFields(draft),
         active: true,
       };
-      if (!ctx.get().catalog) return;
-      ctx
-        .patch((c) => ({
-          ...c,
-          materials: [...c.materials, item],
-        }))
-        .then(
-          () => {
-            toast({ type: 'success', message: `✓ "${code}" creado` });
-          },
-          () => {
-            /* error toast already shown by patch */
-          },
-        );
+      // K1 #1032: return the settle promise — rejection propagates to the
+      // screen (the patch already toasted the error).
+      if (!ctx.get().catalog) return Promise.resolve();
+      return ctx.patch((c) => ({
+        ...c,
+        materials: [...c.materials, item],
+      })).then(() => {
+        toast({ type: 'success', message: `✓ "${code}" creado` });
+      });
     },
 
     updateMaterial: (id, draft) => {
@@ -110,7 +105,7 @@ export function createMaterialsActions(ctx: CatalogStoreCtx): MaterialsSlice {
           ? draft.previewTextureTileLengthMm
           : undefined;
 
-      ctx
+      return ctx
         .patch((c) => ({
           ...c,
           materials: c.materials.map((m) =>
@@ -139,25 +134,20 @@ export function createMaterialsActions(ctx: CatalogStoreCtx): MaterialsSlice {
               : m,
           ),
         }))
-        .then(
-          () => {
-            toast({ type: 'success', message: '✓ Cambios guardados' });
+        .then(() => {
+          toast({ type: 'success', message: '✓ Cambios guardados' });
 
-            // #138: warn about draft quotes that may still use previous catalog prices.
-            if (priceChanged) {
-              const draftCount = deps.getDraftProjectsCount();
-              if (draftCount > 0) {
-                toast({
-                  type: 'info',
-                  message: `Precio de material actualizado. ${draftCount} ${draftCount === 1 ? 'cotización' : 'cotizaciones'} en borrador usarán el nuevo catálogo al recalcular.`,
-                });
-              }
+          // #138: warn about draft quotes that may still use previous catalog prices.
+          if (priceChanged) {
+            const draftCount = deps.getDraftProjectsCount();
+            if (draftCount > 0) {
+              toast({
+                type: 'info',
+                message: `Precio de material actualizado. ${draftCount} ${draftCount === 1 ? 'cotización' : 'cotizaciones'} en borrador usarán el nuevo catálogo al recalcular.`,
+              });
             }
-          },
-          () => {
-            /* error toast already shown by patch */
-          },
-        );
+          }
+        });
     },
 
     setMaterialActive: (id, active) => {

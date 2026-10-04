@@ -425,14 +425,14 @@ export interface ShellViewCtx {
   readonly components: readonly Component[];
   readonly createAgregado: (item: Agregado) => void;
   readonly createAmbientCategory: (draft: CategoryDraft) => void;
-  readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => void;
+  readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => Promise<void>;
   readonly createCategory: (draft: CategoryDraft) => void;
   readonly createComponent: (draft: ComponentDraft) => void;
   readonly createCustomer: (draft: CustomerDraft) => void;
-  readonly createEdge: (draft: EdgeDraft) => string;
+  readonly createEdge: (draft: EdgeDraft) => Promise<string>;
   readonly createFromTemplate: (templateId: string, draft: ProjectDraft) => void;
   readonly createHardware: (draft: HardwareDraft) => void;
-  readonly createMaterial: (draft: MaterialDraft) => void;
+  readonly createMaterial: (draft: MaterialDraft) => Promise<void>;
   readonly createMaterialCategory: (draft: CategoryDraft) => void;
   readonly createModule: (draft: ModuleDraft) => Promise<void>;
   readonly createOptionGroup: (draft: OptionGroupDraft) => void;
@@ -454,6 +454,7 @@ export interface ShellViewCtx {
   readonly deleteTemplate: (templateId: string) => void;
   readonly dismissGuestImport: () => void;
   readonly duplicateAgregado: (id: string) => void;
+  readonly duplicateComponent: (id: string) => void;
   readonly duplicateModuleById: (id: string) => void;
   readonly duplicateProjectById: (id: string) => void;
   readonly duplicateWithScenarioB: (projectId: string, role: string, choiceId: string) => void;
@@ -657,15 +658,15 @@ export interface ShellViewCtx {
   readonly toggleComponentActive: (id: string) => void;
   readonly updateAgregado: (item: Agregado) => void;
   readonly updateAmbientCategory: (id: string, draft: CategoryDraft) => void;
-  readonly updateAmbientMaterial: (id: string, draft: AmbientMaterialDraft) => void;
+  readonly updateAmbientMaterial: (id: string, draft: AmbientMaterialDraft) => Promise<void>;
   readonly updateCategory: (id: string, draft: CategoryDraft) => void;
   readonly updateComponent: (id: string, draft: ComponentDraft) => void;
   readonly updateCustomer: (id: string, draft: CustomerDraft) => void;
-  readonly updateEdge: (id: string, draft: EdgeDraft) => void;
+  readonly updateEdge: (id: string, draft: EdgeDraft) => Promise<void>;
   readonly updateHardware: (id: string, draft: HardwareDraft) => void;
   readonly updateInstallationChecklist: (projectId: string, installationChecklist: readonly InstallationChecklistItem[]) => void;
   readonly updateKitchenLayout: (projectId: string, kitchenLayout: ProjectKitchenLayout) => void;
-  readonly updateMaterial: (id: string, draft: MaterialDraft) => void;
+  readonly updateMaterial: (id: string, draft: MaterialDraft) => Promise<void>;
   readonly updateMaterialCategory: (id: string, draft: CategoryDraft) => void;
   readonly updateMeasureDefaults: (projectId: string, defaults: { readonly inferior?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; readonly superior?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; readonly alto?: { readonly depth?: number | undefined; readonly height?: number | undefined; } | undefined; } | undefined) => void;
   readonly updateModule: (id: string, draft: ModuleDraft) => Promise<void>;
@@ -754,6 +755,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     deleteTemplate,
     dismissGuestImport,
     duplicateAgregado,
+    duplicateComponent,
     duplicateModuleById,
     duplicateProjectById,
     duplicateWithScenarioB,
@@ -2620,6 +2622,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreate={createComponent}
           onUpdate={updateComponent}
           onToggleActive={toggleComponentActive}
+          onDuplicate={duplicateComponent}
           openComponentId={routeComponentId}
           openComponentEditId={routeComponentEditId}
           onRequestEdit={(id) => onEntityEditRequest('components', id)}

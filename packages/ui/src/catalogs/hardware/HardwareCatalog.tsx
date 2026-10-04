@@ -15,10 +15,12 @@ import {
   ValidationError,
   countMachiningOperations,
   validateMachiningProfile,
+  suggestDuplicateCode,
 } from '@granete/domain';
 import type { HardwareAssetService } from '@granete/storage';
-import { Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, Pencil, Plus, SearchX, Settings2 } from 'lucide-react';
 import {
+  ConfirmDialog,
   CatalogImage,
   EmptyState,
   formatMoneyDisplay,
@@ -69,6 +71,18 @@ export interface HardwareCatalogProps {
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
+// K4 #1032: same workshop-facing labels as the form's shape select — the
+// internal enum value never reaches the user.
+const PREVIEW_SHAPE_LABELS_ES: Readonly<Record<string, string>> = {
+  knob: 'Tirador (perilla)',
+  'bar-pull': 'Tirador (barra)',
+  'cup-pull': 'Tirador (copa)',
+  hinge: 'Bisagra',
+  slide: 'Corredera',
+  rail: 'Riel',
+  leg: 'Pata',
+};
+
 export function HardwareCatalog({
   hardware,
   onCreate,
@@ -100,6 +114,12 @@ export function HardwareCatalog({
   const [draft, setDraft] = useState<HardwareDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // K2 #1032: destructive actions ask first; the row button only requests.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<Hardware | null>(null);
+  // K4 #1032: saved identity for the modal title (stable while fields change).
+  const editingHardware = editingId
+    ? (hardware.find((h) => h.id === editingId) ?? null)
+    : null;
   const [readbackError, setReadbackError] = useState<string | null>(null);
 
   const rows = useMemo(
@@ -128,6 +148,17 @@ export function HardwareCatalog({
   const startEdit = (item: Hardware) => {
     setEditingId(item.id);
     setDraft(toDraft(item));
+    setError(null);
+    setModalOpen(true);
+  };
+
+  // K2 #1032: duplicate via the create flow — prefilled, disambiguated code.
+  const startDuplicate = (item: Hardware) => {
+    const next = toDraft(item);
+    next.code = suggestDuplicateCode(item.code, hardware.map((h) => h.code));
+    next.name = `${item.name} (copia)`;
+    setEditingId(null);
+    setDraft(next);
     setError(null);
     setModalOpen(true);
   };
@@ -210,6 +241,7 @@ export function HardwareCatalog({
       {
         key: 'cost',
         header: 'Costo unit.',
+        numeric: true,
         render: (r) => formatMoneyDisplay(r.costPerUnit),
       },
       {
@@ -356,10 +388,10 @@ export function HardwareCatalog({
                   <span className="catalog-row-detail__value">
                     {row.visualAsset ? (
                       <>
-                        <span className="badge badge--info" style={{ marginRight: '0.25rem' }}>
+                        <span className="status-badge status-badge--info" style={{ marginRight: '0.25rem' }}>
                           {(row.visualAsset.representation ?? 'skp').toUpperCase()}
                         </span>
-                        <span className="badge badge--neutral" style={{ marginRight: '0.25rem' }}>
+                        <span className="status-badge status-badge--neutral" style={{ marginRight: '0.25rem' }}>
                           {row.visualAsset.validationState === 'validated'
                             ? 'Validado'
                             : row.visualAsset.validationState === 'failed'
@@ -371,7 +403,7 @@ export function HardwareCatalog({
                         </span>
                       </>
                     ) : row.previewShape ? (
-                      `Forma genérica: ${row.previewShape}`
+                      `Forma genérica: ${PREVIEW_SHAPE_LABELS_ES[row.previewShape] ?? row.previewShape}`
                     ) : (
                       'Sin modelo de archivo asociado'
                     )}
@@ -398,12 +430,21 @@ export function HardwareCatalog({
                       <Pencil size={14} strokeWidth={1.5} aria-hidden />
                       Editar
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      aria-label={`Duplicar ${row.code}`}
+                      onClick={() => startDuplicate(row)}
+                    >
+                      <Copy size={14} strokeWidth={1.5} aria-hidden />
+                      Duplicar
+                    </button>
                     {row.active ? (
                       <button
                         type="button"
                         className="btn btn--small btn--ghost btn--danger"
                         aria-label={`Desactivar ${row.code}`}
-                        onClick={() => onDeactivate(row.id)}
+                        onClick={() => setConfirmDeactivate(row)}
                       >
                         <EyeOff size={14} strokeWidth={1.5} aria-hidden />
                         Desactivar
@@ -429,6 +470,7 @@ export function HardwareCatalog({
 
       <HardwareFormModal
         open={modalOpen}
+        identity={editingHardware ? { code: editingHardware.code, name: editingHardware.name } : undefined}
         editingId={editingId}
         formId={formId}
         draft={draft}
@@ -441,6 +483,22 @@ export function HardwareCatalog({
         resolveImageUrl={resolveImageUrl}
         onSubmit={handleSubmit}
         onClose={closeModal}
+      />
+
+      <ConfirmDialog
+        open={confirmDeactivate != null}
+        onClose={() => setConfirmDeactivate(null)}
+        title="Desactivar herraje"
+        message={
+          confirmDeactivate
+            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? Los muebles que lo usan conservan su copia; podés reactivarlo cuando quieras.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        dataTestId="hardware-deactivate-confirm"
+        onConfirm={() => {
+          if (confirmDeactivate) onDeactivate(confirmDeactivate.id);
+        }}
       />
     </section>
   );

@@ -52,20 +52,17 @@ export function createAmbientActions(ctx: CatalogStoreCtx): AmbientSlice {
         ...(metalness !== undefined ? { previewMetalness: metalness } : {}),
         ...(clearcoat !== undefined ? { previewClearcoat: clearcoat } : {}),
       };
-      if (!ctx.get().catalog) return;
-      ctx
+      // K1 #1032: return the settle promise — rejection propagates to the
+      // screen (the patch already toasted the error).
+      if (!ctx.get().catalog) return Promise.resolve();
+      return ctx
         .patch((c) => ({
           ...c,
           ambientMaterials: [...(c.ambientMaterials ?? []), item],
         }))
-        .then(
-          () => {
-            ctx.toast({ type: 'success', message: `✓ "${code}" creado` });
-          },
-          () => {
-            /* error toast already shown by patch */
-          },
-        );
+        .then(() => {
+          ctx.toast({ type: 'success', message: `✓ "${code}" creado` });
+        });
     },
 
     updateAmbientMaterial: (id, draft) => {
@@ -73,7 +70,7 @@ export function createAmbientActions(ctx: CatalogStoreCtx): AmbientSlice {
       const roughness = parsePbr(draft.previewRoughness);
       const metalness = parsePbr(draft.previewMetalness);
       const clearcoat = parsePbr(draft.previewClearcoat);
-      ctx
+      return ctx
         .patch((c) => ({
           ...c,
           ambientMaterials: (c.ambientMaterials ?? []).map((m) =>
@@ -111,14 +108,9 @@ export function createAmbientActions(ctx: CatalogStoreCtx): AmbientSlice {
               : m,
           ),
         }))
-        .then(
-          () => {
-            ctx.toast({ type: 'success', message: '✓ Cambios guardados' });
-          },
-          () => {
-            /* error toast already shown by patch */
-          },
-        );
+        .then(() => {
+          ctx.toast({ type: 'success', message: '✓ Cambios guardados' });
+        });
     },
 
     setAmbientMaterialActive: (id, active) => {

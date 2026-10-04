@@ -177,64 +177,44 @@ export function ComponentEditorJoineryPanel({
       id="component-editor-panel-construction"
       aria-labelledby="component-editor-tab-construction"
       hidden={hidden}
-      className="catalog-form__section component-editor__panel"
+      className="catalog-form__section component-editor__panel component-joinery"
       data-testid="component-editor-panel-construction"
-      style={{ display: hidden ? 'none' : 'grid', gap: 'var(--space-4)' }}
+      style={{ display: hidden ? 'none' : undefined }}
     >
       {/* Banner de Origen y Procedencia */}
-      <div
-        style={{
-          border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-md)',
-          padding: 'var(--space-3)',
-          background: 'var(--surface-hover)',
-          display: 'grid',
-          gap: 'var(--space-2)',
-        }}
-        data-testid="component-joinery-provenance-banner"
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Layers size={18} style={{ color: 'var(--color-primary-600)' }} aria-hidden />
-            <strong>Origen de Reglas Constructivas</strong>
+      <div className="component-joinery__banner" data-testid="component-joinery-provenance-banner">
+        <div className="component-joinery__banner-head">
+          <div className="component-joinery__banner-title">
+            <Layers size={18} style={{ color: 'var(--brand-600)' }} aria-hidden />
+            <strong>Origen de las reglas constructivas</strong>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="component-joinery__banner-actions">
             <span
-              style={{
-                fontSize: 'var(--text-xs)',
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-full)',
-                fontWeight: 600,
-                background:
-                  effectiveProvenance === 'component'
-                    ? 'var(--color-primary-100, #ebf5ff)'
-                    : effectiveProvenance === 'factory'
-                    ? 'var(--color-success-100, #e6f7ed)'
-                    : 'var(--color-neutral-200, #eee)',
-                color:
-                  effectiveProvenance === 'component'
-                    ? 'var(--color-primary-800, #1e429f)'
-                    : effectiveProvenance === 'factory'
-                    ? 'var(--color-success-800, #155724)'
-                    : 'var(--text-secondary)',
-              }}
+              className={
+                'component-joinery__badge' +
+                (effectiveProvenance === 'component'
+                  ? ' component-joinery__badge--component'
+                  : effectiveProvenance === 'factory'
+                    ? ' component-joinery__badge--factory'
+                    : '')
+              }
               data-testid="component-provenance-badge"
             >
+              <span className="component-joinery__badge-dot" aria-hidden />
               {effectiveProvenance === 'component'
-                ? '🧩 Componente (Excepción)'
+                ? 'Componente · excepción'
                 : effectiveProvenance === 'factory'
-                ? '🏭 Fábrica (Overlay Activo)'
-                : '🏛️ Biblioteca (Estándar Granete)'}
+                ? 'Fábrica · excepción de taller'
+                : 'Biblioteca · estándar Granete'}
             </span>
 
             {hasLocalOverride || storedExceptionActive ? (
               <button
                 type="button"
-                className="btn btn--secondary btn--sm"
+                className="btn btn--small"
                 onClick={handleRestoreInheritance}
                 disabled={constructionException?.saving}
                 data-testid="component-restore-inheritance-btn"
-                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)' }}
               >
                 <RefreshCw size={12} aria-hidden />
                 Restaurar herencia
@@ -243,25 +223,24 @@ export function ComponentEditorJoineryPanel({
             {exceptionDirty && constructionException?.componentId ? (
               <button
                 type="button"
-                className="btn btn--primary btn--sm"
+                className="btn btn--primary btn--small"
                 onClick={handleSaveException}
                 disabled={constructionException.saving || !constructionException.canMutate}
                 data-testid="component-save-exception-btn"
-                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--text-xs)' }}
               >
                 <Factory size={12} aria-hidden />
-                {constructionException.saving ? 'Guardando…' : 'Guardar excepción'}
+                {constructionException.saving ? 'Fijando…' : 'Fijar excepción en fábrica'}
               </button>
             ) : null}
           </div>
         </div>
-        <p className="settings-hint" style={{ margin: 0 }}>
+        <p className="catalog-form__hint">
           {constructionException?.error ? (
             <span role="alert" data-testid="component-exception-error">{constructionException.error}</span>
           ) : storedExceptionActive ? (
-            'Esta pieza tiene una excepción guardada en el overlay de la fábrica: gobierna el perforado real de sus uniones.'
+            'Esta pieza tiene una excepción guardada en la política de la fábrica: gobierna el perforado real de sus uniones.'
           ) : hasLocalOverride ? (
-            'Configuración sin guardar: usá «Guardar excepción» para fijarla en la política de la fábrica.'
+            'Configuración sin guardar: usá «Fijar excepción en fábrica» para aplicarla al perforado de esta pieza.'
           ) : (
             'Esta pieza hereda automáticamente los criterios de ensamble y perforado definidos para el taller.'
           )}
@@ -269,7 +248,7 @@ export function ComponentEditorJoineryPanel({
       </div>
 
       {/* Rol Constructivo */}
-      <fieldset className="catalog-form__section" style={{ border: 'none', padding: 0, margin: 0 }}>
+      <fieldset className="component-joinery__fieldset">
         <legend className="catalog-form__section-title">Rol constructivo</legend>
         <div className="catalog-form__field">
           <label htmlFor="component-constructive-role">Función estructural en el mueble</label>
@@ -292,29 +271,20 @@ export function ComponentEditorJoineryPanel({
             <option value="divider">Divisor vertical</option>
             <option value="custom">Personalizado</option>
           </select>
-          <span className="settings-hint">
+          <span className="catalog-form__hint">
             Determina qué familia de uniones y mecanizados le corresponde a la pieza.
           </span>
         </div>
       </fieldset>
 
       {/* Caras de Conexión */}
-      <fieldset className="catalog-form__section" style={{ border: 'none', padding: 0, margin: 0 }}>
+      <fieldset className="component-joinery__fieldset">
         <legend className="catalog-form__section-title">Caras de unión activas</legend>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
+        <div className="component-joinery__faces">
           {CONNECTION_FACES.map((face) => {
             const isChecked = Boolean(override?.connectionFaces?.includes(face.value));
             return (
-              <label
-                key={face.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  cursor: 'pointer',
-                  fontSize: 'var(--text-sm)',
-                }}
-              >
+              <label key={face.value} className="component-joinery__face-option">
                 <input
                   type="checkbox"
                   checked={isChecked}
@@ -326,15 +296,15 @@ export function ComponentEditorJoineryPanel({
             );
           })}
         </div>
-        <span className="settings-hint" style={{ marginTop: 4 }}>
+        <span className="catalog-form__hint">
           Superficies donde el mueble verifica contacto con piezas adyacentes para aplicar mecanizados.
         </span>
       </fieldset>
 
       {/* Mecanizado y Sistema de Unión */}
-      <fieldset className="catalog-form__section" style={{ border: 'none', padding: 0, margin: 0 }}>
+      <fieldset className="component-joinery__fieldset">
         <legend className="catalog-form__section-title">Sistema de unión para este componente</legend>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        <div className="component-joinery__grid">
           <div className="catalog-form__field">
             <label htmlFor="component-joinery-system">Sistema de fijación</label>
             <select
@@ -410,7 +380,7 @@ export function ComponentEditorJoineryPanel({
             />
           </div>
         </div>
-        <span className="settings-hint" style={{ marginTop: 4 }}>
+        <span className="catalog-form__hint">
           Los valores guardados son una excepción por componente: pisan la política general de la fábrica para esta pieza.
         </span>
       </fieldset>

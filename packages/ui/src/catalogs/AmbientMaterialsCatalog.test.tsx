@@ -2,8 +2,10 @@
  * @vitest-environment jsdom
  */
 
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { AmbientMaterial } from '@granete/domain';
 
 import { AmbientMaterialsCatalog } from './ambient/AmbientMaterialsCatalog';
@@ -117,7 +119,10 @@ describe('AmbientMaterialsCatalog', () => {
         canMutate
       />,
     );
+    // K2 #1032: Desactivar asks for confirmation before acting.
     fireEvent.click(screen.getByLabelText(`Desactivar ${floorMat.code}`));
+    expect(onDeactivate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('ambient-deactivate-confirm-confirm'));
     expect(onDeactivate).toHaveBeenCalledWith('am-1');
   });
 
@@ -269,5 +274,76 @@ describe('AmbientMaterialsCatalog', () => {
       parentId: '',
       sortOrder: '0',
     });
+  });
+});
+
+describe('AmbientMaterialsCatalog — save contract (K1 #1032)', () => {
+  it('keeps the modal open with the form and shows the server error when the save fails', async () => {
+    const user = userEvent.setup();
+    let rejectSave!: (err: Error) => void;
+    const onCreate = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    render(
+      <AmbientMaterialsCatalog
+        materials={[floorMat]}
+        categories={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo acabado/i }));
+    await user.type(screen.getByLabelText('Código'), 'AMB-K1');
+    await user.type(screen.getByLabelText('Nombre'), 'Acabado K1');
+    await user.click(screen.getByTestId('ambient-material-submit'));
+
+    const saveBtn = screen.getByTestId('ambient-material-submit');
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(saveBtn.textContent).toContain('Guardando');
+
+    await act(async () => {
+      rejectSave(new Error('network down'));
+    });
+
+    expect(screen.getByText(/network down/)).toBeTruthy();
+    expect((screen.getByLabelText('Código') as HTMLInputElement).value).toBe('AMB-K1');
+    expect((screen.getByTestId('ambient-material-submit') as HTMLButtonElement).disabled).toBe(false);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the modal only after the save settles successfully', async () => {
+    const user = userEvent.setup();
+    let resolveSave!: () => void;
+    const onCreate = vi.fn(() => new Promise<void>((resolve) => { resolveSave = resolve; }));
+    render(
+      <AmbientMaterialsCatalog
+        materials={[floorMat]}
+        categories={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo acabado/i }));
+    await user.type(screen.getByLabelText('Código'), 'AMB-K1');
+    await user.type(screen.getByLabelText('Nombre'), 'Acabado K1');
+    await user.click(screen.getByTestId('ambient-material-submit'));
+
+    expect(screen.getByTestId('ambient-material-submit')).toBeTruthy();
+    await act(async () => { resolveSave(); });
+    await waitFor(() =>
+      expect(screen.queryByTestId('ambient-material-submit')).toBeNull(),
+    );
+    expect(onCreate).toHaveBeenCalledTimes(1);
   });
 });

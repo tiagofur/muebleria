@@ -166,7 +166,7 @@ export function HardwareAssetSelectorModal({
           <div className="hardware-asset-selector__error" data-testid="hardware-asset-error">
             <AlertCircle size={20} aria-hidden />
             <p>{error}</p>
-            <button type="button" className="btn btn--secondary btn--sm" onClick={fetchAssets}>
+            <button type="button" className="btn btn--small" onClick={fetchAssets}>
               <RefreshCw size={14} aria-hidden /> Reintentar
             </button>
           </div>
@@ -227,11 +227,11 @@ export function HardwareAssetSelectorModal({
                             {asset.display_name}
                           </span>
                           {isRetired ? (
-                            <span className="badge badge--warning" title="Retirado de nuevas selecciones">
+                            <span className="status-badge status-badge--warning" title="Retirado de nuevas selecciones">
                               Retirado
                             </span>
                           ) : (
-                            <span className="badge badge--neutral">
+                            <span className="status-badge status-badge--neutral">
                               {asset.revisions.length}{' '}
                               {asset.revisions.length === 1 ? 'revisión' : 'revisiones'}
                             </span>
@@ -271,7 +271,7 @@ export function HardwareAssetSelectorModal({
                             <div className="hardware-asset-retire-confirm__actions">
                               <button
                                 type="button"
-                                className="btn btn--danger btn--sm"
+                                className="btn btn--danger btn--small"
                                 onClick={() => handleRetire(selectedAsset.id)}
                                 disabled={retiringId === selectedAsset.id}
                                 data-testid="hardware-asset-retire-confirm-btn"
@@ -280,7 +280,7 @@ export function HardwareAssetSelectorModal({
                               </button>
                               <button
                                 type="button"
-                                className="btn btn--sm"
+                                className="btn btn--small"
                                 onClick={() => setRetireConfirmId(null)}
                                 data-testid="hardware-asset-retire-cancel-btn"
                               >
@@ -291,7 +291,7 @@ export function HardwareAssetSelectorModal({
                         ) : (
                           <button
                             type="button"
-                            className="btn btn--secondary btn--sm"
+                            className="btn btn--small"
                             onClick={() => setRetireConfirmId(selectedAsset.id)}
                             title="Retirar de nuevas selecciones"
                             data-testid="hardware-asset-retire-btn"
@@ -335,11 +335,11 @@ export function HardwareAssetSelectorModal({
                               <div className="hardware-asset-revision-card__info">
                                 <div className="hardware-asset-revision-card__title">
                                   <strong>Rev. {rev.revision_number}</strong>
-                                  <span className="badge badge--info">
+                                  <span className="status-badge status-badge--info">
                                     {rev.representation.toUpperCase()}
                                   </span>
                                   {isCurrent ? (
-                                    <span className="badge badge--success">
+                                    <span className="status-badge status-badge--success">
                                       <Check size={12} aria-hidden /> Asociado actualmente
                                     </span>
                                   ) : null}
@@ -359,7 +359,7 @@ export function HardwareAssetSelectorModal({
                               </div>
                               <button
                                 type="button"
-                                className="btn btn--primary btn--sm"
+                                className="btn btn--primary btn--small"
                                 disabled={isRetired || !canMutate}
                                 onClick={() => handleSelectRevision(selectedAsset, rev)}
                                 title={

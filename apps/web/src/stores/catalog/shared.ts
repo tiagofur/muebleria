@@ -72,8 +72,9 @@ export interface CatalogState {
   readonly setCatalog: (catalog: Catalog | null) => void;
 
   // --- Materials ---
-  readonly createMaterial: (draft: MaterialDraft) => void;
-  readonly updateMaterial: (id: string, draft: MaterialDraft) => void;
+  /** K1 #1032: settle promises so screens can await the save. */
+  readonly createMaterial: (draft: MaterialDraft) => Promise<void>;
+  readonly updateMaterial: (id: string, draft: MaterialDraft) => Promise<void>;
   readonly setMaterialActive: (id: string, active: boolean) => void;
   readonly createMaterialCategory: (draft: CategoryDraft) => void;
   readonly updateMaterialCategory: (id: string, draft: CategoryDraft) => void;
@@ -81,8 +82,9 @@ export interface CatalogState {
   readonly deleteMaterialCategory: (id: string) => Promise<void>;
 
   // --- Edges ---
-  readonly createEdge: (draft: EdgeDraft) => string;
-  readonly updateEdge: (id: string, draft: EdgeDraft) => void;
+  /** K1 #1032: settles when the save landed; resolves with the created id. */
+  readonly createEdge: (draft: EdgeDraft) => Promise<string>;
+  readonly updateEdge: (id: string, draft: EdgeDraft) => Promise<void>;
   readonly setEdgeActive: (id: string, active: boolean) => void;
 
   // --- Hardware ---
@@ -91,8 +93,9 @@ export interface CatalogState {
   readonly setHardwareActive: (id: string, active: boolean) => Promise<void>;
 
   // --- Ambient materials (presentation-only: finishes & scene textures) ---
-  readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => void;
-  readonly updateAmbientMaterial: (id: string, draft: AmbientMaterialDraft) => void;
+  /** K1 #1032: settle promises so screens can await the save. */
+  readonly createAmbientMaterial: (draft: AmbientMaterialDraft) => Promise<void>;
+  readonly updateAmbientMaterial: (id: string, draft: AmbientMaterialDraft) => Promise<void>;
   readonly setAmbientMaterialActive: (id: string, active: boolean) => void;
   readonly createAmbientCategory: (draft: CategoryDraft) => void;
   readonly updateAmbientCategory: (id: string, draft: CategoryDraft) => void;
@@ -134,6 +137,8 @@ export interface CatalogState {
   readonly createComponent: (draft: ComponentDraft) => void;
   readonly updateComponent: (id: string, draft: ComponentDraft) => void;
   readonly toggleComponentActive: (id: string) => void;
+  /** Deep-copy with a fresh id/code and regenerated perforation ids (#1019 C3). */
+  readonly duplicateComponent: (id: string) => void;
 
   // --- Agregados ---
   readonly createAgregado: (item: Agregado) => void;

@@ -137,12 +137,12 @@ test.describe.serial('Factory Construction Settings (#875) Browser E2E', () => {
     // save it through the panel's own action.
     await page.getByTestId('component-stations-count-input').fill('5');
     await page.getByTestId('component-save-exception-btn').click();
-    await expect(provenanceBadge).toContainText('Componente (Excepción)');
+    await expect(provenanceBadge).toContainText('Componente · excepción');
 
     // The exception is overlay truth: it survives a full reload.
     await page.reload();
     await page.getByRole('tab', { name: 'Construcción' }).click();
-    await expect(provenanceBadge).toContainText('Componente (Excepción)');
+    await expect(provenanceBadge).toContainText('Componente · excepción');
 
     // «Restaurar herencia» deletes the stored intent — after a reload the
     // component inherits the factory policy again, with no orphan state.

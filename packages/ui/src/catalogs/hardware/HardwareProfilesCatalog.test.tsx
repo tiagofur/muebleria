@@ -156,10 +156,12 @@ describe('HardwareProfilesCatalog (#914)', () => {
     expect(codeInput.value).toBe('PERF-SPAX-50');
   });
 
-  it('deactivates with the row version', async () => {
+  it('deactivates with the row version after confirmation (K2 #1032)', async () => {
     const user = userEvent.setup();
     const { props } = setup();
     await user.click(screen.getByRole('button', { name: /Desactivar PERF-SPAX-50/i }));
+    expect(props.onDeactivate).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId('hardware-profile-deactivate-confirm-confirm'));
     expect(props.onDeactivate).toHaveBeenCalledWith('p-1', 3);
   });
 

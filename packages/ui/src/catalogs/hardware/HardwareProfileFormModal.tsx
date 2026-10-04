@@ -24,6 +24,8 @@ import {
 } from './hardwareProfileDraft';
 
 export interface HardwareProfileFormModalProps {
+  /** K4 #1032: saved identity of the edited item, shown in the title. */
+  readonly identity?: { readonly code: string; readonly name: string };
   readonly open: boolean;
   readonly editingId: string | null;
   readonly formId: string;
@@ -48,6 +50,7 @@ export function HardwareProfileFormModal({
   saving = false,
   onSubmit,
   onClose,
+  identity,
 }: HardwareProfileFormModalProps): ReactNode {
   const itemFieldId = useId();
   const hardwareById = new Map(hardware.map((h) => [h.id, h]));
@@ -77,7 +80,11 @@ export function HardwareProfileFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={editingId ? 'Editar perfil de herrajes' : 'Nuevo perfil de herrajes'}
+      title={
+        identity
+          ? `Editar perfil de herrajes — ${identity.code} · ${identity.name}`
+          : 'Nuevo perfil de herrajes'
+      }
       size="md"
       dataTestId="hardware-profile-form-modal"
       footer={
