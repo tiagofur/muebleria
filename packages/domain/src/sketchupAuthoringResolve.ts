@@ -291,7 +291,8 @@ export type ResolvedMachiningOperationV1 = {
 };
 
 /** One governed source behind a demand line (#917): profile, recipe,
- * relationship and how many contacts were verified. */
+ * relationship, how many contacts were verified and how many stations the
+ * plans laid out (#1065) — the multiplier the demand actually applies. */
 export type ResolvedHardwareProfileDemandSourceV1 = {
   readonly technicalProfileId: string;
   readonly technicalProfileRevision: string;
@@ -299,6 +300,7 @@ export type ResolvedHardwareProfileDemandSourceV1 = {
   readonly recipeRevision: string;
   readonly relationshipId: string;
   readonly contactCount: number;
+  readonly stationCount: number;
 };
 
 /** Per-unit profile hardware demand line (#917): the governed resolve's
@@ -616,6 +618,24 @@ export function validateAuthoringResolveRequest(
         push('RELATIONSHIP_INVALID',
           'stationCount and families are mutually exclusive: declare one station pattern per relationship',
           `${path}.families`);
+      }
+      // Spacing-derived patterns (#1065) are one pattern per relationship
+      // too: mutually exclusive with families and with an explicit count.
+      if (families.length > 0 && relationship.parameters !== undefined && 'maxSpacingMm' in relationship.parameters) {
+        push('RELATIONSHIP_INVALID',
+          'maxSpacingMm and families are mutually exclusive: declare one station pattern per relationship',
+          `${path}.families`);
+      }
+    }
+    const spacingParameter = relationship.parameters?.['maxSpacingMm'];
+    if (spacingParameter !== undefined) {
+      if (typeof spacingParameter !== 'number' || !Number.isFinite(spacingParameter) || spacingParameter <= 0) {
+        push('RELATIONSHIP_INVALID', 'relationship maxSpacingMm must be a positive finite number', `${path}.parameters.maxSpacingMm`);
+      }
+      if (relationship.parameters !== undefined && 'stationCount' in relationship.parameters) {
+        push('RELATIONSHIP_INVALID',
+          'stationCount and maxSpacingMm are mutually exclusive: declare one station pattern per relationship',
+          `${path}.parameters.maxSpacingMm`);
       }
     }
 
@@ -1152,7 +1172,9 @@ function validateResolvedMachining(
             || !isBoundedString(source.recipeId) || !isBoundedString(source.recipeRevision)
             || !isBoundedString(source.relationshipId)
             || typeof source.contactCount !== 'number' || !Number.isInteger(source.contactCount)
-            || source.contactCount < 1) {
+            || source.contactCount < 1
+            || typeof source.stationCount !== 'number' || !Number.isInteger(source.stationCount)
+            || source.stationCount < source.contactCount) {
             problems.push(`${sourcePath} is invalid`);
           }
         }

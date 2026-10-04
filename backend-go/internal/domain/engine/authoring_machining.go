@@ -218,7 +218,8 @@ type HardwareProfileDemandLine struct {
 
 // HardwareProfileDemandSource keeps the diagnostic trail of one demand
 // contribution: which profile, at which revision, through which
-// relationship, over how many verified contacts.
+// relationship, over how many verified contacts and planned stations
+// (#1065: the stations are what a fitter actually installs per contact).
 type HardwareProfileDemandSource struct {
 	TechnicalProfileID       string `json:"technicalProfileId"`
 	TechnicalProfileRevision string `json:"technicalProfileRevision"`
@@ -226,6 +227,7 @@ type HardwareProfileDemandSource struct {
 	RecipeRevision           string `json:"recipeRevision"`
 	RelationshipID           string `json:"relationshipId"`
 	ContactCount             int    `json:"contactCount"`
+	StationCount             int    `json:"stationCount"`
 }
 
 // snapValueTo mirrors TS snapValue (hardwarePlacement.ts): grid snapping with

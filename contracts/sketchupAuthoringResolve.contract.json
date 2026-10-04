@@ -29009,7 +29009,7 @@
             "hardwareProfileDemand": [
               {
                 "hardwareId": "f9160000-0000-0000-0000-000000000002",
-                "quantity": 4,
+                "quantity": 12,
                 "sources": [
                   {
                     "technicalProfileId": "f9160000-0000-0000-0000-000000000001",
@@ -29017,7 +29017,8 @@
                     "recipeId": "test:synthetic-fixed-shelf",
                     "recipeRevision": "test-1",
                     "relationshipId": "rel-fixed-shelf-01",
-                    "contactCount": 2
+                    "contactCount": 2,
+                    "stationCount": 6
                   }
                 ]
               }
