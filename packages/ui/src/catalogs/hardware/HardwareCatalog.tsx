@@ -241,6 +241,7 @@ export function HardwareCatalog({
       {
         key: 'cost',
         header: 'Costo unit.',
+        numeric: true,
         render: (r) => formatMoneyDisplay(r.costPerUnit),
       },
       {
