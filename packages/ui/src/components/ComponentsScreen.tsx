@@ -18,6 +18,9 @@ import type { BoardFace } from '@granete/domain';
  * #875 slice 3: the editor draft opens with the component's STORED station
  * exception (factory overlay truth) so the panel shows the real inherited/
  * excepted state instead of an empty override.
+ * #1052 slice 1: the entity's persisted construction block (role/faces/
+ * system) seeds the base; the overlay exception's station scalars merge on
+ * top instead of replacing the block.
  */
 function draftWithStoredException(
   base: ComponentDraft,
@@ -26,7 +29,10 @@ function draftWithStoredException(
 ): ComponentDraft {
   const stored = policy?.componentOverrides?.[componentId];
   if (!stored) return base;
-  return { ...base, constructionOverride: { ...stored } };
+  return {
+    ...base,
+    constructionOverride: { ...(base.constructionOverride ?? {}), ...stored },
+  };
 }
 import type { ComponentSideAssignmentView, ComponentProfileOption } from './editor/ComponentSideAssignmentsPanel';
 import {

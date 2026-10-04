@@ -52,6 +52,7 @@ export type {
   DoorHingeRule,
   JointDrillingRules,
   Component,
+  ComponentConstruction,
   ModuleComponentInstance,
   Agregado,
   AgregadoPivotSide,

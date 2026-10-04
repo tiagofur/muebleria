@@ -93,6 +93,50 @@ func ValidateModule(module domain.Module) error {
 	return nil
 }
 
+// componentConstruction vocabularies (#1052 slice 1). Mirrors the editor's
+// select options and the domain enums in factoryConstructionPolicy.ts.
+var (
+	componentConstructiveRoles = map[string]bool{
+		"horizontal": true, "lateral": true, "shelf": true, "back": true,
+		"door": true, "divider": true, "custom": true,
+	}
+	componentConnectionFaces = map[string]bool{
+		"front": true, "back": true, "left": true,
+		"right": true, "top": true, "bottom": true,
+	}
+	componentJoinerySystems = map[string]bool{
+		"minifix-dowel": true, "screw-only": true, "dowel-only": true,
+		"minifix-only": true, "custom": true,
+	}
+)
+
+// validateComponentConstruction rejects unknown vocabulary in the persisted
+// construction block (#1052 slice 1) instead of storing garbage the editor
+// cannot render and the engine (slice 2) would have to second-guess.
+func validateComponentConstruction(comp domain.Component) error {
+	construction := comp.Construction
+	if construction == nil {
+		return nil
+	}
+	if role := construction.ConstructiveRole; role != "" && !componentConstructiveRoles[role] {
+		return fmt.Errorf("el componente %s declara un rol constructivo desconocido (%q)", comp.Code, role)
+	}
+	seenFaces := make(map[string]bool, len(construction.ConnectionFaces))
+	for _, face := range construction.ConnectionFaces {
+		if !componentConnectionFaces[face] {
+			return fmt.Errorf("el componente %s declara una cara de unión desconocida (%q)", comp.Code, face)
+		}
+		if seenFaces[face] {
+			return fmt.Errorf("el componente %s repite la cara de unión %q", comp.Code, face)
+		}
+		seenFaces[face] = true
+	}
+	if system := construction.JoinerySystemID; system != "" && !componentJoinerySystems[system] {
+		return fmt.Errorf("el componente %s declara un sistema de unión desconocido (%q)", comp.Code, system)
+	}
+	return nil
+}
+
 // ValidateComponent enforces the material binding role contract at authoring
 // time (#403 / MT-2; mirrors packages/domain validateComponent). A board
 // component follows exactly one material selection: optionRoles must be
@@ -117,6 +161,9 @@ func ValidateComponent(comp domain.Component) error {
 			"el componente %s declara varios roles de opción [%s]; una pieza de tablero sigue una única selección de material — dejá un solo rol",
 			comp.Code, strings.Join(roles, ", "),
 		)
+	}
+	if err := validateComponentConstruction(comp); err != nil {
+		return err
 	}
 	return nil
 }

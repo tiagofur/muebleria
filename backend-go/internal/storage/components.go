@@ -10,10 +10,37 @@ import (
 
 // --- COMPONENTS (F050 / #101) ---
 
+// componentConstructionJSON serializes the persisted construction block
+// (#1052 slice 1). A block with no fields set stores NULL so the row never
+// carries a phanthom override.
+func componentConstructionJSON(c *domain.Component) ([]byte, error) {
+	construction := c.Construction
+	if construction == nil ||
+		(construction.ConstructiveRole == "" && construction.JoinerySystemID == "" && len(construction.ConnectionFaces) == 0) {
+		return nil, nil
+	}
+	raw, err := json.Marshal(construction)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling construction: %w", err)
+	}
+	return raw, nil
+}
+
+func scanComponentConstruction(raw []byte) (*domain.ComponentConstruction, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var construction domain.ComponentConstruction
+	if err := json.Unmarshal(raw, &construction); err != nil {
+		return nil, fmt.Errorf("parsing construction: %w", err)
+	}
+	return &construction, nil
+}
+
 func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component, error) {
 	query := `
 		SELECT id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
-		       default_edges, option_roles, length_formula, width_formula,
+		       default_edges, option_roles, construction, length_formula, width_formula,
 		       x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z,
 		       notes, active, created_at, updated_at
 		FROM components
@@ -32,10 +59,11 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 		var notes *string
 		var lengthFormula, widthFormula *string
 		var xFormula, yFormula, zFormula *string
+		var constructionRaw []byte
 		if err := rows.Scan(
 			&c.ID, &c.Code, &c.Name, &c.Placement, &c.GeometryKind,
 			&c.LengthMm, &c.WidthMm, &c.ThicknessMm,
-			&c.DefaultEdges, &c.OptionRoles, &lengthFormula, &widthFormula,
+			&c.DefaultEdges, &c.OptionRoles, &constructionRaw, &lengthFormula, &widthFormula,
 			&xFormula, &yFormula, &zFormula, &c.RotateX, &c.RotateY, &c.RotateZ,
 			&notes, &c.Active, &c.CreatedAt, &c.UpdatedAt,
 		); err != nil {
@@ -59,6 +87,11 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 		if zFormula != nil {
 			c.ZFormula = *zFormula
 		}
+		construction, err := scanComponentConstruction(constructionRaw)
+		if err != nil {
+			return nil, err
+		}
+		c.Construction = construction
 		out = append(out, c)
 	}
 	if out == nil {
@@ -70,7 +103,7 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 func (s *PostgresStore) GetComponentByID(ctx context.Context, id string) (*domain.Component, error) {
 	query := `
 		SELECT id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
-		       default_edges, option_roles, length_formula, width_formula,
+		       default_edges, option_roles, construction, length_formula, width_formula,
 		       x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z,
 		       notes, active, created_at, updated_at
 		FROM components WHERE id = $1 AND organization_id = $2;
@@ -79,10 +112,11 @@ func (s *PostgresStore) GetComponentByID(ctx context.Context, id string) (*domai
 	var notes *string
 	var lengthFormula, widthFormula *string
 	var xFormula, yFormula, zFormula *string
+	var constructionRaw []byte
 	err := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
 		&c.ID, &c.Code, &c.Name, &c.Placement, &c.GeometryKind,
 		&c.LengthMm, &c.WidthMm, &c.ThicknessMm,
-		&c.DefaultEdges, &c.OptionRoles, &lengthFormula, &widthFormula,
+		&c.DefaultEdges, &c.OptionRoles, &constructionRaw, &lengthFormula, &widthFormula,
 		&xFormula, &yFormula, &zFormula, &c.RotateX, &c.RotateY, &c.RotateZ,
 		&notes, &c.Active, &c.CreatedAt, &c.UpdatedAt,
 	)
@@ -107,6 +141,11 @@ func (s *PostgresStore) GetComponentByID(ctx context.Context, id string) (*domai
 	if zFormula != nil {
 		c.ZFormula = *zFormula
 	}
+	construction, err := scanComponentConstruction(constructionRaw)
+	if err != nil {
+		return nil, err
+	}
+	c.Construction = construction
 	return &c, nil
 }
 
@@ -115,27 +154,31 @@ func (s *PostgresStore) CreateComponent(ctx context.Context, c *domain.Component
 	if err != nil {
 		return fmt.Errorf("marshaling default_edges: %w", err)
 	}
+	constructionJSON, err := componentConstructionJSON(c)
+	if err != nil {
+		return err
+	}
 
 	if c.ID != "" {
 		err = s.db(ctx).QueryRow(ctx, `
-			INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+			INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, construction, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
 			RETURNING created_at, updated_at;
 		`, c.ID, c.Code, c.Name, c.Placement, c.GeometryKind,
 			c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
-			c.OptionRoles, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
+			c.OptionRoles, constructionJSON, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 			nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 			c.RotateX, c.RotateY, c.RotateZ,
 			nullIfEmpty(c.Notes), c.Active, OrgFromCtx(ctx),
 		).Scan(&c.CreatedAt, &c.UpdatedAt)
 	} else {
 		err = s.db(ctx).QueryRow(ctx, `
-			INSERT INTO components (code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+			INSERT INTO components (code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, construction, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
 			RETURNING id, created_at, updated_at;
 		`, c.Code, c.Name, c.Placement, c.GeometryKind,
 			c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
-			c.OptionRoles, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
+			c.OptionRoles, constructionJSON, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 			nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 			c.RotateX, c.RotateY, c.RotateZ,
 			nullIfEmpty(c.Notes), c.Active, OrgFromCtx(ctx),
@@ -152,20 +195,24 @@ func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, c *domai
 	if err != nil {
 		return fmt.Errorf("marshaling default_edges: %w", err)
 	}
+	constructionJSON, err := componentConstructionJSON(c)
+	if err != nil {
+		return err
+	}
 
 	tag, err := s.db(ctx).Exec(ctx, `
 		UPDATE components
 		SET code = $1, name = $2, placement = $3, geometry_kind = $4,
 		    length_mm = $5, width_mm = $6, thickness_mm = $7,
-		    default_edges = $8, option_roles = $9, length_formula = $10, width_formula = $11,
-		    x_formula = $12, y_formula = $13, z_formula = $14,
-		    rotate_x = $15, rotate_y = $16, rotate_z = $17,
-		    notes = $18, active = $19,
+		    default_edges = $8, option_roles = $9, construction = $10, length_formula = $11, width_formula = $12,
+		    x_formula = $13, y_formula = $14, z_formula = $15,
+		    rotate_x = $16, rotate_y = $17, rotate_z = $18,
+		    notes = $19, active = $20,
 		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = $20 AND organization_id = $21;
+		WHERE id = $21 AND organization_id = $22;
 	`, c.Code, c.Name, c.Placement, c.GeometryKind,
 		c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
-		c.OptionRoles, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
+		c.OptionRoles, constructionJSON, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 		nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 		c.RotateX, c.RotateY, c.RotateZ,
 		nullIfEmpty(c.Notes), c.Active, id, OrgFromCtx(ctx))

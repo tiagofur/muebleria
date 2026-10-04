@@ -294,3 +294,49 @@ func TestValidateComponent_SingleBindingRole(t *testing.T) {
 		t.Fatalf("several distinct roles must be rejected, got %v", err)
 	}
 }
+
+// ─── #1052 slice 1: persisted construction block vocabulary ──────────────────
+
+func TestValidateComponent_ConstructionVocabulary(t *testing.T) {
+	base := domain.Component{
+		ID: "comp-c", Code: "CONST", Name: "Construcción",
+		GeometryKind: "rectangular_board", ThicknessMm: 18, Active: true,
+		OptionRoles: []string{"INTERIOR"},
+	}
+	if err := ValidateComponent(base); err != nil {
+		t.Fatalf("no construction block must stay valid, got %v", err)
+	}
+	valid := base
+	valid.Construction = &domain.ComponentConstruction{
+		ConstructiveRole: "horizontal",
+		ConnectionFaces:  []string{"left", "right"},
+		JoinerySystemID:  "screw-only",
+	}
+	if err := ValidateComponent(valid); err != nil {
+		t.Fatalf("valid block must pass, got %v", err)
+	}
+
+	badRole := base
+	badRole.Construction = &domain.ComponentConstruction{ConstructiveRole: "techo"}
+	if err := ValidateComponent(badRole); err == nil || !strings.Contains(err.Error(), "rol constructivo desconocido") {
+		t.Fatalf("unknown constructive role must be rejected, got %v", err)
+	}
+
+	badFace := base
+	badFace.Construction = &domain.ComponentConstruction{ConnectionFaces: []string{"left", "arriba"}}
+	if err := ValidateComponent(badFace); err == nil || !strings.Contains(err.Error(), "cara de unión desconocida") {
+		t.Fatalf("unknown connection face must be rejected, got %v", err)
+	}
+
+	dupFace := base
+	dupFace.Construction = &domain.ComponentConstruction{ConnectionFaces: []string{"left", "left"}}
+	if err := ValidateComponent(dupFace); err == nil || !strings.Contains(err.Error(), "repite la cara") {
+		t.Fatalf("duplicated connection face must be rejected, got %v", err)
+	}
+
+	badSystem := base
+	badSystem.Construction = &domain.ComponentConstruction{JoinerySystemID: "pegamento"}
+	if err := ValidateComponent(badSystem); err == nil || !strings.Contains(err.Error(), "sistema de unión desconocido") {
+		t.Fatalf("unknown joinery system must be rejected, got %v", err)
+	}
+}

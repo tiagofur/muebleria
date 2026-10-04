@@ -122,6 +122,9 @@ import type {
   ManufacturingOperation,
   MachineOutputSelection,
   MachineOutputSelectionRecord,
+  ConnectionFace,
+  ConstructiveRole,
+  JoinerySystemId,
 } from '@granete/domain';
 import {
   TIME_ENTRY_CATEGORIES,
@@ -1154,6 +1157,21 @@ export function componentToApi(c: Component): Record<string, unknown> {
     c.geometry.kind === 'rectangular_board' ? c.geometry.lengthFormula : undefined;
   const widthFormula =
     c.geometry.kind === 'rectangular_board' ? c.geometry.widthFormula : undefined;
+  // #1052 slice 1: mirror the backend normalization — a block with no fields
+  // set is never sent, so the API never sees a phantom override.
+  const construction =
+    c.construction &&
+    (c.construction.constructiveRole ||
+      c.construction.joinerySystemId ||
+      (c.construction.connectionFaces && c.construction.connectionFaces.length > 0))
+      ? {
+          constructive_role: c.construction.constructiveRole ?? '',
+          connection_faces: c.construction.connectionFaces
+            ? [...c.construction.connectionFaces]
+            : [],
+          joinery_system_id: c.construction.joinerySystemId ?? '',
+        }
+      : undefined;
   return {
     id: c.id,
     code: c.code,
@@ -1174,6 +1192,7 @@ export function componentToApi(c: Component): Record<string, unknown> {
     rotate_z: c.rotateZ !== undefined ? c.rotateZ : null,
     default_edges: c.defaultEdges.map((e) => ({ side: e.side, enabled: e.enabled })),
     option_roles: [...c.optionRoles],
+    construction,
     notes: c.notes ?? '',
     active: c.active,
   };
@@ -1191,6 +1210,26 @@ export function componentFromApi(raw: Record<string, unknown>): Component {
   const rotateX = optionalRotate(raw.rotate_x ?? raw.rotateX);
   const rotateY = optionalRotate(raw.rotate_y ?? raw.rotateY);
   const rotateZ = optionalRotate(raw.rotate_z ?? raw.rotateZ);
+  // #1052 slice 1: the backend normalizes empty blocks to NULL — an absent
+  // or empty construction block reads as undefined (inherit everything).
+  let construction: Component['construction'];
+  const constructionRaw = raw.construction;
+  if (constructionRaw && typeof constructionRaw === 'object' && !Array.isArray(constructionRaw)) {
+    const block = constructionRaw as Record<string, unknown>;
+    const facesRaw = block.connection_faces ?? block.connectionFaces;
+    const faces = Array.isArray(facesRaw)
+      ? facesRaw.filter((f): f is ConnectionFace => typeof f === 'string' && f !== '')
+      : [];
+    const role = str(block.constructive_role ?? block.constructiveRole);
+    const system = str(block.joinery_system_id ?? block.joinerySystemId);
+    if (role || system || faces.length > 0) {
+      construction = {
+        constructiveRole: (role || undefined) as ConstructiveRole | undefined,
+        connectionFaces: faces.length > 0 ? faces : undefined,
+        joinerySystemId: (system || undefined) as JoinerySystemId | undefined,
+      };
+    }
+  }
   return {
     id: str(raw.id),
     code: str(raw.code),
@@ -1213,6 +1252,7 @@ export function componentFromApi(raw: Record<string, unknown>): Component {
     optionRoles: Array.isArray(rolesRaw)
       ? (rolesRaw as string[])
       : [],
+    construction,
     notes: str(raw.notes) || undefined,
     active: bool(raw.active, true),
     xFormula,

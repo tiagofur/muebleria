@@ -138,3 +138,61 @@ describe('draftToComponent', () => {
     expect(entity.maxOpeningAngleDeg).toBe(95);
   });
 });
+
+describe('draftToComponent construction block (#1052 slice 1)', () => {
+  const baseDraft = (): ComponentDraft => ({
+    code: 'PISO',
+    name: 'Piso',
+    placement: 'interno',
+    lengthMm: 568,
+    widthMm: 560,
+    thicknessMm: 18,
+    lengthFormula: '',
+    widthFormula: '',
+    xFormula: '',
+    yFormula: '',
+    zFormula: '',
+    rotateX: null,
+    rotateY: null,
+    rotateZ: null,
+    edgeL1: false,
+    edgeL2: false,
+    edgeW1: false,
+    edgeW2: false,
+    optionRoles: 'INTERIOR',
+    notes: '',
+    active: true,
+  });
+
+  it('persists role, faces and joinery system from the draft override', () => {
+    const draft = baseDraft();
+    draft.constructionOverride = {
+      componentId: 'c1',
+      constructiveRole: 'horizontal',
+      connectionFaces: ['left', 'right'],
+      joinerySystemId: 'screw-only',
+      stationsCount: 4,
+      provenance: 'component',
+    };
+    const entity = draftToComponent('c1', draft);
+    expect(entity.construction).toEqual({
+      constructiveRole: 'horizontal',
+      connectionFaces: ['left', 'right'],
+      joinerySystemId: 'screw-only',
+    });
+  });
+
+  it('omits the block when the override carries no persistable field', () => {
+    const draft = baseDraft();
+    // Station scalars alone are overlay-only (#875): the entity stays clean.
+    draft.constructionOverride = {
+      componentId: 'c1',
+      stationsCount: 4,
+      startMarginMm: 50,
+      endMarginMm: 50,
+      provenance: 'component',
+    };
+    expect(draftToComponent('c1', draft).construction).toBeUndefined();
+    expect(draftToComponent('c1', baseDraft()).construction).toBeUndefined();
+  });
+});

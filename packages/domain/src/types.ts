@@ -12,6 +12,7 @@ import type {
   AssemblyDimensionRule,
   HardwareRotationDeg,
 } from './agregadoAssembly';
+import type { ConnectionFace, ConstructiveRole, JoinerySystemId } from './factoryConstructionPolicy';
 
 // --- Literal unions ---
 
@@ -741,6 +742,20 @@ export interface HardwarePlacement {
   readonly doorAffinity?: DoorAffinity;
 }
 
+/**
+ * #1052 slice 1: persisted construction block of a component entity —
+ * constructive role, active joinery faces and the joinery system override
+ * as chosen in the editor's Construcción tab. Absent = inherit everything.
+ * The station pattern (stationsCount/margins) deliberately stays in the
+ * factory policy overlay (#875); the engine does not consume this block
+ * yet (slice 2).
+ */
+export interface ComponentConstruction {
+  readonly constructiveRole?: ConstructiveRole;
+  readonly connectionFaces?: readonly ConnectionFace[];
+  readonly joinerySystemId?: JoinerySystemId;
+}
+
 export interface Component {
   readonly id: string;
   readonly code: string;
@@ -750,6 +765,7 @@ export interface Component {
   readonly defaultEdges: readonly EdgeAssignment[];
   readonly perforations?: readonly Perforation[];
   readonly optionRoles: readonly string[];
+  readonly construction?: ComponentConstruction;
   readonly notes?: string;
   readonly active: boolean;
   readonly xFormula?: string;

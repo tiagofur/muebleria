@@ -264,6 +264,21 @@ export function componentToDraft(item: Component): ComponentDraft {
     edgeW1: edges.get('W1') ?? false,
     edgeW2: edges.get('W2') ?? false,
     optionRoles: item.optionRoles.join(', '),
+    // #1052 slice 1: the entity's persisted construction block seeds the
+    // editor draft so Construcción shows what was saved (station scalars,
+    // when the factory overlay carries an exception, merge in later via
+    // draftWithStoredException).
+    constructionOverride: item.construction
+      ? {
+          componentId: item.id,
+          constructiveRole: item.construction.constructiveRole,
+          connectionFaces: item.construction.connectionFaces
+            ? [...item.construction.connectionFaces]
+            : undefined,
+          joinerySystemId: item.construction.joinerySystemId,
+          provenance: 'component',
+        }
+      : undefined,
     notes: item.notes ?? '',
     active: item.active,
     canOpen: item.canOpen ?? (item.placement === 'puerta'),
