@@ -223,9 +223,9 @@ func (s *PostgresStore) CompleteReleaseEngineering(ctx context.Context, cmd Comp
 	}
 
 	if err := s.auditReleaseEngineering(txCtx, "engineering_completed", actor, release, projectOrgID, cmd.IP, cmd.RequestID, map[string]interface{}{
-		"status":                    string(domain.ReleaseEngineeringCompleted),
-		"expected_version":          cmd.ExpectedVersion,
-		"routing_schema_version":    frozen.SchemaVersion,
+		"status":                 string(domain.ReleaseEngineeringCompleted),
+		"expected_version":       cmd.ExpectedVersion,
+		"routing_schema_version": frozen.SchemaVersion,
 	}); err != nil {
 		return nil, err
 	}
@@ -379,7 +379,9 @@ func (s *PostgresStore) releaseEngineeringStateTx(ctx context.Context, projectID
 
 // scanReleaseEngineeringState scans the durable row; the second return is
 // false when no row matched (pgx.ErrNoRows), keeping call sites explicit.
-func scanReleaseEngineeringState(row interface{ Scan(dest ...interface{}) error }) (*domain.ReleaseEngineeringState, bool, error) {
+func scanReleaseEngineeringState(row interface {
+	Scan(dest ...interface{}) error
+}) (*domain.ReleaseEngineeringState, bool, error) {
 	var state domain.ReleaseEngineeringState
 	err := row.Scan(&state.ReleaseID, &state.Status, &state.StartedBy, &state.StartedAt,
 		&state.CompletedBy, &state.CompletedAt, &state.Version)

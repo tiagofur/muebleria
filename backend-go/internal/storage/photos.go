@@ -246,5 +246,3 @@ func (s *PostgresStore) ListShowcasePhotos(ctx context.Context, onlyShowcase boo
 	}
 	return items, nil
 }
-
-

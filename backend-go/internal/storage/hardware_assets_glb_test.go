@@ -281,4 +281,3 @@ func resolveBindingFor(t *testing.T, w *hwAssetWorld, assetID, revisionID string
 	}
 	return binding
 }
-

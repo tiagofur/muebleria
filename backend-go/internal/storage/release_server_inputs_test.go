@@ -12,12 +12,12 @@ import (
 )
 
 type fakeInputsReader struct {
-	release    *domain.LibraryRelease
-	releaseErr error
-	profiles   []domain.HardwareProfile
+	release     *domain.LibraryRelease
+	releaseErr  error
+	profiles    []domain.HardwareProfile
 	assignments []domain.ComponentSideAssignment
-	overlay    *domain.LibraryOverlay
-	overlayErr error
+	overlay     *domain.LibraryOverlay
+	overlayErr  error
 }
 
 func (f *fakeInputsReader) GetCurrentPublishedRelease(context.Context, uuid.UUID) (*domain.LibraryRelease, error) {
