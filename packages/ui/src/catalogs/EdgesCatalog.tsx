@@ -3,9 +3,15 @@
  */
 
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { isValidPreviewColor, normalizePreviewColor, type EdgeBand } from '@granete/domain';
-import { Eye, EyeOff, Minus, Pencil, Plus, SearchX } from 'lucide-react';
 import {
+  isValidPreviewColor,
+  normalizePreviewColor,
+  suggestDuplicateCode,
+  type EdgeBand,
+} from '@granete/domain';
+import { Copy, Eye, EyeOff, Minus, Pencil, Plus, SearchX } from 'lucide-react';
+import {
+  ConfirmDialog,
   EmptyState,
   formatMoneyDisplay,
   Modal,
@@ -98,6 +104,8 @@ export function EdgesCatalog({
   const [error, setError] = useState<string | null>(null);
   // K1 #1032: save-in-flight flag for the modal footer.
   const [saving, setSaving] = useState(false);
+  // K2 #1032: destructive actions ask first; the row button only requests.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<EdgeBand | null>(null);
 
   const rows = useMemo(
     () =>
@@ -125,6 +133,17 @@ export function EdgesCatalog({
   const startEdit = (item: EdgeBand) => {
     setEditingId(item.id);
     setDraft(toDraft(item));
+    setError(null);
+    setModalOpen(true);
+  };
+
+  // K2 #1032: duplicate via the create flow — prefilled, disambiguated code.
+  const startDuplicate = (item: EdgeBand) => {
+    const next = toDraft(item);
+    next.code = suggestDuplicateCode(item.code, edges.map((e) => e.code));
+    next.name = `${item.name} (copia)`;
+    setEditingId(null);
+    setDraft(next);
     setError(null);
     setModalOpen(true);
   };
@@ -353,12 +372,21 @@ export function EdgesCatalog({
                       <Pencil size={14} strokeWidth={1.5} aria-hidden />
                       Editar
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      aria-label={`Duplicar ${row.code}`}
+                      onClick={() => startDuplicate(row)}
+                    >
+                      <Copy size={14} strokeWidth={1.5} aria-hidden />
+                      Duplicar
+                    </button>
                     {row.active ? (
                       <button
                         type="button"
                         className="btn btn--small btn--ghost btn--danger"
                         aria-label={`Desactivar ${row.code}`}
-                        onClick={() => onDeactivate(row.id)}
+                        onClick={() => setConfirmDeactivate(row)}
                       >
                         <EyeOff size={14} strokeWidth={1.5} aria-hidden />
                         Desactivar
@@ -494,6 +522,22 @@ export function EdgesCatalog({
           </fieldset>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmDeactivate != null}
+        onClose={() => setConfirmDeactivate(null)}
+        title="Desactivar canto"
+        message={
+          confirmDeactivate
+            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? Los muebles que lo usan conservan su copia; podés reactivarlo cuando quieras.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        dataTestId="edge-deactivate-confirm"
+        onConfirm={() => {
+          if (confirmDeactivate) onDeactivate(confirmDeactivate.id);
+        }}
+      />
     </section>
   );
 }

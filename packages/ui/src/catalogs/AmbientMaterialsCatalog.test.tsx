@@ -119,7 +119,10 @@ describe('AmbientMaterialsCatalog', () => {
         canMutate
       />,
     );
+    // K2 #1032: Desactivar asks for confirmation before acting.
     fireEvent.click(screen.getByLabelText(`Desactivar ${floorMat.code}`));
+    expect(onDeactivate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('ambient-deactivate-confirm-confirm'));
     expect(onDeactivate).toHaveBeenCalledWith('am-1');
   });
 
