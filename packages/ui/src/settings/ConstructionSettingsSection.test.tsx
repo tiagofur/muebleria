@@ -4,7 +4,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConstructionSettingsSection } from './ConstructionSettingsSection';
 import { DEFAULT_FACTORY_CONSTRUCTION_POLICY, type FactoryConstructionPolicy } from '@granete/domain';
@@ -56,6 +56,51 @@ describe('ConstructionSettingsSection (#875)', () => {
         }),
       }),
     );
+  });
+
+  it('switches a family to spacing mode, edits the max spacing and previews the derived count (#1065)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <ConstructionSettingsSection
+        policy={DEFAULT_FACTORY_CONSTRUCTION_POLICY}
+        activeOverlay={null}
+        onChange={onChange}
+      />,
+    );
+
+    await user.selectOptions(screen.getByTestId('floor-pattern-select'), 'spacing');
+
+    const switchCall = onChange.mock.calls[0][0] as FactoryConstructionPolicy;
+    expect(switchCall.floorToSide.maxSpacingMm).toBe(250);
+    expect(switchCall.floorToSide.stationsCount).toBe(0);
+
+    rerender(
+      <ConstructionSettingsSection
+        policy={switchCall}
+        activeOverlay={null}
+        onChange={onChange}
+      />,
+    );
+
+    const spacingInput = screen.getByTestId('floor-max-spacing-input') as HTMLInputElement;
+    expect(spacingInput.value).toBe('250');
+    // 490mm útiles − márgenes 50/50 = 390 → floor(390/250)+1 = 2 estaciones.
+    expect(screen.getByTestId('floor-derived-count').textContent).toContain('2 estaciones');
+
+    fireEvent.change(spacingInput, { target: { value: '120' } });
+    const editCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as FactoryConstructionPolicy;
+    expect(editCall.floorToSide.maxSpacingMm).toBe(120);
+
+    rerender(
+      <ConstructionSettingsSection
+        policy={editCall}
+        activeOverlay={null}
+        onChange={onChange}
+      />,
+    );
+    // floor(390/120)+1 = 4.
+    expect(screen.getByTestId('floor-derived-count').textContent).toContain('4 estaciones');
   });
 
   it('renders restore inheritance button when customized and triggers restore', async () => {

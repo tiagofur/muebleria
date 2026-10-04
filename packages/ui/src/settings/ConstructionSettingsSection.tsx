@@ -48,6 +48,94 @@ const SYSTEM_OPTIONS: readonly { value: JoinerySystemId; label: string; descript
   { value: 'custom', label: 'Personalizado', description: 'Herraje o ensamble especial de taller' },
 ];
 
+/** Typical usable span for the live preview: a 590mm-deep floor joint with
+ * 50/50mm margins (#1065 acceptance: the UI shows the derived count). */
+const PATTERN_PREVIEW_SPAN_MM = 490;
+
+/**
+ * Pattern fields for one joint family (#1065): a fixed station count or a
+ * maximum spacing that derives the count from each joint's real span, so
+ * a 400mm and a 1000mm cabinet scale automatically. The derived count for
+ * a typical 490mm usable span is previewed live next to the spacing input.
+ */
+function FamilyPatternFields({
+  idPrefix,
+  rule,
+  disabled,
+  saving,
+  onChange,
+}: {
+  readonly idPrefix: string;
+  readonly rule: JointFamilyRule;
+  readonly disabled: boolean;
+  readonly saving: boolean;
+  readonly onChange: (partial: Partial<JointFamilyRule>) => void;
+}): ReactNode {
+  const spacingMode = rule.maxSpacingMm !== undefined;
+  const previewCount = spacingMode && rule.maxSpacingMm > 0
+    ? Math.max(2, Math.floor(Math.max(0, PATTERN_PREVIEW_SPAN_MM - rule.startMarginMm - rule.endMarginMm) / rule.maxSpacingMm) + 1)
+    : null;
+  return (
+    <>
+      <div className="catalog-form__field">
+        <label htmlFor={`${idPrefix}-pattern`}>Patrón de estaciones</label>
+        <select
+          id={`${idPrefix}-pattern`}
+          value={spacingMode ? 'spacing' : 'count'}
+          onChange={(e) => {
+            if (e.target.value === 'spacing') {
+              onChange({ maxSpacingMm: 250, stationsCount: 0 });
+            } else {
+              onChange({ maxSpacingMm: undefined, stationsCount: 2 });
+            }
+          }}
+          disabled={disabled || saving}
+          data-testid={`${idPrefix}-pattern-select`}
+        >
+          <option value="count">Cantidad fija</option>
+          <option value="spacing">Separación máxima (según medida)</option>
+        </select>
+      </div>
+
+      {spacingMode ? (
+        <div className="catalog-form__field">
+          <label htmlFor={`${idPrefix}-max-spacing`}>Separación máxima (mm)</label>
+          <input
+            id={`${idPrefix}-max-spacing`}
+            type="number"
+            min={50}
+            max={1000}
+            step={10}
+            value={rule.maxSpacingMm}
+            onChange={(e) => onChange({ maxSpacingMm: Number(e.target.value) })}
+            disabled={disabled || saving}
+            data-testid={`${idPrefix}-max-spacing-input`}
+          />
+          <p className="settings-hint" style={{ margin: 0 }} data-testid={`${idPrefix}-derived-count`}>
+            {previewCount !== null
+              ? `Ej.: unión de 490mm útiles → ${previewCount} estaciones (escala con la medida del mueble)`
+              : 'Declara una separación positiva: la cantidad se deriva de la medida real de cada unión.'}
+          </p>
+        </div>
+      ) : (
+        <div className="catalog-form__field">
+          <label htmlFor={`${idPrefix}-stations`}>Estaciones de fijación</label>
+          <input
+            id={`${idPrefix}-stations`}
+            type="number"
+            min={2}
+            max={8}
+            value={rule.stationsCount || 2}
+            onChange={(e) => onChange({ stationsCount: Number(e.target.value) })}
+            disabled={disabled || saving}
+            data-testid={`${idPrefix}-stations-input`}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ConstructionSettingsSection({
   policy,
   activeOverlay,
@@ -456,19 +544,13 @@ export function ConstructionSettingsSection({
             </select>
           </div>
 
-          <div className="catalog-form__field">
-            <label htmlFor="floor-stations">Estaciones de fijación</label>
-            <input
-              id="floor-stations"
-              type="number"
-              min={2}
-              max={8}
-              value={policy.floorToSide.stationsCount}
-              onChange={(e) => updateFloor({ stationsCount: Number(e.target.value) })}
-              disabled={disabled || saving}
-              data-testid="floor-stations-input"
-            />
-          </div>
+          <FamilyPatternFields
+            idPrefix="floor"
+            rule={policy.floorToSide}
+            disabled={disabled}
+            saving={saving}
+            onChange={updateFloor}
+          />
 
           <div className="catalog-form__field">
             <label htmlFor="floor-start-margin">Margen frontal (mm)</label>
@@ -558,19 +640,13 @@ export function ConstructionSettingsSection({
             </select>
           </div>
 
-          <div className="catalog-form__field">
-            <label htmlFor="top-stations">Estaciones de fijación</label>
-            <input
-              id="top-stations"
-              type="number"
-              min={2}
-              max={8}
-              value={policy.topToSide.stationsCount}
-              onChange={(e) => updateTop({ stationsCount: Number(e.target.value) })}
-              disabled={disabled || saving}
-              data-testid="top-stations-input"
-            />
-          </div>
+          <FamilyPatternFields
+            idPrefix="top"
+            rule={policy.topToSide}
+            disabled={disabled}
+            saving={saving}
+            onChange={updateTop}
+          />
 
           <div className="catalog-form__field">
             <label htmlFor="top-start-margin">Margen frontal (mm)</label>
@@ -660,19 +736,13 @@ export function ConstructionSettingsSection({
             </select>
           </div>
 
-          <div className="catalog-form__field">
-            <label htmlFor="shelf-stations">Estaciones de fijación</label>
-            <input
-              id="shelf-stations"
-              type="number"
-              min={2}
-              max={8}
-              value={policy.shelfToSide.stationsCount}
-              onChange={(e) => updateShelf({ stationsCount: Number(e.target.value) })}
-              disabled={disabled || saving}
-              data-testid="shelf-stations-input"
-            />
-          </div>
+          <FamilyPatternFields
+            idPrefix="shelf"
+            rule={policy.shelfToSide}
+            disabled={disabled}
+            saving={saving}
+            onChange={updateShelf}
+          />
 
           <div className="catalog-form__field">
             <label htmlFor="shelf-start-margin">Margen frontal (mm)</label>
