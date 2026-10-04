@@ -6,6 +6,20 @@
 
 La BHX 050 es un destino CNC obligatorio y separado del DXF. Se reutiliza el [dossier de client-a/machine-a](../client-a/machine-a-bhx050.md) y su [checklist](../client-a/intake-checklist.md); no se crea otro registro de la instalación. El dossier confirma modelo/familia, no versión de software, formato exacto, tooling ni límites. HPP 250 es machine-b del mismo cliente: ni su perfil ni su evidencia sirven como homologación BHX; Client B sigue separado.
 
+### B1.3 Investigación de formato woodWOP-MPR (2026-10-03)
+
+El [`woodwop-mpr/`](./woodwop-mpr/) reúne la especificación **pública
+oficial** del formato — HOMAG *Description woodWOP-file* 9-080-42-7190-D00
+(2006), copias en el directorio — con el subconjunto de perforado citado
+campo por campo (`<100 \Werkstck\`, `<102 \BohrVert\`, `<103 \BohrHoriz\`),
+el mapeo Granete→MPR bajo la misma política de transformación de KDT, y el
+**generador candidato** (`packages/excel/src/machines/woodWopMpr/`): writer
++ lector independiente verificados por round-trip y correspondencia 1:1 con
+el fixture `fixture-kdt-field-001`. Es material `PUBLIC_REFERENCE_ONLY`:
+ordena la hipótesis para diferir contra las muestras reales del kit de
+recolección — no valida la instalación ni abre el adapter
+(`serializerImplemented` sigue `false`; el perfil sigue en r1).
+
 Reutilizar [perfiles/adapters](../../architecture/machine-profiles-and-adapters.md), [construcción/uniones](../../architecture/factory-construction-and-joinery.md) y [proyección DXF](../../manufacturing/dxf-cut-plan-projection.md). #351/PR #588 aporta contratos; #591/PR #592, selección persistida que excluyó sintaxis MPR; #503, artefactos/Ingeniería; #739, snapshot congelado; #789, etiquetas/cncDrawingRef. No reabrir bases cerradas ni crear otro registry, motor de uniones o store de selección. Inspeccionar las implementaciones vigentes antes de extenderlas.
 
 Objetivo: piezas y operaciones neutrales completas → plan de montajes de la instalación → adapter nativo versionado → programas/manifest → receptor OEM → validación independiente. **woodWOP/MPR es la familia inicial a contrastar**, no una aceptación ya comprobada. La integración no exige convertir DXF a MPR, no reconstruye operaciones desde CIRCLE y no es un generador NC/G-code genérico. La compilación final de macros al control queda en el software OEM confirmado.
