@@ -547,7 +547,16 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 			rule := policy.RuleForComponent(binding.ComponentID, binding.Relationship.Kind)
 			hasFamilies := len(binding.Relationship.Families) > 0
 			var parameters map[string]any
-			if rule != nil && !hasFamilies {
+			// Authored maxSpacing (#1065) is the FIRST tier of the C3 ladder:
+			// the construction declares spacing-driven counts on the real
+			// contact span, scaling with the furniture's dimensions.
+			if !hasFamilies && binding.Relationship.Station != nil && binding.Relationship.Station.MaxSpacingMm != nil {
+				parameters = map[string]any{
+					"maxSpacingMm":  *binding.Relationship.Station.MaxSpacingMm,
+					"startMarginMm": binding.Relationship.Station.StartMarginMm,
+					"endMarginMm":   binding.Relationship.Station.EndMarginMm,
+				}
+			} else if rule != nil && !hasFamilies {
 				parameters = map[string]any{
 					"stationCount":  float64(rule.StationsCount),
 					"startMarginMm": rule.StartMarginMm,

@@ -2592,6 +2592,7 @@ type FurnitureParameterRelationshipTarget struct {
 type FurnitureParameterRelationshipStationMargins struct {
 	StartMarginMm *float64 `json:"startMarginMm,omitempty"`
 	EndMarginMm   *float64 `json:"endMarginMm,omitempty"`
+	MaxSpacingMm  *float64 `json:"maxSpacingMm,omitempty"`
 }
 
 type FurnitureParameterRelationshipFamily struct {

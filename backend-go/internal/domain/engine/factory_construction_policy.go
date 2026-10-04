@@ -395,6 +395,11 @@ func applyFactoryStationPatterns(relationships []AuthoringRelationship, policy *
 		if _, explicit := relationship.Parameters["stationCount"]; explicit {
 			continue
 		}
+		// Authored spacing-driven patterns (#1065) are explicit intent too:
+		// the factory count must not stack on top of a maxSpacing pattern.
+		if _, spacing := relationship.Parameters["maxSpacingMm"]; spacing {
+			continue
+		}
 		if len(relationship.Families) > 0 {
 			continue
 		}
