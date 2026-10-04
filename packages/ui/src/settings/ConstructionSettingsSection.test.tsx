@@ -71,7 +71,7 @@ describe('ConstructionSettingsSection (#875)', () => {
 
     await user.selectOptions(screen.getByTestId('floor-pattern-select'), 'spacing');
 
-    const switchCall = onChange.mock.calls[0][0] as FactoryConstructionPolicy;
+    const switchCall = onChange.mock.calls[0]![0] as FactoryConstructionPolicy;
     expect(switchCall.floorToSide.maxSpacingMm).toBe(250);
     expect(switchCall.floorToSide.stationsCount).toBe(0);
 
@@ -89,7 +89,7 @@ describe('ConstructionSettingsSection (#875)', () => {
     expect(screen.getByTestId('floor-derived-count').textContent).toContain('2 estaciones');
 
     fireEvent.change(spacingInput, { target: { value: '120' } });
-    const editCall = onChange.mock.calls[onChange.mock.calls.length - 1][0] as FactoryConstructionPolicy;
+    const editCall = onChange.mock.calls[onChange.mock.calls.length - 1]![0] as FactoryConstructionPolicy;
     expect(editCall.floorToSide.maxSpacingMm).toBe(120);
 
     rerender(

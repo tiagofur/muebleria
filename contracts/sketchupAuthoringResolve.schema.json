@@ -1731,6 +1731,10 @@
         "contactCount": {
           "type": "integer",
           "minimum": 1
+        },
+        "stationCount": {
+          "type": "integer",
+          "minimum": 1
         }
       },
       "required": [
@@ -1739,7 +1743,8 @@
         "recipeId",
         "recipeRevision",
         "relationshipId",
-        "contactCount"
+        "contactCount",
+        "stationCount"
       ]
     }
   }
