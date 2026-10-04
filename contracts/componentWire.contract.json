@@ -1,0 +1,31 @@
+{
+  "id": "wire-comp-001",
+  "code": "COM-WIRE-001",
+  "name": "Lateral de prueba",
+  "placement": "lateral_izquierdo",
+  "geometry_kind": "rectangular_board",
+  "length_mm": 720,
+  "width_mm": 560,
+  "thickness_mm": 18,
+  "default_edges": [
+    { "side": "L1", "enabled": true },
+    { "side": "W1", "enabled": false }
+  ],
+  "option_roles": ["INTERIOR", "LATERAL"],
+  "construction": {
+    "constructive_role": "lateral",
+    "connection_faces": ["left", "right"],
+    "joinery_system_id": "screw-only"
+  },
+  "compatible_hardware_categories": ["BIS-CL110"],
+  "length_formula": "PH",
+  "width_formula": "PD",
+  "x_formula": "0",
+  "y_formula": "0",
+  "z_formula": "0",
+  "rotate_x": 90,
+  "notes": "Lateral estándar del wire contract",
+  "active": true,
+  "created_at": "2026-10-04T12:00:00Z",
+  "updated_at": "2026-10-04T12:00:00Z"
+}
