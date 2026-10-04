@@ -55,7 +55,6 @@ import type {
   Supplier,
 } from '@granete/domain';
 import { useWorkspaceLoad } from './shared/query/useWorkspaceLoad';
-import { sessionScopeKey } from './shared/query/sessionScope';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
