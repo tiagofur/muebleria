@@ -197,6 +197,120 @@
 /* —— Inline editor page (Fase 3 UI 3c) —— */
 /* Replaces the Modal LG when /components/:id/edit is active. */
 
+/* ── Construcción (joinery) tab — C4 #1019: system tokens, no hex/px ── */
+
+.component-joinery {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.component-joinery__banner {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--surface-hover);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.component-joinery__banner-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.component-joinery__banner-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.component-joinery__banner-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.component-joinery__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-default);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+}
+
+.component-joinery__badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.component-joinery__badge--component {
+  background: var(--brand-100);
+  border-color: var(--brand-200);
+  color: var(--brand-700);
+}
+
+.component-joinery__badge--component .component-joinery__badge-dot {
+  background: var(--brand-500);
+}
+
+.component-joinery__badge--factory {
+  background: var(--success-100);
+  border-color: var(--success-200);
+  color: var(--success-700);
+}
+
+.component-joinery__badge--factory .component-joinery__badge-dot {
+  background: var(--success-500);
+}
+
+.component-joinery__fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.component-joinery__faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.component-joinery__face-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.component-joinery__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+/* #1019 C1: rejected-save banner (mirrors agregado-editor__save-error). */
+.component-editor__save-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.component-editor__save-error p {
+  margin: 0;
+}
+
 .component-editor-page {
   display: flex;
   flex-direction: column;
@@ -284,7 +398,7 @@
 }
 
 .component-general__placement-hint {
-  margin: 0;
+  margin: var(--space-1) 0 0;
   font-size: var(--text-sm);
   color: var(--text-secondary);
   line-height: var(--leading-normal);
@@ -367,7 +481,7 @@
 
 .component-geometry__viewport-hint {
   margin: 0;
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--text-muted);
 }
 
@@ -389,7 +503,7 @@
 }
 
 .component-geometry__group-hint {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--weight-regular);
   color: var(--text-muted);
 }
@@ -643,6 +757,7 @@
 
 .component-edges__intro {
   margin: 0 0 var(--space-4);
+  max-width: 72ch;
   font-size: var(--text-sm);
   color: var(--text-secondary);
   line-height: var(--leading-normal);
@@ -706,14 +821,33 @@
   transition: stroke var(--duration-fast) var(--ease-out);
 }
 
+/* C2 #1019: invisible fat hit stroke behind each edge — the visible 10-unit
+   line renders ~14px on screen, under any pointer/touch standard. */
+.plank-edge-diagram__edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 30;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* Hover from the fat hit area styles the visible edge (adjacent sibling). */
+.plank-edge-diagram__edge-hit:hover + .plank-edge-diagram__edge {
+  stroke: var(--brand-400);
+}
+
 .plank-edge-diagram__edge:hover {
   stroke: var(--brand-400);
 }
 
+/* C2 #1019: real keyboard focus indicator. The previous drop-shadow(0 0 0 …)
+   painted nothing (and --shadow-focus is box-shadow syntax, invalid there).
+   Thickening + recoloring the stroke is unambiguous for a line-button. */
 .plank-edge-diagram__edge:focus-visible {
   outline: none;
-  /* Simulate the focus ring via a drop-shadow on the stroke. */
-  filter: drop-shadow(0 0 0 var(--shadow-focus));
+  stroke: var(--brand-600);
+  stroke-width: 18;
 }
 
 .plank-edge-diagram__edge--on {
@@ -766,7 +900,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .plank-edge-diagram__legend-dot {
@@ -813,15 +947,6 @@
   margin: var(--space-1) 0 0;
   font-size: var(--text-xs);
   color: var(--danger-700);
-}
-
-/* —— P1-b: placement contextual hint (General) —— */
-
-.component-general__placement-hint {
-  margin: var(--space-1) 0 0;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  line-height: var(--leading-normal);
 }
 
 /* —— P2: option roles as toggle chips (Opciones) —— */

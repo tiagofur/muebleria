@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createProjectFromTemplate,
   duplicateAgregado,
+  duplicateComponent,
   duplicateModule,
   duplicateProject,
   projectToTemplate,
@@ -9,6 +10,7 @@ import {
 } from './duplicate';
 import type {
   Agregado,
+  Component,
   Module,
   Project,
   ProjectTemplate,
@@ -665,6 +667,80 @@ describe('duplicateAgregado (S5 #1009)', () => {
     );
     expect(copy.components?.[0]?.overrides?.hardwarePlacements?.[0]).not.toBe(
       source.components?.[0]?.overrides?.hardwarePlacements?.[0],
+    );
+  });
+});
+
+describe('duplicateComponent (C3 #1019)', () => {
+  function sampleComponent(): Component {
+    return {
+      id: 'comp-orig',
+      code: 'COM-PUE-01',
+      name: 'Puerta',
+      placement: 'puerta',
+      geometry: {
+        kind: 'rectangular_board',
+        lengthMm: 717,
+        widthMm: 296,
+        thicknessMm: 18,
+        lengthFormula: 'PH - 3',
+      },
+      defaultEdges: [
+        { side: 'L1', enabled: true },
+        { side: 'W1', enabled: false },
+      ],
+      perforations: [
+        {
+          id: 'perf-1',
+          relativePosition: { xPercent: 50, yPercent: 50 },
+          diameterMm: 8,
+          depthMm: 12,
+          type: 'shelf_pin',
+        },
+      ],
+      optionRoles: ['FRENTE'],
+      active: true,
+      canOpen: true,
+      maxOpeningAngleDeg: 110,
+    };
+  }
+
+  it('copies with a new id/code, «(copia)» name, and fresh perforation ids', () => {
+    const copy = duplicateComponent(sampleComponent(), {
+      newId: 'comp-new',
+      newCode: 'COM-PUE-01-COPY',
+    });
+
+    expect(copy.id).toBe('comp-new');
+    expect(copy.code).toBe('COM-PUE-01-COPY');
+    expect(copy.name).toBe('Puerta (copia)');
+    expect(copy.perforations?.[0]?.id).not.toBe('perf-1');
+    expect(copy.perforations?.[0]?.type).toBe('shelf_pin');
+  });
+
+  it('preserves geometry, edges, roles and presentation settings', () => {
+    const source = sampleComponent();
+    const copy = duplicateComponent(source, { newId: 'comp-new', newCode: 'C2' });
+
+    expect(copy.geometry).toEqual(source.geometry);
+    expect(copy.defaultEdges).toEqual(source.defaultEdges);
+    expect(copy.optionRoles).toEqual(['FRENTE']);
+    expect(copy.placement).toBe('puerta');
+    expect(copy.canOpen).toBe(true);
+    expect(copy.maxOpeningAngleDeg).toBe(110);
+    expect(copy.active).toBe(true);
+  });
+
+  it('does not share mutable references with the original', () => {
+    const source = sampleComponent();
+    const copy = duplicateComponent(source, { newId: 'comp-new', newCode: 'C2' });
+
+    expect(copy.geometry).not.toBe(source.geometry);
+    expect(copy.defaultEdges).not.toBe(source.defaultEdges);
+    expect(copy.defaultEdges?.[0]).not.toBe(source.defaultEdges?.[0]);
+    expect(copy.perforations).not.toBe(source.perforations);
+    expect(copy.perforations?.[0]?.relativePosition).not.toBe(
+      source.perforations?.[0]?.relativePosition,
     );
   });
 });

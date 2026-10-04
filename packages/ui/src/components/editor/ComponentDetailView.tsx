@@ -6,7 +6,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Component, EdgeSide, OptionGroup } from '@granete/domain';
-import { ChevronLeft, Eye, EyeOff, Pencil } from 'lucide-react';
+import { ChevronLeft, Copy, Eye, EyeOff, MoreHorizontal, Pencil } from 'lucide-react';
+import { DropdownMenu } from '../../common/DropdownMenu';
 import { EngineeringDetailLayout } from '../../common/EngineeringDetailLayout';
 import { geometrySummary, placementLabel } from '../componentDraft';
 import { optionRoleLabel } from '../../optionGroups/optionRoleLabel';
@@ -20,6 +21,8 @@ export type ComponentDetailViewProps = {
   readonly onBack: () => void;
   readonly onEdit: (c: Component) => void;
   readonly onToggleActive?: (c: Component) => void;
+  /** Deep-copy request — the screen/store owns the copy (#1019 C3). */
+  readonly onDuplicate?: (id: string) => void;
   readonly canMutate: boolean;
   /** Option groups — chips prefer the workshop-facing group name (#403). */
   readonly optionGroups?: readonly OptionGroup[];
@@ -81,6 +84,7 @@ export function ComponentDetailView({
   onBack,
   onEdit,
   onToggleActive,
+  onDuplicate,
   canMutate,
   optionGroups,
 }: ComponentDetailViewProps): ReactNode {
@@ -157,6 +161,26 @@ export function ComponentDetailView({
               <Pencil size={16} strokeWidth={1.5} aria-hidden />
               Editar
             </button>
+            {onDuplicate ? (
+              <DropdownMenu
+                ariaLabel="Más acciones del componente"
+                triggerLabel="Más"
+                triggerIcon={<MoreHorizontal size={16} strokeWidth={1.5} />}
+                sections={[
+                  {
+                    id: 'main',
+                    items: [
+                      {
+                        id: 'duplicate',
+                        label: 'Duplicar',
+                        icon: <Copy size={16} strokeWidth={1.5} aria-hidden />,
+                        onSelect: () => onDuplicate(c.id),
+                      },
+                    ],
+                  },
+                ]}
+              />
+            ) : null}
             {onToggleActive ? (
               confirmToggle ? (
                 <span

@@ -24,6 +24,46 @@ Reutilizar [perfiles/adapters](../../architecture/machine-profiles-and-adapters.
 
 Objetivo: piezas y operaciones neutrales completas → plan de montajes de la instalación → adapter nativo versionado → programas/manifest → receptor OEM → validación independiente. **woodWOP/MPR es la familia inicial a contrastar**, no una aceptación ya comprobada. La integración no exige convertir DXF a MPR, no reconstruye operaciones desde CIRCLE y no es un generador NC/G-code genérico. La compilación final de macros al control queda en el software OEM confirmado.
 
+### B1.1 Kit de recolección (2026-10-03)
+
+El [`b1-woodwop-evidence-kit.md`](./b1-woodwop-evidence-kit.md) concreta la
+recolección de muestras: preparar con el woodWOP del cliente los programas
+del fixture congelado `fixture-kdt-field-001` (mismas 12 operaciones que el
+kit K4 de KDT — un fixture, dos receptores), sanitizar, y capturar
+versión/herramientas/caras/pinzas. Con la Muestra A/B aceptada arranca B2
+con evidencia primaria; sin muestras, B2 sigue bloqueado
+(`NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED`).
+
+### B1.2 Mapa de consumidores (actualizado 2026-10-03, post-#1005 K1-K3)
+
+El camino KDT generalizó el pipeline de mecanizado. Estado del seam para
+BHX:
+
+- **Seleccionable y persistido**: el catálogo ya tiene la máquina
+  `client-a-machine-a-bhx050`, el perfil `mpr-woodwop@r1` y el adapter
+  `woodwop-mpr@0.1.0` (`serializerImplemented: false`); la tupla valida y
+  persiste, la generación bloquea con `SERIALIZER_NOT_IMPLEMENTED`
+  (la tarjeta de settings lee «Bloqueado» — correcto hasta tener evidencia).
+- **Flujo de generación existente y fail-closed**:
+  `generateSelectedMachiningOutput` resuelve la tupla exacta y produce
+  bundles por pieza (manifest `by-piece`, provenance congelado, nombres
+  industriales deterministas). Hoy la frontera de capacidad sólo deja pasar
+  a la familia per-piece implementada (kdt) — abrir woodWOP es extender esa
+  frontera cuando el serializer exista, nunca un fallback.
+- **Entrada lista**: `ProjectDrillingData` con las seis caras bajo el marco
+  canónico (proyecciones axis-aligned de `hardwarePlacement`) +
+  `thicknessMm` cableado end-to-end desde el despiece y desde el snapshot
+  congelado de la liberación (mismo camino frozen-only que KDT: sin
+  autoridad canónica, cero archivos — nunca heurísticas F074 a una máquina).
+- **Fixture compartido**: `fixture-kdt-field-001` (3 programas, 12
+  operaciones, expectativas valor-por-valor y hashes pinned bajo test) es
+  el vector expected que el futuro serializer MPR debe reproducir en su
+  gramática — mismo fixture, dos receptores.
+- **Delta restante para B2** (nada de esto existe hoy): dimensiones del
+  perfil evidenciadas desde muestras reales (kit B1.1), serializer +
+  lector independiente (BHX02), el subconjunto que la evidencia habilite
+  (BHX03-BHX06) y el readback de instalación bajo #352 (BHX12).
+
 ## B2. Evidencia que falta y fuentes primarias
 
 Capturar en el dossier existente: variante/año y placa sanitizada; controlador y build; software y versión/build; programas nativos pequeños que ya funcionen y su resultado esperado; versión/gramática/encoding/unidades; herramientas equipadas y sus IDs/mapa; origen, cara de referencia, orientación de alimentación, pinzas y zonas prohibidas; tamaños/espesores; reglas de cara opuesta/reorientación; flujo de transferencia/selección y barcode si está equipado. No solicitar otra vez el modelo ya confirmado ni inventar el resto. Preferir programas sintéticos preparados con el receptor y sanitizar nombres/rutas/referencias. Conservar hash del original en ubicación autorizada y hash de la copia saneada; nunca ejecutar macros o evaluar expresiones arbitrarias para inspeccionar muestras.

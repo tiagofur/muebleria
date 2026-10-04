@@ -30,7 +30,7 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
     );
 
     const badge = screen.getByTestId('component-provenance-badge');
-    expect(badge.textContent).toContain('Biblioteca (Estándar Granete)');
+    expect(badge.textContent).toContain('Biblioteca · estándar Granete');
     expect(screen.queryByTestId('component-restore-inheritance-btn')).toBeNull();
   });
 
@@ -58,7 +58,7 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
     );
 
     const badge = screen.getByTestId('component-provenance-badge');
-    expect(badge.textContent).toContain('Fábrica (Overlay Activo)');
+    expect(badge.textContent).toContain('Fábrica · excepción de taller');
   });
 
   it('a dirty local override shows the unsaved hint and the explicit exception save', async () => {
@@ -101,7 +101,7 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
     // Server truth: nothing stored for this component yet — the badge stays
     // inherited and the dirty state asks for the explicit save.
     const badge = screen.getByTestId('component-provenance-badge');
-    expect(badge.textContent).toContain('Biblioteca (Estándar Granete)');
+    expect(badge.textContent).toContain('Biblioteca · estándar Granete');
     expect(screen.getByTestId('component-save-exception-btn')).toBeTruthy();
 
     await user.click(screen.getByTestId('component-save-exception-btn'));
@@ -153,7 +153,7 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
     );
 
     const badge = screen.getByTestId('component-provenance-badge');
-    expect(badge.textContent).toContain('Componente (Excepción)');
+    expect(badge.textContent).toContain('Componente · excepción');
 
     await user.click(screen.getByTestId('component-restore-inheritance-btn'));
 
@@ -178,7 +178,7 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
       />,
     );
     expect(screen.getByTestId('component-provenance-badge').textContent).toContain(
-      'Biblioteca (Estándar Granete)',
+      'Biblioteca · estándar Granete',
     );
     expect(screen.queryByTestId('component-save-exception-btn')).toBeNull();
   });
