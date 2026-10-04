@@ -26,6 +26,23 @@ type ContactOperationRule struct {
 	Axis            [3]float64 `json:"axis"`
 	DiameterMm      float64    `json:"diameterMm"`
 	DepthMm         float64    `json:"depthMm"`
+	// StationMode selects which planned stations the rule applies at:
+	// "" / "all" = every station (the uniform pattern); "center" = exactly
+	// one operation at the contact span's midpoint (a single centered
+	// fastener — e.g. one central dowel between two flanking screws).
+	// The midpoint station carries StationIndex -1.
+	StationMode string `json:"stationMode,omitempty"`
+}
+
+// ContactOperation rule station modes.
+const (
+	ContactRuleStationModeAll    = "all"
+	ContactRuleStationModeCenter = "center"
+)
+
+// ValidContactRuleStationMode reports whether a rule's station mode is usable.
+func ValidContactRuleStationMode(mode string) bool {
+	return mode == "" || mode == ContactRuleStationModeAll || mode == ContactRuleStationModeCenter
 }
 
 type ContactOperationProvenance struct {

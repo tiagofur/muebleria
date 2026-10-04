@@ -116,7 +116,8 @@ func deriveResolvedContactOperationsForContact(contact ResolvedContact, plan Sta
 			!isFiniteVec3(rule.OffsetMm) || !isFiniteVec3(rule.Axis) ||
 			!finite(rule.DiameterMm) || !finite(rule.DepthMm) ||
 			math.Abs(dot3(rule.Axis, rule.Axis)-1) > 1e-6 ||
-			rule.DiameterMm <= 0 || rule.DepthMm <= 0 {
+			rule.DiameterMm <= 0 || rule.DepthMm <= 0 ||
+			!ValidContactRuleStationMode(rule.StationMode) {
 			return fail("OPERATION_RULE_INVALID")
 		}
 		ruleIDs[rule.RuleID] = true
@@ -133,13 +134,40 @@ func deriveResolvedContactOperationsForContact(contact ResolvedContact, plan Sta
 		}
 		return rules[i].RuleID < rules[j].RuleID
 	})
-	for stationIndex, station := range stations {
+	// A "center" rule applies exactly once, at the contact span's midpoint —
+	// the single-centered-fastener pattern. OverlapMm is measured from the
+	// frame origin, so the midpoint is half the overlap length. The synthetic
+	// midpoint slot carries StationIndex -1 and applies AFTER every planned
+	// station, keeping the historical station-major emission order stable.
+	centerPoint := contactAdd(contact.Frame.OriginAssemblyMm, contact.Frame.AxisAssembly, contact.OverlapMm[1]/2)
+	hasCenterRule := false
+	for _, rule := range rules {
+		if rule.StationMode == ContactRuleStationModeCenter {
+			hasCenterRule = true
+			break
+		}
+	}
+	type applicationSlot struct {
+		stationIndex int
+		point        [3]float64
+	}
+	slots := make([]applicationSlot, 0, len(stations)+1)
+	for index, station := range stations {
+		slots = append(slots, applicationSlot{stationIndex: index, point: station.AssemblyPointMm})
+	}
+	if hasCenterRule {
+		slots = append(slots, applicationSlot{stationIndex: -1, point: centerPoint})
+	}
+	for _, slot := range slots {
 		for _, rule := range rules {
+			if (rule.StationMode == ContactRuleStationModeCenter) != (slot.stationIndex == -1) {
+				continue
+			}
 			board := a
 			if rule.ParticipantRole == "B" {
 				board = b
 			}
-			centerLocal := board.toLocal(contactAdd(station.AssemblyPointMm, project(rule.OffsetMm), 1))
+			centerLocal := board.toLocal(contactAdd(slot.point, project(rule.OffsetMm), 1))
 			direction := project(rule.Axis)
 			axisLocal := [3]float64{dot3(direction, board.Basis.X), dot3(direction, board.Basis.Y), dot3(direction, board.Basis.Z)}
 			dims := [3]float64{board.WidthMm, board.ThicknessMm, board.LengthMm}
@@ -168,7 +196,7 @@ func deriveResolvedContactOperationsForContact(contact ResolvedContact, plan Sta
 			}
 			provenance := ContactOperationProvenance{SourceKind: "relationship", RelationshipID: contact.RelationshipID,
 				ContactID: id, ParticipantID: board.OccurrenceID, ParticipantRole: rule.ParticipantRole,
-				StationIndex: stationIndex, RecipeID: recipe.RecipeID, RecipeRevision: recipe.RecipeRevision,
+				StationIndex: slot.stationIndex, RecipeID: recipe.RecipeID, RecipeRevision: recipe.RecipeRevision,
 				RuleID: rule.RuleID, RuleRevision: rule.RuleRevision, OperationRole: rule.OperationRole}
 			result.Operations = append(result.Operations, NeutralContactOperation{OperationID: ContactOperationID(provenance),
 				Provenance: provenance, TechnicalProfileID: recipe.TechnicalProfileID,
