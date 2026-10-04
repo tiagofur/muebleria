@@ -51,6 +51,25 @@ button transversal, Enter prematuro, atajos, ruta de edición.
   ComponentsScreen/ShellView/AppContent, menú «Más ▾» con Duplicar en
   ComponentDetailView. Sin Eliminar (decisión de contrato del issue).
   Evidencia: domain 1771/1771, ui 2102/2102, web 581/581, typecheck 7/7.
-- [ ] C4 → PR (apilado)
-- [ ] C5 → PR (apilado)
-- [ ] Browser proof + re-critique
+- [x] C4 → PR #1026 (`feat/1019-componentes-ux-c4`). Badge de procedencia
+  como chip dot+texto sobre tokens reales (sin emojis ni hex fallbacks),
+  botones `btn--small` reales, hints a `catalog-form__hint`, estilos a
+  components.css (`component-joinery__*`), verbo del panel «Fijar excepción
+  en fábrica» (ya no compite con el Guardar del chrome). 4 aserciones de test
+  actualizadas al copy aprobado; components 60/60.
+- [x] C5 → PR #1027 (`feat/1019-componentes-ux-c5`). Hints de frase completa
+  a `--text-sm`, dt y total-label al piso de 12px, title del workspace a
+  `--text-lg` (§3.1), intro de cantos `max-width: 72ch`, regla duplicada de
+  placement-hint consolidada. ui 2102/2102.
+- [x] Browser proof (rama C5 servida por el vite dev local, modo invitado):
+  lista de componentes OK; detalle con «Más ▾» → Duplicar creó
+  `COM-PUE-01-COPY — Puerta (copia)` (C3 ✓); tab Construcción con badge
+  «Biblioteca · estándar Granete» sin emojis, regex-checked (C4 ✓); tab
+  Cantos con las reglas nuevas vivas en el stylesheet
+  (`edge:focus-visible { stroke brand-600, width 18 }` + hit stroke 30)
+  y el DOM recibe foco en los bordes (C2 ✓ — el paseo con Tab es una
+  limitación de simulación del IAB, documentada); intro de cantos con
+  medida acotada visible en screenshot (C5 ✓). C1 cubierto por tests con
+  promesa diferida (el guardado local es demasiado rápido para observar el
+  busy en vivo). Restante post-merge: re-corrida `$impeccable critique`
+  sobre main (baseline 26/40).
