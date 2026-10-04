@@ -728,7 +728,11 @@ func expandLayoutInstances(
 				catalogComponentID: comp.ID,
 			}
 			if inst.Overrides != nil {
-				board.hardware = inst.Overrides.HardwarePlacements
+				resolvedHw, err := resolvePlacementHardwareIDs(inst.Overrides.HardwarePlacements, optionChoices, catalog, board.id)
+				if err != nil {
+					return nil, err
+				}
+				board.hardware = resolvedHw
 			}
 			if planned != nil {
 				board.id = planned[i].instanceID
