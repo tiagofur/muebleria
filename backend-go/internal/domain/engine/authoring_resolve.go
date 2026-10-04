@@ -161,12 +161,12 @@ type AuthoringResolveInput struct {
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
 // non-empty means the snapshot was rejected (no resolved result is usable).
 type AuthoringResolveResult struct {
-	Layout                     FurnitureLayout
-	Normalized                 NormalizedAuthoringIntent
-	Machining                  AuthoringMachining
-	ValidationStatus           string
-	ValidationIssues           []domain.ContractIssue
-	StructuralIssues           []domain.ContractIssue
+	Layout           FurnitureLayout
+	Normalized       NormalizedAuthoringIntent
+	Machining        AuthoringMachining
+	ValidationStatus string
+	ValidationIssues []domain.ContractIssue
+	StructuralIssues []domain.ContractIssue
 	// DoorSwingAccessoriesGroups (#529) groups hinges/handles by door and swing
 	// side so the SketchUp inspector can render the Apertura y Accesorios card
 	// with authoritative provenance. One entry per door slot; empty slices when
