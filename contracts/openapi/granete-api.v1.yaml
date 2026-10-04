@@ -5544,7 +5544,7 @@
         }
       }
     },
-    "/catalog/components/{componentId}/side-assignments/{side}": {
+    "/catalog/components/{componentId}/side-assignments": {
       "parameters": [
         {
           "$ref": "#/components/parameters/ComponentId"
@@ -5613,7 +5613,14 @@
             "$ref": "#/components/responses/ApiError"
           }
         }
-      },
+      }
+    },
+    "/catalog/components/{componentId}/side-assignments/{side}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ComponentId"
+        }
+      ],
       "delete": {
         "operationId": "removeComponentSideAssignment",
         "summary": "Remove one side assignment (restore inheritance)",
