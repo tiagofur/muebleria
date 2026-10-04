@@ -22,6 +22,14 @@
 
 ## Máquina A — WEEKE BHX 050
 
+> **#879 B1 (2026-10-03)**: para la integración nativa woodWOP/MPR, el
+> ítem 4 se concreta en el
+> [`kit de recolección`](../bhx050/b1-woodwop-evidence-kit.md) — pedir al
+> operador que prepare en SU woodWOP los programas del fixture congelado
+> `fixture-kdt-field-001` (piezas 600×400×18 con mecanizado conocido): esos
+> bytes MPR reales son el par expected/actual del serializer. Lo de abajo
+> sigue aplicando tal cual.
+
 1. Foto de la placa de identificación de la máquina (fabricante/modelo/año) si
    está accesible.
 2. Foto o captura de la pantalla de inicio del controlador/software.

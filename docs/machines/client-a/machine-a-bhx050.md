@@ -49,6 +49,18 @@ verdad CNC. `NATIVE_FORMAT_RECEIVER_NOT_CONFIRMED` es un bloqueo del plan B1/B2,
 no un código de error ya implementado. La importación/readback y la prueba
 física permanecen bajo #352 y en estado `NOT_TESTED`.
 
+> **Actualización 2026-10-03 (#1005 K1-K3)** — el pipeline de mecanizado se
+> generalizó siguiendo el camino KDT y el mapa vigente vive en
+> [`docs/machines/bhx050/README.md` §B1.2](../bhx050/README.md): flujo de
+> generación de mecanizado fail-closed desde el snapshot congelado (con
+> `thicknessMm` cableado desde el despiece), manifest por pieza, y la
+> frontera de capacidad que hoy sólo deja pasar a la familia con serializer
+> implementado. El kit de recolección para cerrar esta frontera con
+> evidencia primaria está en
+> [`docs/machines/bhx050/b1-woodwop-evidence-kit.md`](../bhx050/b1-woodwop-evidence-kit.md).
+> Esta matriz B1 no cambia: sin muestras MPR reales, todo sigue
+> `UNKNOWN_FIELD_REQUIRED`.
+
 ## 1. Identidad de la máquina
 
 | Campo | Valor | Procedencia |
