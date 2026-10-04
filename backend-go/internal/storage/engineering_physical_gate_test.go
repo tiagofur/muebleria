@@ -179,8 +179,8 @@ func gateSeedMaterialsAuthorization(t *testing.T, fx *releaseFixture, projectID,
 				}
 			}
 			planning := &domain.MaterialPlanning{
-				ID:          domain.NewMaterialPlanningID("mplan"),
-				ProjectID:   projectID,
+				ID:        domain.NewMaterialPlanningID("mplan"),
+				ProjectID: projectID,
 				Requirements: &domain.MaterialRequirementsSnapshot{
 					ReleaseID:      releaseID,
 					BomFingerprint: fingerprint,
@@ -822,8 +822,8 @@ func TestPhysicalWorkGate_ActivityFinishAtomicTOCTOUWithdrawal(t *testing.T) {
 		err := fiTx(t, gs.fx.store, actorA, func(ctx context.Context) error {
 			_, mErr := gs.fx.store.MutateProjectMaterialPlanning(ctx, gs.fx.projectID, func(snap *domain.MaterialPlanningSnapshot) (*domain.MaterialPlanningMutation, error) {
 				planning := &domain.MaterialPlanning{
-					ID:          domain.NewMaterialPlanningID("mplan"),
-					ProjectID:   gs.fx.projectID,
+					ID:        domain.NewMaterialPlanningID("mplan"),
+					ProjectID: gs.fx.projectID,
 					Requirements: &domain.MaterialRequirementsSnapshot{
 						ReleaseID:      "99999999-9999-9999-9999-999999999999",
 						BomFingerprint: "fingerprint-of-another-release",
@@ -853,7 +853,7 @@ func TestPhysicalWorkGate_ActivityFinishAtomicTOCTOUWithdrawal(t *testing.T) {
 		finishDone <- fiTx(t, gs.fx.store, actorA, func(ctx context.Context) error {
 			_, fErr := gs.fx.store.FinishProductionActivityWithPhysicalEffect(ctx, storage.FinishActivityPhysicalCommand{
 				ActivityID: "act-atomic-toctou-0001", PiecesCount: 2, Notes: "debería rodar todo back",
-				ActorID:    rlsUserA,
+				ActorID: rlsUserA,
 			})
 			return fErr
 		})

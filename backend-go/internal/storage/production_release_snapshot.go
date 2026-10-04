@@ -22,10 +22,10 @@ var ErrReleaseSnapshotUnavailable = errors.New("CONFLICT:el snapshot de fabricac
 // Private frozen content; ProductionRelease remains the sole release authority.
 // Version pins remain nil until the existing resolver supports historical definitions.
 type ReleaseManufacturingUnit struct {
-	Resolved          engine.ResolvedReleaseUnit          `json:"resolved"`
-	Parameters        map[string]any                      `json:"parameters"`
-	MaterialChoices   map[string]string                   `json:"materialChoices"`
-	DefinitionVersion *int                                `json:"definitionVersion"`
+	Resolved          engine.ResolvedReleaseUnit `json:"resolved"`
+	Parameters        map[string]any             `json:"parameters"`
+	MaterialChoices   map[string]string          `json:"materialChoices"`
+	DefinitionVersion *int                       `json:"definitionVersion"`
 	// HardwareProfileDemand freezes the unit's resolved-profile commercial
 	// consumption (#917/#875): additive optional section of schema v2.
 	// Historical rows simply lack the key and keep failing closed exactly
@@ -191,10 +191,10 @@ type WorkshopOccurrenceAssignmentView struct {
 // (e.g. a unit was added after liberating) — callers then keep the LIVE
 // canonical order instead of mixing frozen and unfrozen occurrences.
 type WorkshopOccurrenceProjectionView struct {
-	ReleaseID                  string                             `json:"releaseId"`
-	ReleaseNumber              int                                `json:"releaseNumber"`
-	CoversAllCurrentInstances  bool                               `json:"coversAllCurrentInstances"`
-	Assignments                []WorkshopOccurrenceAssignmentView `json:"assignments"`
+	ReleaseID                 string                             `json:"releaseId"`
+	ReleaseNumber             int                                `json:"releaseNumber"`
+	CoversAllCurrentInstances bool                               `json:"coversAllCurrentInstances"`
+	Assignments               []WorkshopOccurrenceAssignmentView `json:"assignments"`
 }
 
 // GetProjectWorkshopOccurrences projects the EXACT release's frozen unit

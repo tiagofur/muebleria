@@ -1108,8 +1108,8 @@ func TestHardwareAssets_PublishFailsOnBrokenComposition(t *testing.T) {
 
 	err := fiTx(t, w.fx.store, fiActorA(), func(ctx context.Context) error {
 		_, err := w.fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
-			DesignID:   w.designID,
-			SourceType: domain.DesignRevisionSourceSketchup,
+			DesignID:    w.designID,
+			SourceType:  domain.DesignRevisionSourceSketchup,
 			ActorUserID: rlsUserA,
 		})
 		return err
@@ -1141,14 +1141,14 @@ func TestHardwareAssets_PublishLegitimateAbsenceWithoutDefinition(t *testing.T) 
 			SourceType: domain.DesignRevisionSourceSketchup,
 			Items: []storage.UpdateDesignWorkingCopyItemCommand{
 				{
-					FurnitureInstanceID:  w.fi, // con definición (fiModuleA)
+					FurnitureInstanceID:   w.fi, // con definición (fiModuleA)
 					FurnitureDefinitionID: fiModuleA,
 					Parameters:            map[string]any{"widthMm": 600.0},
-					Transform: domain.Transform3D{TranslationMm: [3]float64{0, 0, 0}, RotationDeg: [3]float64{0, 0, 0}},
+					Transform:             domain.Transform3D{TranslationMm: [3]float64{0, 0, 0}, RotationDeg: [3]float64{0, 0, 0}},
 				},
 				{
 					FurnitureInstanceID: fi.ID, // sin definición
-					Transform: domain.Transform3D{TranslationMm: [3]float64{600, 0, 0}, RotationDeg: [3]float64{0, 0, 0}},
+					Transform:           domain.Transform3D{TranslationMm: [3]float64{600, 0, 0}, RotationDeg: [3]float64{0, 0, 0}},
 				},
 			},
 			ActorUserID: rlsUserA,

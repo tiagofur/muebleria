@@ -51,12 +51,12 @@ func seedLegacyQuoteRevision(t *testing.T, fx *quoteLifecycleFixture, advanceTo 
 		items := make([]storage.CreateQuoteRevisionItemCommand, 0, len(materialized.Instances))
 		for _, instance := range materialized.Instances {
 			items = append(items, storage.CreateQuoteRevisionItemCommand{
-				FurnitureInstanceID: instance.FurnitureInstanceID,
-				QuoteLineID:         csLine,
+				FurnitureInstanceID:   instance.FurnitureInstanceID,
+				QuoteLineID:           csLine,
 				FurnitureDefinitionID: csModule,
-				Parameters:          map[string]any{},
-				MaterialChoices:     map[string]string{"INTERIOR": csMaterial},
-				LifecycleStatus:     "active",
+				Parameters:            map[string]any{},
+				MaterialChoices:       map[string]string{"INTERIOR": csMaterial},
+				LifecycleStatus:       "active",
 			})
 		}
 		var err error

@@ -21,11 +21,11 @@ import (
 // transaction as the transition.
 
 type engineeringHttpHarness struct {
-	call    func(method, target, credential, body, ifMatch, idemKey string) *httptest.ResponseRecorder
-	tokenA  string // org A admin (release permission)
-	tokenEng string // org A ingeniero
+	call        func(method, target, credential, body, ifMatch, idemKey string) *httptest.ResponseRecorder
+	tokenA      string // org A admin (release permission)
+	tokenEng    string // org A ingeniero
 	tokenSeller string // org A vendedor (no release permission)
-	tokenB  string // org B admin (manufacturing partner of the shared project)
+	tokenB      string // org B admin (manufacturing partner of the shared project)
 }
 
 const engineeringVendedorUserID = "20000000-0000-0000-0000-00000000000e"

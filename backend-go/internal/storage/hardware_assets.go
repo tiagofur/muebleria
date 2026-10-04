@@ -33,7 +33,7 @@ type CreateHardwareAssetUploadSessionCommand struct {
 	// Derivation (#669), when set, stages a GLB derivation block: finalize
 	// writes it onto the new revision. Requires representation 'glb' and a
 	// target asset whose exact SKP revision is the source.
-	Derivation *domain.HardwareAssetDerivation
+	Derivation  *domain.HardwareAssetDerivation
 	ActorUserID string
 }
 
@@ -1117,11 +1117,11 @@ func hardwareAssetGlbRepresentation(
 		return nil
 	}
 	glb := &domain.HardwareVisualGlbRepresentation{
-		RevisionID:       revisionID,
-		SHA256:           sha256,
-		SizeBytes:        sizeBytes,
-		SourceUnits:      origin.SourceUnits,
-		UpAxis:           origin.UpAxis,
+		RevisionID:  revisionID,
+		SHA256:      sha256,
+		SizeBytes:   sizeBytes,
+		SourceUnits: origin.SourceUnits,
+		UpAxis:      origin.UpAxis,
 	}
 	if sourceRevisionID != "" {
 		glb.SourceRevisionID = sourceRevisionID
@@ -1219,95 +1219,114 @@ func (s *PostgresStore) getHardwareAssetRow(ctx context.Context, assetID string)
 // (a retired asset is refused for NEW selections). Representation and digest
 // are returned from the referenced rows — never from client echo. Thumbnails
 // cannot carry a hardware model binding.
-func (s *PostgresStore) ResolveHardwareVisualAssetBinding(ctx context.Context, assetID, revisionID string) (*domain.HardwareVisualAssetBinding, error) {
-	if !isValidUUID(assetID) || !isValidUUID(revisionID) {
-		return nil, fmt.Errorf("%w: asset/revision identifiers required", domain.ErrHardwareAssetBindingInvalid)
+func hardwareAssetContentTypeMatchesRepresentation(rep domain.HardwareAssetRepresentation, contentType string) bool {
+	switch rep {
+	case domain.HardwareAssetRepresentationSKP:
+		return contentType == "application/octet-stream"
+	case domain.HardwareAssetRepresentationGLB:
+		return contentType == "model/gltf-binary"
+	case domain.HardwareAssetRepresentationThumbnail:
+		return contentType == "image/png" || contentType == "image/jpeg" || contentType == "image/webp"
+	default:
+		return false
 	}
-	var (
-		revisionIDRow  string
-		assetStatus    string
-		representation string
-		sha256         string
-		sizeBytes      int64
-		sourceRevID    *string
-		originRaw      []byte
-		evidence       *string
-	)
+}
+
+// lockHardwareAssetRow reads one asset row FOR UPDATE: every append of a new
+// revision (and the retire transition) serializes on it (#667 R5).
+func (s *PostgresStore) lockHardwareAssetRow(ctx context.Context, assetID string) (*domain.HardwareAsset, error) {
+	var a domain.HardwareAsset
+	var createdBy *string
 	err := s.db(ctx).QueryRow(ctx, `
-		SELECT r.id, a.status, r.representation, r.sha256, r.size_bytes, r.source_revision_id, r.origin,
-		       (SELECT v.result FROM hardware_asset_validations v
-		        WHERE v.revision_id = r.id ORDER BY v.created_at DESC, v.id DESC LIMIT 1)
-		FROM hardware_assets a
-		JOIN hardware_asset_revisions r ON r.asset_id = a.id AND r.id = $2
-		WHERE a.id = $1 AND a.organization_id = $3
-	`, assetID, revisionID, OrgFromCtx(ctx)).Scan(&revisionIDRow, &assetStatus, &representation, &sha256, &sizeBytes, &sourceRevID, &originRaw, &evidence)
+		SELECT id, organization_id, display_name, provenance, license, status, created_by, created_at, updated_at
+		FROM hardware_assets WHERE id = $1 AND organization_id = $2
+		FOR UPDATE
+	`, assetID, OrgFromCtx(ctx)).Scan(&a.ID, &a.OrganizationID, &a.DisplayName, &a.Provenance, &a.License, &a.Status, &createdBy, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// Neutral: an unknown revision and a foreign one are
-			// indistinguishable to the caller (no existence oracle).
-			return nil, fmt.Errorf("%w: revisión de recurso no disponible", domain.ErrHardwareAssetBindingInvalid)
+			return nil, domain.ErrHardwareAssetNotFound
 		}
 		return nil, err
 	}
-	if assetStatus == string(domain.HardwareAssetStatusRetired) {
-		return nil, domain.ErrHardwareAssetRetired
+	if createdBy != nil {
+		a.CreatedBy = *createdBy
 	}
-	rep := domain.HardwareAssetRepresentation(representation)
-	if rep == domain.HardwareAssetRepresentationThumbnail {
-		return nil, fmt.Errorf("%w: una miniatura no puede ser el modelo del herraje", domain.ErrHardwareAssetBindingInvalid)
-	}
-	binding := &domain.HardwareVisualAssetBinding{
-		AssetID:          assetID,
-		AssetRevisionID:  revisionID,
-		Representation:   rep,
-		SHA256:           sha256,
-		SizeBytes:        sizeBytes,
-		PreparationState: domain.HardwareAssetPreparationUnprepared,
-	}
-	var origin *domain.HardwareAssetOrigin
-	if len(originRaw) > 0 && string(originRaw) != "null" {
-		origin, err = domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
-		if err != nil {
-			return nil, fmt.Errorf("%w: origen del recurso inválido: %v", domain.ErrHardwareAssetBindingInvalid, err)
-		}
-		if origin != nil {
-			rev := domain.HardwareAssetRevision{Origin: origin}
-			binding.PreparationState = rev.PreparationState()
-			if binding.PreparationState == domain.HardwareAssetPreparationPrepared {
-				binding.MountFrame = origin.MountFrame
-			}
-		}
-	}
-	switch {
-	case evidence == nil:
-		binding.ValidationState = domain.HardwareAssetValidationPending
-	case *evidence == "passed":
-		binding.ValidationState = domain.HardwareAssetValidationValidated
-	default:
-		binding.ValidationState = domain.HardwareAssetValidationFailed
-	}
-
-	// #669 server-resolved GLB co-representation for web consumers: a GLB
-	// binding mirrors itself; an SKP binding resolves the latest derived GLB
-	// of exactly this revision (deterministic rule). Nil when none exists or
-	// its provenance is unreadable — never an invented block.
-	if rep == domain.HardwareAssetRepresentationGLB {
-		binding.Glb = hardwareAssetGlbRepresentation(rep, revisionID, sha256, sizeBytes, "", origin)
-	} else {
-		derived, err := s.latestDerivedGlbRevision(ctx, assetID, revisionID)
-		if err != nil {
-			derived = nil // fail-honest: unreadable provenance omits the block
-		}
-		if derived != nil {
-			binding.Glb = hardwareAssetGlbRepresentation(derived.Representation, derived.ID, derived.SHA256, derived.SizeBytes, derived.SourceRevisionID, derived.Origin)
-		}
-	}
-	return binding, nil
+	return &a, nil
 }
 
-// hardwareAssetValidationStates derives the authoritative validation state of
-// each revision from its latest evidence row (no evidence = pending). The
-// revision rows themselves are immutable.
+// isUniqueViolationOn reports whether err is a 23505 on the given constraint.
+func isUniqueViolationOn(err error, constraint string) bool {
+	var pgErr interface{ SQLState() string }
+	if !errors.As(err, &pgErr) || pgErr.SQLState() != "23505" {
+		return false
+	}
+	return strings.Contains(err.Error(), constraint)
+}
+
+// CollectHardwareAssetStagedFile decides, under the session row lock, whether
+// a staged storage key is still needed; when it is not, it invokes remove()
+// WHILE the lock is held so a concurrent staging of the same
+// content-addressed key can never observe a missing file, and only then
+// commits the decision. A key is still needed when it is the staged bytes of
+// a PREPARED session (the state a rollback restores) or when any immutable
+// revision references it (the finalized blob). Cancelled/expired sessions
+// keep their staged metadata, so their keys are collectable. Returns whether
+// the file was collected.
+func (s *PostgresStore) CollectHardwareAssetStagedFile(ctx context.Context, sessionID, organizationID, storageKey string, remove func() error) (bool, error) {
+	if !isValidUUID(sessionID) || storageKey == "" {
+		return false, nil
+	}
+	actor, _ := TenantActorFromCtx(ctx)
+	if actor.OrganizationID == "" {
+		actor.OrganizationID = organizationID
+	}
+	collected := false
+	err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+		var (
+			staged       *string
+			status       string
+			revisionRefs int
+		)
+		if err := s.db(txCtx).QueryRow(txCtx, `
+			SELECT staged_storage_key, status
+			FROM hardware_asset_upload_sessions
+			WHERE id = $1 AND organization_id = $2
+			FOR UPDATE
+		`, sessionID, organizationID).Scan(&staged, &status); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Session row gone (or foreign org): nothing can restore a
+				// reference to the key through it; revision refs below still
+				// guard finalized blobs.
+				staged, status = nil, ""
+			} else {
+				return err
+			}
+		}
+		if err := s.db(txCtx).QueryRow(txCtx, `
+			SELECT count(*) FROM hardware_asset_revisions
+			WHERE organization_id = $1 AND storage_key = $2
+		`, organizationID, storageKey).Scan(&revisionRefs); err != nil {
+			return err
+		}
+		liveStaging := staged != nil && *staged == storageKey && status == "prepared"
+		if liveStaging || revisionRefs > 0 {
+			return nil // still needed: prepared bytes or a finalized blob
+		}
+		if remove == nil {
+			return nil
+		}
+		if err := remove(); err != nil {
+			return err // decision tx rolls back; the file stays for a retry
+		}
+		collected = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return collected, nil
+}
+
 func (s *PostgresStore) hardwareAssetValidationStates(ctx context.Context, revisionIDs []string) (map[string]domain.HardwareAssetValidationState, error) {
 	states := map[string]domain.HardwareAssetValidationState{}
 	if len(revisionIDs) == 0 {
@@ -1409,501 +1428,3 @@ func (s *PostgresStore) RecordHardwareAssetValidation(ctx context.Context, cmd R
 // The pin INSERT is a single statement joining hardwares with their bound
 // revision: representation and digest always come from the same read as the
 // revision id, so a concurrent rebind can never produce a mixed pin.
-func (s *PostgresStore) freezeDesignRevisionHardwareAssets(ctx context.Context, designOrgID, projectID, designRevisionID string, items []PublishDesignRevisionItemCommand) (int, error) {
-	hardwareIDs := map[string]struct{}{}
-	modules := map[string]*domain.Module{}
-	var catalog *domain.Catalog
-
-	for _, item := range items {
-		if !isValidUUID(item.FurnitureDefinitionID) {
-			continue
-		}
-		if _, cached := modules[item.FurnitureDefinitionID]; cached {
-			continue
-		}
-		m, err := s.GetModuleByID(ctx, item.FurnitureDefinitionID)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				// Historical/legacy definition: explicit absence, no invented
-				// pins (same precedent as the presentation snapshot).
-				modules[item.FurnitureDefinitionID] = nil
-				continue
-			}
-			return 0, err
-		}
-		modules[item.FurnitureDefinitionID] = m
-	}
-
-	for _, module := range modules {
-		if module == nil {
-			continue
-		}
-		if catalog == nil {
-			cat, err := s.publishResolutionCatalog(ctx)
-			if err != nil {
-				return 0, err
-			}
-			catalog = &cat
-		}
-		ids, err := compositionHardwareIDs(*module, *catalog)
-		if err != nil {
-			return 0, err
-		}
-		for id := range ids {
-			hardwareIDs[id] = struct{}{}
-		}
-	}
-	if len(hardwareIDs) == 0 {
-		return 0, nil
-	}
-
-	ids := make([]string, 0, len(hardwareIDs))
-	for id := range hardwareIDs {
-		ids = append(ids, id)
-	}
-	// One atomic statement: the revision id, representation and digest of
-	// each pin come from the SAME read of hardwares × hardware_asset_revisions,
-	// and the derived GLB is resolved at freeze time with the same
-	// deterministic rule as the live binding (highest derived revision of the
-	// exact pinned SKP revision). Later re-exports create new rows and can
-	// never rewrite a frozen pin (#669 historical exactness).
-	pinned, err := s.db(ctx).Query(ctx, `
-		WITH inserted AS (
-			INSERT INTO design_revision_hardware_assets
-				(organization_id, project_id, design_revision_id, hardware_id, asset_id, asset_revision_id, representation, sha256, glb_revision_id, glb_sha256)
-			SELECT $1, $2, $3, h.id, r.asset_id, r.id, r.representation, r.sha256, g.id, g.sha256
-			FROM hardwares h
-			JOIN hardware_asset_revisions r
-			  ON r.id = h.visual_asset_revision_id AND r.asset_id = h.visual_asset_id
-			LEFT JOIN LATERAL (
-				SELECT gr.id, gr.sha256
-				FROM hardware_asset_revisions gr
-				WHERE gr.organization_id = r.organization_id
-				  AND gr.asset_id = r.asset_id
-				  AND gr.source_revision_id = r.id
-				  AND gr.representation = 'glb'
-				ORDER BY gr.revision_number DESC
-				LIMIT 1
-			) g ON r.representation = 'skp'
-			WHERE h.organization_id = $1 AND h.visual_asset_id IS NOT NULL AND h.id = ANY($4::uuid[])
-			RETURNING 1
-		)
-		SELECT count(*) FROM inserted
-	`, designOrgID, projectID, designRevisionID, ids)
-	if err != nil {
-		return 0, err
-	}
-	defer pinned.Close()
-	var count int
-	if pinned.Next() {
-		if err := pinned.Scan(&count); err != nil {
-			return 0, err
-		}
-	}
-	return count, pinned.Err()
-}
-
-// compositionHardwareIDs walks one module's SEMANTIC composition and returns
-// every hardware id it references: placement overrides on structure and
-// module component instances, agregado instances' component placements and
-// hardware lines, and the module's own hardware lines. A referenced
-// structure or agregado that cannot be found is a resolution error — the
-// caller fails the publish instead of silently dropping references.
-func compositionHardwareIDs(module domain.Module, catalog domain.Catalog) (map[string]struct{}, error) {
-	out := map[string]struct{}{}
-	addPlacement := func(hardwareID string) {
-		if strings.TrimSpace(hardwareID) != "" {
-			out[hardwareID] = struct{}{}
-		}
-	}
-	addInstances := func(instances []domain.ComponentInstance) {
-		for _, ci := range instances {
-			if ci.Overrides == nil {
-				continue
-			}
-			for _, hp := range ci.Overrides.HardwarePlacements {
-				addPlacement(hp.HardwareID)
-			}
-		}
-	}
-	addAgregadoInstances := func(instances []domain.ModuleAgregadoInstance) error {
-		for _, ai := range instances {
-			agregado, ok := findCatalogAgregado(catalog, ai.AgregadoID)
-			if !ok {
-				return fmt.Errorf("%w: el módulo %s referencia el agregado %s y no existe en el catálogo",
-					domain.ErrCompositionUnresolvable, module.Code, ai.AgregadoID)
-			}
-			addInstances(agregado.Components)
-			for _, hl := range agregado.HardwareLines {
-				addPlacement(hl.HardwareID)
-			}
-		}
-		return nil
-	}
-
-	if strings.TrimSpace(module.StructureID) != "" {
-		structure, ok := findCatalogStructure(catalog, module.StructureID)
-		if !ok {
-			return nil, fmt.Errorf("%w: el módulo %s referencia la estructura %s y no existe en el catálogo",
-				domain.ErrCompositionUnresolvable, module.Code, module.StructureID)
-		}
-		addInstances(structure.Components)
-		if err := addAgregadoInstances(structure.Agregados); err != nil {
-			return nil, err
-		}
-	}
-	addInstances(module.Components)
-	if err := addAgregadoInstances(module.Agregados); err != nil {
-		return nil, err
-	}
-	for _, hl := range module.HardwareLines {
-		addPlacement(hl.HardwareID)
-	}
-	return out, nil
-}
-
-func findCatalogStructure(catalog domain.Catalog, structureID string) (domain.Structure, bool) {
-	for _, st := range catalog.Structures {
-		if st.ID == structureID {
-			return st, true
-		}
-	}
-	return domain.Structure{}, false
-}
-
-func findCatalogAgregado(catalog domain.Catalog, agregadoID string) (domain.Agregado, bool) {
-	for _, ag := range catalog.Agregados {
-		if ag.ID == agregadoID {
-			return ag, true
-		}
-	}
-	return domain.Agregado{}, false
-}
-
-// publishResolutionCatalog loads the composition the authoritative resolver
-// consumes (same shape as the furniture layout endpoint).
-func (s *PostgresStore) publishResolutionCatalog(ctx context.Context) (domain.Catalog, error) {
-	var cat domain.Catalog
-	structures, err := s.ListStructures(ctx)
-	if err != nil {
-		return cat, err
-	}
-	cat.Structures = structures
-	components, err := s.ListComponents(ctx)
-	if err != nil {
-		return cat, err
-	}
-	cat.Components = components
-	agregados, err := s.ListAgregados(ctx)
-	if err != nil {
-		return cat, err
-	}
-	cat.Agregados = agregados
-	hardware, err := s.ListHardwares(ctx)
-	if err != nil {
-		return cat, err
-	}
-	cat.Hardware = hardware
-	materials, err := s.ListMaterialBoards(ctx)
-	if err != nil {
-		return cat, err
-	}
-	cat.Materials = materials
-	return cat, nil
-}
-
-
-// ListDesignRevisionHardwareAssets reads the frozen pins of one revision
-// (readback for consumers and tests).
-func (s *PostgresStore) ListDesignRevisionHardwareAssets(ctx context.Context, designRevisionID string) ([]domain.DesignRevisionHardwareAssetPin, error) {
-	if !isValidUUID(designRevisionID) {
-		return nil, domain.ErrDesignRevisionNotFound
-	}
-	rows, err := s.db(ctx).Query(ctx, `
-		SELECT id, hardware_id, asset_id, asset_revision_id, representation, sha256, glb_revision_id, glb_sha256, created_at
-		FROM design_revision_hardware_assets
-		WHERE organization_id = $1 AND design_revision_id = $2
-		ORDER BY hardware_id ASC
-	`, OrgFromCtx(ctx), designRevisionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var pins []domain.DesignRevisionHardwareAssetPin
-	for rows.Next() {
-		var p domain.DesignRevisionHardwareAssetPin
-		if err := rows.Scan(&p.ID, &p.HardwareID, &p.AssetID, &p.AssetRevisionID, &p.Representation, &p.SHA256, &p.GlbRevisionID, &p.GlbSHA256, &p.CreatedAt); err != nil {
-			return nil, err
-		}
-		pins = append(pins, p)
-	}
-	return pins, rows.Err()
-}
-
-// attachHardwareVisualBindings resolves the exact binding details
-// (representation, digest, derived validation state) for hardware rows that
-// reference a revision. The identifiers live on the hardwares row; the
-// resolved facts come from the referenced rows — never from client echo.
-func (s *PostgresStore) attachHardwareVisualBindings(ctx context.Context, items []domain.Hardware) error {
-	revisionIDs := make([]string, 0, len(items))
-	for _, h := range items {
-		if h.VisualAsset != nil && h.VisualAsset.AssetRevisionID != "" {
-			revisionIDs = append(revisionIDs, h.VisualAsset.AssetRevisionID)
-		}
-	}
-	if len(revisionIDs) == 0 {
-		return nil
-	}
-	rows, err := s.db(ctx).Query(ctx, `
-		SELECT r.id, r.representation, r.sha256, r.size_bytes, r.source_revision_id, r.origin
-		FROM hardware_asset_revisions r
-		WHERE r.organization_id = $1 AND r.id = ANY($2::uuid[])
-	`, OrgFromCtx(ctx), revisionIDs)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	type revisionFacts struct {
-		Representation   domain.HardwareAssetRepresentation
-		SHA256           string
-		SizeBytes        int64
-		SourceRevisionID string
-		Origin           *domain.HardwareAssetOrigin
-		PreparationState domain.HardwareAssetPreparationState
-		MountFrame       *domain.HardwareMountFrame
-	}
-	details := map[string]revisionFacts{}
-	for rows.Next() {
-		var revisionID, representation, sha256 string
-		var sizeBytes int64
-		var sourceRevisionID *string
-		var originRaw []byte
-		if err := rows.Scan(&revisionID, &representation, &sha256, &sizeBytes, &sourceRevisionID, &originRaw); err != nil {
-			return err
-		}
-		prepState := domain.HardwareAssetPreparationUnprepared
-		var mountFrame *domain.HardwareMountFrame
-		var origin *domain.HardwareAssetOrigin
-		if len(originRaw) > 0 && string(originRaw) != "null" {
-			origin, err = domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw))
-			if err != nil {
-				return fmt.Errorf("%w: revision %s origen del recurso inválido: %v", domain.ErrHardwareAssetBindingInvalid, revisionID, err)
-			}
-			if origin != nil {
-				rev := domain.HardwareAssetRevision{Origin: origin}
-				prepState = rev.PreparationState()
-				if prepState == domain.HardwareAssetPreparationPrepared {
-					mountFrame = origin.MountFrame
-				}
-			}
-		}
-		facts := revisionFacts{
-			Representation:   domain.HardwareAssetRepresentation(representation),
-			SHA256:           sha256,
-			SizeBytes:        sizeBytes,
-			Origin:           origin,
-			PreparationState: prepState,
-			MountFrame:       mountFrame,
-		}
-		if sourceRevisionID != nil {
-			facts.SourceRevisionID = *sourceRevisionID
-		}
-		details[revisionID] = facts
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	states, err := s.hardwareAssetValidationStates(ctx, revisionIDs)
-	if err != nil {
-		return err
-	}
-
-	// #669: resolve the GLB co-representation of every SKP-bound revision in
-	// one batched read of the deterministic latest-derived rule. Unreadable
-	// provenance omits the block (fail-honest, never invented).
-	derivedBySource := map[string]*domain.HardwareVisualGlbRepresentation{}
-	skpBoundIDs := make([]string, 0, len(revisionIDs))
-	for _, id := range revisionIDs {
-		if d, ok := details[id]; ok && d.Representation == domain.HardwareAssetRepresentationSKP {
-			skpBoundIDs = append(skpBoundIDs, id)
-		}
-	}
-	if len(skpBoundIDs) > 0 {
-		derivedRows, err := s.db(ctx).Query(ctx, `
-			SELECT DISTINCT ON (d.source_revision_id) d.source_revision_id, d.id, d.sha256, d.size_bytes, d.origin
-			FROM hardware_asset_revisions d
-			WHERE d.organization_id = $1 AND d.representation = 'glb'
-			  AND d.source_revision_id IS NOT NULL AND d.source_revision_id = ANY($2::uuid[])
-			ORDER BY d.source_revision_id, d.revision_number DESC
-		`, OrgFromCtx(ctx), skpBoundIDs)
-		if err != nil {
-			return err
-		}
-		for derivedRows.Next() {
-			var sourceRevisionID, revisionID, sha256 string
-			var sizeBytes int64
-			var originRaw []byte
-			if err := derivedRows.Scan(&sourceRevisionID, &revisionID, &sha256, &sizeBytes, &originRaw); err != nil {
-				derivedRows.Close()
-				return err
-			}
-			var origin *domain.HardwareAssetOrigin
-			if len(originRaw) > 0 && string(originRaw) != "null" {
-				if origin, err = domain.ValidateHardwareAssetOrigin(json.RawMessage(originRaw)); err != nil {
-					origin = nil // unreadable provenance omits the block
-				}
-			}
-			derivedBySource[sourceRevisionID] = hardwareAssetGlbRepresentation(
-				domain.HardwareAssetRepresentationGLB, revisionID, sha256, sizeBytes, sourceRevisionID, origin)
-		}
-		derivedRows.Close()
-		if err := derivedRows.Err(); err != nil {
-			return err
-		}
-	}
-
-	for i := range items {
-		binding := items[i].VisualAsset
-		if binding == nil {
-			continue
-		}
-		d, ok := details[binding.AssetRevisionID]
-		if !ok {
-			// Referenced revision unreadable in this org: keep identifiers,
-			// expose no fabricated facts (fail-honest read).
-			binding.Representation = ""
-			binding.SHA256 = ""
-			binding.SizeBytes = 0
-			binding.ValidationState = ""
-			binding.PreparationState = ""
-			binding.MountFrame = nil
-			binding.Glb = nil
-			continue
-		}
-		binding.Representation = d.Representation
-		binding.SHA256 = d.SHA256
-		binding.SizeBytes = d.SizeBytes
-		binding.ValidationState = states[binding.AssetRevisionID]
-		binding.PreparationState = d.PreparationState
-		binding.MountFrame = d.MountFrame
-		binding.Glb = nil
-		switch d.Representation {
-		case domain.HardwareAssetRepresentationGLB:
-			binding.Glb = hardwareAssetGlbRepresentation(d.Representation, binding.AssetRevisionID, d.SHA256, d.SizeBytes, d.SourceRevisionID, d.Origin)
-		case domain.HardwareAssetRepresentationSKP:
-			binding.Glb = derivedBySource[binding.AssetRevisionID]
-		}
-	}
-	return nil
-}
-
-// hardwareAssetContentTypeMatchesRepresentation is the storage-frontier
-// coherence table (#667 R3): which staged content types may finalize under
-// each representation.
-func hardwareAssetContentTypeMatchesRepresentation(rep domain.HardwareAssetRepresentation, contentType string) bool {
-	switch rep {
-	case domain.HardwareAssetRepresentationSKP:
-		return contentType == "application/octet-stream"
-	case domain.HardwareAssetRepresentationGLB:
-		return contentType == "model/gltf-binary"
-	case domain.HardwareAssetRepresentationThumbnail:
-		return contentType == "image/png" || contentType == "image/jpeg" || contentType == "image/webp"
-	default:
-		return false
-	}
-}
-
-// lockHardwareAssetRow reads one asset row FOR UPDATE: every append of a new
-// revision (and the retire transition) serializes on it (#667 R5).
-func (s *PostgresStore) lockHardwareAssetRow(ctx context.Context, assetID string) (*domain.HardwareAsset, error) {
-	var a domain.HardwareAsset
-	var createdBy *string
-	err := s.db(ctx).QueryRow(ctx, `
-		SELECT id, organization_id, display_name, provenance, license, status, created_by, created_at, updated_at
-		FROM hardware_assets WHERE id = $1 AND organization_id = $2
-		FOR UPDATE
-	`, assetID, OrgFromCtx(ctx)).Scan(&a.ID, &a.OrganizationID, &a.DisplayName, &a.Provenance, &a.License, &a.Status, &createdBy, &a.CreatedAt, &a.UpdatedAt)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, domain.ErrHardwareAssetNotFound
-		}
-		return nil, err
-	}
-	if createdBy != nil {
-		a.CreatedBy = *createdBy
-	}
-	return &a, nil
-}
-
-// isUniqueViolationOn reports whether err is a 23505 on the given constraint.
-func isUniqueViolationOn(err error, constraint string) bool {
-	var pgErr interface{ SQLState() string }
-	if !errors.As(err, &pgErr) || pgErr.SQLState() != "23505" {
-		return false
-	}
-	return strings.Contains(err.Error(), constraint)
-}
-
-// CollectHardwareAssetStagedFile decides, under the session row lock, whether
-// a staged storage key is still needed; when it is not, it invokes remove()
-// WHILE the lock is held so a concurrent staging of the same
-// content-addressed key can never observe a missing file, and only then
-// commits the decision. A key is still needed when it is the staged bytes of
-// a PREPARED session (the state a rollback restores) or when any immutable
-// revision references it (the finalized blob). Cancelled/expired sessions
-// keep their staged metadata, so their keys are collectable. Returns whether
-// the file was collected.
-func (s *PostgresStore) CollectHardwareAssetStagedFile(ctx context.Context, sessionID, organizationID, storageKey string, remove func() error) (bool, error) {
-	if !isValidUUID(sessionID) || storageKey == "" {
-		return false, nil
-	}
-	actor, _ := TenantActorFromCtx(ctx)
-	if actor.OrganizationID == "" {
-		actor.OrganizationID = organizationID
-	}
-	collected := false
-	err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
-		var (
-			staged     *string
-			status     string
-			revisionRefs int
-		)
-		if err := s.db(txCtx).QueryRow(txCtx, `
-			SELECT staged_storage_key, status
-			FROM hardware_asset_upload_sessions
-			WHERE id = $1 AND organization_id = $2
-			FOR UPDATE
-		`, sessionID, organizationID).Scan(&staged, &status); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				// Session row gone (or foreign org): nothing can restore a
-				// reference to the key through it; revision refs below still
-				// guard finalized blobs.
-				staged, status = nil, ""
-			} else {
-				return err
-			}
-		}
-		if err := s.db(txCtx).QueryRow(txCtx, `
-			SELECT count(*) FROM hardware_asset_revisions
-			WHERE organization_id = $1 AND storage_key = $2
-		`, organizationID, storageKey).Scan(&revisionRefs); err != nil {
-			return err
-		}
-		liveStaging := staged != nil && *staged == storageKey && status == "prepared"
-		if liveStaging || revisionRefs > 0 {
-			return nil // still needed: prepared bytes or a finalized blob
-		}
-		if remove == nil {
-			return nil
-		}
-		if err := remove(); err != nil {
-			return err // decision tx rolls back; the file stays for a retry
-		}
-		collected = true
-		return nil
-	})
-	if err != nil {
-		return false, err
-	}
-	return collected, nil
-}

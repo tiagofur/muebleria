@@ -87,9 +87,9 @@ func TestReleaseServerInputsTenantIsolation(t *testing.T) {
 				Variants: []domain.ProfileRecipeVariant{{
 					TargetFace: "back",
 					Rules: []domain.ProfileRuleSpec{
-					{RuleID: "rule-loader-a", RuleRevision: "1", ParticipantRole: "A", OperationRole: "drill", EntryFace: "front", Axis: [3]float64{0, 1, 0}, DiameterMm: 8, DepthMm: 12},
-					{RuleID: "rule-loader-b", RuleRevision: "1", ParticipantRole: "B", OperationRole: "drill", EntryFace: "back", Axis: [3]float64{0, 1, 0}, DiameterMm: 8, DepthMm: 12},
-				},
+						{RuleID: "rule-loader-a", RuleRevision: "1", ParticipantRole: "A", OperationRole: "drill", EntryFace: "front", Axis: [3]float64{0, 1, 0}, DiameterMm: 8, DepthMm: 12},
+						{RuleID: "rule-loader-b", RuleRevision: "1", ParticipantRole: "B", OperationRole: "drill", EntryFace: "back", Axis: [3]float64{0, 1, 0}, DiameterMm: 8, DepthMm: 12},
+					},
 				}}},
 		})
 	}); err != nil {
@@ -151,10 +151,10 @@ func TestReleaseServerInputsTenantIsolation(t *testing.T) {
 	saveOverlay := func(actor storage.TenantActor, org string, stations int) {
 		t.Helper()
 		overrides, _ := json.Marshal(map[string]any{
-			"joint.floorToSide.systemId":       "screw-only",
-			"joint.floorToSide.stationsCount":  stations,
-			"joint.floorToSide.startMarginMm":  40,
-			"joint.floorToSide.endMarginMm":    40,
+			"joint.floorToSide.systemId":      "screw-only",
+			"joint.floorToSide.stationsCount": stations,
+			"joint.floorToSide.startMarginMm": 40,
+			"joint.floorToSide.endMarginMm":   40,
 		})
 		if err := tenantStore.WithinTenantTx(storage.WithOrgCtx(ctx, org), actor, func(txCtx context.Context) error {
 			_, err := tenantStore.CreateOverlay(txCtx, &domain.LibraryOverlay{

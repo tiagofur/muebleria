@@ -19,10 +19,10 @@ import (
 
 // FurnitureWorkspaceQuery is the selected exact context for the projection.
 type FurnitureWorkspaceQuery struct {
-	QuoteRevisionID  string
-	DesignID         string
+	QuoteRevisionID   string
+	DesignID          string
 	DesignContextKind string // none | working | revision (validated upstream)
-	DesignRevisionID string
+	DesignRevisionID  string
 }
 
 // GetProjectFurnitureWorkspace returns the authoritative per-unit contextual
@@ -217,9 +217,9 @@ func (s *PostgresStore) GetProjectFurnitureWorkspace(ctx context.Context, projec
 		ContextualRelease:            contextualRelease,
 		ContextualReleaseStale:       contextualReleaseStale,
 		ContextualReleaseCurrent:     contextualReleaseCurrent,
-		LatestProjectRelease:        latestProjectRelease,
-		LatestProjectReleaseStale:   latestProjectReleaseStale,
-		LatestProjectReleaseCurrent: latestProjectReleaseCurrent,
+		LatestProjectRelease:         latestProjectRelease,
+		LatestProjectReleaseStale:    latestProjectReleaseStale,
+		LatestProjectReleaseCurrent:  latestProjectReleaseCurrent,
 	}), nil
 }
 
