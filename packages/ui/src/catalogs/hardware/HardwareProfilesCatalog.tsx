@@ -244,9 +244,9 @@ export function HardwareProfilesCatalog({
         header: 'Receta',
         render: (r) =>
           r.hasRecipe ? (
-            <span className="badge badge--info">Embebida</span>
+            <span className="status-badge status-badge--info">Embebida</span>
           ) : (
-            <span className="badge badge--neutral">—</span>
+            <span className="status-badge status-badge--neutral">—</span>
           ),
       },
       {

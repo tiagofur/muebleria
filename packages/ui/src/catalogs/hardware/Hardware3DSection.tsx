@@ -210,21 +210,21 @@ export function Hardware3DSection({
                   <div className="hardware-bound-card" data-testid="hardware-bound-card">
                     <div className="hardware-bound-card__header">
                       <div className="hardware-bound-card__badge-row">
-                        <span className="badge badge--info">
+                        <span className="status-badge status-badge--info">
                           {(draft.visualAsset.representation ?? 'skp').toUpperCase()}
                         </span>
                         {currentRevisionNumber ? (
-                          <span className="badge badge--neutral">
+                          <span className="status-badge status-badge--neutral">
                             Rev. {currentRevisionNumber}
                           </span>
                         ) : null}
                         <span
-                          className={`badge ${
+                          className={`status-badge ${
                             draft.visualAsset.validationState === 'validated'
-                              ? 'badge--success'
+                              ? 'status-badge--success'
                               : draft.visualAsset.validationState === 'failed'
-                              ? 'badge--danger'
-                              : 'badge--warning'
+                              ? 'status-badge--danger'
+                              : 'status-badge--warning'
                           }`}
                         >
                           {draft.visualAsset.validationState === 'validated'
@@ -233,7 +233,7 @@ export function Hardware3DSection({
                             ? 'Falló validación'
                             : 'Pendiente de validación'}
                         </span>
-                        <span className="badge badge--neutral">Archivo almacenado</span>
+                        <span className="status-badge status-badge--neutral">Archivo almacenado</span>
                       </div>
                       <h4 className="hardware-bound-card__name">
                         {boundAsset?.display_name ?? 'Modelo 3D vinculado'}
@@ -259,7 +259,7 @@ export function Hardware3DSection({
                     <div className="hardware-bound-card__actions">
                       <button
                         type="button"
-                        className="btn btn--secondary btn--sm"
+                        className="btn btn--small"
                         onClick={() => setSelectorOpen(true)}
                         disabled={!canMutate}
                         data-testid="hardware-change-asset-btn"
@@ -268,7 +268,7 @@ export function Hardware3DSection({
                       </button>
                       <button
                         type="button"
-                        className="btn btn--secondary btn--sm"
+                        className="btn btn--small"
                         onClick={() => {
                           setUploadTarget({
                             id: draft.visualAsset!.assetId,
@@ -283,7 +283,7 @@ export function Hardware3DSection({
                       </button>
                       <button
                         type="button"
-                        className="btn btn--danger btn--sm"
+                        className="btn btn--danger btn--small"
                         onClick={handleUnbind}
                         disabled={!canMutate}
                         title="Quitar asociación para este herraje"
@@ -305,7 +305,7 @@ export function Hardware3DSection({
                     <div className="hardware-unbound-card__actions">
                       <button
                         type="button"
-                        className="btn btn--secondary btn--sm"
+                        className="btn btn--small"
                         onClick={() => setSelectorOpen(true)}
                         disabled={!canMutate}
                         data-testid="hardware-open-selector-btn"
@@ -314,7 +314,7 @@ export function Hardware3DSection({
                       </button>
                       <button
                         type="button"
-                        className="btn btn--primary btn--sm"
+                        className="btn btn--primary btn--small"
                         onClick={() => {
                           setUploadTarget(null);
                           setUploadOpen(true);
