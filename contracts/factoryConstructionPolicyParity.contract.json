@@ -1,6 +1,6 @@
 {
   "contract": "granete.factory-construction-policy-parity.v1",
-  "description": "Overlay overrides -> effective factory station rules (#875 slice 2). The TS client (packages/domain/src/factoryConstructionPolicy.ts overlayOverridesToPolicy) and the Go resolver (backend-go internal/domain/engine factory_construction_policy.go ParseFactoryConstructionPolicy) must derive identical rules from the same overlay JSON. The flat dotted-key shape is deliberate: joint.constructionPolicy is one literal key whose value is the structured blob; joint.<family>.* are granular keys. Both sides fall missing scalars back to the library-default pattern (2 stations, 50/50mm). The Go resolver additionally enforces engine usability (stationsCount integer 2..1000, finite nonnegative margins) and rejects an explicit factory override that fails it; the client surfaces the same bounds as editor validation. Component construction exceptions (#875 slice 3) are stored RAW in the structured blob (componentOverrides[componentId] scalars): both readers keep the stored entries verbatim — the per-scalar resolution against the factory family rule happens where the relationship kind is known (Go RuleForComponent; the Go parser drops entries with no station scalar and the TS reader mirrors that drop).",
+  "description": "Overlay overrides -> effective factory station rules (#875 slice 2). The TS client (packages/domain/src/factoryConstructionPolicy.ts overlayOverridesToPolicy) and the Go resolver (backend-go internal/domain/engine factory_construction_policy.go ParseFactoryConstructionPolicy) must derive identical rules from the same overlay JSON. The flat dotted-key shape is deliberate: joint.constructionPolicy is one literal key whose value is the structured blob; joint.<family>.* are granular keys. Both sides fall missing scalars back to the library-default pattern (2 stations, 50/50mm). The Go resolver additionally enforces engine usability (stationsCount integer 2..1000, finite nonnegative margins) and rejects an explicit factory override that fails it; the client surfaces the same bounds as editor validation. Component construction exceptions (#875 slice 3) are stored RAW in the structured blob (componentOverrides[componentId] scalars): both readers keep the stored entries verbatim — the per-scalar resolution against the factory family rule happens where the relationship kind is known (Go RuleForComponent; the Go parser drops entries with no station scalar and the TS reader mirrors that drop). Spacing-derived factory rules (#1065) are the count alternative: a stored maxSpacingMm owns the pattern and zeroes stationsCount on both sides; declaring stationsCount and maxSpacingMm in the same family is a parse error on the server and editor validation on the client.",
   "cases": [
     {
       "name": "structured factory floor override",
@@ -197,6 +197,72 @@
         "componentOverrides": {
           "comp-real": {
             "stationsCount": 5
+          }
+        }
+      }
+    },
+    {
+      "name": "structured factory spacing override (#1065)",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "floorToSide": {
+            "provenance": "factory",
+            "systemId": "minifix-dowel",
+            "maxSpacingMm": 250,
+            "startMarginMm": 50,
+            "endMarginMm": 50
+          }
+        }
+      },
+      "expected": {
+        "floorToSide": {
+          "stationsCount": 0,
+          "startMarginMm": 50,
+          "endMarginMm": 50,
+          "maxSpacingMm": 250
+        },
+        "shelfToSide": null
+      }
+    },
+    {
+      "name": "granular spacing keys (#1065)",
+      "overrides": {
+        "joint.shelfToSide.systemId": "minifix-dowel",
+        "joint.shelfToSide.maxSpacingMm": 400,
+        "joint.shelfToSide.startMarginMm": 40,
+        "joint.shelfToSide.endMarginMm": 60
+      },
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": {
+          "stationsCount": 0,
+          "startMarginMm": 40,
+          "endMarginMm": 60,
+          "maxSpacingMm": 400
+        }
+      }
+    },
+    {
+      "name": "component spacing exception passes through raw (#1065)",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "componentOverrides": {
+            "11111111-1111-1111-1111-111111111111": {
+              "maxSpacingMm": 300,
+              "startMarginMm": 45
+            }
+          }
+        }
+      },
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": null,
+        "componentOverrides": {
+          "11111111-1111-1111-1111-111111111111": {
+            "maxSpacingMm": 300,
+            "startMarginMm": 45
           }
         }
       }

@@ -19,12 +19,14 @@ interface ParityRule {
   stationsCount: number;
   startMarginMm: number;
   endMarginMm: number;
+  maxSpacingMm?: number;
 }
 
 interface ParityComponentOverride {
   stationsCount?: number;
   startMarginMm?: number;
   endMarginMm?: number;
+  maxSpacingMm?: number;
 }
 
 interface ParityCase {
@@ -46,6 +48,7 @@ function effectiveRule(rule: {
   stationsCount: number;
   startMarginMm: number;
   endMarginMm: number;
+  maxSpacingMm?: number;
   provenance?: string;
 } | null | undefined): ParityRule | null {
   if (!rule || rule.provenance !== 'factory') {
@@ -55,6 +58,7 @@ function effectiveRule(rule: {
     stationsCount: rule.stationsCount,
     startMarginMm: rule.startMarginMm,
     endMarginMm: rule.endMarginMm,
+    ...(rule.maxSpacingMm !== undefined ? { maxSpacingMm: rule.maxSpacingMm } : {}),
   };
 }
 
@@ -65,11 +69,16 @@ function effectiveRule(rule: {
  */
 function storedComponentOverrides(
   overrides: FactoryConstructionPolicy['componentOverrides'],
-): Record<string, Pick<ComponentConstructionOverride, 'stationsCount' | 'startMarginMm' | 'endMarginMm'>> | undefined {
+): Record<string, Pick<ComponentConstructionOverride, 'stationsCount' | 'startMarginMm' | 'endMarginMm' | 'maxSpacingMm'>> | undefined {
   if (!overrides) return undefined;
-  const out: Record<string, Pick<ComponentConstructionOverride, 'stationsCount' | 'startMarginMm' | 'endMarginMm'>> = {};
+  const out: Record<string, Pick<ComponentConstructionOverride, 'stationsCount' | 'startMarginMm' | 'endMarginMm' | 'maxSpacingMm'>> = {};
   for (const [id, entry] of Object.entries(overrides)) {
-    out[id] = { stationsCount: entry.stationsCount, startMarginMm: entry.startMarginMm, endMarginMm: entry.endMarginMm };
+    out[id] = {
+      stationsCount: entry.stationsCount,
+      startMarginMm: entry.startMarginMm,
+      endMarginMm: entry.endMarginMm,
+      maxSpacingMm: entry.maxSpacingMm,
+    };
   }
   return out;
 }

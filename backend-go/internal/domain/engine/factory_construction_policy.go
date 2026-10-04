@@ -34,21 +34,29 @@ import (
 // contracts/factoryConstructionPolicyParity.contract.json pins both sides to
 // one fixture set — Go and TS must never maintain incompatible parsers.
 
-// FactoryJointRule is one family's factory-governed station pattern.
+// FactoryJointRule is one family's factory-governed station pattern. Either
+// an explicit StationsCount (>= 2) or a spacing-derived MaxSpacingMm
+// (#1065): a spacing rule derives each contact's count from its real span,
+// so furniture dimensions scale the fastener count. The two are mutually
+// exclusive; MaxSpacingMm nil means the count governs.
 type FactoryJointRule struct {
-	StationsCount int     `json:"stationsCount"`
-	StartMarginMm float64 `json:"startMarginMm"`
-	EndMarginMm   float64 `json:"endMarginMm"`
+	StationsCount int      `json:"stationsCount"`
+	StartMarginMm float64  `json:"startMarginMm"`
+	EndMarginMm   float64  `json:"endMarginMm"`
+	MaxSpacingMm  *float64 `json:"maxSpacingMm,omitempty"`
 }
 
 // ComponentConstructionOverride is one catalog component's stored exception
 // scalars (#875 slice 3). Fields are POINTERS on purpose: absent, zero and
 // explicit are distinct states (C3) — each present scalar overrides the
 // factory family rule at consumption time; each absent scalar inherits it.
+// A spacing scalar replaces the whole pattern (count included): the family
+// rule resolves to either a count or a spacing, never both (#1065).
 type ComponentConstructionOverride struct {
 	StationsCount *float64 `json:"stationsCount,omitempty"`
 	StartMarginMm *float64 `json:"startMarginMm,omitempty"`
 	EndMarginMm   *float64 `json:"endMarginMm,omitempty"`
+	MaxSpacingMm  *float64 `json:"maxSpacingMm,omitempty"`
 }
 
 // FactoryConstructionPolicy carries the factory override per engine-resolvable
@@ -57,8 +65,8 @@ type ComponentConstructionOverride struct {
 // the C3 ladder authored intent → component exception → factory family rule →
 // library default, resolved per scalar in RuleForComponent.
 type FactoryConstructionPolicy struct {
-	FloorToSide        *FactoryJointRule                        `json:"floorToSide,omitempty"`
-	ShelfToSide        *FactoryJointRule                        `json:"shelfToSide,omitempty"`
+	FloorToSide        *FactoryJointRule                         `json:"floorToSide,omitempty"`
+	ShelfToSide        *FactoryJointRule                         `json:"shelfToSide,omitempty"`
 	ComponentOverrides map[string]*ComponentConstructionOverride `json:"componentOverrides,omitempty"`
 }
 
@@ -144,6 +152,13 @@ func (p *FactoryConstructionPolicy) RuleForComponent(componentID, kind string) *
 	}
 	if override.StationsCount != nil {
 		resolved.StationsCount = int(*override.StationsCount)
+		resolved.MaxSpacingMm = nil
+	}
+	if override.MaxSpacingMm != nil {
+		// A spacing exception replaces the whole pattern (#1065): the count
+		// is derived from each contact's real span, never pinned.
+		resolved.MaxSpacingMm = override.MaxSpacingMm
+		resolved.StationsCount = 0
 	}
 	if override.StartMarginMm != nil {
 		resolved.StartMarginMm = *override.StartMarginMm
@@ -234,7 +249,24 @@ func factoryRuleFromStructured(structured map[string]any, family string) (*Facto
 	if err != nil {
 		return nil, err
 	}
-	return usableFactoryRule(count, start, end, "joint.constructionPolicy."+family)
+	var maxSpacing *float64
+	if raw := entry["maxSpacingMm"]; raw != nil {
+		value, err := factoryScalarOr(raw, 0, "joint.constructionPolicy."+family+".maxSpacingMm")
+		if err != nil {
+			return nil, err
+		}
+		if err := validateFactoryMaxSpacing(value, "joint.constructionPolicy."+family+".maxSpacingMm"); err != nil {
+			return nil, err
+		}
+		// A factory spacing decision and a factory count are the same
+		// decision made twice (#1065): refuse instead of silently picking.
+		if _, declared := entry["stationsCount"]; declared {
+			return nil, fmt.Errorf("joint.constructionPolicy.%s declares both stationsCount and maxSpacingMm", family)
+		}
+		spacing := value
+		maxSpacing = &spacing
+	}
+	return usableFactoryRule(count, start, end, "joint.constructionPolicy."+family, maxSpacing)
 }
 
 // factoryRuleFromGranular reads one family from the flat editor keys
@@ -243,7 +275,8 @@ func factoryRuleFromStructured(structured map[string]any, family string) (*Facto
 func factoryRuleFromGranular(flat map[string]any, family string) (*FactoryJointRule, error) {
 	_, hasCount := flat["joint."+family+".stationsCount"]
 	_, hasSystem := flat["joint."+family+".systemId"]
-	if !hasCount && !hasSystem {
+	_, hasMaxSpacing := flat["joint."+family+".maxSpacingMm"]
+	if !hasCount && !hasSystem && !hasMaxSpacing {
 		return nil, nil
 	}
 	count, err := factoryScalarOr(flat["joint."+family+".stationsCount"], factoryPolicyDefaultStationsCount, "joint."+family+".stationsCount")
@@ -258,7 +291,22 @@ func factoryRuleFromGranular(flat map[string]any, family string) (*FactoryJointR
 	if err != nil {
 		return nil, err
 	}
-	return usableFactoryRule(count, start, end, "joint."+family)
+	var maxSpacing *float64
+	if raw := flat["joint."+family+".maxSpacingMm"]; raw != nil {
+		value, err := factoryScalarOr(raw, 0, "joint."+family+".maxSpacingMm")
+		if err != nil {
+			return nil, err
+		}
+		if err := validateFactoryMaxSpacing(value, "joint."+family+".maxSpacingMm"); err != nil {
+			return nil, err
+		}
+		if hasCount {
+			return nil, fmt.Errorf("joint.%s declares both stationsCount and maxSpacingMm", family)
+		}
+		spacing := value
+		maxSpacing = &spacing
+	}
+	return usableFactoryRule(count, start, end, "joint."+family, maxSpacing)
 }
 
 // factoryScalarOr resolves one overlay scalar: absent falls back to the
@@ -313,6 +361,23 @@ func parseFactoryComponentOverrides(raw any) (map[string]*ComponentConstructionO
 			stations := value
 			override.StationsCount = &stations
 		}
+		if raw := entry["maxSpacingMm"]; raw != nil {
+			value, err := factoryScalarOr(raw, 0, path+".maxSpacingMm")
+			if err != nil {
+				return nil, err
+			}
+			if err := validateFactoryMaxSpacing(value, path+".maxSpacingMm"); err != nil {
+				return nil, err
+			}
+			// One pattern per exception, mirroring the authored
+			// relationship rule (#1065): refuse the mixture instead of
+			// picking a winner silently.
+			if override.StationsCount != nil {
+				return nil, fmt.Errorf("%s declares both stationsCount and maxSpacingMm", path)
+			}
+			spacing := value
+			override.MaxSpacingMm = &spacing
+		}
 		for name, raw := range map[string]any{"startMarginMm": entry["startMarginMm"], "endMarginMm": entry["endMarginMm"]} {
 			if raw == nil {
 				continue
@@ -330,7 +395,7 @@ func parseFactoryComponentOverrides(raw any) (map[string]*ComponentConstructionO
 				override.EndMarginMm = &value
 			}
 		}
-		if override.StationsCount == nil && override.StartMarginMm == nil && override.EndMarginMm == nil {
+		if override.StationsCount == nil && override.StartMarginMm == nil && override.EndMarginMm == nil && override.MaxSpacingMm == nil {
 			continue
 		}
 		resolved[componentID] = override
@@ -350,12 +415,26 @@ func validateFactoryStationsCount(value float64, path string) error {
 	return nil
 }
 
+// validateFactoryMaxSpacing enforces the spacing alternative's bounds
+// (#1065): a positive finite millimetre gap between consecutive stations.
+// There is no upper cap — a huge spacing simply derives the pattern floor
+// of 2 stations — but garbage must fail closed exactly like a bad count.
+func validateFactoryMaxSpacing(value float64, path string) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value <= 0 {
+		return fmt.Errorf("%s must be a positive finite number", path)
+	}
+	return nil
+}
+
 // usableFactoryRule validates one family's resolved pattern into an
 // engine-usable rule, reusing the component-exception count bound: a policy
-// value can never smuggle a pattern the authored path would reject.
-func usableFactoryRule(count, start, end float64, path string) (*FactoryJointRule, error) {
-	if err := validateFactoryStationsCount(count, path+".stationsCount"); err != nil {
-		return nil, err
+// value can never smuggle a pattern the authored path would reject. A
+// non-nil maxSpacing owns the pattern and zeroes the count (#1065).
+func usableFactoryRule(count, start, end float64, path string, maxSpacing *float64) (*FactoryJointRule, error) {
+	if maxSpacing == nil {
+		if err := validateFactoryStationsCount(count, path+".stationsCount"); err != nil {
+			return nil, err
+		}
 	}
 	for _, margin := range []struct {
 		value float64
@@ -365,7 +444,11 @@ func usableFactoryRule(count, start, end float64, path string) (*FactoryJointRul
 			return nil, fmt.Errorf("%s.%s must be a finite nonnegative number", path, margin.name)
 		}
 	}
-	return &FactoryJointRule{StationsCount: int(count), StartMarginMm: start, EndMarginMm: end}, nil
+	resolved := &FactoryJointRule{StationsCount: int(count), StartMarginMm: start, EndMarginMm: end, MaxSpacingMm: maxSpacing}
+	if maxSpacing != nil {
+		resolved.StationsCount = 0
+	}
+	return resolved, nil
 }
 
 // applyFactoryStationPatterns fills the factory pattern into AUTHORED
@@ -406,7 +489,11 @@ func applyFactoryStationPatterns(relationships []AuthoringRelationship, policy *
 		if relationship.Parameters == nil {
 			relationship.Parameters = map[string]any{}
 		}
-		relationship.Parameters["stationCount"] = float64(rule.StationsCount)
+		if rule.MaxSpacingMm != nil {
+			relationship.Parameters["maxSpacingMm"] = *rule.MaxSpacingMm
+		} else {
+			relationship.Parameters["stationCount"] = float64(rule.StationsCount)
+		}
 		relationship.Parameters["startMarginMm"] = rule.StartMarginMm
 		relationship.Parameters["endMarginMm"] = rule.EndMarginMm
 	}
