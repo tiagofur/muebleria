@@ -18,8 +18,16 @@ const PARAMETER_FIELDS = new Set([
   'min', 'max', 'step', 'maxLength', 'options', 'optionLabels', 'integer', 'binding',
 ]);
 const BINDING_FIELDS = new Set(['version', 'kind', 'componentId', 'dimension', 'relationship']);
-const RELATIONSHIP_FIELDS = new Set(['kind', 'sourceRole', 'targets']);
-const RELATIONSHIP_TARGET_FIELDS = new Set(['componentId', 'role']);
+const RELATIONSHIP_FIELDS = new Set(['kind', 'sourceRole', 'sourceFace', 'targets', 'station', 'families']);
+const RELATIONSHIP_TARGET_FIELDS = new Set(['componentId', 'role', 'face']);
+const RELATIONSHIP_STATION_FIELDS = new Set(['startMarginMm', 'endMarginMm']);
+const RELATIONSHIP_FAMILY_FIELDS = new Set(['familyId', 'count', 'startMarginMm', 'endMarginMm']);
+// Closed face vocabulary for construction-declared relationship anchors
+// (mirror of Go's FurnitureRelationshipAnchorFaces).
+const ANCHOR_FACES = ['top', 'bottom', 'left', 'right', 'front', 'back'];
+// Kinds that resolve contacts through declared anchor faces; a target without
+// one can never verify (Go #874 J1-B/J2-B).
+const FACE_VERIFIED_RELATIONSHIP_KINDS = ['floor-side', 'fixed-shelf-side'];
 const CATALOG_DEFINITION_FIELDS = new Set([
   'furnitureDefinitionId', 'code', 'name', 'category', 'categoryId', 'version',
   'schemaRevision', 'definitionHash', 'description', 'imageUrl', 'thumbnailUrl',
@@ -451,8 +459,115 @@ function validateBinding(
     if ((binding.componentId !== undefined && binding.componentId !== '') || binding.relationship !== undefined) {
       add('binding', 'dimensionColumn cannot target composition');
     }
+  } else if (binding.kind === 'structureRelationship') {
+    if (definition.type !== 'number' || !definition.integer) {
+      add('binding.kind', 'structureRelationship requires an integer number parameter (the station count)');
+    }
+    if (typeof binding.componentId !== 'string' || !binding.componentId.trim()) {
+      add('binding.componentId', 'is required for structureRelationship (the source component)');
+    }
+    if (binding.dimension !== undefined) {
+      add('binding.dimension', 'is not allowed for structureRelationship');
+    }
+    if (binding.relationship === null || typeof binding.relationship !== 'object' ||
+        Array.isArray(binding.relationship)) {
+      add('binding.relationship', 'is required for structureRelationship');
+      return;
+    }
+    const relationship = binding.relationship as Record<string, unknown>;
+    addUnknownFields(relationship, RELATIONSHIP_FIELDS, 'binding.relationship.', add);
+    if (typeof relationship.kind !== 'string' || !relationship.kind.trim()) {
+      add('binding.relationship.kind', 'is required');
+    }
+    if (typeof relationship.sourceRole !== 'string' || !relationship.sourceRole.trim()) {
+      add('binding.relationship.sourceRole', 'is required');
+    }
+    if (typeof relationship.sourceFace === 'string' && relationship.sourceFace !== '' &&
+        !ANCHOR_FACES.includes(relationship.sourceFace)) {
+      add('binding.relationship.sourceFace', 'must be one of the six concrete board faces');
+    }
+    if (!Array.isArray(relationship.targets) || relationship.targets.length === 0) {
+      add('binding.relationship.targets', 'must contain at least one target');
+    } else {
+      // Two targets on the same component can never both resolve to distinct
+      // participants; ambiguity never selects silently.
+      const seenComponents = new Set<string>();
+      const faceVerified = FACE_VERIFIED_RELATIONSHIP_KINDS.includes(relationship.kind as string);
+      for (const target of relationship.targets) {
+        if (target === null || typeof target !== 'object' || Array.isArray(target)) {
+          add('binding.relationship.targets', 'componentId and role are required');
+          continue;
+        }
+        const record = target as Record<string, unknown>;
+        addUnknownFields(record, RELATIONSHIP_TARGET_FIELDS, 'binding.relationship.targets.', add);
+        if (typeof record.componentId !== 'string' || !record.componentId.trim() ||
+            typeof record.role !== 'string' || !record.role.trim()) {
+          add('binding.relationship.targets', 'componentId and role are required');
+          continue;
+        }
+        if (seenComponents.has(record.componentId)) {
+          add('binding.relationship.targets', 'each target must reference a distinct component');
+        }
+        seenComponents.add(record.componentId);
+        if (typeof record.face === 'string' && record.face !== '' &&
+            !ANCHOR_FACES.includes(record.face)) {
+          add('binding.relationship.targets', 'target face must be one of the six concrete board faces');
+        }
+        if (faceVerified && (typeof record.face !== 'string' || !ANCHOR_FACES.includes(record.face))) {
+          add('binding.relationship.targets',
+              'floor-side and fixed-shelf-side targets must declare one concrete contact face');
+        }
+      }
+    }
+    if (relationship.station !== undefined && relationship.station !== null) {
+      if (typeof relationship.station !== 'object' || Array.isArray(relationship.station)) {
+        add('binding.relationship.station', 'must be an object');
+      } else {
+        const station = relationship.station as Record<string, unknown>;
+        addUnknownFields(station, RELATIONSHIP_STATION_FIELDS, 'binding.relationship.station.', add);
+        for (const key of RELATIONSHIP_STATION_FIELDS) {
+          const margin = station[key];
+          if (margin === undefined) continue;
+          if (typeof margin !== 'number' || !Number.isFinite(margin) || margin < 0) {
+            add(`binding.relationship.station.${key}`, 'margins must be finite and nonnegative');
+          }
+        }
+      }
+    }
+    if (relationship.families !== undefined) {
+      if (!Array.isArray(relationship.families)) {
+        add('binding.relationship.families', 'must be an array');
+      } else {
+        const seenFamilies = new Set<string>();
+        for (const family of relationship.families) {
+          if (family === null || typeof family !== 'object' || Array.isArray(family)) {
+            add('binding.relationship.families', 'familyId is required');
+            continue;
+          }
+          const record = family as Record<string, unknown>;
+          addUnknownFields(record, RELATIONSHIP_FAMILY_FIELDS, 'binding.relationship.families.', add);
+          if (typeof record.familyId !== 'string' || !record.familyId.trim()) {
+            add('binding.relationship.families', 'familyId is required');
+          } else if (seenFamilies.has(record.familyId)) {
+            add('binding.relationship.families', 'each familyId must be unique');
+          } else {
+            seenFamilies.add(record.familyId);
+          }
+          if (typeof record.count !== 'number' || !Number.isInteger(record.count) || record.count < 2) {
+            add('binding.relationship.families', 'each family count must be an integer >= 2');
+          }
+          for (const key of ['startMarginMm', 'endMarginMm'] as const) {
+            const margin = record[key];
+            if (margin === undefined) continue;
+            if (typeof margin !== 'number' || !Number.isFinite(margin) || margin < 0) {
+              add(`binding.relationship.families.${key}`, 'margins must be finite and nonnegative');
+            }
+          }
+        }
+      }
+    }
   } else {
-    add('binding.kind', 'must be componentQuantity, componentCondition, or dimensionColumn');
+    add('binding.kind', 'must be componentQuantity, componentCondition, dimensionColumn, or structureRelationship');
   }
 }
 

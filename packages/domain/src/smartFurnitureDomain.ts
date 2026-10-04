@@ -192,6 +192,15 @@ export interface FurnitureParameterBinding {
       readonly startMarginMm?: number;
       readonly endMarginMm?: number;
     };
+    // Independent operation families for one joint (#874 J2-A): each family
+    // plans its OWN stations with its own count and margins. When present the
+    // parameter value no longer drives a single station count.
+    readonly families?: readonly {
+      readonly familyId: string;
+      readonly count: number;
+      readonly startMarginMm?: number;
+      readonly endMarginMm?: number;
+    }[];
   };
 }
 

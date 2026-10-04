@@ -940,6 +940,72 @@
       "expectedFields": [
         "maxLength"
       ]
+    },
+    {
+      "id": "structure-relationship-wrong-type",
+      "boundary": "both",
+      "rawJson": "[{\"name\":\"tornillosPiso\",\"label\":\"Tornillos por contacto\",\"type\":\"string\",\"defaultValue\":\"4\",\"required\":false,\"category\":\"hardware\",\"binding\":{\"version\":1,\"kind\":\"structureRelationship\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"fixed-shelf-side\",\"sourceRole\":\"shelf\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"side\",\"face\":\"front\"}]}},\"maxLength\":8}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.kind"
+      ]
+    },
+    {
+      "id": "structure-relationship-missing-relationship",
+      "boundary": "both",
+      "rawJson": "[{\"name\":\"tornillosPiso\",\"label\":\"Tornillos por contacto\",\"type\":\"number\",\"defaultValue\":4,\"required\":false,\"category\":\"hardware\",\"binding\":{\"version\":1,\"kind\":\"structureRelationship\",\"componentId\":\"comp-shelf\"},\"unit\":\"count\",\"integer\":true}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.relationship"
+      ]
+    },
+    {
+      "id": "structure-relationship-target-face-missing",
+      "boundary": "both",
+      "rawJson": "[{\"name\":\"tornillosPiso\",\"label\":\"Tornillos por contacto\",\"type\":\"number\",\"defaultValue\":4,\"required\":false,\"category\":\"hardware\",\"binding\":{\"version\":1,\"kind\":\"structureRelationship\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"fixed-shelf-side\",\"sourceRole\":\"shelf\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"side\"}]}},\"unit\":\"count\",\"integer\":true}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.relationship.targets"
+      ]
+    },
+    {
+      "id": "structure-relationship-duplicate-target-component",
+      "boundary": "both",
+      "rawJson": "[{\"name\":\"tornillosPiso\",\"label\":\"Tornillos por contacto\",\"type\":\"number\",\"defaultValue\":4,\"required\":false,\"category\":\"hardware\",\"binding\":{\"version\":1,\"kind\":\"structureRelationship\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"fixed-shelf-side\",\"sourceRole\":\"shelf\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"side\",\"face\":\"front\"},{\"componentId\":\"comp-side\",\"role\":\"opposite\",\"face\":\"back\"}]}},\"unit\":\"count\",\"integer\":true}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.relationship.targets"
+      ]
+    },
+    {
+      "id": "structure-relationship-bad-source-face",
+      "boundary": "both",
+      "rawJson": "[{\"name\":\"tornillosPiso\",\"label\":\"Tornillos por contacto\",\"type\":\"number\",\"defaultValue\":4,\"required\":false,\"category\":\"hardware\",\"binding\":{\"version\":1,\"kind\":\"structureRelationship\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"fixed-shelf-side\",\"sourceRole\":\"shelf\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"side\",\"face\":\"front\"}],\"sourceFace\":\"diagonal\"}},\"unit\":\"count\",\"integer\":true}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.relationship.sourceFace"
+      ]
+    },
+    {
+      "id": "structure-relationship-invalid-station-margin",
+      "boundary": "both",
+      "rawJson": "[{\"name\":\"tornillosPiso\",\"label\":\"Tornillos por contacto\",\"type\":\"number\",\"defaultValue\":4,\"required\":false,\"category\":\"hardware\",\"binding\":{\"version\":1,\"kind\":\"structureRelationship\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"fixed-shelf-side\",\"sourceRole\":\"shelf\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"side\",\"face\":\"front\"}],\"station\":{\"startMarginMm\":-5,\"endMarginMm\":30}}},\"unit\":\"count\",\"integer\":true}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.relationship.station"
+      ],
+      "expectedTsFields": [
+        "binding.relationship.station.startMarginMm"
+      ]
+    },
+    {
+      "id": "structure-relationship-bad-family-count",
+      "boundary": "both",
+      "rawJson": "[{\"name\":\"tornillosPiso\",\"label\":\"Tornillos por contacto\",\"type\":\"number\",\"defaultValue\":4,\"required\":false,\"category\":\"hardware\",\"binding\":{\"version\":1,\"kind\":\"structureRelationship\",\"componentId\":\"comp-shelf\",\"relationship\":{\"kind\":\"fixed-shelf-side\",\"sourceRole\":\"shelf\",\"targets\":[{\"componentId\":\"comp-side\",\"role\":\"side\",\"face\":\"front\"}],\"families\":[{\"familyId\":\"f1\",\"count\":1,\"startMarginMm\":10}]}},\"unit\":\"count\",\"integer\":true}]",
+      "expectedCode": "PARAMETER_DEFINITION_INVALID",
+      "expectedFields": [
+        "binding.relationship.families"
+      ]
     }
   ]
 }

@@ -123,6 +123,40 @@ describe('definition-driven furniture parameter parity', () => {
     expect(scenario.response.issues.map((issue) => issue.code)).toContain(expectedCode);
   });
 
+  // #1044 — the perforaciones demo definition publishes structureRelationship
+  // bindings (fixed-shelf-side with station margins); the TS validator accepts
+  // the exact wire shape the Go authority publishes, including families.
+  test('accepts the published structureRelationship binding shape', () => {
+    const rawJson = JSON.stringify([{
+      name: 'tornillosPiso',
+      label: 'Tornillos por contacto',
+      type: 'number',
+      defaultValue: 4,
+      required: false,
+      unit: 'count',
+      category: 'hardware',
+      min: 2,
+      max: 8,
+      step: 1,
+      integer: true,
+      binding: {
+        version: 1,
+        kind: 'structureRelationship',
+        componentId: 'comp-shelf',
+        relationship: {
+          kind: 'fixed-shelf-side',
+          sourceRole: 'shelf',
+          targets: [{ componentId: 'comp-side', role: 'side', face: 'front' }],
+          station: { startMarginMm: 30, endMarginMm: 50 },
+          families: [{ familyId: 'pilotos', count: 2, startMarginMm: 10 }],
+        },
+      },
+    }]);
+
+    const [first] = parseFurnitureParameterDefinitions(rawJson);
+    expect(first?.binding?.kind).toBe('structureRelationship');
+  });
+
   test('fails closed against the shared invalid-definition corpus', () => {
     expect(invalidDefinitionCorpus.schemaVersion).toBe(1);
     for (const scenario of invalidDefinitionCorpus.cases) {

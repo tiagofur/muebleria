@@ -208,6 +208,69 @@ class CatalogParameterContractTest < Minitest::Test
     end
   end
 
+  # #1044 regression (production 2026-10-03): the perforaciones demo
+  # definition publishes structureRelationship bindings; the missing kind
+  # here failed the closed shape and marked the WHOLE catalog unavailable on
+  # the plugin.
+  def test_accepts_structure_relationship_with_station_families_and_faces
+    definition = valid_definition
+    definition['parameters'] = [structure_relationship_parameter]
+
+    assert_same definition, Contract.validate_definition!(definition, 'definition')
+  end
+
+  def test_rejects_structure_relationship_mutations_at_go_parity_fields
+    valid_relationship = structure_relationship_parameter.fetch('binding').fetch('relationship')
+    mutations = [
+      [structure_relationship_parameter.tap do |parameter|
+         parameter.merge!('type' => 'string', 'maxLength' => 8)
+         %w[min max step unit integer].each { |key| parameter.delete(key) }
+       end, '.binding.kind'],
+      [structure_relationship_parameter('integer' => false, 'unit' => 'mm'), '.binding.kind'],
+      [structure_relationship_parameter_with('relationship' => nil), '.binding.relationship'],
+      [structure_relationship_parameter_with('dimension' => 'widthMm'), '.binding.dimension'],
+      [structure_relationship_parameter_with('componentId' => ''), '.binding.componentId'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('targets' => [{ 'componentId' => 'comp-side', 'role' => 'side' }])
+      ), '.targets[0].face'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('targets' => [
+                                                     { 'componentId' => 'comp-side', 'role' => 'side',
+                                                       'face' => 'front' },
+                                                     { 'componentId' => 'comp-side', 'role' => 'opposite',
+                                                       'face' => 'back' }
+                                                   ])
+      ), '.targets'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('sourceFace' => 'diagonal')
+      ), '.sourceFace'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('station' => { 'startMarginMm' => -5, 'endMarginMm' => 30 })
+      ), '.station.startMarginMm'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('station' => { 'startMarginMm' => 30, 'futureField' => true })
+      ), '.station.futureField'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('families' => [{ 'familyId' => 'f1', 'count' => 1 }])
+      ), '.families[0].count'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('families' => [
+                                                     { 'familyId' => 'f1', 'count' => 2 },
+                                                     { 'familyId' => 'f1', 'count' => 3 }
+                                                   ])
+      ), '.families']
+    ]
+
+    mutations.each do |parameter, expected_path|
+      definition = valid_definition.merge('parameters' => [parameter])
+      error = assert_raises(Contract::ContractError) do
+        Contract.validate_definition!(definition, 'definition')
+      end
+      assert_includes error.path, expected_path,
+                      "expected #{expected_path} in #{error.path}"
+    end
+  end
+
   private
 
   def valid_definition
@@ -235,6 +298,29 @@ class CatalogParameterContractTest < Minitest::Test
     }.merge(overrides)
     parameter.delete('maxLength') if overrides.key?('type') && overrides['type'] != 'string' &&
                                      !overrides.key?('maxLength')
+    parameter
+  end
+
+  def structure_relationship_parameter(overrides = {})
+    {
+      'name' => 'tornillosPiso', 'label' => 'Tornillos por contacto', 'type' => 'number',
+      'defaultValue' => 4, 'required' => false, 'unit' => 'count', 'category' => 'hardware',
+      'min' => 2, 'max' => 8, 'step' => 1, 'integer' => true,
+      'binding' => {
+        'version' => 1, 'kind' => 'structureRelationship', 'componentId' => 'comp-shelf',
+        'relationship' => {
+          'kind' => 'fixed-shelf-side', 'sourceRole' => 'shelf',
+          'targets' => [{ 'componentId' => 'comp-side', 'role' => 'side', 'face' => 'front' }],
+          'station' => { 'startMarginMm' => 30, 'endMarginMm' => 50 },
+          'families' => [{ 'familyId' => 'pilotos', 'count' => 2, 'startMarginMm' => 10 }]
+        }
+      }
+    }.merge(overrides)
+  end
+
+  def structure_relationship_parameter_with(binding_overrides)
+    parameter = structure_relationship_parameter
+    parameter['binding'] = parameter['binding'].merge(binding_overrides)
     parameter
   end
 

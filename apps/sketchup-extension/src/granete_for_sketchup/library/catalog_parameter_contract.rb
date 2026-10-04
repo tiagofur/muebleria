@@ -20,7 +20,7 @@ module Granete
         UNITS = %w[mm deg count].freeze
         CATEGORIES = %w[dimension configuration style hardware metadata].freeze
         RESERVED_DIMENSIONS = %w[widthMm heightMm depthMm].freeze
-        BINDING_KINDS = %w[componentQuantity componentCondition dimensionColumn].freeze
+        BINDING_KINDS = %w[componentQuantity componentCondition dimensionColumn structureRelationship].freeze
         DEFINITION_KEYS = %w[
           furnitureDefinitionId code name category categoryId version schemaRevision definitionHash description
           imageUrl thumbnailUrl previewUrl parameters estimatedPartCount estimatedHardwareCount materialRoles
@@ -30,8 +30,16 @@ module Granete
           options optionLabels integer maxLength binding
         ].freeze
         BINDING_KEYS = %w[version kind componentId dimension relationship].freeze
-        RELATIONSHIP_KEYS = %w[kind sourceRole targets].freeze
-        TARGET_KEYS = %w[componentId role].freeze
+        RELATIONSHIP_KEYS = %w[kind sourceRole sourceFace targets station families].freeze
+        TARGET_KEYS = %w[componentId role face].freeze
+        STATION_KEYS = %w[startMarginMm endMarginMm].freeze
+        FAMILY_KEYS = %w[familyId count startMarginMm endMarginMm].freeze
+        # Closed face vocabulary for construction-declared relationship anchors,
+        # mirroring Go's FurnitureRelationshipAnchorFaces.
+        ANCHOR_FACES = %w[top bottom left right front back].freeze
+        # Kinds that resolve contacts through declared anchor faces; targets
+        # must declare one, or the contact can never verify (Go #874 J1-B/J2-B).
+        FACE_VERIFIED_RELATIONSHIP_KINDS = %w[floor-side fixed-shelf-side].freeze
 
         class ContractError < StandardError
           attr_reader :code, :path
@@ -253,6 +261,98 @@ module Granete
             end
             fail_at("#{path}.binding", 'dimensionColumn cannot target composition') if binding.key?('componentId') ||
                                                                                        binding.key?('relationship')
+          when 'structureRelationship'
+            valid = parameter['type'] == 'number' && parameter['integer'] == true
+            unless valid
+              fail_at("#{path}.binding.kind",
+                      'structureRelationship requires an integer number parameter (the station count)')
+            end
+            validate_text!(binding['componentId'], "#{path}.binding.componentId", max: MAX_NAME_LENGTH)
+            if binding.key?('dimension')
+              fail_at("#{path}.binding.dimension",
+                      'is not allowed for structureRelationship')
+            end
+            relationship = binding['relationship']
+            unless relationship.is_a?(Hash)
+              fail_at("#{path}.binding.relationship", 'is required for structureRelationship')
+            end
+            validate_structure_relationship!(relationship, "#{path}.binding.relationship")
+          end
+        end
+
+        # Mirrors the authoritative Go validator (furniture_parameters.go,
+        # FurnitureParameterBindingStructureRelationship) so a catalog the
+        # server published never fails closed on the plugin (#1044).
+        def validate_structure_relationship!(relationship, path)
+          validate_text!(relationship['kind'], "#{path}.kind", max: MAX_NAME_LENGTH)
+          validate_text!(relationship['sourceRole'], "#{path}.sourceRole", max: MAX_NAME_LENGTH)
+          if relationship.key?('sourceFace')
+            validate_anchor_face!(relationship['sourceFace'], "#{path}.sourceFace",
+                                  'must be one of the six concrete board faces')
+          end
+          targets = relationship['targets']
+          fail_at("#{path}.targets", 'must be a non-empty array') unless targets.is_a?(Array) && !targets.empty?
+          face_verified = FACE_VERIFIED_RELATIONSHIP_KINDS.include?(relationship['kind'])
+          validate_structure_targets!(targets, face_verified, "#{path}.targets")
+          validate_station_margins!(relationship['station'], "#{path}.station") if relationship.key?('station')
+          validate_relationship_families!(relationship['families'], "#{path}.families") if relationship.key?('families')
+        end
+
+        def validate_structure_targets!(targets, face_verified, path)
+          seen_components = {}
+          targets.each_with_index do |target, index|
+            target_path = "#{path}[#{index}]"
+            fail_at(target_path, 'must be an object') unless target.is_a?(Hash)
+            validate_closed_shape!(target, TARGET_KEYS, target_path)
+            validate_text!(target['componentId'], "#{target_path}.componentId", max: MAX_NAME_LENGTH)
+            validate_text!(target['role'], "#{target_path}.role", max: MAX_NAME_LENGTH)
+            # Two targets on the same component can never both resolve to
+            # distinct participants; ambiguity never selects silently.
+            fail_at(path, 'each target must reference a distinct component') if seen_components[target['componentId']]
+            seen_components[target['componentId']] = true
+            if face_verified
+              validate_anchor_face!(target['face'], "#{target_path}.face",
+                                    'must declare one concrete contact face')
+            elsif target.key?('face')
+              validate_anchor_face!(target['face'], "#{target_path}.face",
+                                    'must be one of the six concrete board faces')
+            end
+          end
+        end
+
+        def validate_anchor_face!(value, path, message)
+          fail_at(path, message) unless ANCHOR_FACES.include?(value)
+        end
+
+        def validate_station_margins!(station, path)
+          fail_at(path, 'must be an object') unless station.is_a?(Hash)
+          validate_closed_shape!(station, STATION_KEYS, path)
+          STATION_KEYS.each do |key|
+            next unless station.key?(key)
+
+            validate_finite_number!(station[key], "#{path}.#{key}")
+            fail_at("#{path}.#{key}", 'must be nonnegative') if station[key].negative?
+          end
+        end
+
+        def validate_relationship_families!(families, path)
+          fail_at(path, 'must be an array') unless families.is_a?(Array)
+          seen_families = {}
+          families.each_with_index do |family, index|
+            family_path = "#{path}[#{index}]"
+            fail_at(family_path, 'must be an object') unless family.is_a?(Hash)
+            validate_closed_shape!(family, FAMILY_KEYS, family_path)
+            validate_text!(family['familyId'], "#{family_path}.familyId", max: MAX_NAME_LENGTH)
+            fail_at(path, 'each familyId must be unique') if seen_families[family['familyId']]
+            seen_families[family['familyId']] = true
+            count = family['count']
+            fail_at("#{family_path}.count", 'must be an integer >= 2') unless count.is_a?(Integer) && count >= 2
+            %w[startMarginMm endMarginMm].each do |key|
+              next unless family.key?(key)
+
+              validate_finite_number!(family[key], "#{family_path}.#{key}")
+              fail_at("#{family_path}.#{key}", 'must be nonnegative') if family[key].negative?
+            end
           end
         end
 
