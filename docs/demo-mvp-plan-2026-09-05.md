@@ -210,7 +210,7 @@ ni empezar una segunda feature por tomar el menor ID pendiente del ledger.
 
 Fuentes complementarias: [PRD](prd-v2.md), [roadmap](roadmap-comercial-v2.md),
 [Operational Core](operational-core-v1.md), [contrato de integración](architecture/sketchup-backend-web-integration-excellence.md),
-[auditoría histórica](muebles-audit-360-20260903/audit/README.md).
+[auditoría histórica](history/muebles-audit-360-20260903/audit/README.md).
 
 
 ## Verificación de esta actualización documental
