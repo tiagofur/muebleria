@@ -184,3 +184,96 @@ describe('HardwarePlacementsEditor', () => {
     expect(yInput.parentElement?.classList.contains('catalog-form__field--narrow')).toBe(false);
   });
 });
+
+const mockOptionGroups = [
+  {
+    id: 'og-bisagra',
+    code: 'BISAGRA',
+    name: 'Bisagras',
+    kind: 'hardware' as const,
+    required: true,
+    optionIds: ['hw-2', 'hw-1'],
+  },
+  {
+    id: 'og-interior',
+    code: 'INTERIOR',
+    name: 'Interiores',
+    kind: 'board' as const,
+    required: true,
+    optionIds: [],
+  },
+];
+
+function GroupHarness({
+  initial = [],
+}: {
+  readonly initial?: readonly HardwarePlacement[];
+}) {
+  const [placements, setPlacements] = useState<readonly HardwarePlacement[]>(
+    initial,
+  );
+  return (
+    <HardwarePlacementsEditor
+      placements={placements}
+      catalogHardware={mockHardware}
+      optionGroups={mockOptionGroups}
+      onChange={(next) => setPlacements(next ?? [])}
+    />
+  );
+}
+
+describe('HardwarePlacementsEditor — modo por grupo (#1046)', () => {
+  it('hides the Modo selector when no option groups exist (backwards compatible)', () => {
+    render(<Harness initial={[{ hardwareId: 'hw-2', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } }]} />);
+    expect(screen.queryByTestId('instance-hardware-placement-0-mode')).toBeNull();
+  });
+
+  it('switches a specific placement to group mode: clears hardwareId, sets the role and lists members', async () => {
+    const user = userEvent.setup();
+    render(
+      <GroupHarness
+        initial={[{ hardwareId: 'hw-2', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } }]}
+      />,
+    );
+
+    await user.selectOptions(screen.getByTestId('instance-hardware-placement-0-mode'), 'grupo');
+
+    const groupSelect = screen.getByTestId(
+      'instance-hardware-placement-0-group',
+    ) as HTMLSelectElement;
+    expect(groupSelect.value).toBe('BISAGRA');
+    expect(screen.getByTestId('instance-hardware-placement-0-members').textContent).toContain(
+      'HW2 — Bisagra',
+    );
+    expect(screen.getByTestId('instance-hardware-placement-0-members').textContent).toContain(
+      'Se elige al cotizar',
+    );
+  });
+
+  it('keeps a saved role that is no longer in the catalog visible without rewriting it', () => {
+    render(
+      <GroupHarness
+        initial={[{ optionRole: 'CORREDERA_VIEJA', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } }]}
+      />,
+    );
+    const groupSelect = screen.getByTestId(
+      'instance-hardware-placement-0-group',
+    ) as HTMLSelectElement;
+    expect(groupSelect.value).toBe('CORREDERA_VIEJA');
+    expect(groupSelect.textContent).toContain('CORREDERA_VIEJA (guardado)');
+  });
+
+  it('switches back to specific mode: clears the role and selects concrete hardware', async () => {
+    const user = userEvent.setup();
+    render(
+      <GroupHarness
+        initial={[{ optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } }]}
+      />,
+    );
+
+    await user.selectOptions(screen.getByTestId('instance-hardware-placement-0-mode'), 'especifico');
+
+    const picker = screen.getByTestId('instance-hardware-placement-0-hw');
+    expect(picker.textContent).toContain('HW1');
+  });
+});

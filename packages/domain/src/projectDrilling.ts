@@ -120,6 +120,7 @@ export function resolveProjectDrilling(
   const derivedByKey = new Map<string, DerivedJointPlacement[]>();
   const partsByKey = new Map<string, readonly ResolvedBoardPart[]>();
   const moduleIdByKey = new Map<string, string>();
+  const choicesByKey = new Map<string, ReturnType<typeof effectiveOptionChoices>>();
   const resolutionIssues: ProjectDrillingResolutionIssue[] = [];
 
   for (const item of project.items) {
@@ -160,6 +161,11 @@ export function resolveProjectDrilling(
     }
     partsByKey.set(cacheKey, parts);
     moduleIdByKey.set(cacheKey, module.id);
+    // #1046: role-based placements resolve holes through the effective
+    // choices. Templates are first-wins per module (same identity rule as the
+    // canonical piece codes — duplicated module lines share holes), so the
+    // first item's effective choices govern the shared template.
+    choicesByKey.set(cacheKey, choices);
 
     derivedByKey.set(
       cacheKey,
@@ -201,6 +207,8 @@ export function resolveProjectDrilling(
       piece: link.part,
       placements: [...manualForPart, ...derivedForPart],
       hardwareCatalog: catalog.hardware,
+      // #1046: role-based placements drill with the chosen catalog hardware.
+      optionChoices: cacheKey ? choicesByKey.get(cacheKey) : undefined,
     });
 
     patterns.push({

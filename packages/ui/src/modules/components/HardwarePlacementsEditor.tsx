@@ -3,6 +3,11 @@
  * (handles, hinges anchored to a board face at X%/Y%). Stateless — the parent
  * owns the placements array and is notified via onChange.
  *
+ * Each row picks its concrete hardware two ways (#1046): a hardware OPTION
+ * GROUP (the concrete item — Blum vs Hafele vs económica — is chosen later as
+ * a project choice) or a SPECIFIC catalog hardware. Group placements resolve
+ * before drilling/machining/demand; here they only author intent.
+ *
  * Precursor to F070 (interactive 3D gizmo): the placements authored here are
  * the data the CNC perforation pipeline will consume later, and what the 3D
  * viewer renders via HardwareMesh. Percentages are stored in [0,100] (the
@@ -10,12 +15,18 @@
  */
 
 import type { ReactNode } from 'react';
-import type { AnchorFace, Hardware, HardwarePlacement } from '@granete/domain';
+import type { AnchorFace, Hardware, HardwarePlacement, OptionGroup } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
+import { formatMoneyDisplay } from '../../common/formatMoneyDisplay';
 
 export type HardwarePlacementsEditorProps = {
   readonly placements: readonly HardwarePlacement[];
   readonly catalogHardware: readonly Hardware[];
+  /**
+   * Hardware-kind option groups available for the "por grupo" mode (#1046).
+   * Undefined/empty keeps the editor specific-only (backwards compatible).
+   */
+  readonly optionGroups?: readonly OptionGroup[];
   readonly onChange: (
     next: readonly HardwarePlacement[] | undefined,
   ) => void;
@@ -34,6 +45,7 @@ const ANCHOR_FACE_OPTIONS: readonly { value: AnchorFace; label: string }[] = [
 export function HardwarePlacementsEditor({
   placements,
   catalogHardware,
+  optionGroups,
   onChange,
   testIdSuffix,
 }: HardwarePlacementsEditorProps): ReactNode {
@@ -44,6 +56,7 @@ export function HardwarePlacementsEditor({
     name: h.name,
     active: h.active,
   }));
+  const hardwareGroups = (optionGroups ?? []).filter((g) => g.kind === 'hardware');
 
   const update = (idx: number, patch: Partial<HardwarePlacement>) => {
     onChange(
@@ -80,6 +93,16 @@ export function HardwarePlacementsEditor({
     });
   };
 
+  const membersHintFor = (group: OptionGroup): string => {
+    const members = group.optionIds
+      .map((id) => catalogHardware.find((h) => h.id === id))
+      .filter((h): h is Hardware => Boolean(h));
+    if (members.length === 0) return 'Sin miembros activos.';
+    return members
+      .map((h) => `${h.code} — ${h.name} (${formatMoneyDisplay(h.costPerUnit, { showCurrency: false })})`)
+      .join(' · ');
+  };
+
   return (
     <div
       className="instance-hardware-placements"
@@ -109,7 +132,13 @@ export function HardwarePlacementsEditor({
         </p>
       ) : (
         <div className="module-part-list">
-          {placements.map((p, idx) => (
+          {placements.map((p, idx) => {
+            const mode =
+              p.optionRole && !p.hardwareId ? 'grupo' : 'especifico';
+            const selectedGroup = hardwareGroups.find(
+              (g) => g.code === p.optionRole,
+            );
+            return (
             <div
               key={idx}
               className="module-part-card"
@@ -129,16 +158,82 @@ export function HardwarePlacementsEditor({
                 </button>
               </div>
               <div className="module-editor__grid">
-                <CatalogPicker
-                  id={`hw-placement-hw-${idx}${suffix}`}
-                  label="Herraje"
-                  placeholder="Seleccionar herraje…"
-                  searchPlaceholder="Buscar herraje…"
-                  value={p.hardwareId}
-                  onChange={(hardwareId) => update(idx, { hardwareId })}
-                  items={pickerItems}
-                  data-testid={`instance-hardware-placement-${idx}${suffix}-hw`}
-                />
+                {hardwareGroups.length > 0 ? (
+                  <div className="catalog-form__field">
+                    <label htmlFor={`hw-placement-mode-${idx}${suffix}`}>
+                      Modo
+                    </label>
+                    <select
+                      id={`hw-placement-mode-${idx}${suffix}`}
+                      value={mode}
+                      onChange={(e) => {
+                        if (e.target.value === 'grupo') {
+                          update(idx, {
+                            hardwareId: undefined,
+                            optionRole:
+                              hardwareGroups.find((g) => g.code === p.optionRole)?.code ??
+                              hardwareGroups[0]?.code ??
+                              '',
+                          });
+                        } else {
+                          update(idx, {
+                            hardwareId:
+                              catalogHardware.find((h) => h.id === p.hardwareId)?.id ??
+                              catalogHardware[0]?.id ??
+                              '',
+                            optionRole: undefined,
+                          });
+                        }
+                      }}
+                      data-testid={`instance-hardware-placement-${idx}${suffix}-mode`}
+                    >
+                      <option value="especifico">Herraje específico</option>
+                      <option value="grupo">Grupo de opciones</option>
+                    </select>
+                  </div>
+                ) : null}
+                {mode === 'grupo' ? (
+                  <div className="catalog-form__field">
+                    <label htmlFor={`hw-placement-group-${idx}${suffix}`}>
+                      Grupo de herrajes
+                    </label>
+                    <select
+                      id={`hw-placement-group-${idx}${suffix}`}
+                      value={p.optionRole ?? ''}
+                      onChange={(e) => update(idx, { optionRole: e.target.value })}
+                      data-testid={`instance-hardware-placement-${idx}${suffix}-group`}
+                    >
+                      {!p.optionRole ? <option value="">Seleccionar grupo…</option> : null}
+                      {!hardwareGroups.some((g) => g.code === p.optionRole) && p.optionRole ? (
+                        <option value={p.optionRole}>{p.optionRole} (guardado)</option>
+                      ) : null}
+                      {hardwareGroups.map((g) => (
+                        <option key={g.id} value={g.code}>
+                          {g.name} ({g.code})
+                        </option>
+                      ))}
+                    </select>
+                    {selectedGroup ? (
+                      <p
+                        className="catalog-form__hint"
+                        data-testid={`instance-hardware-placement-${idx}${suffix}-members`}
+                      >
+                        Se elige al cotizar: {membersHintFor(selectedGroup)}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <CatalogPicker
+                    id={`hw-placement-hw-${idx}${suffix}`}
+                    label="Herraje"
+                    placeholder="Seleccionar herraje…"
+                    searchPlaceholder="Buscar herraje…"
+                    value={p.hardwareId ?? ''}
+                    onChange={(hardwareId) => update(idx, { hardwareId })}
+                    items={pickerItems}
+                    data-testid={`instance-hardware-placement-${idx}${suffix}-hw`}
+                  />
+                )}
                 <div className="catalog-form__field">
                   <label htmlFor={`hw-placement-face-${idx}${suffix}`}>
                     Cara
@@ -251,7 +346,8 @@ export function HardwarePlacementsEditor({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

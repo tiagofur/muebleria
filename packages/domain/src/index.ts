@@ -286,12 +286,15 @@ export {
 
 export {
   resolveHardwarePlacement,
+  resolvePlacementHardwareId,
   normalizeHardwarePreview,
   snapValue,
   convertWorldDeltaToFaceMm,
   type ResolveHardwarePlacementParams,
   type ResolvedHardwarePlacement,
   type NormalizedHardwarePreview,
+  type PlacementChoiceMap,
+  type PlacementHardwareResolution,
 } from './hardwarePlacement';
 export {
   HARDWARE_FINISHES,

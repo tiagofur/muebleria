@@ -218,7 +218,16 @@ type Agregado struct {
 // (CNC/machining — different lifecycle/consumers). Rides the component-instance
 // overrides JSONB; no dedicated column or migration.
 type HardwarePlacement struct {
-	HardwareID       string               `json:"hardwareId"`
+	// HardwareID is the concrete catalog hardware. Optional when OptionRole is
+	// set (#1046): the layout resolver substitutes the chosen catalog hardware
+	// from the effective option choices, mirroring HardwareLine.HardwareID.
+	// Machining/drilling/demand only ever see the resolved concrete id.
+	HardwareID       string               `json:"hardwareId,omitempty"`
+	// OptionRole is the option-group code (kind hardware) when the concrete
+	// item is chosen later (Blum vs Hafele vs económica — #1046). Exactly one
+	// of HardwareID/OptionRole must be usable; a required group without a
+	// choice fails the resolve.
+	OptionRole       string               `json:"optionRole,omitempty"`
 	AnchorFace       string               `json:"anchorFace"` // front|back|left|right|top|bottom
 	RelativePosition HardwareRelPosition  `json:"relativePosition"`
 	RotationDeg      *HardwareRotationDeg `json:"rotationDeg,omitempty"`

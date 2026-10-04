@@ -199,6 +199,13 @@ func ConsumedOptionRoles(module domain.Module, choices map[string]string, catalo
 			}
 		}
 	}
+	// #1046: role-based hardware placements consume their choice exactly like
+	// role-based hardware lines — the layout resolver substitutes the concrete
+	// chosen hardware before machining/demand, so the released choice set must
+	// keep the role or the gate would silently drop it. Only a role the
+	// placement actually resolves consumes; the optional-group drop and the
+	// required-group failure consume nothing (the latter blocks the resolve).
+	consumePlacementOptionRoles(module, catalog, choices, consumed)
 	// #830: base treatment synthesizes hardware lines (ZOCLO_PERFIL/PATAS)
 	// that no catalog line owns. A resolved synthesized line only exists when
 	// the effective base mode asked for it AND the choice selected its

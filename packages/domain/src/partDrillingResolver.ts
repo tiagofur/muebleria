@@ -33,6 +33,7 @@ import type {
   ProductionCutRow,
   ResolvedBoardPart,
 } from './types';
+import { resolvePlacementHardwareId, type PlacementChoiceMap } from './hardwarePlacement';
 
 export type DrillingIssueCode =
   | 'DEPTH_EXCEEDS_MATERIAL'
@@ -75,6 +76,13 @@ export interface ResolvePartDrillingParams {
   readonly piece: ResolvedBoardPart | ProductionCutRow | PieceDescriptor;
   readonly placements?: readonly HardwarePlacement[];
   readonly hardwareCatalog?: HardwareCatalogLookup;
+  /**
+   * Effective option choices for role-based placements (#1046): a placement
+   * with `optionRole` and no `hardwareId` drills with its chosen catalog
+   * hardware's machining profile. Unresolved roles contribute no holes — the
+   * F074 fallback and the missing-choice export issue stay authoritative.
+   */
+  readonly optionChoices?: PlacementChoiceMap;
   readonly partRole?: string;
   readonly strict?: boolean;
 }
@@ -416,7 +424,7 @@ export function resolvePartDrilling(
     };
   }
 
-  const { piece, placements = [], hardwareCatalog, partRole, strict = false } = params;
+  const { piece, placements = [], hardwareCatalog, optionChoices, partRole, strict = false } = params;
 
   const lengthMm = piece.lengthMm;
   const widthMm = piece.widthMm;
@@ -441,7 +449,12 @@ export function resolvePartDrilling(
   };
 
   for (const placement of placements) {
-    const hardware = findHardwareInCatalog(placement.hardwareId, hardwareCatalog);
+    // #1046: role-based placements drill with their chosen catalog hardware;
+    // an unresolved role contributes no holes (F074 fallback + the
+    // missing-choice export issue stay authoritative — never a silent guess).
+    const resolved = resolvePlacementHardwareId(placement, optionChoices);
+    if (resolved.status === 'unresolved' || resolved.status === 'invalid') continue;
+    const hardware = findHardwareInCatalog(resolved.hardwareId, hardwareCatalog);
     // Derived joints (F129) may carry their application-specific machining —
     // e.g. a through pilot for back-panel screws — which overrides the
     // catalog footprint for this placement only.

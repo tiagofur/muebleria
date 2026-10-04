@@ -309,3 +309,81 @@ describe('collectModuleOptionRoles (gap #5 — accurate delete warnings)', () =>
     expect(roles.size).toBe(1);
   });
 });
+
+describe('collectModuleOptionRoles — placements por grupo (#1046)', () => {
+  const catalog: Pick<Catalog, 'components' | 'structures' | 'agregados'> = {
+    components: [
+      {
+        id: 'comp-puerta',
+        code: 'PUE',
+        name: 'Hoja',
+        placement: 'puerta',
+        geometry: {
+          kind: 'rectangular_board',
+          lengthMm: 700,
+          widthMm: 600,
+          thicknessMm: 18,
+        },
+        defaultEdges: [],
+        optionRoles: [],
+        active: true,
+      },
+    ],
+    structures: [],
+    agregados: [
+      {
+        id: 'agr-puerta',
+        code: 'AGR-PUE',
+        name: 'Puerta',
+        components: [
+          {
+            componentId: 'comp-puerta',
+            quantity: 1,
+            overrides: {
+              hardwarePlacements: [
+                { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  it('collects placement roles from module component instance overrides', () => {
+    const module: Module = {
+      id: 'mod-1',
+      code: 'MOD-1',
+      name: 'Gabinete',
+      components: [
+        {
+          componentId: 'comp-puerta',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              { optionRole: 'JALADERA', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } },
+              // A concrete placement consumes no group choice.
+              { hardwareId: 'hw-1', anchorFace: 'front', relativePosition: { xMm: 3, yMm: 4 } },
+            ],
+          },
+        },
+      ],
+      hardwareLines: [],
+    };
+    const roles = collectModuleOptionRoles(module, catalog);
+    expect(roles.has('JALADERA')).toBe(true);
+    expect(roles.has('BISAGRA')).toBe(false);
+  });
+
+  it('collects placement roles from agregado components (module-scoped instance)', () => {
+    const module: Module = {
+      id: 'mod-2',
+      code: 'MOD-2',
+      name: 'Gabinete con puerta',
+      agregados: [{ agregadoId: 'agr-puerta', quantity: 1 }],
+      hardwareLines: [],
+    };
+    const roles = collectModuleOptionRoles(module, catalog);
+    expect(roles.has('BISAGRA')).toBe(true);
+  });
+});

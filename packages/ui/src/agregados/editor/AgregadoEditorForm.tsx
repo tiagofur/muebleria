@@ -411,72 +411,122 @@ export function AgregadoEditorForm({
                 </div>
               ) : (
                 <ul className="agregado-editor__item-list">
-                  {draft.hardwareLines.map((hw, idx) => (
+                  {draft.hardwareLines.map((hw, idx) => {
+                    const lineMode = hw.hardwareId ? 'especifico' : 'grupo';
+                    const selectedGroup = hardwareRoles.find((g) => g.code === hw.optionRole);
+                    return (
                     <li key={idx} className="agregado-editor__item-row">
                       <div className="agregado-editor__item-fields">
-                        <div className="catalog-form__field">
-                          <label className="catalog-form__label">Herraje específico</label>
-                          <select
-                            className="catalog-form__select"
-                            value={hw.hardwareId ?? ''}
-                            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                              updateHardwareLine(idx, {
-                                hardwareId: e.target.value || undefined,
-                              })
-                            }
-                            data-testid={`agregado-hw-${idx}-select`}
-                          >
-                            <option value="">(Por Rol)</option>
-                            {catalogHardware.map((h) => (
-                              <option key={h.id} value={h.id}>
-                                {h.code} — {h.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div className="catalog-form__field">
-                          <label className="catalog-form__label">Rol de opción</label>
-                          {hardwareRoles.length > 0 ? (
-                            /* S4 #1009: role is a resolution key for pricing
-                             * and drilling — pick from the catalog's hardware
-                             * option groups instead of free text. A saved value
-                             * outside the catalog stays visible, never
-                             * rewritten. */
+                        {hardwareRoles.length > 0 ? (
+                          <div className="catalog-form__field">
+                            <label className="catalog-form__label">Modo</label>
                             <select
                               className="catalog-form__select"
-                              value={hw.optionRole}
-                              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-                                updateHardwareLine(idx, { optionRole: e.target.value })
-                              }
-                              data-testid={`agregado-hw-${idx}-role`}
+                              value={lineMode}
+                              onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                                if (e.target.value === 'grupo') {
+                                  updateHardwareLine(idx, {
+                                    hardwareId: undefined,
+                                    optionRole:
+                                      hardwareRoles.find((g) => g.code === hw.optionRole)?.code ??
+                                      hardwareRoles[0]?.code ??
+                                      '',
+                                  });
+                                } else {
+                                  updateHardwareLine(idx, {
+                                    hardwareId:
+                                      catalogHardware.find((h) => h.id === hw.hardwareId)?.id ??
+                                      catalogHardware[0]?.id ??
+                                      '',
+                                  });
+                                }
+                              }}
+                              data-testid={`agregado-hw-${idx}-mode`}
                             >
-                              {!hw.optionRole ? (
-                                <option value="">(sin rol)</option>
-                              ) : null}
-                              {!hardwareRoles.some((g) => g.code === hw.optionRole) ? (
-                                <option value={hw.optionRole}>
-                                  {hw.optionRole} (guardado)
-                                </option>
-                              ) : null}
-                              {hardwareRoles.map((g) => (
-                                <option key={g.id} value={g.code}>
-                                  {g.code} — {g.name}
+                              <option value="especifico">Herraje específico</option>
+                              <option value="grupo">Grupo de opciones</option>
+                            </select>
+                          </div>
+                        ) : null}
+                        {lineMode === 'grupo' ? (
+                          <div className="catalog-form__field">
+                            <label className="catalog-form__label">Grupo de herrajes</label>
+                            {hardwareRoles.length > 0 ? (
+                              /* S4 #1009 + #1046: role is a resolution key for
+                               * pricing and drilling — pick from the catalog's
+                               * hardware option groups. A saved value outside
+                               * the catalog stays visible, never rewritten. */
+                              <>
+                                <select
+                                  className="catalog-form__select"
+                                  value={hw.optionRole}
+                                  onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                                    updateHardwareLine(idx, { optionRole: e.target.value })
+                                  }
+                                  data-testid={`agregado-hw-${idx}-role`}
+                                >
+                                  {!hw.optionRole ? (
+                                    <option value="">Seleccionar grupo…</option>
+                                  ) : null}
+                                  {!hardwareRoles.some((g) => g.code === hw.optionRole) ? (
+                                    <option value={hw.optionRole}>
+                                      {hw.optionRole} (guardado)
+                                    </option>
+                                  ) : null}
+                                  {hardwareRoles.map((g) => (
+                                    <option key={g.id} value={g.code}>
+                                      {g.code} — {g.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {selectedGroup ? (
+                                  <p className="catalog-form__hint" data-testid={`agregado-hw-${idx}-members`}>
+                                    Se elige al cotizar:{' '}
+                                    {selectedGroup.optionIds
+                                      .map((id) => catalogHardware.find((h) => h.id === id))
+                                      .filter((h): h is NonNullable<typeof h> => Boolean(h))
+                                      .map((h) => `${h.code} — ${h.name}`)
+                                      .join(' · ') || 'Sin miembros activos.'}
+                                  </p>
+                                ) : null}
+                              </>
+                            ) : (
+                              <input
+                                type="text"
+                                className="catalog-form__input"
+                                value={hw.optionRole}
+                                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                  updateHardwareLine(idx, { optionRole: e.target.value })
+                                }
+                                placeholder="BISAGRA / CORREDERA / JALADERA"
+                                data-testid={`agregado-hw-${idx}-role`}
+                              />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="catalog-form__field">
+                            <label className="catalog-form__label">Herraje específico</label>
+                            <select
+                              className="catalog-form__select"
+                              value={hw.hardwareId ?? ''}
+                              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                                updateHardwareLine(idx, {
+                                  hardwareId: e.target.value || undefined,
+                                })
+                              }
+                              data-testid={`agregado-hw-${idx}-select`}
+                            >
+                              <option value="" disabled>
+                                Seleccionar herraje…
+                              </option>
+                              {catalogHardware.map((h) => (
+                                <option key={h.id} value={h.id}>
+                                  {h.code} — {h.name}
                                 </option>
                               ))}
                             </select>
-                          ) : (
-                            <input
-                              type="text"
-                              className="catalog-form__input"
-                              value={hw.optionRole}
-                              onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                                updateHardwareLine(idx, { optionRole: e.target.value })
-                              }
-                              placeholder="BISAGRA / CORREDERA / JALADERA"
-                              data-testid={`agregado-hw-${idx}-role`}
-                            />
-                          )}
-                        </div>
+                          </div>
+                        )}
                         <div className="catalog-form__field catalog-form__field--narrow">
                           <label className="catalog-form__label">Cantidad</label>
                           <input
@@ -503,7 +553,8 @@ export function AgregadoEditorForm({
                         <Trash2 size={15} />
                       </button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
 
@@ -543,6 +594,7 @@ export function AgregadoEditorForm({
                         <HardwarePlacementsEditor
                           placements={comp.overrides?.hardwarePlacements ?? []}
                           catalogHardware={catalogHardware}
+                          optionGroups={optionGroups}
                           testIdSuffix={`hw-pc-${idx}`}
                           onChange={(next) => {
                             const current = comp.overrides ?? {};

@@ -701,7 +701,20 @@ export interface DoorAffinity {
 }
 
 export interface HardwarePlacement {
-  readonly hardwareId: string;
+  /**
+   * Concrete catalog hardware. Optional when `optionRole` is set (#1046): the
+   * concrete item resolves from the design's option choices at resolve time,
+   * mirroring `HardwareLine.hardwareId`. Exactly one of `hardwareId` /
+   * `optionRole` must be usable — neither is an authoring error, and a role
+   * without a choice fails closed on required groups.
+   */
+  readonly hardwareId?: string;
+  /**
+   * Option-group code (kind `hardware`) when the concrete item is chosen
+   * later (Blum vs Hafele vs económica — #1046). Drilling, machining and
+   * demand always consume the RESOLVED concrete hardware, never the role.
+   */
+  readonly optionRole?: string;
   readonly anchorFace: AnchorFace;
   readonly relativePosition: {
     readonly xMm: number;

@@ -13,6 +13,8 @@ import { baseContextForItem, type BaseResolutionContext } from './plinth';
 import type {
   Catalog,
   Module,
+  ModuleAgregadoInstance,
+  ModuleComponentInstance,
   OptionChoices,
   Project,
   ProjectItem,
@@ -75,34 +77,52 @@ function pushDomainError(
 
 /**
  * Collect every option-role code a module references — resolved from its own
- * component instances, its referenced structure's components, and its hardware
- * lines. Used by export validation AND by UI warnings (e.g. counting how many
- * modules use an option group before deleting it — #5).
+ * component instances, its referenced structure's components, its hardware
+ * lines, and (#1046) role-based hardware placements on any of those instances
+ * or on agregado components. Used by export validation AND by UI warnings
+ * (e.g. counting how many modules use an option group before deleting it — #5).
  */
 export function collectModuleOptionRoles(
   module: Module,
-  catalog: Pick<Catalog, 'components' | 'structures'>,
+  catalog: Pick<Catalog, 'components' | 'structures' | 'agregados'>,
 ): Set<string> {
   const roles = new Set<string>();
-  for (const instance of module.components ?? []) {
+  const collectInstanceRoles = (instance: ModuleComponentInstance): void => {
     const comp = catalog.components?.find((c) => c.id === instance.componentId);
     if (comp) {
       for (const role of comp.optionRoles) {
         if (role.trim()) roles.add(role);
       }
     }
+    for (const placement of instance.overrides?.hardwarePlacements ?? []) {
+      // Only a role-based placement consumes a group choice; a concrete
+      // hardwareId never does.
+      if (!placement.hardwareId && placement.optionRole?.trim()) {
+        roles.add(placement.optionRole.trim());
+      }
+    }
+  };
+  for (const instance of module.components ?? []) {
+    collectInstanceRoles(instance);
   }
+  const collectAgregadoInstances = (
+    instances: readonly ModuleAgregadoInstance[] | undefined,
+  ): void => {
+    for (const agrInst of instances ?? []) {
+      const agr = catalog.agregados?.find((a) => a.id === agrInst.agregadoId);
+      for (const instance of agr?.components ?? []) {
+        collectInstanceRoles(instance);
+      }
+    }
+  };
   if (module.structureId) {
     const structure = catalog.structures?.find((s) => s.id === module.structureId);
     for (const instance of structure?.components ?? []) {
-      const comp = catalog.components?.find((c) => c.id === instance.componentId);
-      if (comp) {
-        for (const role of comp.optionRoles) {
-          if (role.trim()) roles.add(role);
-        }
-      }
+      collectInstanceRoles(instance);
     }
+    collectAgregadoInstances(structure?.agregados);
   }
+  collectAgregadoInstances(module.agregados);
   for (const line of module.hardwareLines) {
     if (!line.hardwareId && line.optionRole?.trim()) {
       roles.add(line.optionRole);

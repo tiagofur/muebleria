@@ -464,3 +464,88 @@ describe('AgregadoEditorForm — component picker (S5 #1009)', () => {
     expect(screen.getByTestId('comp-radio-PRT-STD')).toBeTruthy();
   });
 });
+
+describe('AgregadoEditorForm — herrajes por grupo (#1046)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const grupoOptionGroups: OptionGroup[] = [
+    {
+      id: 'og-bisagra',
+      code: 'BISAGRA',
+      name: 'Bisagras',
+      kind: 'hardware',
+      required: true,
+      optionIds: ['hw-blum', 'hw-eco'],
+    },
+  ];
+
+  function specificDraft(): AgregadoDraft {
+    const draft = doorDraft();
+    draft.hardwareLines = [
+      { id: 'hl-1', quantity: 2, optionRole: 'BISAGRA', hardwareId: 'hw-blum' },
+    ];
+    return draft;
+  }
+
+  it('a line with concrete hardware renders the specific select without (Por Rol)', () => {
+    renderForm({
+      editorTab: 'hardware',
+      draft: specificDraft(),
+      optionGroups: grupoOptionGroups,
+    });
+
+    expect(screen.getByTestId('agregado-hw-0-mode')).toBeTruthy();
+    const select = screen.getByTestId('agregado-hw-0-select') as HTMLSelectElement;
+    expect((select.options[0] as HTMLOptionElement).textContent).not.toContain('(Por Rol)');
+  });
+
+  it('switching a line to group mode clears hardwareId, keeps the role and lists members', () => {
+    const setDraftMock = vi.fn();
+    const setDraft = setDraftMock as unknown as Dispatch<SetStateAction<AgregadoDraft>>;
+    renderForm({
+      editorTab: 'hardware',
+      draft: specificDraft(),
+      optionGroups: grupoOptionGroups,
+      setDraft,
+    });
+
+    fireEvent.change(screen.getByTestId('agregado-hw-0-mode'), {
+      target: { value: 'grupo' },
+    });
+
+    const updater = setDraftMock.mock.calls.at(-1)![0] as (
+      prev: AgregadoDraft,
+    ) => AgregadoDraft;
+    const next = updater(specificDraft());
+    const line = next.hardwareLines[0]!;
+    expect(line.hardwareId).toBeUndefined();
+    expect(line.optionRole).toBe('BISAGRA');
+  });
+
+  it('a group line lists its members with the quote-time choice hint', () => {
+    const draft = specificDraft();
+    draft.hardwareLines = [
+      { id: 'hl-1', quantity: 2, optionRole: 'BISAGRA' },
+    ];
+    renderForm({
+      editorTab: 'hardware',
+      draft,
+      optionGroups: grupoOptionGroups,
+    });
+
+    // El harness de este formulario pasa catalogHardware vacío: el hint
+    // honesto es "Sin miembros activos." (los miembros con costo se cubren en
+    // HardwarePlacementsEditor.test).
+    expect(screen.getByTestId('agregado-hw-0-members').textContent).toContain(
+      'Se elige al cotizar',
+    );
+  });
+
+  it('without option groups the Modo selector is absent and behavior is unchanged', () => {
+    renderForm({ editorTab: 'hardware', draft: specificDraft() });
+    expect(screen.queryByTestId('agregado-hw-0-mode')).toBeNull();
+    expect(screen.getByTestId('agregado-hw-0-select')).toBeTruthy();
+  });
+});

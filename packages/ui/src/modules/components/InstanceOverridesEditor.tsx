@@ -5,7 +5,7 @@
 
 import { useId, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
-import type { Hardware, HardwarePlacement } from '@granete/domain';
+import type { Hardware, HardwarePlacement, OptionGroup } from '@granete/domain';
 import {
   instanceOverridesSummary,
   patchInstanceOverrides,
@@ -24,6 +24,8 @@ export type InstanceOverridesEditorProps = {
   /** Hardware catalog for the placements editor. When omitted, the Herrajes
    * section is hidden (no hardware to position). */
   readonly catalogHardware?: readonly Hardware[];
+  /** Hardware option groups for the "por grupo" placement mode (#1046). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 export function InstanceOverridesEditor({
@@ -31,6 +33,7 @@ export function InstanceOverridesEditor({
   onChange,
   testIdSuffix = '',
   catalogHardware,
+  optionGroups,
 }: InstanceOverridesEditorProps): ReactNode {
   const formId = useId();
   const [open, setOpen] = useState(false);
@@ -274,6 +277,7 @@ export function InstanceOverridesEditor({
         <HardwarePlacementsEditor
           placements={overrides?.hardwarePlacements ?? []}
           catalogHardware={catalogHardware}
+          optionGroups={optionGroups}
           onChange={handlePlacementsChange}
           testIdSuffix={testIdSuffix}
         />
