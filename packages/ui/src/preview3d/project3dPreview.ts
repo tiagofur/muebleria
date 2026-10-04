@@ -32,6 +32,7 @@ import {
   resolveBoardOptionChoiceId,
   resolveBom,
   resolveHardwarePlacement,
+  resolvePlacementHardwareId,
   resolveItemDims,
   resolveModuleAgregadoAssemblies,
   baseContextForItem,
@@ -556,11 +557,23 @@ export function resolveModuleHardwarePlacements(
         if (!placements || placements.length === 0) continue;
 
         for (const placement of placements) {
+          // #1046: role-based placements render their chosen member once the
+          // choice exists; unresolved (no choice yet) renders nothing — the
+          // same explicit absence as swapped-to-cost-only hardware (VH-09).
+          const resolvedPlacement = resolvePlacementHardwareId(
+            placement,
+            options.optionChoices,
+          );
+          if (
+            resolvedPlacement.status === 'unresolved' ||
+            resolvedPlacement.status === 'invalid'
+          ) {
+            continue;
+          }
           const targetId =
-            options.optionChoices?.[placement.hardwareId] ?? placement.hardwareId;
-          const hardware =
-            hardwareCatalog.find((h) => h.id === targetId) ??
-            hardwareCatalog.find((h) => h.id === placement.hardwareId);
+            options.optionChoices?.[resolvedPlacement.hardwareId] ??
+            resolvedPlacement.hardwareId;
+          const hardware = hardwareCatalog.find((h) => h.id === targetId);
           // VH-09: swapped-to-cost-only or removed hardware renders nothing.
           if (!hardware) continue;
           const resolved = resolveHardwarePlacement({

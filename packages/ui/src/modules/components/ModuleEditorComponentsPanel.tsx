@@ -3,7 +3,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
-import type { Component, Hardware } from '@granete/domain';
+import type { Component, Hardware, OptionGroup } from '@granete/domain';
 import { Copy, Plus } from 'lucide-react';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import type { ModuleDraft } from '../moduleHelpers';
@@ -18,6 +18,8 @@ export type ModuleEditorComponentsPanelProps = {
   readonly hidden: boolean;
   /** Hardware catalog for the per-instance placements editor. */
   readonly catalogHardware?: readonly Hardware[];
+  /** Hardware option groups for the "por grupo" placement mode (#1046). */
+  readonly optionGroups?: readonly OptionGroup[];
 };
 
 export function ModuleEditorComponentsPanel({
@@ -28,6 +30,7 @@ export function ModuleEditorComponentsPanel({
   onRequestAdd,
   hidden,
   catalogHardware,
+  optionGroups,
 }: ModuleEditorComponentsPanelProps): ReactNode {
   return (
     <div
@@ -170,6 +173,7 @@ export function ModuleEditorComponentsPanel({
                   overrides={comp.overrides}
                   testIdSuffix={String(idx)}
                   catalogHardware={catalogHardware}
+                  optionGroups={optionGroups}
                   onChange={(next) => {
                     setDraft((prev) => ({
                       ...prev,
