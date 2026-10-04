@@ -1298,7 +1298,7 @@ func planResolvedContactStations(resolution ContactResolutionResult, boards []Co
 			continue
 		}
 		spec := specByID[id]
-		if (spec.Count == 0 && spec.MaxSpacingMm <= 0) || (spec.Count != 0 && spec.MaxSpacingMm > 0) {
+		if spec.Count != 0 && spec.MaxSpacingMm > 0 {
 			fail(id, "STATION_PATTERN_INVALID")
 			continue
 		}
@@ -1311,7 +1311,7 @@ func planResolvedContactStations(resolution ContactResolutionResult, boards []Co
 		if spec.MaxSpacingMm > 0 {
 			// Spacing-driven count (#1065): derive from THIS contact's
 			// usable span, so the furniture's dimensions scale the
-			// fastener count. Fail-closed on a degenerate span.
+			// fastener count. Fail-closed on a degenerate span or spacing.
 			if math.IsNaN(spec.MaxSpacingMm) || math.IsInf(spec.MaxSpacingMm, 0) {
 				fail(id, "STATION_PATTERN_INVALID")
 				continue
