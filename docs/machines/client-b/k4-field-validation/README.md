@@ -16,11 +16,21 @@ corte productivo, sin datos de cliente.
 
 ## Antes de la sesión (owner)
 
-1. **Fixture**: exportar los programas del fixture desde la app real
-   (proyecto con el contenido de `fixture-kdt-field-001` liberado → panel
-   Optimización → "Descargar programas KDT (.zip)"). Verificar que los 3
-   `.xml` del ZIP tengan los sha256 de `expected-values.md`
-   (`shasum -a 256 *.xml`). Si no coinciden, cortar ahí y reportar.
+1. **Fixture** — dos caminos para generar los 3 programas:
+   - **A (offline, recomendado para los hashes)**: desde el repo,
+     ```
+     KDT_FIELD_OUT=/ruta/al/directorio pnpm --filter @granete/excel \
+       exec vitest run src/machines/kdt/fieldFixture.export.test.ts
+     ```
+     Escribe los 3 `.xml` + `manifest.json` **byte-idénticos a los hashes**
+     de `expected-values.md` (el comando mismo los verifica al escribir).
+   - **B (app real)**: liberar un proyecto cuyo despiece produzca las 12
+     operaciones de la tabla (piezas 600×400×18) → panel Optimización →
+     «Descargar programas KDT (.zip)». Con identidad de pieza propia, los
+     **hashes van a diferir de `expected-values.md`** — eso NO es alarma:
+     la autoridad en este camino es la **tabla de valores** (verificar
+     posición/canto/Z1/Ø/profundidad operación por operación) y los hashes
+     del export real se anotan en el acta.
 2. **Software**: llevar anotado qué versión exacta del software de control
    muestra la máquina (pregunta abierta §15.5 del spec) y si el import
    valida versión en el XML.
