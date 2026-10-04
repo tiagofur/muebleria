@@ -6,6 +6,7 @@
 import type {
   Agregado,
   AgregadoPresentationMotion,
+  Component,
   HardwareLine,
   HardwarePlacement,
   InstallationChecklistItem,
@@ -463,5 +464,38 @@ export function duplicateAgregado(
     presentationMotion: agregado.presentationMotion
       ? clonePresentationMotion(agregado.presentationMotion)
       : undefined,
+  };
+}
+
+export type DuplicateComponentOptions = {
+  readonly newId: string;
+  readonly newCode: string;
+  /** Factory for nested perforation ids. Defaults like duplicateModule. */
+  readonly nextNestedId?: () => string;
+};
+
+/**
+ * Deep-copy a catalog component (board piece) with a new id/code and fresh
+ * perforation ids. Does not mutate the original. Preserves geometry, default
+ * edges, perforations, roles and presentation settings (#1019 C3: building a
+ * catalog of 20 similar pieces must not mean typing everything 20 times).
+ */
+export function duplicateComponent(
+  component: Component,
+  options: DuplicateComponentOptions,
+): Component {
+  const nextId = options.nextNestedId ?? defaultNestedId;
+  return {
+    ...component,
+    id: options.newId,
+    code: options.newCode,
+    name: `${component.name} (copia)`,
+    geometry: { ...component.geometry },
+    defaultEdges: component.defaultEdges.map((e) => ({ ...e })),
+    perforations: component.perforations?.map((p) => ({
+      ...p,
+      id: nextId(),
+      relativePosition: { ...p.relativePosition },
+    })),
   };
 }

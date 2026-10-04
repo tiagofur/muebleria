@@ -57,15 +57,15 @@ func newMediaAuthEnv(t *testing.T) *mediaAuthEnv {
 	media := mustMediaAuthority(t, "media-auth-test-media-signing-key-0123456789")
 	st := &stubStore{getUserByEmail: &domain.User{ID: mediaTestUser, Email: "media@test.com", AccountStatus: domain.AccountStatusActive}}
 	server := &Server{
-		Store:      st,
-		Tokens:     authority,
+		Store:       st,
+		Tokens:      authority,
 		MediaTokens: media,
-		MediaDir:   dir,
+		MediaDir:    dir,
 	}
 	tc := auth.TokenContext{
-		Roles:        []string{"admin"},
-		OrgID:        mediaTestOrgA,
-		MembershipID: mediaTestUser + ":" + mediaTestOrgA,
+		Roles:                         []string{"admin"},
+		OrgID:                         mediaTestOrgA,
+		MembershipID:                  mediaTestUser + ":" + mediaTestOrgA,
 		MembershipCredentialVersion:   1,
 		OrganizationCredentialVersion: 1,
 	}
@@ -347,7 +347,7 @@ func TestAuthMiddlewareRejectsQuerySessionJWT(t *testing.T) {
 
 	paths := []string{
 		"/api/auth/me?token=",
-		"/api/customers?token=",   // business endpoint
+		"/api/customers?token=", // business endpoint
 		"/api/media/" + mediaTestFileA + "?token=",
 	}
 	for _, p := range paths {
@@ -420,9 +420,9 @@ func TestExtensionTokenMayAuthorizeMediaButNotMutate(t *testing.T) {
 	st := env.server.Store.(*stubStore)
 	authority := env.server.Tokens
 	tc := auth.TokenContext{
-		Roles:        []string{"admin"},
-		OrgID:        mediaTestOrgA,
-		MembershipID: "sketchup-user:" + mediaTestOrgA,
+		Roles:                         []string{"admin"},
+		OrgID:                         mediaTestOrgA,
+		MembershipID:                  "sketchup-user:" + mediaTestOrgA,
 		MembershipCredentialVersion:   1,
 		OrganizationCredentialVersion: 1,
 	}

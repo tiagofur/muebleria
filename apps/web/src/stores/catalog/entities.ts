@@ -6,6 +6,7 @@
 import {
   bumpStructureRevision,
   duplicateAgregado,
+  duplicateComponent,
   duplicateModule as deepCopyModule,
   suggestDuplicateCode,
 } from '@granete/domain';
@@ -30,6 +31,7 @@ type EntitiesSlice = Pick<
   | 'createComponent'
   | 'updateComponent'
   | 'toggleComponentActive'
+  | 'duplicateComponent'
   | 'createAgregado'
   | 'updateAgregado'
   | 'deleteAgregado'
@@ -240,6 +242,24 @@ export function createEntitiesActions(ctx: CatalogStoreCtx): EntitiesSlice {
           comp.id === id ? { ...comp, active: !comp.active } : comp,
         ),
       }));
+    },
+
+    duplicateComponent: (id) => {
+      const source = ctx.get().catalog?.components?.find((c) => c.id === id);
+      if (!source) return;
+      const newCode = suggestDuplicateCode(
+        source.code,
+        (ctx.get().catalog?.components ?? []).map((c) => c.code),
+      );
+      const copy = duplicateComponent(source, {
+        newId: ctx.newId(),
+        newCode,
+        nextNestedId: ctx.newId,
+      });
+      ctx.saveAndToast(
+        (c) => ({ ...c, components: [...(c.components ?? []), copy] }),
+        `✓ Duplicado como ${newCode}`,
+      );
     },
 
     // --- Agregados ---

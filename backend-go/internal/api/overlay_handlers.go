@@ -44,7 +44,6 @@ func (s *Server) HandleCreateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-
 	var req openapi.CreateLibraryOverlayRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithError(w, http.StatusBadRequest, "invalid request body")
@@ -224,7 +223,6 @@ func (s *Server) HandleUpdateLibraryOverlay(w http.ResponseWriter, r *http.Reque
 	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
 		return
 	}
-
 
 	rawID := r.PathValue("id")
 	overlayUUID, err := uuid.Parse(rawID)
@@ -444,7 +442,6 @@ func (s *Server) HandleRebaseLibraryOverlay(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-
 	rawID := r.PathValue("id")
 	overlayUUID, err := uuid.Parse(rawID)
 	if err != nil {
@@ -576,7 +573,6 @@ func (s *Server) HandleResolveLibraryOverlayConflict(w http.ResponseWriter, r *h
 	if !requirePermission(w, domain.AnyRole(actorRoles(claims), domain.RoleCanMutateCatalog), "solo administración de fábrica") {
 		return
 	}
-
 
 	var userUUID *uuid.UUID
 	if claims.Subject != "" {

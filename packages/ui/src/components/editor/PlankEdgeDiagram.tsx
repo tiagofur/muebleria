@@ -138,12 +138,23 @@ export function PlankEdgeDiagram({
           className="plank-edge-diagram__plank"
         />
 
-        {/* Edges: drawn as polylines with thick stroke; the polyline is the button */}
+        {/* Edges: drawn as polylines with thick stroke; the polyline is the button.
+            Each edge carries an invisible fat hit stroke (C2 #1019): the visible
+            10-unit line was ~14px on screen — under any touch/pointer standard. */}
         {sides.map((side) => {
           const m = meta[side];
           const encintado = edges[side];
           return (
             <g key={side}>
+              {!disabled ? (
+                <polyline
+                  points={m.points}
+                  className="plank-edge-diagram__edge-hit"
+                  aria-hidden="true"
+                  data-testid={`edge-hit-${side}`}
+                  onClick={() => onToggle(side)}
+                />
+              ) : null}
               <polyline
                 points={m.points}
                 className={

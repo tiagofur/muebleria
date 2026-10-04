@@ -292,7 +292,7 @@ func TestHandleProjectFurnitureInstances_ListIncludesDisplaySummary(t *testing.T
 		},
 		{
 			Instance: domain.FurnitureInstance{ID: "fi-2", ProjectID: fiTestProjectID,
-				Origin: domain.FurnitureInstanceOriginManual,
+				Origin:          domain.FurnitureInstanceOriginManual,
 				LifecycleStatus: domain.FurnitureInstanceLifecycleActive, Version: 1},
 		},
 	}

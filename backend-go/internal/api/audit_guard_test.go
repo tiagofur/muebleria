@@ -7,7 +7,7 @@ import (
 )
 
 func TestCriticalFoundationEventsNeverUseBestEffortAudit(t *testing.T) {
-	files := []string{"handlers.go", "platform.go", "orgteam.go"}
+	files := []string{"auth_session_handlers.go", "platform.go", "orgteam.go"}
 	criticalEvents := []string{
 		"login_success",
 		"organization_selected",

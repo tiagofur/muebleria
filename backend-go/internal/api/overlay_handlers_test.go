@@ -460,77 +460,76 @@ func TestHandleUpdateLibraryOverlay(t *testing.T) {
 		req.Header.Set("If-Match", FormatVersionETag(1))
 		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
 		rr := httptest.NewRecorder()
-	t.Run("Missing If-Match is 428", func(t *testing.T) {
-		store := &stubStore{
-			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
-				overlayID: overlay,
-			},
-		}
-		srv := &Server{Store: store}
+		t.Run("Missing If-Match is 428", func(t *testing.T) {
+			store := &stubStore{
+				overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+					overlayID: overlay,
+				},
+			}
+			srv := &Server{Store: store}
 
-		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
-			Overrides: map[string]any{"parameters.panelThickness": 18.0},
+			bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
+				Overrides: map[string]any{"parameters.panelThickness": 18.0},
+			})
+			req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+			req.SetPathValue("id", overlayID.String())
+			req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+			rr := httptest.NewRecorder()
+
+			srv.HandleUpdateLibraryOverlay(rr, req)
+
+			if rr.Code != http.StatusPreconditionRequired {
+				t.Fatalf("expected 428 without If-Match, got %d: %s", rr.Code, rr.Body.String())
+			}
 		})
-		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
-		req.SetPathValue("id", overlayID.String())
-		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
-		rr := httptest.NewRecorder()
 
-		srv.HandleUpdateLibraryOverlay(rr, req)
+		t.Run("Stale If-Match is a visible 412 conflict", func(t *testing.T) {
+			store := &stubStore{
+				overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+					overlayID: overlay,
+				},
+			}
+			srv := &Server{Store: store}
 
-		if rr.Code != http.StatusPreconditionRequired {
-			t.Fatalf("expected 428 without If-Match, got %d: %s", rr.Code, rr.Body.String())
-		}
-	})
+			bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
+				Overrides: map[string]any{"parameters.panelThickness": 18.0},
+			})
+			req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+			req.SetPathValue("id", overlayID.String())
+			req.Header.Set("If-Match", FormatVersionETag(99))
+			req = withOverlayOrgClaims(req, orgA.String(), userID.String())
+			rr := httptest.NewRecorder()
 
-	t.Run("Stale If-Match is a visible 412 conflict", func(t *testing.T) {
-		store := &stubStore{
-			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
-				overlayID: overlay,
-			},
-		}
-		srv := &Server{Store: store}
+			srv.HandleUpdateLibraryOverlay(rr, req)
 
-		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
-			Overrides: map[string]any{"parameters.panelThickness": 18.0},
+			if rr.Code != http.StatusPreconditionFailed {
+				t.Fatalf("expected 412 for a stale version, got %d: %s", rr.Code, rr.Body.String())
+			}
 		})
-		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
-		req.SetPathValue("id", overlayID.String())
-		req.Header.Set("If-Match", FormatVersionETag(99))
-		req = withOverlayOrgClaims(req, orgA.String(), userID.String())
-		rr := httptest.NewRecorder()
 
-		srv.HandleUpdateLibraryOverlay(rr, req)
+		t.Run("Vendedor mutation is 403 server-authority", func(t *testing.T) {
+			store := &stubStore{
+				overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
+					overlayID: overlay,
+				},
+			}
+			srv := &Server{Store: store}
 
-		if rr.Code != http.StatusPreconditionFailed {
-			t.Fatalf("expected 412 for a stale version, got %d: %s", rr.Code, rr.Body.String())
-		}
-	})
+			bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
+				Overrides: map[string]any{"parameters.panelThickness": 18.0},
+			})
+			req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
+			req.SetPathValue("id", overlayID.String())
+			req.Header.Set("If-Match", FormatVersionETag(1))
+			req = withOverlayOrgRoleClaims(req, orgA.String(), userID.String(), domain.RoleVendedor)
+			rr := httptest.NewRecorder()
 
-	t.Run("Vendedor mutation is 403 server-authority", func(t *testing.T) {
-		store := &stubStore{
-			overlaysByID: map[uuid.UUID]*domain.LibraryOverlay{
-				overlayID: overlay,
-			},
-		}
-		srv := &Server{Store: store}
+			srv.HandleUpdateLibraryOverlay(rr, req)
 
-		bodyBytes, _ := json.Marshal(openapi.UpdateLibraryOverlayRequest{
-			Overrides: map[string]any{"parameters.panelThickness": 18.0},
+			if rr.Code != http.StatusForbidden {
+				t.Fatalf("expected 403 for a sales role, got %d: %s", rr.Code, rr.Body.String())
+			}
 		})
-		req := httptest.NewRequest(http.MethodPatch, "/api/manufacturing-libraries/overlays/"+overlayID.String(), bytes.NewReader(bodyBytes))
-		req.SetPathValue("id", overlayID.String())
-		req.Header.Set("If-Match", FormatVersionETag(1))
-		req = withOverlayOrgRoleClaims(req, orgA.String(), userID.String(), domain.RoleVendedor)
-		rr := httptest.NewRecorder()
-
-		srv.HandleUpdateLibraryOverlay(rr, req)
-
-		if rr.Code != http.StatusForbidden {
-			t.Fatalf("expected 403 for a sales role, got %d: %s", rr.Code, rr.Body.String())
-		}
-	})
-
 
 		srv.HandleUpdateLibraryOverlay(rr, req)
 
@@ -1091,7 +1090,6 @@ func TestHandleGetActiveLibraryOverlay(t *testing.T) {
 		}
 	})
 }
-
 
 // #875 slice 5: the policy draft/activate handler protocol — If-Match
 // required, permissions enforced, and the 422 with the parser's issue when

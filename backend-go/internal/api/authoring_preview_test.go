@@ -73,8 +73,8 @@ func previewCatalogPtr() *domain.Catalog {
 
 func previewStore() *stubStore {
 	return &stubStore{
-		getUserByEmail:        &domain.User{ID: "u-1", Email: "preview@test"},
-		catalogOverride: previewCatalogPtr(),
+		getUserByEmail:         &domain.User{ID: "u-1", Email: "preview@test"},
+		catalogOverride:        previewCatalogPtr(),
 		listMaterialCategories: []domain.MaterialCategory{},
 	}
 }
