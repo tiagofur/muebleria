@@ -80,6 +80,22 @@
 }
 
 /* uso (activo/inactivo) */
+/* K3 #1032: generic semantic variants for catalog use. */
+.status-badge--info {
+  color: var(--info-700);
+}
+.status-badge--success {
+  color: var(--success-700);
+}
+.status-badge--warning {
+  color: var(--warning-700);
+}
+.status-badge--danger {
+  color: var(--danger-700);
+}
+.status-badge--neutral {
+  color: var(--text-secondary);
+}
 .status-badge--active {
   background: var(--success-50);
   color: var(--success-700);

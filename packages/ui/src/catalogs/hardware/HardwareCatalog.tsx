@@ -371,10 +371,10 @@ export function HardwareCatalog({
                   <span className="catalog-row-detail__value">
                     {row.visualAsset ? (
                       <>
-                        <span className="badge badge--info" style={{ marginRight: '0.25rem' }}>
+                        <span className="status-badge status-badge--info" style={{ marginRight: '0.25rem' }}>
                           {(row.visualAsset.representation ?? 'skp').toUpperCase()}
                         </span>
-                        <span className="badge badge--neutral" style={{ marginRight: '0.25rem' }}>
+                        <span className="status-badge status-badge--neutral" style={{ marginRight: '0.25rem' }}>
                           {row.visualAsset.validationState === 'validated'
                             ? 'Validado'
                             : row.visualAsset.validationState === 'failed'

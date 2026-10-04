@@ -313,7 +313,7 @@ export function AmbientMaterialsCatalog({
             return <span className="catalog-form__hint">—</span>;
           }
           return (
-            <span className="badge badge--neutral">
+            <span className="status-badge status-badge--neutral">
               {path.map((c) => c.name).join(' › ')}
             </span>
           );
