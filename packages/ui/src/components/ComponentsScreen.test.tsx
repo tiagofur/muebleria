@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { act } from 'react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ComponentsScreen } from './ComponentsScreen';
 import type { Component, OptionGroup } from '@granete/domain';
@@ -813,7 +814,7 @@ describe('ComponentsScreen', () => {
     ).toBe('Borrador de sesión');
   });
 
-  it('after save/forceClose, re-open seeds from entity and session is absent (R4-C1)', () => {
+  it('after save/forceClose, re-open seeds from entity and session is absent (R4-C1)', async () => {
     const onUpdate = vi.fn();
     const onRequestEdit = vi.fn();
     const { rerender, unmount } = render(
@@ -836,8 +837,9 @@ describe('ComponentsScreen', () => {
       'WIP sticky empty bug',
     );
 
-    // Save triggers forceCloseEditor (clearDraft + setDraftLocal).
+    // Save settles async before forceCloseEditor runs (C1 #1019) — flush it.
     fireEvent.click(screen.getByTestId('save-btn'));
+    await act(async () => {});
     expect(onUpdate).toHaveBeenCalled();
     expect(sessionStorage.getItem('draft:unscoped:component:c1')).toBeNull();
 
@@ -1097,5 +1099,116 @@ describe('ComponentsScreen', () => {
 
     fireEvent.click(screen.getByTestId('component-editor-tab-general'));
     expect(screen.queryByTestId('component-geometry-3d')).toBeNull();
+  });
+});
+
+describe('ComponentsScreen — save contract (C1 #1019)', () => {
+  afterEach(() => {
+    cleanup();
+    sessionStorage.clear();
+  });
+
+  function openEditor(user: ReturnType<typeof userEvent.setup>) {
+    return user.click(screen.getByRole('button', { name: /Crear componente/i }));
+  }
+
+  async function fillValidDraft(user: ReturnType<typeof userEvent.setup>) {
+    fireEvent.change(screen.getByTestId('input-code'), {
+      target: { value: 'COM-SAVE-01' },
+    });
+    fireEvent.change(screen.getByTestId('input-name'), {
+      target: { value: 'Pieza de Guardado' },
+    });
+    fireEvent.click(screen.getByTestId('component-editor-tab-geometry'));
+    fireEvent.change(screen.getByTestId('input-length'), { target: { value: '500' } });
+    fireEvent.change(screen.getByTestId('input-width'), { target: { value: '300' } });
+    fireEvent.change(screen.getByTestId('input-thickness'), { target: { value: '18' } });
+    fireEvent.click(screen.getByTestId('component-editor-tab-options'));
+    fireEvent.click(screen.getByTestId('option-role-FRENTE'));
+    fireEvent.click(screen.getByTestId('component-editor-tab-general'));
+  }
+
+  it('keeps the editor open with the draft and shows a banner when the save fails', async () => {
+    const user = userEvent.setup();
+    let rejectSave!: (err: Error) => void;
+    const onCreate = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    await openEditor(user);
+    await fillValidDraft(user);
+    await user.click(screen.getByTestId('save-btn'));
+
+    // In flight: Guardar busy + disabled, Cancelar locked.
+    const saveBtn = screen.getByTestId('save-btn') as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    expect(saveBtn.textContent).toContain('Guardando');
+    expect(
+      (screen.getByTestId('component-editor-cancel') as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    await act(async () => {
+      rejectSave(new Error('network down'));
+    });
+
+    // Rejected: editor stays open, draft intact, banner visible, controls back.
+    expect(screen.getByTestId('component-editor-page')).toBeTruthy();
+    expect(screen.getByTestId('component-editor-save-error').textContent).toContain(
+      'No se pudo guardar',
+    );
+    expect(
+      (screen.getByTestId('input-code') as HTMLInputElement).value,
+    ).toBe('COM-SAVE-01');
+    expect((screen.getByTestId('save-btn') as HTMLButtonElement).disabled).toBe(false);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the editor only after the save settles successfully', async () => {
+    const user = userEvent.setup();
+    let resolveSave!: () => void;
+    const onCreate = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    render(
+      <ComponentsScreen
+        components={[]}
+        optionGroups={mockOptionGroups}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onToggleActive={vi.fn()}
+        canMutate={true}
+      />,
+    );
+
+    await openEditor(user);
+    await fillValidDraft(user);
+    await user.click(screen.getByTestId('save-btn'));
+
+    // Still open while the save is in flight.
+    expect(screen.getByTestId('component-editor-page')).toBeTruthy();
+    await act(async () => {
+      resolveSave();
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId('component-editor-page')).toBeNull(),
+    );
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('component-editor-save-error')).toBeNull();
   });
 });
