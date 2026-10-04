@@ -3,6 +3,7 @@
  */
 
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { ComponentPlacement } from '@granete/domain';
 import {
   COMPONENT_PLACEMENT_GROUPS,
   PLACEMENT_DESCRIPTION,
@@ -95,7 +96,9 @@ export function ComponentEditorGeneralPanel({
               id={`${formId}-placement`}
               value={draft.placement}
               onChange={(e) => {
-                const nextPlacement = e.target.value;
+                // Boundary cast: the options come from the typed
+                // COMPONENT_PLACEMENT_GROUPS list rendered below.
+                const nextPlacement = e.target.value as ComponentPlacement;
                 setDraft((prev) => ({
                   ...prev,
                   placement: nextPlacement,

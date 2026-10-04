@@ -6,6 +6,7 @@ import type {
   Component,
   ComponentConstruction,
   ComponentConstructionOverride,
+  ComponentPlacement,
   Perforation,
 } from '@granete/domain';
 import { arrayRule, booleanRule, enumRule, nullableRule, numberRule, objectRule, optionalRule, stringFields, stringRule } from '../common/draftValidation';
@@ -13,7 +14,7 @@ import { edgesFromFlags } from '../modules/helpers/moduleDraftTransforms';
 
 /** Shared placement options for components and structure/module instances. */
 export const COMPONENT_PLACEMENTS: {
-  readonly value: string;
+  readonly value: ComponentPlacement;
   readonly label: string;
 }[] = [
   { value: 'base', label: 'Base' },
@@ -39,7 +40,7 @@ export const PLACEMENT_LABEL: Record<string, string> = Object.fromEntries(
  * plain option list.
  */
 export type PlacementOption = {
-  readonly value: string;
+  readonly value: ComponentPlacement;
   readonly label: string;
   readonly description: string;
 };
@@ -152,7 +153,7 @@ export function countOptionRoles(optionRoles: string): number {
 export interface ComponentDraft {
   code: string;
   name: string;
-  placement: string;
+  placement: ComponentPlacement;
   lengthMm: number;
   widthMm: number;
   thicknessMm: number;
@@ -304,7 +305,7 @@ export function draftToComponent(id: string, draft: ComponentDraft): Component {
     id,
     code: draft.code.trim(),
     name: draft.name.trim(),
-    placement: draft.placement as Component['placement'],
+    placement: draft.placement,
     geometry: {
       kind: 'rectangular_board',
       lengthMm: draft.lengthMm,
@@ -329,10 +330,10 @@ export function draftToComponent(id: string, draft: ComponentDraft): Component {
         (draft.constructionOverride.connectionFaces &&
           draft.constructionOverride.connectionFaces.length > 0))
         ? {
-            constructiveRole: draft.constructionOverride
-              .constructiveRole as ComponentConstruction['constructiveRole'],
-            connectionFaces: draft.constructionOverride.connectionFaces as
-              ComponentConstruction['connectionFaces'],
+            constructiveRole: draft.constructionOverride.constructiveRole,
+            connectionFaces: draft.constructionOverride.connectionFaces,
+            // Only real narrowing left: ComponentConstructionOverride.joinerySystemId
+            // is string in the domain; the entity wants the JoinerySystemId union.
             joinerySystemId: draft.constructionOverride
               .joinerySystemId as ComponentConstruction['joinerySystemId'],
           }
