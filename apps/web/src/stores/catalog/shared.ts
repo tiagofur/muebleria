@@ -134,6 +134,8 @@ export interface CatalogState {
   readonly createComponent: (draft: ComponentDraft) => void;
   readonly updateComponent: (id: string, draft: ComponentDraft) => void;
   readonly toggleComponentActive: (id: string) => void;
+  /** Deep-copy with a fresh id/code and regenerated perforation ids (#1019 C3). */
+  readonly duplicateComponent: (id: string) => void;
 
   // --- Agregados ---
   readonly createAgregado: (item: Agregado) => void;

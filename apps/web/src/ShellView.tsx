@@ -454,6 +454,7 @@ export interface ShellViewCtx {
   readonly deleteTemplate: (templateId: string) => void;
   readonly dismissGuestImport: () => void;
   readonly duplicateAgregado: (id: string) => void;
+  readonly duplicateComponent: (id: string) => void;
   readonly duplicateModuleById: (id: string) => void;
   readonly duplicateProjectById: (id: string) => void;
   readonly duplicateWithScenarioB: (projectId: string, role: string, choiceId: string) => void;
@@ -754,6 +755,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     deleteTemplate,
     dismissGuestImport,
     duplicateAgregado,
+    duplicateComponent,
     duplicateModuleById,
     duplicateProjectById,
     duplicateWithScenarioB,
@@ -2620,6 +2622,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onCreate={createComponent}
           onUpdate={updateComponent}
           onToggleActive={toggleComponentActive}
+          onDuplicate={duplicateComponent}
           openComponentId={routeComponentId}
           openComponentEditId={routeComponentEditId}
           onRequestEdit={(id) => onEntityEditRequest('components', id)}

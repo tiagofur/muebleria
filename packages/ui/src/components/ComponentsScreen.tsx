@@ -76,6 +76,8 @@ export interface ComponentsScreenProps {
   readonly onCreate: (draft: ComponentDraft) => void | Promise<void>;
   readonly onUpdate: (id: string, draft: ComponentDraft) => void | Promise<void>;
   readonly onToggleActive: (id: string) => void;
+  /** Deep-copy handler wired to the store (#1019 C3). */
+  readonly onDuplicate?: (id: string) => void;
   readonly canMutate: boolean;
   readonly openComponentId?: string | null;
   /**
@@ -121,6 +123,7 @@ export function ComponentsScreen({
   onCreate,
   onUpdate,
   onToggleActive,
+  onDuplicate,
   canMutate = true,
   openComponentId = null,
   openComponentEditId = null,
@@ -580,6 +583,7 @@ export function ComponentsScreen({
                 onBack={() => setSelectedId(null)}
                 onEdit={handleEdit}
                 onToggleActive={canMutate ? handleToggleActive : undefined}
+                onDuplicate={canMutate && onDuplicate ? onDuplicate : undefined}
                 canMutate={canMutate}
                 optionGroups={optionGroups}
               />
