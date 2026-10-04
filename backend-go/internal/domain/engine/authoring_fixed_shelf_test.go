@@ -603,3 +603,50 @@ func TestFixedShelfBindingMaterializesPerOccurrence(t *testing.T) {
 		t.Fatalf("per-occurrence identities missing: %+v", ids)
 	}
 }
+
+// TestFixedShelfMaxSpacingDerivesCountFromSpan (#1065): a maxSpacingMm
+// station pattern derives its count from each contact's real usable span —
+// the same relationship scales with the furniture's dimensions. Reuses the
+// shared J1 contact fixture geometry (floor-left overlap 0..500).
+func TestFixedShelfMaxSpacingDerivesCountFromSpan(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolution := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	if len(resolution.Issues) != 0 {
+		t.Fatalf("invalid shared fixture: %+v", resolution.Issues)
+	}
+	// floor-left: overlap 0..500, márgenes 30/50 → útil 420; maxSpacing 250 → 2.
+	specs := []StationSpec{{ContactID: "floor-left", MaxSpacingMm: 250, StartMarginMm: 30, EndMarginMm: 50},
+		{ContactID: "floor-right", Count: 2, StartMarginMm: 40, EndMarginMm: 60}}
+	plans := planResolvedContactStations(resolution, f.Boards, specs)
+	if len(plans.Issues) != 0 {
+		t.Fatalf("spacing plan failed: %+v", plans.Issues)
+	}
+	byContact := map[string]int{}
+	for _, plan := range plans.Plans {
+		byContact[plan.ContactID] = len(plan.Stations)
+	}
+	if got := byContact["floor-left"]; got != 2 {
+		t.Fatalf("420mm usable at maxSpacing 250 should derive 2 stations, got %d", got)
+	}
+	if got := byContact["floor-right"]; got != 2 {
+		t.Fatalf("explicit count contact should keep its 2 stations, got %d", got)
+	}
+	// maxSpacing 120 sobre el mismo útil 420 → floor(420/120)+1 = 4.
+	specs[0].MaxSpacingMm = 120
+	plans = planResolvedContactStations(resolution, f.Boards, specs)
+	if len(plans.Issues) != 0 {
+		t.Fatalf("tight spacing plan failed: %+v", plans.Issues)
+	}
+	for _, plan := range plans.Plans {
+		if plan.ContactID == "floor-left" && len(plan.Stations) != 4 {
+			t.Fatalf("420mm usable at maxSpacing 120 should derive 4 stations, got %d", len(plan.Stations))
+		}
+	}
+	// stationCount + maxSpacing juntos es patrón inválido.
+	bad := []StationSpec{{ContactID: "floor-left", Count: 3, MaxSpacingMm: 250, StartMarginMm: 30, EndMarginMm: 50},
+		{ContactID: "floor-right", Count: 2, StartMarginMm: 40, EndMarginMm: 60}}
+	issues := planResolvedContactStations(resolution, f.Boards, bad)
+	if len(issues.Issues) == 0 || issues.Issues[0].Code != "STATION_PATTERN_INVALID" {
+		t.Fatalf("count+maxSpacing must fail with STATION_PATTERN_INVALID, got %+v", issues.Issues)
+	}
+}

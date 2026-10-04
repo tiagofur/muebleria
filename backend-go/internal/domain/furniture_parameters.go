@@ -166,6 +166,11 @@ type FurnitureParameterRelationshipTarget struct {
 type FurnitureRelationshipStationMargins struct {
 	StartMarginMm float64 `json:"startMarginMm,omitempty"`
 	EndMarginMm   float64 `json:"endMarginMm,omitempty"`
+	// MaxSpacingMm derives the station COUNT from the real contact span
+	// (#1065): count = floor(usable/maxSpacing)+1, min 2 — a 400mm cabinet
+	// and a 1000mm one scale automatically. Mutually exclusive with an
+	// explicit stationCount parameter.
+	MaxSpacingMm *float64 `json:"maxSpacingMm,omitempty"`
 }
 
 // FurnitureRelationshipAnchorFaces is the closed face vocabulary for
@@ -626,6 +631,14 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 		}
 		if strings.TrimSpace(b.Relationship.Kind) == "" {
 			add("binding.relationship.kind", "is required")
+		}
+		if b.Relationship.Station != nil && b.Relationship.Station.MaxSpacingMm != nil {
+			if len(b.Relationship.Families) > 0 {
+				add("binding.relationship.station", "maxSpacingMm cannot combine with families (families declare their own counts)")
+			}
+			if *b.Relationship.Station.MaxSpacingMm <= 0 {
+				add("binding.relationship.station", "maxSpacingMm must be positive")
+			}
 		}
 		if strings.TrimSpace(b.Relationship.SourceRole) == "" {
 			add("binding.relationship.sourceRole", "is required")

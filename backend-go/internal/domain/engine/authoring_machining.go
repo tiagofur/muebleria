@@ -1220,6 +1220,10 @@ type StationSpec struct {
 	Count         int     `json:"count"`
 	StartMarginMm float64 `json:"startMarginMm"`
 	EndMarginMm   float64 `json:"endMarginMm"`
+	// MaxSpacingMm derives Count from each contact's usable span
+	// (#1065): count = floor(usable/maxSpacing)+1, minimum 2. Zero means
+	// the explicit Count governs; both set is a spec error.
+	MaxSpacingMm float64 `json:"maxSpacingMm,omitempty"`
 }
 
 type ContactStation struct {
@@ -1294,8 +1298,8 @@ func planResolvedContactStations(resolution ContactResolutionResult, boards []Co
 			continue
 		}
 		spec := specByID[id]
-		if spec.Count < 2 {
-			fail(id, "STATION_COUNT_INVALID")
+		if (spec.Count == 0 && spec.MaxSpacingMm <= 0) || (spec.Count != 0 && spec.MaxSpacingMm > 0) {
+			fail(id, "STATION_PATTERN_INVALID")
 			continue
 		}
 		if math.IsNaN(spec.StartMarginMm) || math.IsInf(spec.StartMarginMm, 0) || spec.StartMarginMm < 0 ||
@@ -1304,6 +1308,28 @@ func planResolvedContactStations(resolution ContactResolutionResult, boards []Co
 			continue
 		}
 		lo, hi := contact.OverlapMm[0], contact.OverlapMm[1]
+		if spec.MaxSpacingMm > 0 {
+			// Spacing-driven count (#1065): derive from THIS contact's
+			// usable span, so the furniture's dimensions scale the
+			// fastener count. Fail-closed on a degenerate span.
+			if math.IsNaN(spec.MaxSpacingMm) || math.IsInf(spec.MaxSpacingMm, 0) {
+				fail(id, "STATION_PATTERN_INVALID")
+				continue
+			}
+			first, last := lo+spec.StartMarginMm, hi-spec.EndMarginMm
+			if first >= last {
+				fail(id, "STATION_SPAN_INVALID")
+				continue
+			}
+			spec.Count = int(math.Floor((last-first)/spec.MaxSpacingMm)) + 1
+			if spec.Count < 2 {
+				spec.Count = 2
+			}
+		}
+		if spec.Count < 2 {
+			fail(id, "STATION_COUNT_INVALID")
+			continue
+		}
 		origin, axis, normal := contact.Frame.OriginAssemblyMm, contact.Frame.AxisAssembly, contact.Frame.NormalAssembly
 		if math.IsNaN(lo) || math.IsInf(lo, 0) || math.IsNaN(hi) || math.IsInf(hi, 0) || lo != 0 || hi <= 0 ||
 			!isFiniteVec3(origin) || !isFiniteVec3(axis) || !isFiniteVec3(normal) ||
