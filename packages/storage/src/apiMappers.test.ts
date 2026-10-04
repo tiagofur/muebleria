@@ -2855,3 +2855,56 @@ describe('machine output selection mappers (#591)', () => {
     expect(() => machineOutputSelectionRecordFromApi({ ...flatRecord, adapterId: '' })).toThrow();
   });
 });
+
+describe('component construction block round-trip (#1052 slice 1)', () => {
+  const baseComponent = {
+    id: 'c-const',
+    code: 'PISO',
+    name: 'Piso',
+    placement: 'interno' as const,
+    geometry: {
+      kind: 'rectangular_board' as const,
+      lengthMm: 568,
+      widthMm: 560,
+      thicknessMm: 18,
+    },
+    defaultEdges: [],
+    optionRoles: ['INTERIOR'],
+    active: true,
+  };
+
+  it('round-trips role, faces and joinery system', () => {
+    const c: Component = {
+      ...baseComponent,
+      construction: {
+        constructiveRole: 'horizontal',
+        connectionFaces: ['left', 'right'],
+        joinerySystemId: 'screw-only',
+      },
+    };
+    const api = componentToApi(c);
+    expect(api.construction).toEqual({
+      constructive_role: 'horizontal',
+      connection_faces: ['left', 'right'],
+      joinery_system_id: 'screw-only',
+    });
+    const round = componentFromApi(api as Record<string, unknown>);
+    expect(round.construction).toEqual({
+      constructiveRole: 'horizontal',
+      connectionFaces: ['left', 'right'],
+      joinerySystemId: 'screw-only',
+    });
+  });
+
+  it('never emits or reads a phantom empty block', () => {
+    const empty = componentToApi({ ...baseComponent, construction: {} });
+    expect(empty.construction).toBeUndefined();
+    const absent = componentFromApi({ id: 'x', code: 'X', name: 'X', placement: 'base' } as Record<string, unknown>);
+    expect(absent.construction).toBeUndefined();
+    const emptyBlock = componentFromApi({
+      id: 'x', code: 'X', name: 'X', placement: 'base',
+      construction: { constructive_role: '', connection_faces: [], joinery_system_id: '' },
+    } as Record<string, unknown>);
+    expect(emptyBlock.construction).toBeUndefined();
+  });
+});

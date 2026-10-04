@@ -337,6 +337,18 @@ const (
 	PlacementCustom           ComponentPlacement = "custom"
 )
 
+// ComponentConstruction is the persisted construction block of a component
+// entity (#1052 slice 1): constructive role, active joinery faces and the
+// joinery system override. It is EDITOR state that survives save/reload —
+// not to be confused with ComponentConstructionOverride (the factory policy
+// station exception), which stays overlay-only. The engine does not consume
+// this block yet (slice 2).
+type ComponentConstruction struct {
+	ConstructiveRole string   `json:"constructive_role,omitempty"`
+	ConnectionFaces  []string `json:"connection_faces,omitempty"`
+	JoinerySystemID  string   `json:"joinery_system_id,omitempty"`
+}
+
 // Component is a reusable engineering component (carcasa piece).
 // Mirrors the frontend Component type from @granete/domain.
 type Component struct {
@@ -350,6 +362,7 @@ type Component struct {
 	ThicknessMm  int                `json:"thickness_mm"`
 	DefaultEdges []EdgeAssignment   `json:"default_edges"`
 	OptionRoles  []string           `json:"option_roles,omitempty"`
+	Construction *ComponentConstruction `json:"construction,omitempty"`
 	// CompatibleHardwareCategories optionally lists the hardware categories this component can host (#350).
 	CompatibleHardwareCategories []string  `json:"compatible_hardware_categories,omitempty"`
 	LengthFormula                string    `json:"length_formula,omitempty"`

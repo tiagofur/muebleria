@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { Component } from '@granete/domain';
-import { geometrySummary } from './componentDraft';
+import { componentToDraft, geometrySummary } from './componentDraft';
 
 const base: Component = {
   id: 'c1',
@@ -53,5 +53,46 @@ describe('geometrySummary', () => {
       },
     };
     expect(geometrySummary(mixed)).toBe('PW×120×18 mm');
+  });
+});
+
+describe('componentToDraft construction seeding (#1052 slice 1)', () => {
+  it('seeds the editor override from the persisted construction block', () => {
+    const item = {
+      id: 'c-piso',
+      code: 'PISO',
+      name: 'Piso',
+      placement: 'interno',
+      geometry: { kind: 'rectangular_board', lengthMm: 568, widthMm: 560, thicknessMm: 18 },
+      defaultEdges: [],
+      optionRoles: ['INTERIOR'],
+      construction: {
+        constructiveRole: 'horizontal',
+        connectionFaces: ['left', 'right'],
+        joinerySystemId: 'screw-only',
+      },
+      active: true,
+    } as unknown as Component;
+    const draft = componentToDraft(item);
+    expect(draft.constructionOverride).toMatchObject({
+      componentId: 'c-piso',
+      constructiveRole: 'horizontal',
+      connectionFaces: ['left', 'right'],
+      joinerySystemId: 'screw-only',
+    });
+  });
+
+  it('leaves the override empty when the entity has no block', () => {
+    const item = {
+      id: 'c-plain',
+      code: 'LATERAL',
+      name: 'Lateral',
+      placement: 'lateral_izquierdo',
+      geometry: { kind: 'rectangular_board', lengthMm: 720, widthMm: 560, thicknessMm: 18 },
+      defaultEdges: [],
+      optionRoles: ['LATERAL'],
+      active: true,
+    } as unknown as Component;
+    expect(componentToDraft(item).constructionOverride).toBeUndefined();
   });
 });
