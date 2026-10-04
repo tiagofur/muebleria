@@ -286,11 +286,11 @@ describe('catalogStore — materials', () => {
 // ---------------------------------------------------------------------------
 
 describe('catalogStore — edges', () => {
-  it('createEdge returns the new id', () => {
+  it('createEdge returns the new id once the save settles (K1 #1032)', async () => {
     const { deps } = makeDeps({ newId: () => 'edge-1' });
     const store = createCatalogStore({ deps });
     store.getState().setCatalog(seedCatalog());
-    const id = store.getState().createEdge({
+    const id = await store.getState().createEdge({
       code: 'EDG-1',
       name: 'Canto 1',
       thicknessMm: 1,

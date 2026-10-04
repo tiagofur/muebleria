@@ -76,12 +76,14 @@ export interface MaterialsCatalogProps {
   readonly edges: readonly EdgeBand[];
   /** F142: subgrupos de materiales (árbol de categorías) para el form. */
   readonly materialCategories?: readonly MaterialCategory[];
-  readonly onCreate: (draft: MaterialDraft) => void;
-  readonly onUpdate: (id: string, draft: MaterialDraft) => void;
+  /** Save settles before the modal closes (#1032 K1): a rejected save keeps
+   * the form intact. */
+  readonly onCreate: (draft: MaterialDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: MaterialDraft) => void | Promise<void>;
   readonly onDeactivate: (id: string) => void;
   readonly onReactivate: (id: string) => void;
   /** Creates an edge band and returns its new id (for linking as default). */
-  readonly onCreateEdge: (draft: EdgeDraft) => string;
+  readonly onCreateEdge: (draft: EdgeDraft) => string | Promise<string>;
   /**
    * Domain formula injected by the shell (architecture.md: UI does not calculate).
    * Used for live preview and to fill draft.costPerM2 on save.
@@ -146,6 +148,8 @@ export function MaterialsCatalog({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<MaterialDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
+  // K1 #1032: save-in-flight flag shared by the form modal footer.
+  const [saving, setSaving] = useState(false);
   const [edgeCreateOpen, setEdgeCreateOpen] = useState(false);
   const [tileSuggestBusy, setTileSuggestBusy] = useState(false);
   const [tileSuggestMsg, setTileSuggestMsg] = useState<string | null>(null);
@@ -311,8 +315,9 @@ export function MaterialsCatalog({
     );
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const err = validate();
     if (err) {
       setError(err);
@@ -348,12 +353,22 @@ export function MaterialsCatalog({
       previewClearcoat: parsePbr(draft.previewClearcoat),
     };
 
-    if (editingId) {
-      onUpdate(editingId, finalDraft);
-    } else {
-      onCreate(finalDraft);
+    // #1032 K1: the save settles BEFORE the modal closes — a rejected save
+    // keeps the form intact (same contract as HardwareCatalog).
+    setSaving(true);
+    try {
+      if (editingId) {
+        await onUpdate(editingId, finalDraft);
+      } else {
+        await onCreate(finalDraft);
+      }
+      closeModal();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar los cambios';
+      setError(msg);
+    } finally {
+      setSaving(false);
     }
-    closeModal();
   };
 
   const columns: CatalogColumn<MaterialBoard>[] = useMemo(
@@ -665,6 +680,7 @@ export function MaterialsCatalog({
         draft={draft}
         setDraft={setDraft}
         error={error}
+        saving={saving}
         activeEdges={activeEdges}
         canMutate={canMutate}
         getCostPerM2={getCostPerM2}

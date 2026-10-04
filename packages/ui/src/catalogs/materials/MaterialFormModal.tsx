@@ -40,6 +40,8 @@ export interface MaterialFormModalProps {
   readonly tileSuggestMsg: string | null;
   readonly onSuggestTiles: () => void;
   readonly onSubmit: (e: FormEvent) => void;
+  /** K1 #1032: save in flight — footer locked with busy label. */
+  readonly saving?: boolean;
   readonly onClose: () => void;
   readonly onOpenCreateEdge: () => void;
 }
@@ -65,6 +67,7 @@ export function MaterialFormModal({
   onSubmit,
   onClose,
   onOpenCreateEdge,
+  saving = false,
 }: MaterialFormModalProps): ReactNode {
   const textureImagePath =
     draft.previewTextureUrl.trim() || draft.imageUrl.trim() || '';
@@ -122,11 +125,17 @@ export function MaterialFormModal({
       dataTestId="material-form-modal"
       footer={
         <>
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
-          <button type="submit" className="btn btn--primary" form={formId}>
-            Guardar
+          <button
+            type="submit"
+            className="btn btn--primary"
+            form={formId}
+            disabled={saving}
+            data-testid="material-form-submit-btn"
+          >
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </>
       }

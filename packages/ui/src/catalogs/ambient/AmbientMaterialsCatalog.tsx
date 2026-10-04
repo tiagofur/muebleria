@@ -64,8 +64,9 @@ import '../catalogs.css';
 export interface AmbientMaterialsCatalogProps {
   readonly materials: readonly AmbientMaterial[];
   readonly categories?: readonly AmbientCategory[];
-  readonly onCreate: (draft: AmbientMaterialDraft) => void;
-  readonly onUpdate: (id: string, draft: AmbientMaterialDraft) => void;
+  /** Save settles before the modal closes (#1032 K1). */
+  readonly onCreate: (draft: AmbientMaterialDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: AmbientMaterialDraft) => void | Promise<void>;
   readonly onDeactivate: (id: string) => void;
   readonly onReactivate: (id: string) => void;
   readonly onCreateCategory?: (draft: AmbientCategoryDraft) => void;
@@ -119,6 +120,8 @@ export function AmbientMaterialsCatalog({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AmbientMaterialDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
+  // K1 #1032: save-in-flight flag for the modal footer.
+  const [saving, setSaving] = useState(false);
 
   // Category Manage Modal state
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
@@ -199,8 +202,9 @@ export function AmbientMaterialsCatalog({
     return null;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const err = validate();
     if (err) {
       setError(err);
@@ -231,12 +235,21 @@ export function AmbientMaterialsCatalog({
       previewClearcoat: parsePbr(draft.previewClearcoat),
     };
 
-    if (editingId) {
-      onUpdate(editingId, finalDraft);
-    } else {
-      onCreate(finalDraft);
+    // K1 #1032: settle before closing, keep the form on rejection.
+    setSaving(true);
+    try {
+      if (editingId) {
+        await onUpdate(editingId, finalDraft);
+      } else {
+        await onCreate(finalDraft);
+      }
+      closeModal();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar los cambios';
+      setError(msg);
+    } finally {
+      setSaving(false);
     }
-    closeModal();
   };
 
   const columns: CatalogColumn<AmbientMaterial>[] = useMemo(
@@ -529,6 +542,7 @@ export function AmbientMaterialsCatalog({
 
       <AmbientMaterialFormModal
         open={modalOpen}
+        saving={saving}
         editingId={editingId}
         formId={formId}
         draft={draft}

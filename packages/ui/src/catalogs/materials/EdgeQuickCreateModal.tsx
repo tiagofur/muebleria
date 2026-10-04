@@ -20,8 +20,9 @@ export interface EdgeQuickCreateModalProps {
   readonly prefill: { readonly code: string; readonly name: string };
   readonly edges: readonly EdgeBand[];
   readonly onClose: () => void;
-  /** Creates the edge band and returns its new id. */
-  readonly onCreateEdge: (draft: EdgeDraft) => string;
+  /** Creates the edge band and resolves with its new id once the save lands
+   * (#1032 K1). */
+  readonly onCreateEdge: (draft: EdgeDraft) => string | Promise<string>;
   /** Called with the new edge id so the parent links it as default. */
   readonly onCreated: (newEdgeId: string) => void;
 }
@@ -56,7 +57,7 @@ export function EdgeQuickCreateModal({
     setEdgeError(null);
   }
 
-  const submitCreateEdge = () => {
+  const submitCreateEdge = async () => {
     const codeErr = validateUniqueCode(edgeDraft.code, edges);
     if (codeErr) {
       setEdgeError(codeErr);
@@ -74,7 +75,8 @@ export function EdgeQuickCreateModal({
       setEdgeError(numErr);
       return;
     }
-    const newId = onCreateEdge(edgeDraft);
+    // K1 #1032: the id arrives when the save settles; the link happens then.
+    const newId = await onCreateEdge(edgeDraft);
     onCreated(newId);
     setEdgeDraft(emptyEdgeDraft());
     setEdgeError(null);
