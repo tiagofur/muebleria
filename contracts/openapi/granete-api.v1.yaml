@@ -15753,12 +15753,114 @@
             "items": {
               "$ref": "#/components/schemas/FurnitureParameterRelationshipFamily"
             }
+          },
+          "recipes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureParameterRecipeBinding"
+            }
           }
         },
         "required": [
           "kind",
           "sourceRole",
           "targets"
+        ]
+      },
+      "FurnitureParameterRecipeBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "recipeId": {
+            "type": "string"
+          },
+          "recipeRevision": {
+            "type": "string"
+          },
+          "technicalProfileId": {
+            "type": "string"
+          },
+          "technicalProfileRevision": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FurnitureParameterRecipeRule"
+            }
+          }
+        },
+        "required": [
+          "recipeId",
+          "recipeRevision",
+          "technicalProfileId",
+          "technicalProfileRevision",
+          "rules"
+        ]
+      },
+      "FurnitureParameterRecipeRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ruleId": {
+            "type": "string"
+          },
+          "ruleRevision": {
+            "type": "string"
+          },
+          "participantRole": {
+            "type": "string",
+            "enum": [
+              "A",
+              "B"
+            ]
+          },
+          "operationRole": {
+            "type": "string"
+          },
+          "entryFace": {
+            "type": "string"
+          },
+          "offsetMm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "axis": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "diameterMm": {
+            "type": "number"
+          },
+          "depthMm": {
+            "type": "number"
+          },
+          "stationMode": {
+            "type": "string",
+            "enum": [
+              "all",
+              "center"
+            ]
+          }
+        },
+        "required": [
+          "ruleId",
+          "ruleRevision",
+          "participantRole",
+          "operationRole",
+          "entryFace",
+          "offsetMm",
+          "axis",
+          "diameterMm",
+          "depthMm"
         ]
       },
       "FurnitureParameterRelationshipTarget": {
