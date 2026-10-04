@@ -687,3 +687,58 @@ describe('DEFAULT_BOARD_THICKNESS_MM — default único de espesor (deuda F128)'
     expect(result.issues).toHaveLength(0);
   });
 });
+
+describe('resolvePartDrilling — placements por grupo (#1046)', () => {
+  const hwBlum: Hardware = {
+    id: 'hw-blum-cl',
+    code: 'BIS-CL110',
+    name: 'Bisagra cierre lento',
+    unit: 'piece',
+    costPerUnit: 2,
+    active: true,
+    machining: {
+      parts: [
+        {
+          id: 'cup',
+          role: 'body',
+          operations: [
+            { id: 'op-cup', kind: 'blind_hole', diameterMm: 35, depthMm: 12, xMm: 0, yMm: 0, face: 'anchor' },
+          ],
+        },
+      ],
+    },
+  };
+
+  it('un placement por rol perfora con el herraje elegido en las choices', () => {
+    const res = resolvePartDrilling({
+      piece: testDoor,
+      placements: [
+        { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 100, yMm: 100 } },
+      ],
+      hardwareCatalog: [hwBlum],
+      optionChoices: { BISAGRA: 'hw-blum-cl' },
+    });
+    expect(res.holes).toHaveLength(1);
+    expect(res.holes[0]!.diameterMm).toBe(35);
+  });
+
+  it('un rol sin elección no perfora ni inventa agujeros (fallback F074 decide aparte)', () => {
+    const res = resolvePartDrilling({
+      piece: testDoor,
+      placements: [
+        { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 100, yMm: 100 } },
+      ],
+      hardwareCatalog: [hwBlum],
+      optionChoices: {},
+    });
+    expect(res.fallbackUsed).toBe(true);
+    // Los únicos agujeros son los heurísticos del fallback F074 — idénticos a
+    // los de una pieza sin placements (el cup 35mm del herraje elegido no aparece).
+    const baseline = resolvePartDrilling({
+      piece: testDoor,
+      placements: [],
+      hardwareCatalog: [hwBlum],
+    });
+    expect(res.holes).toEqual(baseline.holes);
+  });
+});

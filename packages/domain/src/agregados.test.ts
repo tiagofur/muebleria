@@ -229,6 +229,47 @@ describe('agregados domain helpers', () => {
       expect(jal!.optionRole).toBe('POSITIONED');
     });
 
+    it('#1046: resuelve un placement por grupo vía optionOverrides de la instancia', () => {
+      const agr: Agregado = {
+        id: 'agr-bisagra-grupo',
+        code: 'AGR-BIS-G',
+        name: 'Puerta con bisagra por grupo',
+        components: [
+          {
+            componentId: 'comp-puerta',
+            quantity: 1,
+            overrides: {
+              hardwarePlacements: [
+                {
+                  optionRole: 'BISAGRA',
+                  anchorFace: 'front',
+                  relativePosition: { xMm: 100, yMm: 100 },
+                },
+              ],
+            },
+          },
+        ],
+        hardwareLines: [],
+      };
+      const inst: ModuleAgregadoInstance = {
+        agregadoId: 'agr-bisagra-grupo',
+        quantity: 1,
+        optionOverrides: { BISAGRA: 'hw-blum-cl' },
+      };
+      const resolved = resolveAgregadoInstance(inst, [agr]);
+      const bisagra = resolved.hardwareLines.find((h) => h.hardwareId === 'hw-blum-cl');
+      expect(bisagra).toBeTruthy();
+      expect(bisagra!.quantity).toBe(1);
+      // Sin elección el placement no es concreto: no fabrica línea.
+      const sinEleccion = resolveAgregadoInstance(
+        { agregadoId: 'agr-bisagra-grupo', quantity: 1 },
+        [agr],
+      );
+      expect(
+        sinEleccion.hardwareLines.find((h) => h.optionRole === 'POSITIONED'),
+      ).toBeUndefined();
+    });
+
     it('prevents hardware line ID collision when unitIndex is passed or instance.id is present (R-6)', () => {
       const agr: Agregado = {
         id: 'agr-cajon',

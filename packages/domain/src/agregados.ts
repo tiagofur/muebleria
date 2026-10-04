@@ -95,10 +95,18 @@ export function resolveAgregadoInstance(
     const placements = comp.overrides?.hardwarePlacements;
     if (!placements) continue;
     for (const p of placements) {
-      if (!p.hardwareId) continue;
+      // #1046: role-based placements resolve against the instance's option
+      // overrides (same map bulk lines use). A role without a choice is not
+      // concrete in this estimate — it stays out instead of fabricating a
+      // count for the wrong member.
+      const resolvedId =
+        p.hardwareId ||
+        (p.optionRole && instance.optionOverrides?.[p.optionRole]) ||
+        '';
+      if (!resolvedId) continue;
       placementCounts.set(
-        p.hardwareId,
-        (placementCounts.get(p.hardwareId) ?? 0) + comp.quantity,
+        resolvedId,
+        (placementCounts.get(resolvedId) ?? 0) + comp.quantity,
       );
     }
   }

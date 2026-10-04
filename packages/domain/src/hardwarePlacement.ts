@@ -18,6 +18,35 @@ import type { BoardLocalSize, Vec3 } from './spatialAnchor';
 import type { Hardware, HardwarePlacement } from './types';
 
 /**
+ * Resolution of one placement's concrete hardware (#1046). Mirrors the Go
+ * layout resolver and `HardwareLine` semantics: a concrete `hardwareId` wins;
+ * otherwise the `optionRole` choice map decides; a role without a choice is
+ * UNRESOLVED (fail-closed on required groups at every consume point) and a
+ * placement with neither field is INVALID authoring.
+ */
+export type PlacementHardwareResolution =
+  | { readonly status: 'concrete'; readonly hardwareId: string }
+  | { readonly status: 'resolved'; readonly hardwareId: string }
+  | { readonly status: 'unresolved'; readonly optionRole: string }
+  | { readonly status: 'invalid' };
+
+/** Effective choice map shape shared with `OptionChoices` (role → entity id). */
+export type PlacementChoiceMap = Readonly<Record<string, string | undefined>>;
+
+export function resolvePlacementHardwareId(
+  placement: Pick<HardwarePlacement, 'hardwareId' | 'optionRole'>,
+  choices?: PlacementChoiceMap,
+): PlacementHardwareResolution {
+  const hardwareId = placement.hardwareId?.trim() ?? '';
+  if (hardwareId) return { status: 'concrete', hardwareId };
+  const optionRole = placement.optionRole?.trim() ?? '';
+  if (!optionRole) return { status: 'invalid' };
+  const chosen = choices?.[optionRole]?.trim() ?? '';
+  if (!chosen) return { status: 'unresolved', optionRole };
+  return { status: 'resolved', hardwareId: chosen };
+}
+
+/**
  * Default hardware projection (mm) when the hardware has no previewProjectionMm.
  * The renderer positions each hardware's group at `face + projection` so the
  * primitive (authored +Y-outward, body extending toward the face in −Y) sits
@@ -250,7 +279,7 @@ export function resolveHardwarePlacement(
 
   return {
     componentInstanceId,
-    hardwareId: placement.hardwareId,
+    hardwareId: hardware.id,
     localPosition: [snap(localPosition[0]), snap(localPosition[1]), snap(localPosition[2])],
     localNormal,
     standoffMm: normalized.projectionMm ?? DEFAULT_HARDWARE_PROJECTION_MM,

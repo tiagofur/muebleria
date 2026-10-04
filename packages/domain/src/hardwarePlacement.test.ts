@@ -3,6 +3,7 @@ import {
   DEFAULT_HARDWARE_PROJECTION_MM,
   normalizeHardwarePreview,
   resolveHardwarePlacement,
+  resolvePlacementHardwareId,
   type ResolvedHardwarePlacement,
 } from './hardwarePlacement';
 import type { Hardware } from './types';
@@ -360,5 +361,38 @@ describe('resolveHardwarePlacement — xFormula and yFormula evaluation', () => 
     expect(r).not.toBeNull();
     expect(r!.localPosition[0]).toBeCloseTo(42, 6);
     expect(r!.localPosition[2]).toBeCloseTo(99, 6);
+  });
+});
+
+describe('resolvePlacementHardwareId (#1046)', () => {
+  it('concrete hardwareId wins and never consults choices', () => {
+    expect(
+      resolvePlacementHardwareId(
+        { hardwareId: 'hw-blum', optionRole: 'BISAGRA' },
+        { BISAGRA: 'hw-otro' },
+      ),
+    ).toEqual({ status: 'concrete', hardwareId: 'hw-blum' });
+  });
+
+  it('role-only resolves through the choice map', () => {
+    expect(
+      resolvePlacementHardwareId({ optionRole: 'BISAGRA' }, { BISAGRA: 'hw-blum-cl' }),
+    ).toEqual({ status: 'resolved', hardwareId: 'hw-blum-cl' });
+  });
+
+  it('role without a choice is unresolved, never guessed', () => {
+    expect(resolvePlacementHardwareId({ optionRole: 'BISAGRA' }, {})).toEqual({
+      status: 'unresolved',
+      optionRole: 'BISAGRA',
+    });
+    expect(resolvePlacementHardwareId({ optionRole: 'BISAGRA' })).toEqual({
+      status: 'unresolved',
+      optionRole: 'BISAGRA',
+    });
+  });
+
+  it('neither hardwareId nor role is invalid authoring', () => {
+    expect(resolvePlacementHardwareId({})).toEqual({ status: 'invalid' });
+    expect(resolvePlacementHardwareId({ hardwareId: '   ' })).toEqual({ status: 'invalid' });
   });
 });
