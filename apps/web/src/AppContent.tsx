@@ -1895,6 +1895,7 @@ export function AppContent({
     [catalogActions, editingModuleId],
   );
   const duplicateAgregado = catalogActions.duplicateAgregado;
+  const duplicateComponent = catalogActions.duplicateComponent;
   const duplicateModuleById = catalogActions.duplicateModuleById;
   const createStructure = catalogActions.createStructure;
   const updateStructure = catalogActions.updateStructure;
@@ -3539,6 +3540,7 @@ export function AppContent({
     deleteTemplate,
     dismissGuestImport,
     duplicateAgregado,
+    duplicateComponent,
     duplicateModuleById,
     duplicateProjectById,
     duplicateWithScenarioB,

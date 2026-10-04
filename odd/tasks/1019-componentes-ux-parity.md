@@ -40,8 +40,17 @@ button transversal, Enter prematuro, atajos, ruta de edición.
   nuevo es correcto, el test asentaba sync). Evidencia: ui 2098/2098,
   typecheck 7/7; 2 tests nuevos con promesa diferida (fallo mantiene draft +
   banner; éxito cierra al resolver).
-- [ ] C2 → PR (apilado)
-- [ ] C3 → PR (apilado)
+- [x] C2 → PR #1022 (`feat/1019-componentes-ux-c2`). Foco visible por
+  engrosamiento+recoloreo del trazo (el drop-shadow 0 0 0 no pintaba nada y
+  usaba sintaxis box-shadow inválida), hit stroke invisible de 30 unidades
+  (~40px) con hover por adyacencia, ausente cuando disabled. Tests: 2 nuevos,
+  components 58/58.
+- [x] C3 → PR (`feat/1019-componentes-ux-c3`). `duplicateComponent` en
+  domain/duplicate.ts (id/código `-COPY`, nombre «(copia)», perforaciones con
+  ids frescos), store action (patrón duplicateAgregado), prop onDuplicate en
+  ComponentsScreen/ShellView/AppContent, menú «Más ▾» con Duplicar en
+  ComponentDetailView. Sin Eliminar (decisión de contrato del issue).
+  Evidencia: domain 1771/1771, ui 2102/2102, web 581/581, typecheck 7/7.
 - [ ] C4 → PR (apilado)
 - [ ] C5 → PR (apilado)
 - [ ] Browser proof + re-critique
