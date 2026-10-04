@@ -493,18 +493,18 @@ func TestHandleProjectProductionReleaseCuttingDemand_HappyPath(t *testing.T) {
 		Units                    []struct {
 			FurnitureInstanceID string `json:"furniture_instance_id"`
 			Pieces              []struct {
-				PartID       string  `json:"part_id"`
-				PartCode     *string `json:"part_code"`
-				Quantity     int     `json:"quantity"`
-				LengthMm     int     `json:"length_mm"`
-				WidthMm      int     `json:"width_mm"`
-				ThicknessMm  int     `json:"thickness_mm"`
-				MaterialID   string  `json:"material_id"`
-				EdgeBandID   *string `json:"edge_band_id"`
-				Grain        int     `json:"grain"`
-				L1           int     `json:"l1"`
-				L2           int     `json:"l2"`
-				OptionRole   *string `json:"option_role"`
+				PartID      string  `json:"part_id"`
+				PartCode    *string `json:"part_code"`
+				Quantity    int     `json:"quantity"`
+				LengthMm    int     `json:"length_mm"`
+				WidthMm     int     `json:"width_mm"`
+				ThicknessMm int     `json:"thickness_mm"`
+				MaterialID  string  `json:"material_id"`
+				EdgeBandID  *string `json:"edge_band_id"`
+				Grain       int     `json:"grain"`
+				L1          int     `json:"l1"`
+				L2          int     `json:"l2"`
+				OptionRole  *string `json:"option_role"`
 			} `json:"pieces"`
 		} `json:"units"`
 	}
@@ -619,13 +619,13 @@ func TestHandleProjectWorkshopOccurrences_HappyPath(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var body struct {
-		ReleaseID                string `json:"release_id"`
-		ReleaseNumber            int    `json:"release_number"`
-		CoversAllCurrentInstances bool  `json:"covers_all_current_instances"`
-		Assignments              []struct {
+		ReleaseID                 string `json:"release_id"`
+		ReleaseNumber             int    `json:"release_number"`
+		CoversAllCurrentInstances bool   `json:"covers_all_current_instances"`
+		Assignments               []struct {
 			FurnitureInstanceID       string `json:"furniture_instance_id"`
-			ProjectItemID            string `json:"project_item_id"`
-			WorkshopOccurrenceOrdinal int64 `json:"workshop_occurrence_ordinal"`
+			ProjectItemID             string `json:"project_item_id"`
+			WorkshopOccurrenceOrdinal int64  `json:"workshop_occurrence_ordinal"`
 		} `json:"assignments"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {

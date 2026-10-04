@@ -460,7 +460,7 @@ func TestMFAStepUp_ConcurrentRateLimit(t *testing.T) {
 			// Inject a Sid into the claims
 			claims := claimsFromRequest(req)
 			claims.Sid = "sid-1"
-			
+
 			rec := httptest.NewRecorder()
 			srv.HandleMFAStepUp(rec, req)
 			results <- rec.Code
