@@ -19,6 +19,8 @@ import { Modal } from '../../common';
 import type { AmbientMaterialDraft } from './ambientMaterialDraft';
 
 export interface AmbientMaterialFormModalProps {
+  /** K4 #1032: saved identity of the edited item, shown in the title. */
+  readonly identity?: { readonly code: string; readonly name: string };
   readonly open: boolean;
   readonly editingId: string | null;
   readonly formId: string;
@@ -49,6 +51,7 @@ export function AmbientMaterialFormModal({
   onSubmit,
   onClose,
   saving = false,
+  identity,
 }: AmbientMaterialFormModalProps): ReactNode {
   // Draft category cascade for 3-level selector
   const draftCascade = cascadeFromCategoryId(
@@ -98,7 +101,11 @@ export function AmbientMaterialFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={editingId ? 'Editar acabado' : 'Nuevo acabado'}
+      title={
+        identity
+          ? `Editar acabado — ${identity.code} · ${identity.name}`
+          : 'Nuevo acabado'
+      }
       size="sm"
       dataTestId="ambient-material-form-modal"
       footer={

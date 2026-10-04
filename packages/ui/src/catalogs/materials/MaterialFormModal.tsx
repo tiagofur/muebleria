@@ -42,6 +42,8 @@ export interface MaterialFormModalProps {
   readonly onSubmit: (e: FormEvent) => void;
   /** K1 #1032: save in flight — footer locked with busy label. */
   readonly saving?: boolean;
+  /** K4 #1032: saved identity of the edited item, shown in the title. */
+  readonly identity?: { readonly code: string; readonly name: string };
   readonly onClose: () => void;
   readonly onOpenCreateEdge: () => void;
 }
@@ -68,6 +70,7 @@ export function MaterialFormModal({
   onClose,
   onOpenCreateEdge,
   saving = false,
+  identity,
 }: MaterialFormModalProps): ReactNode {
   const textureImagePath =
     draft.previewTextureUrl.trim() || draft.imageUrl.trim() || '';
@@ -120,7 +123,13 @@ export function MaterialFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={editingId ? 'Editar material' : 'Nuevo material'}
+      title={
+        editingId && identity
+          ? `Editar material — ${identity.code} · ${identity.name}`
+          : editingId
+            ? 'Editar material'
+            : 'Nuevo material'
+      }
       size="md"
       dataTestId="material-form-modal"
       footer={

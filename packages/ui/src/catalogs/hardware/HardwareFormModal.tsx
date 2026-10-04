@@ -21,6 +21,8 @@ import { HardwareMachiningSection } from './HardwareMachiningSection';
 import { UNIT_LABELS, type HardwareDraft } from './hardwareDraft';
 
 export interface HardwareFormModalProps {
+  /** K4 #1032: saved identity of the edited item, shown in the title. */
+  readonly identity?: { readonly code: string; readonly name: string };
   readonly open: boolean;
   readonly editingId: string | null;
   readonly formId: string;
@@ -50,12 +52,17 @@ export function HardwareFormModal({
   resolveImageUrl,
   onSubmit,
   onClose,
+  identity,
 }: HardwareFormModalProps): ReactNode {
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={editingId ? 'Editar herraje' : 'Nuevo herraje'}
+      title={
+        identity
+          ? `Editar herraje — ${identity.code} · ${identity.name}`
+          : 'Nuevo herraje'
+      }
       size="md"
       dataTestId="hardware-form-modal"
       footer={

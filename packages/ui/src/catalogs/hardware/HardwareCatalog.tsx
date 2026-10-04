@@ -71,6 +71,18 @@ export interface HardwareCatalogProps {
   readonly resolveImageUrl?: (url: string | undefined) => string | undefined;
 }
 
+// K4 #1032: same workshop-facing labels as the form's shape select — the
+// internal enum value never reaches the user.
+const PREVIEW_SHAPE_LABELS_ES: Readonly<Record<string, string>> = {
+  knob: 'Tirador (perilla)',
+  'bar-pull': 'Tirador (barra)',
+  'cup-pull': 'Tirador (copa)',
+  hinge: 'Bisagra',
+  slide: 'Corredera',
+  rail: 'Riel',
+  leg: 'Pata',
+};
+
 export function HardwareCatalog({
   hardware,
   onCreate,
@@ -104,6 +116,10 @@ export function HardwareCatalog({
   const [saving, setSaving] = useState(false);
   // K2 #1032: destructive actions ask first; the row button only requests.
   const [confirmDeactivate, setConfirmDeactivate] = useState<Hardware | null>(null);
+  // K4 #1032: saved identity for the modal title (stable while fields change).
+  const editingHardware = editingId
+    ? (hardware.find((h) => h.id === editingId) ?? null)
+    : null;
   const [readbackError, setReadbackError] = useState<string | null>(null);
 
   const rows = useMemo(
@@ -386,7 +402,7 @@ export function HardwareCatalog({
                         </span>
                       </>
                     ) : row.previewShape ? (
-                      `Forma genérica: ${row.previewShape}`
+                      `Forma genérica: ${PREVIEW_SHAPE_LABELS_ES[row.previewShape] ?? row.previewShape}`
                     ) : (
                       'Sin modelo de archivo asociado'
                     )}
@@ -453,6 +469,7 @@ export function HardwareCatalog({
 
       <HardwareFormModal
         open={modalOpen}
+        identity={editingHardware ? { code: editingHardware.code, name: editingHardware.name } : undefined}
         editingId={editingId}
         formId={formId}
         draft={draft}

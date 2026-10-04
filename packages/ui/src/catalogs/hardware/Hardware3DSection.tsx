@@ -238,14 +238,19 @@ export function Hardware3DSection({
                       <h4 className="hardware-bound-card__name">
                         {boundAsset?.display_name ?? 'Modelo 3D vinculado'}
                       </h4>
-                      <p className="hardware-bound-card__ids">
-                        ID: {draft.visualAsset.assetId} · Rev: {draft.visualAsset.assetRevisionId}
-                      </p>
-                      {draft.visualAsset.sha256 ? (
-                        <p className="hardware-bound-card__hash">
-                          SHA-256: <code>{draft.visualAsset.sha256.slice(0, 16)}...</code>
+                      {/* K4 #1032: system internals (ids, hash) stay out of the
+                          workshop's face — available on demand. */}
+                      <details className="hardware-bound-card__tech">
+                        <summary>Datos técnicos</summary>
+                        <p className="hardware-bound-card__ids">
+                          ID: {draft.visualAsset.assetId} · Rev: {draft.visualAsset.assetRevisionId}
                         </p>
-                      ) : null}
+                        {draft.visualAsset.sha256 ? (
+                          <p className="hardware-bound-card__hash">
+                            SHA-256: <code>{draft.visualAsset.sha256.slice(0, 16)}...</code>
+                          </p>
+                        ) : null}
+                      </details>
                     </div>
 
                     <div className="hardware-bound-card__notice">
@@ -300,7 +305,7 @@ export function Hardware3DSection({
                       Sin modelo de archivo asociado
                     </p>
                     <p className="hardware-unbound-card__desc">
-                      Puedes seleccionar un archivo .skp o .glb existente o subir un archivo nuevo.
+                      Podés seleccionar un archivo .skp o .glb existente o subir un archivo nuevo.
                     </p>
                     <div className="hardware-unbound-card__actions">
                       <button
