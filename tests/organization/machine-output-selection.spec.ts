@@ -179,10 +179,13 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     const cutting = readModel.selections.find((s) => s.selection.selection.operation === 'cutting');
     expect(cutting!.selection.selection.outputCompatibilityProfileId).toBe('ptx-cadmatic-3');
 
-    // Machining selection of the pending MPR serializer is valid and surfaces
-    // the structural blocker (selection ≠ generation).
+    // #879 B2: the machining selection of the woodWOP candidate serializer
+    // (r2, per-piece capable) persists and reads Configurada — the settings
+    // probe filters the per-piece granularity code. Installation validation
+    // stays #352/NOT_TESTED; the r1 historical pin is covered by the
+    // resolver unit tests (stale blocker, never a retarget).
     await page.getByTestId('machine-output-machining-machine').selectOption({ label: 'WEEKE (HOMAG) BHX 050' });
-    await page.getByTestId('machine-output-machining-profile').selectOption({ label: 'MPR · woodWOP · r1' });
+    await page.getByTestId('machine-output-machining-profile').selectOption({ label: 'MPR · woodWOP · r2' });
     await page.getByTestId('machine-output-machining-save').click();
     await expect
       .poll(
@@ -194,10 +197,8 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
         { timeout: 15_000 },
       )
       .toBe('mpr-woodwop');
-    await expect(page.getByTestId('machine-output-machining-readiness')).toHaveText('Bloqueado');
-    await expect(page.getByTestId('machine-output-machining-blocked')).toContainText(
-      'serializador',
-    );
+    await expect(page.getByTestId('machine-output-machining-readiness')).toHaveText('Configurada');
+    await expect(page.getByTestId('machine-output-machining-blocked')).toHaveCount(0);
   });
 
   test('KDT: la selección de mecanizado queda Configurada con el serializer K2 (#1005)', async ({ page }) => {

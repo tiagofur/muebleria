@@ -403,9 +403,11 @@ export { SAW_POSTPROCESSOR_ADAPTER, SAW_ADAPTER_IMPLEMENTATION_DESCRIPTOR } from
 export {
   WOODWOP_MPR_POSTPROCESSOR_ADAPTER,
   MPR_ADAPTER_IMPLEMENTATION_DESCRIPTOR,
+  serializeMprPerPiece,
   describeMachiningOperations,
   describeUnrepresentableOperations,
   type MprOperationKind,
+  type MprPieceArtifact,
 } from './machines/woodWopMprAdapter';
 export {
   KDT_POSTPROCESSOR_ADAPTER,
@@ -450,5 +452,6 @@ export {
   generateSelectedCuttingOutput,
   generateSelectedMachiningOutput,
   kdtArtifactFileName,
+  mprArtifactFileName,
   machineOutputBlockerMessageEs,
 } from './machines/outputSelectionResolver';

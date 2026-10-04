@@ -88,9 +88,9 @@ func TestResolveMachineOutputBlockersSurfacesMissingSerializer(t *testing.T) {
 		t.Fatalf("implemented serializer must not block, got %v", blockers)
 	}
 
-	sel.AdapterID = "woodwop-mpr"
+	sel.AdapterID = "homag-saw"
 	sel.AdapterVersion = "0.1.0"
-	sel.AdapterImplementationDigest = "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782"
+	sel.AdapterImplementationDigest = "c6278fffdde1296eb508772d7a240c06695bba8b4bcac2e59b64761b38a74e9e"
 	blockers := ResolveMachineOutputBlockers(catalog, sel)
 	if len(blockers) != 1 || blockers[0].Code != "SERIALIZER_NOT_IMPLEMENTED" {
 		t.Fatalf("expected SERIALIZER_NOT_IMPLEMENTED blocker, got %v", blockers)

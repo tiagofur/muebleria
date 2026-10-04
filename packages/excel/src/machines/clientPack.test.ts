@@ -4,20 +4,25 @@ import { describe, expect, it } from 'vitest';
 import { buildClientValidationPack } from './clientPack';
 
 describe('buildClientValidationPack', () => {
-  it('generates ONLY the evidence-backed cutting artifact (ptx-generic)', async () => {
+  it('generates the evidence-backed cutting artifact AND the MPR r2 candidate (#879 B2)', async () => {
     const pack = await buildClientValidationPack();
 
-    expect(pack.generated.map((entry) => entry.name)).toEqual(['test-generic']);
+    expect(pack.generated.map((entry) => entry.name)).toEqual(['test-generic', 'test-bhx050']);
     const generic = pack.generated[0]!;
     expect(generic.bundle.artifact.fileName).toBe('test-generic.ptx');
     expect(generic.bundle.manifest.validationStatus).toBe('NOT_TESTED');
     expect(generic.bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r1');
+    const mpr = pack.generated[1]!;
+    expect(mpr.bundle.artifact.kind).toBe('mpr');
+    expect(mpr.bundle.artifact.bytes[0]).toBe(0x5b); // '[' — data head [H
+    expect(mpr.bundle.manifest.validationStatus).toBe('NOT_TESTED');
+    expect(mpr.bundle.manifest.outputCompatibilityProfile.revisionId).toBe('r2');
   });
 
   it('records every unevidenced target as notGenerated with reasons', async () => {
     const pack = await buildClientValidationPack();
     const names = pack.notGenerated.map((entry) => entry.name).sort();
-    expect(names).toEqual(['test-bhx050', 'test-cadmatic3', 'test-cadmatic4', 'test-cadmatic5', 'test-hpp250']);
+    expect(names).toEqual(['test-cadmatic3', 'test-cadmatic4', 'test-cadmatic5', 'test-hpp250']);
 
     for (const entry of pack.notGenerated) {
       expect(entry.reasons.length).toBeGreaterThan(0);
