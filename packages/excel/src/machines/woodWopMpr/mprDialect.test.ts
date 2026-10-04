@@ -4,12 +4,12 @@ import {
   KDT_FIELD_EXPECTATIONS,
 } from '../kdt/fieldFixture';
 import { transformJobToPrograms } from '../kdt/transform';
-import { serializeMprCandidateDocument } from './candidateFormat';
-import { parseMprCandidateBytes } from './candidateParse';
+import { serializeMprCandidateDocument } from './mprFormat';
+import { parseMprCandidateBytes } from './mprParse';
 import {
   transformPatternToMprCandidatePrograms,
   type MprCandidateProvenance,
-} from './candidateTransform';
+} from './mprTransform';
 import { sha256Hex } from '../digest';
 
 const PROVENANCE: Omit<MprCandidateProvenance, 'pieceCode' | 'machiningFace'> = {

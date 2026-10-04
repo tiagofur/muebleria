@@ -174,21 +174,24 @@ func TestMachineOutputSelectionPermissionAndOperationMismatch(t *testing.T) {
 
 func TestMachineOutputSelectionSerializerNotImplementedSurfaced(t *testing.T) {
 	srv := &Server{Store: &stubStore{}}
+	// #879 B2: woodwop-mpr ya implementa serializer (r2) — la familia sin
+	// implementar hoy es saw-homag (corte). Selección ≠ generación sigue
+	// demostrado a nivel API con esa tupla.
 	sel := domain.MachineOutputSelection{
-		Operation:                domain.OperationMachining,
-		MachineProfileID:         "client-a-machine-a-bhx050",
+		Operation:                domain.OperationCutting,
+		MachineProfileID:         "client-a-machine-b-hpp250",
 		MachineProfileRevisionID: "r1",
-		OutputProfileID:          "mpr-woodwop",
+		OutputProfileID:          "saw-homag",
 		OutputProfileRevisionID:  "r1",
 		OutputProfileDigest: func() *string {
-			value := "28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1"
+			value := "2cccceea22fbba8ec7c7df948473b8cb713223f0de1c3d07216e5614c7c3e112"
 			return &value
 		}(),
-		AdapterID:                   "woodwop-mpr",
+		AdapterID:                   "homag-saw",
 		AdapterVersion:              "0.1.0",
-		AdapterImplementationDigest: "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782",
+		AdapterImplementationDigest: "c6278fffdde1296eb508772d7a240c06695bba8b4bcac2e59b64761b38a74e9e",
 	}
-	rr := putMachineOutputSelection(t, srv, "machining", sel, 0, string(domain.RoleAdmin))
+	rr := putMachineOutputSelection(t, srv, "cutting", sel, 0, string(domain.RoleAdmin))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("selection of a pending serializer must still save (selection ≠ generation): %d %s", rr.Code, rr.Body.String())
 	}

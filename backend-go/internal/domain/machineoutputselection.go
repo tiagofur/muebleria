@@ -131,13 +131,13 @@ const MachineOutputCatalogJSON = `{
     {"outputCompatibilityProfileId": "ptx-cadmatic-4", "revisionId": "r5", "formatFamily": "ptx", "supportStatus": "NOT_TESTED", "digest": "3d3d215bf45859b6bf74ea931fc34e9d2b99e16ed346f67a33f68da482534c6b"},
     {"outputCompatibilityProfileId": "ptx-cadmatic-5", "revisionId": "r1", "formatFamily": "ptx", "supportStatus": "NOT_TESTED", "digest": "0679fada5b4d97ee5f2ec173d5c7ddebbf14cd8b226bf1ebe12ff95da9288bc1"},
     {"outputCompatibilityProfileId": "saw-homag", "revisionId": "r1", "formatFamily": "saw", "supportStatus": "NOT_TESTED", "digest": "2cccceea22fbba8ec7c7df948473b8cb713223f0de1c3d07216e5614c7c3e112"},
-    {"outputCompatibilityProfileId": "mpr-woodwop", "revisionId": "r1", "formatFamily": "mpr", "supportStatus": "NOT_TESTED", "digest": "28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1"},
+    {"outputCompatibilityProfileId": "mpr-woodwop", "revisionId": "r2", "formatFamily": "mpr", "supportStatus": "NOT_TESTED", "digest": "0f6cd2d5817994871b97abcdef9ee693cf257315d51e73157b225b3042842c96"},
     {"outputCompatibilityProfileId": "kdt-flexdrill-1200", "revisionId": "r2", "formatFamily": "kdt", "supportStatus": "NOT_TESTED", "digest": "d11d92c35fb481e158cebc336a6c7c419c39b89366e5939dea39787b1bc8b77e"}
   ],
   "adapters": [
     {"postprocessorAdapterId": "granete-ptx", "adapterVersion": "1.4.0", "implementationDigest": "8c13f67bfc8f1354984b90bbea1a3719b91905b62d63af570eec3d83a52a7916", "producedFormatFamily": "ptx", "serializerImplemented": true},
     {"postprocessorAdapterId": "homag-saw", "adapterVersion": "0.1.0", "implementationDigest": "c6278fffdde1296eb508772d7a240c06695bba8b4bcac2e59b64761b38a74e9e", "producedFormatFamily": "saw", "serializerImplemented": false},
-    {"postprocessorAdapterId": "woodwop-mpr", "adapterVersion": "0.1.0", "implementationDigest": "4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782", "producedFormatFamily": "mpr", "serializerImplemented": false},
+    {"postprocessorAdapterId": "woodwop-mpr", "adapterVersion": "0.2.0", "implementationDigest": "78a7948d08580054b594d7387a4d49dacf89510f3f623bdc824fa30cf527d3a1", "producedFormatFamily": "mpr", "serializerImplemented": true},
     {"postprocessorAdapterId": "granete-kdt", "adapterVersion": "0.2.0", "implementationDigest": "b9b824c7f86b16603f4d90e278d5920d26b816fdcff9007804ae64e3f0a5d17f", "producedFormatFamily": "kdt", "serializerImplemented": true}
   ]
 }`

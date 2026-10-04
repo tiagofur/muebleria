@@ -8,6 +8,7 @@ import {
   KDT_FLEXDRILL_1200_PROFILE,
   KDT_FLEXDRILL_1200_PROFILE_R1,
   MPR_WOODWOP_PROFILE,
+  MPR_WOODWOP_PROFILE_R1,
   PTX_CADMATIC_3_PROFILE,
   PTX_CADMATIC_4_CANDIDATE_PROFILE,
   PTX_CADMATIC_4_PROFILE,
@@ -33,6 +34,7 @@ const ALL_PROFILES = [
   PTX_CADMATIC_5_PROFILE,
   SAW_HOMAG_PROFILE,
   MPR_WOODWOP_PROFILE,
+  MPR_WOODWOP_PROFILE_R1,
   KDT_FLEXDRILL_1200_PROFILE,
   KDT_FLEXDRILL_1200_PROFILE_R1,
 ];
@@ -103,11 +105,20 @@ describe('machine output profiles', () => {
     });
   });
 
-  it('SAW and MPR profiles declare zero evidenced dimensions', () => {
+  it('SAW declares zero evidenced dimensions; MPR r1 es histórica y r2 lleva las del serializer (#879 B2)', () => {
     expect(SAW_HOMAG_PROFILE.dimensions).toEqual({});
     expect(SAW_HOMAG_PROFILE.pendingEvidence.length).toBeGreaterThan(0);
-    expect(MPR_WOODWOP_PROFILE.dimensions).toEqual({});
-    expect(MPR_WOODWOP_PROFILE.pendingEvidence).toContain('macroSyntax');
+    expect(MPR_WOODWOP_PROFILE_R1.dimensions).toEqual({});
+    expect(MPR_WOODWOP_PROFILE_R1.ref.revisionId).toBe('r1');
+    expect(MPR_WOODWOP_PROFILE.dimensions.fileExtension).toBe('mpr');
+    expect(MPR_WOODWOP_PROFILE.dimensions.encoding).toBe('ascii');
+    expect(MPR_WOODWOP_PROFILE.dimensions.operationMacros).toBe(
+      'vertical-drilling,horizontal-drilling',
+    );
+    expect(MPR_WOODWOP_PROFILE.pendingEvidence).toContain('filenameConstraints');
+    expect(MPR_WOODWOP_PROFILE.pendingEvidence).toContain('controlSoftwareVersion');
+    expect(MPR_WOODWOP_PROFILE.supportStatus).toBe('NOT_TESTED');
+    expect(MPR_WOODWOP_PROFILE.evidenceUri).toBe('docs/machines/bhx050/woodwop-mpr/README.md');
   });
 
   it('KDT r1 (histórica) declara cero dimensiones; r2 lleva las dimensiones del writer (#1005 K2)', () => {

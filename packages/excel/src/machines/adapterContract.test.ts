@@ -9,7 +9,7 @@ import { KDT_POSTPROCESSOR_ADAPTER } from './kdtAdapter';
 import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
 import { SAW_POSTPROCESSOR_ADAPTER } from './sawAdapter';
 import { WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
-import { KDT_FLEXDRILL_1200_PROFILE, PTX_GENERIC_PROFILE, SAW_HOMAG_PROFILE } from './profiles';
+import { KDT_FLEXDRILL_1200_PROFILE, MPR_WOODWOP_PROFILE, PTX_GENERIC_PROFILE, SAW_HOMAG_PROFILE } from './profiles';
 import { sha256Hex } from './digest';
 /**
  * Contract invariant: for every adapter, `canSerialize(job, profile).ready
@@ -66,28 +66,31 @@ describe('PostprocessorAdapter contract invariant', () => {
     assertReadyImpliesSerializable(SAW_POSTPROCESSOR_ADAPTER, job, complete);
   });
 
-  it('MPR on a fully evidenced synthetic profile: ready stays false (serializer unimplemented)', () => {
+  it('MPR on the real r2 profile: ready=true → serialize executes the per-piece writer (#879 B2)', async () => {
     const job = buildFixtureMachiningJob();
-    const complete: OutputCompatibilityProfile = {
-      ref: { outputCompatibilityProfileId: 'mpr-woodwop-test-complete', revisionId: 'rX' },
-      formatFamily: 'mpr',
-      dimensions: {
-        fileExtension: 'mpr',
-        encoding: 'ascii',
-        versionHeader: 'sample',
-        coordinateConvention: 'sample',
-        faceConvention: 'sample',
-        toolIdConvention: 'sample',
-        macroSyntax: 'sample',
-        operationMacros: 'vertical-drilling,horizontal-drilling',
+    assertReadyImpliesSerializable(WOODWOP_MPR_POSTPROCESSOR_ADAPTER, job, MPR_WOODWOP_PROFILE);
+    const bytes = WOODWOP_MPR_POSTPROCESSOR_ADAPTER.serialize(job, MPR_WOODWOP_PROFILE);
+    expect(new TextDecoder().decode(bytes)).toContain('[H');
+    // One program per piece/face-group: a multi-program job NEVER serializes
+    // through the interface path — it must go through serializeMprPerPiece.
+    const multiPiece = {
+      ...job,
+      drilling: {
+        ...job.drilling,
+        patterns: [
+          job.drilling.patterns[0]!,
+          { ...job.drilling.patterns[0]!, pieceCode: 'MOD-1-P02' },
+        ],
       },
-      pendingEvidence: [],
-      supportStatus: 'NOT_TESTED',
-      digest: 'test-only',
     };
-    const readiness = WOODWOP_MPR_POSTPROCESSOR_ADAPTER.canSerialize(job, complete);
-    expect(readiness.ready).toBe(false);
-    assertReadyImpliesSerializable(WOODWOP_MPR_POSTPROCESSOR_ADAPTER, job, complete);
+    const multiReadiness = WOODWOP_MPR_POSTPROCESSOR_ADAPTER.canSerialize(
+      multiPiece,
+      MPR_WOODWOP_PROFILE,
+    );
+    expect(multiReadiness.ready).toBe(false);
+    expect(() => WOODWOP_MPR_POSTPROCESSOR_ADAPTER.serialize(multiPiece, MPR_WOODWOP_PROFILE)).toThrow(
+      AdapterSerializationBlocked,
+    );
   });
 
   it('KDT on the real r2 profile: ready=true → serialize executes the per-piece writer (#1005 K2)', async () => {

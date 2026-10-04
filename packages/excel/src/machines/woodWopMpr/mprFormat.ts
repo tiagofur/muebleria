@@ -14,7 +14,7 @@
  * receiver compatibility.
  */
 
-import type { MprCandidateDocument } from './candidateDocument';
+import type { MprCandidateDocument } from './mprDocument';
 import { assertExactTwoDecimals, formatKdtNumber } from '../kdt/format';
 
 const CRLF = '\r\n';
@@ -75,5 +75,13 @@ export function serializeMprCandidateDocument(document: MprCandidateDocument): U
     );
   }
   lines.push('!');
-  return new TextEncoder().encode(lines.join(CRLF) + CRLF);
+  const text = lines.join(CRLF) + CRLF;
+  // The r2 profile declares encoding 'ascii' as the conservative candidate
+  // transport: any non-ASCII character (accents in names) fails closed
+  // instead of depending on the receiver's byte interpretation (doc does
+  // not fix encoding; the b1-kit sample will).
+  if (/[^\x00-\x7F]/.test(text)) {
+    throw new Error('mpr candidate: el perfil declara encoding ascii y el contenido tiene caracteres no-ASCII');
+  }
+  return new TextEncoder().encode(text);
 }

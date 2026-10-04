@@ -20,8 +20,8 @@ import type {
   MprCandidateDocument,
   MprCandidateDrillDirection,
   MprCandidateOperation,
-} from './candidateDocument';
-import { MprCandidateParseError } from './candidateParse';
+} from './mprDocument';
+import { MprCandidateParseError } from './mprParse';
 
 export interface MprCandidateProvenance {
   readonly generator: string;
@@ -187,4 +187,14 @@ export function transformPatternToMprCandidatePrograms(
     programs.push(build('front', edges));
   }
   return programs;
+}
+
+/** Whole-job split into candidate programs; pieces keep their order. */
+export function transformJobToMprCandidatePrograms(
+  job: { readonly drilling: { readonly patterns: readonly PartDrillingPattern[] } },
+  baseProvenance: Omit<MprCandidateProvenance, 'pieceCode' | 'machiningFace'>,
+): MprCandidatePieceProgram[] {
+  return job.drilling.patterns.flatMap((pattern) =>
+    transformPatternToMprCandidatePrograms(pattern, baseProvenance),
+  );
 }

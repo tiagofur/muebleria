@@ -149,23 +149,39 @@ describe('resolveManufacturingOutputTarget', () => {
     }
   });
 
-  it('machining with pending MPR serializer surfaces SERIALIZER_NOT_IMPLEMENTED', () => {
-    const selection: MachineOutputSelection = {
+  it('machining MPR r2 (serializer B2) reads ready en settings; la r1 histórica queda stale', () => {
+    // #879 B2: el probe de settings filtra PROGRAM_GRANULARITY_UNSUPPORTED
+    // para familias per-piece (kdt y mpr) — el serializer candidato lee
+    // Configurada; la validación de instalación sigue #352/NOT_TESTED.
+    const current: MachineOutputSelection = {
       operation: 'machining',
       machineProfileId: 'client-a-machine-a-bhx050',
       machineProfileRevisionId: 'r1',
       outputCompatibilityProfileId: 'mpr-woodwop',
-      outputCompatibilityProfileRevisionId: 'r1',
+      outputCompatibilityProfileRevisionId: 'r2',
       outputCompatibilityProfileDigest: MPR_WOODWOP_PROFILE.digest,
       postprocessorAdapterId: 'woodwop-mpr',
+      postprocessorAdapterVersion: '0.2.0',
+      postprocessorImplementationDigest: '78a7948d08580054b594d7387a4d49dacf89510f3f623bdc824fa30cf527d3a1',
+    };
+    const result = resolveManufacturingOutputTarget(current, 'machining');
+    expect(result.status).toBe('CONFIGURED');
+    if (result.status !== 'CONFIGURED') return;
+    expect(result.readiness.ready).toBe(true);
+
+    // r1 histórica: stale blocker, nunca retarget automático a r2.
+    const historical = {
+      ...current,
+      outputCompatibilityProfileRevisionId: 'r1',
+      outputCompatibilityProfileDigest: '28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1',
       postprocessorAdapterVersion: '0.1.0',
       postprocessorImplementationDigest: '4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782',
     };
-    const result = resolveManufacturingOutputTarget(selection, 'machining');
-    expect(result.status).toBe('CONFIGURED');
-    if (result.status !== 'CONFIGURED') return;
-    expect(result.readiness.ready).toBe(false);
-    expect(result.readiness.reasons.map((r) => r.code)).toContain('SERIALIZER_NOT_IMPLEMENTED');
+    const stale = resolveManufacturingOutputTarget(historical, 'machining');
+    expect(stale.status).toBe('CONFIGURED');
+    if (stale.status !== 'CONFIGURED') return;
+    expect(stale.readiness.ready).toBe(false);
+    expect(stale.readiness.reasons.map((r) => r.code)).toContain('PROFILE_DIGEST_MISMATCH');
   });
 
   it('stale references surface typed blockers instead of substituting another profile', () => {

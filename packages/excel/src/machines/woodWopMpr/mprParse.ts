@@ -1,7 +1,7 @@
 /**
  * woodWOP MPR CANDIDATE dialect reader (#879 B2-prep).
  *
- * Deliberately independent of the writer (candidateFormat.ts) — shares no
+ * Deliberately independent of the writer (mprFormat.ts) — shares no
  * helpers, so round-trip tests prove real invertibility (BHX02 pattern).
  * Parses exactly the candidate subset: [H head, <100 \Werkstck\,
  * <101 \Comment\, <102 \BohrVert\, <103 \BohrHoriz\, `!` terminator.
@@ -12,7 +12,7 @@
 import type {
   MprCandidateDocument,
   MprCandidateDrillDirection,
-} from './candidateDocument';
+} from './mprDocument';
 
 export class MprCandidateParseError extends Error {
   constructor(message: string) {

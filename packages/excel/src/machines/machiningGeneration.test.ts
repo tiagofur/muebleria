@@ -33,8 +33,8 @@ function mprMachiningSelection(): MachineOutputSelection {
     outputCompatibilityProfileRevisionId: MPR_WOODWOP_PROFILE.ref.revisionId,
     outputCompatibilityProfileDigest: MPR_WOODWOP_PROFILE.digest,
     postprocessorAdapterId: 'woodwop-mpr',
-    postprocessorAdapterVersion: '0.1.0',
-    postprocessorImplementationDigest: '4ae7d19fb29c555c5de0346d06ae88cbc47bfa043b80222b9d427705c5c7e782',
+    postprocessorAdapterVersion: '0.2.0',
+    postprocessorImplementationDigest: '78a7948d08580054b594d7387a4d49dacf89510f3f623bdc824fa30cf527d3a1',
   };
 }
 
@@ -104,9 +104,12 @@ describe('generateSelectedMachiningOutput (#1005 K3)', () => {
 
   it('bloquea sin fallback: familia sin serializer, selección ausente y digest stale', async () => {
     const job = buildFixtureMachiningJob();
-    await expect(
-      generateSelectedMachiningOutput(job, mprMachiningSelection()),
-    ).rejects.toThrow(/el serializador todavía no está implementado/);
+    // #879 B2: mpr ya genera (serializer candidato) — mismo contrato por pieza.
+    const mprBundles = await generateSelectedMachiningOutput(job, mprMachiningSelection());
+    expect(mprBundles).toHaveLength(1);
+    expect(mprBundles[0]!.artifact.kind).toBe('mpr');
+    expect(mprBundles[0]!.artifact.fileName).toMatch(/^M[0-9A-F]{12}\.mpr$/);
+    expect(new TextDecoder().decode(mprBundles[0]!.artifact.bytes)).toContain('[H');
     await expect(
       generateSelectedMachiningOutput(job, {
         ...kdtMachiningSelection(),

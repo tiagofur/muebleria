@@ -488,13 +488,11 @@ export const MPR_REQUIRED_DIMENSIONS = [
 ] as const;
 
 /**
- * `mpr-woodwop` r1 — woodWOP MPR part program format. No reliable in-repo
- * format evidence exists: zero evidenced dimensions, serialization fails
- * closed until a real `.mpr` sample produced by the client's woodWOP version
- * (plus its exact version) is captured. MPRX stays out of scope; a future
- * adapter can be added without touching neutral machining logic.
+ * `mpr-woodwop` r1 — HISTORICAL (#351 registration): the zero-evidence
+ * fail-closed revision. Selections pinned to it surface a stale-revision
+ * blocker — never an automatic retarget to r2.
  */
-export const MPR_WOODWOP_PROFILE: OutputCompatibilityProfile = {
+export const MPR_WOODWOP_PROFILE_R1: OutputCompatibilityProfile = {
   ref: { outputCompatibilityProfileId: 'mpr-woodwop', revisionId: 'r1' },
   formatFamily: 'mpr',
   targetSoftware: {
@@ -511,6 +509,68 @@ export const MPR_WOODWOP_PROFILE: OutputCompatibilityProfile = {
   supportStatus: 'NOT_TESTED',
   digest: '28369cb293fcc77db20b11a4dfda795dc9f3346ea2d70e756286ba46de03fdf1',
   evidenceUri: 'docs/machines/client-a/machine-a-bhx050.md',
+};
+
+/**
+ * `mpr-woodwop` r2 — the B2 offline-candidate revision (#879): every
+ * syntax dimension the serializer consumes, evidenced from the OFFICIAL
+ * public HOMAG file description (9-080-42-7190-D00, 2006 —
+ * docs/machines/bhx050/woodwop-mpr/) plus documented candidate choices:
+ *
+ * - fileExtension mpr · versionHeader 4.0 (doc §5) · decimalPlaces 2 ·
+ *   lineEnding crlf + encoding ascii (conservative candidate transport —
+ *   the doc does NOT fix bytes; PTX-r2 precedent for first-candidate
+ *   transport, the b1-kit sample confirms).
+ * - coordinateConvention 'bottom-left-ko0': workpiece origin bottom-left,
+ *   X=length, Y=width (doc §9.1.1 diagram, KO=0 default).
+ * - faceConvention 'granete-front-up-r1': the same orientation policy as
+ *   KDT (machines/kdt/transform.ts) expressed as BohrHoriz travel
+ *   directions — see machines/woodWopMpr/mprTransform.ts.
+ * - toolIdConvention 'du-direct': holes carry DU (diameter); the doc allows
+ *   DU as alternative to TNO/T_ and NO tool mapping is invented.
+ * - macroSyntax 'inline-quoted-id100-id103': quoted KEY="value" rows
+ *   (doc §3) inside <100/<101/<102/<103 blocks, literal numbers only.
+ * - operationMacros 'vertical-drilling,horizontal-drilling': the subset the
+ *   resolved model reaches (<102/<103); grooves/routing stay
+ *   OPERATION_NOT_REPRESENTABLE.
+ *
+ * EVIDENCE STATUS: repo implementation of a PUBLIC_REFERENCE_ONLY spec —
+ * supportStatus stays NOT_TESTED and the receiver unknowns (control
+ * version, filename constraints, tool-number mapping, Bohr cycle variants,
+ * MPRX migration, AlignmentFace equivalent) remain pendingEvidence. The
+ * b1-kit samples confirm or correct this dialect; the diff is the
+ * analysis. r1 stays an immutable historical constant.
+ */
+export const MPR_WOODWOP_PROFILE: OutputCompatibilityProfile = {
+  ref: { outputCompatibilityProfileId: 'mpr-woodwop', revisionId: 'r2' },
+  formatFamily: 'mpr',
+  targetSoftware: {
+    name: 'woodWOP',
+    provenance: 'PUBLIC_REFERENCE_ONLY',
+  },
+  dimensions: {
+    fileExtension: 'mpr',
+    encoding: 'ascii',
+    versionHeader: '4.0',
+    coordinateConvention: 'bottom-left-ko0',
+    faceConvention: 'granete-front-up-r1',
+    toolIdConvention: 'du-direct',
+    macroSyntax: 'inline-quoted-id100-id103',
+    operationMacros: 'vertical-drilling,horizontal-drilling',
+    lineEnding: 'crlf',
+    decimalPlaces: 2,
+  },
+  pendingEvidence: [
+    'filenameConstraints',
+    'controlSoftwareVersion',
+    'toolNumberMapping',
+    'bohrCycleVariants',
+    'mprxMigration',
+    'alignmentFaceEquivalent',
+  ],
+  supportStatus: 'NOT_TESTED',
+  digest: '0f6cd2d5817994871b97abcdef9ee693cf257315d51e73157b225b3042842c96',
+  evidenceUri: 'docs/machines/bhx050/woodwop-mpr/README.md',
 };
 
 // ---------------------------------------------------------------------------

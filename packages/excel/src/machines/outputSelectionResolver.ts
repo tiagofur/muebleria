@@ -14,6 +14,7 @@ import {
   type ManufacturingLabelProjection,
   ManufacturingOperation,
   type OutputCompatibilityProfile,
+  type PostprocessorAdapter,
   type ResolvedMachiningJob,
   ResolvedManufacturingOutputTarget,
   ValidationError,
@@ -35,7 +36,7 @@ import { PTX_POSTPROCESSOR_ADAPTER } from './ptxAdapter';
 import { KDT_POSTPROCESSOR_ADAPTER, serializePerPiece } from './kdtAdapter';
 import { KDT_PANEL_FORMAT_SCHEMA_VERSION } from './kdt/document';
 import { SAW_POSTPROCESSOR_ADAPTER } from './sawAdapter';
-import { WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
+import { serializeMprPerPiece, WOODWOP_MPR_POSTPROCESSOR_ADAPTER } from './woodWopMprAdapter';
 import { ptxPartLabelsFromManufacturingProjection } from '../ptx/partLabels';
 import type { PtxPartLabelData } from '../ptx/partLabels';
 
@@ -206,7 +207,7 @@ export function resolveManufacturingOutputTarget(
         patterns: [],
       },
     } as never, profile!).reasons;
-    const perPieceCapable = profile!.formatFamily === 'kdt';
+    const perPieceCapable = profile!.formatFamily === 'kdt' || profile!.formatFamily === 'mpr';
     reasons.push(
       ...(perPieceCapable
         ? probeReasons.filter((reason) => reason.code !== 'PROGRAM_GRANULARITY_UNSUPPORTED')
@@ -547,6 +548,25 @@ export { machineOutputBlockerMessageEs } from '@granete/domain';
  * constraints stay pendingEvidence; the conservative short form is the
  * safest candidate until #1005 K4 field evidence refines them.
  */
+/**
+ * #879 B2 — MPR twin of the KDT industrial name: `M<hex12>.mpr`, hash-bound
+ * to the exact job + piece + face. Same doctrine: the manifest carries the
+ * descriptive mapping; filename constraints stay pendingEvidence until the
+ * client-a sample confirms them.
+ */
+export async function mprArtifactFileName(
+  jobId: string,
+  pieceCode: string,
+  machiningFace: 'front' | 'back',
+): Promise<string> {
+  const token = (
+    await sha256Hex(`granete:mpr-artifact:${jobId}:${pieceCode}:${machiningFace}`)
+  )
+    .slice(0, 12)
+    .toUpperCase();
+  return `M${token}.mpr`;
+}
+
 export async function kdtArtifactFileName(
   jobId: string,
   pieceCode: string,
@@ -596,14 +616,26 @@ export async function generateSelectedMachiningOutput(
       { status: 'BLOCKED', reasons: catalogResolved.readiness.reasons },
     );
   }
-  if (adapter !== KDT_POSTPROCESSOR_ADAPTER) {
-    // Only the per-piece serializer-capable family generates today; this is
-    // a capability boundary, never a fallback to another output.
+  // Per-piece serializer capability boundary (#879 B2: woodWOP joins KDT).
+  // A family without an implemented per-piece serializer blocks here —
+  // never a fallback to another output.
+  type PerPieceSerializer = (
+    job: ResolvedMachiningJob,
+    profile: OutputCompatibilityProfile,
+  ) => readonly { pieceCode: string; machiningFace: 'front' | 'back'; bytes: Uint8Array }[];
+  const serializePerPieceForFamily = (family: string): PerPieceSerializer | undefined =>
+    family === 'kdt'
+      ? (job2, prof) => serializePerPiece(job2, prof)
+      : family === 'mpr'
+        ? (job2, prof) => serializeMprPerPiece(job2, prof)
+        : undefined;
+  const perPieceSerializer = serializePerPieceForFamily(profile.formatFamily);
+  if (!perPieceSerializer) {
     throw new ValidationError(
       machineOutputBlockerMessageEs([
         {
           code: 'SERIALIZER_NOT_IMPLEMENTED',
-          detail: `la familia ${profile.formatFamily} todavía no tiene serializer implementado; sólo KDT genera programas hoy (#1005 K3)`,
+          detail: `la familia ${profile.formatFamily} todavía no tiene serializer implementado`,
         },
       ]),
       {
@@ -617,7 +649,11 @@ export async function generateSelectedMachiningOutput(
       },
     );
   }
-  const readiness = adapter.canSerialize(job, profile);
+  // The per-piece family check above guarantees a machining-family adapter
+  // here; the union type still carries cutting adapters, so the call goes
+  // through the machining view explicitly.
+  const machiningAdapter = adapter as PostprocessorAdapter<ResolvedMachiningJob>;
+  const readiness = machiningAdapter.canSerialize(job, profile);
   const fatal = readiness.reasons.filter(
     (reason) => reason.code !== 'PROGRAM_GRANULARITY_UNSUPPORTED',
   );
@@ -628,7 +664,7 @@ export async function generateSelectedMachiningOutput(
     });
   }
 
-  const pieces = serializePerPiece(job, profile);
+  const pieces = perPieceSerializer(job, profile);
   if (pieces.length === 0) {
     throw new ValidationError(
       machineOutputBlockerMessageEs([
@@ -655,11 +691,19 @@ export async function generateSelectedMachiningOutput(
       machine.ref.machineProfileRevisionId === selection.machineProfileRevisionId,
   )!;
   const bundles: MachineArtifactBundle[] = [];
+  const artifactKind = profile.formatFamily === 'kdt' ? ('kdt' as const) : ('mpr' as const);
+  const schemaVersion =
+    profile.formatFamily === 'kdt'
+      ? KDT_PANEL_FORMAT_SCHEMA_VERSION
+      : String(profile.dimensions.versionHeader ?? 'pending-evidence');
   for (const piece of pieces) {
-    const fileName = await kdtArtifactFileName(job.jobId, piece.pieceCode, piece.machiningFace);
+    const fileName =
+      profile.formatFamily === 'kdt'
+        ? await kdtArtifactFileName(job.jobId, piece.pieceCode, piece.machiningFace)
+        : await mprArtifactFileName(job.jobId, piece.pieceCode, piece.machiningFace);
     bundles.push(
-      // Bytes already serialized by serializePerPiece (which owns gating);
-      // the builder only wraps each program into artifact + manifest.
+      // Bytes already serialized by the family's per-piece serializer (which
+      // owns gating); the builder wraps each program into artifact + manifest.
       await generateMachineArtifactFromBytes({
         jobId: job.jobId,
         artifactId: `${job.jobId}--${piece.pieceCode}--${piece.machiningFace}--${profile.ref.outputCompatibilityProfileId}@${profile.ref.revisionId}`,
@@ -670,8 +714,8 @@ export async function generateSelectedMachiningOutput(
           adapterVersion: adapter.adapterVersion,
           implementationDigest: adapter.implementationDigest,
         },
-        kind: 'kdt',
-        schemaVersion: KDT_PANEL_FORMAT_SCHEMA_VERSION,
+        kind: artifactKind,
+        schemaVersion,
         fileName,
         bytes: piece.bytes,
         delivery: {
