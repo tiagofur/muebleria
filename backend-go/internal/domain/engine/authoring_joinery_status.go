@@ -198,6 +198,7 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 		return deriveFamilyPlans(relationship, resolution, boards, contactIDs, validContacts, pushIssue, familyProfiles, operations)
 	}
 	count, hasCount := relationship.Parameters["stationCount"].(float64)
+	maxSpacing, hasMaxSpacing := relationship.Parameters["maxSpacingMm"].(float64)
 	start, hasStart := relationship.Parameters["startMarginMm"].(float64)
 	end, hasEnd := relationship.Parameters["endMarginMm"].(float64)
 	if !hasStart {
@@ -206,9 +207,36 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 	if !hasEnd {
 		end = 0
 	}
-	if !hasCount || count != math.Trunc(count) || count < 2 ||
+	if hasCount && hasMaxSpacing {
+		pushIssue("STATION_PATTERN_INVALID",
+			"floor-side declares both stationCount and maxSpacingMm",
+			"Declare either an explicit stationCount or a spacing-derived pattern, never both.")
+		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+			Stage: JoineryStationInvalid, Contacts: validContacts(),
+			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: []string{"STATION_PATTERN_INVALID"}, StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}},
+			Blockers: []string{"STATION_PATTERN_INVALID"}}
+	}
+	if hasMaxSpacing && (math.IsNaN(maxSpacing) || math.IsInf(maxSpacing, 0) || maxSpacing <= 0) {
+		pushIssue("STATION_PATTERN_INVALID",
+			"floor-side maxSpacingMm must be a positive finite number",
+			"Declare a positive spacing so the station count derives from the real contact span.")
+		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+			Stage: JoineryStationInvalid, Contacts: validContacts(),
+			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: []string{"STATION_PATTERN_INVALID"}, StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}},
+			Blockers: []string{"STATION_PATTERN_INVALID"}}
+	}
+	if !hasCount && !hasMaxSpacing {
+		pushIssue("STATION_PATTERN_INVALID",
+			fmt.Sprintf("floor-side relationship %s declares no station pattern", relationshipID),
+			"Declare stationCount (>= 2) or maxSpacingMm (> 0) with optional margins.")
+		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
+			Stage: JoineryStationInvalid, Contacts: validContacts(),
+			Stations: JoineryStationPlanStatus{Status: "INVALID", IssueCodes: []string{"STATION_PATTERN_INVALID"}, StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}},
+			Blockers: []string{"STATION_PATTERN_INVALID"}}
+	}
+	if hasCount && (count != math.Trunc(count) || count < 2 ||
 		math.IsNaN(start) || math.IsInf(start, 0) || start < 0 ||
-		math.IsNaN(end) || math.IsInf(end, 0) || end < 0 {
+		math.IsNaN(end) || math.IsInf(end, 0) || end < 0) {
 		pushIssue("STATION_PATTERN_INVALID",
 			"floor-side station pattern needs an integer stationCount >= 2 and finite nonnegative margins",
 			"Declare stationCount (>= 2) and optional nonnegative start/end margins on the relationship.")
@@ -219,7 +247,11 @@ func deriveFloorSideJoinery(relationship AuthoringRelationship, boardIndex map[s
 	}
 	specs := make([]StationSpec, 0, len(contactIDs))
 	for _, contactID := range contactIDs {
-		specs = append(specs, StationSpec{ContactID: contactID, Count: int(count), StartMarginMm: start, EndMarginMm: end})
+		if hasMaxSpacing {
+			specs = append(specs, StationSpec{ContactID: contactID, MaxSpacingMm: maxSpacing, StartMarginMm: start, EndMarginMm: end})
+		} else {
+			specs = append(specs, StationSpec{ContactID: contactID, Count: int(count), StartMarginMm: start, EndMarginMm: end})
+		}
 	}
 	planned := planResolvedContactStations(resolution, boards, specs)
 	if len(planned.Issues) > 0 {
@@ -273,6 +305,12 @@ func deriveFamilyPlans(relationship AuthoringRelationship, resolution ContactRes
 		pushIssue("STATION_PATTERN_INVALID",
 			"stationCount and families are mutually exclusive: declare one station pattern per relationship",
 			"Declare either a stationCount parameter or families with unique ids and counts >= 2.")
+		return invalid([]string{"STATION_PATTERN_INVALID"})
+	}
+	if _, hasSpacing := relationship.Parameters["maxSpacingMm"]; hasSpacing {
+		pushIssue("STATION_PATTERN_INVALID",
+			"maxSpacingMm and families are mutually exclusive: declare one station pattern per relationship",
+			"Declare either a maxSpacingMm parameter or families with unique ids and counts >= 2.")
 		return invalid([]string{"STATION_PATTERN_INVALID"})
 	}
 	seen := map[string]bool{}
