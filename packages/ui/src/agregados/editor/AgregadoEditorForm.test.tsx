@@ -502,7 +502,8 @@ describe('AgregadoEditorForm — herrajes por grupo (#1046)', () => {
   });
 
   it('switching a line to group mode clears hardwareId, keeps the role and lists members', () => {
-    const setDraft = vi.fn() as Dispatch<SetStateAction<AgregadoDraft>>;
+    const setDraftMock = vi.fn();
+    const setDraft = setDraftMock as unknown as Dispatch<SetStateAction<AgregadoDraft>>;
     renderForm({
       editorTab: 'hardware',
       draft: specificDraft(),
@@ -514,7 +515,7 @@ describe('AgregadoEditorForm — herrajes por grupo (#1046)', () => {
       target: { value: 'grupo' },
     });
 
-    const updater = setDraft.mock.calls.at(-1)![0] as (
+    const updater = setDraftMock.mock.calls.at(-1)![0] as (
       prev: AgregadoDraft,
     ) => AgregadoDraft;
     const next = updater(specificDraft());
