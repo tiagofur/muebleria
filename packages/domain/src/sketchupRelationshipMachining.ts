@@ -1790,7 +1790,8 @@ export function deriveResolvedContactOperationsForContact(
         !['top', 'bottom', 'left', 'right', 'front', 'back'].includes(rule.entryFace) ||
         !validVector(rule.offsetMm) || !validVector(rule.axis) ||
         !Number.isFinite(rule.diameterMm) || !Number.isFinite(rule.depthMm) ||
-        Math.abs(contactDot(rule.axis, rule.axis) - 1) > 1e-6 || rule.diameterMm <= 0 || rule.depthMm <= 0) {
+        Math.abs(contactDot(rule.axis, rule.axis) - 1) > 1e-6 || rule.diameterMm <= 0 || rule.depthMm <= 0 ||
+        (rule.stationMode !== undefined && rule.stationMode !== '' && rule.stationMode !== 'all' && rule.stationMode !== 'center')) {
       return fail('OPERATION_RULE_INVALID');
     }
     ruleIds.add(rule.ruleId);
@@ -1803,10 +1804,19 @@ export function deriveResolvedContactOperationsForContact(
   const rules = [...recipe.rules].sort((x, y) =>
     x.participantRole < y.participantRole ? -1 : x.participantRole > y.participantRole ? 1 :
       compareUnicodeScalarIds(x.ruleId, y.ruleId));
-  for (const [stationIndex, station] of stations.entries()) {
+  // A "center" rule applies exactly once at the contact span midpoint (the
+  // single-centered-fastener pattern), AFTER every planned station — the
+  // station-major emission order and StationIndex -1 mirror the Go engine.
+  const hasCenterRule = rules.some((rule) => rule.stationMode === 'center');
+  const centerPoint = contactScale(contact.frame.originAssemblyMm, along, contact.overlapMm[1]! / 2);
+  const slots: { stationIndex: number; point: Vec3 }[] = stations.map((station, index) =>
+    ({ stationIndex: index, point: station.assemblyPointMm }));
+  if (hasCenterRule) slots.push({ stationIndex: -1, point: centerPoint });
+  for (const slot of slots) {
     for (const rule of rules) {
+      if ((rule.stationMode === 'center') !== (slot.stationIndex === -1)) continue;
       const board = rule.participantRole === 'A' ? a[0]! : b[0]!;
-      const centerLocal = contactToLocal(board, contactScale(station.assemblyPointMm, project(rule.offsetMm), 1));
+      const centerLocal = contactToLocal(board, contactScale(slot.point, project(rule.offsetMm), 1));
       const directionAssembly = project(rule.axis);
       const axisLocal: Vec3 = [contactDot(directionAssembly, board.basis.x),
         contactDot(directionAssembly, board.basis.y), contactDot(directionAssembly, board.basis.z)];
@@ -1822,7 +1832,7 @@ export function deriveResolvedContactOperationsForContact(
           !centerLocal.every((value, i) => value + rule.depthMm * axisLocal[i]! >= -1e-6 &&
             value + rule.depthMm * axisLocal[i]! <= dims[i]! + 1e-6)) return fail('OPERATION_GEOMETRY_INVALID');
       const provenance = { sourceKind: 'relationship' as const, relationshipId: contact.relationshipId, contactId: id,
-        participantId: board.occurrenceId, participantRole: rule.participantRole, stationIndex,
+        participantId: board.occurrenceId, participantRole: rule.participantRole, stationIndex: slot.stationIndex,
         recipeId: recipe.recipeId, recipeRevision: recipe.recipeRevision, ruleId: rule.ruleId,
         ruleRevision: rule.ruleRevision, operationRole: rule.operationRole };
       operations.push({ operationId: contactOperationId(provenance),

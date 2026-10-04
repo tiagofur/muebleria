@@ -110,6 +110,38 @@ type FurnitureParameterRelationshipBinding struct {
 	// margins. When present, the parameter value no longer drives a single
 	// station count. familyId values must be unique; counts are >= 2.
 	Families []FurnitureRelationshipFamily `json:"families,omitempty"`
+	// Recipes declares the joint's versioned technical recipes inline —
+	// construction-authored intent that wins over server-resolved side
+	// recipes (authored-override-wins). One recipe pattern is applied to
+	// every target of the materialized relationship; the engine re-validates
+	// every rule fail-closed at resolve time.
+	Recipes []FurnitureParameterRecipeBinding `json:"recipes,omitempty"`
+}
+
+// FurnitureParameterRecipeBinding is one inline versioned per-contact recipe
+// declared by a structureRelationship binding (the ContactOperationRecipe
+// contract shape minus the contactId, which the resolver fills per target).
+type FurnitureParameterRecipeBinding struct {
+	RecipeID                 string                         `json:"recipeId"`
+	RecipeRevision           string                         `json:"recipeRevision"`
+	TechnicalProfileID       string                         `json:"technicalProfileId"`
+	TechnicalProfileRevision string                         `json:"technicalProfileRevision"`
+	Rules                    []FurnitureParameterRecipeRule `json:"rules"`
+}
+
+// FurnitureParameterRecipeRule is one inline machining rule (the
+// ContactOperationRule contract shape).
+type FurnitureParameterRecipeRule struct {
+	RuleID          string     `json:"ruleId"`
+	RuleRevision    string     `json:"ruleRevision"`
+	ParticipantRole string     `json:"participantRole"`
+	OperationRole   string     `json:"operationRole"`
+	EntryFace       string     `json:"entryFace"`
+	OffsetMm        [3]float64 `json:"offsetMm"` // contact axis, normal, axis × normal
+	Axis            [3]float64 `json:"axis"`
+	DiameterMm      float64    `json:"diameterMm"`
+	DepthMm         float64    `json:"depthMm"`
+	StationMode     string     `json:"stationMode,omitempty"` // '' | all | center
 }
 
 // FurnitureRelationshipFamily is one operation family inside a joint:
@@ -556,6 +588,41 @@ func validateFurnitureParameterBinding(definition FurnitureParameterDefinition, 
 		if b.Relationship == nil {
 			add("binding.relationship", "is required for structureRelationship")
 			return
+		}
+		for recipeIndex, recipe := range b.Relationship.Recipes {
+			path := fmt.Sprintf("binding.relationship.recipes[%d]", recipeIndex)
+			if strings.TrimSpace(recipe.RecipeID) == "" || strings.TrimSpace(recipe.RecipeRevision) == "" ||
+				strings.TrimSpace(recipe.TechnicalProfileID) == "" || strings.TrimSpace(recipe.TechnicalProfileRevision) == "" {
+				add(path, "recipeId, recipeRevision, technicalProfileId and technicalProfileRevision are required")
+			}
+			if len(recipe.Rules) == 0 {
+				add(path, "must contain at least one rule")
+				continue
+			}
+			seenRules := map[string]bool{}
+			for ruleIndex, rule := range recipe.Rules {
+				rulePath := fmt.Sprintf("%s.rules[%d]", path, ruleIndex)
+				if strings.TrimSpace(rule.RuleID) == "" || strings.TrimSpace(rule.RuleRevision) == "" ||
+					strings.TrimSpace(rule.OperationRole) == "" || seenRules[rule.RuleID] {
+					add(rulePath, "unique ruleId, ruleRevision and operationRole are required")
+				}
+				seenRules[rule.RuleID] = true
+				if rule.ParticipantRole != "A" && rule.ParticipantRole != "B" {
+					add(rulePath, "participantRole must be A or B")
+				}
+				if !FurnitureRelationshipAnchorFaces[rule.EntryFace] {
+					add(rulePath, "entryFace must be one of the six concrete board faces")
+				}
+				if rule.StationMode != "" && rule.StationMode != "all" && rule.StationMode != "center" {
+					add(rulePath, "stationMode must be empty, all, or center")
+				}
+				if rule.DiameterMm <= 0 || rule.DepthMm <= 0 {
+					add(rulePath, "diameterMm and depthMm must be positive")
+				}
+				if math.Abs(rule.Axis[0]*rule.Axis[0]+rule.Axis[1]*rule.Axis[1]+rule.Axis[2]*rule.Axis[2]-1) > 1e-6 {
+					add(rulePath, "axis must be a unit vector")
+				}
+			}
 		}
 		if strings.TrimSpace(b.Relationship.Kind) == "" {
 			add("binding.relationship.kind", "is required")

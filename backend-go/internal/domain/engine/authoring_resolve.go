@@ -594,21 +594,29 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 					ComponentInstanceID: source.id, Role: binding.Relationship.SourceRole,
 					Face: binding.Relationship.SourceFace,
 				}
+				// Inline recipes (construction-declared technical rules) ride
+				// the binding verbatim: authored intent that wins over
+				// server-resolved side recipes (injectResolvedSideRecipes
+				// only synthesizes when Recipes is empty).
+				relationshipID := fmt.Sprintf("parameter-%s-%d", definition.Name, index+1)
+				inlineRecipes := convertBindingRecipes(binding.Relationship.Recipes, relationshipID, targets)
 				// Families (#874 J2-A): construction-declared independent
 				// operation families replace the single parameter-driven
 				// station count; each family carries its own count/margins.
 				if len(binding.Relationship.Families) > 0 {
 					result = append(result, AuthoringRelationship{
-						RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1),
+						RelationshipID: relationshipID,
 						Kind:           binding.Relationship.Kind,
 						Source:         sourceAnchor, Targets: targets,
 						Families: convertBindingFamilies(binding.Relationship.Families),
+						Recipes:  inlineRecipes,
 					})
 				} else {
 					result = append(result, AuthoringRelationship{
-						RelationshipID: fmt.Sprintf("parameter-%s-%d", definition.Name, index+1),
+						RelationshipID: relationshipID,
 						Kind:           binding.Relationship.Kind,
 						Source:         sourceAnchor, Targets: targets, Parameters: parameters,
+						Recipes: inlineRecipes,
 					})
 				}
 				has[key] = true
@@ -627,6 +635,44 @@ func convertBindingFamilies(families []domain.FurnitureRelationshipFamily) []Aut
 		out = append(out, AuthoringRelationshipFamily{
 			FamilyID: family.FamilyID, Count: family.Count,
 			StartMarginMm: family.StartMarginMm, EndMarginMm: family.EndMarginMm,
+		})
+	}
+	return out
+}
+
+// convertBindingRecipes materializes one binding's inline recipe pattern into
+// per-target ContactOperationRecipes: every resolved target instance gets a
+// versioned recipe keyed by `{relationshipId}:{targetInstanceId}` (the #874
+// J2-B contact identity). One pattern covers every target; N patterns for N
+// targets map 1:1 (mirrored joints — front/back entry faces — declare one
+// pattern per side). The engine re-validates every rule fail-closed; the
+// stationMode passthrough carries the single-centered-fastener pattern.
+func convertBindingRecipes(patterns []domain.FurnitureParameterRecipeBinding, relationshipID string, targets []AuthoringRelationshipAnchor) []ContactOperationRecipe {
+	if len(patterns) == 0 || len(targets) == 0 {
+		return nil
+	}
+	out := make([]ContactOperationRecipe, 0, len(targets))
+	for index, target := range targets {
+		pattern := patterns[0]
+		if len(patterns) == len(targets) {
+			pattern = patterns[index]
+		}
+		rules := make([]ContactOperationRule, 0, len(pattern.Rules))
+		for _, rule := range pattern.Rules {
+			rules = append(rules, ContactOperationRule{
+				RuleID: rule.RuleID, RuleRevision: rule.RuleRevision,
+				ParticipantRole: rule.ParticipantRole, OperationRole: rule.OperationRole,
+				EntryFace: rule.EntryFace, OffsetMm: rule.OffsetMm, Axis: rule.Axis,
+				DiameterMm: rule.DiameterMm, DepthMm: rule.DepthMm, StationMode: rule.StationMode,
+			})
+		}
+		out = append(out, ContactOperationRecipe{
+			ContactID:                relationshipID + ":" + target.ComponentInstanceID,
+			RecipeID:                 pattern.RecipeID,
+			RecipeRevision:           pattern.RecipeRevision,
+			TechnicalProfileID:       pattern.TechnicalProfileID,
+			TechnicalProfileRevision: pattern.TechnicalProfileRevision,
+			Rules:                    rules,
 		})
 	}
 	return out

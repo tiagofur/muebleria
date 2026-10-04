@@ -744,3 +744,69 @@ func TestJ1ConflictingSameIDContactsOmitted(t *testing.T) {
 		}
 	}
 }
+
+// TestContactRuleStationModeCenter pins the single-centered-fastener rule
+// application: a "center" rule emits EXACTLY ONE operation at the contact
+// span midpoint (StationIndex -1) while "all" rules keep one per station.
+func TestContactRuleStationModeCenter(t *testing.T) {
+	f := readJ1ContactFixture(t)
+	resolution := resolveExplicitContacts(f.Boards, f.Contacts, f.RequiredContactIDs)
+	plans := planResolvedContactStations(resolution, f.Boards, f.StationSpecs)
+	if len(resolution.Issues) != 0 || len(plans.Issues) != 0 {
+		t.Fatalf("invalid shared fixture: %+v %+v", resolution.Issues, plans.Issues)
+	}
+	contact := resolution.Contacts[0]
+	plan := plans.Plans[0]
+	base := f.OperationRecipes[0]
+	span := contact.OverlapMm[1]
+	rules := append([]ContactOperationRule(nil), base.Rules...)
+	for i := range rules {
+		if rules[i].OperationRole == "pilot" && rules[i].ParticipantRole == "A" {
+			rules[i].StationMode = ContactRuleStationModeCenter
+		}
+	}
+	recipe := ContactOperationRecipe{ContactID: base.ContactID, RecipeID: base.RecipeID,
+		RecipeRevision: base.RecipeRevision, TechnicalProfileID: base.TechnicalProfileID,
+		TechnicalProfileRevision: base.TechnicalProfileRevision, Rules: rules}
+	got := deriveResolvedContactOperationsForContact(contact, plan, f.Boards, f.StationSpecs[0], recipe)
+	if len(got.Issues) != 0 {
+		t.Fatalf("center rule should derive cleanly: %+v", got.Issues)
+	}
+	pilotCount, pilotStationIndexes := 0, map[int]bool{}
+	var pilotDistance *float64
+	for _, operation := range got.Operations {
+		if operation.Provenance.RuleID != "pilot" || operation.Provenance.ParticipantRole != "A" {
+			continue
+		}
+		pilotCount++
+		pilotStationIndexes[operation.Provenance.StationIndex] = true
+		distance := math.Abs(operation.CenterLocalMm[0] - span/2)
+		if pilotDistance == nil || distance < *pilotDistance {
+			pilotDistance = &distance
+		}
+	}
+	if pilotCount != 1 {
+		t.Fatalf("center rule must emit exactly one pilot, got %d", pilotCount)
+	}
+	if !pilotStationIndexes[-1] {
+		t.Fatalf("center rule operation must carry StationIndex -1, got %v", pilotStationIndexes)
+	}
+	if pilotDistance == nil || *pilotDistance > 1e-6 {
+		t.Fatalf("center rule must land at the contact midpoint (span %.2f), off by %v", span, pilotDistance)
+	}
+	// "all" rules keep one operation per planned station.
+	for _, operation := range got.Operations {
+		if operation.Provenance.RuleID == "counterbore" {
+			if operation.Provenance.StationIndex < 0 || operation.Provenance.StationIndex >= len(plan.Stations) {
+				t.Fatalf("all-mode rule must stay on planned stations: %+v", operation.Provenance)
+			}
+		}
+	}
+	// An unknown mode fails closed.
+	bad := recipe
+	bad.Rules = append([]ContactOperationRule(nil), rules...)
+	bad.Rules[0].StationMode = "sometimes"
+	if issues := deriveResolvedContactOperationsForContact(contact, plan, f.Boards, f.StationSpecs[0], bad); len(issues.Issues) == 0 {
+		t.Fatal("unknown stationMode must fail closed with OPERATION_RULE_INVALID")
+	}
+}

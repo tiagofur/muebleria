@@ -103,6 +103,8 @@ var authoringManualMachiningProfiles = map[string]ManualMachiningProfile{
 	"BIS-BLUM-110":  {ProfileID: "hinge-blum-110-cup", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 35, PilotDepthMm: 13},
 	"HER-PLACA-BIS": {ProfileID: "hinge-plate-pilot-5", HoleType: "screw", BoardFace: "front", PilotDiameterMm: 5, PilotDepthMm: 10},
 	"JAL-TUB-SAT":   {ProfileID: "pull-tub-screw-5", HoleType: "screw", BoardFace: "front", PilotDiameterMm: 5, PilotDepthMm: 12},
+	"HER-TOR-3X20":  {ProfileID: "screw-pilot-3", HoleType: "screw", BoardFace: "front", PilotDiameterMm: 3, PilotDepthMm: 15},
+	"HER-TAQ-8X30":  {ProfileID: "dowel-pilot-8", HoleType: "dowel", BoardFace: "front", PilotDiameterMm: 8, PilotDepthMm: 10},
 }
 
 // ResolveHole is one board-local drilling hole of a machining operation

@@ -94,6 +94,10 @@ export type RelationshipRecipeRuleIntent = {
   readonly axis: readonly [number, number, number];
   readonly diameterMm: number;
   readonly depthMm: number;
+  /** Station applicability: '' / 'all' = every planned station; 'center' =
+   *  exactly one operation at the contact span midpoint (StationIndex -1) —
+   *  the single-centered-fastener pattern. Go parity: ContactOperationRule. */
+  readonly stationMode?: '' | 'all' | 'center';
 };
 
 /** Versioned per-contact technical recipe a fixed-shelf-side relationship

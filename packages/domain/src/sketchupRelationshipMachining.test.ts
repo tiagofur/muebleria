@@ -234,6 +234,33 @@ describe('J1-A1a paired operations for one exact contact', () => {
     expect(deriveRelationshipMachining(acceptedSnapshot(), cabinetJoineryCatalog).issues).toEqual([]);
   });
 
+  // #kdt-demo: the single-centered-fastener rule — a "center" stationMode
+  // rule emits EXACTLY ONE operation at the contact span midpoint
+  // (StationIndex -1); "all" rules stay per-station; unknown modes fail.
+  it('applies stationMode center rules once at the span midpoint', () => {
+    const contact = resolved.contacts[0]!;
+    const span = contact.overlapMm[1]!;
+    const base = recipes[0]!;
+    const rules = base.rules.map((rule) => (
+      rule.operationRole === 'pilot' && rule.participantRole === 'A'
+        ? { ...rule, stationMode: 'center' as const } : rule));
+    const recipe = { ...base, rules };
+    const result = derive(0, recipe);
+    expect(result.issues).toEqual([]);
+    const pilots = result.operations.filter((op) => op.provenance.ruleId === 'pilot' && op.provenance.participantRole === 'A');
+    expect(pilots).toHaveLength(1);
+    expect(pilots[0]!.provenance.stationIndex).toBe(-1);
+    expect(Math.abs(pilots[0]!.centerLocalMm[0]! - span / 2)).toBeLessThanOrEqual(1e-6);
+    for (const operation of result.operations) {
+      if (operation.provenance.ruleId !== 'pilot') {
+        expect(operation.provenance.stationIndex).toBeGreaterThanOrEqual(0);
+      }
+    }
+    const bad = { ...recipe, rules: rules.map((rule) => (
+      rule.participantRole === 'A' ? { ...rule, stationMode: 'sometimes' } : rule)) };
+    expect(derive(0, bad).issues.map((issue) => issue.code)).toContain('OPERATION_RULE_INVALID');
+  });
+
   it('keeps local machining invariant under rigid translation of the same occurrence', () => {
     const movedBoards = fixture.boards.map((board) => ({ ...board,
       translationMm: [board.translationMm[0] + 73, board.translationMm[1] - 41,
