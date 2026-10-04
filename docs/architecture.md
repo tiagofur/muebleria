@@ -586,10 +586,42 @@ explícito. Un path de negocio sin scope falla loud.
 
 ## 9. API, errores, concurrencia e idempotencia
 
-### OpenAPI
+### Contrato del API en dos capas
 
-Los DTOs de Identity, Organization Access, Organizations, Platform y Sales Network
-se generan desde OpenAPI. React no usa `res.json() as Type` como prueba de contrato.
+El API de Granete vive en dos capas de contrato. Un endpoint nuevo es de capa 1
+por defecto; una excepción de capa 2 se documenta en esta sección al momento.
+
+**Capa 1 — spec acotado v1 (contrato generado).** La fuente es
+`contracts/openapi/granete-api.v1.yaml`. El generador determinista
+`scripts/generate_openapi.py` produce de ella el cliente TS
+(`packages/storage/src/openapi/generated/types.ts` + `client.ts`) y los tipos
+Go (`backend-go/internal/api/openapi/generated/types.gen.go`); `pnpm
+openapi:check` falla si algún generado drifta. Cubre Organization Foundation
+(auth, organizations, memberships, platform, sales network), el digital thread
+(proyectos, diseños, furniture instances, manufacturing libraries, hardware
+assets, machine-output-selections) y endpoints de catálogo incorporados por
+paridad cross-surface (p. ej. side-assignments de componentes,
+`granete-api.v1.yaml:5547`). Corregir el spec corrige a todos los clientes de
+una vez (precedente: el 405 de side-assignments, #1049/#1050).
+
+**Capa 2 — CRUD hand-mapeado (fuera del spec).** El CRUD del catálogo de
+fabricación no tiene schemas en el spec: componentes, módulos, estructuras,
+materiales, edges, herrajes, perfiles HW, option groups, agregados, categorías,
+ambientes y clientes. Las rutas viven en
+`backend-go/internal/api/routes_catalog.go` (componentes: :142–146), los
+handlers en `backend-go/internal/api/modules_handlers.go` (`HandleComponents`
+:354, `HandleComponentByID` :395) y las queries en
+`backend-go/internal/storage/components.go`. El dominio `Component` vive en
+`backend-go/internal/domain/module.go` (:354) — nombre heredado del monolito
+pre-#1017. Lado TS: fetchers hand-mapeados en
+`packages/storage/src/apiWorkspaceRepository.ts` y mappers en
+`packages/storage/src/apiMappers.ts` (`componentToApi` :1155,
+`componentFromApi` :1201). El triple mapeo a mano (apiMappers TS ↔ tags JSON de
+`domain.Component` ↔ columnas SQL de `components.go`) aún no tiene corpus de
+paridad compartido: los round-trips TS y Go son la guarda actual.
+
+Los DTOs generados son la prueba de contrato: React no usa
+`res.json() as Type` como prueba de contrato.
 
 ### Error envelope
 
@@ -861,7 +893,8 @@ relationship, publication y price policy stale.
 - RBAC/capabilities: `packages/domain/src/rbac.ts`, contracts y enforcement Go;
 - lógica pura: `packages/domain`;
 - almacenamiento/server: `backend-go`;
-- API Organization Foundation: OpenAPI generado por #448 cuando se implemente;
+- Contrato del API: `contracts/openapi/granete-api.v1.yaml` — capa 1 generada;
+  ver §9 para las dos capas del API;
 - UX: `docs/design.md` + `docs/operational-ux.md`;
 - producto: `docs/prd-v2.md`;
 - plan: `docs/operational-core-v1.md`;
