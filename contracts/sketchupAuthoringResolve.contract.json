@@ -236,6 +236,13 @@
       "shelf-support": "minifix-dowel"
     },
     "machiningProfiles": {
+      "BIS-BLUM-110": {
+        "profileId": "hinge-blum-110-cup",
+        "holeType": "hinge",
+        "boardFace": "front",
+        "pilotDiameterMm": 35,
+        "pilotDepthMm": 13
+      },
       "BIS-CL100": {
         "profileId": "hinge-cup-32",
         "holeType": "hinge",
@@ -249,6 +256,20 @@
         "boardFace": "front",
         "pilotDiameterMm": 35,
         "pilotDepthMm": 12.5
+      },
+      "HER-PLACA-BIS": {
+        "profileId": "hinge-plate-pilot-5",
+        "holeType": "screw",
+        "boardFace": "front",
+        "pilotDiameterMm": 5,
+        "pilotDepthMm": 10
+      },
+      "JAL-TUB-SAT": {
+        "profileId": "pull-tub-screw-5",
+        "holeType": "screw",
+        "boardFace": "front",
+        "pilotDiameterMm": 5,
+        "pilotDepthMm": 12
       }
     },
     "machiningProfileContract": "granete.machining-profile.v1",
@@ -324,7 +345,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "materialChoices": {
             "FRENTE": "mat-oak18"
@@ -362,7 +383,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -1268,7 +1289,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -1356,7 +1377,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -2257,7 +2278,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -2370,7 +2391,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -3635,7 +3656,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3694,7 +3715,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -4221,7 +4242,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -4323,7 +4344,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -5216,7 +5237,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5288,7 +5309,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -6122,7 +6143,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "relationships": [
             {
@@ -6172,7 +6193,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -6195,7 +6216,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "relationships": [
             {
@@ -6245,7 +6266,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -6268,7 +6289,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -6301,7 +6322,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -6323,7 +6344,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -6431,7 +6452,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelf2Z": 520
@@ -6464,7 +6485,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -6486,7 +6507,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6550,7 +6571,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -6586,7 +6607,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6653,7 +6674,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -6674,7 +6695,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6734,7 +6755,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -7627,7 +7648,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -7695,7 +7716,7 @@
         "responseMessageId": "resolve-msg-fixture-unicode-step",
         "inReplyToMessageId": "msg-fixture-unicode-step",
         "idempotencyKey": "fixture:unicode-step:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -8596,7 +8617,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -8659,7 +8680,7 @@
         "responseMessageId": "resolve-msg-fixture-material-pbr",
         "inReplyToMessageId": "msg-fixture-material-pbr",
         "idempotencyKey": "fixture:material-pbr:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -9565,7 +9586,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -9637,7 +9658,7 @@
         "responseMessageId": "resolve-msg-fixture-cost-only-hardware",
         "inReplyToMessageId": "msg-fixture-cost-only-hardware",
         "idempotencyKey": "fixture:cost-only-hardware:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -10403,7 +10424,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "label": "custom",
@@ -10441,7 +10462,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -12062,7 +12083,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "hasBackPanel": true
@@ -12095,7 +12116,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -12988,7 +13009,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "hasBackPanel": false
@@ -13021,7 +13042,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -13859,7 +13880,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -13892,7 +13913,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -14785,7 +14806,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "softClose": "true"
@@ -14818,7 +14839,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -14845,7 +14866,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelfCount": 6
@@ -14878,7 +14899,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -14909,7 +14930,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "tiltDeg": 12.1
@@ -14942,7 +14963,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -14972,7 +14993,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "style": "ornate"
@@ -15005,7 +15026,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -15036,7 +15057,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -15069,7 +15090,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -15097,7 +15118,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -15189,7 +15210,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -16055,7 +16076,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -16147,7 +16168,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -16981,7 +17002,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -17059,7 +17080,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -17881,7 +17902,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -17976,7 +17997,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -18974,7 +18995,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -19069,7 +19090,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -20069,7 +20090,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -20164,7 +20185,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -21162,7 +21183,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "mod-comp-door",
@@ -21257,7 +21278,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -22255,7 +22276,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -22323,7 +22344,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -23224,7 +23245,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -23328,7 +23349,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -24405,7 +24426,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -24509,7 +24530,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -25492,7 +25513,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -25582,7 +25603,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -26538,7 +26559,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -26737,7 +26758,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -27665,7 +27686,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -27738,7 +27759,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -27761,7 +27782,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -27833,7 +27854,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -27856,7 +27877,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -27936,7 +27957,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "status": "rejected",
         "issues": [
           {
@@ -27959,7 +27980,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-50354d6c1473",
+          "catalogRevision": "workshop-8f5897cf2ad0",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -28062,7 +28083,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-50354d6c1473",
+        "catalogRevision": "workshop-8f5897cf2ad0",
         "libraryReleaseId": "f9160000-0000-0000-0000-000000000001",
         "status": "accepted",
         "normalizedSnapshot": {

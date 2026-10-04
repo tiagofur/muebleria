@@ -92,11 +92,17 @@ var authoringRelationshipKindDefaults = map[string]string{
 }
 
 // Versioned manual machining profiles keyed by hardware commercial code.
-// Hinges drill a pilot; pulls/knobs/slides ride the surface and drill
-// nothing (absent profile = no machining, never a guessed rule).
+// Hinges drill their cup; hinge plates drill their fixing pilots; a bar
+// pull drills its through mounting pilot. Anything without a profile rides
+// the surface and drills nothing (absent profile = no machining, never a
+// guessed rule). Cup/pilot values mirror each hardware's catalog machining
+// footprint (hardwares.machining) at the placement anchor point.
 var authoringManualMachiningProfiles = map[string]ManualMachiningProfile{
-	"BIS-CL110": {ProfileID: "hinge-cup-35", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 35, PilotDepthMm: 12.5},
-	"BIS-CL100": {ProfileID: "hinge-cup-32", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 32, PilotDepthMm: 12.5},
+	"BIS-CL110":     {ProfileID: "hinge-cup-35", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 35, PilotDepthMm: 12.5},
+	"BIS-CL100":     {ProfileID: "hinge-cup-32", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 32, PilotDepthMm: 12.5},
+	"BIS-BLUM-110":  {ProfileID: "hinge-blum-110-cup", HoleType: "hinge", BoardFace: "front", PilotDiameterMm: 35, PilotDepthMm: 13},
+	"HER-PLACA-BIS": {ProfileID: "hinge-plate-pilot-5", HoleType: "screw", BoardFace: "front", PilotDiameterMm: 5, PilotDepthMm: 10},
+	"JAL-TUB-SAT":   {ProfileID: "pull-tub-screw-5", HoleType: "screw", BoardFace: "front", PilotDiameterMm: 5, PilotDepthMm: 12},
 }
 
 // ResolveHole is one board-local drilling hole of a machining operation
