@@ -117,7 +117,6 @@ import {
   releaseBomItemsToProjectItems,
   buildMaterialRequirements,
   consumePlannedMaterials,
-  reportQualityIssue,
   captureCostBaseline,
   setLaborRate,
   recordTimeEntry,
@@ -133,10 +132,6 @@ import {
   verifySiteSurvey,
   approveSpaceMeasures,
   freezeMeasuresForFabrication,
-  transitionQualityIssue,
-  recordReworkAction,
-  recordUnitQc,
-  overrideUnitQc,
   type ReworkActionType,
   type QualityIssueCategory,
 } from '@granete/domain';
@@ -216,9 +211,6 @@ import {
   PageLoading,
   buildProductionOrderReadiness,
   type CommandPaletteItem,
-  qualityPanelView,
-  type QualityPanelView,
-  type QualityHandlers,
   costingPanelView,
   MATERIAL_BASIS_LABELS_ES,
   type CostingPanelView,
@@ -246,6 +238,7 @@ import { useExportHandlers } from './exports/useExportHandlers';
 import { useMachineOutputSelections } from './exports/useMachineOutputSelections';
 import { useProductionActions } from './production/useProductionActions';
 import { useMaterialPlanning } from './materials/useMaterialPlanning';
+import { useQualityActions } from './quality/useQualityActions';
 import { buildStockCatalog } from './derivations/stockCatalog';
 import { usePurchasingDerivations } from './derivations/usePurchasingDerivations';
 import { useQuoteDerivations } from './derivations/useQuoteDerivations';
@@ -1628,102 +1621,8 @@ export function AppContent({
     requirementLinesFor,
   });
 
-  /**
-   * #302 (OC-060..OC-062) — quality actions: report issues, rework with
-   * costing (physical piece effect included), per-unit QC checklist and the
-   * audited supervisor override.
-   */
-  const runQualityAction = useCallback(
-    (
-      projectId: string,
-      opts: {
-        api?: (repo: ReturnType<typeof getRepository>) => Promise<unknown> | null;
-        local: (project: Project) => { project: Project };
-        successMessage: string;
-      },
-    ) => {
-      const project = projectActions.projects.find((p) => p.id === projectId);
-      if (!project) return;
-      let local: { project: Project };
-      try {
-        local = opts.local(project);
-      } catch (err) {
-        toast({
-          type: 'error',
-          message: err instanceof Error && err.message ? err.message : 'Acción de calidad inválida',
-        });
-        return;
-      }
-      const repo = getRepository();
-      const apiPromise = opts.api ? opts.api(repo) : null;
-      if (apiPromise) {
-        void apiPromise
-          .then(() => {
-            projectActions.applyQualityProject(projectId, local.project);
-            toast({ type: 'success', message: opts.successMessage });
-          })
-          .catch((err) => {
-            toast({
-              type: 'error',
-              message: err instanceof Error && err.message ? err.message : 'No se pudo completar la acción de calidad',
-            });
-          });
-        return;
-      }
-      projectActions.applyQualityProject(projectId, local.project);
-      toast({ type: 'success', message: opts.successMessage });
-    },
-    [getRepository, projectActions, toast],
-  );
-
-  const qualityHandlers = useMemo<QualityHandlers>(
-    () => ({
-      onReportIssue: (projectId, payload) =>
-        runQualityAction(projectId, {
-          api: (repo) => (repo.reportQualityIssue ? repo.reportQualityIssue(projectId, payload) : null),
-          local: (p) => reportQualityIssue(p, payload),
-          successMessage: '✓ Problema de calidad reportado',
-        }),
-      onRework: (projectId, payload) =>
-        runQualityAction(projectId, {
-          api: (repo) => (repo.recordQualityRework ? repo.recordQualityRework(projectId, payload) : null),
-          local: (p) => recordReworkAction(p, payload.issueId, payload),
-          successMessage: '✓ Retrabajo registrado con costo',
-        }),
-      onTransition: (projectId, issueId, toStatus, notes) =>
-        runQualityAction(projectId, {
-          api: (repo) =>
-            repo.transitionQualityIssue ? repo.transitionQualityIssue(projectId, issueId, toStatus, notes) : null,
-          local: (p) => transitionQualityIssue(p, issueId, toStatus, { notes }),
-          successMessage: '✓ Estado de calidad actualizado',
-        }),
-      onRecordQc: (projectId, unitId, checklist) =>
-        runQualityAction(projectId, {
-          api: (repo) => (repo.recordQualityUnitQc ? repo.recordQualityUnitQc(projectId, unitId, checklist) : null),
-          local: (p) => recordUnitQc(p, unitId, { checklist }),
-          successMessage: '✓ QC de unidad registrado',
-        }),
-      onOverrideQc: (projectId, unitId, reason) =>
-        runQualityAction(projectId, {
-          api: (repo) => (repo.overrideQualityUnitQc ? repo.overrideQualityUnitQc(projectId, unitId, reason) : null),
-          local: (p) => overrideUnitQc(p, unitId, { reason }),
-          successMessage: '✓ Override de QC registrado (auditado)',
-        }),
-    }),
-    [runQualityAction],
-  );
-
-  /** Quality view per project with units at/past the QC gate. */
-  const qualityByProject = useMemo<Readonly<Record<string, QualityPanelView>>>(() => {
-    const entries = projectActions.projects
-      .filter(
-        (p) =>
-          (p.moduleUnits ?? []).some((u) => u.status === 'module_qc' || u.status === 'packaged') ||
-          (p.quality?.issues.length ?? 0) > 0,
-      )
-      .map((project) => [project.id, qualityPanelView(project)] as const);
-    return Object.fromEntries(entries);
-  }, [projectActions.projects]);
+  // R5 #1074 — quality actions live in ./quality/useQualityActions (verbatim move).
+  const { qualityHandlers, qualityByProject } = useQualityActions();
 
   // ── Job costing (OC-080..OC-084, #304) ────────────────────────────────────
   // Views resolve locally from the project aggregate; when the server costing
