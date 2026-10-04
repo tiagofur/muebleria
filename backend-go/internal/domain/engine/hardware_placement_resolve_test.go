@@ -31,8 +31,8 @@ func oneDoorCabinetWithHingeGroup(requiredGroup bool) (domain.Module, domain.Cat
 		if module.Components[i].ComponentID == "comp-door" {
 			module.Components[i].Overrides = &domain.ComponentInstanceOverrides{
 				HardwarePlacements: []domain.HardwarePlacement{{
-					OptionRole:  "BISAGRA",
-					AnchorFace:  "front",
+					OptionRole:       "BISAGRA",
+					AnchorFace:       "front",
 					RelativePosition: domain.HardwareRelPosition{XMm: 100, YMm: 100},
 				}},
 			}

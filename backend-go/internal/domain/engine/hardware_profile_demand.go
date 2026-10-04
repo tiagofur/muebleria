@@ -9,9 +9,12 @@ import (
 // DeriveHardwareProfileDemand projects the commercial consumption of the
 // resolved profiles (#917): for every relationship that reached
 // MACHINING_READY through server-resolved profiles, each VERIFIED contact
-// consumes one application of the profile's items. Aggregated by catalog
-// hardware id with a per-relationship provenance trail. The source is the
-// profile RESOLUTION (assignments × pinned items) — never the drilling
+// consumes one application of the profile's items PER PLANNED STATION
+// (#1065) — a spacing-derived joint plans more stations on a bigger span,
+// and the purchase lines must scale with what the fitter actually installs,
+// not with a fixed per-contact count. Aggregated by catalog hardware id with
+// a per-relationship provenance trail. The source is the profile RESOLUTION
+// (assignments × pinned items × planned stations) — never the drilling
 // output: a hardware producing five operations is still one purchase line,
 // and the machining geometry stays out of the commercial path.
 //
@@ -54,14 +57,28 @@ func DeriveHardwareProfileDemand(
 		if !ok || status.Stage != JoineryMachiningReady {
 			continue
 		}
+		stationCountByContact := map[string]int{}
+		for _, count := range status.Stations.StationCounts {
+			stationCountByContact[count.ContactID] = count.StationCount
+		}
 		verifiedContacts := 0
+		plannedStations := 0
 		for _, contact := range status.Contacts {
-			if contact.Status == "VALID" {
-				verifiedContacts++
+			if contact.Status != "VALID" {
+				continue
 			}
+			verifiedContacts++
+			plannedStations += stationCountByContact[contact.ContactID]
 		}
 		if verifiedContacts == 0 {
 			continue
+		}
+		if plannedStations == 0 {
+			// A MACHINING_READY relationship always publishes station plans
+			// for its verified contacts; this branch only keeps legacy
+			// statuses without plans behaving exactly as before instead of
+			// collapsing their demand to zero.
+			plannedStations = verifiedContacts
 		}
 		recipe := recipeByRelationship[status.RelationshipID]
 		for _, item := range profile.Items {
@@ -71,7 +88,7 @@ func DeriveHardwareProfileDemand(
 				byHardware[item.HardwareID] = line
 				order = append(order, item.HardwareID)
 			}
-			line.quantity += item.Quantity * float64(verifiedContacts)
+			line.quantity += item.Quantity * float64(plannedStations)
 			line.sources = append(line.sources, HardwareProfileDemandSource{
 				TechnicalProfileID:       profile.ID,
 				TechnicalProfileRevision: profile.Revision,
@@ -79,6 +96,7 @@ func DeriveHardwareProfileDemand(
 				RecipeRevision:           recipe[1],
 				RelationshipID:           status.RelationshipID,
 				ContactCount:             verifiedContacts,
+				StationCount:             plannedStations,
 			})
 		}
 	}

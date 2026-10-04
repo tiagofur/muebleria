@@ -166,6 +166,17 @@ async function seedPolicyCatalog(token: string, tenant: 'a' | 'b', run: 't1' | '
   return MODULE_ID;
 }
 
+/** The seed provisions the tuned construction policy (#1065): tests that
+ * pin the NO-policy baseline restore inheritance explicitly. */
+async function clearConstructionPolicy(token: string): Promise<void> {
+  const active = await client.getActiveStandardLibraryOverlay(token);
+  if (!active) return;
+  const remaining = Object.fromEntries(
+    Object.entries((active.overrides ?? {}) as Record<string, unknown>).filter(([key]) => !key.startsWith('joint.')),
+  );
+  await client.updateLibraryOverlay(token, active.id, active.version, { overrides: remaining });
+}
+
 async function saveShelfPolicy(token: string, stations: number): Promise<void> {
   const overrides: Record<string, unknown> = {
     'joint.shelfToSide.systemId': 'minifix-dowel',
@@ -256,6 +267,7 @@ test.describe.serial('Factory policy governs the real resolve (#875 slice 2)', (
     const { profileId } = (await seeded.json()) as { profileId: string };
     expect(profileId, 'seed returns the provisioned profile id').toBeTruthy();
     const moduleId = await seedPolicyCatalog(tokenA, 'a', 't1', profileId);
+    await clearConstructionPolicy(tokenA);
 
     // 0. Baseline: no factory policy → the definition default governs.
     const base = shelfEvidence(await resolveDefinitionDefault(tokenA, moduleId));

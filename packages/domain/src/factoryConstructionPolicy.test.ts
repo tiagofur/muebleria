@@ -106,6 +106,87 @@ describe('FactoryConstructionPolicy (#875)', () => {
     expect(policy).toEqual(DEFAULT_FACTORY_CONSTRUCTION_POLICY);
   });
 
+  it('round-trips a spacing-derived factory rule (#1065): maxSpacingMm replaces the count key', () => {
+    const spacingPolicy: FactoryConstructionPolicy = {
+      ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+      floorToSide: {
+        ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide,
+        stationsCount: 0,
+        maxSpacingMm: 250,
+        provenance: 'factory',
+      },
+    };
+
+    const overrides = policyToOverlayOverrides(spacingPolicy);
+    expect(overrides['joint.floorToSide.maxSpacingMm']).toBe(250);
+    expect(overrides['joint.floorToSide.stationsCount']).toBeUndefined();
+
+    const reconstituted = overlayOverridesToPolicy(overrides);
+    expect(reconstituted.floorToSide.maxSpacingMm).toBe(250);
+    expect(reconstituted.floorToSide.stationsCount).toBe(0);
+    expect(reconstituted.floorToSide.provenance).toBe('factory');
+    expect(validateConstructionPolicy(reconstituted).valid).toBe(true);
+  });
+
+  it('reads granular spacing keys and zeroes the count like the Go parser (#1065)', () => {
+    const policy = overlayOverridesToPolicy({
+      'joint.shelfToSide.systemId': 'minifix-dowel',
+      'joint.shelfToSide.maxSpacingMm': 400,
+      'joint.shelfToSide.startMarginMm': 40,
+      'joint.shelfToSide.endMarginMm': 60,
+    });
+    expect(policy.shelfToSide.provenance).toBe('factory');
+    expect(policy.shelfToSide.maxSpacingMm).toBe(400);
+    expect(policy.shelfToSide.stationsCount).toBe(0);
+  });
+
+  it('flags a rule declaring both patterns and an invalid spacing (#1065)', () => {
+    const both: FactoryConstructionPolicy = {
+      ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+      floorToSide: {
+        ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide,
+        stationsCount: 3,
+        maxSpacingMm: 250,
+        provenance: 'factory',
+      },
+    };
+    const res = validateConstructionPolicy(both);
+    expect(res.valid).toBe(false);
+    expect(res.issues).toContain('floorToSide: declare either stationsCount or maxSpacingMm, never both');
+
+    const invalidSpacing: FactoryConstructionPolicy = {
+      ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+      shelfToSide: {
+        ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide,
+        stationsCount: 0,
+        maxSpacingMm: -1,
+        provenance: 'factory',
+      },
+    };
+    const spacingRes = validateConstructionPolicy(invalidSpacing);
+    expect(spacingRes.valid).toBe(false);
+    expect(spacingRes.issues).toContain('shelfToSide: maxSpacingMm must be a positive finite number');
+  });
+
+  it('keeps a component spacing exception through the structured blob (#1065)', () => {
+    const policy: FactoryConstructionPolicy = {
+      ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+      componentOverrides: {
+        'comp-1': {
+          componentId: 'comp-1',
+          maxSpacingMm: 300,
+          startMarginMm: 45,
+          provenance: 'component',
+        },
+      },
+    };
+    const overrides = policyToOverlayOverrides(policy);
+    const blob = overrides['joint.constructionPolicy'] as { componentOverrides?: Record<string, { maxSpacingMm?: number }> };
+    expect(blob.componentOverrides?.['comp-1']?.maxSpacingMm).toBe(300);
+    const reconstituted = overlayOverridesToPolicy(overrides);
+    expect(reconstituted.componentOverrides?.['comp-1']?.maxSpacingMm).toBe(300);
+  });
+
   it('restoreInheritance cleanly removes an override without copying the current value', () => {
     const customPolicy: FactoryConstructionPolicy = {
       ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,

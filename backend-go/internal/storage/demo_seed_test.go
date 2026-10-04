@@ -2,7 +2,7 @@ package storage_test
 
 import (
 	"context"
-
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -12,6 +12,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -86,6 +87,93 @@ func TestDemoSeedPublishesStandardRelease(t *testing.T) {
 	again, err := store.GetCurrentPublishedRelease(ctx, uuid.MustParse(domain.GraneteStandardLibraryID))
 	if err != nil || again.ID != release.ID {
 		t.Fatalf("second run changed the published release: %+v err=%v", again, err)
+	}
+}
+
+// TestDemoSeedProvisionsTunedConstructionPolicy (#1065): the demo seed
+// provisions the org's factory construction overlay with the spacing-derived
+// patterns (Taller inicial afinada), idempotently, and never touches an org
+// that already owns an active overlay.
+func TestDemoSeedProvisionsTunedConstructionPolicy(t *testing.T) {
+	migrationPool := multiOrgFreshMigrationDB(t)
+	store := &storage.PostgresStore{Pool: migrationPool}
+	ctx := storage.WithOrgCtx(context.Background(), storage.InitialOrganizationID)
+	if err := store.RunMigrations(ctx); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	if err := store.SeedCatalog(ctx); err != nil {
+		t.Fatalf("seed catalog: %v", err)
+	}
+	orgID := uuid.MustParse(initialOrgIDForSeedTest(ctx))
+	libraryID := uuid.MustParse(domain.GraneteStandardLibraryID)
+
+	if err := store.SeedCatalog(ctx); err != nil {
+		t.Fatalf("re-seed catalog: %v", err)
+	}
+	if err := application.ProvisionDemoProfileForOrg(ctx, store, initialOrgIDForSeedTest(ctx)); err != nil {
+		t.Fatalf("provision profile: %v", err)
+	}
+	created, err := application.ProvisionDemoConstructionPolicyForOrg(ctx, store, initialOrgIDForSeedTest(ctx))
+	if err != nil || !created {
+		t.Fatalf("provision policy: created=%v err=%v", created, err)
+	}
+
+	overlay, err := store.GetActiveOverlayByLibrary(ctx, orgID, libraryID)
+	if err != nil {
+		t.Fatalf("active overlay: %v", err)
+	}
+	policy, err := engine.ParseFactoryConstructionPolicy(overlay.Overrides)
+	if err != nil {
+		t.Fatalf("seeded policy must parse: %v", err)
+	}
+	if policy.FloorToSide == nil || policy.FloorToSide.MaxSpacingMm == nil || *policy.FloorToSide.MaxSpacingMm != 250 {
+		t.Fatalf("floor family must be spacing-derived at 250mm: %+v", policy.FloorToSide)
+	}
+	if policy.ShelfToSide == nil || policy.ShelfToSide.MaxSpacingMm == nil || *policy.ShelfToSide.MaxSpacingMm != 400 {
+		t.Fatalf("shelf family must be spacing-derived at 400mm: %+v", policy.ShelfToSide)
+	}
+	if policy.FloorToSide.StationsCount != 0 || policy.ShelfToSide.StationsCount != 0 {
+		t.Fatalf("spacing rules must not carry counts: %+v %+v", policy.FloorToSide, policy.ShelfToSide)
+	}
+
+	// Idempotent: a re-provision with nothing to rewrite is a version-stable no-op.
+	version := overlay.Version
+	createdAgain, err := application.ProvisionDemoConstructionPolicyForOrg(ctx, store, initialOrgIDForSeedTest(ctx))
+	if err != nil || createdAgain {
+		t.Fatalf("re-provision must be a no-op: created=%v err=%v", createdAgain, err)
+	}
+	again, err := store.GetActiveOverlayByLibrary(ctx, orgID, libraryID)
+	if err != nil || again.Version != version {
+		t.Fatalf("re-provision changed the overlay: %+v err=%v", again, err)
+	}
+
+	// The seed OWNS the joint.* namespace: a stale key from an older era
+	// (a stationsCount saved over the spacing default) is rewritten on the
+	// next seed, and a foreign key outside the namespace survives.
+	if err := store.UpdateOverlayOverrides(ctx, overlay.ID, overlay.Version,
+		json.RawMessage(`{"joint.floorToSide.stationsCount": 5, "joint.shelfToSide.maxSpacingMm": 900, "custom.branding": "mine"}`), nil); err != nil {
+		t.Fatalf("stale overlay write: %v", err)
+	}
+	createdThird, err := application.ProvisionDemoConstructionPolicyForOrg(ctx, store, initialOrgIDForSeedTest(ctx))
+	if err != nil || !createdThird {
+		t.Fatalf("re-provision after drift: created=%v err=%v", createdThird, err)
+	}
+	final, err := store.GetActiveOverlayByLibrary(ctx, orgID, libraryID)
+	if err != nil {
+		t.Fatalf("final overlay: %v", err)
+	}
+	var finalOverrides map[string]any
+	if err := json.Unmarshal(final.Overrides, &finalOverrides); err != nil {
+		t.Fatalf("decode final overrides: %v", err)
+	}
+	if finalOverrides["joint.shelfToSide.maxSpacingMm"] != 400.0 || finalOverrides["joint.floorToSide.maxSpacingMm"] != 250.0 {
+		t.Fatalf("the tuned joint keys must be exactly the seeded set: %+v", finalOverrides)
+	}
+	if _, drifted := finalOverrides["joint.floorToSide.stationsCount"]; drifted {
+		t.Fatalf("the stale count key must be gone from the seed namespace: %+v", finalOverrides)
+	}
+	if finalOverrides["custom.branding"] != "mine" {
+		t.Fatalf("foreign keys survive the rewrite: %+v", finalOverrides)
 	}
 }
 

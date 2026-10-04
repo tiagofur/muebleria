@@ -183,11 +183,14 @@ func TestProductionReleaseFreezesFactoryConstructionPolicy(t *testing.T) {
 	if r1d15 != 16 || r1d8 != 16 {
 		t.Fatalf("R1 frozen routing must carry exactly the 4-station pattern: d15=%d d8=%d", r1d15, r1d8)
 	}
-	if r1Demand[hwA] != 4 {
-		t.Fatalf("R1 demand = %+v, want 2 units x 2 contacts of the pinned profile hardware", r1Demand)
+	// #1065: demand applies the profile items PER PLANNED STATION — the same
+	// 2 units x 2 contacts x 4 stations the frozen routing drills — never
+	// the old per-contact count that bought half the fasteners.
+	if r1Demand[hwA] != 16 {
+		t.Fatalf("R1 demand = %+v, want 2 units x 2 contacts x 4 stations of the pinned profile hardware", r1Demand)
 	}
-	if r1Requirements[hwA] != 4 {
-		t.Fatalf("R1 requirements = %+v, want the demand merged into herrajes before rounding", r1Requirements)
+	if r1Requirements[hwA] != 16 {
+		t.Fatalf("R1 requirements = %+v, want the 16-station demand merged into herrajes before rounding", r1Requirements)
 	}
 
 	// 4. The factory changes its policy to 2.
@@ -217,16 +220,16 @@ func TestProductionReleaseFreezesFactoryConstructionPolicy(t *testing.T) {
 		t.Fatalf("R1 snapshot bytes changed after an unrelated policy edit")
 	}
 
-	// 6-7. R2 under policy 2 freezes the NEW pattern; per-contact demand is
-	// station-independent (#917).
+	// 6-7. R2 under policy 2 freezes the NEW pattern; demand applies the
+	// items per planned station (#1065), scaling with the pattern.
 	r2 := createRelease("R2")
 	r2d15, r2d8, r2Demand, r2Requirements, _ := readFrozen(t, r2.Release.ID)
 	// 2 units x 2 contacts x 2 stations: the NEW policy, never R1's.
 	if r2d15 != 8 || r2d8 != 8 {
 		t.Fatalf("R2 frozen routing must carry exactly the 2-station pattern: d15=%d d8=%d", r2d15, r2d8)
 	}
-	if r2Demand[hwA] != 4 || r2Requirements[hwA] != 4 {
-		t.Fatalf("R2 demand/requirements = %+v / %+v, want the per-contact demand", r2Demand, r2Requirements)
+	if r2Demand[hwA] != 8 || r2Requirements[hwA] != 8 {
+		t.Fatalf("R2 demand/requirements = %+v / %+v, want the 2-units x 2-contacts x 2-stations demand", r2Demand, r2Requirements)
 	}
 
 	// 8. Both releases remain independent frozen truths.

@@ -2,6 +2,10 @@ package application
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -67,4 +71,111 @@ func ProvisionDemoProfileForOrg(ctx context.Context, store interface {
 		{HardwareID: storage.SeededIDForOrg(orgID, seedDemoTaqueteID), Quantity: 1, ApplicationRole: "dowel"},
 	}
 	return store.CreateHardwareProfile(ctx, profile)
+}
+
+// demoConstructionPolicyOverrides is the tuned "Taller inicial" construction
+// policy (#1065): spacing-derived station patterns per engine-resolvable
+// family. Every provisioned org starts with dimension-driven drilling — a
+// 400mm and a 1000mm cabinet derive their own fastener counts from the same
+// rule — and can re-customize or restore inheritance in Ajustes →
+// Construcción. Families the engine cannot resolve yet (top-to-side, #874)
+// stay inherited: honest absence, never fake coverage.
+// Granular keys ONLY, no `joint.constructionPolicy` structured blob: the
+// flat form is the canonical merge surface — a later writer that adds
+// granular keys (the settings UI, tests, future API flows) can never be
+// silently overridden by a stale structured blob, because there isn't one.
+func demoConstructionPolicyOverrides() json.RawMessage {
+	return json.RawMessage(`{
+		"joint.floorToSide.systemId": "minifix-dowel",
+		"joint.floorToSide.maxSpacingMm": 250,
+		"joint.floorToSide.startMarginMm": 50,
+		"joint.floorToSide.endMarginMm": 50,
+		"joint.floorToSide.withDowels": true,
+		"joint.shelfToSide.systemId": "minifix-dowel",
+		"joint.shelfToSide.maxSpacingMm": 400,
+		"joint.shelfToSide.startMarginMm": 50,
+		"joint.shelfToSide.endMarginMm": 50,
+		"joint.shelfToSide.withDowels": true
+	}`)
+}
+
+// ProvisionDemoConstructionPolicyForOrg idempotently provisions the org's
+// factory construction overlay with the tuned demo policy. The seed OWNS the
+// `joint.*` namespace of the demo org: every /seed rewrites it to exactly
+// the tuned granular keys (dropping stale keys from older provisions —
+// including any legacy structured blob) and leaves every foreign key
+// untouched, so a re-seeded workshop converges on the tuned baseline
+// instead of accumulating era-mixed patterns. Outside the namespace the
+// overlay belongs to the factory (#875 C1) and is never touched.
+func ProvisionDemoConstructionPolicyForOrg(ctx context.Context, store interface {
+	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
+	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
+	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
+}, orgID string) (bool, error) {
+	orgIDParsed, err := uuid.Parse(orgID)
+	if err != nil {
+		return false, err
+	}
+	libraryID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	tunedRaw := map[string]any{}
+	if err := json.Unmarshal(demoConstructionPolicyOverrides(), &tunedRaw); err != nil {
+		return false, err
+	}
+	tuned := map[string]any{}
+	domain.FlattenMap("", tunedRaw, tuned)
+	overlay, err := store.GetActiveOverlayByLibrary(ctx, orgIDParsed, libraryID)
+	if errors.Is(err, storage.ErrOverlayNotFound) {
+		overlay = &domain.LibraryOverlay{
+			OrganizationID: orgIDParsed,
+			LibraryID:      libraryID,
+			BaseReleaseID:  uuid.MustParse(domain.GraneteStandardDraftReleaseID),
+			Status:         "active",
+			Overrides:      demoConstructionPolicyOverrides(),
+		}
+		if _, err := store.CreateOverlay(ctx, overlay); err != nil {
+			return false, err
+		}
+		return true, nil
+	} else if err != nil {
+		return false, err
+	}
+
+	var overrides map[string]any
+	if len(overlay.Overrides) > 0 {
+		if err := json.Unmarshal(overlay.Overrides, &overrides); err != nil {
+			return false, fmt.Errorf("decode overlay overrides: %w", err)
+		}
+	}
+	next := make(map[string]any, len(overrides)+len(tuned))
+	for key, value := range overrides {
+		if strings.HasPrefix(key, "joint.") {
+			continue // the seed's namespace: rewritten to the tuned set
+		}
+		next[key] = value
+	}
+	for key, value := range tuned {
+		next[key] = value
+	}
+	if jsonEqual(overlay.Overrides, next) {
+		return false, nil // already exactly the tuned policy: version-stable no-op
+	}
+	merged, err := json.Marshal(next)
+	if err != nil {
+		return false, err
+	}
+	return true, store.UpdateOverlayOverrides(ctx, overlay.ID, overlay.Version, merged, overlay.CustomResourceIDs)
+}
+
+// jsonEqual compares stored overrides with a rebuilt map without marshaling
+// noise deciding the outcome.
+func jsonEqual(raw json.RawMessage, rebuilt map[string]any) bool {
+	var stored map[string]any
+	if len(raw) == 0 {
+		stored = map[string]any{}
+	} else if err := json.Unmarshal(raw, &stored); err != nil {
+		return false
+	}
+	storedJSON, errA := json.Marshal(stored)
+	rebuiltJSON, errB := json.Marshal(rebuilt)
+	return errA == nil && errB == nil && string(storedJSON) == string(rebuiltJSON)
 }

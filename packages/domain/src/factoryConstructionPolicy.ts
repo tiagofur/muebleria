@@ -33,6 +33,12 @@ export interface JointFamilyRule {
   readonly stationsCount: number;
   readonly startMarginMm: number;
   readonly endMarginMm: number;
+  /** Spacing-derived alternative to stationsCount (#1065): each joint's
+   * count derives from its real usable span (count = max(2, floor(span /
+   * maxSpacing) + 1)), so furniture dimensions scale the fastener count.
+   * Mutually exclusive with stationsCount; when set the engine ignores and
+   * the editor must not persist stationsCount for the same rule. */
+  readonly maxSpacingMm?: number;
   readonly minifixCode?: string;
   readonly dowelCode?: string;
   readonly screwCode?: string;
@@ -55,6 +61,9 @@ export interface ComponentConstructionOverride {
   readonly stationsCount?: number;
   readonly startMarginMm?: number;
   readonly endMarginMm?: number;
+  /** Spacing exception (#1065): replaces the whole pattern — the resolved
+   * rule derives counts from the contact span instead of a fixed count. */
+  readonly maxSpacingMm?: number;
   readonly provenance?: JoineryProvenance;
 }
 
@@ -136,6 +145,31 @@ export function isConstructionPolicyOwnedKey(key: string): boolean {
   );
 }
 
+/**
+ * Flatten one joint family into its granular overlay keys. A spacing-derived
+ * rule (#1065) replaces the count key — the two patterns are mutually
+ * exclusive and the engine refuses a rule carrying both.
+ */
+function jointFamilyOverlayEntries(
+  prefix: string,
+  rule: JointFamilyRule,
+): Record<string, unknown> {
+  const overrides: Record<string, unknown> = {};
+  overrides[`${prefix}.systemId`] = rule.systemId;
+  if (rule.maxSpacingMm !== undefined) {
+    overrides[`${prefix}.maxSpacingMm`] = rule.maxSpacingMm;
+  } else {
+    overrides[`${prefix}.stationsCount`] = rule.stationsCount;
+  }
+  overrides[`${prefix}.startMarginMm`] = rule.startMarginMm;
+  overrides[`${prefix}.endMarginMm`] = rule.endMarginMm;
+  if (rule.minifixCode) overrides[`${prefix}.minifixCode`] = rule.minifixCode;
+  if (rule.dowelCode) overrides[`${prefix}.dowelCode`] = rule.dowelCode;
+  if (rule.screwCode) overrides[`${prefix}.screwCode`] = rule.screwCode;
+  if (rule.withDowels !== undefined) overrides[`${prefix}.withDowels`] = rule.withDowels;
+  return overrides;
+}
+
 /** Convert a typed FactoryConstructionPolicy into flattened overlay overrides with `joint.` prefix. */
 export function policyToOverlayOverrides(policy: FactoryConstructionPolicy): Record<string, unknown> {
   const overrides: Record<string, unknown> = {};
@@ -153,38 +187,17 @@ export function policyToOverlayOverrides(policy: FactoryConstructionPolicy): Rec
 
   if (policy.floorToSide.provenance === 'factory') {
     structuredPolicy.floorToSide = { ...policy.floorToSide, provenance: 'factory' };
-    overrides['joint.floorToSide.systemId'] = policy.floorToSide.systemId;
-    overrides['joint.floorToSide.stationsCount'] = policy.floorToSide.stationsCount;
-    overrides['joint.floorToSide.startMarginMm'] = policy.floorToSide.startMarginMm;
-    overrides['joint.floorToSide.endMarginMm'] = policy.floorToSide.endMarginMm;
-    if (policy.floorToSide.minifixCode) overrides['joint.floorToSide.minifixCode'] = policy.floorToSide.minifixCode;
-    if (policy.floorToSide.dowelCode) overrides['joint.floorToSide.dowelCode'] = policy.floorToSide.dowelCode;
-    if (policy.floorToSide.screwCode) overrides['joint.floorToSide.screwCode'] = policy.floorToSide.screwCode;
-    if (policy.floorToSide.withDowels !== undefined) overrides['joint.floorToSide.withDowels'] = policy.floorToSide.withDowels;
+    Object.assign(overrides, jointFamilyOverlayEntries('joint.floorToSide', policy.floorToSide));
   }
 
   if (policy.topToSide.provenance === 'factory') {
     structuredPolicy.topToSide = { ...policy.topToSide, provenance: 'factory' };
-    overrides['joint.topToSide.systemId'] = policy.topToSide.systemId;
-    overrides['joint.topToSide.stationsCount'] = policy.topToSide.stationsCount;
-    overrides['joint.topToSide.startMarginMm'] = policy.topToSide.startMarginMm;
-    overrides['joint.topToSide.endMarginMm'] = policy.topToSide.endMarginMm;
-    if (policy.topToSide.minifixCode) overrides['joint.topToSide.minifixCode'] = policy.topToSide.minifixCode;
-    if (policy.topToSide.dowelCode) overrides['joint.topToSide.dowelCode'] = policy.topToSide.dowelCode;
-    if (policy.topToSide.screwCode) overrides['joint.topToSide.screwCode'] = policy.topToSide.screwCode;
-    if (policy.topToSide.withDowels !== undefined) overrides['joint.topToSide.withDowels'] = policy.topToSide.withDowels;
+    Object.assign(overrides, jointFamilyOverlayEntries('joint.topToSide', policy.topToSide));
   }
 
   if (policy.shelfToSide.provenance === 'factory') {
     structuredPolicy.shelfToSide = { ...policy.shelfToSide, provenance: 'factory' };
-    overrides['joint.shelfToSide.systemId'] = policy.shelfToSide.systemId;
-    overrides['joint.shelfToSide.stationsCount'] = policy.shelfToSide.stationsCount;
-    overrides['joint.shelfToSide.startMarginMm'] = policy.shelfToSide.startMarginMm;
-    overrides['joint.shelfToSide.endMarginMm'] = policy.shelfToSide.endMarginMm;
-    if (policy.shelfToSide.minifixCode) overrides['joint.shelfToSide.minifixCode'] = policy.shelfToSide.minifixCode;
-    if (policy.shelfToSide.dowelCode) overrides['joint.shelfToSide.dowelCode'] = policy.shelfToSide.dowelCode;
-    if (policy.shelfToSide.screwCode) overrides['joint.shelfToSide.screwCode'] = policy.shelfToSide.screwCode;
-    if (policy.shelfToSide.withDowels !== undefined) overrides['joint.shelfToSide.withDowels'] = policy.shelfToSide.withDowels;
+    Object.assign(overrides, jointFamilyOverlayEntries('joint.shelfToSide', policy.shelfToSide));
   }
 
   if (policy.backPanel.provenance === 'factory') {
@@ -223,25 +236,13 @@ export function overlayOverridesToPolicy(overrides: Record<string, unknown> | nu
     return {
       version: 1,
       floorToSide: structured.floorToSide && structured.floorToSide.provenance === 'factory'
-        ? {
-            ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide,
-            ...structured.floorToSide,
-            provenance: 'factory',
-          }
+        ? storedFamilyRule(DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide, structured.floorToSide)
         : DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide,
       topToSide: structured.topToSide && structured.topToSide.provenance === 'factory'
-        ? {
-            ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide,
-            ...structured.topToSide,
-            provenance: 'factory',
-          }
+        ? storedFamilyRule(DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide, structured.topToSide)
         : DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide,
       shelfToSide: structured.shelfToSide && structured.shelfToSide.provenance === 'factory'
-        ? {
-            ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide,
-            ...structured.shelfToSide,
-            provenance: 'factory',
-          }
+        ? storedFamilyRule(DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide, structured.shelfToSide)
         : DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide,
       backPanel: structured.backPanel && structured.backPanel.provenance === 'factory'
         ? {
@@ -255,51 +256,30 @@ export function overlayOverridesToPolicy(overrides: Record<string, unknown> | nu
   }
 
   // Check granular keys
-  const hasFloor = 'joint.floorToSide.systemId' in overrides || 'joint.floorToSide.stationsCount' in overrides;
-  const hasTop = 'joint.topToSide.systemId' in overrides || 'joint.topToSide.stationsCount' in overrides;
-  const hasShelf = 'joint.shelfToSide.systemId' in overrides || 'joint.shelfToSide.stationsCount' in overrides;
+  const hasFloor =
+    'joint.floorToSide.systemId' in overrides
+    || 'joint.floorToSide.stationsCount' in overrides
+    || 'joint.floorToSide.maxSpacingMm' in overrides;
+  const hasTop =
+    'joint.topToSide.systemId' in overrides
+    || 'joint.topToSide.stationsCount' in overrides
+    || 'joint.topToSide.maxSpacingMm' in overrides;
+  const hasShelf =
+    'joint.shelfToSide.systemId' in overrides
+    || 'joint.shelfToSide.stationsCount' in overrides
+    || 'joint.shelfToSide.maxSpacingMm' in overrides;
   const hasBack = 'joint.backPanel.screwCode' in overrides || 'joint.backPanel.insetMm' in overrides;
 
   return {
     version: 1,
     floorToSide: hasFloor
-      ? {
-          systemId: (overrides['joint.floorToSide.systemId'] as JoinerySystemId) ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide.systemId,
-          stationsCount: Number(overrides['joint.floorToSide.stationsCount'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide.stationsCount),
-          startMarginMm: Number(overrides['joint.floorToSide.startMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide.startMarginMm),
-          endMarginMm: Number(overrides['joint.floorToSide.endMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide.endMarginMm),
-          minifixCode: overrides['joint.floorToSide.minifixCode'] as string | undefined,
-          dowelCode: overrides['joint.floorToSide.dowelCode'] as string | undefined,
-          screwCode: overrides['joint.floorToSide.screwCode'] as string | undefined,
-          withDowels: overrides['joint.floorToSide.withDowels'] as boolean | undefined,
-          provenance: 'factory',
-        }
+      ? readGranularJointFamily(overrides, 'floorToSide', DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide)
       : DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide,
     topToSide: hasTop
-      ? {
-          systemId: (overrides['joint.topToSide.systemId'] as JoinerySystemId) ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide.systemId,
-          stationsCount: Number(overrides['joint.topToSide.stationsCount'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide.stationsCount),
-          startMarginMm: Number(overrides['joint.topToSide.startMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide.startMarginMm),
-          endMarginMm: Number(overrides['joint.topToSide.endMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide.endMarginMm),
-          minifixCode: overrides['joint.topToSide.minifixCode'] as string | undefined,
-          dowelCode: overrides['joint.topToSide.dowelCode'] as string | undefined,
-          screwCode: overrides['joint.topToSide.screwCode'] as string | undefined,
-          withDowels: overrides['joint.topToSide.withDowels'] as boolean | undefined,
-          provenance: 'factory',
-        }
+      ? readGranularJointFamily(overrides, 'topToSide', DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide)
       : DEFAULT_FACTORY_CONSTRUCTION_POLICY.topToSide,
     shelfToSide: hasShelf
-      ? {
-          systemId: (overrides['joint.shelfToSide.systemId'] as JoinerySystemId) ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide.systemId,
-          stationsCount: Number(overrides['joint.shelfToSide.stationsCount'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide.stationsCount),
-          startMarginMm: Number(overrides['joint.shelfToSide.startMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide.startMarginMm),
-          endMarginMm: Number(overrides['joint.shelfToSide.endMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide.endMarginMm),
-          minifixCode: overrides['joint.shelfToSide.minifixCode'] as string | undefined,
-          dowelCode: overrides['joint.shelfToSide.dowelCode'] as string | undefined,
-          screwCode: overrides['joint.shelfToSide.screwCode'] as string | undefined,
-          withDowels: overrides['joint.shelfToSide.withDowels'] as boolean | undefined,
-          provenance: 'factory',
-        }
+      ? readGranularJointFamily(overrides, 'shelfToSide', DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide)
       : DEFAULT_FACTORY_CONSTRUCTION_POLICY.shelfToSide,
     backPanel: hasBack
       ? {
@@ -309,6 +289,51 @@ export function overlayOverridesToPolicy(overrides: Record<string, unknown> | nu
           provenance: 'factory',
         }
       : DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel,
+  };
+}
+
+/**
+ * Merge one stored structured family entry over its library default,
+ * mirroring the Go parser: a stored maxSpacingMm (#1065) owns the pattern
+ * and zeroes the count (`usableFactoryRule`).
+ */
+function storedFamilyRule(fallback: JointFamilyRule, stored: JointFamilyRule): JointFamilyRule {
+  const merged: JointFamilyRule = { ...fallback, ...stored, provenance: 'factory' };
+  if (merged.maxSpacingMm !== undefined) {
+    return { ...merged, stationsCount: 0 };
+  }
+  return merged;
+}
+
+/**
+ * Read one joint family from the flat editor keys, mirroring the Go granular
+ * parser: a stored maxSpacingMm (#1065) owns the pattern and zeroes the
+ * count, exactly like `usableFactoryRule` on the server.
+ */
+function readGranularJointFamily(
+  overrides: Record<string, unknown>,
+  family: 'floorToSide' | 'topToSide' | 'shelfToSide',
+  fallback: JointFamilyRule,
+): JointFamilyRule {
+  // The flat keys are a MULTI-WRITER merge surface: a stale spacing key
+  // next to an explicit count resolves to the count (#1065: stationCount
+  // explícito gana), mirroring the Go granular parser.
+  const hasCountKey = `joint.${family}.stationsCount` in overrides;
+  const maxSpacingMmRaw = overrides[`joint.${family}.maxSpacingMm`];
+  const maxSpacingMm = !hasCountKey && maxSpacingMmRaw !== undefined ? Number(maxSpacingMmRaw) : undefined;
+  return {
+    systemId: (overrides[`joint.${family}.systemId`] as JoinerySystemId) ?? fallback.systemId,
+    stationsCount: maxSpacingMm !== undefined
+      ? 0
+      : Number(overrides[`joint.${family}.stationsCount`] ?? fallback.stationsCount),
+    startMarginMm: Number(overrides[`joint.${family}.startMarginMm`] ?? fallback.startMarginMm),
+    endMarginMm: Number(overrides[`joint.${family}.endMarginMm`] ?? fallback.endMarginMm),
+    maxSpacingMm,
+    minifixCode: overrides[`joint.${family}.minifixCode`] as string | undefined,
+    dowelCode: overrides[`joint.${family}.dowelCode`] as string | undefined,
+    screwCode: overrides[`joint.${family}.screwCode`] as string | undefined,
+    withDowels: overrides[`joint.${family}.withDowels`] as boolean | undefined,
+    provenance: 'factory',
   };
 }
 
@@ -362,7 +387,8 @@ function pickStoredComponentOverrides(
     if (
       entry.stationsCount === undefined &&
       entry.startMarginMm === undefined &&
-      entry.endMarginMm === undefined
+      entry.endMarginMm === undefined &&
+      entry.maxSpacingMm === undefined
     ) {
       continue;
     }
@@ -376,7 +402,17 @@ export function validateConstructionPolicy(policy: FactoryConstructionPolicy): {
   const issues: string[] = [];
 
   const checkJoint = (family: string, rule: JointFamilyRule) => {
-    if (rule.stationsCount < 1 || rule.stationsCount > 10) {
+    if (rule.maxSpacingMm !== undefined) {
+      // Spacing-derived pattern (#1065): the count is derived per joint, so
+      // the count bounds do not apply — but a stored count alongside a
+      // spacing is the same decision made twice.
+      if (!Number.isFinite(rule.maxSpacingMm) || rule.maxSpacingMm <= 0) {
+        issues.push(`${family}: maxSpacingMm must be a positive finite number`);
+      }
+      if (rule.stationsCount > 0) {
+        issues.push(`${family}: declare either stationsCount or maxSpacingMm, never both`);
+      }
+    } else if (rule.stationsCount < 1 || rule.stationsCount > 10) {
       issues.push(`${family}: stationsCount must be between 1 and 10`);
     }
     if (rule.startMarginMm < 10 || rule.startMarginMm > 300) {
@@ -404,6 +440,14 @@ export function validateConstructionPolicy(policy: FactoryConstructionPolicy): {
   for (const [componentId, entry] of Object.entries(policy.componentOverrides ?? {})) {
     if (entry.stationsCount !== undefined && (entry.stationsCount < 1 || entry.stationsCount > 10)) {
       issues.push(`componentOverrides.${componentId}: stationsCount must be between 1 and 10`);
+    }
+    if (entry.maxSpacingMm !== undefined) {
+      if (!Number.isFinite(entry.maxSpacingMm) || entry.maxSpacingMm <= 0) {
+        issues.push(`componentOverrides.${componentId}: maxSpacingMm must be a positive finite number`);
+      }
+      if (entry.stationsCount !== undefined) {
+        issues.push(`componentOverrides.${componentId}: declare either stationsCount or maxSpacingMm, never both`);
+      }
     }
     if (entry.startMarginMm !== undefined && (entry.startMarginMm < 10 || entry.startMarginMm > 300)) {
       issues.push(`componentOverrides.${componentId}: startMarginMm must be between 10mm and 300mm`);

@@ -120,7 +120,19 @@ func TestFloorSideJoineryNegatives(t *testing.T) {
 		{"missing count", func(rel AuthoringRelationship, _ map[string]*layoutBoard) {
 			delete(rel.Parameters, "stationCount")
 		}, JoineryStationInvalid, "STATION_PATTERN_INVALID"},
+		{"count and maxSpacing together", func(rel AuthoringRelationship, _ map[string]*layoutBoard) {
+			rel.Parameters["maxSpacingMm"] = float64(250)
+		}, JoineryStationInvalid, "STATION_PATTERN_INVALID"},
+		{"negative maxSpacing", func(rel AuthoringRelationship, _ map[string]*layoutBoard) {
+			delete(rel.Parameters, "stationCount")
+			rel.Parameters["maxSpacingMm"] = float64(-250)
+		}, JoineryStationInvalid, "STATION_PATTERN_INVALID"},
+		{"zero maxSpacing", func(rel AuthoringRelationship, _ map[string]*layoutBoard) {
+			delete(rel.Parameters, "stationCount")
+			rel.Parameters["maxSpacingMm"] = float64(0)
+		}, JoineryStationInvalid, "STATION_PATTERN_INVALID"},
 	}
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			rel := j1bRelationship()
@@ -146,6 +158,83 @@ func TestFloorSideJoineryNegatives(t *testing.T) {
 				t.Fatalf("code %s missing; blockers=%+v issues=%+v", tc.code, status.Blockers, collected)
 			}
 		})
+	}
+
+	// Whole-field replacements cannot ride the by-value mutate closure:
+	// they run as direct subtests on their own relationship.
+	t.Run("no station pattern at all", func(t *testing.T) {
+		rel := j1bRelationship()
+		rel.Parameters = nil
+		var collected []domain.ContractIssue
+		status := deriveFloorSideJoinery(rel, j1bBoards(), &collected, nil, nil)
+		if status.Stage != JoineryStationInvalid {
+			t.Fatalf("stage = %s, want STATION_INVALID (%+v)", status.Stage, status)
+		}
+		for _, issue := range collected {
+			if issue.Code == "STATION_PATTERN_INVALID" {
+				return
+			}
+		}
+		t.Fatalf("STATION_PATTERN_INVALID missing: %+v", collected)
+	})
+	t.Run("maxSpacingMm and families together", func(t *testing.T) {
+		rel := j1bRelationship()
+		rel.Parameters = map[string]any{"maxSpacingMm": float64(250)}
+		rel.Families = []AuthoringRelationshipFamily{{FamilyID: "minifix", Count: 2, StartMarginMm: 10, EndMarginMm: 10}}
+		var collected []domain.ContractIssue
+		status := deriveFloorSideJoinery(rel, j1bBoards(), &collected, nil, nil)
+		if status.Stage != JoineryStationInvalid {
+			t.Fatalf("stage = %s, want STATION_INVALID (%+v)", status.Stage, status)
+		}
+		for _, issue := range collected {
+			if issue.Code == "STATION_PATTERN_INVALID" {
+				return
+			}
+		}
+		t.Fatalf("STATION_PATTERN_INVALID missing: %+v", collected)
+	})
+}
+
+// TestFloorSideJoineryMaxSpacingDerivesCountFromSpan (#1065): the same
+// floor-side joint on a narrow and a wide cabinet plans different station
+// counts from one maxSpacingMm — the dimension drives the pattern, never a
+// fixed count.
+func TestFloorSideJoineryMaxSpacingDerivesCountFromSpan(t *testing.T) {
+	maxSpacingRelationship := func(spacing float64) AuthoringRelationship {
+		rel := j1bRelationship()
+		rel.Parameters = map[string]any{
+			"maxSpacingMm":  spacing,
+			"startMarginMm": float64(40),
+			"endMarginMm":   float64(40),
+		}
+		return rel
+	}
+	var collected []domain.ContractIssue
+	status := deriveFloorSideJoinery(maxSpacingRelationship(250), j1bBoards(), &collected, nil, nil)
+	if status.Stage != JoineryTechnicalProfileMissing {
+		t.Fatalf("stage = %s (%+v)", status.Stage, status)
+	}
+	if status.Stations.Status != "PLANNED" {
+		t.Fatalf("stations = %+v", status.Stations)
+	}
+	for _, count := range status.Stations.StationCounts {
+		// 570mm side minus 40/40 margins leaves ~490mm: floor(490/250)+1 = 2.
+		if count.StationCount != 2 {
+			t.Fatalf("usable ~490mm at maxSpacing 250 must plan 2 stations, got %+v", count)
+		}
+	}
+
+	collected = nil
+	status = deriveFloorSideJoinery(maxSpacingRelationship(100), j1bBoards(), &collected, nil, nil)
+	if status.Stations.Status != "PLANNED" {
+		t.Fatalf("stations = %+v", status.Stations)
+	}
+	for _, count := range status.Stations.StationCounts {
+		// The same joint at maxSpacing 100: floor(~490/100)+1 = 5 — the
+		// count scaled with the spacing while the pattern stayed uniform.
+		if count.StationCount != 5 {
+			t.Fatalf("usable ~490mm at maxSpacing 100 must plan 5 stations, got %+v", count)
+		}
 	}
 }
 

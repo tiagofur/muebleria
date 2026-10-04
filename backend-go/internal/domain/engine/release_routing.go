@@ -97,10 +97,10 @@ type ReleaseRoutingProgram struct {
 // pointer or nil members mean "unavailable -> inherit/fail honest", never
 // "guess".
 type ReleaseServerInputs struct {
-	LibraryReleaseID string                                 `json:"libraryReleaseId,omitempty"`
-	SideRecipes      []ResolvedSideRecipe                   `json:"sideRecipes,omitempty"`
-	Policy           *FactoryConstructionPolicy             `json:"policy,omitempty"`
-	ProfilesByID     map[string]domain.HardwareProfile      `json:"profilesById,omitempty"`
+	LibraryReleaseID string                            `json:"libraryReleaseId,omitempty"`
+	SideRecipes      []ResolvedSideRecipe              `json:"sideRecipes,omitempty"`
+	Policy           *FactoryConstructionPolicy        `json:"policy,omitempty"`
+	ProfilesByID     map[string]domain.HardwareProfile `json:"profilesById,omitempty"`
 }
 
 // DeriveReleaseRoutingProgram derives the neutral routing program of an exact

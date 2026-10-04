@@ -12,8 +12,8 @@ type factoryPolicyFixtureCase struct {
 	Name      string          `json:"name"`
 	Overrides json.RawMessage `json:"overrides"`
 	Expected  struct {
-		FloorToSide        *FactoryJointRule                        `json:"floorToSide"`
-		ShelfToSide        *FactoryJointRule                        `json:"shelfToSide"`
+		FloorToSide        *FactoryJointRule                         `json:"floorToSide"`
+		ShelfToSide        *FactoryJointRule                         `json:"shelfToSide"`
 		ComponentOverrides map[string]*ComponentConstructionOverride `json:"componentOverrides"`
 	} `json:"expected"`
 }
@@ -61,7 +61,8 @@ func componentOverridesDiffer(got, want map[string]*ComponentConstructionOverrid
 		}
 		if scalarDiffer(gotEntry.StationsCount, wantEntry.StationsCount) ||
 			scalarDiffer(gotEntry.StartMarginMm, wantEntry.StartMarginMm) ||
-			scalarDiffer(gotEntry.EndMarginMm, wantEntry.EndMarginMm) {
+			scalarDiffer(gotEntry.EndMarginMm, wantEntry.EndMarginMm) ||
+			scalarDiffer(gotEntry.MaxSpacingMm, wantEntry.MaxSpacingMm) {
 			return true
 		}
 	}
@@ -75,11 +76,18 @@ func scalarDiffer(got, want *float64) bool {
 	return *got != *want
 }
 
+// rulesDiffer compares field by field: the rule carries pointer scalars
+// (maxSpacingMm, #1065), so a struct != would compare pointer identities.
 func rulesDiffer(got, want *FactoryJointRule) bool {
 	if got == nil || want == nil {
 		return got != want
 	}
-	return *got != *want
+	if got.StationsCount != want.StationsCount ||
+		got.StartMarginMm != want.StartMarginMm ||
+		got.EndMarginMm != want.EndMarginMm {
+		return true
+	}
+	return scalarDiffer(got.MaxSpacingMm, want.MaxSpacingMm)
 }
 
 func TestParseFactoryConstructionPolicyEdgeCases(t *testing.T) {
@@ -104,10 +112,83 @@ func TestParseFactoryConstructionPolicyEdgeCases(t *testing.T) {
 			"negative margin":       []byte(`{"joint.shelfToSide.systemId": "m", "joint.shelfToSide.startMarginMm": -5}`),
 			"string margin":         []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.endMarginMm": "wide"}`),
 			"structured non-object": []byte(`{"joint.constructionPolicy": {"version": 1, "floorToSide": "four"}}`),
+			// #1065: spacing rules validate like counts — positive and finite.
+			"zero spacing":     []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": 0}`),
+			"negative spacing": []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": -250}`),
+			"string spacing":   []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": "wide"}`),
 		} {
 			if _, err := ParseFactoryConstructionPolicy(raw); err == nil {
 				t.Fatalf("%s: unusable explicit pattern must error", name)
 			}
+		}
+	})
+
+	t.Run("structured count and spacing mixed fails closed", func(t *testing.T) {
+		raw := []byte(`{"joint.constructionPolicy": {"version": 1, "floorToSide": {
+			"provenance": "factory", "stationsCount": 3, "maxSpacingMm": 250,
+			"startMarginMm": 40, "endMarginMm": 40}}}`)
+		if _, err := ParseFactoryConstructionPolicy(raw); err == nil {
+			t.Fatalf("a family declaring both patterns must error")
+		}
+	})
+
+	t.Run("granular count wins over a stale spacing key (#1065)", func(t *testing.T) {
+		// The flat keys are a multi-writer merge surface: a provisioned
+		// spacing default plus a later explicit count must resolve to the
+		// count, never poison the org policy with a parse error.
+		raw := []byte(`{"joint.floorToSide.maxSpacingMm": 250, "joint.floorToSide.stationsCount": 4}`)
+		policy, err := ParseFactoryConstructionPolicy(raw)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if policy.FloorToSide == nil || policy.FloorToSide.StationsCount != 4 {
+			t.Fatalf("floor rule = %+v, want count 4", policy.FloorToSide)
+		}
+		if policy.FloorToSide.MaxSpacingMm != nil {
+			t.Fatalf("the stale spacing key must be ignored: %+v", policy.FloorToSide)
+		}
+	})
+
+	t.Run("structured spacing rule zeroes the count", func(t *testing.T) {
+		raw := []byte(`{"joint.constructionPolicy": {"version": 1, "shelfToSide": {
+			"provenance": "factory", "maxSpacingMm": 400,
+			"startMarginMm": 40, "endMarginMm": 60}}}`)
+		policy, err := ParseFactoryConstructionPolicy(raw)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if policy.ShelfToSide == nil || policy.ShelfToSide.MaxSpacingMm == nil || *policy.ShelfToSide.MaxSpacingMm != 400 {
+			t.Fatalf("spacing rule = %+v", policy.ShelfToSide)
+		}
+		if policy.ShelfToSide.StationsCount != 0 {
+			t.Fatalf("a spacing rule must not carry a count: %+v", policy.ShelfToSide)
+		}
+	})
+
+	t.Run("component spacing exception resolves over the factory count", func(t *testing.T) {
+		spacing := 300.0
+		policy := &FactoryConstructionPolicy{
+			FloorToSide: &FactoryJointRule{StationsCount: 4, StartMarginMm: 30, EndMarginMm: 35},
+			ComponentOverrides: map[string]*ComponentConstructionOverride{
+				"comp-base": {MaxSpacingMm: &spacing, StartMarginMm: float64Pointer(20)},
+			},
+		}
+		rule := policy.RuleForComponent("comp-base", "floor-side")
+		if rule == nil || rule.MaxSpacingMm == nil || *rule.MaxSpacingMm != 300 {
+			t.Fatalf("component spacing exception must own the pattern: %+v", rule)
+		}
+		if rule.StationsCount != 0 {
+			t.Fatalf("resolved spacing rule must not keep a count: %+v", rule)
+		}
+		if rule.StartMarginMm != 20 || rule.EndMarginMm != 35 {
+			t.Fatalf("margins resolve per scalar around the spacing: %+v", rule)
+		}
+
+		count := 3.0
+		policy.ComponentOverrides["comp-count"] = &ComponentConstructionOverride{StationsCount: &count}
+		rule = policy.RuleForComponent("comp-count", "floor-side")
+		if rule == nil || rule.MaxSpacingMm != nil || rule.StationsCount != 3 {
+			t.Fatalf("a count exception must replace a factory spacing: %+v", rule)
 		}
 	})
 }
@@ -191,6 +272,31 @@ func TestMaterializeBoundRelationshipsFactoryPolicyOverridesDefinitionDefault(t 
 		}
 		if relationships[0].Parameters["startMarginMm"] != 40.0 {
 			t.Fatalf("binding margins must survive without a factory rule: %+v", relationships[0].Parameters)
+		}
+	})
+
+	t.Run("spacing family rule materializes maxSpacingMm, never a zero count (#1065)", func(t *testing.T) {
+		spacing := 400.0
+		policy := &FactoryConstructionPolicy{
+			ShelfToSide: &FactoryJointRule{StartMarginMm: 50, EndMarginMm: 50, MaxSpacingMm: &spacing},
+		}
+		definition := structureDefinition()
+		definition.Binding.Relationship.Kind = "fixed-shelf-side"
+		relationships := materializeBoundRelationships(
+			[]domain.FurnitureParameterDefinition{definition},
+			map[string]any{"baseJointStations": float64(3)},
+			structureBoards(), nil, policy)
+		if len(relationships) != 1 {
+			t.Fatalf("relationships = %+v", relationships)
+		}
+		if got := relationships[0].Parameters["maxSpacingMm"]; got != spacing {
+			t.Fatalf("the spacing rule must materialize maxSpacingMm, got %v", got)
+		}
+		if _, hasCount := relationships[0].Parameters["stationCount"]; hasCount {
+			t.Fatalf("a spacing policy must not materialize a (zero) stationCount: %+v", relationships[0].Parameters)
+		}
+		if relationships[0].Parameters["startMarginMm"] != 50.0 || relationships[0].Parameters["endMarginMm"] != 50.0 {
+			t.Fatalf("the spacing rule carries the factory margins: %+v", relationships[0].Parameters)
 		}
 	})
 
@@ -390,6 +496,65 @@ func TestApplyFactoryStationPatternsComponentExceptionBeatsFactoryRule(t *testin
 	if got := result[2].Parameters["stationCount"]; got != float64(6) {
 		t.Fatalf("authored explicit count stays immune to the exception, got %v", got)
 	}
+}
+
+// TestApplyFactoryStationPatternsSpacingRuleInjectsMaxSpacing (#1065): a
+// factory spacing rule fills the pattern with maxSpacingMm — never a count —
+// so the resolver derives each contact's stations from its real span.
+func TestApplyFactoryStationPatternsSpacingRuleInjectsMaxSpacing(t *testing.T) {
+	spacing := 250.0
+	policy := &FactoryConstructionPolicy{
+		FloorToSide: &FactoryJointRule{StartMarginMm: 40, EndMarginMm: 40, MaxSpacingMm: &spacing},
+	}
+	relationships := []AuthoringRelationship{
+		{RelationshipID: "undeclared", Kind: "floor-side", Parameters: map[string]any{}},
+		{RelationshipID: "authored-count", Kind: "floor-side", Parameters: map[string]any{"stationCount": float64(2)}},
+		{RelationshipID: "authored-spacing", Kind: "floor-side", Parameters: map[string]any{"maxSpacingMm": float64(400)}},
+	}
+	result := applyFactoryStationPatterns(relationships, policy, nil)
+	if got := result[0].Parameters["maxSpacingMm"]; got != spacing {
+		t.Fatalf("undeclared floor-side must take the factory spacing, got %v", got)
+	}
+	if _, hasCount := result[0].Parameters["stationCount"]; hasCount {
+		t.Fatalf("a spacing rule must not inject a count: %+v", result[0].Parameters)
+	}
+	if result[0].Parameters["startMarginMm"] != 40.0 || result[0].Parameters["endMarginMm"] != 40.0 {
+		t.Fatalf("spacing rule must carry the factory margins: %+v", result[0].Parameters)
+	}
+	if _, untouched := result[1].Parameters["maxSpacingMm"]; untouched {
+		t.Fatalf("authored count must stay untouched by the factory spacing: %+v", result[1].Parameters)
+	}
+	if got := result[2].Parameters["maxSpacingMm"]; got != float64(400) {
+		t.Fatalf("authored spacing stays immune to the factory rule, got %v", got)
+	}
+
+	t.Run("component spacing exception replaces the factory count", func(t *testing.T) {
+		componentSpacing := 300.0
+		policy := &FactoryConstructionPolicy{
+			FloorToSide: &FactoryJointRule{StationsCount: 4, StartMarginMm: 30, EndMarginMm: 35},
+			ComponentOverrides: map[string]*ComponentConstructionOverride{
+				"comp-base": {MaxSpacingMm: &componentSpacing},
+			},
+		}
+		boards := []layoutBoard{
+			{id: "floor", catalogComponentID: "comp-base"},
+			{id: "floor-other", catalogComponentID: "comp-plain"},
+		}
+		relationships := []AuthoringRelationship{
+			{RelationshipID: "a1", Kind: "floor-side", Source: AuthoringRelationshipAnchor{ComponentInstanceID: "floor"}, Parameters: map[string]any{}},
+			{RelationshipID: "a2", Kind: "floor-side", Source: AuthoringRelationshipAnchor{ComponentInstanceID: "floor-other"}, Parameters: map[string]any{}},
+		}
+		result := applyFactoryStationPatterns(relationships, policy, boards)
+		if got := result[0].Parameters["maxSpacingMm"]; got != componentSpacing {
+			t.Fatalf("the excepted component must derive from its own spacing, got %v", got)
+		}
+		if _, hasCount := result[0].Parameters["stationCount"]; hasCount {
+			t.Fatalf("a component spacing exception must not leave a count: %+v", result[0].Parameters)
+		}
+		if got := result[1].Parameters["stationCount"]; got != float64(4) {
+			t.Fatalf("a plain component keeps the factory count, got %v", got)
+		}
+	})
 }
 
 func TestMaterializeBoundRelationshipsComponentExceptionBeatsFactoryRule(t *testing.T) {

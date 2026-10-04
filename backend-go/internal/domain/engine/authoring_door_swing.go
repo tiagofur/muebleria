@@ -165,7 +165,7 @@ func computeDoorSwingAccessories(
 	groups := make([]domain.DoorAccessoryGroup, 0, len(doorBoards))
 	for slotIdx, door := range doorBoards {
 		slotSwing := doorSlotSwing(swing, slotIdx)
-		hingeFace := slotSwing         // bisagras on the hinge side
+		hingeFace := slotSwing                // bisagras on the hinge side
 		handleFace := oppositeFace(slotSwing) // jaladera on the opposite side
 
 		group := domain.DoorAccessoryGroup{
