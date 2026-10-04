@@ -197,6 +197,17 @@
 /* —— Inline editor page (Fase 3 UI 3c) —— */
 /* Replaces the Modal LG when /components/:id/edit is active. */
 
+/* #1019 C1: rejected-save banner (mirrors agregado-editor__save-error). */
+.component-editor__save-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.component-editor__save-error p {
+  margin: 0;
+}
+
 .component-editor-page {
   display: flex;
   flex-direction: column;

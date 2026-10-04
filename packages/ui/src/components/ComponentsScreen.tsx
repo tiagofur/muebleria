@@ -71,8 +71,10 @@ export interface ComponentsScreenProps {
   readonly components: readonly Component[];
   readonly optionGroups: readonly OptionGroup[];
   readonly materials?: readonly MaterialBoard[];
-  readonly onCreate: (draft: ComponentDraft) => void;
-  readonly onUpdate: (id: string, draft: ComponentDraft) => void;
+  /** Save handlers settle before the editor closes (#1019 C1): a rejected
+   * save keeps the editor open with the draft intact. */
+  readonly onCreate: (draft: ComponentDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: ComponentDraft) => void | Promise<void>;
   readonly onToggleActive: (id: string) => void;
   readonly canMutate: boolean;
   readonly openComponentId?: string | null;
@@ -189,6 +191,10 @@ export function ComponentsScreen({
     currentSelectionId: expandedId,
   });
 
+  // C1 #1019: save-in-flight feedback + rejected-save surface.
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+
   const materialColors = useMemo(
     () => materialColorMap(materials),
     [materials],
@@ -299,6 +305,7 @@ export function ComponentsScreen({
       setEditingId(null);
       setEditorTab('general');
       setError(null);
+      setSaveFailed(false);
       setModalOpen(true);
       seededEditIdRef.current = 'new';
       return;
@@ -317,6 +324,7 @@ export function ComponentsScreen({
     setEditingId(component.id);
     setEditorTab('general');
     setError(null);
+    setSaveFailed(false);
     setModalOpen(true);
     seededEditIdRef.current = openComponentEditId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -384,7 +392,9 @@ export function ComponentsScreen({
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     setError(null);
+    setSaveFailed(false);
 
     const codeError = validateUniqueCode(
       draft.code,
@@ -474,13 +484,23 @@ export function ComponentsScreen({
       return;
     }
 
-    if (editingId) {
-      onUpdate(editingId, draft);
-    } else {
-      onCreate(draft);
-    }
-    // Just saved — close without dirty-discard warn.
-    forceCloseEditor();
+    // #1019 C1: the save settles BEFORE the editor closes — a rejected save
+    // keeps the editor open with the draft intact (parity with #1009 S3).
+    setSaving(true);
+    void (async () => {
+      try {
+        if (editingId) {
+          await onUpdate(editingId, draft);
+        } else {
+          await onCreate(draft);
+        }
+        setSaving(false);
+        forceCloseEditor();
+      } catch {
+        setSaving(false);
+        setSaveFailed(true);
+      }
+    })();
   };
 
   // Fase 5 UI: always full-page workspace editor (same pattern as modules).
@@ -521,6 +541,7 @@ export function ComponentsScreen({
             type="button"
             className="btn"
             onClick={closeModal}
+            disabled={saving}
             data-testid="component-editor-cancel"
           >
             Cancelar
@@ -529,9 +550,10 @@ export function ComponentsScreen({
             type="submit"
             className="btn btn--primary"
             form={formId}
+            disabled={saving}
             data-testid="save-btn"
           >
-            Guardar
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </>
       }
@@ -568,6 +590,7 @@ export function ComponentsScreen({
         <ComponentEditorForm
           formId={formId}
           error={error}
+          saveFailed={saveFailed}
           onSubmit={onSubmit}
           editorTab={editorTab}
           setEditorTab={setEditorTab}
