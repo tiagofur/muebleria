@@ -1,5 +1,12 @@
 # AGENTS.md — Mapa de navegación
 
+> **ARCHIVO HISTÓRICO CONGELADO (AGENTS anterior, 2026-09).** Esta copia se
+> preservó sin borrar contenido en la migración al AGENTS.md vigente. **El mapa
+> de navegación vigente es `AGENTS.md` en la raíz**; si algo aquí contradice al
+> AGENTS actual, a los contratos vigentes o al código, manda el presente. No
+> arranques sesiones leyendo este archivo de corrido: sólo secciones puntuales
+> cuando el AGENTS vigente lo pida.
+
 > Punto de entrada para cualquier agente. Es un mapa, no un manual. Lee sólo lo
 > necesario y respeta las fuentes canónicas actuales.
 
