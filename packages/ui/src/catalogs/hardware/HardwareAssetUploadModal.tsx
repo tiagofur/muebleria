@@ -127,7 +127,7 @@ export function HardwareAssetUploadModal({
 
   const handleClose = () => {
     if (stage === 'starting' || stage === 'uploading' || stage === 'finalizing' || stage === 'resuming') {
-      if (!window.confirm('Hay una carga en curso. ¿Deseas cancelarla?')) {
+      if (!window.confirm('Hay una carga en curso. ¿Querés cancelarla?')) {
         return;
       }
       if (session && assetService && session.status !== 'finalized') {
@@ -365,7 +365,7 @@ export function HardwareAssetUploadModal({
     e.preventDefault();
     e.stopPropagation();
     if (!file) {
-      setError('Selecciona un archivo .skp o .glb');
+      setError('Elegí un archivo .skp o .glb');
       return;
     }
     void runUploadProcess(file, null);

@@ -100,6 +100,10 @@ export function HardwareProfilesCatalog({
   const [editingVersion, setEditingVersion] = useState<number>(1);
   // K2 #1032: destructive actions ask first; the row button only requests.
   const [confirmDeactivate, setConfirmDeactivate] = useState<HardwareProfileRow | null>(null);
+  // K4 #1032: saved identity for the modal title (stable while fields change).
+  const editingProfile = editingId
+    ? (profiles.find((p) => p.id === editingId) ?? null)
+    : null;
   const [draft, setDraft] = useState<HardwareProfileDraft>(emptyProfileDraft());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -408,6 +412,7 @@ export function HardwareProfilesCatalog({
 
       <HardwareProfileFormModal
         open={modalOpen}
+        identity={editingProfile ? { code: editingProfile.code, name: editingProfile.name } : undefined}
         editingId={editingId}
         formId={formId}
         draft={draft}

@@ -127,6 +127,10 @@ export function AmbientMaterialsCatalog({
   const [saving, setSaving] = useState(false);
   // K2 #1032: destructive actions ask first; the row button only requests.
   const [confirmDeactivate, setConfirmDeactivate] = useState<AmbientMaterial | null>(null);
+  // K4 #1032: saved identity for the modal title (stable while fields change).
+  const editingAmbient = editingId
+    ? (materials.find((m) => m.id === editingId) ?? null)
+    : null;
 
   // Category Manage Modal state
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
@@ -568,6 +572,7 @@ export function AmbientMaterialsCatalog({
       <AmbientMaterialFormModal
         open={modalOpen}
         saving={saving}
+        identity={editingAmbient ? { code: editingAmbient.code, name: editingAmbient.name } : undefined}
         editingId={editingId}
         formId={formId}
         draft={draft}

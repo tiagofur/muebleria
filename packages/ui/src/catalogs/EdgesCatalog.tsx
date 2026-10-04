@@ -106,6 +106,10 @@ export function EdgesCatalog({
   const [saving, setSaving] = useState(false);
   // K2 #1032: destructive actions ask first; the row button only requests.
   const [confirmDeactivate, setConfirmDeactivate] = useState<EdgeBand | null>(null);
+  // K4 #1032: saved identity for the modal title (stable while fields change).
+  const editingEdge = editingId
+    ? (edges.find((e) => e.id === editingId) ?? null)
+    : null;
 
   const rows = useMemo(
     () =>
@@ -413,7 +417,13 @@ export function EdgesCatalog({
       <Modal
         open={modalOpen}
         onClose={closeModal}
-        title={editingId ? 'Editar canto' : 'Nuevo canto'}
+        title={
+          editingId && editingEdge
+            ? `Editar canto — ${editingEdge.code} · ${editingEdge.name}`
+            : editingId
+              ? 'Editar canto'
+              : 'Nuevo canto'
+        }
         size="sm"
         footer={
           <>

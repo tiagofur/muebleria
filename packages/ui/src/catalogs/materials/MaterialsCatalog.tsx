@@ -155,6 +155,10 @@ export function MaterialsCatalog({
   const [saving, setSaving] = useState(false);
   // K2 #1032: destructive actions ask first; the row button only requests.
   const [confirmDeactivate, setConfirmDeactivate] = useState<MaterialBoard | null>(null);
+  // K4 #1032: saved identity for the modal title (stable while fields change).
+  const editingMaterial = editingId
+    ? (materials.find((m) => m.id === editingId) ?? null)
+    : null;
   const [edgeCreateOpen, setEdgeCreateOpen] = useState(false);
   const [tileSuggestBusy, setTileSuggestBusy] = useState(false);
   const [tileSuggestMsg, setTileSuggestMsg] = useState<string | null>(null);
@@ -707,12 +711,13 @@ export function MaterialsCatalog({
       <MaterialFormModal
         materialCategories={materialCategories}
         open={modalOpen}
+        saving={saving}
+        identity={editingMaterial ? { code: editingMaterial.code, name: editingMaterial.name } : undefined}
         editingId={editingId}
         formId={formId}
         draft={draft}
         setDraft={setDraft}
         error={error}
-        saving={saving}
         activeEdges={activeEdges}
         canMutate={canMutate}
         getCostPerM2={getCostPerM2}
