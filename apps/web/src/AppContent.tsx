@@ -58,7 +58,6 @@ import { useWorkspaceLoad } from './shared/query/useWorkspaceLoad';
 import {
   applyRoleChoiceToProject,
   bumpStructureRevision,
-  calcMaterialCostPerM2,
   calcProjectBreakdown,
   computeProductionTotals,
   defaultMeasurePresetId,
@@ -96,9 +95,6 @@ import {
   roleCanAppendProjectEvent,
   roleCanViewPortfolioDashboard,
   roleCanSuperviseFloor,
-  computeWorkshopAnalytics,
-  deriveOpsExceptions,
-  type AnalyticsPeriodDays,
   type WarrantyTicket,
   type ItemFloorStatus,
   ITEM_FLOOR_STATUS_LABELS_ES,
@@ -172,7 +168,6 @@ import {
   requiredGroupCodesForModule,
   selectableGroupCodesForModule,
   resolveCustomerName,
-  selectRecentProjects,
   sumMonthlyQuotedTotal,
   type AppNavId,
   type EdgeDraft,
@@ -195,7 +190,6 @@ import {
   AgregadosScreen,
   PageLoading,
   buildProductionOrderReadiness,
-  type CommandPaletteItem,
   type ProjectOverviewNav,
   type CuttingOutputTargetView,
 } from '@granete/ui';
@@ -219,6 +213,7 @@ import { useMaterialPlanning } from './materials/useMaterialPlanning';
 import { useQualityActions } from './quality/useQualityActions';
 import { useJobCosting } from './costing/useJobCosting';
 import { useSiteSurvey } from './survey/useSiteSurvey';
+import { useDashboardData } from './dashboard/useDashboardData';
 import { buildStockCatalog } from './derivations/stockCatalog';
 import { usePurchasingDerivations } from './derivations/usePurchasingDerivations';
 import { useQuoteDerivations } from './derivations/useQuoteDerivations';
@@ -1199,185 +1194,31 @@ export function AppContent({
   });
 
   /** F090: workshop analytics — funnel + warranties for gerente/admin. */
-  const [analyticsPeriod, setAnalyticsPeriod] =
-    useState<AnalyticsPeriodDays>('all');
-  const [warrantyTickets, setWarrantyTickets] = useState<
-    readonly WarrantyTicket[] | null
-  >(null);
-  useEffect(() => {
-    if (!canViewPortfolioDashboard) return;
-    let cancelled = false;
-    const repo = getRepository();
-    if (!repo?.getWarrantyTickets) {
-      setWarrantyTickets([]);
-      return;
-    }
-    repo
-      .getWarrantyTickets()
-      .then((tickets) => {
-        if (!cancelled) setWarrantyTickets(tickets);
-      })
-      .catch(() => {
-        if (!cancelled) setWarrantyTickets([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canViewPortfolioDashboard, getRepository]);
-
-  const workshopAnalytics = useMemo(() => {
-    if (!canViewPortfolioDashboard) return undefined;
-    return computeWorkshopAnalytics(projects, warrantyTickets ?? [], {
-      period: analyticsPeriod,
-    });
-  }, [canViewPortfolioDashboard, projects, warrantyTickets, analyticsPeriod]);
-
-  // OC-090 — exception-first list for the owner/manager home. Derived from
-  // real project state; shortage/WIP/material inputs arrive from the shell
-  // derivations when available (no invented KPIs).
-  const opsExceptions = useMemo(() => {
-    if (!canViewPortfolioDashboard) return [];
-    return deriveOpsExceptions(projects);
-  }, [canViewPortfolioDashboard, projects]);
-
-  const onDashboardOpenProject = useCallback(
-    (projectId: string) => {
-      navigate(projectPath(projectId));
-    },
-    [navigate],
-  );
-
-  const onDashboardNewProject = useCallback(() => {
-    bumpProjectsCreateKey();
-    navigate(pathForNav('quotes'));
-  }, [navigate]);
-
-  const onDashboardNewModule = useCallback(() => {
-    bumpModulesCreateKey();
-    navigate(pathForNav('modules'));
-  }, [navigate]);
-
-  const onDashboardNewMaterial = useCallback(() => {
-    bumpMaterialsCreateKey();
-    navigate(pathForNav('materials'));
-  }, [navigate]);
-
-  const onDashboardOpenShowcase = useCallback(() => {
-    navigate(pathForNav('showcase'));
-  }, [navigate]);
-
-  const onDashboardOpenMaterials = useCallback(() => {
-    navigate(pathForNav('materials'));
-  }, [navigate]);
-
-  const onDashboardOpenModules = useCallback(() => {
-    navigate(pathForNav('modules'));
-  }, [navigate]);
-
-  const onShowcaseUseInQuote = useCallback(
-    (moduleId: string) => {
-      const mod = modules.find((m) => m.id === moduleId);
-      bumpProjectsCreateKey();
-      navigate(pathForNav('quotes'));
-      toast({
-        type: 'info',
-        message: mod
-          ? `Nueva cotización: agregá «${mod.name}» (${mod.code}) con Agregar mueble.`
-          : 'Nueva cotización: agregá el mueble desde Agregar mueble.',
-      });
-    },
-    [modules, navigate, toast],
-  );
-
-  const onShowcaseUseProjectAsReference = useCallback(
-    (projectId: string) => {
-      const proj = projects.find((p) => p.id === projectId);
-      bumpProjectsCreateKey();
-      navigate(pathForNav('quotes'));
-      toast({
-        type: 'info',
-        message: proj
-          ? `Nueva cotización inspirada en «${proj.name}».`
-          : 'Nueva cotización iniciada desde el portafolio.',
-      });
-    },
-    [projects, navigate, toast],
-  );
-
-
-  const dashboardHomeMode = useMemo(():
-    | 'default'
-    | 'sales'
-    | 'engineering' => {
-    if (session !== 'auth' || actorRoles.length === 0) return 'default';
-    if (actorRoles.includes('vendedor')) return 'sales';
-    if (actorRoles.includes('ingeniero')) return 'engineering';
-    return 'default';
-  }, [session, actorRoles]);
-
-  const modulesWithoutPhotoCount = useMemo(
-    () => modules.filter((m) => !m.imageUrl).length,
-    [modules],
-  );
-
-  /** Recent entities for Cmd+K palette (issue #54). */
-  const commandItems = useMemo((): CommandPaletteItem[] => {
-    const projectItems: CommandPaletteItem[] = selectRecentProjects(
-      projects,
-      12,
-    ).map((p) => ({
-      id: `project:${p.id}`,
-      label: p.name,
-      group: 'Cotizaciones',
-      keywords: resolveCustomerName(p.customerId, customers),
-    }));
-    const moduleItems: CommandPaletteItem[] = [...modules]
-      .slice(0, 12)
-      .map((m) => ({
-        id: `module:${m.id}`,
-        label: `${m.code} — ${m.name}`,
-        group: 'Muebles',
-        keywords: m.code,
-      }));
-    return [...projectItems, ...moduleItems];
-  }, [projects, modules, customers]);
-
-  const onCommandItem = useCallback(
-    (id: string) => {
-      if (id.startsWith('project:')) {
-        navigate(projectPath(id.slice('project:'.length)));
-        return;
-      }
-      if (id.startsWith('module:')) {
-        navigate(entityPath('modules', id.slice('module:'.length)));
-      }
-    },
-    [navigate],
-  );
-
-  const groupLabels = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const g of optionGroups) {
-      map[g.code] = `${g.name} (${g.code})`;
-    }
-    return map;
-  }, [optionGroups]);
-
-  const getMaterialCostPerM2 = useCallback(
-    (input: {
-      widthMm: number;
-      lengthMm: number;
-      boardPrice: number;
-      wastePercent: number;
-    }) =>
-      calcMaterialCostPerM2(
-        input.widthMm,
-        input.lengthMm,
-        input.boardPrice,
-        input.wastePercent,
-      ),
-    [],
-  );
+  // R5 #1085 — dashboard/palette data lives in ./dashboard/useDashboardData
+  // (verbatim move; called at the cluster's exact position to preserve
+  // effect order — the warranty loader effect moved with the cluster).
+  const {
+    analyticsPeriod,
+    setAnalyticsPeriod,
+    warrantyTickets,
+    workshopAnalytics,
+    opsExceptions,
+    onDashboardOpenProject,
+    onDashboardNewProject,
+    onDashboardNewModule,
+    onDashboardNewMaterial,
+    onDashboardOpenShowcase,
+    onDashboardOpenMaterials,
+    onDashboardOpenModules,
+    onShowcaseUseInQuote,
+    onShowcaseUseProjectAsReference,
+    dashboardHomeMode,
+    modulesWithoutPhotoCount,
+    commandItems,
+    onCommandItem,
+    groupLabels,
+    getMaterialCostPerM2,
+  } = useDashboardData({ session, actorRoles, canViewPortfolioDashboard });
 
   // F062: catalog handlers delegate to catalogStore. App.tsx no longer owns
   // the catalog reducer wrapper, draftToModule/Structure/Component mappers, or
