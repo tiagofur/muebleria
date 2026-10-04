@@ -28,16 +28,19 @@ export function createEdgesActions(ctx: CatalogStoreCtx): EdgesSlice {
         ...(previewColor ? { previewColor } : {}),
         active: true,
       };
-      ctx.saveAndToast(
-        (c) => ({ ...c, edges: [...c.edges, item] }),
-        `✓ "${code}" creado`,
-      );
-      return id;
+      // K1 #1032: settle promise for the save contract; the created id is
+      // still delivered (to the quick-create link flow) once the save lands.
+      return ctx
+        .saveAndToast(
+          (c) => ({ ...c, edges: [...c.edges, item] }),
+          `✓ "${code}" creado`,
+        )
+        .then(() => id);
     },
 
     updateEdge: (id, draft) => {
       const previewColor = normalizePreviewColor(draft.previewColor);
-      ctx.saveAndToast(
+      return ctx.saveAndToast(
         (c) => ({
           ...c,
           edges: c.edges.map((e) =>

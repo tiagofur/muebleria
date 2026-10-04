@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
  * @vitest-environment jsdom
  */
 
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -346,5 +347,92 @@ describe('MaterialsCatalog form layout (Fase 3 UI)', () => {
         categoryId: 'cat-claro',
       }),
     );
+  });
+});
+
+
+describe('MaterialsCatalog — save contract (K1 #1032)', () => {
+  it('keeps the modal open with the form and shows the server error when the save fails', async () => {
+    const user = userEvent.setup();
+    let rejectSave!: (err: Error) => void;
+    const onCreate = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    render(
+      <MaterialsCatalog
+        materials={[sampleMaterial]}
+        edges={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+        requestCreateKey={0}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo material/i }));
+    await user.type(screen.getByLabelText('Código'), 'MAT-K1');
+    await user.type(screen.getByLabelText('Nombre'), 'Tablero K1');
+    await user.type(screen.getByLabelText('Fabricante'), 'Arauco');
+    await user.type(screen.getByLabelText('Ancho del tablero (mm)'), '1830');
+    await user.type(screen.getByLabelText('Largo del tablero — Veta (mm)'), '2440');
+    await user.type(screen.getByLabelText('Espesor (mm)'), '15');
+    await user.type(screen.getByLabelText('Precio del tablero ($)'), '100');
+    await user.type(screen.getByLabelText('Merma (%)'), '10');
+    await user.click(screen.getByTestId('material-form-submit-btn'));
+
+    const saveBtn = screen.getByTestId('material-form-submit-btn');
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(saveBtn.textContent).toContain('Guardando');
+
+    await act(async () => {
+      rejectSave(new Error('network down'));
+    });
+
+    expect(screen.getByTestId('material-form-modal')).toBeTruthy();
+    expect(screen.getByText(/network down/)).toBeTruthy();
+    expect((screen.getByLabelText('Código') as HTMLInputElement).value).toBe('MAT-K1');
+    expect((screen.getByTestId('material-form-submit-btn') as HTMLButtonElement).disabled).toBe(false);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the modal only after the save settles successfully', async () => {
+    const user = userEvent.setup();
+    let resolveSave!: () => void;
+    const onCreate = vi.fn(() => new Promise<void>((resolve) => { resolveSave = resolve; }));
+    render(
+      <MaterialsCatalog
+        materials={[sampleMaterial]}
+        edges={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+        onCreateEdge={vi.fn(() => 'edge-new')}
+        getCostPerM2={() => 25}
+        requestCreateKey={0}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo material/i }));
+    await user.type(screen.getByLabelText('Código'), 'MAT-K1');
+    await user.type(screen.getByLabelText('Nombre'), 'Tablero K1');
+    await user.type(screen.getByLabelText('Fabricante'), 'Arauco');
+    await user.type(screen.getByLabelText('Ancho del tablero (mm)'), '1830');
+    await user.type(screen.getByLabelText('Largo del tablero — Veta (mm)'), '2440');
+    await user.type(screen.getByLabelText('Espesor (mm)'), '15');
+    await user.type(screen.getByLabelText('Precio del tablero ($)'), '100');
+    await user.type(screen.getByLabelText('Merma (%)'), '10');
+    await user.click(screen.getByTestId('material-form-submit-btn'));
+
+    expect(screen.getByTestId('material-form-modal')).toBeTruthy();
+    await act(async () => { resolveSave(); });
+    await waitFor(() => expect(screen.queryByTestId('material-form-modal')).toBeNull());
+    expect(onCreate).toHaveBeenCalledTimes(1);
   });
 });

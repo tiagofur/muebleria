@@ -31,6 +31,8 @@ export interface AmbientMaterialFormModalProps {
   readonly resolveImageUrl: (url: string | undefined) => string | undefined;
   readonly onSubmit: (e: FormEvent) => void;
   readonly onClose: () => void;
+  /** K1 #1032: save in flight — footer locked with busy label. */
+  readonly saving?: boolean;
 }
 
 export function AmbientMaterialFormModal({
@@ -46,6 +48,7 @@ export function AmbientMaterialFormModal({
   resolveImageUrl,
   onSubmit,
   onClose,
+  saving = false,
 }: AmbientMaterialFormModalProps): ReactNode {
   // Draft category cascade for 3-level selector
   const draftCascade = cascadeFromCategoryId(
@@ -100,16 +103,17 @@ export function AmbientMaterialFormModal({
       dataTestId="ambient-material-form-modal"
       footer={
         <>
-          <button type="button" className="btn" onClick={onClose}>
+          <button type="button" className="btn" onClick={onClose} disabled={saving}>
             Cancelar
           </button>
           <button
             type="submit"
             className="btn btn--primary"
             form={formId}
+            disabled={saving}
             data-testid="ambient-material-submit"
           >
-            Guardar
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </>
       }

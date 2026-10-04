@@ -18,9 +18,11 @@ import {
   filterMaterialBoardsByCategory,
   isValidPreviewColor,
   normalizePreviewColor,
+  suggestDuplicateCode,
   UNCATEGORIZED_FILTER,
 } from '@granete/domain';
 import {
+  Copy,
   Eye,
   EyeOff,
   Layers,
@@ -30,6 +32,7 @@ import {
 } from 'lucide-react';
 import {
   CatalogImage,
+  ConfirmDialog,
   EmptyState,
   formatMoneyDisplay,
   PageHeader,
@@ -76,12 +79,14 @@ export interface MaterialsCatalogProps {
   readonly edges: readonly EdgeBand[];
   /** F142: subgrupos de materiales (árbol de categorías) para el form. */
   readonly materialCategories?: readonly MaterialCategory[];
-  readonly onCreate: (draft: MaterialDraft) => void;
-  readonly onUpdate: (id: string, draft: MaterialDraft) => void;
+  /** Save settles before the modal closes (#1032 K1): a rejected save keeps
+   * the form intact. */
+  readonly onCreate: (draft: MaterialDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: MaterialDraft) => void | Promise<void>;
   readonly onDeactivate: (id: string) => void;
   readonly onReactivate: (id: string) => void;
   /** Creates an edge band and returns its new id (for linking as default). */
-  readonly onCreateEdge: (draft: EdgeDraft) => string;
+  readonly onCreateEdge: (draft: EdgeDraft) => string | Promise<string>;
   /**
    * Domain formula injected by the shell (architecture.md: UI does not calculate).
    * Used for live preview and to fill draft.costPerM2 on save.
@@ -146,6 +151,10 @@ export function MaterialsCatalog({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<MaterialDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
+  // K1 #1032: save-in-flight flag shared by the form modal footer.
+  const [saving, setSaving] = useState(false);
+  // K2 #1032: destructive actions ask first; the row button only requests.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<MaterialBoard | null>(null);
   const [edgeCreateOpen, setEdgeCreateOpen] = useState(false);
   const [tileSuggestBusy, setTileSuggestBusy] = useState(false);
   const [tileSuggestMsg, setTileSuggestMsg] = useState<string | null>(null);
@@ -284,6 +293,24 @@ export function MaterialsCatalog({
     setModalOpen(true);
   };
 
+  // K2 #1032: duplicate via the create flow — the form opens prefilled with
+  // the source values and a disambiguated code; saving creates a new item.
+  const startDuplicate = (item: MaterialBoard) => {
+    const next = toDraft(item);
+    next.code = suggestDuplicateCode(
+      item.code,
+      materials.map((m) => m.code),
+    );
+    next.name = `${item.name} (copia)`;
+    setEditingId(null);
+    setDraft(next);
+    setError(null);
+    setPreview3dOpen(hasPreview3dConfig(next));
+    setTileSuggestMsg(null);
+    setEdgeCreateOpen(false);
+    setModalOpen(true);
+  };
+
   const openCreateEdge = () => setEdgeCreateOpen(true);
 
   const validate = (): string | null => {
@@ -311,8 +338,9 @@ export function MaterialsCatalog({
     );
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const err = validate();
     if (err) {
       setError(err);
@@ -348,12 +376,22 @@ export function MaterialsCatalog({
       previewClearcoat: parsePbr(draft.previewClearcoat),
     };
 
-    if (editingId) {
-      onUpdate(editingId, finalDraft);
-    } else {
-      onCreate(finalDraft);
+    // #1032 K1: the save settles BEFORE the modal closes — a rejected save
+    // keeps the form intact (same contract as HardwareCatalog).
+    setSaving(true);
+    try {
+      if (editingId) {
+        await onUpdate(editingId, finalDraft);
+      } else {
+        await onCreate(finalDraft);
+      }
+      closeModal();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar los cambios';
+      setError(msg);
+    } finally {
+      setSaving(false);
     }
-    closeModal();
   };
 
   const columns: CatalogColumn<MaterialBoard>[] = useMemo(
@@ -613,12 +651,21 @@ export function MaterialsCatalog({
                         <Pencil size={14} strokeWidth={1.5} aria-hidden />
                         Editar
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn--small btn--ghost"
+                        aria-label={`Duplicar ${row.code}`}
+                        onClick={() => startDuplicate(row)}
+                      >
+                        <Copy size={14} strokeWidth={1.5} aria-hidden />
+                        Duplicar
+                      </button>
                       {row.active ? (
                         <button
                           type="button"
                           className="btn btn--small btn--ghost btn--danger"
                           aria-label={`Desactivar ${row.code}`}
-                          onClick={() => onDeactivate(row.id)}
+                          onClick={() => setConfirmDeactivate(row)}
                         >
                           <EyeOff size={14} strokeWidth={1.5} aria-hidden />
                           Desactivar
@@ -665,6 +712,7 @@ export function MaterialsCatalog({
         draft={draft}
         setDraft={setDraft}
         error={error}
+        saving={saving}
         activeEdges={activeEdges}
         canMutate={canMutate}
         getCostPerM2={getCostPerM2}
@@ -691,6 +739,22 @@ export function MaterialsCatalog({
         onCreated={(newId) => {
           setDraft((d) => ({ ...d, defaultEdgeBandId: newId }));
           setEdgeCreateOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDeactivate != null}
+        onClose={() => setConfirmDeactivate(null)}
+        title="Desactivar material"
+        message={
+          confirmDeactivate
+            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? Los muebles y cotizaciones que lo usan conservan su copia; podés reactivarlo cuando quieras.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        dataTestId="material-deactivate-confirm"
+        onConfirm={() => {
+          if (confirmDeactivate) onDeactivate(confirmDeactivate.id);
         }}
       />
     </section>

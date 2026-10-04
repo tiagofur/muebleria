@@ -2,8 +2,9 @@
  * EdgesCatalog tests (gap #6 — was the only catalog screen without a component test).
  * @vitest-environment jsdom
  */
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { EdgeBand } from '@granete/domain';
 import { EdgesCatalog } from './EdgesCatalog';
@@ -112,5 +113,78 @@ describe('EdgesCatalog (gap #6)', () => {
       await user.click(reactivateBtn);
       expect(onReactivate).toHaveBeenCalledWith(expect.any(String));
     }
+  });
+});
+
+describe('EdgesCatalog — save contract (K1 #1032)', () => {
+  it('keeps the modal open with the form and shows the server error when the save fails', async () => {
+    const user = userEvent.setup();
+    let rejectSave!: (err: Error) => void;
+    const onCreate = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    render(
+      <EdgesCatalog
+        edges={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo canto/i }));
+    await user.type(screen.getByLabelText('Código'), 'CAN-K1');
+    await user.type(screen.getByLabelText('Nombre'), 'Canto K1');
+    await user.type(screen.getByLabelText('Espesor (mm)'), '15');
+    await user.type(screen.getByLabelText('Costo / ML'), '5');
+    await user.click(screen.getByTestId('edge-form-submit-btn'));
+
+    const saveBtn = screen.getByTestId('edge-form-submit-btn');
+    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(saveBtn.textContent).toContain('Guardando');
+
+    await act(async () => {
+      rejectSave(new Error('network down'));
+    });
+
+    // The modal is still open (its footer submit exists) with the error shown.
+    expect(screen.getByTestId('edge-form-submit-btn')).toBeTruthy();
+    expect(screen.getByText(/network down/)).toBeTruthy();
+    expect((screen.getByLabelText('Código') as HTMLInputElement).value).toBe('CAN-K1');
+    expect((screen.getByTestId('edge-form-submit-btn') as HTMLButtonElement).disabled).toBe(false);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the modal only after the save settles successfully', async () => {
+    const user = userEvent.setup();
+    let resolveSave!: () => void;
+    const onCreate = vi.fn(() => new Promise<void>((resolve) => { resolveSave = resolve; }));
+    render(
+      <EdgesCatalog
+        edges={[]}
+        onCreate={onCreate}
+        onUpdate={vi.fn()}
+        onDeactivate={vi.fn()}
+        onReactivate={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nuevo canto/i }));
+    await user.type(screen.getByLabelText('Código'), 'CAN-K1');
+    await user.type(screen.getByLabelText('Nombre'), 'Canto K1');
+    await user.type(screen.getByLabelText('Espesor (mm)'), '15');
+    await user.type(screen.getByLabelText('Costo / ML'), '5');
+    await user.click(screen.getByTestId('edge-form-submit-btn'));
+
+    expect(screen.getByTestId('edge-form-submit-btn')).toBeTruthy();
+    await act(async () => { resolveSave(); });
+    await waitFor(() =>
+      expect(screen.queryByTestId('edge-form-submit-btn')).toBeNull(),
+    );
+    expect(onCreate).toHaveBeenCalledTimes(1);
   });
 });

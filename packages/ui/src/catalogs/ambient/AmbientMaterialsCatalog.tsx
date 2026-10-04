@@ -22,8 +22,10 @@ import {
   isValidPreviewColor,
   normalizePreviewColor,
   UNCATEGORIZED_FILTER,
+  suggestDuplicateCode,
 } from '@granete/domain';
 import {
+  Copy,
   Eye,
   EyeOff,
   Palette,
@@ -32,6 +34,7 @@ import {
   SearchX,
 } from 'lucide-react';
 import {
+  ConfirmDialog,
   EmptyState,
   PageHeader,
   PageToolbar,
@@ -64,8 +67,9 @@ import '../catalogs.css';
 export interface AmbientMaterialsCatalogProps {
   readonly materials: readonly AmbientMaterial[];
   readonly categories?: readonly AmbientCategory[];
-  readonly onCreate: (draft: AmbientMaterialDraft) => void;
-  readonly onUpdate: (id: string, draft: AmbientMaterialDraft) => void;
+  /** Save settles before the modal closes (#1032 K1). */
+  readonly onCreate: (draft: AmbientMaterialDraft) => void | Promise<void>;
+  readonly onUpdate: (id: string, draft: AmbientMaterialDraft) => void | Promise<void>;
   readonly onDeactivate: (id: string) => void;
   readonly onReactivate: (id: string) => void;
   readonly onCreateCategory?: (draft: AmbientCategoryDraft) => void;
@@ -119,6 +123,10 @@ export function AmbientMaterialsCatalog({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AmbientMaterialDraft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
+  // K1 #1032: save-in-flight flag for the modal footer.
+  const [saving, setSaving] = useState(false);
+  // K2 #1032: destructive actions ask first; the row button only requests.
+  const [confirmDeactivate, setConfirmDeactivate] = useState<AmbientMaterial | null>(null);
 
   // Category Manage Modal state
   const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
@@ -183,6 +191,17 @@ export function AmbientMaterialsCatalog({
     setModalOpen(true);
   };
 
+  // K2 #1032: duplicate via the create flow — prefilled, disambiguated code.
+  const startDuplicate = (item: AmbientMaterial) => {
+    const next = toDraft(item);
+    next.code = suggestDuplicateCode(item.code, materials.map((m) => m.code));
+    next.name = `${item.name} (copia)`;
+    setEditingId(null);
+    setDraft(next);
+    setError(null);
+    setModalOpen(true);
+  };
+
   const validate = (): string | null => {
     const codeErr = validateUniqueCode(
       draft.code,
@@ -199,8 +218,9 @@ export function AmbientMaterialsCatalog({
     return null;
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     const err = validate();
     if (err) {
       setError(err);
@@ -231,12 +251,21 @@ export function AmbientMaterialsCatalog({
       previewClearcoat: parsePbr(draft.previewClearcoat),
     };
 
-    if (editingId) {
-      onUpdate(editingId, finalDraft);
-    } else {
-      onCreate(finalDraft);
+    // K1 #1032: settle before closing, keep the form on rejection.
+    setSaving(true);
+    try {
+      if (editingId) {
+        await onUpdate(editingId, finalDraft);
+      } else {
+        await onCreate(finalDraft);
+      }
+      closeModal();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al guardar los cambios';
+      setError(msg);
+    } finally {
+      setSaving(false);
     }
-    closeModal();
   };
 
   const columns: CatalogColumn<AmbientMaterial>[] = useMemo(
@@ -498,12 +527,21 @@ export function AmbientMaterialsCatalog({
                       <Pencil size={14} strokeWidth={1.5} aria-hidden />
                       Editar
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn--small btn--ghost"
+                      aria-label={`Duplicar ${row.code}`}
+                      onClick={() => startDuplicate(row)}
+                    >
+                      <Copy size={14} strokeWidth={1.5} aria-hidden />
+                      Duplicar
+                    </button>
                     {row.active ? (
                       <button
                         type="button"
                         className="btn btn--small btn--ghost btn--danger"
                         aria-label={`Desactivar ${row.code}`}
-                        onClick={() => onDeactivate(row.id)}
+                        onClick={() => setConfirmDeactivate(row)}
                       >
                         <EyeOff size={14} strokeWidth={1.5} aria-hidden />
                         Desactivar
@@ -529,6 +567,7 @@ export function AmbientMaterialsCatalog({
 
       <AmbientMaterialFormModal
         open={modalOpen}
+        saving={saving}
         editingId={editingId}
         formId={formId}
         draft={draft}
@@ -553,6 +592,22 @@ export function AmbientMaterialsCatalog({
           if (categoryFilter === id) {
             setCategoryFilter(null);
           }
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDeactivate != null}
+        onClose={() => setConfirmDeactivate(null)}
+        title="Desactivar acabado"
+        message={
+          confirmDeactivate
+            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? Los proyectos que lo usan conservan su copia; podés reactivarlo cuando quieras.`
+            : ''
+        }
+        confirmLabel="Desactivar"
+        dataTestId="ambient-deactivate-confirm"
+        onConfirm={() => {
+          if (confirmDeactivate) onDeactivate(confirmDeactivate.id);
         }}
       />
     </section>
