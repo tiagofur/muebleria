@@ -392,6 +392,7 @@ export {
 
 export {
   ComponentsScreen,
+  draftToComponent,
   type ComponentDraft,
   type ComponentsScreenProps,
 } from './components';

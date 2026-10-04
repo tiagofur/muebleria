@@ -6,6 +6,7 @@ export {
 export {
   COMPONENT_PLACEMENTS,
   PLACEMENT_LABEL,
+  draftToComponent,
   type ComponentDraft,
   type ComponentEditorTab,
 } from './componentDraft';

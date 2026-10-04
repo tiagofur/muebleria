@@ -3,19 +3,22 @@
  *
  * Extracted from App.tsx so the store owns catalog mutations and App.tsx
  * becomes a thin shell. All functions are pure — no IO, no React.
+ *
+ * Component and Module draft↔entity mappers live in @granete/ui (single
+ * source of truth); this file keeps thin re-exports. Structure/Customer
+ * mappers remain local.
  */
 
 import type {
   Component,
-  ComponentConstruction,
   Customer,
   Module,
   Structure,
 } from '@granete/domain';
 import type { ComponentPlacement } from '@granete/domain';
 import {
+  draftToComponent as draftToComponentFromUi,
   draftToModule as draftToModuleFromUi,
-  edgesFromFlags,
   type ComponentDraft,
   type ModuleDraft,
   type StructureDraft,
@@ -78,59 +81,9 @@ export function draftToStructure(id: string, draft: StructureDraft): Structure {
   };
 }
 
+/** Re-export domain mapper from UI helpers (single source of truth). */
 export function draftToComponent(id: string, draft: ComponentDraft): Component {
-  return {
-    id,
-    code: draft.code.trim(),
-    name: draft.name.trim(),
-    placement: draft.placement as Component['placement'],
-    geometry: {
-      kind: 'rectangular_board',
-      lengthMm: draft.lengthMm,
-      widthMm: draft.widthMm,
-      thicknessMm: draft.thicknessMm,
-      lengthFormula: draft.lengthFormula.trim() || undefined,
-      widthFormula: draft.widthFormula.trim() || undefined,
-    },
-    defaultEdges: edgesFromFlags(draft.edgeL1, draft.edgeL2, draft.edgeW1, draft.edgeW2),
-    // Preserve perforations round-tripped via draft (no CNC editor yet — C2).
-    perforations:
-      draft.perforations && draft.perforations.length > 0
-        ? draft.perforations
-        : undefined,
-    optionRoles: draft.optionRoles.split(',').map((s) => s.trim()).filter(Boolean),
-    // #1052 slice 1: the Construcción tab's role/faces/system persist as
-    // entity data. Station scalars stay overlay-only (#875) — never here.
-    construction:
-      draft.constructionOverride &&
-      (draft.constructionOverride.constructiveRole ||
-        draft.constructionOverride.joinerySystemId ||
-        (draft.constructionOverride.connectionFaces &&
-          draft.constructionOverride.connectionFaces.length > 0))
-        ? {
-            constructiveRole: draft.constructionOverride
-              .constructiveRole as ComponentConstruction['constructiveRole'],
-            connectionFaces: draft.constructionOverride.connectionFaces as
-              ComponentConstruction['connectionFaces'],
-            joinerySystemId: draft.constructionOverride
-              .joinerySystemId as ComponentConstruction['joinerySystemId'],
-          }
-        : undefined,
-    notes: optionalNotes(draft.notes),
-    active: draft.active !== false,
-    xFormula: draft.xFormula.trim() || undefined,
-    yFormula: draft.yFormula.trim() || undefined,
-    zFormula: draft.zFormula.trim() || undefined,
-    // null = placement default; 0 is a valid explicit rotation
-    rotateX: draft.rotateX ?? undefined,
-    rotateY: draft.rotateY ?? undefined,
-    rotateZ: draft.rotateZ ?? undefined,
-    canOpen: draft.canOpen,
-    maxOpeningAngleDeg:
-      draft.canOpen && Number(draft.maxOpeningAngleDeg) > 0
-        ? Number(draft.maxOpeningAngleDeg)
-        : undefined,
-  };
+  return draftToComponentFromUi(id, draft);
 }
 
 /**

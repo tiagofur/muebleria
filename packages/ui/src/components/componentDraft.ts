@@ -2,8 +2,14 @@
  * Component catalog draft helpers and shared placement labels.
  */
 
-import type { Component, ComponentConstructionOverride, Perforation } from '@granete/domain';
+import type {
+  Component,
+  ComponentConstruction,
+  ComponentConstructionOverride,
+  Perforation,
+} from '@granete/domain';
 import { arrayRule, booleanRule, enumRule, nullableRule, numberRule, objectRule, optionalRule, stringFields, stringRule } from '../common/draftValidation';
+import { edgesFromFlags } from '../modules/helpers/moduleDraftTransforms';
 
 /** Shared placement options for components and structure/module instances. */
 export const COMPONENT_PLACEMENTS: {
@@ -286,6 +292,66 @@ export function componentToDraft(item: Component): ComponentDraft {
     perforations: item.perforations,
   };
   return draft;
+}
+
+function optionalNotes(notes: string): string | undefined {
+  const trimmed = notes.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function draftToComponent(id: string, draft: ComponentDraft): Component {
+  return {
+    id,
+    code: draft.code.trim(),
+    name: draft.name.trim(),
+    placement: draft.placement as Component['placement'],
+    geometry: {
+      kind: 'rectangular_board',
+      lengthMm: draft.lengthMm,
+      widthMm: draft.widthMm,
+      thicknessMm: draft.thicknessMm,
+      lengthFormula: draft.lengthFormula.trim() || undefined,
+      widthFormula: draft.widthFormula.trim() || undefined,
+    },
+    defaultEdges: edgesFromFlags(draft.edgeL1, draft.edgeL2, draft.edgeW1, draft.edgeW2),
+    // Preserve perforations round-tripped via draft (no CNC editor yet — C2).
+    perforations:
+      draft.perforations && draft.perforations.length > 0
+        ? draft.perforations
+        : undefined,
+    optionRoles: draft.optionRoles.split(',').map((s) => s.trim()).filter(Boolean),
+    // #1052 slice 1: the Construcción tab's role/faces/system persist as
+    // entity data. Station scalars stay overlay-only (#875) — never here.
+    construction:
+      draft.constructionOverride &&
+      (draft.constructionOverride.constructiveRole ||
+        draft.constructionOverride.joinerySystemId ||
+        (draft.constructionOverride.connectionFaces &&
+          draft.constructionOverride.connectionFaces.length > 0))
+        ? {
+            constructiveRole: draft.constructionOverride
+              .constructiveRole as ComponentConstruction['constructiveRole'],
+            connectionFaces: draft.constructionOverride.connectionFaces as
+              ComponentConstruction['connectionFaces'],
+            joinerySystemId: draft.constructionOverride
+              .joinerySystemId as ComponentConstruction['joinerySystemId'],
+          }
+        : undefined,
+    notes: optionalNotes(draft.notes),
+    active: draft.active !== false,
+    xFormula: draft.xFormula.trim() || undefined,
+    yFormula: draft.yFormula.trim() || undefined,
+    zFormula: draft.zFormula.trim() || undefined,
+    // null = placement default; 0 is a valid explicit rotation
+    rotateX: draft.rotateX ?? undefined,
+    rotateY: draft.rotateY ?? undefined,
+    rotateZ: draft.rotateZ ?? undefined,
+    canOpen: draft.canOpen,
+    maxOpeningAngleDeg:
+      draft.canOpen && Number(draft.maxOpeningAngleDeg) > 0
+        ? Number(draft.maxOpeningAngleDeg)
+        : undefined,
+  };
 }
 
 /**
