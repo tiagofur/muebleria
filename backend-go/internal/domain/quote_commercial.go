@@ -145,6 +145,9 @@ type QuoteCommercialDemandSource struct {
 	RecipeRevision           string `json:"recipeRevision,omitempty"`
 	RelationshipID           string `json:"relationshipId"`
 	ContactCount             int    `json:"contactCount"`
+	// StationCount is what the demand actually multiplied (#1065): the
+	// planned stations across the verified contacts, per relationship.
+	StationCount int `json:"stationCount"`
 }
 
 // QuoteCommercialSnapshot is the complete frozen commercial payload of one

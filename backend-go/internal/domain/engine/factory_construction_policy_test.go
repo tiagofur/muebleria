@@ -260,6 +260,31 @@ func TestMaterializeBoundRelationshipsFactoryPolicyOverridesDefinitionDefault(t 
 		}
 	})
 
+	t.Run("spacing family rule materializes maxSpacingMm, never a zero count (#1065)", func(t *testing.T) {
+		spacing := 400.0
+		policy := &FactoryConstructionPolicy{
+			ShelfToSide: &FactoryJointRule{StartMarginMm: 50, EndMarginMm: 50, MaxSpacingMm: &spacing},
+		}
+		definition := structureDefinition()
+		definition.Binding.Relationship.Kind = "fixed-shelf-side"
+		relationships := materializeBoundRelationships(
+			[]domain.FurnitureParameterDefinition{definition},
+			map[string]any{"baseJointStations": float64(3)},
+			structureBoards(), nil, policy)
+		if len(relationships) != 1 {
+			t.Fatalf("relationships = %+v", relationships)
+		}
+		if got := relationships[0].Parameters["maxSpacingMm"]; got != spacing {
+			t.Fatalf("the spacing rule must materialize maxSpacingMm, got %v", got)
+		}
+		if _, hasCount := relationships[0].Parameters["stationCount"]; hasCount {
+			t.Fatalf("a spacing policy must not materialize a (zero) stationCount: %+v", relationships[0].Parameters)
+		}
+		if relationships[0].Parameters["startMarginMm"] != 50.0 || relationships[0].Parameters["endMarginMm"] != 50.0 {
+			t.Fatalf("the spacing rule carries the factory margins: %+v", relationships[0].Parameters)
+		}
+	})
+
 	t.Run("shelf family rule maps fixed-shelf-side bindings", func(t *testing.T) {
 		definition := structureDefinition()
 		definition.Binding.Relationship.Kind = "fixed-shelf-side"

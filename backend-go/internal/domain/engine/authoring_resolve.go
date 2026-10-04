@@ -557,10 +557,18 @@ func materializeBoundRelationships(definitions []domain.FurnitureParameterDefini
 					"endMarginMm":   binding.Relationship.Station.EndMarginMm,
 				}
 			} else if rule != nil && !hasFamilies {
+				// A spacing rule owns the pattern (#1065): materialize
+				// maxSpacingMm — never stationCount, which a spacing rule
+				// zeroes. Injecting the zero count here used to fail every
+				// policy-governed bound joint with STATION_PATTERN_INVALID.
 				parameters = map[string]any{
-					"stationCount":  float64(rule.StationsCount),
 					"startMarginMm": rule.StartMarginMm,
 					"endMarginMm":   rule.EndMarginMm,
+				}
+				if rule.MaxSpacingMm != nil {
+					parameters["maxSpacingMm"] = *rule.MaxSpacingMm
+				} else {
+					parameters["stationCount"] = float64(rule.StationsCount)
 				}
 			} else {
 				count, ok := structureStationCount(definition, values)

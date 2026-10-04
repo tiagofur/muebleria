@@ -232,8 +232,9 @@ test.describe.serial('Hardware profile demo chain (#955)', () => {
     const taqueteID = byCode.get('HER-TAQ-8X30');
     expect(minifixID, 'HER-MIN-15 present in the org catalog').toBeTruthy();
     expect(taqueteID, 'HER-TAQ-8X30 present in the org catalog').toBeTruthy();
-    // 1 minifix + 1 tarugo per contact × 2 verified contacts.
-    expect(byHardware.get(minifixID!)).toBe(2);
-    expect(byHardware.get(taqueteID!)).toBe(2);
+    // #1065: 1 minifix + 1 tarugo PER PLANNED STATION — the authored
+    // relationship's 3-station pattern × 2 verified contacts.
+    expect(byHardware.get(minifixID!)).toBe(6);
+    expect(byHardware.get(taqueteID!)).toBe(6);
   });
 });

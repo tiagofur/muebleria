@@ -142,6 +142,17 @@ async function seedProjectAndDesigns(): Promise<SeededJoinery> {
   });
   await seedJoineryCatalog(owner.token);
 
+  // The /seed of OTHER gate specs may have provisioned the tuned
+  // construction policy (#1065): this suite pins the PARAMETER-driven
+  // baseline (baseJointStations 4/3), so restore inheritance explicitly.
+  const activeOverlay = await client.getActiveStandardLibraryOverlay(owner.token);
+  if (activeOverlay) {
+    const remaining = Object.fromEntries(
+      Object.entries((activeOverlay.overrides ?? {}) as Record<string, unknown>).filter(([key]) => !key.startsWith('joint.')),
+    );
+    await client.updateLibraryOverlay(owner.token, activeOverlay.id, activeOverlay.version, { overrides: remaining });
+  }
+
   // Readback regression guard: the construction declaration must survive
   // persistence exactly (the storage workspace mapper drops
   // parameter_definitions — this seed never round-trips the module through

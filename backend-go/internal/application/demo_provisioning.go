@@ -78,13 +78,12 @@ func ProvisionDemoProfileForOrg(ctx context.Context, store interface {
 // rule — and can re-customize or restore inheritance in Ajustes →
 // Construcción. Families the engine cannot resolve yet (top-to-side, #874)
 // stay inherited: honest absence, never fake coverage.
+// Granular keys ONLY, no `joint.constructionPolicy` structured blob: the
+// flat form is the canonical merge surface — a later writer that adds
+// granular keys (the settings UI, tests, future API flows) can never be
+// silently overridden by a stale structured blob, because there isn't one.
 func demoConstructionPolicyOverrides() json.RawMessage {
 	return json.RawMessage(`{
-		"joint.constructionPolicy": {
-			"version": 1,
-			"floorToSide": {"provenance": "factory", "systemId": "minifix-dowel", "maxSpacingMm": 250, "startMarginMm": 50, "endMarginMm": 50, "withDowels": true},
-			"shelfToSide": {"provenance": "factory", "systemId": "minifix-dowel", "maxSpacingMm": 400, "startMarginMm": 50, "endMarginMm": 50, "withDowels": true}
-		},
 		"joint.floorToSide.systemId": "minifix-dowel",
 		"joint.floorToSide.maxSpacingMm": 250,
 		"joint.floorToSide.startMarginMm": 50,

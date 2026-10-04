@@ -165,10 +165,13 @@ func TestQuoteCommercialSnapshotCarriesProfileDemand(t *testing.T) {
 
 	snapshot := readQuoteRevisionSnapshot(t, fx, requoted.Revision.ID)
 
-	// The price: 2 physical units × 2 verified contacts × 1 minifix × $10 =
-	// $40 of governed demand joined the SAME hardware total as manual lines.
-	if math.Abs(snapshot.Breakdown.HardwareTotal-40) > 1e-9 {
-		t.Fatalf("HardwareTotal=%v want 40 (2 units × 2 contacts × $10)", snapshot.Breakdown.HardwareTotal)
+	// The price: 2 physical units × 2 verified contacts × 3 stations (the
+	// binding's own station default) × 1 minifix × $10 = $120 of governed
+	// demand joined the SAME hardware total as manual lines. #1065: demand
+	// applies per PLANNED STATION — the binding drills 3 stations per
+	// contact, so buying per contact under-counted by 3×.
+	if math.Abs(snapshot.Breakdown.HardwareTotal-120) > 1e-9 {
+		t.Fatalf("HardwareTotal=%v want 120 (2 units × 2 contacts × 3 stations × $10)", snapshot.Breakdown.HardwareTotal)
 	}
 
 	// The provenance: ONE entry per physical unit under its unit's frozen
@@ -194,8 +197,8 @@ func TestQuoteCommercialSnapshotCarriesProfileDemand(t *testing.T) {
 			t.Fatalf("demand lines=%d want 1: %+v", len(entry.Lines), entry.Lines)
 		}
 		line := entry.Lines[0]
-		if line.HardwareID != hwA || math.Abs(line.Quantity-2) > 1e-9 {
-			t.Fatalf("demand line = %+v want hardware %s quantity 2 per unit", line, hwA)
+		if line.HardwareID != hwA || math.Abs(line.Quantity-6) > 1e-9 {
+			t.Fatalf("demand line = %+v want hardware %s quantity 6 per unit (2 contacts x 3 stations)", line, hwA)
 		}
 		if len(line.Sources) != 1 {
 			t.Fatalf("sources=%d want 1: %+v", len(line.Sources), line.Sources)
@@ -204,7 +207,7 @@ func TestQuoteCommercialSnapshotCarriesProfileDemand(t *testing.T) {
 		want := domain.QuoteCommercialDemandSource{
 			TechnicalProfileID: profA, TechnicalProfileRevision: "rev-1",
 			RecipeID: "qt:minifix", RecipeRevision: "rev-1",
-			RelationshipID: "parameter-shelfJoints-1", ContactCount: 2,
+			RelationshipID: "parameter-shelfJoints-1", ContactCount: 2, StationCount: 6,
 		}
 		if source != want {
 			t.Fatalf("source = %+v want %+v", source, want)
@@ -235,9 +238,9 @@ func TestQuoteCommercialSnapshotCarriesProfileDemand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("live demand: %v", err)
 	}
-	if len(live) != 2 || len(live[0]) != 1 || live[0][0].HardwareID != hwA || math.Abs(live[0][0].Quantity-2) > 1e-9 ||
-		len(live[1]) != 1 || live[1][0].HardwareID != hwA || math.Abs(live[1][0].Quantity-2) > 1e-9 {
-		t.Fatalf("live demand matrix = %+v want one minifix line of 2 per unit", live)
+	if len(live) != 2 || len(live[0]) != 1 || live[0][0].HardwareID != hwA || math.Abs(live[0][0].Quantity-6) > 1e-9 ||
+		len(live[1]) != 1 || live[1][0].HardwareID != hwA || math.Abs(live[1][0].Quantity-6) > 1e-9 {
+		t.Fatalf("live demand matrix = %+v want one minifix line of 6 per unit (2 contacts x 3 stations)", live)
 	}
 
 	// The revision frozen before the assignments keeps its pre-demand truth.

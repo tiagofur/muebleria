@@ -431,6 +431,7 @@ func quoteCommercialDemandLineFromEngine(line engine.HardwareProfileDemandLine) 
 			RecipeRevision:           source.RecipeRevision,
 			RelationshipID:           source.RelationshipID,
 			ContactCount:             source.ContactCount,
+			StationCount:             source.StationCount,
 		})
 	}
 	return converted
