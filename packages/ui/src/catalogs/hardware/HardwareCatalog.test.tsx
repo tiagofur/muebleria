@@ -201,6 +201,53 @@ describe('HardwareCatalog — Maquinado CNC (F127)', () => {
     expect(draft.machining).toBeNull();
   });
 
+  it('cambiar ciego→pasante no arrastra depthMm residual y el guardado pasa (#1047)', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = setup([machinedHardware]);
+    await openEdit(user, machinedHardware);
+
+    await user.selectOptions(
+      screen.getByTestId('hardware-machining-kind-0-0'),
+      'through_hole',
+    );
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const draft = onUpdate.mock.calls[0]![1] as {
+      machining?: {
+        parts: Array<{ operations: Array<Record<string, unknown>> }>;
+      };
+    };
+    const op = draft.machining!.parts[0]!.operations[0]!;
+    expect(op.kind).toBe('through_hole');
+    expect(op.depthMm).toBeUndefined();
+    expect(op.label).toBe('Taza 35 mm');
+    expect(op.xMm).toBe(0);
+    expect(op.face).toBe('anchor');
+  });
+
+  it('escareado→ciego no arrastra innerDiameterMm residual (#1047)', async () => {
+    const user = userEvent.setup();
+    const { onUpdate } = setup([machinedHardware]);
+    await openEdit(user, machinedHardware);
+
+    const kindSelect = screen.getByTestId('hardware-machining-kind-0-0');
+    await user.selectOptions(kindSelect, 'counterbore');
+    await user.selectOptions(kindSelect, 'blind_hole');
+    fireEvent.submit(screen.getByTestId('hardware-form-modal').querySelector('form')!);
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    const draft = onUpdate.mock.calls[0]![1] as {
+      machining?: {
+        parts: Array<{ operations: Array<Record<string, unknown>> }>;
+      };
+    };
+    const op = draft.machining!.parts[0]!.operations[0]!;
+    expect(op.kind).toBe('blind_hole');
+    expect(op.innerDiameterMm).toBeUndefined();
+    expect(op.depthMm).toBe(15);
+  });
+
   it('el detalle expandido muestra el resumen de maquinado', async () => {
     const user = userEvent.setup();
     setup([machinedHardware]);
