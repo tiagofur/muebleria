@@ -571,8 +571,16 @@ func deriveManualPlacementMachining(
 		return
 	}
 
+	// The hole enters through the PLACEMENT's anchor face (TS parity: the
+	// resolver derives targetFace from placement.anchorFace, not from the
+	// profile) — a screw placed on a board edge drills that edge. The
+	// profile face is only the fallback for intents without an anchor.
+	holeFace := placement.intent.AnchorFace
+	if holeFace == "" {
+		holeFace = profile.BoardFace
+	}
 	holes := []ResolveHole{{
-		Face:       profile.BoardFace,
+		Face:       holeFace,
 		XMm:        placement.intent.OffsetMm[0],
 		YMm:        placement.intent.OffsetMm[1],
 		DiameterMm: profile.PilotDiameterMm,
