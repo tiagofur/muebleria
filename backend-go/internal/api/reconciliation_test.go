@@ -35,7 +35,6 @@ func withTestClaims(req *http.Request, userID string, roles []domain.UserRole) *
 	return req.WithContext(ctx)
 }
 
-
 func TestHandleProjectReconciliation_Unauthorized(t *testing.T) {
 	server := &Server{Store: &stubStore{}}
 	req := httptest.NewRequest(http.MethodPost, "/api/projects/10000000-0000-0000-0000-000000000001/reconciliation", bytes.NewBufferString("{}"))
