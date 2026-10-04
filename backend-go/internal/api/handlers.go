@@ -223,42 +223,6 @@ func authTransportFromClaims(claims *auth.Claims) openapi.AuthTransport {
 	return openapi.AuthTransportWeb
 }
 
-func (s *Server) audit(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) {
-	// Best-effort: an audit write failure must not fail the request; it is
-	// logged server-side instead.
-	if details == nil {
-		details = map[string]interface{}{}
-	}
-	requestID := RequestIDFromContext(ctx)
-	if requestID != "" {
-		details["request_id"] = requestID
-	}
-	if err := s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
-		EventType:      eventType,
-		SchemaVersion:  1,
-		RequestID:      requestID,
-		ActorUserID:    actorUserID,
-		OrganizationID: organizationID,
-		IP:             ip,
-		Details:        details,
-	}); err != nil {
-		slog.Warn("security audit write failed", "event_type", eventType, "error", err)
-	}
-}
-
-func (s *Server) auditRequired(ctx context.Context, eventType, actorUserID, organizationID, ip string, details map[string]interface{}) error {
-	if details == nil {
-		details = map[string]interface{}{}
-	}
-	requestID := RequestIDFromContext(ctx)
-	if requestID != "" {
-		details["request_id"] = requestID
-	}
-	return s.Store.InsertSecurityAuditEvent(ctx, storage.SecurityAuditEvent{
-		EventType: eventType, SchemaVersion: 1, RequestID: requestID, ActorUserID: actorUserID, OrganizationID: organizationID, IP: ip, Details: details,
-	})
-}
-
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
