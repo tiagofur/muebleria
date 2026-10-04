@@ -17,11 +17,11 @@ import (
 // ─── Mock OverlayStore for Unit Testing ──────────────────────────────────────
 
 type mockOverlayStore struct {
-	overlays       map[uuid.UUID]*domain.LibraryOverlay
-	conflicts      map[uuid.UUID]*domain.LibraryOverlayConflict
-	releases       map[uuid.UUID]*domain.LibraryRelease
-	manifests      map[uuid.UUID]*domain.LibraryManifest
-	blobs          map[string]*domain.ResourceBlob
+	overlays  map[uuid.UUID]*domain.LibraryOverlay
+	conflicts map[uuid.UUID]*domain.LibraryOverlayConflict
+	releases  map[uuid.UUID]*domain.LibraryRelease
+	manifests map[uuid.UUID]*domain.LibraryManifest
+	blobs     map[string]*domain.ResourceBlob
 }
 
 func newMockOverlayStore() *mockOverlayStore {
@@ -436,11 +436,11 @@ func TestOverlayService_ExecuteRebase_CollisionDetectionAndResolutionWorkflow(t 
 	// 2. Resolve conflict choosing keep_custom
 	user := uuid.New()
 	resolved, err := svc.ResolveConflict(ctx, application.ResolveConflictParams{
-		OverlayID:   overlayID,
-		ConflictID:  conflict.ID,
-		OrgID:       orgID,
-		Action:      domain.ResolutionKeepCustom,
-		ResolvedBy:  &user,
+		OverlayID:  overlayID,
+		ConflictID: conflict.ID,
+		OrgID:      orgID,
+		Action:     domain.ResolutionKeepCustom,
+		ResolvedBy: &user,
 	})
 	if err != nil {
 		t.Fatalf("ResolveConflict failed: %v", err)
@@ -565,7 +565,6 @@ func TestOverlayService_ExecuteRebase_TargetReleaseMustBePublished(t *testing.T)
 		t.Fatalf("expected ErrBaseReleaseNotPublished, got %v", err)
 	}
 }
-
 
 // #875 slice 5: the construction policy draft/activate lifecycle — an
 // invalid draft persists, activation validates with the ENGINE's own parser

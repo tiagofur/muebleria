@@ -19,14 +19,14 @@ import (
 // conflict resolution workflow, and deterministic candidate compilation.
 
 var (
-	ErrUnauthorizedOverlayAccess    = errors.New("unauthorized access to library overlay")
+	ErrUnauthorizedOverlayAccess = errors.New("unauthorized access to library overlay")
 
 	// ErrNoPolicyDraft: activation without a staged draft.
 	ErrNoPolicyDraft = errors.New("library overlay has no policy draft to activate")
 
 	// ErrInvalidPolicyDraft: the staged draft fails the engine's own policy
 	// validation — activation refuses it with the parser's issue.
-	ErrInvalidPolicyDraft = errors.New("policy draft is not activatable")
+	ErrInvalidPolicyDraft           = errors.New("policy draft is not activatable")
 	ErrBaseReleaseNotPublished      = errors.New("target base release must be in published status")
 	ErrBaseReleaseLibraryMismatch   = errors.New("target base release does not belong to the upstream library lineage")
 	ErrRebasePendingConflictsRemain = errors.New("overlay has unresolved rebase conflicts blocking activation/publication")
@@ -303,12 +303,12 @@ func (s *OverlayService) ActivatePolicyDraft(
 
 // RebaseResult models the outcome returned to caller following a 3-way rebase pass.
 type RebaseResult struct {
-	OverlayID       uuid.UUID                       `json:"overlayId"`
-	OldBaseReleaseID uuid.UUID                      `json:"oldBaseReleaseId"`
-	NewBaseReleaseID uuid.UUID                      `json:"newBaseReleaseId"`
-	HasConflicts    bool                            `json:"hasConflicts"`
-	Conflicts       []domain.LibraryOverlayConflict `json:"conflicts,omitempty"`
-	Status          string                          `json:"status"` // "active" (merged cleanly) or "rebase_conflict"
+	OverlayID        uuid.UUID                       `json:"overlayId"`
+	OldBaseReleaseID uuid.UUID                       `json:"oldBaseReleaseId"`
+	NewBaseReleaseID uuid.UUID                       `json:"newBaseReleaseId"`
+	HasConflicts     bool                            `json:"hasConflicts"`
+	Conflicts        []domain.LibraryOverlayConflict `json:"conflicts,omitempty"`
+	Status           string                          `json:"status"` // "active" (merged cleanly) or "rebase_conflict"
 }
 
 // ExecuteRebase runs a deterministic 3-way merge between OldBase, NewBase, and customer overrides.

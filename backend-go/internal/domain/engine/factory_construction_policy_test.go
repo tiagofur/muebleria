@@ -112,12 +112,10 @@ func TestParseFactoryConstructionPolicyEdgeCases(t *testing.T) {
 			"negative margin":       []byte(`{"joint.shelfToSide.systemId": "m", "joint.shelfToSide.startMarginMm": -5}`),
 			"string margin":         []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.endMarginMm": "wide"}`),
 			"structured non-object": []byte(`{"joint.constructionPolicy": {"version": 1, "floorToSide": "four"}}`),
-			// #1065: spacing rules validate like counts — positive, finite,
-			// and never alongside an explicit count in the same family.
-			"zero spacing":            []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": 0}`),
-			"negative spacing":        []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": -250}`),
-			"string spacing":          []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": "wide"}`),
-			"count and spacing mixed": []byte(`{"joint.floorToSide.stationsCount": 3, "joint.floorToSide.maxSpacingMm": 250}`),
+			// #1065: spacing rules validate like counts — positive and finite.
+			"zero spacing":     []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": 0}`),
+			"negative spacing": []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": -250}`),
+			"string spacing":   []byte(`{"joint.floorToSide.systemId": "m", "joint.floorToSide.maxSpacingMm": "wide"}`),
 		} {
 			if _, err := ParseFactoryConstructionPolicy(raw); err == nil {
 				t.Fatalf("%s: unusable explicit pattern must error", name)
@@ -131,6 +129,23 @@ func TestParseFactoryConstructionPolicyEdgeCases(t *testing.T) {
 			"startMarginMm": 40, "endMarginMm": 40}}}`)
 		if _, err := ParseFactoryConstructionPolicy(raw); err == nil {
 			t.Fatalf("a family declaring both patterns must error")
+		}
+	})
+
+	t.Run("granular count wins over a stale spacing key (#1065)", func(t *testing.T) {
+		// The flat keys are a multi-writer merge surface: a provisioned
+		// spacing default plus a later explicit count must resolve to the
+		// count, never poison the org policy with a parse error.
+		raw := []byte(`{"joint.floorToSide.maxSpacingMm": 250, "joint.floorToSide.stationsCount": 4}`)
+		policy, err := ParseFactoryConstructionPolicy(raw)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if policy.FloorToSide == nil || policy.FloorToSide.StationsCount != 4 {
+			t.Fatalf("floor rule = %+v, want count 4", policy.FloorToSide)
+		}
+		if policy.FloorToSide.MaxSpacingMm != nil {
+			t.Fatalf("the stale spacing key must be ignored: %+v", policy.FloorToSide)
 		}
 	})
 

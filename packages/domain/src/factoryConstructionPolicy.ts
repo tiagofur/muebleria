@@ -315,8 +315,12 @@ function readGranularJointFamily(
   family: 'floorToSide' | 'topToSide' | 'shelfToSide',
   fallback: JointFamilyRule,
 ): JointFamilyRule {
+  // The flat keys are a MULTI-WRITER merge surface: a stale spacing key
+  // next to an explicit count resolves to the count (#1065: stationCount
+  // explícito gana), mirroring the Go granular parser.
+  const hasCountKey = `joint.${family}.stationsCount` in overrides;
   const maxSpacingMmRaw = overrides[`joint.${family}.maxSpacingMm`];
-  const maxSpacingMm = maxSpacingMmRaw !== undefined ? Number(maxSpacingMmRaw) : undefined;
+  const maxSpacingMm = !hasCountKey && maxSpacingMmRaw !== undefined ? Number(maxSpacingMmRaw) : undefined;
   return {
     systemId: (overrides[`joint.${family}.systemId`] as JoinerySystemId) ?? fallback.systemId,
     stationsCount: maxSpacingMm !== undefined

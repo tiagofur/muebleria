@@ -136,7 +136,7 @@ func TestDemoSeedProvisionsTunedConstructionPolicy(t *testing.T) {
 		t.Fatalf("spacing rules must not carry counts: %+v %+v", policy.FloorToSide, policy.ShelfToSide)
 	}
 
-	// Idempotent: a re-provision keeps the same overlay row untouched.
+	// Idempotent: a re-provision with nothing to rewrite is a version-stable no-op.
 	version := overlay.Version
 	createdAgain, err := application.ProvisionDemoConstructionPolicyForOrg(ctx, store, initialOrgIDForSeedTest(ctx))
 	if err != nil || createdAgain {
@@ -147,24 +147,33 @@ func TestDemoSeedProvisionsTunedConstructionPolicy(t *testing.T) {
 		t.Fatalf("re-provision changed the overlay: %+v err=%v", again, err)
 	}
 
-	// An org that already owns an active overlay keeps it: provisioning
-	// seeds the tuned default, never a factory's own decisions.
-	custom := &domain.LibraryOverlay{
-		OrganizationID: orgID, LibraryID: libraryID,
-		BaseReleaseID: uuid.MustParse(domain.GraneteStandardDraftReleaseID),
-		Status:        "active",
-		Overrides:     json.RawMessage(`{"joint.floorToSide.stationsCount": 5}`),
-	}
-	if _, err := store.CreateOverlay(ctx, custom); err != nil {
-		t.Fatalf("custom overlay: %v", err)
+	// The seed OWNS the joint.* namespace: a stale key from an older era
+	// (a stationsCount saved over the spacing default) is rewritten on the
+	// next seed, and a foreign key outside the namespace survives.
+	if err := store.UpdateOverlayOverrides(ctx, overlay.ID, overlay.Version,
+		json.RawMessage(`{"joint.floorToSide.stationsCount": 5, "joint.shelfToSide.maxSpacingMm": 900, "custom.branding": "mine"}`), nil); err != nil {
+		t.Fatalf("stale overlay write: %v", err)
 	}
 	createdThird, err := application.ProvisionDemoConstructionPolicyForOrg(ctx, store, initialOrgIDForSeedTest(ctx))
-	if err != nil || createdThird {
-		t.Fatalf("provision must skip orgs with overlays: created=%v err=%v", createdThird, err)
+	if err != nil || !createdThird {
+		t.Fatalf("re-provision after drift: created=%v err=%v", createdThird, err)
 	}
 	final, err := store.GetActiveOverlayByLibrary(ctx, orgID, libraryID)
-	if err != nil || final.ID != custom.ID {
-		t.Fatalf("provision replaced the org overlay: %+v err=%v", final, err)
+	if err != nil {
+		t.Fatalf("final overlay: %v", err)
+	}
+	var finalOverrides map[string]any
+	if err := json.Unmarshal(final.Overrides, &finalOverrides); err != nil {
+		t.Fatalf("decode final overrides: %v", err)
+	}
+	if finalOverrides["joint.shelfToSide.maxSpacingMm"] != 400.0 || finalOverrides["joint.floorToSide.maxSpacingMm"] != 250.0 {
+		t.Fatalf("the tuned joint keys must be exactly the seeded set: %+v", finalOverrides)
+	}
+	if _, drifted := finalOverrides["joint.floorToSide.stationsCount"]; drifted {
+		t.Fatalf("the stale count key must be gone from the seed namespace: %+v", finalOverrides)
+	}
+	if finalOverrides["custom.branding"] != "mine" {
+		t.Fatalf("foreign keys survive the rewrite: %+v", finalOverrides)
 	}
 }
 

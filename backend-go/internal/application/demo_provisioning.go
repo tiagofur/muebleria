@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -98,33 +100,82 @@ func demoConstructionPolicyOverrides() json.RawMessage {
 }
 
 // ProvisionDemoConstructionPolicyForOrg idempotently provisions the org's
-// factory construction overlay with the tuned demo policy. An org that
-// already owns an active overlay keeps it untouched — provisioning seeds
-// the tuned default, never overwrites a factory's own decisions (#875 C1:
-// the policy belongs to the factory).
+// factory construction overlay with the tuned demo policy. The seed OWNS the
+// `joint.*` namespace of the demo org: every /seed rewrites it to exactly
+// the tuned granular keys (dropping stale keys from older provisions —
+// including any legacy structured blob) and leaves every foreign key
+// untouched, so a re-seeded workshop converges on the tuned baseline
+// instead of accumulating era-mixed patterns. Outside the namespace the
+// overlay belongs to the factory (#875 C1) and is never touched.
 func ProvisionDemoConstructionPolicyForOrg(ctx context.Context, store interface {
 	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
 	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
+	UpdateOverlayOverrides(ctx context.Context, id uuid.UUID, expectedVersion int64, overrides json.RawMessage, customResourceIDs []uuid.UUID) error
 }, orgID string) (bool, error) {
 	orgIDParsed, err := uuid.Parse(orgID)
 	if err != nil {
 		return false, err
 	}
 	libraryID := uuid.MustParse(domain.GraneteStandardLibraryID)
-	if _, err := store.GetActiveOverlayByLibrary(ctx, orgIDParsed, libraryID); err == nil {
-		return false, nil // the org already owns overlay decisions
-	} else if !errors.Is(err, storage.ErrOverlayNotFound) {
+	tunedRaw := map[string]any{}
+	if err := json.Unmarshal(demoConstructionPolicyOverrides(), &tunedRaw); err != nil {
 		return false, err
 	}
-	overlay := &domain.LibraryOverlay{
-		OrganizationID: orgIDParsed,
-		LibraryID:      libraryID,
-		BaseReleaseID:  uuid.MustParse(domain.GraneteStandardDraftReleaseID),
-		Status:         "active",
-		Overrides:      demoConstructionPolicyOverrides(),
-	}
-	if _, err := store.CreateOverlay(ctx, overlay); err != nil {
+	tuned := map[string]any{}
+	domain.FlattenMap("", tunedRaw, tuned)
+	overlay, err := store.GetActiveOverlayByLibrary(ctx, orgIDParsed, libraryID)
+	if errors.Is(err, storage.ErrOverlayNotFound) {
+		overlay = &domain.LibraryOverlay{
+			OrganizationID: orgIDParsed,
+			LibraryID:      libraryID,
+			BaseReleaseID:  uuid.MustParse(domain.GraneteStandardDraftReleaseID),
+			Status:         "active",
+			Overrides:      demoConstructionPolicyOverrides(),
+		}
+		if _, err := store.CreateOverlay(ctx, overlay); err != nil {
+			return false, err
+		}
+		return true, nil
+	} else if err != nil {
 		return false, err
 	}
-	return true, nil
+
+	var overrides map[string]any
+	if len(overlay.Overrides) > 0 {
+		if err := json.Unmarshal(overlay.Overrides, &overrides); err != nil {
+			return false, fmt.Errorf("decode overlay overrides: %w", err)
+		}
+	}
+	next := make(map[string]any, len(overrides)+len(tuned))
+	for key, value := range overrides {
+		if strings.HasPrefix(key, "joint.") {
+			continue // the seed's namespace: rewritten to the tuned set
+		}
+		next[key] = value
+	}
+	for key, value := range tuned {
+		next[key] = value
+	}
+	if jsonEqual(overlay.Overrides, next) {
+		return false, nil // already exactly the tuned policy: version-stable no-op
+	}
+	merged, err := json.Marshal(next)
+	if err != nil {
+		return false, err
+	}
+	return true, store.UpdateOverlayOverrides(ctx, overlay.ID, overlay.Version, merged, overlay.CustomResourceIDs)
+}
+
+// jsonEqual compares stored overrides with a rebuilt map without marshaling
+// noise deciding the outcome.
+func jsonEqual(raw json.RawMessage, rebuilt map[string]any) bool {
+	var stored map[string]any
+	if len(raw) == 0 {
+		stored = map[string]any{}
+	} else if err := json.Unmarshal(raw, &stored); err != nil {
+		return false
+	}
+	storedJSON, errA := json.Marshal(stored)
+	rebuiltJSON, errB := json.Marshal(rebuilt)
+	return errA == nil && errB == nil && string(storedJSON) == string(rebuiltJSON)
 }

@@ -266,6 +266,21 @@
           }
         }
       }
+    },
+    {
+      "name": "granular count wins over a stale spacing key (#1065)",
+      "overrides": {
+        "joint.floorToSide.maxSpacingMm": 250,
+        "joint.floorToSide.stationsCount": 4
+      },
+      "expected": {
+        "floorToSide": {
+          "stationsCount": 4,
+          "startMarginMm": 50,
+          "endMarginMm": 50
+        },
+        "shelfToSide": null
+      }
     }
   ]
 }

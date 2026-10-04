@@ -292,16 +292,19 @@ func factoryRuleFromGranular(flat map[string]any, family string) (*FactoryJointR
 		return nil, err
 	}
 	var maxSpacing *float64
-	if raw := flat["joint."+family+".maxSpacingMm"]; raw != nil {
+	if raw := flat["joint."+family+".maxSpacingMm"]; raw != nil && !hasCount {
+		// The flat keys are a MULTI-WRITER merge surface (provisioned org
+		// defaults + later granular saves): a stale spacing key next to an
+		// explicit count must not poison the whole org policy. The explicit
+		// count governs (#1065: stationCount explícito gana); the spacing
+		// key is ignored until its writer removes it. The single-writer
+		// structured blob keeps its fail-closed mutual exclusion below.
 		value, err := factoryScalarOr(raw, 0, "joint."+family+".maxSpacingMm")
 		if err != nil {
 			return nil, err
 		}
 		if err := validateFactoryMaxSpacing(value, "joint."+family+".maxSpacingMm"); err != nil {
 			return nil, err
-		}
-		if hasCount {
-			return nil, fmt.Errorf("joint.%s declares both stationsCount and maxSpacingMm", family)
 		}
 		spacing := value
 		maxSpacing = &spacing
