@@ -2559,6 +2559,28 @@ type FurnitureParameterRelationshipBinding struct {
 	Targets    []FurnitureParameterRelationshipTarget        `json:"targets"`
 	Station    *FurnitureParameterRelationshipStationMargins `json:"station,omitempty"`
 	Families   []FurnitureParameterRelationshipFamily        `json:"families,omitempty"`
+	Recipes    []FurnitureParameterRecipeBinding             `json:"recipes,omitempty"`
+}
+
+type FurnitureParameterRecipeBinding struct {
+	RecipeId                 string                         `json:"recipeId"`
+	RecipeRevision           string                         `json:"recipeRevision"`
+	TechnicalProfileId       string                         `json:"technicalProfileId"`
+	TechnicalProfileRevision string                         `json:"technicalProfileRevision"`
+	Rules                    []FurnitureParameterRecipeRule `json:"rules"`
+}
+
+type FurnitureParameterRecipeRule struct {
+	RuleId          string    `json:"ruleId"`
+	RuleRevision    string    `json:"ruleRevision"`
+	ParticipantRole string    `json:"participantRole"`
+	OperationRole   string    `json:"operationRole"`
+	EntryFace       string    `json:"entryFace"`
+	OffsetMm        []float64 `json:"offsetMm"`
+	Axis            []float64 `json:"axis"`
+	DiameterMm      float64   `json:"diameterMm"`
+	DepthMm         float64   `json:"depthMm"`
+	StationMode     *string   `json:"stationMode,omitempty"`
 }
 
 type FurnitureParameterRelationshipTarget struct {
@@ -2570,6 +2592,7 @@ type FurnitureParameterRelationshipTarget struct {
 type FurnitureParameterRelationshipStationMargins struct {
 	StartMarginMm *float64 `json:"startMarginMm,omitempty"`
 	EndMarginMm   *float64 `json:"endMarginMm,omitempty"`
+	MaxSpacingMm  *float64 `json:"maxSpacingMm,omitempty"`
 }
 
 type FurnitureParameterRelationshipFamily struct {
