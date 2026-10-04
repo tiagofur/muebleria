@@ -46,6 +46,13 @@ func SeedDemoForOrg(ctx context.Context, store StandardReleaseStore, orgID, publ
 	if err := ProvisionDemoProfileForOrg(ctx, store, orgID); err != nil {
 		return "", err
 	}
+	// The tuned "Taller inicial" construction policy (#1065): provisioned
+	// orgs start with spacing-derived station patterns and keep full
+	// self-service over them (#875). Idempotent; an org with its own active
+	// overlay is never touched.
+	if _, err := ProvisionDemoConstructionPolicyForOrg(ctx, store, orgID); err != nil {
+		return "", fmt.Errorf("demo construction policy: %w", err)
+	}
 
 	// 2. Publish the seeded Standard draft release through the real
 	// compiler (platform staff only; skip otherwise, or when already

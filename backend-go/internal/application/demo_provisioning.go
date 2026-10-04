@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -67,4 +69,63 @@ func ProvisionDemoProfileForOrg(ctx context.Context, store interface {
 		{HardwareID: storage.SeededIDForOrg(orgID, seedDemoTaqueteID), Quantity: 1, ApplicationRole: "dowel"},
 	}
 	return store.CreateHardwareProfile(ctx, profile)
+}
+
+// demoConstructionPolicyOverrides is the tuned "Taller inicial" construction
+// policy (#1065): spacing-derived station patterns per engine-resolvable
+// family. Every provisioned org starts with dimension-driven drilling — a
+// 400mm and a 1000mm cabinet derive their own fastener counts from the same
+// rule — and can re-customize or restore inheritance in Ajustes →
+// Construcción. Families the engine cannot resolve yet (top-to-side, #874)
+// stay inherited: honest absence, never fake coverage.
+func demoConstructionPolicyOverrides() json.RawMessage {
+	return json.RawMessage(`{
+		"joint.constructionPolicy": {
+			"version": 1,
+			"floorToSide": {"provenance": "factory", "systemId": "minifix-dowel", "maxSpacingMm": 250, "startMarginMm": 50, "endMarginMm": 50, "withDowels": true},
+			"shelfToSide": {"provenance": "factory", "systemId": "minifix-dowel", "maxSpacingMm": 400, "startMarginMm": 50, "endMarginMm": 50, "withDowels": true}
+		},
+		"joint.floorToSide.systemId": "minifix-dowel",
+		"joint.floorToSide.maxSpacingMm": 250,
+		"joint.floorToSide.startMarginMm": 50,
+		"joint.floorToSide.endMarginMm": 50,
+		"joint.floorToSide.withDowels": true,
+		"joint.shelfToSide.systemId": "minifix-dowel",
+		"joint.shelfToSide.maxSpacingMm": 400,
+		"joint.shelfToSide.startMarginMm": 50,
+		"joint.shelfToSide.endMarginMm": 50,
+		"joint.shelfToSide.withDowels": true
+	}`)
+}
+
+// ProvisionDemoConstructionPolicyForOrg idempotently provisions the org's
+// factory construction overlay with the tuned demo policy. An org that
+// already owns an active overlay keeps it untouched — provisioning seeds
+// the tuned default, never overwrites a factory's own decisions (#875 C1:
+// the policy belongs to the factory).
+func ProvisionDemoConstructionPolicyForOrg(ctx context.Context, store interface {
+	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
+	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
+}, orgID string) (bool, error) {
+	orgIDParsed, err := uuid.Parse(orgID)
+	if err != nil {
+		return false, err
+	}
+	libraryID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	if _, err := store.GetActiveOverlayByLibrary(ctx, orgIDParsed, libraryID); err == nil {
+		return false, nil // the org already owns overlay decisions
+	} else if !errors.Is(err, storage.ErrOverlayNotFound) {
+		return false, err
+	}
+	overlay := &domain.LibraryOverlay{
+		OrganizationID: orgIDParsed,
+		LibraryID:      libraryID,
+		BaseReleaseID:  uuid.MustParse(domain.GraneteStandardDraftReleaseID),
+		Status:         "active",
+		Overrides:      demoConstructionPolicyOverrides(),
+	}
+	if _, err := store.CreateOverlay(ctx, overlay); err != nil {
+		return false, err
+	}
+	return true, nil
 }

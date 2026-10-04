@@ -155,5 +155,9 @@ type StandardReleaseStore interface {
 	EnsureSeedPlatformUser(ctx context.Context) (string, error)
 	// ResetManifestlessPublishedRelease is strictly a test/demo fixture repair helper (#955).
 	ResetManifestlessPublishedRelease(ctx context.Context, releaseID string) (bool, error)
+	// Overlay surface of the tuned demo construction policy (#1065): the
+	// seed provisions the org's factory overlay only when the org does not
+	// own one yet — an explicit factory decision is never overwritten.
+	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
+	CreateOverlay(ctx context.Context, overlay *domain.LibraryOverlay) (*domain.LibraryOverlay, error)
 }
-
