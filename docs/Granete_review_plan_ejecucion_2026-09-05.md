@@ -219,8 +219,8 @@ Prefijo de referencia: `https://github.com/tiagofur/muebleria/blob/587961fd379b6
 - `apps/web/src/stores/purchasingStore.ts`
 - `apps/sketchup-extension/src/granete_for_sketchup/host/authoring_mutation_coordinator.rb`
 - `docs/architecture/3d-asset-library.md`
-- `docs/muebles-audit-360-20260903/audit/data/defect-proofs.json`
-- `docs/muebles-audit-360-20260903/audit/data/template-roundtrip-proof.json`
+- `docs/history/muebles-audit-360-20260903/audit/data/defect-proofs.json`
+- `docs/history/muebles-audit-360-20260903/audit/data/template-roundtrip-proof.json`
 
 Issues consultadas para este anexo: #351, #396, #443, #465, #497, #529. PRs relevantes de referencia: #554, #555, #562 y #564. El reporte conversacional también contrasta los cambios recientes relacionados con edición, inspección y preflight.
 
