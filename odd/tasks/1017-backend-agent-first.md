@@ -1,6 +1,6 @@
 # ODD — #1017 Backend agent-first refactor (moves mecánicos, fases A–G)
 
-**Estado:** IMPLEMENTED_PENDING_REVIEW (por fase/PR apilado)
+**Estado:** IMPLEMENTED_PENDING_REVIEW (fases A–G; A MERGEADA, B–G en PRs apilados)
 **Lane:** Delegated Direct (sustancial, multi-archivo). Un writer: GLM (ZCode).
 **Issue:** #1017 (`status:approved`, 2026-10-03, autorización del owner en sesión).
 **Plan rector:** `docs/backend-agent-first-refactor-plan-2026-09-27.md` (§4 fases, §5 métricas, §6 no-goals, §8 verificación).
@@ -47,10 +47,27 @@ Métricas §5 contra la baseline de abajo.
 
 ## Evidencia por fase (se actualiza por PR)
 
-| Fase | PR | Commits | V0/V1 | Estado |
+| Fase | PR | Contenido | V0/V1 | Estado |
 | --- | --- | --- | --- | --- |
-| A | (pendiente) | — | — | en curso |
-| B–G | (pendientes) | — | — | no iniciadas |
+| A | #1018 **MERGEADA** (main @ c72313b5) | server/http_respond/dto_user/audit fuera de handlers.go (2.916→2.596) | build+vet+test ×4 commits | ✅ |
+| B | #1023 | Store 329 métodos → 16 sub-interfaces + stub espejo (handlers_test 4.735→2.218) | build+vet+test ×2; 329=329; 68 tests intactos | ✅ |
+| C | #1024 | RegisterRoutes → raíz 257 + 15 registradores/12 archivos; **309/309 rutas idénticas** (el check atrapó login caída) | build+vet+test; diff de patrones = vacío | ✅ |
+| D | #1028 | handlers.go DELETED → auth/catalog/projects/modules/workspace + tests por dominio (68 intactos); guard audit re-apuntado | build+vet+test ×2 | ✅ |
+| E | (este stack) | storage: projects/designs/organizations/hardware_assets partidos en 13 archivos | build+vet+**suite completa con PG desechable PASS (storage 502s, pilotreadiness 196s, 0 fallos)** | ✅ |
+| F | (este stack) | domain/types.go 1.153 → 6 archivos por agregado | build+vet+test | ✅ |
+| G | (este stack) | backend-go/AGENTS.md + métricas + este ODD | — | ✅ |
+
+## Métricas §5 — después (2026-10-04, rama af-f)
+
+| Métrica | Baseline 2026-10-03 | Después | Objetivo |
+| --- | --- | --- | --- |
+| handlers.go | 2.916 | **0 (eliminado)** | ≤~800 ✅ |
+| handlers_test.go | 4.735 | 1.978 (struct stub + helpers + suite Ownership mixta) | eliminado como monolito ✅ |
+| store.go | 596 (329 métodos) | 32 (raíz composición, 16 sub-interfaces ≤~180 c/u) | ≤~500 ✅ |
+| RegisterRoutes | 904 (1 función, 309 rutas) | 257 raíz+helpers; 15 registradores ≤~150 | ✅ |
+| storage >1.000 | 5 archivos | 2, ambas declaradas: hardware_assets.go 1.430 (single-domain ciclo de vida), projects.go 1.246 (single-domain, excepción en commit) + seed.go 1.162 (no-goal del plan) | ~0 ⚠️ documentado |
+| domain/types.go | 1.153 | **0 (eliminado)** → 6 archivos ≤362 | ≤~500 ✅ |
+| Comportamiento | — | rutas 309/309 idénticas; tests 68 intactos; OpenAPI sin tocar; suite PG PASS | cero diffs ✅ |
 
 ## Estrategia de entrega
 
