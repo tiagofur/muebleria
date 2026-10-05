@@ -142,7 +142,7 @@ func TestIsolation_Customers(t *testing.T) {
 	}
 
 	// Cross-org write attempts must not change anything.
-	if err := isolationRuntimeError(fixture, fixture.actorB, func(txCtx context.Context) error { return store.DeactivateCustomer(txCtx, idA) }); err == nil {
+	if err := isolationRuntimeError(fixture, fixture.actorB, func(txCtx context.Context) error { return store.DeactivateCustomer(txCtx, idA, 1) }); err == nil {
 		t.Fatal("org B deactivating org A's customer must fail")
 	}
 	var activeA bool

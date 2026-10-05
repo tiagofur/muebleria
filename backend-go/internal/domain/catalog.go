@@ -27,6 +27,9 @@ type Customer struct {
 	OwnerUserID string    `json:"owner_user_id,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 type MaterialBoard struct {
@@ -64,6 +67,9 @@ type MaterialBoard struct {
 	Active                     bool      `json:"active"`
 	CreatedAt                  time.Time `json:"created_at"`
 	UpdatedAt                  time.Time `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 type EdgeBand struct {
@@ -81,6 +87,9 @@ type EdgeBand struct {
 	PreviewColor *string   `json:"preview_color,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 type Hardware struct {
@@ -163,6 +172,9 @@ type OptionGroup struct {
 	Kind      string   `json:"kind"`
 	Required  bool     `json:"required"`
 	OptionIDs []string `json:"option_ids"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 type EdgeAssignment struct {

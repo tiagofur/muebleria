@@ -14,6 +14,9 @@ type ModuleCategory struct {
 	SortOrder int       `json:"sortOrder"`
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 type Module struct {

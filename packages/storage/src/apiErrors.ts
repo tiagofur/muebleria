@@ -53,3 +53,19 @@ export class HardwareVersionUnknownError extends Error {
 export function parseApiError(value: unknown): ApiError {
   return parseGenerated<ApiError>('ApiError', value);
 }
+
+
+/**
+ * #1091 (#443 slice 2): a simple-catalog-family save was refused BEFORE the
+ * wire because this session has no server version for the entity. Fail-closed
+ * — a blind write could clobber a concurrent catalog change. Recovery:
+ * reload the catalog.
+ */
+export class CatalogEntityVersionUnknownError extends Error {
+  constructor(readonly family: string, readonly entityId: string) {
+    super(
+      `No se conoce la versión de ${family} ${entityId} en esta sesión; recargá el catálogo antes de volver a guardar.`,
+    );
+    this.name = 'CatalogEntityVersionUnknownError';
+  }
+}

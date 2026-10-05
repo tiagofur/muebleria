@@ -19,7 +19,7 @@ import (
 
 func (s *PostgresStore) ListAmbientCategories(ctx context.Context) ([]domain.AmbientCategory, error) {
 	query := `
-		SELECT id, name, parent_id, sort_order, created_at, updated_at
+		SELECT id, name, parent_id, sort_order, created_at, updated_at, version
 		FROM ambient_categories
 		WHERE organization_id = $1
 		ORDER BY sort_order ASC, name ASC;
@@ -34,7 +34,7 @@ func (s *PostgresStore) ListAmbientCategories(ctx context.Context) ([]domain.Amb
 	for rows.Next() {
 		var c domain.AmbientCategory
 		var parentID *string
-		err := rows.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt)
+		err := rows.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -51,14 +51,14 @@ func (s *PostgresStore) ListAmbientCategories(ctx context.Context) ([]domain.Amb
 
 func (s *PostgresStore) GetAmbientCategoryByID(ctx context.Context, id string) (*domain.AmbientCategory, error) {
 	query := `
-		SELECT id, name, parent_id, sort_order, created_at, updated_at
+		SELECT id, name, parent_id, sort_order, created_at, updated_at, version
 		FROM ambient_categories
 		WHERE id = $1 AND organization_id = $2;
 	`
 	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var c domain.AmbientCategory
 	var parentID *string
-	err := row.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.Name, &parentID, &c.SortOrder, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("ambient category not found")
@@ -92,22 +92,22 @@ func (s *PostgresStore) CreateAmbientCategory(ctx context.Context, c *domain.Amb
 		query := `
 			INSERT INTO ambient_categories (id, name, parent_id, sort_order, organization_id)
 			VALUES ($1, $2, $3, $4, $5)
-			RETURNING created_at, updated_at;
+			RETURNING created_at, updated_at, version;
 		`
 		return s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
-			Scan(&c.CreatedAt, &c.UpdatedAt)
+			Scan(&c.CreatedAt, &c.UpdatedAt, &c.Version)
 	}
 
 	query := `
 		INSERT INTO ambient_categories (name, parent_id, sort_order, organization_id)
 		VALUES ($1, $2, $3, $4)
-		RETURNING id, created_at, updated_at;
+		RETURNING id, created_at, updated_at, version;
 	`
 	return s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, OrgFromCtx(ctx)).
-		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
+		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 }
 
-func (s *PostgresStore) UpdateAmbientCategory(ctx context.Context, id string, c *domain.AmbientCategory) error {
+func (s *PostgresStore) UpdateAmbientCategory(ctx context.Context, id string, expectedVersion int64, c *domain.AmbientCategory) error {
 	all, err := s.ListAmbientCategories(ctx)
 	if err != nil {
 		return err
@@ -126,14 +126,14 @@ func (s *PostgresStore) UpdateAmbientCategory(ctx context.Context, id string, c 
 
 	query := `
 		UPDATE ambient_categories
-		SET name = $1, parent_id = $2, sort_order = $3, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $4 AND organization_id = $5
-		RETURNING updated_at;
+		SET name = $1, parent_id = $2, sort_order = $3, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $4 AND organization_id = $5 AND version = $6
+		RETURNING updated_at, version;
 	`
-	err = s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx)).Scan(&c.UpdatedAt)
+	err = s.db(ctx).QueryRow(ctx, query, c.Name, parent, c.SortOrder, id, OrgFromCtx(ctx), expectedVersion).Scan(&c.UpdatedAt, &c.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("ambient category not found")
+			return s.disambiguateRowNotFound(ctx, "ambient_categories", id, fmt.Errorf("ambient category not found"))
 		}
 		return err
 	}
@@ -141,7 +141,7 @@ func (s *PostgresStore) UpdateAmbientCategory(ctx context.Context, id string, c 
 	return nil
 }
 
-func (s *PostgresStore) DeleteAmbientCategory(ctx context.Context, id string) error {
+func (s *PostgresStore) DeleteAmbientCategory(ctx context.Context, id string, expectedVersion int64) error {
 	children, err := s.db(ctx).Query(ctx, `SELECT id FROM ambient_categories WHERE parent_id = $1 AND organization_id = $2 LIMIT 1`, id, OrgFromCtx(ctx))
 	if err != nil {
 		return err
@@ -151,13 +151,29 @@ func (s *PostgresStore) DeleteAmbientCategory(ctx context.Context, id string) er
 		return fmt.Errorf("cannot delete category with children; reparent or delete children first")
 	}
 
-	_, err = s.db(ctx).Exec(ctx, `DELETE FROM ambient_categories WHERE id = $1 AND organization_id = $2`, id, OrgFromCtx(ctx))
-	return err
+	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM ambient_categories WHERE id = $1 AND organization_id = $2 AND version = $3`, id, OrgFromCtx(ctx), expectedVersion)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		// Cross-org deletes stay a silent no-op (original semantics, no
+		// information leak); only a same-org stale version conflicts.
+		var exists bool
+		if checkErr := s.db(ctx).QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM ambient_categories WHERE id = $1 AND organization_id = $2)`,
+			id, OrgFromCtx(ctx)).Scan(&exists); checkErr != nil {
+			return fmt.Errorf("error checking ambient category existence: %w", checkErr)
+		}
+		if exists {
+			return ErrVersionConflict
+		}
+	}
+	return nil
 }
 
 func (s *PostgresStore) ListAmbientMaterials(ctx context.Context) ([]domain.AmbientMaterial, error) {
 	query := `
-		SELECT id, code, name, active, surface_type, category_id, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat
+		SELECT id, code, name, active, surface_type, category_id, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, version
 		FROM ambient_materials
 		WHERE organization_id = $1
 		ORDER BY name ASC;
@@ -184,7 +200,7 @@ func (s *PostgresStore) ListAmbientMaterials(ctx context.Context) ([]domain.Ambi
 
 func (s *PostgresStore) GetAmbientMaterialByID(ctx context.Context, id string) (*domain.AmbientMaterial, error) {
 	query := `
-		SELECT id, code, name, active, surface_type, category_id, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat
+		SELECT id, code, name, active, surface_type, category_id, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, version
 		FROM ambient_materials
 		WHERE id = $1 AND organization_id = $2;
 	`
@@ -202,27 +218,28 @@ func (s *PostgresStore) GetAmbientMaterialByID(ctx context.Context, id string) (
 func (s *PostgresStore) CreateAmbientMaterial(ctx context.Context, m *domain.AmbientMaterial) error {
 	query := `
 		INSERT INTO ambient_materials (id, code, name, active, surface_type, category_id, preview_color, preview_texture_url, preview_texture_tile_width_mm, preview_texture_tile_length_mm, preview_roughness, preview_metalness, preview_clearcoat, organization_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		RETURNING version;
 	`
-	_, err := s.db(ctx).Exec(ctx, query,
+	err := s.db(ctx).QueryRow(ctx, query,
 		m.ID, m.Code, m.Name, m.Active, string(m.SurfaceType),
 		nullIfEmpty(m.CategoryID),
 		nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL),
 		m.PreviewTextureTileWidthMm, m.PreviewTextureTileLengthMm,
 		m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat,
 		OrgFromCtx(ctx),
-	)
+	).Scan(&m.Version)
 	if err != nil {
 		return fmt.Errorf("error creating ambient material: %w", err)
 	}
 	return nil
 }
 
-func (s *PostgresStore) UpdateAmbientMaterial(ctx context.Context, id string, m *domain.AmbientMaterial) error {
+func (s *PostgresStore) UpdateAmbientMaterial(ctx context.Context, id string, expectedVersion int64, m *domain.AmbientMaterial) error {
 	query := `
 		UPDATE ambient_materials
-		SET code = $1, name = $2, active = $3, surface_type = $4, category_id = $5, preview_color = $6, preview_texture_url = $7, preview_texture_tile_width_mm = $8, preview_texture_tile_length_mm = $9, preview_roughness = $10, preview_metalness = $11, preview_clearcoat = $12
-		WHERE id = $13 AND organization_id = $14;
+		SET code = $1, name = $2, active = $3, surface_type = $4, category_id = $5, preview_color = $6, preview_texture_url = $7, preview_texture_tile_width_mm = $8, preview_texture_tile_length_mm = $9, preview_roughness = $10, preview_metalness = $11, preview_clearcoat = $12, version = version + 1
+		WHERE id = $13 AND organization_id = $14 AND version = $15;
 	`
 	tag, err := s.db(ctx).Exec(ctx, query,
 		m.Code, m.Name, m.Active, string(m.SurfaceType),
@@ -230,22 +247,39 @@ func (s *PostgresStore) UpdateAmbientMaterial(ctx context.Context, id string, m 
 		nullIfEmpty(m.PreviewColor), nullIfEmpty(m.PreviewTextureURL),
 		m.PreviewTextureTileWidthMm, m.PreviewTextureTileLengthMm,
 		m.PreviewRoughness, m.PreviewMetalness, m.PreviewClearcoat,
-		id, OrgFromCtx(ctx),
+		id, OrgFromCtx(ctx), expectedVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("error updating ambient material: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("ambient material not found")
+		return s.disambiguateRowNotFound(ctx, "ambient_materials", id, fmt.Errorf("ambient material not found"))
 	}
 	m.ID = id
+	m.Version = expectedVersion + 1
 	return nil
 }
 
-func (s *PostgresStore) DeactivateAmbientMaterial(ctx context.Context, id string) error {
-	query := `UPDATE ambient_materials SET active = false WHERE id = $1 AND organization_id = $2;`
-	_, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
-	return err
+func (s *PostgresStore) DeactivateAmbientMaterial(ctx context.Context, id string, expectedVersion int64) error {
+	query := `UPDATE ambient_materials SET active = false, version = version + 1 WHERE id = $1 AND organization_id = $2 AND version = $3;`
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx), expectedVersion)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		// Cross-org deactivates stay a silent no-op (original semantics, no
+		// information leak); only a same-org stale version conflicts.
+		var exists bool
+		if checkErr := s.db(ctx).QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM ambient_materials WHERE id = $1 AND organization_id = $2)`,
+			id, OrgFromCtx(ctx)).Scan(&exists); checkErr != nil {
+			return fmt.Errorf("error checking ambient material existence: %w", checkErr)
+		}
+		if exists {
+			return ErrVersionConflict
+		}
+	}
+	return nil
 }
 
 func scanAmbientMaterial(r rowScanner) (domain.AmbientMaterial, error) {
@@ -260,6 +294,7 @@ func scanAmbientMaterial(r rowScanner) (domain.AmbientMaterial, error) {
 		&previewColor, &previewTexture,
 		&m.PreviewTextureTileWidthMm, &m.PreviewTextureTileLengthMm,
 		&m.PreviewRoughness, &m.PreviewMetalness, &m.PreviewClearcoat,
+		&m.Version,
 	)
 	if err != nil {
 		return m, err

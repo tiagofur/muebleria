@@ -222,7 +222,7 @@ func TestAmbientMaterials_CRUDRoundTrip(t *testing.T) {
 	upd := *got
 	upd.Name = "Roble Premium"
 	upd.PreviewTextureURL = ""
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAmbientMaterial(txCtx, id, &upd) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAmbientMaterial(txCtx, id, upd.Version, &upd) })
 	var again *domain.AmbientMaterial
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		var err error
@@ -233,7 +233,7 @@ func TestAmbientMaterials_CRUDRoundTrip(t *testing.T) {
 		t.Fatalf("update not persisted: %#v", again)
 	}
 
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAmbientMaterial(txCtx, id) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAmbientMaterial(txCtx, id, again.Version) })
 	var deact *domain.AmbientMaterial
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		var err error
@@ -266,7 +266,7 @@ func TestAmbientMaterials_NullablePBR_NullVsZero(t *testing.T) {
 	}
 	upd := *got
 	upd.PreviewRoughness = fptr(0)
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAmbientMaterial(txCtx, id, &upd) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAmbientMaterial(txCtx, id, upd.Version, &upd) })
 	var zero *domain.AmbientMaterial
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		var err error

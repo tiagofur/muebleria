@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Hardware } from '@granete/domain';
+import type { Hardware, MaterialBoard } from '@granete/domain';
 import { APIWorkspaceRepository } from './apiWorkspaceRepository';
 import type { Catalog } from '@granete/domain';
 import { ProjectInlineUpdateHttpError } from './workspaceRepository';
@@ -180,6 +180,10 @@ describe('APIWorkspaceRepository', () => {
         putBodies.push(String(init.body));
         return { ok: true, json: async () => ({}) } as Response;
       }
+      if (url.includes('/catalog/materials/m1') && (init?.method ?? 'GET') === 'GET') {
+        // #1091: the guarded write learns the server version first.
+        return { ok: true, json: async () => ({ id: 'm1', version: 2 }) } as Response;
+      }
       return { ok: true, json: async () => [] } as Response;
     });
 
@@ -307,6 +311,9 @@ describe('APIWorkspaceRepository', () => {
         });
         return { ok: true, json: async () => ({}) } as Response;
       }
+      if (init?.method === 'GET' && url.includes('/catalog/ambient-materials/')) {
+        return { ok: true, json: async () => ({ id: 'amb-1', version: 1 }) } as Response;
+      }
       return { ok: true, json: async () => [] } as Response;
     });
 
@@ -351,6 +358,10 @@ describe('APIWorkspaceRepository', () => {
           body: JSON.parse(String(init.body)) as Record<string, unknown>,
         });
         return { ok: true, json: async () => ({}) } as Response;
+      }
+      if ((init?.method ?? 'GET') === 'GET' && url.includes('/catalog/ambient-categories/')) {
+        // #1091: the guarded write learns the server version first.
+        return { ok: true, json: async () => ({ id: 'acat-1', version: 1 }) } as Response;
       }
       return { ok: true, json: async () => [] } as Response;
     });
@@ -402,16 +413,17 @@ describe('APIWorkspaceRepository', () => {
     expect(methods).toEqual(['POST http://localhost:8080/api/projects']);
   });
 
-  it('saveCatalog POSTs material when PUT returns 404 not found', async () => {
+  it('saveCatalog POSTs material when the learn GET returns 404 not found', async () => {
     const methods: string[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const method = init?.method ?? 'GET';
       methods.push(`${method} ${String(input)}`);
-      if (method === 'PUT') {
+      // #1091: the guarded upsert learns first; a 404 goes straight to POST.
+      if (method === 'GET') {
         return {
           ok: false,
           status: 404,
-          text: async () => '{"error":"material board not found"}',
+          text: async () => '{"code":"NOT_FOUND","message":"material board not found"}',
         } as Response;
       }
       if (method === 'POST') {
@@ -445,7 +457,7 @@ describe('APIWorkspaceRepository', () => {
       customers: [],
     });
 
-    expect(methods.some((m) => m.startsWith('PUT'))).toBe(true);
+    expect(methods.some((m) => m.startsWith('PUT'))).toBe(false);
     expect(methods.some((m) => m.startsWith('POST'))).toBe(true);
   });
 
@@ -460,8 +472,11 @@ describe('APIWorkspaceRepository', () => {
         return {
           ok: false,
           status: 409,
-          text: async () => '{"error":"El código ingresado ya está registrado"}',
-        } as Response;
+          json: async () => ({ code: 'CONFLICT', message: 'El código ingresado ya está registrado', fieldErrors: {}, requestId: 'r', retryable: false, details: {} }),
+        } as unknown as Response;
+      }
+      if (method === 'GET') {
+        return { ok: true, json: async () => ({ id: 'dup-id', version: 2 }) } as Response;
       }
       return { ok: true, json: async () => [] } as Response;
     });
@@ -493,12 +508,12 @@ describe('APIWorkspaceRepository', () => {
         categories: [],
         customers: [],
       }),
-    ).rejects.toThrow(/conflict/i);
+    ).rejects.toThrow(/código/i);
 
     expect(methods.filter((m) => m.startsWith('PUT'))).toHaveLength(1);
-    // No POST should follow a conflict.
+    // No POST should follow a conflict. #1091: the typed GraneteApiError
+    // rejects directly — the shell surfaces it without a console round-trip.
     expect(methods.some((m) => m.startsWith('POST'))).toBe(false);
-    expect(errSpy).toHaveBeenCalled();
   });
 
   it('F116 C2: saveCatalog rejects on POST 409 conflict (silent data loss fixed)', async () => {
@@ -507,14 +522,15 @@ describe('APIWorkspaceRepository', () => {
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const method = init?.method ?? 'GET';
       methods.push(`${method} ${String(input)}`);
-      if (method === 'PUT') {
+      // #1091: the guarded upsert learns first; a 404 goes straight to POST,
+      // which collides (concurrent create / re-seed) → already exists.
+      if (method === 'GET') {
         return {
           ok: false,
           status: 404,
-          text: async () => '{"error":"not found"}',
+          text: async () => '{"code":"NOT_FOUND","message":"not found"}',
         } as Response;
       }
-      // POST collides (concurrent create / re-seed) → already exists.
       if (method === 'POST') {
         return {
           ok: false,
@@ -540,7 +556,8 @@ describe('APIWorkspaceRepository', () => {
       }),
     ).rejects.toThrow(/create failed/i);
 
-    expect(methods.some((m) => m.startsWith('PUT') && m.includes('/customers/'))).toBe(true);
+    // #1091: learn-404 goes straight to POST — no PUT probe anymore.
+    expect(methods.some((m) => m.startsWith('PUT') && m.includes('/customers/'))).toBe(false);
     expect(methods.some((m) => m.startsWith('POST') && m.includes('/customers'))).toBe(true);
   });
 
@@ -1804,5 +1821,151 @@ describe('APIWorkspaceRepository hardware optimistic concurrency (#1084 / #443 s
     await saveCatalogWith(repo, [hwDomain()]);
     expect(learnGets).toBe(0);
     expect(ifMatchSeen).toEqual(['"v5"']);
+  });
+});
+
+describe('APIWorkspaceRepository simple families concurrency (#1091 / #443 slice 2)', () => {
+  const wire = (id: string, version: number) => ({
+    id,
+    code: 'X1',
+    name: 'Entidad S2',
+    width_mm: 100,
+    length_mm: 200,
+    thickness_mm: 15,
+    cost_per_m2: 1,
+    board_price: 1,
+    waste_percent: 0,
+    grain_default: false,
+    active: true,
+    version,
+  });
+  const matDomain = (id = 'mat-1'): MaterialBoard =>
+    ({
+      id,
+      code: 'X1',
+      name: 'Entidad S2',
+      widthMm: 100,
+      lengthMm: 200,
+      thicknessMm: 15,
+      grainDefault: false,
+      boardPrice: 1,
+      wastePercent: 0,
+      costPerM2: 1,
+      active: true,
+    }) as unknown as MaterialBoard;
+
+  const saveCatalogWith = async (repo: APIWorkspaceRepository, materials: MaterialBoard[]) => {
+    await repo.saveCatalog({
+      materials,
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+    });
+  };
+
+  it('materials: siembra la caché en load y manda If-Match sin re-aprender', async () => {
+    let learnGets = 0;
+    const ifMatchSeen: (string | null)[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const headers = new Headers(init?.headers);
+      if (method === 'GET' && url.endsWith('/catalog/materials')) {
+        return { ok: true, json: async () => [wire('mat-1', 5)] } as Response;
+      }
+      if (method === 'GET' && url.includes('/catalog/materials/mat-1')) {
+        learnGets += 1;
+        return { ok: true, json: async () => wire('mat-1', 5) } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/materials/mat-1')) {
+        ifMatchSeen.push(headers.get('If-Match'));
+        return { ok: true, json: async () => wire('mat-1', 6) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const ws = await repo.load();
+    expect(ws.catalog.materials).toHaveLength(1);
+    await saveCatalogWith(repo, [matDomain()]);
+    expect(learnGets).toBe(0);
+    expect(ifMatchSeen).toEqual(['"v5"']);
+  });
+
+  it('materials: sin caché aprende por GET y el write-back refresca la versión', async () => {
+    let learnGets = 0;
+    const ifMatchSeen: (string | null)[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const headers = new Headers(init?.headers);
+      if (method === 'GET' && url.includes('/catalog/materials/mat-1')) {
+        learnGets += 1;
+        return { ok: true, json: async () => wire('mat-1', 3) } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/materials/mat-1')) {
+        ifMatchSeen.push(headers.get('If-Match'));
+        return { ok: true, json: async () => wire('mat-1', Number(headers.get('If-Match')!.slice(2, -1)) + 1) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await saveCatalogWith(repo, [matDomain()]);
+    await saveCatalogWith(repo, [matDomain()]);
+    expect(learnGets).toBe(1);
+    expect(ifMatchSeen).toEqual(['"v3"', '"v4"']);
+  });
+
+  it('materials: un PUT 412 VERSION_CONFLICT rechaza saveCatalog con el error tipado', async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.includes('/catalog/materials/mat-1')) {
+        return { ok: true, json: async () => wire('mat-1', 3) } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/materials/mat-1')) {
+        return {
+          ok: false,
+          status: 412,
+          json: async () => ({ code: 'VERSION_CONFLICT', message: 'la versión cambió; recargá y reintentá', fieldErrors: {}, requestId: 'r', retryable: false, details: {} }),
+        } as unknown as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await expect(saveCatalogWith(repo, [matDomain()])).rejects.toMatchObject({
+      status: 412,
+      code: 'VERSION_CONFLICT',
+    });
+  });
+
+  it('materials: 404 al aprender mantiene el fallback POST-create sin If-Match', async () => {
+    const methods: { method: string; ifMatch: string | null }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const headers = new Headers(init?.headers);
+      if (method === 'GET' && url.includes('/catalog/materials/mat-9')) {
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({ code: 'NOT_FOUND', message: 'material board not found', fieldErrors: {}, requestId: 'r', retryable: false, details: {} }),
+        } as unknown as Response;
+      }
+      if (method === 'POST' && url.endsWith('/catalog/materials')) {
+        methods.push({ method, ifMatch: headers.get('If-Match') });
+        return { ok: true, json: async () => wire('mat-9', 1) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await saveCatalogWith(repo, [matDomain('mat-9')]);
+    expect(methods).toEqual([{ method: 'POST', ifMatch: null }]);
   });
 });

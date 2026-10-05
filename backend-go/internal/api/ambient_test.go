@@ -151,6 +151,7 @@ func TestHandleAmbientMaterialByID_VendedorPutReturns403(t *testing.T) {
 	srv := &Server{Store: &stubStore{ambientReturnedByID: &domain.AmbientMaterial{ID: "a1"}}}
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "v1", string(domain.RoleVendedor))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "a1")
 	rr := httptest.NewRecorder()
@@ -179,6 +180,7 @@ func TestHandleAmbientMaterialByID_UpdateCleansReplacedTexture(t *testing.T) {
 	srv := &Server{Store: store, MediaDir: dir}
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true,"preview_texture_url":"/api/media/newtex.webp"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "a1")
 	rr := httptest.NewRecorder()
@@ -210,6 +212,7 @@ func TestHandleAmbientMaterialByID_UpdateKeepsSameTexture(t *testing.T) {
 	srv := &Server{Store: store, MediaDir: dir}
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true,"preview_texture_url":"/api/media/keep.webp"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "a1")
 	rr := httptest.NewRecorder()
@@ -231,6 +234,7 @@ func TestHandleAmbientMaterialByID_UpdatePreservesZeroRoughness(t *testing.T) {
 	srv := &Server{Store: store}
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true,"preview_roughness":0}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "a1")
 	rr := httptest.NewRecorder()
@@ -255,6 +259,7 @@ func TestHandleAmbientMaterialByID_UpdateOmittedPBRIsNil(t *testing.T) {
 	srv := &Server{Store: store}
 	body := strings.NewReader(`{"code":"C","name":"N","surface_type":"floor","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-materials/a1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "a1")
 	rr := httptest.NewRecorder()
@@ -277,6 +282,7 @@ func TestHandleAmbientMaterialByID_DeleteDeactivates(t *testing.T) {
 	store := &stubStore{}
 	srv := &Server{Store: store}
 	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/ambient-materials/a1", nil), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "a1")
 	rr := httptest.NewRecorder()
 
@@ -376,6 +382,7 @@ func TestHandleAmbientCategoryByID_UpdateAndDeletes(t *testing.T) {
 	srv := &Server{Store: store}
 	body := strings.NewReader(`{"name":"Maderas Nobles"}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/ambient-categories/c1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.Header.Set("Content-Type", "application/json")
 	req.SetPathValue("id", "c1")
 	rr := httptest.NewRecorder()
@@ -391,6 +398,7 @@ func TestHandleAmbientCategoryByID_UpdateAndDeletes(t *testing.T) {
 
 	// Delete
 	delReq := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/ambient-categories/c1", nil), "eng", string(domain.RoleIngeniero))
+	delReq.Header.Set("If-Match", `"v1"`)
 	delReq.SetPathValue("id", "c1")
 	delRR := httptest.NewRecorder()
 

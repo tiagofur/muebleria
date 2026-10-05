@@ -129,9 +129,11 @@ func crossOrgDirection(t *testing.T, d crossDirection) {
 	fx.want(t, http.MethodPut, "/api/projects/"+d.target.project.id, tok, map[string]any{
 		"name": "HACKED " + d.target.project.name, "customer_id": d.target.customer.id,
 	}, http.StatusNotFound)
-	fx.want(t, http.MethodPut, "/api/catalog/materials/"+d.target.material.id, tok, map[string]any{
+	// #1091: even carrying a fabricated If-Match, a cross-org write stays a
+	// 404 — the strongest isolation proof (no existence leak, no write).
+	fx.wantIfMatch(t, http.MethodPut, "/api/catalog/materials/"+d.target.material.id, tok, map[string]any{
 		"code": "HACKED", "name": "HACKED", "manufacturer": "HACKED",
-	}, http.StatusNotFound)
+	}, 1, http.StatusNotFound)
 	fx.decode(t, http.MethodGet, "/api/customers/"+d.target.customer.id, d.target.admin.token, nil, http.StatusOK, &targetCustomer)
 	if targetCustomer.Name != d.target.customer.name || !targetCustomer.Active {
 		t.Fatalf("cross-org PUT left traces: customer of %s is %+v (want name %q active)", d.target.name, targetCustomer, d.target.customer.name)
@@ -147,9 +149,10 @@ func crossOrgDirection(t *testing.T, d crossDirection) {
 
 	// --- DELETE by foreign id fails, row survives --------------------------
 
-	fx.want(t, http.MethodDelete, "/api/customers/"+d.target.customer.id, tok, nil, http.StatusNotFound)
+	// #1091: same fabricated-If-Match isolation for the guarded deactivate.
+	fx.wantIfMatch(t, http.MethodDelete, "/api/customers/"+d.target.customer.id, tok, nil, 1, http.StatusNotFound)
 	fx.want(t, http.MethodDelete, "/api/projects/"+d.target.project.id, tok, nil, http.StatusNotFound)
-	fx.want(t, http.MethodDelete, "/api/catalog/materials/"+d.target.material.id, tok, nil, http.StatusNotFound)
+	fx.wantIfMatch(t, http.MethodDelete, "/api/catalog/materials/"+d.target.material.id, tok, nil, 1, http.StatusNotFound)
 	fx.decode(t, http.MethodGet, "/api/customers/"+d.target.customer.id, d.target.admin.token, nil, http.StatusOK, &targetCustomer)
 	if !targetCustomer.Active {
 		t.Fatalf("cross-org DELETE deactivated %s's customer — delete must be org-scoped", d.target.name)

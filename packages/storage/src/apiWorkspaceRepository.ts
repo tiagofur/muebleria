@@ -64,7 +64,8 @@ import {
   ProjectInlineUpdateHttpError,
 } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
-import { GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError } from './apiErrors';
+import type { ApiError } from './openapi/generated/types';
+import { CatalogEntityVersionUnknownError, GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError } from './apiErrors';
 import type {
   CatalogModule,
   ProductionRelease,
@@ -318,6 +319,10 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   private readonly moduleVersions = new Map<string, number>();
   // #1084 (#443 slice 1): server-owned hardware versions for If-Match writes.
   private readonly hardwareVersions = new Map<string, number>();
+  // #1091 (#443 slice 2): session version cache for the simple catalog
+  // families, keyed "family:id". Seeded by getCatalog, refreshed from every
+  // accepted write response.
+  private readonly entityVersions = new Map<string, number>();
 
   /**
    * #460 SEC-4B: el repository NO conoce storage de credenciales. El access
@@ -477,6 +482,25 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         this.moduleVersions.set(mod.id, mod.version);
       }
     }
+    // #1091 (#443 slice 2): seed the session version cache for the simple
+    // catalog families straight from the wire payloads (the mapped domain
+    // shapes carry no version), so every guarded save goes out under
+    // If-Match against the loaded server state.
+    const seedEntityVersions = (family: string, raw: unknown): void => {
+      if (!Array.isArray(raw)) return;
+      for (const item of raw as Array<{ id?: unknown; version?: unknown }>) {
+        if (typeof item?.id === 'string' && typeof item.version === 'number' && item.version > 0) {
+          this.entityVersions.set(this.versionKey(family, item.id), item.version);
+        }
+      }
+    };
+    seedEntityVersions('materials', materials);
+    seedEntityVersions('edges', edges);
+    seedEntityVersions('option-groups', optionGroups);
+    seedEntityVersions('categories', categories);
+    seedEntityVersions('customers', customers);
+    seedEntityVersions('ambient-materials', ambientMaterials);
+    seedEntityVersions('ambient-categories', ambientCategories);
     // #1084 (#443 slice 1): seed the hardware version cache straight from the
     // validated wire payload (the mapped domain shape carries no version), so
     // every save goes out under If-Match against the loaded server state.
@@ -637,6 +661,107 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
   }
 
+  private versionKey(family: string, id: string): string {
+    return `${family}:${id}`;
+  }
+
+  private rememberEntityVersion(family: string, id: string, saved: { readonly version?: unknown }): void {
+    const version = saved.version;
+    if (typeof version === 'number' && version > 0) {
+      this.entityVersions.set(this.versionKey(family, id), version);
+    }
+  }
+
+  /**
+   * #1091 (#443 slice 2): optimistic-concurrency write for the simple
+   * catalog families over the existing REST endpoints. Every PUT carries
+   * If-Match from the session version cache; an unknown version is learned
+   * first with a GET (404 keeps the POST-create fallback alive for
+   * locally-created entities); a stale write surfaces the server's typed
+   * GraneteApiError / VERSION_CONFLICT (412) so the shell can tell a stale
+   * editor apart from a transport failure — never a silent overwrite. The
+   * accepted write's response refreshes the cached version, so the next save
+   * of the same entity does not fail with a stale local version.
+   */
+  private async upsertGuarded(
+    pathById: string,
+    collection: string,
+    body: Record<string, unknown>,
+    family: string,
+    id: string,
+  ): Promise<void> {
+    const key = this.versionKey(family, id);
+    let expected = this.entityVersions.get(key);
+    if (expected === undefined) {
+      const learnRes = await this.fetch(`${this.baseUrl}${pathById}`, { method: 'GET', headers: this.getHeaders() });
+      if (learnRes.status === 404) {
+        await this.createThroughApi(collection, body, family, id);
+        return;
+      }
+      if (!learnRes.ok) {
+        throw new Error(`API learn failed ${pathById}: ${learnRes.status}`);
+      }
+      const learned = (await learnRes.json()) as { version?: unknown };
+      if (typeof learned.version !== 'number' || learned.version < 1) {
+        throw new CatalogEntityVersionUnknownError(family, id);
+      }
+      expected = learned.version;
+      this.entityVersions.set(key, expected);
+    }
+
+    const headers = this.getHeaders();
+    headers['If-Match'] = `"v${expected}"`;
+    const res = await this.fetch(`${this.baseUrl}${pathById}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      if (res.status === 404) {
+        // Deleted mid-session: recreate instead of failing the whole save.
+        await this.createThroughApi(collection, body, family, id);
+        return;
+      }
+      if (res.status === 412 || res.status === 409 || res.status >= 400) {
+        const payload = (await res.json().catch(() => null)) as
+          | { code?: string; message?: string; fieldErrors?: Record<string, string>; requestId?: string; retryable?: boolean; details?: Record<string, unknown> }
+          | null;
+        if (payload && payload.code) {
+          throw new GraneteApiError(res.status, {
+            code: payload.code as ApiError['code'],
+            message: payload.message ?? 'conflicto de versión',
+            fieldErrors: payload.fieldErrors ?? {},
+            requestId: payload.requestId ?? '',
+            retryable: payload.retryable ?? res.status >= 500,
+            details: payload.details ?? {},
+          });
+        }
+      }
+      throw new Error(`API upsert failed ${pathById}: ${res.status}`);
+    }
+    const saved = (await res.json().catch(() => ({}))) as { version?: unknown };
+    this.rememberEntityVersion(family, id, saved);
+  }
+
+  private async createThroughApi(
+    collection: string,
+    body: Record<string, unknown>,
+    family: string,
+    id: string,
+  ): Promise<void> {
+    const created = await this.fetch(`${this.baseUrl}${collection}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!created.ok) {
+      const text = await created.text().catch(() => '');
+      throw new Error(`API create failed ${collection}: ${created.status} ${text}`);
+    }
+    const saved = (await created.json().catch(() => ({}))) as { version?: unknown };
+    this.rememberEntityVersion(family, id, saved);
+  }
+
   private async upsert(
     pathById: string,
     pathCollection: string,
@@ -701,18 +826,22 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
   async saveCatalog(catalog: Catalog): Promise<void> {
     for (const m of catalog.materials) {
-      await this.upsert(
+      await this.upsertGuarded(
         `/catalog/materials/${m.id}`,
         '/catalog/materials',
         materialToApi(m),
+        'materials',
+        m.id,
       );
     }
 
     for (const e of catalog.edges) {
-      await this.upsert(
+      await this.upsertGuarded(
         `/catalog/edges/${e.id}`,
         '/catalog/edges',
         edgeToApi(e),
+        'edges',
+        e.id,
       );
     }
 
@@ -721,10 +850,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
 
     for (const og of catalog.optionGroups) {
-      await this.upsert(
+      await this.upsertGuarded(
         `/catalog/option-groups/${og.id}`,
         '/catalog/option-groups',
         optionGroupToApi(og),
+        'option-groups',
+        og.id,
       );
     }
 
@@ -757,10 +888,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     // Categories before modules (FK); parents before children.
     if (catalog.categories) {
       for (const cat of sortCategoriesForSave(catalog.categories)) {
-        await this.upsert(
+        await this.upsertGuarded(
           `/catalog/categories/${cat.id}`,
           '/catalog/categories',
           categoryToApi(cat),
+          'categories',
+          cat.id,
         );
       }
     }
@@ -771,10 +904,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
 
     if (catalog.customers) {
       for (const c of catalog.customers) {
-        await this.upsert(
+        await this.upsertGuarded(
           `/customers/${c.id}`,
           '/customers',
           customerToApi(c),
+          'customers',
+          c.id,
         );
       }
     }
@@ -782,10 +917,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     // Ambient categories (finishes taxonomy, max 3 levels).
     if (catalog.ambientCategories) {
       for (const cat of sortCategoriesForSave(catalog.ambientCategories)) {
-        await this.upsert(
+        await this.upsertGuarded(
           `/catalog/ambient-categories/${cat.id}`,
           '/catalog/ambient-categories',
           ambientCategoryToApi(cat),
+          'ambient-categories',
+          cat.id,
         );
       }
     }

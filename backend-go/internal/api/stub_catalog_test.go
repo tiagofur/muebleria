@@ -29,14 +29,17 @@ func (s *stubStore) ListMaterialBoards(context.Context) ([]domain.MaterialBoard,
 	return []domain.MaterialBoard{}, nil
 }
 
-func (s *stubStore) UpdateMaterialBoard(_ context.Context, _ string, m *domain.MaterialBoard) error {
+func (s *stubStore) UpdateMaterialBoard(_ context.Context, _ string, _ int64, m *domain.MaterialBoard) error {
+	if s.updateMaterialBoardErr != nil {
+		return s.updateMaterialBoardErr
+	}
 	s.updateMaterialCalled = true
 	cp := *m
 	s.updateMaterialReceived = &cp
 	return nil
 }
 
-func (s *stubStore) DeactivateMaterialBoard(context.Context, string) error {
+func (s *stubStore) DeactivateMaterialBoard(_ context.Context, _ string, _ int64) error {
 	return nil
 }
 
@@ -61,14 +64,14 @@ func (s *stubStore) CreateAmbientMaterial(_ context.Context, m *domain.AmbientMa
 	return nil
 }
 
-func (s *stubStore) UpdateAmbientMaterial(_ context.Context, _ string, m *domain.AmbientMaterial) error {
+func (s *stubStore) UpdateAmbientMaterial(_ context.Context, _ string, _ int64, m *domain.AmbientMaterial) error {
 	s.updateAmbientCalled = true
 	cp := *m
 	s.updateAmbientReceived = &cp
 	return nil
 }
 
-func (s *stubStore) DeactivateAmbientMaterial(_ context.Context, id string) error {
+func (s *stubStore) DeactivateAmbientMaterial(_ context.Context, id string, _ int64) error {
 	s.deactivateAmbientCalled = true
 	s.deactivateAmbientReceived = id
 	return nil
@@ -93,12 +96,12 @@ func (s *stubStore) CreateAmbientCategory(_ context.Context, _ *domain.AmbientCa
 	return nil
 }
 
-func (s *stubStore) UpdateAmbientCategory(_ context.Context, _ string, _ *domain.AmbientCategory) error {
+func (s *stubStore) UpdateAmbientCategory(_ context.Context, _ string, _ int64, _ *domain.AmbientCategory) error {
 	s.updateAmbientCategoryCalled = true
 	return nil
 }
 
-func (s *stubStore) DeleteAmbientCategory(_ context.Context, _ string) error {
+func (s *stubStore) DeleteAmbientCategory(_ context.Context, _ string, _ int64) error {
 	s.deleteAmbientCategoryCalled = true
 	return nil
 }
@@ -122,12 +125,12 @@ func (s *stubStore) CreateMaterialCategory(_ context.Context, _ *domain.Material
 	return nil
 }
 
-func (s *stubStore) UpdateMaterialCategory(_ context.Context, _ string, _ *domain.MaterialCategory) error {
+func (s *stubStore) UpdateMaterialCategory(_ context.Context, _ string, _ int64, _ *domain.MaterialCategory) error {
 	s.updateMaterialCategoryCalled = true
 	return nil
 }
 
-func (s *stubStore) DeleteMaterialCategory(_ context.Context, _ string) error {
+func (s *stubStore) DeleteMaterialCategory(_ context.Context, _ string, _ int64) error {
 	s.deleteMaterialCategoryCalled = true
 	if s.deleteMaterialCategoryErrHook != nil {
 		return s.deleteMaterialCategoryErrHook
@@ -150,12 +153,12 @@ func (s *stubStore) CreateEdgeBand(context.Context, *domain.EdgeBand) error {
 	return nil
 }
 
-func (s *stubStore) UpdateEdgeBand(context.Context, string, *domain.EdgeBand) error {
+func (s *stubStore) UpdateEdgeBand(_ context.Context, _ string, _ int64, _ *domain.EdgeBand) error {
 	s.stubNotUsed("UpdateEdgeBand")
 	return nil
 }
 
-func (s *stubStore) DeactivateEdgeBand(context.Context, string) error {
+func (s *stubStore) DeactivateEdgeBand(_ context.Context, _ string, _ int64) error {
 	s.stubNotUsed("DeactivateEdgeBand")
 	return nil
 }

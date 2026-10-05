@@ -300,20 +300,29 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "category not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var c domain.ModuleCategory
 		if !decodeJSONBody(w, r, &c) {
 			return
 		}
-		err := s.Store.UpdateCategory(r.Context(), id, &c)
+		err := s.Store.UpdateCategory(r.Context(), id, expectedVersion, &c)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			if strings.Contains(err.Error(), "invalid category placement") ||
@@ -333,10 +342,22 @@ func (s *Server) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		err := s.Store.DeleteCategory(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeleteCategory(r.Context(), id, expectedVersion)
 		if err != nil {
 			if strings.Contains(err.Error(), "cannot delete category with children") {
 				respondWithError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			respondWithInternalError(w, err, "handler")

@@ -15,6 +15,7 @@ func TestPilotReadiness_CatalogCloneIndependence(t *testing.T) {
 		Code       string  `json:"code"`
 		Name       string  `json:"name"`
 		BoardPrice float64 `json:"board_price"`
+		Version    int64   `json:"version"`
 	}
 	var listA, listB []board
 	fx.decode(t, http.MethodGet, "/api/catalog/materials", fx.a.admin.token, nil, http.StatusOK, &listA)
@@ -51,7 +52,9 @@ func TestPilotReadiness_CatalogCloneIndependence(t *testing.T) {
 		"waste_percent": 8, "cost_per_m2": 25.5,
 		"grain_default": true, "preview_color": "#a9714b",
 	}
-	fx.want(t, http.MethodPut, "/api/catalog/materials/"+sharedA.ID, fx.a.admin.token, renamed, http.StatusOK)
+	// #1091 (#443 slice 2): the guarded write carries the version the client
+	// just read, exactly like the web upsertGuarded flow.
+	fx.wantIfMatch(t, http.MethodPut, "/api/catalog/materials/"+sharedA.ID, fx.a.admin.token, renamed, sharedA.Version, http.StatusOK)
 
 	// A sees its edit…
 	var afterA board

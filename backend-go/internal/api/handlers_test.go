@@ -359,7 +359,12 @@ type stubStore struct {
 	deactivateHardwareCalled      bool
 	deactivateHardwareExpectedVer int64
 	deactivateHardwareErr         error
-	moduleReturnedByID            *domain.Module
+	// #1091 (#443 slice 2): conflict injection for simple catalog families.
+	updateMaterialBoardErr error
+	updateCategoryErr      error
+	updateCustomerErr      error
+	deactivateCustomerErr  error
+	moduleReturnedByID     *domain.Module
 	// Floor scan (F089-RN): per-id modules + floor status write log.
 	modulesByID       map[string]*domain.Module
 	floorStatusWrites []floorStatusWrite

@@ -58,14 +58,14 @@ func ensureCustomerInOrgTx(ctx context.Context, tx pgx.Tx, customerID, org strin
 
 func (s *PostgresStore) GetCustomerByID(ctx context.Context, id string) (*domain.Customer, error) {
 	query := `
-		SELECT id, name, email, phone, address, notes, active, owner_user_id, created_at, updated_at
+		SELECT id, name, email, phone, address, notes, active, owner_user_id, created_at, updated_at, version
 		FROM customers
 		WHERE id = $1 AND organization_id = $2;
 	`
 	row := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx))
 	var c domain.Customer
 	var email, phone, address, notes, ownerID *string
-	err := row.Scan(&c.ID, &c.Name, &email, &phone, &address, &notes, &c.Active, &ownerID, &c.CreatedAt, &c.UpdatedAt)
+	err := row.Scan(&c.ID, &c.Name, &email, &phone, &address, &notes, &c.Active, &ownerID, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -96,10 +96,10 @@ func (s *PostgresStore) CreateCustomer(ctx context.Context, c *domain.Customer) 
 		query := `
 			INSERT INTO customers (id, name, email, phone, address, notes, active, owner_user_id, organization_id)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-			RETURNING created_at, updated_at;
+			RETURNING created_at, updated_at, version;
 		`
 		err := s.db(ctx).QueryRow(ctx, query, c.ID, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
-			Scan(&c.CreatedAt, &c.UpdatedAt)
+			Scan(&c.CreatedAt, &c.UpdatedAt, &c.Version)
 		if err != nil {
 			return fmt.Errorf("error creating customer: %w", err)
 		}
@@ -108,17 +108,17 @@ func (s *PostgresStore) CreateCustomer(ctx context.Context, c *domain.Customer) 
 	query := `
 		INSERT INTO customers (name, email, phone, address, notes, active, owner_user_id, organization_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		RETURNING id, created_at, updated_at;
+		RETURNING id, created_at, updated_at, version;
 	`
 	err := s.db(ctx).QueryRow(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, OrgFromCtx(ctx)).
-		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
+		Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 	if err != nil {
 		return fmt.Errorf("error creating customer: %w", err)
 	}
 	return nil
 }
 
-func (s *PostgresStore) UpdateCustomer(ctx context.Context, id string, c *domain.Customer) error {
+func (s *PostgresStore) UpdateCustomer(ctx context.Context, id string, expectedVersion int64, c *domain.Customer) error {
 	var owner *string
 	if c.OwnerUserID != "" {
 		owner = &c.OwnerUserID
@@ -126,23 +126,24 @@ func (s *PostgresStore) UpdateCustomer(ctx context.Context, id string, c *domain
 	query := `
 		UPDATE customers
 		SET name = $1, email = $2, phone = $3, address = $4, notes = $5, active = $6,
-		    owner_user_id = $7, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $8 AND organization_id = $9;
+		    owner_user_id = $7, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $8 AND organization_id = $9 AND version = $10;
 	`
-	result, err := s.db(ctx).Exec(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, id, OrgFromCtx(ctx))
+	result, err := s.db(ctx).Exec(ctx, query, c.Name, c.Email, c.Phone, c.Address, c.Notes, c.Active, owner, id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
 		return fmt.Errorf("error updating customer: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("customer not found")
+		return s.disambiguateRowNotFound(ctx, "customers", id, fmt.Errorf("customer not found"))
 	}
 	c.ID = id
+	c.Version = expectedVersion + 1
 	return nil
 }
 
 func (s *PostgresStore) ListCustomers(ctx context.Context) ([]domain.Customer, error) {
 	query := `
-		SELECT id, name, email, phone, address, notes, active, owner_user_id, created_at, updated_at
+		SELECT id, name, email, phone, address, notes, active, owner_user_id, created_at, updated_at, version
 		FROM customers
 		WHERE organization_id = $1
 		ORDER BY name ASC;
@@ -157,7 +158,7 @@ func (s *PostgresStore) ListCustomers(ctx context.Context) ([]domain.Customer, e
 	for rows.Next() {
 		var c domain.Customer
 		var email, phone, address, notes, ownerID *string
-		err := rows.Scan(&c.ID, &c.Name, &email, &phone, &address, &notes, &c.Active, &ownerID, &c.CreatedAt, &c.UpdatedAt)
+		err := rows.Scan(&c.ID, &c.Name, &email, &phone, &address, &notes, &c.Active, &ownerID, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -184,18 +185,18 @@ func (s *PostgresStore) ListCustomers(ctx context.Context) ([]domain.Customer, e
 	return list, nil
 }
 
-func (s *PostgresStore) DeactivateCustomer(ctx context.Context, id string) error {
+func (s *PostgresStore) DeactivateCustomer(ctx context.Context, id string, expectedVersion int64) error {
 	query := `
 		UPDATE customers
-		SET active = false, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1 AND organization_id = $2;
+		SET active = false, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $1 AND organization_id = $2 AND version = $3;
 	`
-	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("customer not found")
+		return s.disambiguateRowNotFound(ctx, "customers", id, fmt.Errorf("customer not found"))
 	}
 	return nil
 }
