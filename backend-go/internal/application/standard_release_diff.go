@@ -26,7 +26,8 @@ type StandardDraftDiffStore interface {
 	GetCurrentPublishedRelease(ctx context.Context, libraryID uuid.UUID) (*domain.LibraryRelease, error)
 	GetReleaseManifest(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryManifest, []byte, error)
 	GetResourceBlob(ctx context.Context, sha256 string) (*domain.ResourceBlob, error)
-	HardwareReader
+	CatalogReader
+	MaterialCategoryReader
 	HardwareProfileReader
 }
 
@@ -81,7 +82,19 @@ func DiffStandardDraft(
 	// The draft side: the publisher's exact inputs, with human labels parsed
 	// from the canonical payloads (hardware and profiles both carry
 	// code/name).
-	inputs, err := BuildStandardReleaseInputs(ctx, store, store)
+	catalog, err := store.GetFullCatalog(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather authoring catalog: %w", err)
+	}
+	materialCategories, err := store.ListMaterialCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather material categories: %w", err)
+	}
+	profiles, err := store.ListActiveHardwareProfilesAnyOrg(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather hardware profile resources: %w", err)
+	}
+	inputs, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
 	if err != nil {
 		return nil, fmt.Errorf("gather draft resources: %w", err)
 	}

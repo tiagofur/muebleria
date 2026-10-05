@@ -161,22 +161,71 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// ONE authoritative full-catalog read feeds the revision, definition
-	// selection and resolve. The definition can no longer come from a stale
-	// GetModuleByID read outside the snapshot being pinned.
-	snapshot, err := s.loadWorkshopCatalogOnce(r)
-	if err != nil {
-		if definitionErr, ok := furnitureParameterDefinitionsError(err); ok {
+	// #1102 frozen geometry: a consumer release pin anchors the WHOLE
+	// resolve to that release — the geometry catalog decodes from the
+	// release's frozen blobs and CATALOG_REVISION_STALE is not compared
+	// against the live catalog (the pin replaces the revision as the
+	// reproducibility anchor; catalogRevision becomes advisory). Without a
+	// pin the resolve reads the live catalog exactly as before.
+	pinnedReleaseID, pinIssue := parseOptionalReleasePin(req.Furniture.LibraryReleaseID)
+	if pinIssue != nil {
+		s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, []domain.ContractIssue{*pinIssue})
+		return
+	}
+
+	var snapshot authoringCatalogSnapshot
+	if pinnedReleaseID != nil {
+		frozenCatalog, frozenMaterialCategories, frozenErr := storage.FrozenCatalogForRelease(r.Context(), s.Store, *pinnedReleaseID)
+		if frozenErr != nil {
 			s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
-				Code: "PARAMETER_DEFINITION_INVALID", Message: "the pinned furniture parameter definition is invalid",
-				Severity: domain.IssueSeverityError, Path: "furniture.parameters",
-				Remediation: "Correct and republish the furniture definition before resolving it.",
-				Details:     map[string]any{"issues": definitionErr.Issues},
+				Code:     "LIBRARY_RELEASE_UNAVAILABLE",
+				Message:  "el release pineado no se pudo cargar para resolver: " + frozenErr.Error(),
+				Severity: domain.IssueSeverityError, Path: "furniture.libraryReleaseId",
+				Remediation: "Sincronizá el consumidor con el release publicado vigente (GET /manufacturing-libraries/standard/releases/current).",
 			}})
 			return
 		}
-		respondWithInternalError(w, err, "load resolution catalog")
-		return
+		projection, projErr := buildWorkshopFurnitureCatalogValidated(
+			frozenCatalog.Modules, frozenCatalog.Categories, frozenMaterialCategories, frozenCatalog,
+		)
+		if projErr != nil {
+			if definitionErr, ok := furnitureParameterDefinitionsError(projErr); ok {
+				s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+					Code: "PARAMETER_DEFINITION_INVALID", Message: "the frozen furniture parameter definition is invalid",
+					Severity: domain.IssueSeverityError, Path: "furniture.parameters",
+					Remediation: "Corrigé la definición y publicá una nueva versión del release.",
+					Details:     map[string]any{"issues": definitionErr.Issues},
+				}})
+				return
+			}
+			respondWithInternalError(w, projErr, "build frozen resolution catalog")
+			return
+		}
+		snapshot = authoringCatalogSnapshot{
+			Composition:        frozenCatalog,
+			MaterialCategories: frozenMaterialCategories,
+			Projection:         projection,
+			Revision:           workshopCatalogRevisionID(projection),
+		}
+	} else {
+		// ONE authoritative full-catalog read feeds the revision, definition
+		// selection and resolve. The definition can no longer come from a stale
+		// GetModuleByID read outside the snapshot being pinned.
+		liveSnapshot, err := s.loadWorkshopCatalogOnce(r)
+		if err != nil {
+			if definitionErr, ok := furnitureParameterDefinitionsError(err); ok {
+				s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+					Code: "PARAMETER_DEFINITION_INVALID", Message: "the pinned furniture parameter definition is invalid",
+					Severity: domain.IssueSeverityError, Path: "furniture.parameters",
+					Remediation: "Correct and republish the furniture definition before resolving it.",
+					Details:     map[string]any{"issues": definitionErr.Issues},
+				}})
+				return
+			}
+			respondWithInternalError(w, err, "load resolution catalog")
+			return
+		}
+		snapshot = liveSnapshot
 	}
 	module := snapshot.module(req.Furniture.FurnitureDefinitionID)
 	if module == nil {
@@ -202,7 +251,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		}})
 		return
 	}
-	if revision != req.Furniture.CatalogRevision {
+	if pinnedReleaseID == nil && revision != req.Furniture.CatalogRevision {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
 			Code:     "CATALOG_REVISION_STALE",
 			Message:  "el request fue armado contra la revisión " + req.Furniture.CatalogRevision + " del catálogo y la actual es " + revision,
@@ -247,24 +296,15 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	// with a structured issue — never a silent inherit.
 	var serverInputs *engine.ReleaseServerInputs
 	var policyErr error
-	if pinnedRelease := strings.TrimSpace(req.Furniture.LibraryReleaseID); pinnedRelease != "" {
-		// #1102 Slice D: the consumer declared the exact release it consumes.
+	if pinnedReleaseID != nil {
 		// Fail-closed: an unpublished/unknown pin is a structured rejection —
 		// never a silent upgrade to current.
-		pinnedUUID, pinErr := uuid.Parse(pinnedRelease)
-		if pinErr != nil {
-			s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, []domain.ContractIssue{{
-				Code: "REQUEST_INVALID", Message: "furniture.libraryReleaseId debe ser un uuid válido",
-				Severity: domain.IssueSeverityError, Path: "furniture.libraryReleaseId",
-			}})
-			return
-		}
-		serverInputs, policyErr = storage.ReleaseServerInputsForRelease(r.Context(), s.Store, org.ID, pinnedUUID)
+		serverInputs, policyErr = storage.ReleaseServerInputsForRelease(r.Context(), s.Store, org.ID, *pinnedReleaseID)
 		if policyErr != nil {
 			if errors.Is(policyErr, storage.ErrReleaseNotPublished) || errors.Is(policyErr, storage.ErrLibraryReleaseNotFound) {
 				s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
 					Code:     "LIBRARY_RELEASE_UNAVAILABLE",
-					Message:  "el release pineado " + pinnedRelease + " no está disponible (no existe o no está publicado); actualizá la biblioteca del consumidor",
+					Message:  "el release pineado " + pinnedReleaseID.String() + " no está disponible (no existe o no está publicado); actualizá la biblioteca del consumidor",
 					Severity: domain.IssueSeverityError, Path: "furniture.libraryReleaseId",
 					Remediation: "Sincronizá el consumidor con el release publicado vigente (GET /manufacturing-libraries/standard/releases/current).",
 				}})
@@ -865,4 +905,21 @@ func authoringPlacementsFromWire(wire []authoringPlacementWire) ([]engine.Author
 		})
 	}
 	return out, issues
+}
+
+// parseOptionalReleasePin parses the consumer's optional library release pin;
+// nil means "no pin" (live/current semantics).
+func parseOptionalReleasePin(raw string) (*uuid.UUID, *domain.ContractIssue) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	parsed, err := uuid.Parse(trimmed)
+	if err != nil {
+		return nil, &domain.ContractIssue{
+			Code: "REQUEST_INVALID", Message: "furniture.libraryReleaseId debe ser un uuid válido",
+			Severity: domain.IssueSeverityError, Path: "furniture.libraryReleaseId",
+		}
+	}
+	return &parsed, nil
 }
