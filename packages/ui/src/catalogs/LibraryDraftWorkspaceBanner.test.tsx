@@ -36,6 +36,7 @@ describe('LibraryDraftWorkspaceBanner (#1102)', () => {
     error: null,
     onOpenDraft: vi.fn(),
     onValidateDraft: vi.fn(),
+    onPublishClick: vi.fn(),
   };
 
   it('offers opening a draft when none is open, showing the published version', () => {
@@ -76,6 +77,10 @@ describe('LibraryDraftWorkspaceBanner (#1102)', () => {
     expect(validateButton.textContent).toContain('Probar borrador v0.3.5');
     fireEvent.click(validateButton);
     expect(onValidateDraft).toHaveBeenCalledTimes(1);
+    const publishButton = screen.getByTestId('library-publish-open-btn');
+    expect(publishButton.textContent).toContain('Publicar v0.3.5');
+    fireEvent.click(publishButton);
+    expect(baseProps.onPublishClick).toHaveBeenCalledTimes(1);
   });
 
   it('renders a distinct alert state when the workspace cannot load', () => {

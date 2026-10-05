@@ -148,6 +148,7 @@ import type {
   SessionDirectory,
   SessionRevokeResponse,
   SketchupProfileResponse,
+  StandardDraftDiffReport,
   StandardDraftValidationReport,
   StandardReleasePublishResult,
   StartHardwareAssetUploadRequest,
@@ -319,6 +320,7 @@ export abstract class GeneratedGraneteApiClient {
   getStandardLibraryDraftReleases(token: string, signal?: AbortSignal): Promise<ReadonlyArray<LibraryReleaseSummary>> { return this.request("GET", "/manufacturing-libraries/standard/releases/drafts", { arrayOf: "LibraryReleaseSummary", token, signal }); }
   getStandardReleaseById(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryReleaseDetail> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}`, { schema: "LibraryReleaseDetail", token, signal }); }
   publishStandardLibraryRelease(token: string, releaseId: string, signal?: AbortSignal): Promise<StandardReleasePublishResult> { return this.request("POST", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/publish`, { schema: "StandardReleasePublishResult", token, signal }); }
+  getStandardLibraryDraftDiff(token: string, releaseId: string, signal?: AbortSignal): Promise<StandardDraftDiffReport> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/diff`, { schema: "StandardDraftDiffReport", token, signal }); }
   validateStandardLibraryDraft(token: string, releaseId: string, signal?: AbortSignal): Promise<StandardDraftValidationReport> { return this.request("POST", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/validate`, { schema: "StandardDraftValidationReport", token, signal }); }
   getHardwareProfilesForRelease(token: string, releaseId: string, signal?: AbortSignal): Promise<ReadonlyArray<HardwareProfile>> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/hardware-profiles`, { arrayOf: "HardwareProfile", token, signal }); }
   getStandardReleaseManifest(token: string, releaseId: string, signal?: AbortSignal): Promise<LibraryManifest> { return this.request("GET", `/manufacturing-libraries/standard/releases/${encodeURIComponent(releaseId)}/manifest`, { schema: "LibraryManifest", token, signal }); }

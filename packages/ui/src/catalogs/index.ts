@@ -81,3 +81,13 @@ export {
   LibraryDraftValidationPanel,
   type LibraryDraftValidationPanelProps,
 } from './LibraryDraftValidationPanel';
+
+export {
+  LibraryPublishConfirmContent,
+  type LibraryPublishConfirmContentProps,
+} from './LibraryPublishConfirmContent';
+
+export {
+  LibraryPublishHistoryPanel,
+  type LibraryPublishHistoryPanelProps,
+} from './LibraryPublishHistoryPanel';

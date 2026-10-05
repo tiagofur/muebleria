@@ -2315,6 +2315,29 @@ type StandardReleasePublishResult struct {
 	ResourceCount int64  `json:"resourceCount"`
 }
 
+type StandardDraftDiffReport struct {
+	ReleaseId  string                `json:"releaseId"`
+	Version    string                `json:"version"`
+	Base       *DraftDiffBase        `json:"base,omitempty"`
+	Added      []DraftResourceChange `json:"added"`
+	Modified   []DraftResourceChange `json:"modified"`
+	Removed    []DraftResourceChange `json:"removed"`
+	Unchanged  int64                 `json:"unchanged"`
+	ComputedAt string                `json:"computedAt"`
+}
+
+type DraftDiffBase struct {
+	ReleaseId string `json:"releaseId"`
+	Version   string `json:"version"`
+}
+
+type DraftResourceChange struct {
+	Kind string  `json:"kind"`
+	ID   string  `json:"id"`
+	Code *string `json:"code,omitempty"`
+	Name *string `json:"name,omitempty"`
+}
+
 type StandardDraftValidationReport struct {
 	ReleaseId   string              `json:"releaseId"`
 	Version     string              `json:"version"`
