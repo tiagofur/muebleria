@@ -46,8 +46,19 @@ async function ensureExceptionComponent(token: string): Promise<void> {
     active: true,
   });
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Request-ID': crypto.randomUUID() };
-  const put = await fetch(`${base}/catalog/components/${EXCEPTION_COMPONENT_ID}`, { method: 'PUT', headers, body });
-  if (put.ok) return;
+  // #1096 (#443 slice 3): guarded component writes — learn first, PUT under
+  // If-Match; missing rows fall through to POST-create.
+  const learn = await fetch(`${base}/catalog/components/${EXCEPTION_COMPONENT_ID}`, { method: 'GET', headers });
+  if (learn.ok) {
+    const current = (await learn.json()) as { version?: number };
+    const put = await fetch(`${base}/catalog/components/${EXCEPTION_COMPONENT_ID}`, {
+      method: 'PUT',
+      headers: { ...headers, 'If-Match': `"v${current.version}"` },
+      body,
+    });
+    expect(put.ok, `component upsert (If-Match): ${put.status} ${await put.text().catch(() => '')}`).toBe(true);
+    return;
+  }
   const created = await fetch(`${base}/catalog/components`, { method: 'POST', headers, body });
   expect(created.ok, `component upsert: ${created.status} ${await created.text().catch(() => '')}`).toBe(true);
 }

@@ -388,7 +388,7 @@ func TestAgregadoRevisions_LegacyAgregadoCompatibility(t *testing.T) {
 	r1 := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
 		return store.CreateAgregadoRevision(txCtx, agregadoID, sampleRecipeR1(), nil)
 	})
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAgregado(txCtx, agregadoID) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAgregado(txCtx, agregadoID, 1) })
 	deactivated := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, agregadoID) })
 	if deactivated.Active {
 		t.Fatal("expected agregado to be inactive after deactivation")
@@ -399,7 +399,7 @@ func TestAgregadoRevisions_LegacyAgregadoCompatibility(t *testing.T) {
 	if fetchedR1.ID != r1.ID {
 		t.Fatal("fetched revision ID mismatch after deactivation")
 	}
-	err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error { return store.DeleteAgregado(txCtx, agregadoID) })
+	err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error { return store.DeleteAgregado(txCtx, agregadoID, 1) })
 	if err == nil {
 		t.Fatal("physical DeleteAgregado must fail while historical revisions exist (ON DELETE RESTRICT)")
 	}

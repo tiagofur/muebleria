@@ -30,33 +30,30 @@ async function upsertCatalog(token: string, pathById: string, pathCollection: st
     Authorization: `Bearer ${token}`,
     'X-Request-ID': crypto.randomUUID(),
   };
-  const put = await fetch(`${apiBase}${pathById}`, { method: 'PUT', headers, body: JSON.stringify(body) });
-  if (put.ok) return;
-  const putText = await put.text().catch(() => '');
-  // #497: a module PUT without If-Match answers 428 once the row exists —
-  // learn the current version and retry the write under If-Match (still
-  // version-guarded; a mid-seed change answers 412).
-  if (put.status === 428 && pathById.startsWith('/catalog/modules/')) {
-    const current = await fetch(`${apiBase}${pathById}`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${token}`, 'X-Request-ID': crypto.randomUUID() },
-    });
-    const etag = current.headers.get('ETag');
-    if (current.ok && etag) {
-      const retry = await fetch(`${apiBase}${pathById}`, {
+  // #1096 (#443 slice 3): learn-first for every guarded family — GET the
+  // current version (or the ETag for modules), PUT under If-Match; missing
+  // rows (404/405/legacy 500) fall through to the create endpoint (a real
+  // conflict surfaces there as 409).
+  const learn = await fetch(`${apiBase}${pathById}`, { method: 'GET', headers });
+  if (learn.ok) {
+    let ifMatch: string | null = learn.headers.get('ETag');
+    if (!ifMatch) {
+      const current = (await learn.json()) as { version?: number };
+      ifMatch = typeof current.version === 'number' ? `"v${current.version}"` : null;
+    }
+    if (ifMatch) {
+      const put = await fetch(`${apiBase}${pathById}`, {
         method: 'PUT',
-        headers: { ...headers, 'If-Match': etag },
+        headers: { ...headers, 'If-Match': ifMatch },
         body: JSON.stringify(body),
       });
-      if (retry.ok) return;
-      throw new Error(`PUT ${pathById} (If-Match ${etag}): ${retry.status} ${await retry.text().catch(() => '')}`);
+      if (put.ok) return;
+      throw new Error(`PUT ${pathById} (If-Match ${ifMatch}): ${put.status} ${await put.text().catch(() => '')}`);
     }
   }
-  // The legacy Go update path answers an opaque 500 for a missing row; any
-  // 404/405/500 falls through to the create endpoint (a real conflict
-  // surfaces there as 409).
-  if (put.status !== 404 && put.status !== 405 && put.status !== 500) {
-    throw new Error(`PUT ${pathById}: ${put.status} ${putText}`);
+  const learnText = await learn.text().catch(() => '');
+  if (learn.status !== 404 && learn.status !== 405 && learn.status !== 500) {
+    throw new Error(`GET ${pathById}: ${learn.status} ${learnText}`);
   }
   const created = await fetch(`${apiBase}${pathCollection}`, { method: 'POST', headers, body: JSON.stringify(body) });
   if (!created.ok) {

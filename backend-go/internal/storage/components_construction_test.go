@@ -27,7 +27,7 @@ func TestComponentConstruction_roundTrip(t *testing.T) {
 	}
 	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateComponent(txCtx, comp) })
 	t.Cleanup(func() {
-		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteComponent(txCtx, comp.ID) })
+		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteComponent(txCtx, comp.ID, comp.Version) })
 	})
 
 	var loaded *domain.Component
@@ -66,7 +66,7 @@ func TestComponentConstruction_roundTrip(t *testing.T) {
 
 	// Clearing the block stores NULL (no phanthom override).
 	comp.Construction = nil
-	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateComponent(txCtx, comp.ID, comp) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateComponent(txCtx, comp.ID, comp.Version, comp) })
 	var cleared *domain.Component
 	withinInitialOrganization(t, store, func(txCtx context.Context) error {
 		var err error
@@ -79,7 +79,7 @@ func TestComponentConstruction_roundTrip(t *testing.T) {
 
 	// An all-empty block normalizes to NULL on write.
 	comp.Construction = &domain.ComponentConstruction{}
-	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateComponent(txCtx, comp.ID, comp) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateComponent(txCtx, comp.ID, comp.Version, comp) })
 	var empty *domain.Component
 	withinInitialOrganization(t, store, func(txCtx context.Context) error {
 		var err error

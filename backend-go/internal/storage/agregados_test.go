@@ -31,12 +31,12 @@ func TestAgregados_CRUDRoundTrip(t *testing.T) {
 	}
 	upd := *in
 	upd.Name = "Cuerpo 3 Cajones Actualizado"
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, &upd) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, upd.Version, &upd) })
 	again := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, id) })
 	if again.Name != "Cuerpo 3 Cajones Actualizado" {
 		t.Fatalf("expected updated name, got %q", again.Name)
 	}
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAgregado(txCtx, id) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.DeactivateAgregado(txCtx, id, again.Version) })
 	deact := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, id) })
 	if deact.Active {
 		t.Fatal("expected active=false after deactivate")
@@ -72,15 +72,15 @@ func TestAgregados_PresentationMotionRoundTrip(t *testing.T) {
 
 	upd := *in
 	upd.PresentationMotion = map[string]any{"kind": "translate", "axis": map[string]any{"x": 0.0, "y": 1.0, "z": 0.0}, "distanceMm": 400.0}
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, &upd) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, upd.Version, &upd) })
 	again := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, id) })
 	if again.PresentationMotion == nil || again.PresentationMotion["kind"] != "translate" || again.PresentationMotion["distanceMm"] != 400.0 {
 		t.Fatalf("translate motion lost after update: %+v", again.PresentationMotion)
 	}
 
-	noMotion := *in
+	noMotion := *again
 	noMotion.PresentationMotion = nil
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, &noMotion) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateAgregado(txCtx, id, noMotion.Version, &noMotion) })
 	cleared := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) { return store.GetAgregadoByID(txCtx, id) })
 	if cleared.PresentationMotion != nil {
 		t.Fatalf("expected nil presentation motion after clearing update, got %+v", cleared.PresentationMotion)
@@ -99,7 +99,7 @@ func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
 		t.Fatalf("mismatch on structure agregado: %+v", structGot.Agregados)
 	}
 	structIn.Agregados[0].Name = "Puerta Izq Modificada"
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, structID, structIn) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, structID, structIn.Version, structIn) })
 	structUpd := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Structure, error) { return store.GetStructureByID(txCtx, structID) })
 	if len(structUpd.Agregados) != 1 || structUpd.Agregados[0].Name != "Puerta Izq Modificada" {
 		t.Fatalf("mismatch after structure update: %+v", structUpd.Agregados)

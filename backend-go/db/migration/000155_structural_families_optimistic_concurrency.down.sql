@@ -1,0 +1,3 @@
+ALTER TABLE components DROP COLUMN IF EXISTS version;
+ALTER TABLE structures DROP COLUMN IF EXISTS version;
+ALTER TABLE agregados  DROP COLUMN IF EXISTS version;

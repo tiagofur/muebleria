@@ -572,6 +572,10 @@ describe('APIWorkspaceRepository', () => {
         });
         return { ok: true, json: async () => ({}) } as Response;
       }
+      if ((init?.method ?? 'GET') === 'GET' && url.includes('/catalog/agregados/')) {
+        // #1096: the guarded write learns the server version first.
+        return { ok: true, json: async () => ({ id: 'agr-1', version: 2 }) } as Response;
+      }
       return { ok: true, json: async () => [] } as Response;
     });
 

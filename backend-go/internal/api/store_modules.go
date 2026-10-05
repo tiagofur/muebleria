@@ -20,10 +20,10 @@ type ModuleStore interface {
 	ListAgregados(ctx context.Context) ([]domain.Agregado, error)
 	GetAgregadoByID(ctx context.Context, id string) (*domain.Agregado, error)
 	CreateAgregado(ctx context.Context, a *domain.Agregado) error
-	UpdateAgregado(ctx context.Context, id string, a *domain.Agregado) error
-	DeactivateAgregado(ctx context.Context, id string) error
+	UpdateAgregado(ctx context.Context, id string, expectedVersion int64, a *domain.Agregado) error
+	DeactivateAgregado(ctx context.Context, id string, expectedVersion int64) error
 	// DeleteAgregado hard-deletes with an in-use guard (F116 C4).
-	DeleteAgregado(ctx context.Context, id string) error
+	DeleteAgregado(ctx context.Context, id string, expectedVersion int64) error
 
 	// Catalog: categories
 	ListCategories(ctx context.Context) ([]domain.ModuleCategory, error)
@@ -49,13 +49,13 @@ type ModuleStore interface {
 	ListStructures(ctx context.Context) ([]domain.Structure, error)
 	GetStructureByID(ctx context.Context, id string) (*domain.Structure, error)
 	CreateStructure(ctx context.Context, st *domain.Structure) error
-	UpdateStructure(ctx context.Context, id string, st *domain.Structure) error
-	DeleteStructure(ctx context.Context, id string) error
+	UpdateStructure(ctx context.Context, id string, expectedVersion int64, st *domain.Structure) error
+	DeleteStructure(ctx context.Context, id string, expectedVersion int64) error
 
 	// Catalog: components
 	ListComponents(ctx context.Context) ([]domain.Component, error)
 	GetComponentByID(ctx context.Context, id string) (*domain.Component, error)
 	CreateComponent(ctx context.Context, c *domain.Component) error
-	UpdateComponent(ctx context.Context, id string, c *domain.Component) error
-	DeleteComponent(ctx context.Context, id string) error
+	UpdateComponent(ctx context.Context, id string, expectedVersion int64, c *domain.Component) error
+	DeleteComponent(ctx context.Context, id string, expectedVersion int64) error
 }

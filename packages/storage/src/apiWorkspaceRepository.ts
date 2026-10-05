@@ -494,6 +494,9 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         }
       }
     };
+    seedEntityVersions('components', components);
+    seedEntityVersions('agregados', agregados);
+    seedEntityVersions('structures', structures);
     seedEntityVersions('materials', materials);
     seedEntityVersions('edges', edges);
     seedEntityVersions('option-groups', optionGroups);
@@ -862,26 +865,32 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     // Components before structures/modules: structure_components and
     // module_components FK reference components(id).
     for (const c of catalog.components ?? []) {
-      await this.upsert(
+      await this.upsertGuarded(
         `/catalog/components/${c.id}`,
         '/catalog/components',
         componentToApi(c),
+        'components',
+        c.id,
       );
     }
 
     for (const a of catalog.agregados ?? []) {
-      await this.upsert(
+      await this.upsertGuarded(
         `/catalog/agregados/${a.id}`,
         '/catalog/agregados',
         agregadoToApi(a),
+        'agregados',
+        a.id,
       );
     }
 
     for (const st of catalog.structures ?? []) {
-      await this.upsert(
+      await this.upsertGuarded(
         `/catalog/structures/${st.id}`,
         '/catalog/structures',
         structureToApi(st),
+        'structures',
+        st.id,
       );
     }
 
