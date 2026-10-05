@@ -1,5 +1,33 @@
 # ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
 
+**Slice C (rama apilada feat/1102-lib-draft-publish, base = rama B):**
+diseño publicado antes de codear (issuecomment-6001287796). C = UI + wiring
+más UN endpoint nuevo de lectura:
+
+- `GET /api/manufacturing-libraries/standard/releases/{releaseId}/diff`
+  (platform staff, read-only, simétrico a publish/validate): dry-run de
+  compilación + comparación por (kind, id) contra el manifiesto del release
+  publicado vigente → agregados / modificados (definitionHash distinto) /
+  eliminados / sin-cambio. Labels del lado draft desde los payloads; los
+  eliminados se etiquetan desde su blob content-addressed. Sin base
+  publicada: todo agregado y base=null. Un draft que no compila responde
+  422 estructurado (la respuesta honesta del diff).
+- Web: botón "Publicar vN" en el banner → Modal compartido (focus trap, Esc)
+  con `LibraryPublishConfirmContent` (loading del diff, listas etiquetadas,
+  "sin cambios: N", advertencia de inmutabilidad, Confirmar/Cancelar —
+  confirmar deshabilitado sin diff) + `LibraryPublishHistoryPanel`
+  (colapsado por defecto, versión/fecha/hash corto/changelog). publishDraft
+  refresca el workspace: el draft publicado sale de borradores y entra al
+  historial; errores 409/422/red con mensajes distintos y el release
+  anterior queda intacto (garantía del backend, mensajes lo comunican).
+- Tests: application diff (sin base / clasificación completa con labels
+  desde blobs / guards), handler (diff con labels reales 200, 403/404/409),
+  hook (diff keyed, publish refresca y limpia el diff, 422 mantiene el
+  release), banner (botón publicar), confirm content (loading/diff/error/
+  confirm-cancel), history panel (colapsado/expandido).
+
+---
+
 **Slice B (rama apilada feat/1102-lib-draft-validate, base = rama A):**
 diseño publicado antes de codear (issuecomment-6000798162). Bajo la
 arquitectura de A, "browser con flag" y "plugin modo dev" son piezas de D
