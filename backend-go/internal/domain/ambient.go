@@ -11,6 +11,9 @@ type AmbientCategory struct {
 	SortOrder int       `json:"sort_order"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 // AmbientMaterial is a presentation-only surface/finish for the 3D scene
@@ -35,6 +38,9 @@ type AmbientMaterial struct {
 	PreviewRoughness           *float64           `json:"preview_roughness,omitempty"`
 	PreviewMetalness           *float64           `json:"preview_metalness,omitempty"`
 	PreviewClearcoat           *float64           `json:"preview_clearcoat,omitempty"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 // AmbientSurfaceType discriminates floor vs wall ambient materials. Stored as

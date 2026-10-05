@@ -11,6 +11,6 @@ type CustomerStore interface {
 	ListCustomers(ctx context.Context) ([]domain.Customer, error)
 	GetCustomerByID(ctx context.Context, id string) (*domain.Customer, error)
 	CreateCustomer(ctx context.Context, c *domain.Customer) error
-	UpdateCustomer(ctx context.Context, id string, c *domain.Customer) error
-	DeactivateCustomer(ctx context.Context, id string) error
+	UpdateCustomer(ctx context.Context, id string, expectedVersion int64, c *domain.Customer) error
+	DeactivateCustomer(ctx context.Context, id string, expectedVersion int64) error
 }

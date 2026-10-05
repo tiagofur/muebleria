@@ -380,11 +380,11 @@ func TestIsolation_AmbientCategories(t *testing.T) {
 		t.Fatal("org B reading org A's category must fail")
 	}
 	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error {
-		return store.UpdateAmbientCategory(txCtx, catA, &domain.AmbientCategory{Name: "HACKED", SortOrder: 2})
+		return store.UpdateAmbientCategory(txCtx, catA, 1, &domain.AmbientCategory{Name: "HACKED", SortOrder: 2})
 	}); err == nil {
 		t.Fatal("cross-org category update must fail")
 	}
-	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeleteAmbientCategory(txCtx, catA) }); err != nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeleteAmbientCategory(txCtx, catA, 1) }); err != nil {
 		t.Fatalf("cross-org category delete must surface an error: %v", err)
 	}
 	count := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (int, error) {
@@ -422,7 +422,7 @@ func TestIsolation_AmbientMaterials(t *testing.T) {
 	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { _, err := store.GetAmbientMaterialByID(txCtx, matA); return err }); err == nil {
 		t.Fatal("org B reading org A's ambient material must fail")
 	}
-	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeactivateAmbientMaterial(txCtx, matA) }); err != nil {
+	if err := isolationFamilyError(t, fixture, orgB, func(txCtx context.Context) error { return store.DeactivateAmbientMaterial(txCtx, matA, 1) }); err != nil {
 		t.Fatalf("cross-org deactivate should be a silent no-op at storage level: %v", err)
 	}
 	active := isolationFamilySQLValue(t, fixture, orgA, func(tx pgx.Tx) (bool, error) {

@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"errors"
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // --- CATALOG / AMBIENT MATERIALS (presentation-only floor/wall, #4150) ---
@@ -64,10 +67,15 @@ func (s *Server) HandleAmbientMaterialByID(w http.ResponseWriter, r *http.Reques
 			respondWithError(w, http.StatusNotFound, "ambient material not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(m.Version))
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
 			return
 		}
 		var m domain.AmbientMaterial
@@ -81,9 +89,13 @@ func (s *Server) HandleAmbientMaterialByID(w http.ResponseWriter, r *http.Reques
 		if cur, err := s.Store.GetAmbientMaterialByID(r.Context(), id); err == nil && cur != nil {
 			prevTexture = cur.PreviewTextureURL
 		}
-		if err := s.Store.UpdateAmbientMaterial(r.Context(), id, &m); err != nil {
+		if err := s.Store.UpdateAmbientMaterial(r.Context(), id, expectedVersion, &m); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			if isDuplicateKey(err) {
@@ -102,7 +114,19 @@ func (s *Server) HandleAmbientMaterialByID(w http.ResponseWriter, r *http.Reques
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		if err := s.Store.DeactivateAmbientMaterial(r.Context(), id); err != nil {
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		if err := s.Store.DeactivateAmbientMaterial(r.Context(), id, expectedVersion); err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
 			respondWithInternalError(w, err, "ambient material deactivate")
 			return
 		}
@@ -165,17 +189,22 @@ func (s *Server) HandleAmbientCategoryByID(w http.ResponseWriter, r *http.Reques
 			respondWithError(w, http.StatusNotFound, "ambient category not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var c domain.AmbientCategory
 		if !decodeJSONBody(w, r, &c) {
 			return
 		}
-		err := s.Store.UpdateAmbientCategory(r.Context(), id, &c)
+		err := s.Store.UpdateAmbientCategory(r.Context(), id, expectedVersion, &c)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
@@ -198,7 +227,11 @@ func (s *Server) HandleAmbientCategoryByID(w http.ResponseWriter, r *http.Reques
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		err := s.Store.DeleteAmbientCategory(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeleteAmbientCategory(r.Context(), id, expectedVersion)
 		if err != nil {
 			if strings.Contains(err.Error(), "cannot delete category with children") {
 				respondWithError(w, http.StatusConflict, err.Error())

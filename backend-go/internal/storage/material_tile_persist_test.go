@@ -31,7 +31,7 @@ func TestMaterialBoard_PersistsTextureTileMm(t *testing.T) {
 	board.PreviewTextureTileWidthMm = 333
 	board.PreviewTextureTileLengthMm = 444
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
-		return store.UpdateMaterialBoard(txCtx, board.ID, board)
+		return store.UpdateMaterialBoard(txCtx, board.ID, board.Version, board)
 	})
 
 	got := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.MaterialBoard, error) {

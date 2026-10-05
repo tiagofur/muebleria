@@ -28,10 +28,16 @@ func (s *stubStore) ListCustomers(context.Context) ([]domain.Customer, error) {
 	return []domain.Customer{}, nil
 }
 
-func (s *stubStore) UpdateCustomer(context.Context, string, *domain.Customer) error {
+func (s *stubStore) UpdateCustomer(_ context.Context, _ string, _ int64, _ *domain.Customer) error {
+	if s.updateCustomerErr != nil {
+		return s.updateCustomerErr
+	}
 	return nil
 }
 
-func (s *stubStore) DeactivateCustomer(context.Context, string) error {
+func (s *stubStore) DeactivateCustomer(_ context.Context, _ string, _ int64) error {
+	if s.deactivateCustomerErr != nil {
+		return s.deactivateCustomerErr
+	}
 	return nil
 }

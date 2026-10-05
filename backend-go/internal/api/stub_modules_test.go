@@ -26,12 +26,12 @@ func (s *stubStore) CreateOptionGroup(context.Context, *domain.OptionGroup) erro
 	return nil
 }
 
-func (s *stubStore) UpdateOptionGroup(context.Context, string, *domain.OptionGroup) error {
+func (s *stubStore) UpdateOptionGroup(_ context.Context, _ string, _ int64, _ *domain.OptionGroup) error {
 	s.stubNotUsed("UpdateOptionGroup")
 	return nil
 }
 
-func (s *stubStore) DeleteOptionGroup(context.Context, string) error {
+func (s *stubStore) DeleteOptionGroup(_ context.Context, _ string, _ int64) error {
 	s.stubNotUsed("DeleteOptionGroup")
 	return nil
 }
@@ -53,12 +53,15 @@ func (s *stubStore) CreateCategory(context.Context, *domain.ModuleCategory) erro
 	return nil
 }
 
-func (s *stubStore) UpdateCategory(context.Context, string, *domain.ModuleCategory) error {
+func (s *stubStore) UpdateCategory(_ context.Context, _ string, _ int64, _ *domain.ModuleCategory) error {
+	if s.updateCategoryErr != nil {
+		return s.updateCategoryErr
+	}
 	s.stubNotUsed("UpdateCategory")
 	return nil
 }
 
-func (s *stubStore) DeleteCategory(context.Context, string) error {
+func (s *stubStore) DeleteCategory(_ context.Context, _ string, _ int64) error {
 	s.stubNotUsed("DeleteCategory")
 	return nil
 }

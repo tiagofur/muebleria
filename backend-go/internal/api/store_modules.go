@@ -13,8 +13,8 @@ type ModuleStore interface {
 	ListOptionGroups(ctx context.Context) ([]domain.OptionGroup, error)
 	GetOptionGroupByID(ctx context.Context, id string) (*domain.OptionGroup, error)
 	CreateOptionGroup(ctx context.Context, og *domain.OptionGroup) error
-	UpdateOptionGroup(ctx context.Context, id string, og *domain.OptionGroup) error
-	DeleteOptionGroup(ctx context.Context, id string) error
+	UpdateOptionGroup(ctx context.Context, id string, expectedVersion int64, og *domain.OptionGroup) error
+	DeleteOptionGroup(ctx context.Context, id string, expectedVersion int64) error
 
 	// Catalog: agregados (reusable sub-assemblies)
 	ListAgregados(ctx context.Context) ([]domain.Agregado, error)
@@ -29,8 +29,8 @@ type ModuleStore interface {
 	ListCategories(ctx context.Context) ([]domain.ModuleCategory, error)
 	GetCategoryByID(ctx context.Context, id string) (*domain.ModuleCategory, error)
 	CreateCategory(ctx context.Context, c *domain.ModuleCategory) error
-	UpdateCategory(ctx context.Context, id string, c *domain.ModuleCategory) error
-	DeleteCategory(ctx context.Context, id string) error
+	UpdateCategory(ctx context.Context, id string, expectedVersion int64, c *domain.ModuleCategory) error
+	DeleteCategory(ctx context.Context, id string, expectedVersion int64) error
 
 	// Catalog: modules + full catalog
 	// ListModules returns modules with their measure presets only (catalog

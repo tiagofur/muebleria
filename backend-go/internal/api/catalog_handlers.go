@@ -82,6 +82,7 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
@@ -97,24 +98,37 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var c domain.Customer
 		if !decodeJSONBody(w, r, &c) {
 			return
 		}
 		c.OwnerUserID = domain.ResolveOwnerOnUpdateRoles(roles, existing.OwnerUserID, c.OwnerUserID)
-		err = s.Store.UpdateCustomer(r.Context(), id, &c)
+		err = s.Store.UpdateCustomer(r.Context(), id, expectedVersion, &c)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(roles, domain.RoleCanMutateCustomers), "no tenés permiso para eliminar clientes") {
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
 			return
 		}
 		existing, err := s.Store.GetCustomerByID(r.Context(), id)
@@ -126,8 +140,16 @@ func (s *Server) HandleCustomerByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "customer not found")
 			return
 		}
-		err = s.Store.DeactivateCustomer(r.Context(), id)
+		err = s.Store.DeactivateCustomer(r.Context(), id, expectedVersion)
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
@@ -199,10 +221,15 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		if !s.actorCanViewCosts(r) {
 			domain.RedactMaterialCosts(m)
 		}
+		w.Header().Set("ETag", FormatVersionETag(m.Version))
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
 			return
 		}
 		var m domain.MaterialBoard
@@ -221,10 +248,14 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 				m.Manufacturer = cur.Manufacturer
 			}
 		}
-		err := s.Store.UpdateMaterialBoard(r.Context(), id, &m)
+		err := s.Store.UpdateMaterialBoard(r.Context(), id, expectedVersion, &m)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			// F116 A1: renaming to an existing code must surface as 409, not 500
@@ -242,18 +273,27 @@ func (s *Server) HandleMaterialByID(w http.ResponseWriter, r *http.Request) {
 		if prevTexture != m.PreviewTextureURL {
 			deleteMediaFileByURL(r.Context(), s.MediaDir, prevTexture)
 		}
+		w.Header().Set("ETag", FormatVersionETag(m.Version))
 		respondWithJSON(w, http.StatusOK, m)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		err := s.Store.DeactivateMaterialBoard(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeactivateMaterialBoard(r.Context(), id, expectedVersion)
 		if err != nil {
 			// F179: a missing or cross-org board must surface as 404 (the
 			// scoped UPDATE affects no rows), never as a 500.
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			respondWithInternalError(w, err, "handler")
@@ -323,20 +363,33 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 		if !s.actorCanViewCosts(r) {
 			domain.RedactEdgeCosts(e)
 		}
+		w.Header().Set("ETag", FormatVersionETag(e.Version))
 		respondWithJSON(w, http.StatusOK, e)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var e domain.EdgeBand
 		if !decodeJSONBody(w, r, &e) {
 			return
 		}
-		err := s.Store.UpdateEdgeBand(r.Context(), id, &e)
+		err := s.Store.UpdateEdgeBand(r.Context(), id, expectedVersion, &e)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			if isDuplicateKey(err) {
@@ -346,14 +399,27 @@ func (s *Server) HandleEdgeBandByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(e.Version))
 		respondWithJSON(w, http.StatusOK, e)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		err := s.Store.DeactivateEdgeBand(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeactivateEdgeBand(r.Context(), id, expectedVersion)
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}
@@ -564,20 +630,29 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "option group not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(og.Version))
 		respondWithJSON(w, http.StatusOK, og)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var og domain.OptionGroup
 		if !decodeJSONBody(w, r, &og) {
 			return
 		}
-		err := s.Store.UpdateOptionGroup(r.Context(), id, &og)
+		err := s.Store.UpdateOptionGroup(r.Context(), id, expectedVersion, &og)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			if isDuplicateKey(err) {
@@ -593,8 +668,20 @@ func (s *Server) HandleOptionGroupByID(w http.ResponseWriter, r *http.Request) {
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		err := s.Store.DeleteOptionGroup(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeleteOptionGroup(r.Context(), id, expectedVersion)
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}

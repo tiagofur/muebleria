@@ -234,6 +234,7 @@ func TestHandleMaterialByIDUpdateCleansReplacedImage(t *testing.T) {
 
 	body := strings.NewReader(`{"code":"C","name":"N","manufacturer":"Arauco","image_url":"/api/media/new.jpg","preview_texture_url":"","board_price":1,"waste_percent":0,"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "m1")
 	rr := httptest.NewRecorder()
 	srv.HandleMaterialByID(rr, req)
@@ -267,6 +268,7 @@ func TestHandleMaterialByIDUpdateReceivesTextureTiles(t *testing.T) {
 		"preview_texture_tile_length_mm":600
 	}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "m1")
 	rr := httptest.NewRecorder()
 	srv.HandleMaterialByID(rr, req)
@@ -301,6 +303,7 @@ func TestHandleMaterialByIDUpdateKeepsSameImage(t *testing.T) {
 
 	body := strings.NewReader(`{"code":"C","name":"Renamed","manufacturer":"Arauco","image_url":"/api/media/keep.jpg","board_price":1,"waste_percent":0,"active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "m1")
 	rr := httptest.NewRecorder()
 	srv.HandleMaterialByID(rr, req)
@@ -352,6 +355,7 @@ func TestHandleMaterialByIDSoftDeleteKeepsImage(t *testing.T) {
 	srv := &Server{Store: store, MediaDir: dir}
 
 	req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/materials/m1", nil), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "m1")
 	rr := httptest.NewRecorder()
 	srv.HandleMaterialByID(rr, req)

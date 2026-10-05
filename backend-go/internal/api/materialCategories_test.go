@@ -93,6 +93,7 @@ func TestHandleMaterialCategoryByID_DeleteChildrenReturns409(t *testing.T) {
 	store := &stubStore{deleteMaterialCategoryErrHook: errors.New("cannot delete category with children; reparent or delete children first")}
 	srv := &Server{Store: store}
 	req := withClaims(httptest.NewRequest("DELETE", "/api/catalog/material-categories/mc1", nil), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "mc1")
 	rr := httptest.NewRecorder()
 
@@ -132,6 +133,7 @@ func TestHandleMaterials_PutWithoutManufacturerKeepsExisting(t *testing.T) {
 	srv := &Server{Store: store}
 	body := strings.NewReader(`{"id":"m1","code":"TAB-X","name":"Sync legacy","width_mm":1830,"length_mm":2440,"thickness_mm":18,"board_price":100,"waste_percent":0,"active":true}`)
 	req := withClaims(httptest.NewRequest("PUT", "/api/catalog/materials/m1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`) // #1091: guarded writes carry the expected version
 	req.SetPathValue("id", "m1")
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()

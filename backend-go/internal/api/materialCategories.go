@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"errors"
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // --- CATALOG / MATERIAL CATEGORIES (F142: subgrupos de tableros) ---
@@ -63,20 +66,29 @@ func (s *Server) HandleMaterialCategoryByID(w http.ResponseWriter, r *http.Reque
 			respondWithError(w, http.StatusNotFound, "material category not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var c domain.MaterialCategory
 		if !decodeJSONBody(w, r, &c) {
 			return
 		}
-		err := s.Store.UpdateMaterialCategory(r.Context(), id, &c)
+		err := s.Store.UpdateMaterialCategory(r.Context(), id, expectedVersion, &c)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			if strings.Contains(err.Error(), "invalid category placement") ||
@@ -96,10 +108,18 @@ func (s *Server) HandleMaterialCategoryByID(w http.ResponseWriter, r *http.Reque
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		err := s.Store.DeleteMaterialCategory(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeleteMaterialCategory(r.Context(), id, expectedVersion)
 		if err != nil {
 			if strings.Contains(err.Error(), "cannot delete category with children") {
 				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			respondWithInternalError(w, err, "material category delete")

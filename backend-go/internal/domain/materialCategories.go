@@ -12,4 +12,7 @@ type MaterialCategory struct {
 	SortOrder int       `json:"sort_order"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
