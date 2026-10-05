@@ -23,6 +23,35 @@ type createStandardReleaseBody struct {
 	Changelog *string `json:"changelog"`
 }
 
+// HandleStandardLibraryDraftReleases answers GET /api/manufacturing-libraries/standard/releases/drafts
+// (#1102 Slice A) — the authoring workspace read: the open draft releases of
+// the Granete Standard library, newest first. Same platform-staff gate as
+// create/publish; the 000156 read policy makes Standard drafts visible to the
+// platform-admin marker and to nothing else. The workspace treats the first
+// entry as the current draft; publish stays a separate deliberate step (#955).
+func (s *Server) HandleStandardLibraryDraftReleases(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || !claims.PlatformAdmin {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "sólo el equipo de plataforma Granete puede ver los borradores Standard", nil)
+		return
+	}
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	releases, err := s.Store.GetDraftReleases(r.Context(), standardID)
+	if err != nil {
+		respondWithInternalError(w, err, "get standard library draft releases")
+		return
+	}
+	summaries := make([]openapi.LibraryReleaseSummary, 0, len(releases))
+	for _, rel := range releases {
+		summaries = append(summaries, mapLibraryReleaseToSummary(rel))
+	}
+	respondWithJSON(w, http.StatusOK, summaries)
+}
+
 // HandleCreateStandardLibraryRelease answers POST /api/manufacturing-libraries/standard/releases
 // — create a new DRAFT release (version + optional changelog). Publishing
 // is a separate deliberate step.
@@ -51,6 +80,13 @@ func (s *Server) HandleCreateStandardLibraryRelease(w http.ResponseWriter, r *ht
 		Changelog:     body.Changelog,
 	})
 	if err != nil {
+		// #1102 Slice A: the workspace's "Abrir borrador" suggests the next
+		// version but two concurrent opens can race the same version — that
+		// is a user-resolvable conflict, not a 500.
+		if errors.Is(err, storage.ErrReleaseDuplicateVersion) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "ya existe un release con esa versión; recargá e intentá de nuevo", nil)
+			return
+		}
 		respondWithInternalError(w, err, "create standard release draft")
 		return
 	}

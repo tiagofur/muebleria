@@ -241,6 +241,8 @@ type stubStore struct {
 	currentPublishedReleaseErr       error
 	publishedReleases                []*domain.LibraryRelease
 	publishedReleasesErr             error
+	draftReleases                    []*domain.LibraryRelease
+	draftReleasesErr                 error
 	releaseByID                      map[uuid.UUID]*domain.LibraryRelease
 	getReleaseByIDErr                error
 	releaseManifestsByID             map[uuid.UUID]*domain.LibraryManifest

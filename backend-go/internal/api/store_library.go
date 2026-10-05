@@ -24,6 +24,9 @@ type ManufacturingLibraryStore interface {
 	GetProductionReleaseManufacturingSnapshot(ctx context.Context, projectID, releaseID string) (*storage.ReleaseManufacturingSnapshot, error)
 	HardwareProfilesForRelease(ctx context.Context, releaseID uuid.UUID) ([]domain.HardwareProfile, error)
 	GetPublishedReleases(ctx context.Context, libraryID uuid.UUID) ([]*domain.LibraryRelease, error)
+	// GetDraftReleases (#1102 Slice A): the authoring workspace read —
+	// open drafts only; RLS restricts Standard drafts to platform staff.
+	GetDraftReleases(ctx context.Context, libraryID uuid.UUID) ([]*domain.LibraryRelease, error)
 	CreateDraftRelease(ctx context.Context, params storage.CreateDraftReleaseParams) (*domain.LibraryRelease, error)
 	PublishReleaseWithManifest(ctx context.Context, releaseID uuid.UUID, manifest *domain.LibraryManifest, manifestBytes []byte, blobs []domain.ResourceBlob, publishedBy *uuid.UUID) error
 	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)

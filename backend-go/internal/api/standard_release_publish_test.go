@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -72,6 +73,76 @@ func TestHandleCreateStandardLibraryRelease(t *testing.T) {
 			t.Fatalf("status = %d", rec.Code)
 		}
 	})
+}
+
+// TestHandleStandardLibraryDraftReleases (#1102 Slice A): the authoring
+// workspace read — platform staff see open Standard drafts, tenants get 403,
+// empty list means "no draft open".
+func TestHandleStandardLibraryDraftReleases(t *testing.T) {
+	draftRequest := func(store *stubStore, platform bool, method string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api/manufacturing-libraries/standard/releases/drafts", nil)
+		req = platformClaims(req, platform)
+		rec := httptest.NewRecorder()
+		(&Server{Store: store}).HandleStandardLibraryDraftReleases(rec, req)
+		return rec
+	}
+
+	t.Run("lists open drafts newest first for platform staff", func(t *testing.T) {
+		store := &stubStore{
+			draftReleases: []*domain.LibraryRelease{
+				{ID: uuid.MustParse(domain.GraneteStandardDraftReleaseID), LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.4.0", Status: domain.ReleaseStatusDraft, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+		}
+		rec := draftRequest(store, true, http.MethodGet)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var drafts []map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &drafts); err != nil || len(drafts) != 1 {
+			t.Fatalf("drafts = %s err=%v", rec.Body.String(), err)
+		}
+		if drafts[0]["version"] != "0.4.0" || drafts[0]["status"] != "draft" {
+			t.Fatalf("draft[0] = %v", drafts[0])
+		}
+	})
+
+	t.Run("returns an empty list when no draft is open", func(t *testing.T) {
+		rec := draftRequest(&stubStore{}, true, http.MethodGet)
+		if rec.Code != http.StatusOK || rec.Body.String() != "[]" {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("rejects a non-platform user with 403", func(t *testing.T) {
+		rec := draftRequest(&stubStore{}, false, http.MethodGet)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("405 on non-GET", func(t *testing.T) {
+		rec := draftRequest(&stubStore{}, true, http.MethodPost)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+}
+
+func TestHandleCreateStandardLibraryReleaseDuplicateVersion(t *testing.T) {
+	store := &stubStore{
+		createDraftReleaseErr: fmt.Errorf("%w: 1.2.3", storage.ErrReleaseDuplicateVersion),
+	}
+	body := strings.NewReader(`{"version":"1.2.3"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/manufacturing-libraries/standard/releases", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = platformClaims(req, true)
+	rec := httptest.NewRecorder()
+	(&Server{Store: store}).HandleCreateStandardLibraryRelease(rec, req)
+	// #1102 Slice A: racing the same suggested version is a user-resolvable
+	// conflict, not a 500.
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestHandlePublishStandardLibraryRelease(t *testing.T) {
