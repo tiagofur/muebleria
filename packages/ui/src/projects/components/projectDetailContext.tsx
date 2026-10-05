@@ -122,6 +122,25 @@ export function projectAllowsProductionChrome(
   );
 }
 
+/**
+ * #1124: ONE shared rule for content editing (meta, items, options) — the
+ * header chrome and every panel MUST agree. Modern Digital Thread projects
+ * edit through revisions (Reconciliation), never through the live workspace:
+ * content editing requires no quote authority (pre-Digital-Thread) or an
+ * explicit empty answer. loading/error are UNKNOWN and fail closed.
+ */
+export function projectAllowsContentEdit(
+  project: Project,
+  quoteAuthority: ProjectDetailQuoteAuthority | undefined,
+  canMutate: boolean,
+): boolean {
+  return (
+    canMutate &&
+    project.status === 'draft' &&
+    (quoteAuthority === undefined || quoteAuthority.kind === 'empty')
+  );
+}
+
 // ─── Item handlers ──────────────────────────────────────────────────
 
 export interface ProjectDetailItemHandlers {

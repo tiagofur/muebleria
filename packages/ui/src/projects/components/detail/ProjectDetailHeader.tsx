@@ -22,22 +22,34 @@ import { DropdownMenu, type DropdownMenuSection } from '../../../common';
 import { WhatsAppButton } from '../../../crm/WhatsAppButton';
 import { StatusBadge } from '../StatusBadge';
 import { formatIsoDate, formatProjectMoney, resolveCustomerName } from '../../projectHelpers';
-import { useProjectDetail } from '../projectDetailContext';
+import {
+  projectAllowsContentEdit,
+  useProjectDetail,
+} from '../projectDetailContext';
 
+/**
+ * #1124: la primaria del chrome la arbitra el detalle (chromePrimary) entre
+ * TODAS las candidatas — ciclo de vida comercial (manage-quote /
+ * quote-revision) y manufactura (open-production / export). Exactamente una
+ * primaria por nivel en cualquier estado del ciclo; las perdedoras renderizan
+ * como botones secundarios.
+ */
 export type ChromePrimary =
   | 'open-production'
   | 'export'
+  | 'manage-quote'
+  | 'quote-revision'
   | null;
 
 export interface ProjectDetailHeaderProps {
-  readonly primary: ChromePrimary;
+  readonly chromePrimary: ChromePrimary;
   readonly chromeSale: number | null;
   readonly moreSections: readonly DropdownMenuSection[];
   readonly exportMenuClose?: () => void;
 }
 
 export function ProjectDetailHeader({
-  primary,
+  chromePrimary,
   chromeSale,
   moreSections,
   exportMenuClose,
@@ -60,7 +72,12 @@ export function ProjectDetailHeader({
   } = ctx;
 
   const hasOpenInProduction = Boolean(onOpenInProduction);
-  const canEditContent = canMutate && project.status === 'draft';
+  // #1124: misma regla compartida que los paneles — nunca diverger.
+  const canEditContent = projectAllowsContentEdit(
+    project,
+    quoteAuthority,
+    canMutate,
+  );
 
   const exportTitle = !productionExportOk
     ? 'Export de producción disponible tras liberar producción (o compatibilidad pre-Digital Thread)'
@@ -94,7 +111,7 @@ export function ProjectDetailHeader({
         </button>
         <div className="workspace-chrome__identity">
           <div className="workspace-chrome__title-row">
-            <h2 className="workspace-chrome__title">
+            <h1 className="workspace-chrome__title">
               {frozenAuthority
                 ? frozenAuthority.projectName
                 : quoteAuthority?.kind === 'loading'
@@ -102,7 +119,7 @@ export function ProjectDetailHeader({
                   : identityUnavailable
                     ? 'Cotización comercial no disponible'
                     : project.name}
-            </h2>
+            </h1>
             {quoteAuthority?.kind === 'ready' ? (
               <span className={`status-badge status-badge--${quoteAuthority.status === 'accepted' ? 'accepted' : quoteAuthority.status === 'published' ? 'quoted' : 'draft'}`}>
                 Q{quoteAuthority.revisionNumber} · {quoteAuthority.status === 'accepted' ? 'Aceptada' : quoteAuthority.status === 'published' ? 'Publicada' : quoteAuthority.status === 'superseded' ? 'Reemplazada' : 'Borrador'}
@@ -122,8 +139,7 @@ export function ProjectDetailHeader({
             )}
             <span
               className="badge badge--neutral-subtle"
-              title="Etapa Operativa del Proyecto"
-              style={{ fontSize: '0.75rem' }}
+              aria-label={`Etapa operativa del proyecto: ${PROJECT_STAGE_LABELS_ES[deriveProjectStage(project)]}`}
             >
               {PROJECT_STAGE_LABELS_ES[deriveProjectStage(project)]}
             </span>
@@ -136,8 +152,7 @@ export function ProjectDetailHeader({
                       ? 'danger-subtle'
                       : 'info-subtle'
                 }`}
-                title="Estado Comercial"
-                style={{ fontSize: '0.75rem' }}
+                aria-label={`Estado comercial: ${COMMERCIAL_STATUS_LABELS_ES[project.commercialStatus]}`}
               >
                 {COMMERCIAL_STATUS_LABELS_ES[project.commercialStatus]}
               </span>
@@ -145,8 +160,7 @@ export function ProjectDetailHeader({
             {isProjectStaleForProduction(project) && (
               <span
                 className="badge badge--danger-subtle"
-                title="Cambios posteriores a la liberación detectados (Stale)"
-                style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '2px' }}
+                aria-label="Cambios posteriores a la liberación detectados (stale)"
               >
                 <AlertTriangle size={11} aria-hidden="true" />
                 Stale
@@ -163,8 +177,7 @@ export function ProjectDetailHeader({
                         ? 'done'
                         : TECHNICAL_STATUS_METADATA[project.technicalStatus].color
                 }`}
-                style={{ marginLeft: '0.25rem', fontSize: '0.75rem' }}
-                title={TECHNICAL_STATUS_METADATA[project.technicalStatus].description}
+                aria-label={`Estado técnico: ${TECHNICAL_STATUS_METADATA[project.technicalStatus].description}`}
               >
                 <HardHat size={12} />
                 {TECHNICAL_STATUS_METADATA[project.technicalStatus].shortLabel}
@@ -259,7 +272,9 @@ export function ProjectDetailHeader({
         {quoteAuthority?.kind === 'ready' && onOpenReconciliation && quoteAuthority.status !== 'accepted' ? (
           <button
             type="button"
-            className="btn btn--primary"
+            className={
+              chromePrimary === 'manage-quote' ? 'btn btn--primary' : 'btn'
+            }
             onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
             data-testid="quote-revision-lifecycle-action"
           >
@@ -278,7 +293,9 @@ export function ProjectDetailHeader({
             // highlights it), never a second modernization of the stale base.
             <button
               type="button"
-              className="btn btn--primary"
+              className={
+                chromePrimary === 'quote-revision' ? 'btn btn--primary' : 'btn'
+              }
               onClick={() => onOpenReconciliation(project.id, quoteAuthority.revisionId)}
               data-testid="legacy-continue-btn"
             >
@@ -287,7 +304,9 @@ export function ProjectDetailHeader({
           ) : (
             <button
               type="button"
-              className="btn btn--primary"
+              className={
+                chromePrimary === 'quote-revision' ? 'btn btn--primary' : 'btn'
+              }
               onClick={() => onOpenReconciliation(
                 project.id,
                 quoteAuthority.kind === 'legacy' ? quoteAuthority.revisionId : undefined,
@@ -300,7 +319,7 @@ export function ProjectDetailHeader({
             </button>
           )
         ) : null}
-        {primary === 'open-production' && onOpenInProduction ? (
+        {chromePrimary === 'open-production' && onOpenInProduction ? (
           <button
             type="button"
             className="btn btn--primary"
@@ -316,7 +335,7 @@ export function ProjectDetailHeader({
         {showExportInChrome && onExport ? (
           <button
             type="button"
-            className={primary === 'export' ? 'btn btn--primary' : 'btn'}
+            className={chromePrimary === 'export' ? 'btn btn--primary' : 'btn'}
             disabled={productionExportDisabled}
             title={exportTitle}
             onClick={() => {

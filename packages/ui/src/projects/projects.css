@@ -2628,3 +2628,11 @@
   margin: 2px 0 0 0;
 }
 
+
+/* ── #1124 — nota de modo lectura en las herramientas ─────────────────── */
+
+.project-detail__tools-readonly {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}

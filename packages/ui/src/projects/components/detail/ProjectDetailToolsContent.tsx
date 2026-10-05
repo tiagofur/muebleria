@@ -55,6 +55,7 @@ export function ProjectDetailToolsContent({
 
   return (
     <div
+      id="project-tools-panel"
       className="project-detail__tools-body"
       data-testid={`project-tools-panel-${toolsPanel}`}
     >
