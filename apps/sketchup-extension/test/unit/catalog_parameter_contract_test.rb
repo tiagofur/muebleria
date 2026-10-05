@@ -219,6 +219,38 @@ class CatalogParameterContractTest < Minitest::Test
     assert_same definition, Contract.validate_definition!(definition, 'definition')
   end
 
+  # #1065 / #874: the Go/TS wire gate publishes station.maxSpacingMm (strictly
+  # positive), relationship recipes, and the back-panel kind (face-verified
+  # like fixed-shelf-side); the Ruby mirror must accept the same shapes.
+  def test_accepts_structure_relationship_with_max_spacing_and_back_panel
+    definition = valid_definition
+    parameter = structure_relationship_parameter_with(
+      'relationship' => {
+        'kind' => 'back-panel', 'sourceRole' => 'back-perimeter',
+        'targets' => [
+          { 'componentId' => 'side-left', 'role' => 'side', 'face' => 'front' },
+          { 'componentId' => 'side-right', 'role' => 'side', 'face' => 'back' }
+        ],
+        'station' => { 'startMarginMm' => 50, 'endMarginMm' => 50, 'maxSpacingMm' => 300 }
+      }
+    )
+    definition['parameters'] = [parameter]
+
+    assert_same definition, Contract.validate_definition!(definition, 'definition')
+  end
+
+  def test_accepts_relationship_binding_with_recipes_key
+    definition = valid_definition
+    parameter = structure_relationship_parameter_with(
+      'relationship' => structure_relationship_parameter.fetch('binding').fetch('relationship').merge(
+        'recipes' => [{ 'contactId' => 'contact-1', 'recipeId' => 'rec-1', 'recipeRevision' => 'r1' }]
+      )
+    )
+    definition['parameters'] = [parameter]
+
+    assert_same definition, Contract.validate_definition!(definition, 'definition')
+  end
+
   def test_rejects_structure_relationship_mutations_at_go_parity_fields
     valid_relationship = structure_relationship_parameter.fetch('binding').fetch('relationship')
     mutations = [
@@ -250,6 +282,12 @@ class CatalogParameterContractTest < Minitest::Test
       [structure_relationship_parameter_with(
         'relationship' => valid_relationship.merge('station' => { 'startMarginMm' => 30, 'futureField' => true })
       ), '.station.futureField'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('station' => { 'maxSpacingMm' => 0 })
+      ), '.station.maxSpacingMm'],
+      [structure_relationship_parameter_with(
+        'relationship' => valid_relationship.merge('station' => { 'maxSpacingMm' => -10 })
+      ), '.station.maxSpacingMm'],
       [structure_relationship_parameter_with(
         'relationship' => valid_relationship.merge('families' => [{ 'familyId' => 'f1', 'count' => 1 }])
       ), '.families[0].count'],
