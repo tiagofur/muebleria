@@ -72,6 +72,49 @@ module Granete
           @logger.error('close_all_doors_failed', error: e)
         end
 
+        # #1046 S2: what hardware REALLY exists in the project — grouped by
+        # catalog definition from managed metadata only. The no-selection lane
+        # renders exactly this (never the whole catalog).
+        def handle_request_hardware_inventory(dialog, _raw_payload = nil)
+          model = active_model
+          store = @metadata_store_factory.call(model)
+          scanned = Selection::HardwareInventory.scan(model, store)
+          items = scanned.items.map do |entry|
+            {
+              'hardwareDefinitionId' => entry.hardware_definition_id,
+              'furnitureInstanceRef' => entry.furniture_instance_ref,
+              'hardwarePlacementId' => entry.hardware_placement_id,
+              'count' => entry.occurrences
+            }
+          end
+          execute_bridge(dialog, 'onHardwareInventory', { 'items' => items })
+          @logger.info('hardware_inventory_published', items: items.length)
+        rescue StandardError => e
+          @logger.error('hardware_inventory_failed', error: e)
+        end
+
+        # Selecting one inventory row: locate the sample hardware occurrence
+        # through managed metadata (furniture ref + placement id) and let the
+        # selection observer publish its child context — the same flow as a
+        # viewport click, never a parallel selection model.
+        def handle_select_hardware_instance(_dialog, raw_payload = nil)
+          payload = parse_payload(raw_payload)
+          furniture_ref = payload['furnitureInstanceRef']
+          placement_id = payload['hardwarePlacementId']
+          model = active_model
+          furniture = furniture_ref && search_entities_for_instance(furniture_ref)
+          target = furniture && find_hardware_child(furniture, placement_id)
+
+          if model && target
+            select_entity(model, target)
+            @logger.info('hardware_instance_selected', placement_id: placement_id)
+          else
+            @logger.warn('hardware_instance_select_rejected', placement_id: placement_id)
+          end
+        rescue StandardError => e
+          @logger.error('hardware_instance_select_failed', error: e)
+        end
+
         private
 
         def presentation_motion_adapter_for(furniture_entity, open_angle_deg)
@@ -120,6 +163,23 @@ module Granete
             JSON.parse(raw_payload)
           else
             raw_payload || {}
+          end
+        end
+
+        # The sample hardware occurrence of one inventory row: the child of
+        # the named furniture occurrence whose managed identity carries the
+        # hardwarePlacementId. Metadata only — never names or geometry.
+        def find_hardware_child(furniture_entity, placement_id)
+          return nil unless placement_id && furniture_entity.respond_to?(:definition) &&
+                            furniture_entity.definition.respond_to?(:entities)
+
+          store = @metadata_store_factory.call(active_model)
+          furniture_entity.definition.entities.find do |child|
+            meta = store.read(child)
+            identity = meta&.dig('identity') || {}
+            identity['hardwarePlacementId'] == placement_id
+          rescue StandardError
+            false
           end
         end
 

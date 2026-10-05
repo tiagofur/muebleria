@@ -86,6 +86,7 @@ module Granete
         selection/capability_reasons
         selection/selection_context
         selection/door_actors
+        selection/hardware_inventory
         selection/capability_policy
         selection/resolver
         selection/batch_context
