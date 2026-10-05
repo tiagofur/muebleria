@@ -15,7 +15,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { FileQuestion } from 'lucide-react';
 import type {
   Catalog,
@@ -48,8 +48,6 @@ import type {
 import {
   generateCutRows,
   generateHardwareList,
-  duplicateModule as deepCopyModule,
-  duplicateProject as deepCopyProject,
   anyRole,
   roleCanExportProduction,
   roleCanMutateProjects,
