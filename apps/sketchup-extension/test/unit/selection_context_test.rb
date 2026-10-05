@@ -9,6 +9,7 @@ require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/selection/capabilities'
 require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/selection_context'
+require_relative '../../src/granete_for_sketchup/selection/hardware_inventory'
 require_relative '../../src/granete_for_sketchup/selection/capability_policy'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
 

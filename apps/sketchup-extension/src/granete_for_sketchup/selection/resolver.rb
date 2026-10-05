@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative 'hardware_inventory'
-
 module Granete
   module SketchUpExtension
     module Selection
