@@ -74,6 +74,7 @@ export function AcceptInvitationScreen({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
   const errorRef = useRef<HTMLDivElement>(null);
+  const previewErrorRef = useRef<HTMLDivElement>(null);
 
   const loadPreview = useCallback(async () => {
     setPreviewLoading(true);
@@ -96,6 +97,10 @@ export function AcceptInvitationScreen({
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
+
+  useEffect(() => {
+    if (previewError) previewErrorRef.current?.focus();
+  }, [previewError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,7 +160,12 @@ export function AcceptInvitationScreen({
 
         {previewError && (
           <>
-            <div role="alert" className="accept-invitation-alert accept-invitation-alert--error">
+            <div
+              ref={previewErrorRef}
+              role="alert"
+              tabIndex={-1}
+              className="accept-invitation-alert accept-invitation-alert--error"
+            >
               {previewError}
             </div>
             <div className="accept-invitation-card__footer accept-invitation-card__footer--actions">

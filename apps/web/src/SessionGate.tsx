@@ -24,6 +24,11 @@ const SESSION_END_NOTICES: Record<string, string> = {
   connection: 'Perdimos la conexión y no pudimos mantener tu sesión. Iniciá sesión de nuevo.',
 };
 
+// Identidad de fetch estable: crearla por render cambiaba las props de
+// AcceptInvitationScreen en cada render del gate y re-disparaba el preflight
+// de la invitación (#1108).
+const CREDENTIALED_WEB_FETCH = credentialedWebFetch();
+
 export function SessionGate({ children }: { readonly children: ReactNode }): ReactNode {
   const session = useWorkspaceStore((s) => s.session);
   const authBootstrapping = useWorkspaceStore((s) => s.authBootstrapping);
@@ -83,7 +88,7 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
       <AcceptInvitationScreen
         token={invitationToken}
         baseUrl={DEFAULT_API_BASE}
-        fetchImpl={credentialedWebFetch()}
+        fetchImpl={CREDENTIALED_WEB_FETCH}
         onAccepted={(authData) => {
           loginWithAuthPayload(authData);
           if (typeof window !== 'undefined') {

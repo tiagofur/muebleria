@@ -130,6 +130,7 @@ describe('AcceptInvitationScreen lifecycle', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('reemplazado por uno más reciente');
+    expect(document.activeElement).toBe(alert);
   });
 
   it('offers retry when the preview cannot reach the server', async () => {
