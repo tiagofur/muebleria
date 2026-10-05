@@ -307,7 +307,8 @@ export function WorkshopAnalyticsPanel({
           />
         </button>
       </header>
-      {!expanded ? (
+      {/* #1116 re-critique: sin actividad el teaser de ceros es ruido — oculto. */}
+      {!expanded && hasData ? (
         <p className="analytics__teaser" data-testid="analytics-teaser">
           Pipeline abierto: {analytics.funnel.openPipelineCount} · Reclamos:{' '}
           {analytics.warranties.total}

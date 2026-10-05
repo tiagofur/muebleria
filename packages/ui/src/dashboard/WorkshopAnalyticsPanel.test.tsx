@@ -221,6 +221,8 @@ describe('WorkshopAnalyticsPanel (F090)', () => {
       />,
     );
     expect(screen.getByTestId('analytics-empty')).toBeTruthy();
+    // #1116 re-critique: sin actividad no hay teaser de ceros.
+    expect(screen.queryByTestId('analytics-teaser')).toBeNull();
   });
 
   it('shows loading state', () => {

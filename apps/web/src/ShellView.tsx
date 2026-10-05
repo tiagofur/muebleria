@@ -1106,16 +1106,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               ? onDashboardOpenShowcase
               : undefined
           }
-          onOpenMaterials={
-            dashboardHomeMode === 'engineering'
-              ? onDashboardOpenMaterials
-              : undefined
-          }
-          onOpenModules={
-            dashboardHomeMode === 'engineering'
-              ? onDashboardOpenModules
-              : undefined
-          }
+          onOpenMaterials={onDashboardOpenMaterials}
+          onOpenModules={onDashboardOpenModules}
           modulesWithoutPhotoCount={
             dashboardHomeMode === 'engineering'
               ? modulesWithoutPhotoCount
