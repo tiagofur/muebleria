@@ -88,13 +88,13 @@ test.describe.serial('Catalog If-Match concurrency browser proof (#443 slice 3)'
         active: true,
       }),
     });
-    expect(createRes.status(), 'create').toBe(200);
+    expect(createRes.status, 'create').toBe(200);
     const created = (await createRes.json()) as MaterialWire;
     expect(created.version).toBe(1);
 
     const readEntity = async (who: string): Promise<MaterialWire> => {
       const res = await authedFetch(token, `/catalog/materials/${entityId}`);
-      expect(res.status(), `read (${who})`).toBe(200);
+      expect(res.status, `read (${who})`).toBe(200);
       const body = (await res.json()) as MaterialWire;
       expect(res.headers().get('etag'), `etag (${who})`).toBe(`"v${body.version}"`);
       return body;

@@ -41,15 +41,23 @@ async function upsert(token: string, pathById: string, pathCollection: string, b
     Authorization: `Bearer ${token}`,
     'X-Request-ID': crypto.randomUUID(),
   };
-  const put = await fetch(`${apiBase}${pathById}`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(body),
-  });
-  if (put.ok) return;
-  const putText = await put.text().catch(() => '');
-  if (put.status !== 404 && put.status !== 405 && !(put.status === 500 && /not found|no rows/i.test(putText))) {
-    throw new Error(`PUT ${pathById}: ${put.status} ${putText}`);
+  // #1096 (#443 slice 3): guarded catalog writes — learn the server version
+  // first (404/405/legacy-500 keeps the POST-create fallback), then PUT
+  // under If-Match.
+  const learn = await fetch(`${apiBase}${pathById}`, { method: 'GET', headers });
+  if (learn.ok) {
+    const current = (await learn.json()) as { version?: number };
+    const put = await fetch(`${apiBase}${pathById}`, {
+      method: 'PUT',
+      headers: { ...headers, 'If-Match': `"v${current.version}"` },
+      body: JSON.stringify(body),
+    });
+    if (put.ok) return;
+    throw new Error(`PUT ${pathById}: ${put.status} ${await put.text().catch(() => '')}`);
+  }
+  const learnText = await learn.text().catch(() => '');
+  if (learn.status !== 404 && learn.status !== 405 && !(learn.status === 500 && /not found|no rows/i.test(learnText))) {
+    throw new Error(`GET ${pathById}: ${learn.status} ${learnText}`);
   }
   const created = await fetch(`${apiBase}${pathCollection}`, {
     method: 'POST',
