@@ -13,10 +13,9 @@
 
 import {
   useMemo,
-  useRef,
   type ReactNode,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { FileQuestion } from 'lucide-react';
 import type {
   Catalog,
@@ -25,90 +24,45 @@ import type {
   EdgeBand,
   ExportIssue,
   Hardware,
-  HardwarePurchaseRow,
   ProductionCutRow,
   MaterialBoard,
   Module,
-  ModuleCategory,
-  ComponentPlacement,
   OptionChoices,
   OptionGroup,
   Project,
   ProjectItem,
   ReleaseCuttingDemandBase,
   ProjectMaterialSummary,
-  ProjectStatus,
   ProjectTemplate,
   QuoteBreakdown,
   Structure,
   WorkshopSettings,
-  BoardSheetEstimate,
-  Workspace,
   ProjectPickingState,
-  PickingMaterial,
   PickingStatus,
   MaterialStock,
-  StockMaterialKind,
   StockMovement,
-  StockMovementType,
   PurchaseOrder,
   Supplier,
   OpsException,
 } from '@granete/domain';
 import {
-  applyRoleChoiceToProject,
-  bumpStructureRevision,
-  calcMaterialCostPerM2,
-  calcProjectBreakdown,
-  computeProductionTotals,
-  defaultMeasurePresetId,
-  estimateBoardSheets,
   generateCutRows,
   generateHardwareList,
-  generateProjectMaterialSummary,
-  duplicateModule as deepCopyModule,
-  duplicateProject as deepCopyProject,
-  projectToTemplate,
-  createProjectFromTemplate,
   anyRole,
-  navIdsForRole,
-  resolveOwnerOnCreate,
-  resolveOwnerOnUpdate,
-  resolveWorkshopSettings,
-  roleCanAssignOwner,
-  roleCanDeleteProject,
-  canExportProductionForProject,
   roleCanExportProduction,
-  roleCanMarkPicking,
-  roleCanMarkProduced,
-  roleCanMutateCatalog,
-  roleCanAccessPurchasingNav,
-  roleCanManagePurchasing,
-  roleCanMutateModules,
   roleCanMutateProjects,
   roleCanApproveDesignRevisions,
   roleCanReleaseProduction,
   roleCanAcceptQuoteRevisions,
-  roleCanReopenProject,
-  roleCanViewCosts,
-  roleCanViewPortfolioDashboard,
-  computeWorkshopAnalytics,
   type AnalyticsPeriodDays,
   type WarrantyTicket,
   type ItemFloorStatus,
-  ITEM_FLOOR_STATUS_LABELS_ES,
-  roleUsesProductionQueue,
-  roleCanAccessProductionNav,
-  roleIsScopedBySector,
-  roleCanAccessFabricNav,   roleCanAccessShippingNav,
-   roleCanAccessEmbarquesNav,
-  filterProjectsByProcessStage,
+  roleCanAccessShippingNav,
+  roleCanAccessEmbarquesNav,
   projectAllowsProductionAccess,
   releaseBaseFromDemand,
   type ManufacturingLabelProjection,
   releaseCutRowsFromDemand,
-  suggestDuplicateCode,
-  transitionProjectStatus,
   type WarehouseProjectInput,
   roleCanAppendProjectEvent,
 } from '@granete/domain';
@@ -144,11 +98,8 @@ import {
   EngineeringWorkspace,
   SalesDashboard,
   ProductionManagerDashboard,
-  ProjectFloorProgressStrip,
   filterProductionVisible,
-  parseProductionOrderTab,
   Dashboard,
-  LoginScreen,
   SettingsScreen,
   DevicesScreen,
   SecurityScreen,
@@ -163,21 +114,7 @@ import {
   Modal,
   OnboardingTourModal,
   UsabilityBenchmarkPanel,
-  getHasSeenOnboardingTour,
-  canShowPricePreview,
-  canShowProjectPricePreview,
-  aggregatePortfolioByOwner,
-  countActiveMaterials,
-  countActiveProjects,
-  countModules,
-  defaultOptionChoicesForModule,
-  edgesFromFlags,
-  parseOptionalNumber,
-  requiredGroupCodesForModule,
-  selectableGroupCodesForModule,
   resolveCustomerName,
-  selectRecentProjects,
-  sumMonthlyQuotedTotal,
   type AppNavId,
   type EdgeDraft,
   type HardwareDraft,
@@ -211,16 +148,11 @@ import {
   type ProjectOverviewNav,
 } from '@granete/ui';
 import {
-  APIWorkspaceRepository,
-  LocalStorageWorkspaceRepository,
-  breakdownFromApi,
-  createSeedWorkspace,
   GraneteApiClient,
   createApiHardwareAssetService,
 } from '@granete/storage';
 import { GlbAssetSourceProvider } from '@granete/ui';
 import { useApiGlbAssetSource } from './glbAssetSource';
-import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import {
   deriveEngineeringWorkshopOccurrenceView,
   resolveEffectiveOccurrenceContext,
@@ -230,97 +162,40 @@ import {
   startEngineeringCommand,
 } from './engineeringState';
 import { overlayOverridesToPolicy } from '@granete/domain';
-import { runExport, type ExportDelivery } from './exports/runExport';
-import { useExportHandlers } from './exports/useExportHandlers';
-import { buildStockCatalog } from './derivations/stockCatalog';
-import { usePurchasingDerivations } from './derivations/usePurchasingDerivations';
-import { useQuoteDerivations } from './derivations/useQuoteDerivations';
 import {
-  computeModuleCostPreview,
-  computeSelectedProjectBreakdown,
-} from './derivations/breakdown';
-import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
-import { buildHardwareListExport } from './exportHardwareList';
-import {
-  buildPieceLabelsExport,
   type PieceLabelsExportOptions,
 } from './exportPieceLabels';
 import {
-  buildModuleLabelsExport,
   type ModuleLabelsExportOptions,
 } from './exportModuleLabels';
-import { buildProductionPackExport } from './exportProductionPack';
-import { buildWallElevationsExport } from './exportWallElevations';
-import { buildCutListCsvExport } from './exportCutListCsv';
-import { buildCncPilotExport } from './exportCncPilot';
-import { buildAssemblySheetsExport } from './exportAssemblySheets';
-import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
-import { downloadDespiecePdf } from './exportDespiecePdf';
-import { downloadCutPlanPdf } from './exportCutPlanPdf';
 import {
-  buildOptimizerExport,
-  deliverExcelFile,
-} from './exportOptimizer';
-import {
-  componentEditIdFromPath,
-  entityIdFromPath,
-  entityPath,
-  engineeringProjectFromPath,
   engineeringProjectPath,
-  isEntityEditPath,
-  isEntitySection,
-  moduleEditIdFromPath,
-  moduleEditPath,
   NAV_PATHS,
-  navBlockedForSession,
-  navFromPath,
   pathForNav,
-  productionOrderFromPath,
   productionOrderPath,
   projectFurniturePath,
   projectDesignsPath,
   projectReconciliationPath,
-  shipmentDetailFromPath,
   installationDetailPath,
   shipmentDetailPath,
   projectPath,
-  structureEditIdFromPath,
   type EntitySection,
 } from './routes';
 import { organizationKeys } from './shared/query/queryKeys';
 import { sessionScopeKey } from './shared/query/sessionScope';
 import type { SessionScope } from './shared/query/sessionScope';
 import {
-  type QuoteRevisionAuthority,
   type QuoteRevisionsQuery,
 } from './quoteRevisionAuthority';
 import { useProjectsCommercialSummaries } from './projectsCommercialSummaries';
 import { homeCommercialSummariesProps } from './homeCommercialSummaries';
 import {
   DEFAULT_API_BASE,
-  isAdminRole,
   type SessionMode,
 } from './session';
 import {
-  useCatalogStore,
   useWorkspaceStore,
-  ensureCatalogStore,
-  getCatalogStoreState,
-  resetCatalogStore,
-  useProjectStore,
-  ensureProjectStore,
-  getProjectStoreState,
-  resetProjectStore,
-  useBackendBreakdownEffect,
-  useUiStore,
-  getUiStoreState,
-  usePurchasingStore,
-  ensurePurchasingStore,
-  getPurchasingStoreState,
-  resetPurchasingStore,
-  type PurchasingState,
 } from './stores';
-import { ToastViewport } from './components/ToastViewport';
 import { BoardEditor } from './components/BoardEditor';
 
 

@@ -774,7 +774,9 @@ describe('@granete/web F013 export lista de herrajes', () => {
 describe('F041 engineer production exports', () => {
   it('App gates production export with canExportProductionForProject', () => {
     const appSrc = readFileSync(join(here, 'App.tsx'), 'utf8');
-    expect(appContentSrc()).toContain('canExportProductionForProject');
+    // R5: the export wiring moved to useExportHandlers — the gate guard
+    // follows it; roleCanExportProduction remains in AppContent.
+    expect(readFileSync(join(here, 'exports/useExportHandlers.ts'), 'utf8')).toContain('canExportProductionForProject');
     expect(appContentSrc()).toContain('roleCanExportProduction');
   });
 });
