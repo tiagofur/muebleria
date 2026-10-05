@@ -20,7 +20,7 @@ async function loginLifecycleToA(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByLabel('Email').fill(LIFECYCLE_SUBJECT_EMAIL);
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' })).toBeVisible();
   await page.getByRole('button', { name: /Browser Gate A/ }).click();
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');

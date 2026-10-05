@@ -63,7 +63,7 @@ async function loginToA(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_EMAIL'));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' })).toBeVisible();
   await page.getByRole('button', { name: /Browser Gate A/ }).click();
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
@@ -373,7 +373,7 @@ test.describe.serial('Machine output selection readiness/provenance (#692) brows
     await page.goto('/');
     await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_EMAIL'));
     await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-    await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+    await page.getByRole('button', { name: 'Iniciar sesión' }).click();
     await page.getByRole('button', { name: 'Browser Gate B' }).click(); await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate B');
     expect(await exportPtx(page, EXPORT_PROJECT_B_ID)).toContain('[HEADER]');
 

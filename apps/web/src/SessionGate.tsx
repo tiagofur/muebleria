@@ -11,7 +11,7 @@
 
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { LoginScreen, AcceptInvitationScreen } from '@granete/ui';
+import { BrandMark, LoginScreen, AcceptInvitationScreen } from '@granete/ui';
 
 import { useWorkspaceStore } from './stores/workspaceStore';
 import { OrgPicker } from './OrgPicker';
@@ -23,6 +23,11 @@ const SESSION_END_NOTICES: Record<string, string> = {
   security: 'Cerramos tu sesión por seguridad. Iniciá sesión de nuevo.',
   connection: 'Perdimos la conexión y no pudimos mantener tu sesión. Iniciá sesión de nuevo.',
 };
+
+// Identidad de fetch estable: crearla por render cambiaba las props de
+// AcceptInvitationScreen en cada render del gate y re-disparaba el preflight
+// de la invitación (#1108).
+const CREDENTIALED_WEB_FETCH = credentialedWebFetch();
 
 export function SessionGate({ children }: { readonly children: ReactNode }): ReactNode {
   const session = useWorkspaceStore((s) => s.session);
@@ -59,14 +64,21 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
     return (
       <main
         style={{
-          minHeight: '100vh',
+          minHeight: '100dvh',
           display: 'grid',
           placeItems: 'center',
-          gap: 12,
+          background: 'var(--surface-sidebar)',
+          color: 'var(--text-inverse)',
+          fontFamily: 'var(--font-sans)',
         }}
         aria-busy="true"
       >
-        <p style={{ margin: 0, fontSize: 15 }}>Restaurando tu sesión…</p>
+        <div role="status" style={{ display: 'grid', placeItems: 'center', gap: 'var(--space-4)' }}>
+          <BrandMark size={56} />
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'color-mix(in srgb, var(--text-inverse) 72%, transparent)' }}>
+            Restaurando tu sesión…
+          </p>
+        </div>
       </main>
     );
   }
@@ -76,7 +88,7 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
       <AcceptInvitationScreen
         token={invitationToken}
         baseUrl={DEFAULT_API_BASE}
-        fetchImpl={credentialedWebFetch()}
+        fetchImpl={CREDENTIALED_WEB_FETCH}
         onAccepted={(authData) => {
           loginWithAuthPayload(authData);
           if (typeof window !== 'undefined') {
@@ -114,13 +126,14 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
             style={{
               display: 'flex',
               flexWrap: 'wrap',
-              gap: 12,
+              gap: 'var(--space-3)',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '10px 16px',
-              borderBottom: '1px solid #d79b9b',
-              background: '#fdf0f0',
-              fontSize: 14,
+              padding: 'var(--space-2) var(--space-4)',
+              borderBottom: '1px solid color-mix(in srgb, var(--danger-500) 40%, transparent)',
+              background: 'var(--danger-50)',
+              color: 'var(--text-primary)',
+              fontSize: 'var(--text-sm)',
             }}
           >
             <span>

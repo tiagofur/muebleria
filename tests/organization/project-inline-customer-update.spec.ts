@@ -13,7 +13,7 @@ async function loginToA(page: Page): Promise<void> {
   await page
     .getByRole('textbox', { name: 'Contraseña', exact: true })
     .fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(
     page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' }),
   ).toBeVisible();

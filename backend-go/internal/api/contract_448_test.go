@@ -655,3 +655,97 @@ func TestInvitationAcceptanceTypedLifecycleErrors(t *testing.T) {
 		})
 	}
 }
+
+type invitationPreviewStore struct {
+	stubStore
+	preview *storage.InvitationPreview
+	err     error
+}
+
+func (s *invitationPreviewStore) PreviewInvitation(context.Context, string) (*storage.InvitationPreview, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.preview, nil
+}
+
+func TestInvitationPreviewHandler(t *testing.T) {
+	t.Run("returns masked context", func(t *testing.T) {
+		srv := NewServer(&invitationPreviewStore{preview: &storage.InvitationPreview{
+			Email: "jose.perez@taller.com", Roles: []domain.UserRole{domain.RoleAdmin},
+			Status: "pending", ExpiresAt: time.Now().Add(time.Hour), CurrentToken: true,
+			OrganizationName: "Taller López", AccountExists: true,
+		}}, "secret", nil, 1, 1)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/invitations:preview", bytes.NewBufferString(`{"token":"valid-looking-token"}`))
+		rec := httptest.NewRecorder()
+		srv.HandlePreviewInvitation(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var got openapi.InvitationPreviewResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		if got.OrganizationName != "Taller López" || !got.AccountExists {
+			t.Fatalf("response=%+v", got)
+		}
+		if got.EmailMasked != "j•••@taller.com" {
+			t.Fatalf("email_masked=%q", got.EmailMasked)
+		}
+		if len(got.Roles) != 1 || got.Roles[0] != string(domain.RoleAdmin) {
+			t.Fatalf("roles=%v", got.Roles)
+		}
+	})
+	t.Run("empty token is a bad request", func(t *testing.T) {
+		srv := NewServer(&invitationPreviewStore{}, "secret", nil, 1, 1)
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/invitations:preview", bytes.NewBufferString(`{"token":"   "}`))
+		rec := httptest.NewRecorder()
+		srv.HandlePreviewInvitation(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+	for _, tc := range []struct {
+		name   string
+		err    error
+		status int
+		code   openapi.ApiErrorCode
+	}{
+		{"not-found", storage.ErrInvitationNotFound, http.StatusNotFound, openapi.ApiErrorCodeInvitationNotFound},
+		{"expired", storage.ErrInvitationExpired, http.StatusGone, openapi.ApiErrorCodeInvitationExpired},
+		{"revoked", storage.ErrInvitationRevoked, http.StatusGone, openapi.ApiErrorCodeInvitationRevoked},
+		{"used", storage.ErrInvitationAlreadyUsed, http.StatusConflict, openapi.ApiErrorCodeInvitationAlreadyUsed},
+		{"rotated", storage.ErrInvitationTokenRotated, http.StatusGone, openapi.ApiErrorCodeInvitationTokenRotated},
+	} {
+		t.Run("lifecycle "+tc.name, func(t *testing.T) {
+			srv := NewServer(&invitationPreviewStore{err: tc.err}, "secret", nil, 1, 1)
+			req := httptest.NewRequest(http.MethodPost, "/api/auth/invitations:preview", bytes.NewBufferString(`{"token":"valid-looking-token"}`))
+			rec := httptest.NewRecorder()
+			srv.HandlePreviewInvitation(rec, req)
+			if rec.Code != tc.status {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var got openapi.ApiError
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Code != tc.code {
+				t.Fatalf("code=%s", got.Code)
+			}
+		})
+	}
+}
+
+func TestMaskInvitationEmail(t *testing.T) {
+	cases := map[string]string{
+		"jose.perez@taller.com": "j•••@taller.com",
+		"a@b.co":                "a•••@b.co",
+		"@nodomain":             "•••",
+		"nodomain":              "•••",
+	}
+	for input, want := range cases {
+		if got := maskInvitationEmail(input); got != want {
+			t.Fatalf("maskInvitationEmail(%q)=%q want %q", input, got, want)
+		}
+	}
+}

@@ -983,6 +983,37 @@
         }
       }
     },
+    "/auth/invitations:preview": {
+      "post": {
+        "operationId": "previewInvitation",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Invitation context for the acceptance screen; the invitation is not consumed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPreviewResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/org/memberships": {
       "get": {
         "operationId": "listMemberships",
@@ -7122,6 +7153,45 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "InvitationPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "InvitationPreviewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "organization_name",
+          "roles",
+          "email_masked",
+          "account_exists"
+        ],
+        "properties": {
+          "organization_name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "email_masked": {
+            "type": "string"
+          },
+          "account_exists": {
+            "type": "boolean"
           }
         }
       },

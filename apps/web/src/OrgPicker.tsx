@@ -27,7 +27,7 @@ export function OrgPicker({
   return (
     <main
       style={{
-        minHeight: '100vh',
+        minHeight: '100dvh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -40,7 +40,7 @@ export function OrgPicker({
         style={{
           width: '100%',
           maxWidth: '420px',
-          background: 'var(--surface)',
+          background: 'var(--surface-card)',
           borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-md)',
           padding: 'var(--space-6)',
@@ -83,7 +83,7 @@ export function OrgPicker({
                   padding: 'var(--space-3) var(--space-4)',
                   borderRadius: 'var(--radius-md)',
                   border: '1px solid var(--border)',
-                  background: 'var(--surface)',
+                  background: 'var(--surface-card)',
                   cursor: loading ? 'wait' : 'pointer',
                   textAlign: 'left',
                   fontFamily: 'var(--font-sans)',
@@ -93,6 +93,12 @@ export function OrgPicker({
                   if (!loading) e.currentTarget.style.borderColor = 'var(--brand-400)';
                 }}
                 onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                }}
+                onFocus={(e) => {
+                  if (!loading) e.currentTarget.style.borderColor = 'var(--brand-400)';
+                }}
+                onBlur={(e) => {
                   e.currentTarget.style.borderColor = 'var(--border)';
                 }}
               >
@@ -112,7 +118,7 @@ export function OrgPicker({
           </p>
         ) : null}
         {loading ? (
-          <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', margin: 'var(--space-3) 0 0' }}>
+          <p role="status" style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)', margin: 'var(--space-3) 0 0' }}>
             Entrando…
           </p>
         ) : null}

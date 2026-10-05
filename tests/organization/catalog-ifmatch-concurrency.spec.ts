@@ -51,7 +51,7 @@ test.describe.serial('Catalog If-Match concurrency browser proof (#443 slice 3)'
     await page.goto('/');
     await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
     await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-    await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+    await page.getByRole('button', { name: 'Iniciar sesión' }).click();
     await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
     const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
     if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();

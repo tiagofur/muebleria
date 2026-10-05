@@ -566,6 +566,48 @@ func (s *PostgresStore) AcceptInvitation(ctx context.Context, cmd AcceptInvitati
 	return result, nil
 }
 
+// InvitationPreview is the public, read-only context of a pending invitation
+// token (#1108). It carries the minimum the acceptance screen needs to tell
+// the invitee who invited them before any credential is submitted.
+type InvitationPreview struct {
+	Email            string
+	Roles            []domain.UserRole
+	Status           string
+	ExpiresAt        time.Time
+	CurrentToken     bool
+	OrganizationName string
+	AccountExists    bool
+}
+
+// PreviewInvitation resolves an invitation token's context without locking or
+// consuming it: a later AcceptInvitation with the same token must succeed.
+func (s *PostgresStore) PreviewInvitation(ctx context.Context, tokenHash string) (*InvitationPreview, error) {
+	var p InvitationPreview
+	err := s.db(ctx).QueryRow(ctx, `SELECT normalized_email, roles, status, expires_at, current_token, organization_name, account_exists
+		FROM read_open_invitation_by_hash($1)`, tokenHash).Scan(&p.Email, &p.Roles, &p.Status, &p.ExpiresAt, &p.CurrentToken, &p.OrganizationName, &p.AccountExists)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrInvitationNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !p.CurrentToken {
+		return nil, ErrInvitationTokenRotated
+	}
+	switch p.Status {
+	case "accepted":
+		return nil, ErrInvitationAlreadyUsed
+	case "revoked":
+		return nil, ErrInvitationRevoked
+	case "expired":
+		return nil, ErrInvitationExpired
+	}
+	if !p.ExpiresAt.After(time.Now()) {
+		return nil, ErrInvitationExpired
+	}
+	return &p, nil
+}
+
 // jsonbRemapKey returns a SQL expression that rewrites `key` inside every
 // element of a JSONB array of objects using an old→new id map table.
 // F179: jsonb_agg over an EMPTY array yields NULL, but columns like

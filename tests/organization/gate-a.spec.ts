@@ -6,7 +6,7 @@ async function login(page: Page, email: string, organizationSlug: string): Promi
   await page.goto('/');
   await page.getByLabel('Email').fill(email);
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   const chooser = page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' });
   if (await chooser.isVisible()) {
     await page.getByRole('button', { name: new RegExp(organizationSlug === required('ORGANIZATION_GATE_ORG_A_SLUG') ? 'Browser Gate A' : 'Browser Gate B') }).click();

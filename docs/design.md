@@ -1181,7 +1181,7 @@ Especificaciones de pantalla alineadas con la app post F016–F023 + F024 + Fase
 ### 6.13 Aceptación de invitación
 
 - **Path:** `packages/ui/src/auth/AcceptInvitationScreen.tsx`
-- **Patrón:** pantalla completa pre-shell, comparte `login.css`
+- **Patrón:** pantalla completa pre-shell con CSS propio `acceptInvitation.css` (tema claro sobre `--brand-50`; no comparte `login.css`). Preflight `POST …/auth/invitations:preview` (#1108) muestra el contexto del taller y el email enmascarado antes del formulario
 - **Acciones:**
   - `POST …/auth/invitations:accept` consume un enlace de una sola vez;
   - una identidad nueva define nombre y contraseña; una existente confirma su contraseña;

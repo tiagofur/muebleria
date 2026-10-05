@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { useState, type FormEvent, type ReactNode } from 'react';
-import { KeyRound, Mail, LogIn, WifiOff, Eye, EyeOff } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { KeyRound, Mail, LogIn, Compass, Eye, EyeOff } from 'lucide-react';
 import { BrandMark } from '../common/BrandMark';
 import './login.css';
 
@@ -24,6 +24,11 @@ export function LoginScreen({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (error ?? localError) errorRef.current?.focus();
+  }, [error, localError]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -65,7 +70,7 @@ export function LoginScreen({
             </div>
           ) : null}
           {displayError ? (
-            <div className="login-error" role="alert">
+            <div ref={errorRef} className="login-error" role="alert" tabIndex={-1}>
               {displayError}
             </div>
           ) : null}
@@ -139,9 +144,10 @@ export function LoginScreen({
             type="submit"
             className="login-submit"
             disabled={loading}
+            aria-busy={loading}
           >
             <LogIn size={16} strokeWidth={1.5} aria-hidden />
-            {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
+            {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
           </button>
         </form>
 
@@ -157,9 +163,12 @@ export function LoginScreen({
           onClick={onGuestAccess}
           disabled={loading}
         >
-          <WifiOff size={16} strokeWidth={1.5} aria-hidden />
-          Acceder sin conexión (Invitado)
+          <Compass size={16} strokeWidth={1.5} aria-hidden />
+          Explorar modo demo
         </button>
+        <p className="login-guest-hint">
+          Datos de ejemplo en tu navegador; tu cuenta y tus datos no se modifican.
+        </p>
 
         <p className="login-invitation-note">
           El acceso a talleres se realiza mediante invitación del administrador.

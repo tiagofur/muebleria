@@ -38,4 +38,7 @@ func registerOrgRoutes(server *Server, mux *http.ServeMux, authRL, authMW func(h
 
 	// Public invitation acceptance (rate limited like login/register).
 	mux.Handle("POST /api/auth/invitations:accept", noStoreMiddleware(authRL(server.RequireIdempotency("auth.accept-invitation", http.HandlerFunc(server.HandleAcceptInvitation)))))
+
+	// Public invitation preflight (#1108): read-only, no idempotency key.
+	mux.Handle("POST /api/auth/invitations:preview", noStoreMiddleware(authRL(http.HandlerFunc(server.HandlePreviewInvitation))))
 }

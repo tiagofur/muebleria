@@ -177,10 +177,25 @@ export async function loginRequest(
     const client = new GraneteApiClient(baseUrl, credentialedWebFetch(fetchImpl));
     return parseAuthResponse(await client.login({ email, password, transport: 'web' }));
   } catch (error) {
-    if (error instanceof GraneteApiError && error.status === 401) throw new Error('Email o contraseña incorrectos');
-    if (error instanceof GraneteApiError && error.status === 403) throw new Error(error.message);
-    throw new Error('No se pudo conectar con el servidor');
+    throw new Error(loginErrorMessage(error));
   }
+}
+
+/**
+ * Copy de error de login por clase de fallo (#1108): un 5xx o un rate-limit no
+ * son "problema de conexión", y el 403 de login hoy significa cuenta sin
+ * taller asignado (backend: auth_session_handlers no_membership) — el mismo
+ * caso del futuro usuario Free sin fábrica.
+ */
+export function loginErrorMessage(error: unknown): string {
+  if (error instanceof GraneteApiError) {
+    if (error.status === 401) return 'Email o contraseña incorrectos';
+    if (error.status === 403) return 'Todavía no tenés un taller asignado. Pedile al administrador que te invite o te asigne uno.';
+    if (error.status === 429) return 'Demasiados intentos. Esperá un momento y probá de nuevo.';
+    if (error.status >= 500) return 'El servidor no respondió correctamente. Probá de nuevo en un momento.';
+    return 'No se pudo iniciar sesión. Probá de nuevo en un momento.';
+  }
+  return 'No se pudo conectar con el servidor. Revisá tu conexión.';
 }
 
 function safeSessionStorage(): Storage | null {

@@ -190,6 +190,10 @@ func (s *stubStore) AcceptInvitation(context.Context, storage.AcceptInvitationCo
 	return nil, storage.ErrInvitationNotFound
 }
 
+func (s *stubStore) PreviewInvitation(context.Context, string) (*storage.InvitationPreview, error) {
+	return nil, storage.ErrInvitationNotFound
+}
+
 func (s *stubStore) ListSecurityAuditEvents(context.Context, string, int) ([]openapi.SecurityAuditEvent, error) {
 	return nil, nil
 }

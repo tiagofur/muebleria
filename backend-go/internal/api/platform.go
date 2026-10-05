@@ -55,6 +55,55 @@ func hashInvitationToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// maskInvitationEmail hides the local part of the invitee address so the
+// preview response never carries the full email (#1108): a·••@domain.
+func maskInvitationEmail(email string) string {
+	local, domain, ok := strings.Cut(email, "@")
+	if !ok || local == "" || domain == "" {
+		return "•••"
+	}
+	return local[:1] + "•••@" + domain
+}
+
+// HandlePreviewInvitation implements POST /api/auth/invitations:preview — the
+// read-only preflight behind the acceptance screen (#1108). It reuses the
+// accept lifecycle taxonomy so expired/revoked/used invitations show their
+// specific state before the form, and never mutates invitation state.
+func (s *Server) HandlePreviewInvitation(w http.ResponseWriter, r *http.Request) {
+	var body openapi.InvitationPreviewRequest
+	if !decodeGeneratedJSONBody(w, r, &body) {
+		return
+	}
+	if strings.TrimSpace(body.Token) == "" {
+		respondWithAPIError(w, http.StatusBadRequest, openapi.ApiErrorCodeBadRequest, "token es obligatorio", nil)
+		return
+	}
+	preview, err := s.Store.PreviewInvitation(r.Context(), hashInvitationToken(strings.TrimSpace(body.Token)))
+	if err != nil {
+		switch {
+		case errors.Is(err, storage.ErrInvitationNotFound):
+			respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeInvitationNotFound, "invitación inválida o no disponible", nil)
+		case errors.Is(err, storage.ErrInvitationExpired):
+			respondWithAPIError(w, http.StatusGone, openapi.ApiErrorCodeInvitationExpired, "la invitación expiró", nil)
+		case errors.Is(err, storage.ErrInvitationRevoked):
+			respondWithAPIError(w, http.StatusGone, openapi.ApiErrorCodeInvitationRevoked, "la invitación fue revocada", nil)
+		case errors.Is(err, storage.ErrInvitationAlreadyUsed):
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeInvitationAlreadyUsed, "la invitación ya fue usada", nil)
+		case errors.Is(err, storage.ErrInvitationTokenRotated):
+			respondWithAPIError(w, http.StatusGone, openapi.ApiErrorCodeInvitationTokenRotated, "el token fue reemplazado", nil)
+		default:
+			respondWithInternalError(w, err, "preview invitation")
+		}
+		return
+	}
+	respondWithJSON(w, http.StatusOK, openapi.InvitationPreviewResponse{
+		OrganizationName: preview.OrganizationName,
+		Roles:            roleStrings(preview.Roles),
+		EmailMasked:      maskInvitationEmail(preview.Email),
+		AccountExists:    preview.AccountExists,
+	})
+}
+
 func randomToken32() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
