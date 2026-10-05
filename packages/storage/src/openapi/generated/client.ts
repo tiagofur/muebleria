@@ -65,6 +65,8 @@ import type {
   HardwareProfileWrite,
   HardwareWrite,
   Invitation,
+  InvitationPreviewRequest,
+  InvitationPreviewResponse,
   LibraryManifest,
   LibraryOverlayConflictDetail,
   LibraryOverlayDetail,
@@ -212,6 +214,7 @@ export abstract class GeneratedGraneteApiClient {
   endSupportSession(token: string, sessionId: string, signal?: AbortSignal): Promise<EndSupportSessionResponse> { return this.request("DELETE", `/platform/support-sessions/${encodeURIComponent(sessionId)}`, { schema: "EndSupportSessionResponse", token, signal }); }
   listFactoryOrganizations(token: string, signal?: AbortSignal): Promise<ReadonlyArray<FactoryOrganization>> { return this.request("GET", "/factory/organizations", { arrayOf: "FactoryOrganization", token, signal }); }
   acceptInvitation(body: AcceptInvitationRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<LoginResponse> { return this.request("POST", "/auth/invitations:accept", { schema: "LoginResponse", bodySchema: "AcceptInvitationRequest", body, idempotencyKey: key, signal }); }
+  previewInvitation(body: InvitationPreviewRequest, signal?: AbortSignal): Promise<InvitationPreviewResponse> { return this.request("POST", "/auth/invitations:preview", { schema: "InvitationPreviewResponse", bodySchema: "InvitationPreviewRequest", body, signal }); }
   listMemberships(token: string, signal?: AbortSignal): Promise<TeamDirectory> { return this.request("GET", "/org/memberships", { schema: "TeamDirectory", token, signal }); }
   updateMembershipRoles(token: string, membershipId: string, version: number, body: UpdateMemberRolesRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("PUT", `/org/memberships/${encodeURIComponent(membershipId)}/roles`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "UpdateMemberRolesRequest", body, idempotencyKey: key, signal }); }
   updateMembershipStatus(token: string, membershipId: string, version: number, body: UpdateMembershipStatusRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("PUT", `/org/memberships/${encodeURIComponent(membershipId)}/status`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "UpdateMembershipStatusRequest", body, idempotencyKey: key, signal }); }

@@ -136,6 +136,17 @@ type AcceptInvitationRequest struct {
 	Name     *string `json:"name,omitempty"`
 }
 
+type InvitationPreviewRequest struct {
+	Token string `json:"token"`
+}
+
+type InvitationPreviewResponse struct {
+	OrganizationName string   `json:"organization_name"`
+	Roles            []string `json:"roles"`
+	EmailMasked      string   `json:"email_masked"`
+	AccountExists    bool     `json:"account_exists"`
+}
+
 type LoginResponse struct {
 	Token                    string               `json:"token"`
 	User                     User                 `json:"user"`
