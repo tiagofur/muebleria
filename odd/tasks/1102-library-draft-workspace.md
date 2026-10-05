@@ -1,5 +1,40 @@
 # ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
 
+**Slice D (rama feat/1102-lib-consumer-release desde main con A+B+C mergeados por el owner):**
+diseño publicado antes de codear (issuecomment-6001874131). El hallazgo que
+redefinió el slice: `ReleaseServerResolveInputs` (#875/#916) YA resuelve los
+inputs de manufactura desde el release publicado (implícito "current"); el
+trío LibraryStore de #774 estaba DORMIDO (sin adapter de API ni wiring).
+
+- **Backend:** `furniture.libraryReleaseId` opcional en el request de
+  authoring resolve. Presente → `ReleaseServerInputsForRelease` arma los
+  inputs desde ESE release; no publicado/desconocido → 422
+  LIBRARY_RELEASE_UNAVAILABLE (el pin significa exactamente ese release).
+  La degradación honesta de blobs no cargables se mantiene (#875). La
+  respuesta ya hacía echo del release id — ahora hace eco del pin del
+  consumidor.
+- **Allowlist extensión** (grant deliberado #1102): GET current / release /
+  manifest / blobs — lectura de PUBLICADOS (RLS los limita).
+- **Plugin:** `request_raw` en HttpAdapter (manifiesto y blobs viajan como
+  bytes exactos — el store verifica sha256); `ReleaseApiClient` (puerto del
+  synchronizer); `ConsumerPin#refresh!` (boot best-effort: sync current con
+  expected hash + org-change guard; offline → pin viejo persiste);
+  `RemoteCatalogProvider.library_pin_provider` inyecta
+  `furniture.libraryReleaseId` en cada resolve; RBZ 0.1.39.
+- **Web:** Vista consumidor — pin explícito por release, muestra los
+  perfiles congelados vía el pinned read existente; "Actualizar a la última"
+  mueve el pin; fijar manualmente una versión vieja simula al "otro
+  consumidor" que se queda atrás.
+
+**Restante nombrado (no implementado, a filear como issue propia):** congelar
+la GEOMETRÍA del catálogo en releases (compilador extenso a
+muebles/estructuras/materiales + resolve desde el freeze). Hoy la geometría
+sigue leyendo tablas vivas; el pin cubre la capa de manufactura completa.
+Plugin dev-mode contra borrador: también restante (probar borrador vive en la
+web B).
+
+---
+
 **Slice C (rama apilada feat/1102-lib-draft-publish, base = rama B):**
 diseño publicado antes de codear (issuecomment-6001287796). C = UI + wiring
 más UN endpoint nuevo de lectura:
