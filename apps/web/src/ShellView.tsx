@@ -2515,7 +2515,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               ? 'ready'
               : commercialSummaries.kind === 'error'
                 ? 'error'
-                : 'loading'
+                : // #1118: sesión local (invitado/demo) nunca consulta el
+                  // batch — estado explícito, no «Cargando…» eterno.
+                commercialSummaries.kind === 'idle'
+                  ? 'unavailable'
+                  : 'loading'
+          }
+          commercialSummariesStale={
+            commercialSummaries.kind === 'ready'
+              ? (commercialSummaries.staleMessage ?? null)
+              : null
           }
           commercialSummariesError={
             commercialSummaries.kind === 'error'

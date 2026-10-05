@@ -86,6 +86,8 @@ export interface ProjectsScreenProps {
    */
   readonly commercialSummariesStatus?: CommercialSummariesStatus;
   readonly commercialSummariesError?: string | null;
+  /** #1118: refresh fallido sobre datos anteriores — el lista decide sobre ellos. */
+  readonly commercialSummariesStale?: string | null;
   readonly onRetryCommercialSummaries?: () => void;
   /** When true, show section loading (workspace/async gate). */
   readonly loading?: boolean;
@@ -464,6 +466,7 @@ export function ProjectsScreen({
   commercialSummaries,
   commercialSummariesStatus = 'loading',
   commercialSummariesError = null,
+  commercialSummariesStale = null,
   onRetryCommercialSummaries,
   projects,
   modules,
@@ -913,8 +916,11 @@ export function ProjectsScreen({
           commercialSummaries={commercialSummaries}
           commercialSummariesStatus={commercialSummariesStatus}
           commercialSummariesError={commercialSummariesError}
+          commercialSummariesStale={commercialSummariesStale}
           onRetryCommercialSummaries={onRetryCommercialSummaries}
           commercialFiltersDisabled={state.commercialFiltersDisabled}
+          sortKey={state.sortKey}
+          onSortChange={state.setSortKey}
           isTrulyEmpty={state.isTrulyEmpty}
           isFilterEmpty={state.isFilterEmpty}
           canMutate={canMutate}

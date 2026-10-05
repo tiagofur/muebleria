@@ -10,7 +10,7 @@
  * the navigation set only — never commercial dataset truth.
  */
 
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   FileText,
   LayoutTemplate,
@@ -34,8 +34,11 @@ import {
 } from '../projectHelpers';
 import {
   QUOTE_COMMERCIAL_FILTER_OPTIONS,
+  filterProjectsByCommercialStatus,
   resolveCommercialCardIdentity,
+  PROJECT_LIST_SORT_OPTIONS,
   type CommercialSummariesStatus,
+  type ProjectListSortKey,
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
 import { CommercialStatusBadge } from './CommercialStatusBadge';
@@ -43,6 +46,9 @@ import { CommercialStatusBadge } from './CommercialStatusBadge';
 function quoteNoun(count: number): string {
   return count === 1 ? 'cotización' : 'cotizaciones';
 }
+
+/** #1118: paginación incremental — 500 tab stops no son triage. */
+const LIST_PAGE_SIZE = 24;
 
 export interface ProjectsListViewProps {
   readonly projects: readonly Project[];
@@ -55,8 +61,12 @@ export interface ProjectsListViewProps {
   /** Dataset state of the batch summaries request — loading/error are never "Sin cotización". */
   readonly commercialSummariesStatus?: CommercialSummariesStatus;
   readonly commercialSummariesError?: string | null;
+  /** #1118: refresh fallido sobre datos anteriores — banner + Reintentar. */
+  readonly commercialSummariesStale?: string | null;
   readonly onRetryCommercialSummaries?: () => void;
   readonly commercialFiltersDisabled?: boolean;
+  readonly sortKey?: ProjectListSortKey;
+  readonly onSortChange?: (key: ProjectListSortKey) => void;
   readonly isTrulyEmpty: boolean;
   readonly isFilterEmpty: boolean;
   readonly canMutate: boolean;
@@ -81,8 +91,11 @@ export function ProjectsListView({
   commercialSummaries,
   commercialSummariesStatus = 'ready',
   commercialSummariesError,
+  commercialSummariesStale,
   onRetryCommercialSummaries,
   commercialFiltersDisabled = false,
+  sortKey = 'recent',
+  onSortChange,
   isTrulyEmpty,
   isFilterEmpty,
   canMutate,
@@ -106,6 +119,34 @@ export function ProjectsListView({
   // badge pending; error surfaces the banner and never "Sin cotización".
   const summariesReady = commercialSummariesStatus === 'ready';
   const summariesFailed = commercialSummariesStatus === 'error';
+  const summariesUnavailable = commercialSummariesStatus === 'unavailable';
+
+  // #1118: contadores por chip — sólo con dataset ready (nunca clasificar
+  // sobre datos que no llegaron).
+  const chipOptions = summariesReady
+    ? QUOTE_COMMERCIAL_FILTER_OPTIONS.map((option) => {
+        const count =
+          option.value === 'all'
+            ? projects.length
+            : filterProjectsByCommercialStatus(
+                projects,
+                '',
+                option.value,
+                customers ?? [],
+                commercialSummaries,
+                'ready',
+              ).length;
+        return { ...option, label: `${option.label} (${count})` };
+      })
+    : QUOTE_COMMERCIAL_FILTER_OPTIONS;
+
+  // #1118: paginación incremental; el límite se reinicia al cambiar filtros.
+  const [visibleLimit, setVisibleLimit] = useState(LIST_PAGE_SIZE);
+  useEffect(() => {
+    setVisibleLimit(LIST_PAGE_SIZE);
+  }, [search, statusFilter]);
+  const visibleProjects = filtered.slice(0, visibleLimit);
+  const hiddenCount = filtered.length - visibleProjects.length;
 
   // #710: recovery stays reachable while restricted results are on screen.
   // `filtered` follows the parent's debounced search, so right after the user
@@ -189,11 +230,35 @@ export function ProjectsListView({
             <StatusChips
               value={statusFilter}
               onChange={onStatusFilterChange}
-              options={QUOTE_COMMERCIAL_FILTER_OPTIONS}
+              options={chipOptions}
               disabled={commercialFiltersDisabled}
-              aria-label="Filtrar cotizaciones por estado"
+              aria-label={
+                commercialFiltersDisabled
+                  ? 'Filtrar cotizaciones por estado (requiere conexión al servidor)'
+                  : 'Filtrar cotizaciones por estado'
+              }
               data-testid="project-status-chips"
             />
+          }
+          contextualControls={
+            <div className="project-sort">
+              <label className="project-sort__label" htmlFor="project-sort">
+                Ordenar
+              </label>
+              <select
+                id="project-sort"
+                className="input project-sort__select"
+                value={sortKey}
+                onChange={(e) => onSortChange?.(e.target.value as ProjectListSortKey)}
+                data-testid="project-sort"
+              >
+                {PROJECT_LIST_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           }
         />
       ) : null}
@@ -201,8 +266,16 @@ export function ProjectsListView({
       {!isTrulyEmpty ? (
         <div className="project-list-meta">
           <p aria-live="polite" data-testid="projects-results-summary">
-            {`Mostrando ${filtered.length} de ${projects.length} ${quoteNoun(projects.length)}`}
+            {`Mostrando ${visibleProjects.length} de ${projects.length} ${quoteNoun(projects.length)}`}
           </p>
+          {summariesReady ? (
+            <p
+              className="project-list-meta__legend"
+              data-testid="projects-price-legend"
+            >
+              Los montos son el precio total de venta congelado de cada obra.
+            </p>
+          ) : null}
           {/* With zero matches the no-results EmptyState already owns the only
               recovery action — never render a second Limpiar filtros here. */}
           {showClearFilters ? (
@@ -218,13 +291,51 @@ export function ProjectsListView({
         </div>
       ) : null}
 
+      {/* #1118: sesión sin acceso al batch — estado explícito, nunca
+          «Cargando…» eterno. */}
+      {summariesUnavailable ? (
+        <div
+          className="alert alert--warning"
+          role="status"
+          data-testid="commercial-summaries-unavailable"
+        >
+          <span>
+            La información comercial requiere una sesión con acceso al
+            servidor.
+          </span>
+        </div>
+      ) : null}
+
+      {/* #1118: refresh fallido sobre datos anteriores — decidir con cuidado. */}
+      {summariesReady && commercialSummariesStale ? (
+        <div
+          className="alert alert--warning"
+          role="status"
+          data-testid="commercial-summaries-stale"
+        >
+          <span>{commercialSummariesStale}</span>
+          {onRetryCommercialSummaries ? (
+            <button
+              type="button"
+              className="btn btn--small btn--secondary"
+              onClick={onRetryCommercialSummaries}
+            >
+              Reintentar
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
       {summariesFailed ? (
         <div
           className="alert alert--danger"
           role="alert"
           data-testid="commercial-summaries-error"
         >
-          <span>No se pudo cargar la información comercial.</span>
+          <span>
+            {commercialSummariesError ??
+              'No se pudo cargar la información comercial.'}
+          </span>
           {onRetryCommercialSummaries ? (
             <button
               type="button"
@@ -267,7 +378,7 @@ export function ProjectsListView({
         />
       ) : (
         <ul className="project-card-grid" aria-label="Lista de cotizaciones">
-          {filtered.map((project) => {
+          {visibleProjects.map((project) => {
             const summary = commercialSummaries?.get(project.id);
             const identity = cardIdentity(project, summary);
             // Loading/error keep navigation identity only: no legacy price,
@@ -294,8 +405,9 @@ export function ProjectsListView({
                     <h3 className="project-card__name">{identity.name}</h3>
                     <CommercialStatusBadge
                       summary={summary}
-                      loading={!summariesReady && !summariesFailed}
+                      loading={!summariesReady && !summariesFailed && !summariesUnavailable}
                       error={summariesFailed}
+                      unavailable={summariesUnavailable}
                     />
                   </div>
                   {identity.customer != null ? (
@@ -311,7 +423,7 @@ export function ProjectsListView({
                     ) : null}
                     {activityDate != null ? (
                       <span className="project-card__stat">
-                        Act. {formatIsoDate(activityDate)}
+                        Actualizada {formatIsoDate(activityDate)}
                       </span>
                     ) : null}
                   </div>
@@ -327,10 +439,10 @@ export function ProjectsListView({
                       </span>
                     </div>
                   ) : null}
-                  <div className="project-card__price">
-                    <span className="project-card__price-label">
-                      Precio total
-                    </span>
+                  <div
+                    className="project-card__price"
+                    title="Precio total"
+                  >
                     {formattedTotal != null ? (
                       <span className="project-card__price-value">
                         {formattedTotal}
@@ -355,6 +467,18 @@ export function ProjectsListView({
           })}
         </ul>
       )}
+      {hiddenCount > 0 ? (
+        <div className="project-list-more">
+          <button
+            type="button"
+            className="btn btn--secondary"
+            onClick={() => setVisibleLimit((n) => n + LIST_PAGE_SIZE)}
+            data-testid="projects-show-more"
+          >
+            Mostrar más ({hiddenCount} restantes)
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }

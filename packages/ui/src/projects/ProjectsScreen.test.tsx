@@ -1455,15 +1455,15 @@ describe('ProjectsScreen F022', () => {
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: /^Borrador$/i }));
+    await user.click(screen.getByRole('button', { name: /^Borrador \(/i }));
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: /^Publicada$/i }));
+    await user.click(screen.getByRole('button', { name: /^Publicada \(/i }));
     expect(screen.queryByTestId('project-card-prj-1')).toBeNull();
     expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
 
-    await user.click(screen.getByRole('button', { name: /^Todas$/i }));
+    await user.click(screen.getByRole('button', { name: /^Todas \(/i }));
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
   });
@@ -2666,7 +2666,7 @@ describe('#710 quotes list orientation and filter recovery', () => {
 
     // Status filter on top: restricted by both search and status.
     const chips = screen.getByTestId('project-status-chips');
-    await user.click(within(chips).getByRole('button', { name: 'Borrador' }));
+    await user.click(within(chips).getByRole('button', { name: /^Borrador \(/i }));
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
       'Mostrando 1 de 2 cotizaciones',
     );
@@ -2679,12 +2679,133 @@ describe('#710 quotes list orientation and filter recovery', () => {
     }) as HTMLInputElement;
     expect(searchbox.value).toBe('');
     expect(
-      within(chips).getByRole('button', { name: 'Todas' }).getAttribute('aria-pressed'),
+      within(chips).getByRole('button', { name: /^Todas \(/ }).getAttribute('aria-pressed'),
     ).toBe('true');
     // …while the cards follow the parent's debounce and then come back whole.
     expect(await screen.findByText('Mostrando 2 de 2 cotizaciones')).toBeTruthy();
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
     expect(screen.queryByTestId('projects-clear-filters')).toBeNull();
+  });
+});
+
+describe('Cotizaciones S3 (#1118)', () => {
+  const summaryFor = (
+    projectId: string,
+    overrides: Partial<ProjectCommercialSummary> = {},
+  ): ProjectCommercialSummary => ({
+    projectId,
+    projectName: `Obra ${projectId}`,
+    quoteStatus: 'published',
+    quoteRevisionNumber: 1,
+    isLegacy: false,
+    furnitureQuantity: 1,
+    saleTotal: 100,
+    currency: 'MXN',
+    commercialActivityAt: '2026-07-01T00:00:00.000Z',
+    ...overrides,
+  });
+
+  it('orders by commercial activity desc by default (recientes primero)', () => {
+    const summaries = new Map([
+      ['prj-1', { ...defaultCommercialSummaries.get('prj-1')! }],
+      ['prj-2', { ...defaultCommercialSummaries.get('prj-2')! }],
+    ]);
+    renderScreen({ commercialSummaries: summaries });
+    const cards = screen.getAllByTestId(/^project-card-/);
+    expect(cards[0]?.getAttribute('data-testid')).toBe('project-card-prj-2');
+    expect(cards[1]?.getAttribute('data-testid')).toBe('project-card-prj-1');
+  });
+
+  it('reorders by amount and by customer via the sort control', async () => {
+    const user = userEvent.setup();
+    const summaries = new Map<string, ProjectCommercialSummary>([
+      ['prj-1', summaryFor('prj-1', { quoteStatus: 'draft', saleTotal: 202.5, customerName: 'Zúñiga, Ana', commercialActivityAt: '2026-07-12T00:00:00.000Z' })],
+      ['prj-2', summaryFor('prj-2', { saleTotal: 900, customerName: 'Alba, Bruno', commercialActivityAt: '2026-07-13T00:00:00.000Z' })],
+    ]);
+    renderScreen({ commercialSummaries: summaries });
+
+    const order = () =>
+      screen
+        .getAllByTestId(/^project-card-/)
+        .map((el) => el.getAttribute('data-testid'));
+    // Recientes: prj-2 (07-13) primero.
+    expect(order()[0]).toBe('project-card-prj-2');
+
+    await user.selectOptions(screen.getByTestId('project-sort'), 'amount');
+    expect(order()[0]).toBe('project-card-prj-2'); // 900 > 202.5
+
+    await user.selectOptions(screen.getByTestId('project-sort'), 'customer');
+    expect(order()[0]).toBe('project-card-prj-2'); // Alba < Zúñiga
+    expect(order()[1]).toBe('project-card-prj-1');
+  });
+
+  it('shows per-status counters on the chips when the dataset is ready', () => {
+    renderScreen({ commercialSummariesStatus: 'ready' });
+    const chips = screen.getByTestId('project-status-chips');
+    expect(within(chips).getByRole('button', { name: 'Borrador (1)' })).toBeTruthy();
+    expect(within(chips).getByRole('button', { name: /Publicada \(1\)/ })).toBeTruthy();
+    expect(within(chips).getByRole('button', { name: /Todas \(2\)/ })).toBeTruthy();
+  });
+
+  it('surfaces the stale banner with retry when the refresh failed', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    renderScreen({
+      commercialSummariesStale: 'No se pudo actualizar la información comercial.',
+      onRetryCommercialSummaries: onRetry,
+    });
+    const banner = screen.getByTestId('commercial-summaries-stale');
+    expect(banner.textContent).toContain('No se pudo actualizar');
+    await user.click(within(banner).getByRole('button', { name: 'Reintentar' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the backend error detail from the prop with fallback', () => {
+    renderScreen({
+      commercialSummariesStatus: 'error',
+      commercialSummariesError: 'detalle del backend: 503',
+      onRetryCommercialSummaries: vi.fn(),
+    });
+    expect(screen.getByTestId('commercial-summaries-error').textContent).toContain(
+      'detalle del backend: 503',
+    );
+    cleanup();
+    renderScreen({ commercialSummariesStatus: 'error' });
+    expect(screen.getByTestId('commercial-summaries-error').textContent).toContain(
+      'No se pudo cargar la información comercial.',
+    );
+  });
+
+  it('paginates the list incrementally with Mostrar más', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 26 }, (_, i) => ({
+      id: `gen-${i + 1}`,
+      name: `Obra ${i + 1}`,
+      customerId: null,
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'quoted' as const,
+      items: [],
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      priceSnapshot: null,
+    }));
+    const summaries = new Map(
+      many.map((p, i) => [
+        p.id,
+        summaryFor(p.id, { commercialActivityAt: `2026-07-${String((i % 27) + 1).padStart(2, '0')}T00:00:00.000Z` }),
+      ]),
+    );
+    renderScreen({ projects: many, commercialSummaries: summaries });
+
+    expect(screen.getAllByTestId(/^project-card-/).length).toBe(24);
+    expect(screen.getByTestId('projects-results-summary').textContent).toBe(
+      'Mostrando 24 de 26 cotizaciones',
+    );
+    await user.click(screen.getByTestId('projects-show-more'));
+    expect(screen.getAllByTestId(/^project-card-/).length).toBe(26);
+    expect(screen.queryByTestId('projects-show-more')).toBeNull();
   });
 });
