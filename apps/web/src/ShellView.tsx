@@ -76,6 +76,7 @@ import {
   HardwareProfilesCatalog,
   AmbientMaterialsCatalog,
   MaterialsCatalog,
+  LibraryConsumerViewPanel,
   LibraryDraftValidationPanel,
   LibraryDraftWorkspaceBanner,
   LibraryPublishConfirmContent,
@@ -1041,6 +1042,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           />
           <LibraryPublishHistoryPanel
             releases={libraryWorkspace.publishedReleases}
+          />
+          <LibraryConsumerViewPanel
+            pin={libraryWorkspace.consumerPin}
+            published={libraryWorkspace.publishedReleases}
+            profiles={libraryWorkspace.consumerProfiles}
+            loading={libraryWorkspace.consumerLoading}
+            error={libraryWorkspace.consumerError}
+            onPin={(releaseId) => libraryWorkspace.pinConsumerRelease(releaseId)}
           />
           <Modal
             open={libraryPublishOpen && libraryWorkspace.currentDraft !== null}

@@ -39,36 +39,72 @@ import (
 // test stubs, so tests exercise the SAME loading rules production runs.
 type ReleaseServerInputsReader interface {
 	GetCurrentPublishedRelease(ctx context.Context, libraryID uuid.UUID) (*domain.LibraryRelease, error)
+	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
 	HardwareProfilesForRelease(ctx context.Context, releaseID uuid.UUID) ([]domain.HardwareProfile, error)
 	ListAllComponentSideAssignments(ctx context.Context) ([]domain.ComponentSideAssignment, error)
 	GetActiveOverlayByLibrary(ctx context.Context, organizationID, libraryID uuid.UUID) (*domain.LibraryOverlay, error)
 }
 
 // ReleaseServerResolveInputs delegates to the shared orchestration over the
-// store itself.
+// store itself: inputs pinned to the CURRENT published release (the implicit
+// contract pre-#1102, kept for callers that do not declare a pin).
 func (s *PostgresStore) ReleaseServerResolveInputs(ctx context.Context, orgID string) (*engine.ReleaseServerInputs, error) {
 	return ReleaseServerInputsFromStore(ctx, s, orgID)
 }
 
+// ErrReleaseNotPublished is returned when a consumer pins an exact release
+// that is not published: the pin means exactly that release, so serving
+// anything else (current, draft) would break the #1102 consumer contract.
+var ErrReleaseNotPublished = errors.New("library release is not published")
+
+// ReleaseServerInputsForRelease (#1102 Slice D) assembles the shared resolve
+// inputs pinned to ONE explicitly declared release — the consumer-side
+// contract: the caller declares which release it consumes and the inputs
+// come from that release's frozen blobs, never from current or live rows.
+func ReleaseServerInputsForRelease(ctx context.Context, store ReleaseServerInputsReader, orgID string, releaseID uuid.UUID) (*engine.ReleaseServerInputs, error) {
+	release, err := store.GetReleaseByID(ctx, releaseID)
+	if err != nil {
+		return nil, fmt.Errorf("load pinned release: %w", err)
+	}
+	if release.Status != domain.ReleaseStatusPublished {
+		return nil, fmt.Errorf("%w: %s is %s", ErrReleaseNotPublished, releaseID, release.Status)
+	}
+	return assembleReleaseInputs(ctx, store, release, orgID)
+}
+
 // ReleaseServerInputsFromStore is the shared inputs orchestration.
 func ReleaseServerInputsFromStore(ctx context.Context, store ReleaseServerInputsReader, orgID string) (*engine.ReleaseServerInputs, error) {
-	inputs := &engine.ReleaseServerInputs{
-		ProfilesByID: map[string]domain.HardwareProfile{},
-	}
 	release, err := store.GetCurrentPublishedRelease(ctx, uuid.MustParse(domain.GraneteStandardLibraryID))
 	if err != nil {
 		if !errors.Is(err, ErrLibraryReleaseNotFound) {
 			slog.Error("release server inputs: profile pin load failed", "error", err)
 		}
-		return inputs, nil
+		return &engine.ReleaseServerInputs{
+			ProfilesByID: map[string]domain.HardwareProfile{},
+		}, nil
 	}
 	if release == nil {
-		return inputs, nil
+		return &engine.ReleaseServerInputs{
+			ProfilesByID: map[string]domain.HardwareProfile{},
+		}, nil
+	}
+	return assembleReleaseInputs(ctx, store, release, orgID)
+}
+
+// assembleReleaseInputs builds the shared inputs from one exact release:
+// pinned profiles from its content-addressed blobs, synthesized side recipes
+// and the organization's factory construction policy.
+func assembleReleaseInputs(ctx context.Context, store ReleaseServerInputsReader, release *domain.LibraryRelease, orgID string) (*engine.ReleaseServerInputs, error) {
+	inputs := &engine.ReleaseServerInputs{
+		ProfilesByID: map[string]domain.HardwareProfile{},
 	}
 	inputs.LibraryReleaseID = release.ID.String()
 
 	profiles, err := store.HardwareProfilesForRelease(ctx, release.ID)
 	if err != nil {
+		// Honest degradation (#875/#916 contract): a release whose pinned
+		// blobs cannot load resolves with EMPTY profile inputs (relationships
+		// surface TECHNICAL_PROFILE_REQUIRED) — never with live rows instead.
 		slog.Error("release server inputs: pinned profile load failed", "release", release.ID, "error", err)
 		return inputs, nil
 	}

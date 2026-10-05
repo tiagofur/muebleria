@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   GraneteApiClient,
   GraneteApiError,
+  type HardwareProfile,
   type LibraryReleaseSummary,
   type StandardDraftDiffReport,
   type StandardDraftValidationReport,
@@ -85,6 +86,15 @@ export function useStandardLibraryWorkspace({
   } | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // #1102 Slice D: the simulated consumer — an explicit release pin and the
+  // pinned content it can read. Publish changes NOTHING here until the pin
+  // moves (its own update).
+  const [consumerPin, setConsumerPin] = useState<string | null>(null);
+  const [consumerProfiles, setConsumerProfiles] = useState<
+    ReadonlyArray<HardwareProfile>
+  >([]);
+  const [consumerLoading, setConsumerLoading] = useState(false);
+  const [consumerError, setConsumerError] = useState<string | null>(null);
 
   const fetchState = useCallback(
     async (client: GraneteApiClient, authToken: string) => {
@@ -248,10 +258,46 @@ export function useStandardLibraryWorkspace({
     }
   }, [baseUrl, token, currentDraft, fetchState]);
 
+  // #1102 Slice D: the pinned consumer reads its release's frozen blobs —
+  // the same pinned read the resolve inputs use.
+  useEffect(() => {
+    if (!enabled || !token || !consumerPin) return;
+    let cancelled = false;
+    const client = new GraneteApiClient(baseUrl);
+    setConsumerLoading(true);
+    client
+      .getHardwareProfilesForRelease(token, consumerPin)
+      .then((profiles) => {
+        if (cancelled) return;
+        setConsumerProfiles(profiles);
+        setConsumerError(null);
+        setConsumerLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setConsumerLoading(false);
+        setConsumerError('No se pudo leer el contenido del release pineado.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl, token, enabled, consumerPin]);
+
+  const pinConsumerRelease = useCallback((releaseId: string | null) => {
+    setConsumerPin(releaseId);
+    setConsumerProfiles([]);
+    setConsumerError(null);
+  }, []);
+
   return {
     currentPublished,
     publishedReleases,
     currentDraft,
+    consumerPin,
+    pinConsumerRelease,
+    consumerProfiles,
+    consumerLoading,
+    consumerError,
     draftReleases,
     suggestedVersion,
     loading,

@@ -434,6 +434,15 @@ module Granete
           raise LayoutResolutionError, "Error de conexión al resolver composición: #{e.message}"
         end
 
+        # #1102 Slice D: the consumer's library release pin — a callable
+        # returning [org_id, release_id] (or nil). When it yields a release,
+        # every authoring resolve is pinned to it via
+        # furniture.libraryReleaseId: the server resolves the manufacturing
+        # inputs from THAT release's frozen blobs and an unpublished pin
+        # fails closed. Absent → the server's current published release, as
+        # before this field existed.
+        attr_accessor :library_pin_provider
+
         # #477 — submits the versioned authoring resolve request and parses
         # the authoritative result. The intent rides the POST body by
         # contract; this transport never appends authoring query parameters.
@@ -442,6 +451,7 @@ module Granete
         def resolve_authoring(request_payload)
           return nil unless @transport&.configured? && @auth_provider&.configured?
 
+          pin_request_payload(request_payload)
           @auth_provider.refresh_if_needed if @auth_provider.respond_to?(:refresh_if_needed)
           response = @transport.request(
             { 'method' => 'POST', 'path' => '/furniture/authoring/resolve', 'body' => request_payload },
@@ -464,6 +474,26 @@ module Granete
         end
 
         private
+
+        # Applies the consumer's library release pin to one resolve payload
+        # (mutates the caller's hash in place — the payload is built per
+        # request and travels exactly once). Never raises: a pin-lookup
+        # failure resolves WITHOUT the pin (server falls back to current),
+        # never blocks authoring.
+        def pin_request_payload(request_payload)
+          return unless @library_pin_provider.respond_to?(:call)
+          return unless request_payload.is_a?(Hash) && request_payload['furniture'].is_a?(Hash)
+
+          pinned = @library_pin_provider.call
+          return unless pinned.is_a?(Array) && pinned.length == 2
+
+          org_id, release_id = pinned
+          return if org_id.to_s.strip.empty? || release_id.to_s.strip.empty?
+
+          request_payload['furniture']['libraryReleaseId'] = release_id
+        rescue StandardError => e
+          @logger&.info('library_pin_lookup_failed', error: e)
+        end
 
         def fetch_contract(force: false)
           unless @transport&.configured? && @auth_provider&.configured?

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -14,6 +15,7 @@ import (
 type fakeInputsReader struct {
 	release     *domain.LibraryRelease
 	releaseErr  error
+	pinned      *domain.LibraryRelease
 	profiles    []domain.HardwareProfile
 	assignments []domain.ComponentSideAssignment
 	overlay     *domain.LibraryOverlay
@@ -22,6 +24,13 @@ type fakeInputsReader struct {
 
 func (f *fakeInputsReader) GetCurrentPublishedRelease(context.Context, uuid.UUID) (*domain.LibraryRelease, error) {
 	return f.release, f.releaseErr
+}
+
+func (f *fakeInputsReader) GetReleaseByID(_ context.Context, id uuid.UUID) (*domain.LibraryRelease, error) {
+	if f.pinned == nil || f.pinned.ID != id {
+		return nil, ErrLibraryReleaseNotFound
+	}
+	return f.pinned, nil
 }
 
 func (f *fakeInputsReader) HardwareProfilesForRelease(context.Context, uuid.UUID) ([]domain.HardwareProfile, error) {
@@ -122,6 +131,50 @@ func TestReleaseServerInputsFromStore(t *testing.T) {
 		reader := &fakeInputsReader{overlayErr: errors.New("db down")}
 		if _, err := ReleaseServerInputsFromStore(context.Background(), reader, "not-a-uuid"); err != nil {
 			t.Fatalf("unparseable org must degrade: %v", err)
+		}
+	})
+}
+
+// TestReleaseServerInputsForRelease (#1102 Slice D): the consumer-declared
+// pin — inputs from exactly that release, fail-closed on anything else.
+func TestReleaseServerInputsForRelease(t *testing.T) {
+	ctx := context.Background()
+	orgID := "11111111-1111-1111-1111-111111111111"
+	pinID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	t.Run("assembles inputs from exactly the pinned published release", func(t *testing.T) {
+		publishedAt := time.Now()
+		reader := &fakeInputsReader{
+			pinned:   &domain.LibraryRelease{ID: pinID, Status: domain.ReleaseStatusPublished, PublishedAt: &publishedAt},
+			profiles: []domain.HardwareProfile{{ID: "prof-pin", Revision: "r1", Active: true}},
+		}
+		inputs, err := ReleaseServerInputsForRelease(ctx, reader, orgID, pinID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if inputs.LibraryReleaseID != pinID.String() {
+			t.Fatalf("release pin = %q", inputs.LibraryReleaseID)
+		}
+		if inputs.ProfilesByID["prof-pin"].ID != "prof-pin" {
+			t.Fatalf("profiles = %+v", inputs.ProfilesByID)
+		}
+	})
+
+	t.Run("pin to a draft fails closed with ErrReleaseNotPublished", func(t *testing.T) {
+		reader := &fakeInputsReader{
+			pinned: &domain.LibraryRelease{ID: pinID, Status: domain.ReleaseStatusDraft},
+		}
+		_, err := ReleaseServerInputsForRelease(ctx, reader, orgID, pinID)
+		if !errors.Is(err, ErrReleaseNotPublished) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+
+	t.Run("pin to an unknown release fails closed", func(t *testing.T) {
+		reader := &fakeInputsReader{}
+		_, err := ReleaseServerInputsForRelease(ctx, reader, orgID, pinID)
+		if !errors.Is(err, ErrLibraryReleaseNotFound) {
+			t.Fatalf("err = %v", err)
 		}
 	})
 }

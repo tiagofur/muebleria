@@ -91,3 +91,8 @@ export {
   LibraryPublishHistoryPanel,
   type LibraryPublishHistoryPanelProps,
 } from './LibraryPublishHistoryPanel';
+
+export {
+  LibraryConsumerViewPanel,
+  type LibraryConsumerViewPanelProps,
+} from './LibraryConsumerViewPanel';

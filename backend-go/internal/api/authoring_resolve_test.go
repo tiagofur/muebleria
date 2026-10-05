@@ -1447,6 +1447,63 @@ func TestAuthoringResolveAuthAndCapability(t *testing.T) {
 	}
 }
 
+// TestAuthoringResolveHonorsConsumerReleasePin (#1102 Slice D): the optional
+// furniture.libraryReleaseId pin — inputs from exactly that release, echoed
+// back in the envelope; unpublished/unknown pins fail closed; a malformed id
+// is a transport rejection.
+func TestAuthoringResolveHonorsConsumerReleasePin(t *testing.T) {
+	server, token := authoringStubServer(t)
+	stub := server.Store.(*stubStore)
+	revision := authoringCatalogRevision(t, server)
+	pinID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+
+	request := func(pin string) authoringResolveRequest {
+		return authoringFixtureRequest(revision, authoringResolveFurniture{
+			FurnitureDefinitionID: authoringFixtureModuleID,
+			LibraryReleaseID:      pin,
+		})
+	}
+
+	t.Run("published pin resolves and is echoed back", func(t *testing.T) {
+		stub.releaseByID = map[uuid.UUID]*domain.LibraryRelease{
+			pinID: {ID: pinID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.3.4", Status: domain.ReleaseStatusPublished},
+		}
+		rec := postAuthoringResolve(server, token, "", request(pinID.String()))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), pinID.String()) {
+			t.Fatalf("pinned release id not echoed: %s", rec.Body.String())
+		}
+	})
+
+	t.Run("draft pin fails closed", func(t *testing.T) {
+		stub.releaseByID[pinID].Status = domain.ReleaseStatusDraft
+		rec := postAuthoringResolve(server, token, "", request(pinID.String()))
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "LIBRARY_RELEASE_UNAVAILABLE") {
+			t.Fatalf("body = %s", rec.Body.String())
+		}
+	})
+
+	t.Run("unknown pin fails closed", func(t *testing.T) {
+		unknown := uuid.MustParse("22222222-2222-2222-2222-222222229999")
+		rec := postAuthoringResolve(server, token, "", request(unknown.String()))
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("malformed pin is a transport rejection", func(t *testing.T) {
+		rec := postAuthoringResolve(server, token, "", request("not-a-uuid"))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+}
+
 func TestAuthoringResolveTransportFailClosed(t *testing.T) {
 	server, token := authoringStubServer(t)
 	valid := authoringResolveFurniture{
