@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Hardware } from '@granete/domain';
+import type { Hardware, MaterialBoard } from '@granete/domain';
 import { APIWorkspaceRepository } from './apiWorkspaceRepository';
 import type { Catalog } from '@granete/domain';
 import { ProjectInlineUpdateHttpError } from './workspaceRepository';
@@ -1839,7 +1839,7 @@ describe('APIWorkspaceRepository simple families concurrency (#1091 / #443 slice
     active: true,
     version,
   });
-  const matDomain = (id = 'mat-1'): Parameters<Parameters<APIWorkspaceRepository['saveCatalog']>[0]['materials']['push']>[0] =>
+  const matDomain = (id = 'mat-1'): MaterialBoard =>
     ({
       id,
       code: 'X1',
@@ -1852,12 +1852,9 @@ describe('APIWorkspaceRepository simple families concurrency (#1091 / #443 slice
       wastePercent: 0,
       costPerM2: 1,
       active: true,
-    }) as never;
+    }) as unknown as MaterialBoard;
 
-  const saveCatalogWith = async (
-    repo: APIWorkspaceRepository,
-    materials: Parameters<Parameters<APIWorkspaceRepository['saveCatalog']>[0]['materials']['push']>[0][],
-  ) => {
+  const saveCatalogWith = async (repo: APIWorkspaceRepository, materials: MaterialBoard[]) => {
     await repo.saveCatalog({
       materials,
       edges: [],

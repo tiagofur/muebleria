@@ -197,6 +197,25 @@ func (f *fixture) want(t *testing.T, method, path, token string, body any, accep
 	return nil
 }
 
+// wantIfMatch issues a guarded write carrying the expected version as
+// If-Match (#443/#448) and demands one of the accepted statuses.
+func (f *fixture) wantIfMatch(t *testing.T, method, path, token string, body any, version int64, accepted ...int) []byte {
+	t.Helper()
+	return f.wantWithHeaders(t, method, path, token, body, map[string]string{"If-Match": fmt.Sprintf(`"v%d"`, version)}, accepted...)
+}
+
+func (f *fixture) wantWithHeaders(t *testing.T, method, path, token string, body any, extraHeaders map[string]string, accepted ...int) []byte {
+	t.Helper()
+	status, raw, _ := f.doWithHeaders(t, method, path, token, body, extraHeaders)
+	for _, code := range accepted {
+		if status == code {
+			return raw
+		}
+	}
+	t.Fatalf("%s %s: got status %d (want one of %v) body=%s", method, path, status, accepted, truncate(raw))
+	return nil
+}
+
 func (f *fixture) decode(t *testing.T, method, path, token string, body any, accepted int, dst any) {
 	t.Helper()
 	raw := f.want(t, method, path, token, body, accepted)
