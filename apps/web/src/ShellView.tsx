@@ -497,6 +497,8 @@ export interface ShellViewCtx {
   readonly showAdminUsers: boolean;
   readonly showCosts: boolean;
   readonly showOnboardingTour: boolean;
+  readonly onboardingOffered: boolean;
+  readonly dismissOnboardingOffer: () => void;
   readonly showcasePhotos: readonly ShowcasePhotoItem[];
   readonly startEngineering: (projectId: string) => void;
   readonly stockCatalog: StockCatalogView;
@@ -787,6 +789,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     setMaterialActive,
     setShowOnboardingTour,
     setStructureActive,
+    dismissOnboardingOffer,
+    onboardingOffered,
     showAdminUsers,
     showCosts,
     showOnboardingTour,
@@ -1077,6 +1081,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           {...homeCommercialSummariesProps(session, commercialSummaries)}
           projectsCount={projects.length}
           onOpenProject={onDashboardOpenProject}
+          onOpenQuotes={() => onNavigate('quotes')}
+          onOpenTour={() => {
+            dismissOnboardingOffer();
+            setShowOnboardingTour(true);
+          }}
+          onboardingOffered={onboardingOffered}
+          onDismissOnboardingOffer={dismissOnboardingOffer}
+          isDemoWorkspace={session === 'guest'}
           onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
           onNewModule={canMutateModules ? onDashboardNewModule : undefined}
           onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}

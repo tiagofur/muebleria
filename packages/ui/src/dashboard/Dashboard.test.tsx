@@ -614,3 +614,135 @@ describe('Inicio recent cards — commercial authority (#642)', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Dashboard S2 (#1116)', () => {
+  const draftSummary = (projectId: string): ProjectCommercialSummary => ({
+    projectId,
+    projectName: 'Cocina Ana',
+    currency: 'MXN',
+    quoteStatus: 'draft',
+    isLegacy: false,
+    furnitureQuantity: 1,
+    commercialActivityAt: '2026-08-10T12:00:00Z',
+  });
+
+  it('offers the onboarding tour once via the opt-in card, never automatically', async () => {
+    const user = userEvent.setup();
+    const onOpenTour = vi.fn();
+    const onDismiss = vi.fn();
+    const { rerender } = render(
+      <Dashboard
+        {...baseProps}
+        onboardingOffered
+        onOpenTour={onOpenTour}
+        onDismissOnboardingOffer={onDismiss}
+      />,
+    );
+    const card = screen.getByTestId('dashboard-tour-card');
+    expect(card.textContent).toContain('¿Primera vez en Granete?');
+
+    await user.click(screen.getByTestId('dashboard-tour-card-open'));
+    expect(onOpenTour).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Dashboard
+        {...baseProps}
+        onboardingOffered={false}
+        onOpenTour={onOpenTour}
+        onDismissOnboardingOffer={onDismiss}
+      />,
+    );
+    expect(screen.queryByTestId('dashboard-tour-card')).toBeNull();
+
+    cleanup();
+    render(<Dashboard {...baseProps} />);
+    expect(screen.queryByTestId('dashboard-tour-card')).toBeNull();
+  });
+
+  it('dismisses the tour card via «No, gracias»', async () => {
+    const user = userEvent.setup();
+    const onDismiss = vi.fn();
+    render(
+      <Dashboard
+        {...baseProps}
+        onboardingOffered
+        onOpenTour={vi.fn()}
+        onDismissOnboardingOffer={onDismiss}
+      />,
+    );
+    await user.click(screen.getByTestId('dashboard-tour-card-dismiss'));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('suggests resuming a draft quote only from real summaries and without exceptions', async () => {
+    const user = userEvent.setup();
+    const onOpenProject = vi.fn();
+    const summaries = new Map<string, ProjectCommercialSummary>([
+      ['prj-1', draftSummary('prj-1')],
+    ]);
+    const first = render(
+      <Dashboard
+        {...baseProps}
+        commercialSummaries={summaries}
+        commercialSummariesStatus="ready"
+        opsExceptions={[]}
+        onOpenProject={onOpenProject}
+      />,
+    );
+    const strip = screen.getByTestId('dashboard-resume-draft');
+    expect(strip.textContent).toContain('Cocina Ana');
+    expect(strip.textContent).toContain('borrador');
+    await user.click(screen.getByTestId('dashboard-resume-draft-action'));
+    expect(onOpenProject).toHaveBeenCalledWith('prj-1');
+
+    // Con excepciones activas, el foco es el panel de excepciones: sin franja.
+    first.rerender(
+      <Dashboard
+        {...baseProps}
+        commercialSummaries={summaries}
+        commercialSummariesStatus="ready"
+        opsExceptions={[
+          {
+            id: 'ex-1',
+            severity: 'critical',
+            title: 'Sin fotos',
+            hint: 'Subí fotos',
+            projectId: 'prj-1',
+          } as never,
+        ]}
+        onOpenProject={onOpenProject}
+      />,
+    );
+    expect(screen.queryByTestId('dashboard-resume-draft')).toBeNull();
+  });
+
+  it('does not invent a suggestion without ready summaries', () => {
+    render(<Dashboard {...baseProps} />);
+    expect(screen.queryByTestId('dashboard-resume-draft')).toBeNull();
+  });
+
+  it('makes the stat cards navigable to their lists', async () => {
+    const user = userEvent.setup();
+    const onOpenQuotes = vi.fn();
+    const onOpenModules = vi.fn();
+    const onOpenMaterials = vi.fn();
+    renderDashboard({ onOpenQuotes, onOpenModules, onOpenMaterials });
+
+    await user.click(screen.getByTestId('stat-active-projects'));
+    expect(onOpenQuotes).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId('stat-monthly-quoted'));
+    expect(onOpenQuotes).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByTestId('stat-modules'));
+    expect(onOpenModules).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByTestId('stat-materials'));
+    expect(onOpenMaterials).toHaveBeenCalledTimes(1);
+  });
+
+  it('brands recent cards with a Demo chip in a guest workspace', () => {
+    renderDashboard({ isDemoWorkspace: true });
+    expect(screen.getAllByTestId('dashboard-demo-chip')[0]).toBeTruthy();
+    cleanup();
+    renderDashboard({});
+    expect(screen.queryByTestId('dashboard-demo-chip')).toBeNull();
+  });
+});

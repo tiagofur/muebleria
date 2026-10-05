@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   Package,
   Plus,
+  Sparkles,
   Store,
 } from 'lucide-react';
 import { EmptyState, PageHeader, PageLoading } from '../common';
@@ -115,6 +116,16 @@ export type DashboardProps = {
    * decoration later. Omitted for roles without the portfolio dashboard.
    */
   readonly opsExceptions?: readonly OpsException[];
+  /** Navigate to the quotes list — clickable stat cards (#1116). */
+  readonly onOpenQuotes?: () => void;
+  /** Tour opt-in (#1116 §4.9): open the onboarding tour on explicit request. */
+  readonly onOpenTour?: () => void;
+  /** True while the one-time onboarding offer card should still be shown. */
+  readonly onboardingOffered?: boolean;
+  /** Dismiss the onboarding offer for good (marks the one-time flag). */
+  readonly onDismissOnboardingOffer?: () => void;
+  /** Guest/local demo workspace: brand recent cards so demo data is explicit. */
+  readonly isDemoWorkspace?: boolean;
 };
 
 type GettingStartedStep = {
@@ -152,6 +163,11 @@ export function Dashboard({
   onAnalyticsPeriodChange,
   analyticsLoading = false,
   opsExceptions,
+  onOpenQuotes,
+  onOpenTour,
+  onboardingOffered = false,
+  onDismissOnboardingOffer,
+  isDemoWorkspace = false,
 }: DashboardProps): ReactNode {
   if (loading) {
     return (
@@ -221,6 +237,18 @@ export function Dashboard({
     },
   ];
 
+  // #1116 «Seguí donde dejaste»: la primera cotización reciente con una
+  // revisión en borrador según el batch comercial #642 — la misma autoridad
+  // que la lista de Cotizaciones. Sólo con datos reales: sin resumen listo o
+  // sin borradores no se sugiere nada.
+  const summariesReady = commercialSummariesStatus === 'ready';
+  const draftSuggestion =
+    summariesReady && opsExceptions && opsExceptions.length === 0
+      ? (recentProjects.find(
+          (project) => commercialSummaries?.get(project.id)?.quoteStatus === 'draft',
+        ) ?? null)
+      : null;
+
   return (
     <section className="dashboard" aria-label="Inicio">
       <PageHeader
@@ -270,6 +298,46 @@ export function Dashboard({
           </>
         }
       />
+
+      {/* #1116 §4.9: el tour es opt-in — card descartable, nunca modal auto-abierto. */}
+      {onboardingOffered && onOpenTour ? (
+        <section
+          className="dashboard-tour-card"
+          aria-labelledby="dashboard-tour-card-title"
+          data-testid="dashboard-tour-card"
+        >
+          <Sparkles size={18} strokeWidth={1.5} aria-hidden />
+          <div className="dashboard-tour-card__body">
+            <h3 id="dashboard-tour-card-title" className="dashboard-tour-card__title">
+              ¿Primera vez en Granete?
+            </h3>
+            <p className="dashboard-tour-card__lead">
+              Recorré el taller en 3 pasos: diseño 3D, catálogo paramétrico y
+              exportación a producción.
+            </p>
+          </div>
+          <div className="dashboard-tour-card__actions">
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={onOpenTour}
+              data-testid="dashboard-tour-card-open"
+            >
+              Ver el tour
+            </button>
+            {onDismissOnboardingOffer ? (
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                onClick={onDismissOnboardingOffer}
+                data-testid="dashboard-tour-card-dismiss"
+              >
+                No, gracias
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {showGettingStarted ? (
         <section
@@ -343,6 +411,24 @@ export function Dashboard({
         </section>
       ) : (
         <>
+          {/* #1116: cuando no hay excepciones, la respuesta a «¿qué hago hoy?»
+              es seguir la cotización en borrador — sólo con datos reales. */}
+          {draftSuggestion && onOpenProject ? (
+            <div className="dashboard-resume" data-testid="dashboard-resume-draft">
+              <p className="dashboard-resume__text">
+                <strong>Seguí donde dejaste:</strong> «{draftSuggestion.name}»
+                tiene una cotización en borrador.
+              </p>
+              <button
+                type="button"
+                className="btn btn--secondary btn--small"
+                onClick={() => onOpenProject(draftSuggestion.id)}
+                data-testid="dashboard-resume-draft-action"
+              >
+                Abrir cotización
+              </button>
+            </div>
+          ) : null}
           {opsExceptions && opsExceptions.length > 0 ? (
             <OpsExceptionsPanel exceptions={opsExceptions} onOpenProject={onOpenProject} />
           ) : null}
@@ -355,43 +441,73 @@ export function Dashboard({
             aria-label="Indicadores"
             data-testid={isSales ? 'dashboard-stats-sales' : 'dashboard-stats'}
           >
-            <li className={`stat-card stat-card--stack${isSales ? ' stat-card--sales' : ''}`} data-testid="stat-active-projects">
-              <span className="stat-card__icon" aria-hidden>
-                <FileText size={18} strokeWidth={1.5} />
-              </span>
-              <p className="stat-card__label">Cotizaciones activas</p>
-              <p className="stat-card__value">{stats.activeProjects}</p>
+            {/* #1116: los indicadores navegan — cada card lleva a su lista. */}
+            <li>
+              <button
+                type="button"
+                className={`stat-card stat-card--button stat-card--stack${isSales ? ' stat-card--sales' : ''}`}
+                onClick={onOpenQuotes}
+                disabled={!onOpenQuotes}
+                data-testid="stat-active-projects"
+              >
+                <span className="stat-card__icon" aria-hidden>
+                  <FileText size={18} strokeWidth={1.5} />
+                </span>
+                <p className="stat-card__label">Cotizaciones activas</p>
+                <p className="stat-card__value">{stats.activeProjects}</p>
+              </button>
             </li>
-            <li
-              className={`stat-card stat-card--stack stat-card--emphasis${isSales ? ' stat-card--sales' : ''}`}
-              data-testid="stat-monthly-quoted"
-            >
-              <span className="stat-card__icon" aria-hidden>
-                <DollarSign size={18} strokeWidth={1.5} />
-              </span>
-              <p className="stat-card__label">
-                {isSales ? 'Tu total del mes' : 'Total cotizado del mes'}
-              </p>
-              <p className="stat-card__value">
-                {formatDashboardMoney(stats.monthlyQuotedTotal)}
-              </p>
+            <li>
+              <button
+                type="button"
+                className={`stat-card stat-card--button stat-card--stack stat-card--emphasis${isSales ? ' stat-card--sales' : ''}`}
+                onClick={onOpenQuotes}
+                disabled={!onOpenQuotes}
+                data-testid="stat-monthly-quoted"
+              >
+                <span className="stat-card__icon" aria-hidden>
+                  <DollarSign size={18} strokeWidth={1.5} />
+                </span>
+                <p className="stat-card__label">
+                  {isSales ? 'Tu total del mes' : 'Total cotizado del mes'}
+                </p>
+                <p className="stat-card__value">
+                  {formatDashboardMoney(stats.monthlyQuotedTotal)}
+                </p>
+              </button>
             </li>
             {!isSales ? (
-              <li className="stat-card stat-card--stack" data-testid="stat-modules">
-                <span className="stat-card__icon" aria-hidden>
-                  <Package size={18} strokeWidth={1.5} />
-                </span>
-                <p className="stat-card__label">Muebles en catálogo</p>
-                <p className="stat-card__value">{stats.modulesCount}</p>
+              <li>
+                <button
+                  type="button"
+                  className="stat-card stat-card--button stat-card--stack"
+                  onClick={onOpenModules}
+                  disabled={!onOpenModules}
+                  data-testid="stat-modules"
+                >
+                  <span className="stat-card__icon" aria-hidden>
+                    <Package size={18} strokeWidth={1.5} />
+                  </span>
+                  <p className="stat-card__label">Muebles en catálogo</p>
+                  <p className="stat-card__value">{stats.modulesCount}</p>
+                </button>
               </li>
             ) : null}
             {!isSales ? (
-              <li className="stat-card stat-card--stack" data-testid="stat-materials">
-                <span className="stat-card__icon" aria-hidden>
-                  <Layers size={18} strokeWidth={1.5} />
-                </span>
-                <p className="stat-card__label">Materiales activos</p>
-                <p className="stat-card__value">{stats.activeMaterials}</p>
+              <li>
+                <button
+                  type="button"
+                  className="stat-card stat-card--button stat-card--stack"
+                  onClick={onOpenMaterials}
+                  disabled={!onOpenMaterials}
+                  data-testid="stat-materials"
+                >
+                  <span className="stat-card__icon" aria-hidden>
+                    <Layers size={18} strokeWidth={1.5} />
+                  </span>
+                  <p className="stat-card__label">Materiales activos</p>
+                  <p className="stat-card__value">{stats.activeMaterials}</p>
+                </button>
               </li>
             ) : null}
           </ul>
@@ -623,6 +739,15 @@ export function Dashboard({
                         <div className="dashboard-recent-card__top">
                           <h4 className="dashboard-recent-card__name">
                             {identity.name}
+                            {/* #1116: el dato demo se marca siempre, no sólo en el tour. */}
+                            {isDemoWorkspace ? (
+                              <span
+                                className="dashboard-recent-card__demo"
+                                data-testid="dashboard-demo-chip"
+                              >
+                                Demo
+                              </span>
+                            ) : null}
                           </h4>
                           <CommercialStatusBadge
                             summary={summary}
@@ -639,9 +764,7 @@ export function Dashboard({
                             <span className="dashboard-recent-card__date">
                               Act. {formatIsoDate(activityDate)}
                             </span>
-                          ) : (
-                            <span className="dashboard-recent-card__date" />
-                          )}
+                          ) : null}
                           {summariesReady && summary?.saleTotal != null ? (
                             <span className="dashboard-recent-card__price">
                               {formatMoneyDisplay(summary.saleTotal, {

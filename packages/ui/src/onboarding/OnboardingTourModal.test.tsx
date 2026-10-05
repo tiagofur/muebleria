@@ -46,21 +46,28 @@ describe('OnboardingTourModal', () => {
   it('renders step 1 when isOpen is true', () => {
     render(<OnboardingTourModal isOpen={true} onClose={vi.fn()} />);
     expect(screen.getByTestId('onboarding-tour-modal')).toBeTruthy();
-    expect(screen.getByText(/¡Bienvenido a Granete!/i)).toBeTruthy();
+    expect(screen.getAllByText(/Arrancá con Cocina López en 3D/i).length).toBeGreaterThan(0);
+    // #1116: el paso se anuncia por aria-live y el copy es voseo sin claims.
+    expect(screen.getByTestId('onboarding-tour-live').textContent).toContain(
+      'Paso 1 de 3',
+    );
     expect(screen.getByTestId('onboarding-tour-next')).toBeTruthy();
   });
 
   it('advances steps when clicking Siguiente', async () => {
     const user = userEvent.setup();
     render(<OnboardingTourModal isOpen={true} onClose={vi.fn()} />);
-    
+
     // Step 1 -> Step 2
     await user.click(screen.getByTestId('onboarding-tour-next'));
-    expect(screen.getByText(/Catálogo de Muebles LatAm/i)).toBeTruthy();
+    expect(screen.getAllByText(/Muebles paramétricos listos para adaptar/i).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('onboarding-tour-live').textContent).toContain(
+      'Paso 2 de 3',
+    );
 
     // Step 2 -> Step 3
     await user.click(screen.getByTestId('onboarding-tour-next'));
-    expect(screen.getByText(/Exportación a Producción en 1 Clic/i)).toBeTruthy();
+    expect(screen.getAllByText(/Exportá a producción cuando apruebes/i).length).toBeGreaterThan(0);
     expect(screen.getByTestId('onboarding-tour-finish')).toBeTruthy();
   });
 
@@ -72,7 +79,7 @@ describe('OnboardingTourModal', () => {
     expect(screen.getByTestId('onboarding-tour-prev')).toBeTruthy();
 
     await user.click(screen.getByTestId('onboarding-tour-prev'));
-    expect(screen.getByText(/¡Bienvenido a Granete!/i)).toBeTruthy();
+    expect(screen.getAllByText(/Arrancá con Cocina López en 3D/i).length).toBeGreaterThan(0);
   });
 
   it('calls onLoadDemoProject and onClose when clicking Finish', async () => {
@@ -154,7 +161,7 @@ describe('OnboardingTourModal', () => {
     const labelledBy = dialog.getAttribute('aria-labelledby');
     expect(labelledBy).toBeTruthy();
     expect(document.getElementById(labelledBy!)?.textContent).toBe(
-      'Tour de Bienvenida — Granete App',
+      'Tour de bienvenida — Granete',
     );
   });
 
