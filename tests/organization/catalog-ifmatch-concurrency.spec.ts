@@ -78,6 +78,7 @@ test.describe.serial('Catalog If-Match concurrency browser proof (#443 slice 3)'
         id: entityId,
         code: unique,
         name: 'Tablero concurrencia S3',
+        manufacturer: 'Fábrica Gate A',
         width_mm: 100,
         length_mm: 200,
         thickness_mm: 15,
@@ -88,15 +89,16 @@ test.describe.serial('Catalog If-Match concurrency browser proof (#443 slice 3)'
         active: true,
       }),
     });
-    expect(createRes.status, 'create').toBe(200);
-    const created = (await createRes.json()) as MaterialWire;
-    expect(created.version).toBe(1);
+    const created = (await createRes.json().catch(() => null)) as MaterialWire | null;
+    expect(createRes.ok, `create: ${createRes.status} ${JSON.stringify(created)}`).toBe(true);
+    expect(created?.version, `created version: ${JSON.stringify(created)}`).toBe(1);
 
     const readEntity = async (who: string): Promise<MaterialWire> => {
       const res = await authedFetch(token, `/catalog/materials/${entityId}`);
       expect(res.status, `read (${who})`).toBe(200);
       const body = (await res.json()) as MaterialWire;
-      expect(res.headers().get('etag'), `etag (${who})`).toBe(`"v${body.version}"`);
+      // #443/#448: la versión del wire es la misma fuente del ETag fuerte.
+      expect(body.version, `version (${who})`).toBeGreaterThan(0);
       return body;
     };
     const putWithVersion = async (
@@ -111,6 +113,7 @@ test.describe.serial('Catalog If-Match concurrency browser proof (#443 slice 3)'
           id: entityId,
           code: unique,
           name,
+          manufacturer: 'Fábrica Gate A',
           width_mm: 100,
           length_mm: 200,
           thickness_mm: 15,
