@@ -1683,4 +1683,93 @@ test('R3b apply: a params-only draft omits materialChoiceModes; a busy controlle
   assert(busyToast && busyToast.msg.includes('mutación en curso'), 'the busy state is named honestly');
 });
 
+// #1046 S3 — Herrajes del mueble: the card renders ONLY the groups the
+// furniture consumes, a modal pick lands in the shared #784 draft, and the
+// ONE Aplicar sends the group choice inside materialChoices (no new
+// mutation kind; consequences are resolve-authoritative).
+test('hardware groups: card renders consumed groups and a pick rides the draft to Aplicar', () => {
+  const modalCalls = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} },
+      hardwareGroupSelector: {
+        open: (opts) => modalCalls.push(opts)
+      }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+  api.setHardwareCatalog([
+    { id: 'hw-blum', code: 'BIS-CL110', name: 'Bisagra Blum', category: 'hinge', unit: 'piece' },
+    { id: 'hw-eco', code: 'BIS-ECO', name: 'Bisagra económica', category: 'hinge', unit: 'piece' }
+  ]);
+  api.setOptionGroups([
+    { id: 'og-1', code: 'BISAGRA', name: 'Bisagras', kind: 'hardware', required: true, optionIds: ['hw-blum', 'hw-eco'] }
+  ]);
+
+  api.onSelectionChange(furnitureContext({ hardwareGroups: [{ code: 'BISAGRA', chosenHardwareId: 'hw-blum', count: 2 }] }));
+  assert(visible(el(sandbox, 'inspector-hardware-groups-card')), 'the groups card appears for consumed groups');
+  const groupRow = el(sandbox, 'inspector-hardware-groups-container').children[0];
+  assert(el(sandbox, 'inspector-hardware-groups-container').children.length === 1, 'one row per group');
+  // row → head(kv-row) → [k, v, count]; the mock DOM keeps textContent per
+  // node, so the leaf values are asserted directly.
+  const head = groupRow.children[0];
+  assert.strictEqual(head.children[0].textContent, 'Bisagras', 'group name header');
+  assert.strictEqual(head.children[1].textContent, 'Bisagra Blum', 'the chosen member is shown');
+  assert.strictEqual(head.children[2].textContent, '×2', 'the real occurrence count is shown');
+
+  // Cambiar opens the modal with the group's members (catalog authority).
+  const changeBtn = Array.from(groupRow.children)
+    .filter((n) => String(n.tagName).toLowerCase() === 'button')[0];
+  assert.strictEqual(changeBtn.textContent, 'Cambiar herraje');
+  changeBtn.click();
+  assert.strictEqual(modalCalls.length, 1);
+  assert.strictEqual(modalCalls[0].groupLabel, 'Bisagras');
+  assert.strictEqual(modalCalls[0].chosenId, 'hw-blum');
+  assert.deepStrictEqual(modalCalls[0].rows.map((r) => r.id), ['hw-blum', 'hw-eco']);
+
+  // The modal pick lands in the shared draft — pending footer, no mutation yet.
+  const before = sandbox.__bridge.length;
+  modalCalls[0].onPick('hw-eco');
+  assert(sandbox.__bridge.slice(before).every((c) => c.action !== 'update_furniture'), 'a pick never mutates directly');
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0);
+  assert(visible(el(sandbox, 'inspector-footer')), 'the hardware pick is pending in the draft');
+  assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
+  assert.strictEqual(el(sandbox, 'inspector-hardware-groups-container').children[0].children[0].children[1].textContent,
+    'Bisagra económica', 'the row repaints the drafted member');
+
+  el(sandbox, 'btn-apply').click();
+  const submit = sandbox.__mutation.filter((c) => c.action === 'submitUpdate').pop();
+  assert(submit && submit.payload.materialChoices.BISAGRA === 'hw-eco',
+    'the Apply materializes the group choice inside materialChoices');
+  assert.strictEqual(submit.payload.materialChoiceModes.BISAGRA, 'override');
+});
+
+test('hardware groups: no consumed groups means no card, and groups catalog absence disables Cambiar honestly', () => {
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: { hasActiveDefinition: () => false, applyMaterialChoice: () => {} }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+
+  api.onSelectionChange(furnitureContext({ hardwareGroups: [] }));
+  assert(!visible(el(sandbox, 'inspector-hardware-groups-card')), 'no groups consumed, no card noise');
+
+  api.setOptionGroups([]); // offline/local catalog: no groups slice
+  api.onSelectionChange(furnitureContext({ hardwareGroups: [{ code: 'BISAGRA', chosenHardwareId: 'hw-blum', count: 1 }] }));
+  assert(visible(el(sandbox, 'inspector-hardware-groups-card')), 'the scanned group still surfaces');
+  const changeBtn = Array.from(el(sandbox, 'inspector-hardware-groups-container').children[0].children)
+    .filter((n) => String(n.tagName).toLowerCase() === 'button')[0];
+  assert.strictEqual(changeBtn.disabled, true, 'sin grupos de catálogo el Cambiar queda deshabilitado');
+  assert.strictEqual(changeBtn.textContent, 'Cambiar herraje (catálogo sin grupos)');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));

@@ -628,6 +628,16 @@
                 <div id="inspector-materials-container" style="margin-top: var(--space-2);"></div>
               </div>
 
+              <!-- #1046 S3: Herrajes por grupo — sólo los grupos que este
+                   mueble consume (escaneo de hijos gestionados). Elegir un
+                   miembro viaja en el MISMO draft #784 (una mutación
+                   Aplicar); el resolve recalcula posiciones, perforaciones,
+                   demanda y precio. Sin grupos, la card no aparece. -->
+              <div class="card" id="inspector-hardware-groups-card" style="display: none;">
+                <div class="card-title">Herrajes del Mueble</div>
+                <div id="inspector-hardware-groups-container" style="margin-top: var(--space-2);"></div>
+              </div>
+
               <!-- Dock dentro del fieldset: la mutación sigue sometida al
                    switch fail-closed nativo de #476. -->
               <div id="inspector-actionbar" class="action-dock">
@@ -722,6 +732,12 @@
                 </div>
                 <div id="hw-opening-derived-note" class="subhead" style="display: none; color: var(--text-muted); font-size: var(--text-xs); margin-top: var(--space-1);">
                   Al cambiar la apertura del mueble, la posición de este herraje se recalcula.
+                </div>
+                <!-- #1046 S3: el modelo de un placement por grupo se elige a
+                     nivel mueble; la edición por ocurrencia está bloqueada a
+                     propósito (semántica de grupo). -->
+                <div id="hw-group-managed-note" class="subhead" style="display: none; color: var(--text-muted); font-size: var(--text-xs); margin-top: var(--space-1);">
+                  Este herraje se elige por grupo: cambiá el modelo desde Herrajes del mueble (se aplica a todas sus ocurrencias).
                 </div>
               </div>
 
@@ -900,6 +916,37 @@
         </section>
 
       </main>
+
+      <!-- #1046 S3: Hardware Group Selector Modal — same shared
+           selector-modal chrome as the finish selector, one flat member
+           list (groups are small by design). Pure presentation; the pick
+           lands in the caller's draft. -->
+      <div id="hardware-group-modal" class="selector-modal-backdrop" style="display: none;">
+        <div class="selector-modal" role="dialog" aria-modal="true" aria-labelledby="hw-group-modal-title" style="max-width: 480px;">
+          <header class="selector-modal-header">
+            <div class="selector-modal-title-group">
+              <h2 id="hw-group-modal-title" class="selector-modal-title">Elegir herraje</h2>
+              <span id="hw-group-modal-badge" class="selector-modal-role-badge">Grupo: --</span>
+            </div>
+            <button id="btn-hw-group-close" type="button" class="selector-modal-close-btn" aria-label="Cerrar modal">✕</button>
+          </header>
+          <div class="selector-modal-body" style="flex-direction: column; padding: var(--space-3);">
+            <div id="hw-group-list" class="hw-group-list"></div>
+            <div id="hw-group-empty" class="selector-candidate-empty" style="display: none;">
+              <p style="font-size: var(--text-xs); color: var(--text-secondary); margin: 0;">
+                No hay miembros disponibles para este grupo en el catálogo del taller.
+              </p>
+            </div>
+            <p class="subhead" style="font-size: var(--text-xs); color: var(--text-muted); margin: var(--space-2) 0 0 0;">
+              Al aplicar, el mueble se recalcula con el herraje elegido: posiciones, perforaciones, demanda y precio.
+            </p>
+          </div>
+          <footer style="display: flex; gap: var(--space-2); padding: var(--space-3); border-top: 1px solid var(--border-default);">
+            <button id="btn-hw-group-cancel" type="button" class="btn btn-secondary" style="flex: 1;">Cancelar</button>
+            <button id="btn-hw-group-apply" type="button" class="btn btn-primary" style="flex: 1;" disabled>Aplicar</button>
+          </footer>
+        </div>
+      </div>
 
       <!-- Visual Material Option Selector Modal (Slice B - Miller Columns) -->
       <div id="material-selector-modal" class="selector-modal-backdrop" style="display: none;">
@@ -1092,6 +1139,7 @@
          user-accessible open. The Ruby-native selector remains the
          primary path; this modal is the local fallback. -->
     <script src="js/granete-finish-selector.js"></script>
+    <script src="js/granete-hardware-group-selector.js"></script>
 
     <!-- #848 Phase B C4.6: material roles module under window.GraneteUI.
          It owns the shared material/acabados authority: the material
@@ -1464,6 +1512,7 @@
                 categories: payload.materialCategories || []
               });
               window.GraneteUI.inspector.setHardwareCatalog(payload.hardware || []);
+              window.GraneteUI.inspector.setOptionGroups(payload.optionGroups || []);
               window.GraneteUI.media.setCatalogMedia(payload.media);
               if (window.GraneteState) {
                 window.GraneteState.set("catalog", {
@@ -1682,7 +1731,8 @@
         window.GraneteUI.inspectorChild.init({
           showToast: showToast,
           capabilityEnabled: capabilityEnabled,
-          getHardwareCatalog: function () { return window.GraneteUI.inspector.getHardwareCatalog(); }
+          getHardwareCatalog: function () { return window.GraneteUI.inspector.getHardwareCatalog(); },
+          getOptionGroups: function () { return window.GraneteUI.inspector.getOptionGroups(); }
         });
 
         // #848 C4.7: the inspector module owns the selection working copy,

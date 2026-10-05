@@ -66,6 +66,10 @@
   if (window.GraneteUI.inspector) return;
 
   var catalogHardware = [];
+  // #1046 S3: kind=hardware option groups from the SAME pinned catalog
+  // contract (setCatalog). Empty under offline/local catalogs — the groups
+  // UI never invents demo groups.
+  var catalogOptionGroups = [];
 
   // Central selection state (#476): the SelectionContext payload published
   // by the Ruby resolver — one model for every kind
@@ -133,6 +137,9 @@
   var inspectorManufacturingBadge = document.getElementById("inspector-manufacturing-badge");
   var inspectorParamsContainer = document.getElementById("inspector-params-container");
   var inspectorMaterialsCard = document.getElementById("inspector-materials-card");
+  // #1046 S3: per-group hardware model selection card (furniture lane).
+  var inspectorHardwareGroupsCard = document.getElementById("inspector-hardware-groups-card");
+  var inspectorHardwareGroupsContainer = document.getElementById("inspector-hardware-groups-container");
   var inspectorMaterialsContainer = document.getElementById("inspector-materials-container");
   // #529: card Apertura y Accesorios (solo definiciones con doorSwing).
   var inspectorOpeningAccessoriesCard = document.getElementById("inspector-opening-accessories-card");
@@ -282,6 +289,19 @@
     ensureDraft();
     draft.choices[role] = id;
     delete draft.modes[role];
+    updateInspectorFooter();
+  }
+
+  // #1046 S3: a hardware group pick rides the SAME #784 draft lane as a
+  // material pick (group code → chosen hardware id in materialChoices), but
+  // it is NOT gated on canEditMaterialRoles: groups are furniture authoring,
+  // gated by the fieldset's canEditParameters like every edit here.
+  function recordHardwareGroupPick(code, id) {
+    if (!selectedContext || selectedContext.kind !== "furniture") return;
+    if (selectedContext.selectionCount && selectedContext.selectionCount > 1) return;
+    ensureDraft();
+    draft.choices[code] = id;
+    delete draft.modes[code];
     updateInspectorFooter();
   }
 
@@ -481,6 +501,106 @@
            definitionId: selectedContext ? selectedContext.furnitureDefinitionId : null });
   }
 
+  // ------------------------------------------------------------------
+  // #1046 S3 — Herrajes del mueble: one row per hardware option group the
+  // furniture REALLY consumes (SelectionContext.hardwareGroups, scanned
+  // from managed children). Members come from the pinned catalog's
+  // kind=hardware option groups; a pick lands in the shared draft and the
+  // ONE Aplicar re-resolves the furniture (positions, drilling, demand and
+  // price are server-authoritative consequences, never local guesses).
+  // ------------------------------------------------------------------
+  function hardwareUnitLabel(unit) {
+    var labels = { piece: "por unidad", m: "por metro", set: "por juego" };
+    return labels[unit] || (unit ? unit : null);
+  }
+
+  function renderInspectorHardwareGroups() {
+    if (!inspectorHardwareGroupsCard || !inspectorHardwareGroupsContainer) return;
+    var context = selectedContext;
+    var groups = (context && context.kind === "furniture" && Array.isArray(context.hardwareGroups))
+      ? context.hardwareGroups : [];
+    var multi = context && context.selectionCount && context.selectionCount > 1;
+    if (!groups.length || multi) {
+      inspectorHardwareGroupsCard.style.display = "none";
+      return;
+    }
+
+    var groupDefs = {};
+    (catalogOptionGroups || []).forEach(function (group) {
+      if (group && group.code) groupDefs[group.code] = group;
+    });
+
+    inspectorHardwareGroupsContainer.innerHTML = "";
+
+    groups.forEach(function (group) {
+      var def = groupDefs[group.code];
+      // The working draft choice wins over the scanned chosen so a pending
+      // pick repaints immediately; both are the same map the Apply sends.
+      var chosenId = inspectorMaterialChoices[group.code] || group.chosenHardwareId;
+      var chosen = chosenId ? hardwareDefinitionById(chosenId) : null;
+
+      var row = document.createElement("div");
+      row.className = "material-role-block";
+
+      var head = document.createElement("div");
+      head.className = "kv-row";
+      var k = document.createElement("span");
+      k.className = "k";
+      k.textContent = def ? (def.name || group.code) : group.code;
+      var v = document.createElement("span");
+      v.className = "v";
+      v.textContent = chosen ? (chosen.name || chosen.code) : (chosenId || "--");
+      head.appendChild(k);
+      head.appendChild(v);
+      if (group.count && group.count > 1) {
+        var count = document.createElement("span");
+        count.className = "status-badge neutral";
+        count.textContent = "×" + group.count;
+        head.appendChild(count);
+      }
+      row.appendChild(head);
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-sm btn-secondary";
+      btn.style.marginTop = "var(--space-1)";
+      btn.style.width = "100%";
+      var membersKnown = def && Array.isArray(def.optionIds) && def.optionIds.length > 0;
+      btn.textContent = membersKnown ? "Cambiar herraje" : "Cambiar herraje (catálogo sin grupos)";
+      btn.disabled = !membersKnown;
+      btn.addEventListener("click", function () {
+        if (!membersKnown || !window.GraneteUI.hardwareGroupSelector) return;
+        var rows = def.optionIds.map(function (hwId) {
+          var entry = hardwareDefinitionById(hwId);
+          return {
+            id: hwId,
+            name: entry ? (entry.name || entry.code) : hwId,
+            code: entry ? entry.code : null,
+            categoryLabel: entry ? hardwareCategoryLabel(entry.category) : null,
+            unitLabel: entry ? hardwareUnitLabel(entry.unit) : null,
+            notes: entry && entry.notes ? entry.notes : null
+          };
+        });
+        window.GraneteUI.hardwareGroupSelector.open({
+          title: "Elegir " + (def.name || group.code),
+          groupLabel: def.name || group.code,
+          rows: rows,
+          chosenId: chosenId,
+          onPick: function (hwId) {
+            inspectorMaterialChoices[group.code] = hwId;
+            recordHardwareGroupPick(group.code, hwId);
+            renderInspectorHardwareGroups();
+          }
+        });
+      });
+      row.appendChild(btn);
+
+      inspectorHardwareGroupsContainer.appendChild(row);
+    });
+
+    inspectorHardwareGroupsCard.style.display = "block";
+  }
+
   // Repaints the working snapshots from the CONFIRMED context (never from
   // a draft) and re-anchors confirmedBase — used by Descartar and by every
   // honest draft invalidation.
@@ -495,6 +615,8 @@
     if (deps.capabilityEnabled(selectedContext, "canEditMaterialRoles")) {
       renderInspectorMaterialSelectors();
     }
+    // #1046 S3: repintar Herrajes del mueble desde el contexto confirmado.
+    renderInspectorHardwareGroups();
     // #529: repintar Apertura y Accesorios desde el contexto confirmado.
     renderOpeningAccessoriesCard(selectedContext, inspectorParams);
     updateInspectorSummary();
@@ -1240,6 +1362,7 @@
       inspectorMaterialChoices = {};
       draft = null; // fail-closed lane: no draft survives a denied render
       inspectorMaterialsCard.style.display = "none";
+      if (inspectorHardwareGroupsCard) inspectorHardwareGroupsCard.style.display = "none";
       if (inspectorOpeningAccessoriesCard) inspectorOpeningAccessoriesCard.style.display = "none";
       renderOpeningAccessoriesCard(context, inspectorParams);
       updateInspectorFooter();
@@ -1275,6 +1398,8 @@
     if (canEditMaterials) {
       renderInspectorMaterialSelectors();
     }
+    // #1046 S3: card Herrajes del mueble (sólo grupos consumidos).
+    renderInspectorHardwareGroups();
     // #529: card Apertura y Accesorios (nivel mueble, después de params/materiales).
     renderOpeningAccessoriesCard(context, inspectorParams);
 
@@ -1678,6 +1803,8 @@
     getDefinition: function () { return inspectorDef; },
     getMaterialsCard: function () { return inspectorMaterialsCard; },
     setHardwareCatalog: setHardwareCatalog,
+    setOptionGroups: function (groups) { catalogOptionGroups = groups || []; },
+    getOptionGroups: function () { return catalogOptionGroups; },
     getHardwareCatalog: function () { return catalogHardware; }
   };
 })();

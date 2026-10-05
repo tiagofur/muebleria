@@ -2,6 +2,7 @@
 // #848 Phase B: dialog.html loads external JS around its inline bootstrap
 // (granete-media.js, granete-account.js, granete-library.js,
 // granete-configurator.js, granete-finish-selector.js,
+// granete-hardware-group-selector.js,
 // granete-material-roles.js, granete-inspector-child.js,
 // granete-inspector.js, granete-model-binding.js,
 // granete-project-furniture.js, granete-param-form.js). Harnesses execute
@@ -24,6 +25,7 @@ function dialogSources() {
     library: fs.readFileSync(path.join(RESOURCES, 'js/granete-library.js'), 'utf8'),
     configurator: fs.readFileSync(path.join(RESOURCES, 'js/granete-configurator.js'), 'utf8'),
     finishSelector: fs.readFileSync(path.join(RESOURCES, 'js/granete-finish-selector.js'), 'utf8'),
+    hardwareGroupSelector: fs.readFileSync(path.join(RESOURCES, 'js/granete-hardware-group-selector.js'), 'utf8'),
     materialRoles: fs.readFileSync(path.join(RESOURCES, 'js/granete-material-roles.js'), 'utf8'),
     inspectorChild: fs.readFileSync(path.join(RESOURCES, 'js/granete-inspector-child.js'), 'utf8'),
     inspector: fs.readFileSync(path.join(RESOURCES, 'js/granete-inspector.js'), 'utf8'),
@@ -48,6 +50,7 @@ function runDialogScripts(sandbox) {
   vm.runInContext(sources.library, sandbox, { filename: 'granete-library.js' });
   vm.runInContext(sources.configurator, sandbox, { filename: 'granete-configurator.js' });
   vm.runInContext(sources.finishSelector, sandbox, { filename: 'granete-finish-selector.js' });
+  vm.runInContext(sources.hardwareGroupSelector, sandbox, { filename: 'granete-hardware-group-selector.js' });
   vm.runInContext(sources.materialRoles, sandbox, { filename: 'granete-material-roles.js' });
   vm.runInContext(sources.inspectorChild, sandbox, { filename: 'granete-inspector-child.js' });
   vm.runInContext(sources.designInspector, sandbox, { filename: 'granete-design-inspector.js' });

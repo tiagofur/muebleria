@@ -55,7 +55,7 @@
   var deps = {};
 
   function requireDeps() {
-    var missing = ["showToast", "capabilityEnabled", "getHardwareCatalog"].filter(function (name) {
+    var missing = ["showToast", "capabilityEnabled", "getHardwareCatalog", "getOptionGroups"].filter(function (name) {
       return typeof deps[name] !== "function";
     });
     if (missing.length > 0) {
@@ -200,12 +200,24 @@
 
         var isManual = context.placementKind === "manual";
         var isDerived = context.placementKind === "derived" || context.placementKind === "opening-derived";
+        // #1046 S3: placement por grupo — el modelo se elige en Herrajes del
+        // mueble (materialChoices del grupo); NUNCA por ocurrencia, porque
+        // fijar el concreto rompería la semántica de grupo.
+        var optionRole = context.optionRole || null;
+        var groupName = optionRole;
+        if (optionRole && typeof deps.getOptionGroups === "function") {
+          var groupDef = (deps.getOptionGroups() || []).filter(function (g) { return g && g.code === optionRole; })[0];
+          if (groupDef && groupDef.name) groupName = groupDef.name;
+        }
         var doorAffinity = context.doorAffinity;
         var isDoorAccessory = !!doorAffinity ||
           (context.hardwareCategory === "hinge" || context.hardwareCategory === "handle" ||
            context.category === "hinge" || context.category === "handle");
         if (hwProvenanceBadge) {
-          if (isManual) {
+          if (optionRole) {
+            hwProvenanceBadge.textContent = "Por grupo · " + groupName;
+            hwProvenanceBadge.className = "status-badge valid";
+          } else if (isManual) {
             hwProvenanceBadge.textContent = "Manual";
             hwProvenanceBadge.className = "status-badge success";
           } else if (isDerived && isDoorAccessory) {
@@ -250,11 +262,12 @@
         } else if (typeof context.offsetMm === "number") {
           currentOffset = context.offsetMm;
         }
+        var groupManaged = !!optionRole;
         if (hwOffsetInput) {
           hwOffsetInput.value = currentOffset;
-          hwOffsetInput.disabled = !isManual;
+          hwOffsetInput.disabled = !isManual || groupManaged;
         }
-        if (btnApplyHwOffset) btnApplyHwOffset.disabled = !isManual;
+        if (btnApplyHwOffset) btnApplyHwOffset.disabled = !isManual || groupManaged;
         if (hwDerivedLockedNote) hwDerivedLockedNote.style.display = (isDerived && !isDoorAccessory) ? "block" : "none";
         // #529: nota solo para accesorios de puerta derivados.
         if (hwOpeningDerivedNote) {
@@ -262,7 +275,7 @@
         }
 
         if (hwReplacementSelect) {
-          hwReplacementSelect.disabled = !isManual;
+          hwReplacementSelect.disabled = !isManual || groupManaged;
           hwReplacementSelect.innerHTML = "";
           // #1046 S2: sólo candidatos de la MISMA categoría (bisagra↔bisagra).
           // El resto del catálogo no se pinta ni deshabilitado: la card lista
@@ -292,7 +305,12 @@
             hwReplacementSelect.appendChild(only);
           }
         }
-        if (btnReplaceHw) btnReplaceHw.disabled = !isManual;
+        if (btnReplaceHw) btnReplaceHw.disabled = !isManual || groupManaged;
+        // #1046 S3: nota honesta para placements por grupo — la edición por
+        // ocurrencia está bloqueada a propósito (guard HARDWARE_GROUP_MANAGED
+        // en Ruby); el cambio de modelo vive en la card del mueble.
+        var groupNote = document.getElementById("hw-group-managed-note");
+        if (groupNote) groupNote.style.display = groupManaged ? "block" : "none";
       }
 
       // Conflict banner: check recent mutation issues or preflight issues
@@ -489,6 +507,10 @@
   if (btnApplyHwOffset) {
     btnApplyHwOffset.addEventListener("click", function () {
       if (!activeChildContext || activeChildContext.kind !== "hardware") return;
+      if (activeChildContext.optionRole) {
+        deps.showToast("info", "Este herraje se elige por grupo: cambialo desde Herrajes del mueble.");
+        return;
+      }
       if (activeChildContext.placementKind === "derived") {
         deps.showToast("warning", "Los herrajes derivados se calculan por regla de ingeniería; no admiten edición manual.");
         return;
@@ -504,6 +526,10 @@
   if (btnReplaceHw) {
     btnReplaceHw.addEventListener("click", function () {
       if (!activeChildContext || activeChildContext.kind !== "hardware") return;
+      if (activeChildContext.optionRole) {
+        deps.showToast("info", "Este herraje se elige por grupo: cambialo desde Herrajes del mueble.");
+        return;
+      }
       if (activeChildContext.placementKind === "derived") {
         deps.showToast("warning", "Los herrajes derivados no admiten sustitución manual.");
         return;
