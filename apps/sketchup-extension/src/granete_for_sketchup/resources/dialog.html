@@ -499,6 +499,15 @@
             </p>
           </div>
 
+          <!-- #1046 S2: inventario contextual de herrajes del proyecto. Sólo
+               las categorías y herrajes QUE EXISTEN en el modelo (metadata
+               gestionada); nunca el catálogo completo. Click → selecciona la
+               ocurrencia y abre su card. -->
+          <div id="hardware-inventory-card" class="card" style="display: none;">
+            <h2 style="font-size: var(--text-md); margin: 0 0 var(--space-2);">Herrajes en este proyecto</h2>
+            <div id="hardware-inventory-list"></div>
+          </div>
+
           <div id="inspector-unmanaged-view" class="card empty-state" style="display: none;">
             <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
             <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Geometría no gestionada por Granete</h2>
@@ -1521,6 +1530,12 @@
           onAllDoorsClosed: function () {
             if (window.GraneteUI.inspector && window.GraneteUI.inspector.onAllDoorsClosed) {
               window.GraneteUI.inspector.onAllDoorsClosed();
+            }
+          },
+
+          onHardwareInventory: function (payload) {
+            if (window.GraneteUI.inspector && window.GraneteUI.inspector.onHardwareInventory) {
+              window.GraneteUI.inspector.onHardwareInventory(payload);
             }
           }
         };

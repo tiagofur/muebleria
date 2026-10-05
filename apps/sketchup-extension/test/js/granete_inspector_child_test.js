@@ -499,20 +499,39 @@ test('offset prefill: array payloads render the Y component, scalars render as-i
   assert.strictEqual(el(sandbox, 'hw-offset-input').value, 0, 'missing offset falls back to 0');
 });
 
-test('replacement select: other-family options stay visible but disabled; current stays selected', () => {
+test('replacement select lists ONLY same-category candidates; current stays selected (#1046 S2)', () => {
   const sandbox = buildModuleSandbox();
   runModule(sandbox);
   initChildDeps(sandbox);
   sandbox.__hardwareCatalog = [
     { id: 'hw-handle', code: 'HW-H', name: 'Manija 160', category: 'handles' },
+    { id: 'hw-handle-2', code: 'HW-H2', name: 'Manija Gola', category: 'handles' },
     { id: 'hw-hinge', code: 'HW-B', name: 'Bisagra', category: 'hinges' }
   ];
   sandbox.window.GraneteUI.inspectorChild.render(hardwareContext('manual'));
   const options = el(sandbox, 'hw-replacement-select').children;
-  const hinge = options.find((o) => o.value === 'hw-hinge');
-  assert(hinge.disabled && hinge.textContent.includes('(incompatible)'), 'other-family option visible but disabled');
-  const handle = options.find((o) => o.value === 'hw-handle');
-  assert(handle.selected, 'current hardware selected');
+  // Only the same family is offered — the rest of the catalog never fills
+  // the select (owner rule: no disabled noise, no foreign families).
+  assert(!options.some((o) => o.value === 'hw-hinge'), 'other-family option is not rendered at all');
+  const current = options.find((o) => o.value === 'hw-handle');
+  assert(current && current.selected, 'current hardware selected');
+  assert(options.some((o) => o.value === 'hw-handle-2'), 'same-category alternative offered');
+  assert(options.every((o) => !o.disabled), 'no option renders disabled');
+});
+
+test('replacement select with unknown current definition keeps one honest option (#1046 S2)', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initChildDeps(sandbox);
+  sandbox.__hardwareCatalog = [
+    { id: 'hw-handle', code: 'HW-H', name: 'Manija 160', category: 'handles' }
+  ];
+  sandbox.window.GraneteUI.inspectorChild.render(
+    hardwareContext('manual', { hardwareDefinitionId: 'hw-gone' })
+  );
+  const options = el(sandbox, 'hw-replacement-select').children;
+  assert.strictEqual(options.length, 1, 'single honest option for a catalog-missing definition');
+  assert.strictEqual(options[0].value, 'hw-gone', 'the current id stays selectable');
 });
 
 test('drilling conflict banner reads ONLY from GraneteState mutation issues', () => {

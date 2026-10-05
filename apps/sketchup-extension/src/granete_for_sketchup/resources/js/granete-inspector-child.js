@@ -264,24 +264,33 @@
         if (hwReplacementSelect) {
           hwReplacementSelect.disabled = !isManual;
           hwReplacementSelect.innerHTML = "";
+          // #1046 S2: sólo candidatos de la MISMA categoría (bisagra↔bisagra).
+          // El resto del catálogo no se pinta ni deshabilitado: la card lista
+          // lo que corresponde, nunca llena la pantalla con opciones ajenas.
           hardwareList.forEach(function (candidate) {
-            var opt = document.createElement("option");
-            opt.value = candidate.id;
             var isComp = currentDef && candidate.category === currentDef.category;
             var isCurrent = candidate.id === context.hardwareDefinitionId || candidate.code === context.hardwareDefinitionId;
-            if (!isComp && !isCurrent) {
-              // No se puede elegir un herraje de otra familia: queda
-              // visible para no esconder el catálogo, pero deshabilitado.
-              opt.disabled = true;
-              opt.textContent = candidate.name + " (incompatible)";
-            } else {
-              opt.textContent = candidate.name;
-            }
+            if (!isComp && !isCurrent) return;
+            var opt = document.createElement("option");
+            opt.value = candidate.id;
+            opt.textContent = isCurrent ? candidate.name + " (actual)" : candidate.name;
             if (isCurrent) {
               opt.selected = true;
             }
             hwReplacementSelect.appendChild(opt);
           });
+          // Definición fuera del catálogo (borrada/renombrada): honesto —
+          // una sola opción, la actual, en lugar de un select vacío.
+          var rendered = hwReplacementSelect.options || hwReplacementSelect.children || [];
+          if (rendered.length === 0 && context.hardwareDefinitionId) {
+            var only = document.createElement("option");
+            only.value = context.hardwareDefinitionId;
+            only.textContent = hwDefName && hwDefName.textContent
+              ? hwDefName.textContent + " (actual)"
+              : context.hardwareDefinitionId;
+            only.selected = true;
+            hwReplacementSelect.appendChild(only);
+          }
         }
         if (btnReplaceHw) btnReplaceHw.disabled = !isManual;
       }
