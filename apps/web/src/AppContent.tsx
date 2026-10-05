@@ -95,7 +95,6 @@ import {
   roleCanAppendProjectEvent,
   roleCanViewPortfolioDashboard,
   roleCanSuperviseFloor,
-  type WarrantyTicket,
   type ItemFloorStatus,
   ITEM_FLOOR_STATUS_LABELS_ES,
   roleUsesProductionQueue,
@@ -1009,11 +1008,8 @@ export function AppContent({
   const setExportErrors = useUiStore((s) => s.setExportErrors);
   const setExportBusy = useUiStore((s) => s.setExportBusy);
   const projectsCreateKey = useUiStore((s) => s.projectsCreateKey);
-  const bumpProjectsCreateKey = useUiStore((s) => s.bumpProjectsCreateKey);
   const modulesCreateKey = useUiStore((s) => s.modulesCreateKey);
-  const bumpModulesCreateKey = useUiStore((s) => s.bumpModulesCreateKey);
   const materialsCreateKey = useUiStore((s) => s.materialsCreateKey);
-  const bumpMaterialsCreateKey = useUiStore((s) => s.bumpMaterialsCreateKey);
 
   // F063: backend breakdown state lives in projectStore; hook drives fetch.
   const backendBreakdown = useProjectStore((s) => s.backendBreakdown);
