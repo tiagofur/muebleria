@@ -78,3 +78,56 @@
 
 Inspector SketchUp con grupos y reemplazo entre miembros; `DoorHingeRule`
 honrando la elección; acabados de herraje (snapshot comercial v2).
+
+## S3 — Herrajes por grupo en el Inspector de mueble (2026-10-05)
+
+- **Autorización**: owner en conversación directa («empezamos» sobre el plan
+  revisado: elegir modelo de herraje como frente/interior). Encuadre exacto del
+  S2 restante nombrado por la issue: «inspector muestra grupo y reemplazo entre
+  miembros». Quedan FUERA: DoorHingeRule dinámico (#1078), acabados de herraje
+  (snapshot v2), hardwareChoices a nivel diseño (#784 extensión).
+- **Base**: `origin/main` @ `875f2b65` (post #1099). Rama
+  `feat/1046-hw-group-mueble-inspector`, worktree
+  `../muebles-worktrees/1046-hw-group-mueble`. El checkout main queda intocado
+  (dirty de #1056, otro escritor).
+- **Hechos verificados (base 875f2b65)**:
+  1. El update de mueble ya manda SOLO
+     `{furnitureDefinitionId, catalogRevision, parameters, materialChoices}`
+     (`submit_minimal_authoring_resolve`, catalog_provider.rb:258) — sin
+     `hardwarePlacements` → `present=false` → el motor materializa los
+     placements del definition sustituyendo grupos por choices. Una elección de
+     grupo viaja limpia SIN pinnear (el fork semántico sólo existe en
+     `substitute_hardware`/`update_hardware_placement`).
+  2. La proyección de taller (`workshopFurnitureCatalog`,
+     furniture_catalog.go:131) NO incluye `hardware` ni `optionGroups`: el
+     plugin cae SIEMPRE a la lista estática de demo (`all_hardware` fallback).
+     La sustitución por familia del S2 lista candidatos estáticos, no el
+     catálogo real del taller. Este slice lo corrige.
+  3. `resolved.layout.hardware` no lleva `optionRole` (ni Go engine, ni api
+     wire, ni TS type, ni parser Ruby) — el plugin no puede distinguir un
+     placement por grupo de uno concreto.
+  4. TS valida `resolved.layout.hardware` sólo como array (sin allowlist por
+     clave) → campo opcional pasa sin tocar el fixture compartido
+     (decisión: NO editar `sketchupAuthoringResolve.contract.json`; evita
+     polución cross-spec tipo #1096).
+  5. Contrato Ruby de materialChoices valida strings sólo → los grupos
+     hardware viajan en el mismo mapa sin cambio de contrato.
+- **Diseño**:
+  - Go: `LayoutHardware.OptionRole` (engine) + wire api response; proyección
+    de taller gana `hardware` (activos, sin costos — decisión: precio fuera del
+    payload del plugin v1) y `optionGroups` kind=hardware; ambos entran al hash
+    de `revisionId` (choices dependen de ellos).
+  - Ruby: parser layout `optionRole` opcional; metadata hijo
+    `intent['optionRole']`; SelectionContext `optionRole` +
+    `hardwareGroups` (escaneo por mueble, fail-closed por hijo); guard
+    client-side que RECHAZA offset/sustitución por ocurrencia sobre placements
+    por grupo (evita el pin; código `HARDWARE_GROUP_MANAGED`).
+  - JS: sección «Herrajes por grupo» en la card del mueble (sólo grupos
+    consumidos; sin grupos no aparece), modal selector propio
+    (`granete-hardware-group-selector.js`, patrón #848 Phase B), pick al draft
+    existente (#784) y Apply por `update_furniture` — sin mutación nueva. Card
+    hijo: badge «Por grupo» + bloqueo con derivación a la sección del mueble.
+- **Verificación**: Go engine/api/catalog tests; Ruby unit (layout contract,
+  builder, selección, guard, provider); JS harness (inspector, child, selector);
+  `bundle exec rake verify` + `verify_affected` al congelar. V2 host real
+  (TestUp/smoke) queda NOT_RUN en este slice — se declara en el PR.

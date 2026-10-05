@@ -94,6 +94,22 @@ describe('sketchupAuthoringResolve.schema.json', () => {
     expect(requestValidator!(malformed)).toBe(false);
   });
 
+  test('accepts resolved layout hardware optionRole and rejects non-strings', () => {
+    const scenarios = record(fixture).scenarios as unknown[];
+    const acceptedScenario = record(scenarios.find((value) => record(record(value).response).status === 'accepted'));
+    const response = structuredClone(acceptedScenario.response);
+    const layout = record(record(response).resolved).layout;
+    const hardware = record(layout).hardware;
+    if (!Array.isArray(hardware) || hardware.length === 0) throw new Error('fixture must contain resolved layout hardware');
+    record(hardware[0]).optionRole = 'BISAGRA';
+    expect(acceptedValidator!(response), ajv.errorsText(acceptedValidator!.errors)).toBe(true);
+
+    const malformed = structuredClone(acceptedScenario.response);
+    const malformedHardware = record(record(record(record(malformed).resolved).layout)).hardware;
+    record((malformedHardware as unknown[])[0]).optionRole = 42;
+    expect(acceptedValidator!(malformed)).toBe(false);
+  });
+
   test('rejects optional occurrence definition IDs, nested parameters, and response union leakage', () => {
     const scenarios = record(fixture).scenarios as unknown[];
     const acceptedScenario = record(scenarios.find((value) => {

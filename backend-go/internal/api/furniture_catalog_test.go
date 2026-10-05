@@ -399,3 +399,67 @@ func TestCategoryPathNamesSurvivesCycles(t *testing.T) {
 		t.Fatalf("cycle must terminate with the nodes seen once, got %v", path)
 	}
 }
+
+// #1046 S3: the workshop projection exposes the REAL active hardware and the
+// kind=hardware option groups so the plugin stops falling back to its
+// packaged demo list; material-kind groups and inactive hardware stay out.
+func TestWorkshopCatalogExposesHardwareAndOptionGroups(t *testing.T) {
+	composition := domain.Catalog{
+		Hardware: []domain.Hardware{
+			{ID: "hw-2", Code: "B-2", Name: "Bisagra", Unit: domain.UnitPiece, Active: true, Category: "hinge"},
+			{ID: "hw-1", Code: "B-1", Name: "Corredera", Unit: domain.UnitPiece, Active: true, Category: "slide"},
+			{ID: "hw-3", Code: "B-3", Name: "Retirada", Unit: domain.UnitPiece, Active: false},
+		},
+		OptionGroups: []domain.OptionGroup{
+			{ID: "og-b", Code: "BISAGRA", Name: "Bisagras", Kind: "hardware", Required: true, OptionIDs: []string{"hw-2"}},
+			{ID: "og-a", Code: "AGR", Name: "Frente", Kind: "material", OptionIDs: []string{"mat-1"}},
+		},
+	}
+
+	catalog, err := buildWorkshopFurnitureCatalogValidated(nil, nil, nil, composition)
+	if err != nil {
+		t.Fatalf("workshop catalog: %v", err)
+	}
+
+	if len(catalog.Hardware) != 2 {
+		t.Fatalf("only active hardware projects, got %+v", catalog.Hardware)
+	}
+	if catalog.Hardware[0].Code != "B-1" || catalog.Hardware[1].Code != "B-2" {
+		t.Fatalf("hardware must be deterministically ordered by code, got %+v", catalog.Hardware)
+	}
+	if catalog.Hardware[0].Category != "slide" || !catalog.Hardware[0].Active {
+		t.Fatalf("hardware entries carry category/active, got %+v", catalog.Hardware[0])
+	}
+	if len(catalog.OptionGroups) != 1 {
+		t.Fatalf("only kind=hardware groups project, got %+v", catalog.OptionGroups)
+	}
+	group := catalog.OptionGroups[0]
+	if group.Code != "BISAGRA" || !group.Required || len(group.OptionIDs) != 1 || group.OptionIDs[0] != "hw-2" {
+		t.Fatalf("hardware group must carry code/required/members, got %+v", group)
+	}
+}
+
+// #1046 S3: role-based placements resolve against hardware groups, so a
+// group or member change must invalidate the catalog pin.
+func TestWorkshopCatalogRevisionCoversHardwareGroups(t *testing.T) {
+	mk := func(groupCode string, members []string) workshopFurnitureCatalog {
+		return buildWorkshopFurnitureCatalog(nil, nil, nil, domain.Catalog{
+			Hardware: []domain.Hardware{{ID: "hw-1", Code: "B-1", Name: "Bisagra", Unit: domain.UnitPiece, Active: true}},
+			OptionGroups: []domain.OptionGroup{{
+				ID: "og-1", Code: groupCode, Name: "Bisagras", Kind: "hardware", Required: true, OptionIDs: members,
+			}},
+		})
+	}
+
+	base := mk("BISAGRA", []string{"hw-1"})
+	_ = base
+	if workshopCatalogRevisionID(base) != workshopCatalogRevisionID(mk("BISAGRA", []string{"hw-1"})) {
+		t.Fatal("revision must be stable for identical hardware groups")
+	}
+	if workshopCatalogRevisionID(base) == workshopCatalogRevisionID(mk("BISAGRA_PRO", []string{"hw-1"})) {
+		t.Fatal("revision must change when a hardware group code changes")
+	}
+	if workshopCatalogRevisionID(base) == workshopCatalogRevisionID(mk("BISAGRA", []string{"hw-1", "hw-2"})) {
+		t.Fatal("revision must change when a hardware group membership changes")
+	}
+}

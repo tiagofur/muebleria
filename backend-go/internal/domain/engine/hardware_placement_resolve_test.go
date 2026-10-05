@@ -154,3 +154,31 @@ func TestConsumedOptionRolesIncludesPlacementRoles(t *testing.T) {
 		t.Fatalf("no choice → no consumption, got %+v", consumed)
 	}
 }
+
+// #1046 S3: a role-based placement keeps its group code in the resolved
+// layout so hosts can offer group-level model changes; concrete placements
+// carry an empty OptionRole.
+func TestResolveLayoutEchoesPlacementOptionRole(t *testing.T) {
+	module, catalog := oneDoorCabinetWithHingeGroup(true)
+	choices := map[string]string{"BISAGRA": "hw-bisagra-eco"}
+
+	layout, _, err := resolveFurnitureLayoutOpts(module, catalog, nil, choices, resolveOptions{})
+	if err != nil {
+		t.Fatalf("layout resolve: %v", err)
+	}
+	roleSeen := false
+	for _, hw := range layout.Hardware {
+		if hw.HardwareID == "hw-bisagra-eco" {
+			if hw.OptionRole != "BISAGRA" {
+				t.Fatalf("chosen group placement must echo its optionRole, got %+v", hw)
+			}
+			roleSeen = true
+		}
+		if hw.HardwareID == "hw-handle" && hw.OptionRole != "" {
+			t.Fatalf("concrete placement must not carry an optionRole, got %+v", hw)
+		}
+	}
+	if !roleSeen {
+		t.Fatalf("expected the chosen hinge in layout hardware, got %+v", layout.Hardware)
+	}
+}
