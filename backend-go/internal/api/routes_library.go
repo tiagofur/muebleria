@@ -39,6 +39,9 @@ func registerLibraryRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// writers of Standard library releases.
 	mux.Handle("POST /api/manufacturing-libraries/standard/releases", authMW(http.HandlerFunc(server.HandleCreateStandardLibraryRelease)))
 	mux.Handle("POST /api/manufacturing-libraries/standard/releases/{releaseId}/publish", authMW(http.HandlerFunc(server.HandlePublishStandardLibraryRelease)))
+	// #1102 (LIB-AUTH Slice B): read-only pre-publish validation — the
+	// "probar borrador" dry run; same platform-staff gate as publish.
+	mux.Handle("POST /api/manufacturing-libraries/standard/releases/{releaseId}/validate", authMW(http.HandlerFunc(server.HandleValidateStandardLibraryDraft)))
 	// #1102 (LIB-AUTH Slice A): authoring workspace draft read — platform
 	// staff only; the literal path wins over {releaseId} so a draft list is
 	// never parsed as a release id.
