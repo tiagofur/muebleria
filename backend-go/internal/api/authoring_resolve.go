@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
@@ -243,7 +245,41 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	// same org the overlay lookup pins, never a second context read. An
 	// explicitly overridden but unusable factory policy rejects the resolve
 	// with a structured issue — never a silent inherit.
-	serverInputs, policyErr := s.Store.ReleaseServerResolveInputs(r.Context(), org.ID)
+	var serverInputs *engine.ReleaseServerInputs
+	var policyErr error
+	if pinnedRelease := strings.TrimSpace(req.Furniture.LibraryReleaseID); pinnedRelease != "" {
+		// #1102 Slice D: the consumer declared the exact release it consumes.
+		// Fail-closed: an unpublished/unknown pin is a structured rejection —
+		// never a silent upgrade to current.
+		pinnedUUID, pinErr := uuid.Parse(pinnedRelease)
+		if pinErr != nil {
+			s.writeAuthoringResolveEnvelope(w, http.StatusBadRequest, req, authoringStatusRejected, []domain.ContractIssue{{
+				Code: "REQUEST_INVALID", Message: "furniture.libraryReleaseId debe ser un uuid válido",
+				Severity: domain.IssueSeverityError, Path: "furniture.libraryReleaseId",
+			}})
+			return
+		}
+		serverInputs, policyErr = storage.ReleaseServerInputsForRelease(r.Context(), s.Store, org.ID, pinnedUUID)
+		if policyErr != nil {
+			if errors.Is(policyErr, storage.ErrReleaseNotPublished) || errors.Is(policyErr, storage.ErrLibraryReleaseNotFound) {
+				s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+					Code:     "LIBRARY_RELEASE_UNAVAILABLE",
+					Message:  "el release pineado " + pinnedRelease + " no está disponible (no existe o no está publicado); actualizá la biblioteca del consumidor",
+					Severity: domain.IssueSeverityError, Path: "furniture.libraryReleaseId",
+					Remediation: "Sincronizá el consumidor con el release publicado vigente (GET /manufacturing-libraries/standard/releases/current).",
+				}})
+				return
+			}
+			s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
+				Code:     "LIBRARY_RELEASE_UNAVAILABLE",
+				Message:  "el release pineado no se pudo cargar: " + policyErr.Error(),
+				Severity: domain.IssueSeverityError, Path: "furniture.libraryReleaseId",
+			}})
+			return
+		}
+	} else {
+		serverInputs, policyErr = s.Store.ReleaseServerResolveInputs(r.Context(), org.ID)
+	}
 	if policyErr != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
 			Code:     "FACTORY_POLICY_INVALID",
@@ -328,7 +364,12 @@ type authoringResolveFurniture struct {
 	FurnitureDefinitionID string `json:"furnitureDefinitionId"`
 	// CatalogRevision is REQUIRED (#477 review: the resolve is reproducible
 	// only against a pinned catalog; there is no implicit latest).
-	CatalogRevision    string                         `json:"catalogRevision"`
+	CatalogRevision string `json:"catalogRevision"`
+	// LibraryReleaseID (#1102 Slice D): the consumer's pinned library
+	// release. Present → the manufacturing inputs resolve from THAT release's
+	// frozen blobs (fail-closed on unpublished/unknown); absent → the current
+	// published release, exactly as before this field existed.
+	LibraryReleaseID   string                         `json:"libraryReleaseId,omitempty"`
 	Parameters         map[string]any                 `json:"parameters,omitempty"`
 	MaterialChoices    map[string]string              `json:"materialChoices,omitempty"`
 	Components         []authoringOccurrenceWire      `json:"components,omitempty"`
@@ -461,16 +502,16 @@ func (s *Server) writeAuthoringResolveAccepted(w http.ResponseWriter, req author
 		LibraryReleaseID:   libraryReleaseID,
 		Status:             authoringStatusAccepted,
 		NormalizedSnapshot: &result.Normalized,
-			Resolved: &authoringResolveResolved{
-				Layout:    result.Layout,
-				Machining: result.Machining,
-				Preflight: authoringResolvePreflight{
-					Scope:             engine.AuthoringValidationScope,
-					Status:            result.ValidationStatus,
-					Issues:            validationIssues,
-					PreflightContract: engine.ManufacturingPreflightContract,
-				},
+		Resolved: &authoringResolveResolved{
+			Layout:    result.Layout,
+			Machining: result.Machining,
+			Preflight: authoringResolvePreflight{
+				Scope:             engine.AuthoringValidationScope,
+				Status:            result.ValidationStatus,
+				Issues:            validationIssues,
+				PreflightContract: engine.ManufacturingPreflightContract,
 			},
+		},
 		Issues: validationIssues,
 	}
 	body, err := json.Marshal(response)
