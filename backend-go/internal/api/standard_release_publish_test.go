@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -69,6 +70,249 @@ func TestHandleCreateStandardLibraryRelease(t *testing.T) {
 		rec := httptest.NewRecorder()
 		(&Server{Store: store}).HandleCreateStandardLibraryRelease(rec, req)
 		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+}
+
+// TestHandleStandardLibraryDraftReleases (#1102 Slice A): the authoring
+// workspace read — platform staff see open Standard drafts, tenants get 403,
+// empty list means "no draft open".
+func TestHandleStandardLibraryDraftReleases(t *testing.T) {
+	draftRequest := func(store *stubStore, platform bool, method string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api/manufacturing-libraries/standard/releases/drafts", nil)
+		req = platformClaims(req, platform)
+		rec := httptest.NewRecorder()
+		(&Server{Store: store}).HandleStandardLibraryDraftReleases(rec, req)
+		return rec
+	}
+
+	t.Run("lists open drafts newest first for platform staff", func(t *testing.T) {
+		store := &stubStore{
+			draftReleases: []*domain.LibraryRelease{
+				{ID: uuid.MustParse(domain.GraneteStandardDraftReleaseID), LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.4.0", Status: domain.ReleaseStatusDraft, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+		}
+		rec := draftRequest(store, true, http.MethodGet)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var drafts []map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &drafts); err != nil || len(drafts) != 1 {
+			t.Fatalf("drafts = %s err=%v", rec.Body.String(), err)
+		}
+		if drafts[0]["version"] != "0.4.0" || drafts[0]["status"] != "draft" {
+			t.Fatalf("draft[0] = %v", drafts[0])
+		}
+	})
+
+	t.Run("returns an empty list when no draft is open", func(t *testing.T) {
+		rec := draftRequest(&stubStore{}, true, http.MethodGet)
+		if rec.Code != http.StatusOK || rec.Body.String() != "[]" {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("rejects a non-platform user with 403", func(t *testing.T) {
+		rec := draftRequest(&stubStore{}, false, http.MethodGet)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("405 on non-GET", func(t *testing.T) {
+		rec := draftRequest(&stubStore{}, true, http.MethodPost)
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+}
+
+func TestHandleCreateStandardLibraryReleaseDuplicateVersion(t *testing.T) {
+	store := &stubStore{
+		createDraftReleaseErr: fmt.Errorf("%w: 1.2.3", storage.ErrReleaseDuplicateVersion),
+	}
+	body := strings.NewReader(`{"version":"1.2.3"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/manufacturing-libraries/standard/releases", body)
+	req.Header.Set("Content-Type", "application/json")
+	req = platformClaims(req, true)
+	rec := httptest.NewRecorder()
+	(&Server{Store: store}).HandleCreateStandardLibraryRelease(rec, req)
+	// #1102 Slice A: racing the same suggested version is a user-resolvable
+	// conflict, not a 500.
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandleValidateStandardLibraryDraft (#1102 Slice B): the read-only
+// "probar borrador" — platform staff gate, publish's 404/409 semantics and a
+// structured report instead of a write.
+func TestHandleValidateStandardLibraryDraft(t *testing.T) {
+	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
+
+	validateRequest := func(store *stubStore, platform bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/manufacturing-libraries/standard/releases/"+releaseID.String()+"/validate", nil)
+		req.SetPathValue("releaseId", releaseID.String())
+		req = platformClaims(req, platform)
+		rec := httptest.NewRecorder()
+		(&Server{Store: store}).HandleValidateStandardLibraryDraft(rec, req)
+		return rec
+	}
+
+	t.Run("validates a draft through the real compiler and engine", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.4.0", Status: domain.ReleaseStatusDraft, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+			listActiveHardwareProfilesAnyOrg: []domain.HardwareProfile{{
+				ID: "a0000010-0000-0000-0000-000000000001", Code: "PERF-X", Name: "X", Revision: "r1", Active: true,
+				Items: []domain.HardwareProfileItem{{HardwareID: "a0000003-0000-0000-0000-000000000012", Quantity: 1}},
+			}},
+			listHardwares: []domain.Hardware{},
+			listModules: []domain.Module{
+				{ID: "m-1", Code: "VIG-A", Name: "Vigas A", WidthMm: 600, HeightMm: 720, DepthMm: 560},
+			},
+		}
+		rec := validateRequest(store, true)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var report struct {
+			Ok      bool `json:"ok"`
+			Compile struct {
+				Ok            bool `json:"ok"`
+				ResourceCount int  `json:"resourceCount"`
+			} `json:"compile"`
+			Furniture struct {
+				Total    int `json:"total"`
+				Resolved int `json:"resolved"`
+				Failed   int `json:"failed"`
+			} `json:"furniture"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
+			t.Fatalf("body = %s err=%v", rec.Body.String(), err)
+		}
+		if !report.Ok || !report.Compile.Ok || report.Compile.ResourceCount != 1 {
+			t.Fatalf("report = %s", rec.Body.String())
+		}
+		if report.Furniture.Total != 1 || report.Furniture.Resolved != 1 || report.Furniture.Failed != 0 {
+			t.Fatalf("furniture = %+v", report.Furniture)
+		}
+	})
+
+	t.Run("409 when the release is not a draft", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.1.0", Status: domain.ReleaseStatusPublished, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+		}
+		rec := validateRequest(store, true)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("404 when the release does not exist", func(t *testing.T) {
+		rec := validateRequest(&stubStore{}, true)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects a non-platform user with 403", func(t *testing.T) {
+		rec := validateRequest(&stubStore{}, false)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+}
+
+// TestHandleStandardLibraryDraftDiff (#1102 Slice C): the publish-confirmation
+// summary — platform staff gate, publish's 404/409 semantics and a labeled
+// diff computed against the published manifest.
+func TestHandleStandardLibraryDraftDiff(t *testing.T) {
+	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
+	baseID := uuid.MustParse("00000000-0000-0000-0003-000000000001")
+
+	diffRequest := func(store *stubStore, platform bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/manufacturing-libraries/standard/releases/"+releaseID.String()+"/diff", nil)
+		req.SetPathValue("releaseId", releaseID.String())
+		req = platformClaims(req, platform)
+		rec := httptest.NewRecorder()
+		(&Server{Store: store}).HandleStandardLibraryDraftDiff(rec, req)
+		return rec
+	}
+
+	t.Run("diffs the draft against the published base with labels", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.4.0", Status: domain.ReleaseStatusDraft, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+			currentPublishedRelease: &domain.LibraryRelease{ID: baseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.3.4", Status: domain.ReleaseStatusPublished},
+			releaseManifestsByID: map[uuid.UUID]*domain.LibraryManifest{
+				baseID: {Resources: []domain.ManifestResourceRef{}},
+			},
+			listHardwares: []domain.Hardware{{ID: "a0000003-0000-0000-0000-000000000012", Code: "BIS-CL110", Name: "Bisagra", Unit: "unidad", Active: true}},
+			listActiveHardwareProfilesAnyOrg: []domain.HardwareProfile{{
+				ID: "a0000010-0000-0000-0000-000000000001", Code: "PERF-X", Name: "X", Revision: "r1", Active: true,
+				Items: []domain.HardwareProfileItem{{HardwareID: "a0000003-0000-0000-0000-000000000012", Quantity: 1}},
+			}},
+		}
+		rec := diffRequest(store, true)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var diff struct {
+			Version string `json:"version"`
+			Base    *struct {
+				Version string `json:"version"`
+			} `json:"base"`
+			Added []struct {
+				Code string `json:"code"`
+			} `json:"added"`
+			Unchanged int `json:"unchanged"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &diff); err != nil {
+			t.Fatalf("body = %s err=%v", rec.Body.String(), err)
+		}
+		if diff.Version != "0.4.0" || diff.Base == nil || diff.Base.Version != "0.3.4" {
+			t.Fatalf("diff header = %s", rec.Body.String())
+		}
+		codes := map[string]bool{}
+		for _, change := range diff.Added {
+			codes[change.Code] = true
+		}
+		if len(diff.Added) != 2 || !codes["BIS-CL110"] || !codes["PERF-X"] {
+			t.Fatalf("added = %s", rec.Body.String())
+		}
+		if diff.Unchanged != 0 {
+			t.Fatalf("unchanged = %d", diff.Unchanged)
+		}
+	})
+
+	t.Run("409 when the release is not a draft", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.1.0", Status: domain.ReleaseStatusPublished, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+		}
+		rec := diffRequest(store, true)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("404 when the release does not exist", func(t *testing.T) {
+		rec := diffRequest(&stubStore{}, true)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects a non-platform user with 403", func(t *testing.T) {
+		rec := diffRequest(&stubStore{}, false)
+		if rec.Code != http.StatusForbidden {
 			t.Fatalf("status = %d", rec.Code)
 		}
 	})

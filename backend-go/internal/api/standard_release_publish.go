@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -21,6 +22,35 @@ import (
 type createStandardReleaseBody struct {
 	Version   string  `json:"version"`
 	Changelog *string `json:"changelog"`
+}
+
+// HandleStandardLibraryDraftReleases answers GET /api/manufacturing-libraries/standard/releases/drafts
+// (#1102 Slice A) — the authoring workspace read: the open draft releases of
+// the Granete Standard library, newest first. Same platform-staff gate as
+// create/publish; the 000156 read policy makes Standard drafts visible to the
+// platform-admin marker and to nothing else. The workspace treats the first
+// entry as the current draft; publish stays a separate deliberate step (#955).
+func (s *Server) HandleStandardLibraryDraftReleases(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || !claims.PlatformAdmin {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "sólo el equipo de plataforma Granete puede ver los borradores Standard", nil)
+		return
+	}
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+	releases, err := s.Store.GetDraftReleases(r.Context(), standardID)
+	if err != nil {
+		respondWithInternalError(w, err, "get standard library draft releases")
+		return
+	}
+	summaries := make([]openapi.LibraryReleaseSummary, 0, len(releases))
+	for _, rel := range releases {
+		summaries = append(summaries, mapLibraryReleaseToSummary(rel))
+	}
+	respondWithJSON(w, http.StatusOK, summaries)
 }
 
 // HandleCreateStandardLibraryRelease answers POST /api/manufacturing-libraries/standard/releases
@@ -51,6 +81,13 @@ func (s *Server) HandleCreateStandardLibraryRelease(w http.ResponseWriter, r *ht
 		Changelog:     body.Changelog,
 	})
 	if err != nil {
+		// #1102 Slice A: the workspace's "Abrir borrador" suggests the next
+		// version but two concurrent opens can race the same version — that
+		// is a user-resolvable conflict, not a 500.
+		if errors.Is(err, storage.ErrReleaseDuplicateVersion) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "ya existe un release con esa versión; recargá e intentá de nuevo", nil)
+			return
+		}
 		respondWithInternalError(w, err, "create standard release draft")
 		return
 	}
@@ -106,6 +143,152 @@ func (s *Server) HandlePublishStandardLibraryRelease(w http.ResponseWriter, r *h
 	})
 }
 
+// HandleValidateStandardLibraryDraft answers POST /api/manufacturing-libraries/standard/releases/{releaseId}/validate
+// (#1102 Slice B) — the read-only "probar borrador": the publisher's exact
+// compile inputs as a dry run plus a batch resolve of every furniture
+// definition, without persisting anything. Same platform-staff gate and the
+// same 404/409 semantics as publish; the report carries failures instead of
+// aborting.
+func (s *Server) HandleValidateStandardLibraryDraft(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || !claims.PlatformAdmin {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "sólo el equipo de plataforma Granete puede probar borradores Standard", nil)
+		return
+	}
+	releaseID, err := uuid.Parse(r.PathValue("releaseId"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid release id")
+		return
+	}
+	report, err := application.ValidateStandardDraft(r.Context(), s.Store, releaseID)
+	if err != nil {
+		if errors.Is(err, storage.ErrLibraryReleaseNotFound) {
+			respondWithError(w, http.StatusNotFound, "release not found")
+			return
+		}
+		if errors.Is(err, application.ErrStandardLibraryNotFound) {
+			respondWithError(w, http.StatusNotFound, "release not found in Granete Standard")
+			return
+		}
+		if errors.Is(err, application.ErrReleaseNotDraft) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "el release no está en draft: creá un draft nuevo para probar", nil)
+			return
+		}
+		respondWithInternalError(w, err, "validate standard draft")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, mapStandardDraftValidationReport(report))
+}
+
+func mapStandardDraftValidationReport(report *application.DraftValidationReport) openapi.StandardDraftValidationReport {
+	compile := openapi.DraftCompileCheck{
+		Ok:            report.Compile.OK,
+		ResourceCount: int64(report.Compile.ResourceCount),
+		ManifestHash:  stringPtr(report.Compile.ManifestHash),
+		Error:         stringPtr(report.Compile.Error),
+	}
+	furniture := openapi.DraftFurnitureCheck{
+		Total:    int64(report.Furniture.Total),
+		Resolved: int64(report.Furniture.Resolved),
+		Failed:   int64(report.Furniture.Failed),
+		Failures: make([]openapi.DraftFurnitureFailure, 0, len(report.Furniture.Failures)),
+	}
+	for _, failure := range report.Furniture.Failures {
+		furniture.Failures = append(furniture.Failures, openapi.DraftFurnitureFailure{
+			ID:    failure.ID,
+			Code:  failure.Code,
+			Name:  failure.Name,
+			Error: failure.Error,
+		})
+	}
+	return openapi.StandardDraftValidationReport{
+		ReleaseId:   report.ReleaseID.String(),
+		Version:     report.Version,
+		Ok:          report.OK,
+		Compile:     compile,
+		Furniture:   furniture,
+		ValidatedAt: report.ValidatedAt.Format(time.RFC3339),
+	}
+}
+
+// HandleStandardLibraryDraftDiff answers GET /api/manufacturing-libraries/standard/releases/{releaseId}/diff
+// (#1102 Slice C) — the publish-confirmation summary: what would change
+// between the current published release and the draft's authoring state.
+// Read-only; same platform-staff gate and 404/409 semantics as publish.
+func (s *Server) HandleStandardLibraryDraftDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || !claims.PlatformAdmin {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "sólo el equipo de plataforma Granete puede ver el diff de un borrador Standard", nil)
+		return
+	}
+	releaseID, err := uuid.Parse(r.PathValue("releaseId"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid release id")
+		return
+	}
+	diff, err := application.DiffStandardDraft(r.Context(), s.Store, releaseID)
+	if err != nil {
+		if errors.Is(err, storage.ErrLibraryReleaseNotFound) {
+			respondWithError(w, http.StatusNotFound, "release not found")
+			return
+		}
+		if errors.Is(err, application.ErrStandardLibraryNotFound) {
+			respondWithError(w, http.StatusNotFound, "release not found in Granete Standard")
+			return
+		}
+		if errors.Is(err, application.ErrReleaseNotDraft) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "el release no está en draft", nil)
+			return
+		}
+		// A compile dry-run failure is the honest diff answer: the draft
+		// cannot publish — surface it as a structured 422, not a 500.
+		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, mapStandardDraftDiff(diff))
+}
+
+func mapStandardDraftDiff(diff *application.DraftDiffReport) openapi.StandardDraftDiffReport {
+	var base *openapi.DraftDiffBase
+	if diff.Base != nil {
+		base = &openapi.DraftDiffBase{
+			ReleaseId: diff.Base.ReleaseID,
+			Version:   diff.Base.Version,
+		}
+	}
+	return openapi.StandardDraftDiffReport{
+		ReleaseId:  diff.ReleaseID,
+		Version:    diff.Version,
+		Base:       base,
+		Added:      mapDraftResourceChanges(diff.Added),
+		Modified:   mapDraftResourceChanges(diff.Modified),
+		Removed:    mapDraftResourceChanges(diff.Removed),
+		Unchanged:  int64(diff.Unchanged),
+		ComputedAt: diff.ComputedAt.Format(time.RFC3339),
+	}
+}
+
+func mapDraftResourceChanges(changes []application.DraftResourceChange) []openapi.DraftResourceChange {
+	mapped := make([]openapi.DraftResourceChange, 0, len(changes))
+	for _, change := range changes {
+		mapped = append(mapped, openapi.DraftResourceChange{
+			Kind: change.Kind,
+			ID:   change.ID,
+			Code: stringPtr(change.Code),
+			Name: stringPtr(change.Name),
+		})
+	}
+	return mapped
+}
+
 // mapLibraryReleaseToSummary projects a domain release into the OpenAPI
 // LibraryReleaseSummary shape served by the catalog endpoint.
 func mapLibraryReleaseToSummary(release *domain.LibraryRelease) openapi.LibraryReleaseSummary {
@@ -121,4 +304,13 @@ func mapLibraryReleaseToSummary(release *domain.LibraryRelease) openapi.LibraryR
 		CreatedAt:     createdAt,
 		UpdatedAt:     createdAt,
 	}
+}
+
+// stringPtr maps an empty application-layer string to a null contract field
+// (manifestHash/error are meaningful only when set).
+func stringPtr(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }

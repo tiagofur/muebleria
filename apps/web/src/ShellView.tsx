@@ -13,6 +13,7 @@
 
 import {
   useMemo,
+  useState,
   type ReactNode,
 } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -75,6 +76,10 @@ import {
   HardwareProfilesCatalog,
   AmbientMaterialsCatalog,
   MaterialsCatalog,
+  LibraryDraftValidationPanel,
+  LibraryDraftWorkspaceBanner,
+  LibraryPublishConfirmContent,
+  LibraryPublishHistoryPanel,
   ModulesScreen,
   ShowcaseScreen,
   OptionGroupsScreen,
@@ -188,6 +193,7 @@ import {
   type QuoteRevisionsQuery,
 } from './quoteRevisionAuthority';
 import { useProjectsCommercialSummaries } from './projectsCommercialSummaries';
+import { useStandardLibraryWorkspace } from './useStandardLibraryWorkspace';
 import { homeCommercialSummariesProps } from './homeCommercialSummaries';
 import {
   DEFAULT_API_BASE,
@@ -529,6 +535,22 @@ export interface ShellViewCtx {
   readonly enterSupportSession?: (token: string, orgId: string) => Promise<void>;
   readonly isPlatformAdmin?: boolean;
 }
+
+// #1102 LIB-AUTH Slice A: superficies de autoría del catálogo (Catálogos +
+// Librería) donde el bibliotecario compone la próxima versión de la
+// biblioteca — el banner del workspace de borrador se muestra sobre ellas.
+const LIBRARY_AUTHORING_NAV_IDS: readonly AppNavId[] = [
+  'materials',
+  'edges',
+  'hardware',
+  'hardwareProfiles',
+  'finishes',
+  'modules',
+  'structures',
+  'addOns',
+  'components',
+  'optionGroups',
+];
 
 export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   const {
@@ -884,6 +906,19 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       authToken,
     );
   }, [session, authToken]);
+  // #1102 LIB-AUTH Slice A: workspace de autoría de la biblioteca — identidad
+  // del borrador y versión publicada para el bibliotecario (platform admin).
+  // Los edits de Catálogos siguen por catalogStore sin cambios.
+  const libraryWorkspace = useStandardLibraryWorkspace({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    enabled: isPlatformAdmin === true,
+  });
+  const libraryAuthoringSurface =
+    isPlatformAdmin === true && LIBRARY_AUTHORING_NAV_IDS.includes(navId);
+  // #1102 LIB-AUTH Slice C: confirmación de publicación — el modal pide el
+  // diff al abrirse y la confirmación dispara el publish atómico del backend.
+  const [libraryPublishOpen, setLibraryPublishOpen] = useState(false);
   // #669: session-scoped GLB byte source for every 3D consumer (Proyectar,
   // mueble, Agregado, herraje). Guest sessions fall back to the test seam /
   // procedural representations.
@@ -979,6 +1014,62 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       commandItems={commandItems}
       onCommandItem={onCommandItem}
     >
+      {libraryAuthoringSurface ? (
+        <>
+          <LibraryDraftWorkspaceBanner
+            currentPublished={libraryWorkspace.currentPublished}
+            currentDraft={libraryWorkspace.currentDraft}
+            suggestedVersion={libraryWorkspace.suggestedVersion}
+            loading={libraryWorkspace.loading}
+            opening={libraryWorkspace.opening}
+            validating={libraryWorkspace.validating}
+            error={libraryWorkspace.error}
+            onOpenDraft={() => {
+              void libraryWorkspace.openDraft();
+            }}
+            onValidateDraft={() => {
+              void libraryWorkspace.validateDraft();
+            }}
+            onPublishClick={() => {
+              setLibraryPublishOpen(true);
+              void libraryWorkspace.requestDiff();
+            }}
+          />
+          <LibraryDraftValidationPanel
+            report={libraryWorkspace.currentValidation}
+            validating={libraryWorkspace.validating}
+          />
+          <LibraryPublishHistoryPanel
+            releases={libraryWorkspace.publishedReleases}
+          />
+          <Modal
+            open={libraryPublishOpen && libraryWorkspace.currentDraft !== null}
+            onClose={() => {
+              if (!libraryWorkspace.publishing) setLibraryPublishOpen(false);
+            }}
+            title={
+              libraryWorkspace.currentDraft
+                ? `Publicar biblioteca v${libraryWorkspace.currentDraft.version}`
+                : 'Publicar biblioteca'
+            }
+            dataTestId="library-publish-modal"
+          >
+            <LibraryPublishConfirmContent
+              version={libraryWorkspace.currentDraft?.version ?? ''}
+              diff={libraryWorkspace.currentDiff}
+              loading={libraryWorkspace.diffLoading}
+              error={libraryWorkspace.error}
+              publishing={libraryWorkspace.publishing}
+              onCancel={() => setLibraryPublishOpen(false)}
+              onConfirm={() => {
+                void libraryWorkspace.publishDraft().then((published) => {
+                  if (published) setLibraryPublishOpen(false);
+                });
+              }}
+            />
+          </Modal>
+        </>
+      ) : null}
       {navId === 'home' ? (
         <Dashboard
           stats={dashboardStats}

@@ -71,6 +71,13 @@ func (s *stubStore) GetPublishedReleases(_ context.Context, _ uuid.UUID) ([]*dom
 	return s.publishedReleases, nil
 }
 
+func (s *stubStore) GetDraftReleases(_ context.Context, _ uuid.UUID) ([]*domain.LibraryRelease, error) {
+	if s.draftReleasesErr != nil {
+		return nil, s.draftReleasesErr
+	}
+	return s.draftReleases, nil
+}
+
 func (s *stubStore) GetReleaseByID(_ context.Context, id uuid.UUID) (*domain.LibraryRelease, error) {
 	if s.getReleaseByIDErr != nil {
 		return nil, s.getReleaseByIDErr

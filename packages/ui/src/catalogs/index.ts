@@ -71,3 +71,23 @@ export {
   type AmbientMaterialDraft,
   type AmbientMaterialsCatalogProps,
 } from './ambient/AmbientMaterialsCatalog';
+
+export {
+  LibraryDraftWorkspaceBanner,
+  type LibraryDraftWorkspaceBannerProps,
+} from './LibraryDraftWorkspaceBanner';
+
+export {
+  LibraryDraftValidationPanel,
+  type LibraryDraftValidationPanelProps,
+} from './LibraryDraftValidationPanel';
+
+export {
+  LibraryPublishConfirmContent,
+  type LibraryPublishConfirmContentProps,
+} from './LibraryPublishConfirmContent';
+
+export {
+  LibraryPublishHistoryPanel,
+  type LibraryPublishHistoryPanelProps,
+} from './LibraryPublishHistoryPanel';

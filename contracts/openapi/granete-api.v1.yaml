@@ -4918,6 +4918,40 @@
         }
       }
     },
+    "/manufacturing-libraries/standard/releases/drafts": {
+      "get": {
+        "operationId": "getStandardLibraryDraftReleases",
+        "summary": "List open Granete Standard library draft releases (Granete platform staff)",
+        "description": "Returns the draft (unpublished) releases of the Granete Standard manufacturing library ordered newest first — the authoring workspace read of the library cycle (#1102 LIB-AUTH Slice A). Only platform staff may call this: tenants keep the exact published-only surface (000156 read policy). The first entry is the draft the authoring workspace is composing. [#1102]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of draft releases (empty when no draft is open)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LibraryReleaseSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/manufacturing-libraries/standard/releases/{releaseId}": {
       "get": {
         "operationId": "getStandardReleaseById",
@@ -4997,6 +5031,100 @@
             "$ref": "#/components/responses/ApiError"
           },
           "422": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/standard/releases/{releaseId}/diff": {
+      "get": {
+        "operationId": "getStandardLibraryDraftDiff",
+        "summary": "Diff of a Standard draft against the current published release (Granete platform staff)",
+        "description": "Read-only publish-confirmation summary (#1102 LIB-AUTH Slice C): compiles the draft dry-run with the publisher's exact inputs and compares per resource (kind, id) against the published manifest — added / modified (definitionHash changed) / removed / unchanged. Labels come from the canonical payloads; removed resources are labeled from their content-addressed blob. Base is null when nothing has been published yet. [#1102]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Diff report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftDiffReport"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "description": "The draft does not compile — it cannot publish; the error carries the fail-closed reason",
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/manufacturing-libraries/standard/releases/{releaseId}/validate": {
+      "post": {
+        "operationId": "validateStandardLibraryDraft",
+        "summary": "Validate the authoring state against a Standard draft release (Granete platform staff)",
+        "description": "Read-only pre-publish validation (#1102 LIB-AUTH Slice B): runs the exact compile inputs the publisher will gather (fail-closed hardware + #912-valid hardware profiles) without persisting anything, plus a batch resolve of every furniture definition of the caller's organization through the plugin-insertion engine. Symmetric with /publish: 404 unknown release, 409 not draft. [#1102]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation report (ok=false carries the failures; nothing was written)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftValidationReport"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "default": {
@@ -15188,6 +15316,221 @@
           "manifestHash",
           "resourceCount"
         ]
+      },
+      "StandardDraftDiffReport": {
+        "type": "object",
+        "required": [
+          "releaseId",
+          "version",
+          "added",
+          "modified",
+          "removed",
+          "unchanged",
+          "computedAt"
+        ],
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          },
+          "base": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DraftDiffBase"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The published release the draft is compared against; null when nothing was published yet"
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftResourceChange"
+            }
+          },
+          "modified": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftResourceChange"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftResourceChange"
+            }
+          },
+          "unchanged": {
+            "type": "integer"
+          },
+          "computedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DraftDiffBase": {
+        "type": "object",
+        "required": [
+          "releaseId",
+          "version"
+        ],
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "DraftResourceChange": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "StandardDraftValidationReport": {
+        "type": "object",
+        "required": [
+          "releaseId",
+          "version",
+          "ok",
+          "compile",
+          "furniture",
+          "validatedAt"
+        ],
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "true only when the compile dry-run succeeded AND every active furniture definition resolved"
+          },
+          "compile": {
+            "$ref": "#/components/schemas/DraftCompileCheck"
+          },
+          "furniture": {
+            "$ref": "#/components/schemas/DraftFurnitureCheck"
+          },
+          "validatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DraftCompileCheck": {
+        "type": "object",
+        "required": [
+          "ok",
+          "resourceCount"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "resourceCount": {
+            "type": "integer",
+            "description": "Resources the publisher would gather (0 when the gather itself failed)"
+          },
+          "manifestHash": {
+            "type": "string",
+            "description": "Deterministic hash the publish would record; empty when the dry-run failed"
+          },
+          "error": {
+            "type": "string",
+            "description": "Fail-closed gather/compile error; empty when ok"
+          }
+        }
+      },
+      "DraftFurnitureCheck": {
+        "type": "object",
+        "required": [
+          "total",
+          "resolved",
+          "failed"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Furniture definitions attempted"
+          },
+          "resolved": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftFurnitureFailure"
+            }
+          }
+        }
+      },
+      "DraftFurnitureFailure": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "error"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
       },
       "LibraryReleaseSummary": {
         "type": "object",

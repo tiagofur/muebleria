@@ -2326,6 +2326,59 @@ type StandardReleasePublishResult struct {
 	ResourceCount int64  `json:"resourceCount"`
 }
 
+type StandardDraftDiffReport struct {
+	ReleaseId  string                `json:"releaseId"`
+	Version    string                `json:"version"`
+	Base       *DraftDiffBase        `json:"base,omitempty"`
+	Added      []DraftResourceChange `json:"added"`
+	Modified   []DraftResourceChange `json:"modified"`
+	Removed    []DraftResourceChange `json:"removed"`
+	Unchanged  int64                 `json:"unchanged"`
+	ComputedAt string                `json:"computedAt"`
+}
+
+type DraftDiffBase struct {
+	ReleaseId string `json:"releaseId"`
+	Version   string `json:"version"`
+}
+
+type DraftResourceChange struct {
+	Kind string  `json:"kind"`
+	ID   string  `json:"id"`
+	Code *string `json:"code,omitempty"`
+	Name *string `json:"name,omitempty"`
+}
+
+type StandardDraftValidationReport struct {
+	ReleaseId   string              `json:"releaseId"`
+	Version     string              `json:"version"`
+	Ok          bool                `json:"ok"`
+	Compile     DraftCompileCheck   `json:"compile"`
+	Furniture   DraftFurnitureCheck `json:"furniture"`
+	ValidatedAt string              `json:"validatedAt"`
+}
+
+type DraftCompileCheck struct {
+	Ok            bool    `json:"ok"`
+	ResourceCount int64   `json:"resourceCount"`
+	ManifestHash  *string `json:"manifestHash,omitempty"`
+	Error         *string `json:"error,omitempty"`
+}
+
+type DraftFurnitureCheck struct {
+	Total    int64                   `json:"total"`
+	Resolved int64                   `json:"resolved"`
+	Failed   int64                   `json:"failed"`
+	Failures []DraftFurnitureFailure `json:"failures,omitempty"`
+}
+
+type DraftFurnitureFailure struct {
+	ID    string `json:"id"`
+	Code  string `json:"code"`
+	Name  string `json:"name"`
+	Error string `json:"error"`
+}
+
 type LibraryReleaseSummary struct {
 	ID               string  `json:"id"`
 	LibraryId        string  `json:"libraryId"`

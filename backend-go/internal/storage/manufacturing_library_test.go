@@ -3,6 +3,7 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -694,4 +695,141 @@ func TestManufacturingLibrary_DesignRevisionPinningImmutability(t *testing.T) {
 	if !strings.Contains(err.Error(), "design_revisions is immutable") && !strings.Contains(err.Error(), "immutable") {
 		t.Fatalf("expected immutability trigger error, got: %v", err)
 	}
+}
+
+// ─── Case 12 (#1102 Slice A): platform staff read Standard drafts ─────────────
+// The authoring workspace needs the open draft visible to platform staff
+// (app.platform_admin, 000156 read policy) while tenants keep the exact
+// published-only surface of 000139. Org-owned overlay drafts keep their
+// owner-organization visibility for tenants; platform staff already reach
+// every library row through 000146's FOR ALL policy (permissive policies
+// compose with OR) — pinned here so any future narrowing is explicit.
+func TestManufacturingLibrary_RLSStandardDraftReads(t *testing.T) {
+	fx := newRLSFixture(t)
+	ctx := context.Background()
+
+	standardID := uuid.MustParse(domain.GraneteStandardLibraryID)
+
+	draftID := uuid.New()
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO library_releases (id, library_id, version, status, schema_version)
+		VALUES ($1, $2, '0.0.1-draft', 'draft', 1)
+	`, draftID, standardID); err != nil {
+		t.Fatalf("insert standard draft: %v", err)
+	}
+	publishedID := uuid.New()
+	if _, err := fx.admin.Exec(ctx, `
+		INSERT INTO library_releases (id, library_id, version, status, schema_version, manifest_hash, published_at)
+		VALUES ($1, $2, '0.0.1-pub', 'published', 1, 'sha256:draft-reads', NOW())
+	`, publishedID, standardID); err != nil {
+		t.Fatalf("insert standard published: %v", err)
+	}
+
+	t.Run("tenant without the marker sees published only", func(t *testing.T) {
+		withRLSActor(t, fx.app, rlsOrgA, rlsUserA, func(tx pgx.Tx) {
+			var draftCount int
+			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM library_releases WHERE id = $1`, draftID).Scan(&draftCount); err != nil {
+				t.Fatalf("read draft as tenant: %v", err)
+			}
+			if draftCount != 0 {
+				t.Fatalf("RLS breach: tenant saw the Standard draft (%d rows)", draftCount)
+			}
+			var publishedCount int
+			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM library_releases WHERE id = $1`, publishedID).Scan(&publishedCount); err != nil {
+				t.Fatalf("read published as tenant: %v", err)
+			}
+			if publishedCount != 1 {
+				t.Fatalf("tenant lost the published release: %d rows", publishedCount)
+			}
+		})
+	})
+
+	t.Run("platform admin marker reads the draft through the store", func(t *testing.T) {
+		err := fx.store.WithinTenantTx(ctx, storage.TenantActor{
+			OrganizationID: rlsOrgA,
+			UserID:         rlsUserA,
+			PlatformAdmin:  true,
+		}, func(txCtx context.Context) error {
+			drafts, err := fx.store.GetDraftReleases(txCtx, standardID)
+			if err != nil {
+				return err
+			}
+			// Two drafts: the workspace draft under test plus the 000139
+			// seeded initial draft (fixed UUID, '0.1.0-draft'). Newest first
+			// puts the workspace draft at the head.
+			if len(drafts) != 2 {
+				return fmt.Errorf("platform staff drafts = %d (want 2)", len(drafts))
+			}
+			if drafts[0].ID != draftID {
+				return fmt.Errorf("newest draft = %s (want %s)", drafts[0].ID, draftID)
+			}
+			if drafts[1].ID.String() != domain.GraneteStandardDraftReleaseID {
+				return fmt.Errorf("second draft = %s (want seeded %s)", drafts[1].ID, domain.GraneteStandardDraftReleaseID)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("platform staff draft read: %v", err)
+		}
+	})
+
+	t.Run("org-owned drafts stay visible to staff authority and to their owner", func(t *testing.T) {
+		orgB := uuid.MustParse(rlsOrgB)
+		overlayID := uuid.New()
+		if _, err := fx.admin.Exec(ctx, `
+			INSERT INTO manufacturing_libraries
+			    (id, code, kind, owner_organization_id, upstream_library_id, status)
+			VALUES ($1, 'DRAFT-READS-OVERLAY', 'organization_overlay', $2, $3, 'active')
+		`, overlayID, orgB, standardID); err != nil {
+			t.Fatalf("create overlay: %v", err)
+		}
+		overlayDraftID := uuid.New()
+		if _, err := fx.admin.Exec(ctx, `
+			INSERT INTO library_releases (id, library_id, version, status, schema_version)
+			VALUES ($1, $2, '0.1.0-b', 'draft', 1)
+		`, overlayDraftID, overlayID); err != nil {
+			t.Fatalf("create overlay draft: %v", err)
+		}
+
+		// Platform staff scoped to Org A CAN read Org B's overlay draft: the
+		// #955 write policy (000146, FOR ALL with app_platform_admin())
+		// composes with SELECT per PostgreSQL's OR of permissive policies —
+		// pre-existing staff cross-org library authority, unchanged here.
+		// This subtest pins that behavior so a future narrowing is explicit.
+		err := fx.store.WithinTenantTx(ctx, storage.TenantActor{
+			OrganizationID: rlsOrgA,
+			UserID:         rlsUserA,
+			PlatformAdmin:  true,
+		}, func(txCtx context.Context) error {
+			drafts, err := fx.store.GetDraftReleases(txCtx, overlayID)
+			if err != nil {
+				return err
+			}
+			if len(drafts) != 1 || drafts[0].ID != overlayDraftID {
+				return fmt.Errorf("staff overlay draft visibility changed: %d", len(drafts))
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("platform staff overlay draft read: %v", err)
+		}
+
+		// Org B itself keeps its owner-organization branch of the read policy.
+		err = fx.store.WithinTenantTx(ctx, storage.TenantActor{
+			OrganizationID: rlsOrgB,
+			UserID:         rlsUserB,
+		}, func(txCtx context.Context) error {
+			drafts, err := fx.store.GetDraftReleases(txCtx, overlayID)
+			if err != nil {
+				return err
+			}
+			if len(drafts) != 1 || drafts[0].ID != overlayDraftID {
+				return fmt.Errorf("owner org lost its overlay draft: %d", len(drafts))
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("owner org overlay draft read: %v", err)
+		}
+	})
 }
