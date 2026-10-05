@@ -855,6 +855,40 @@ export function ConstructionSettingsSection({
               disabled={disabled || saving}
               data-testid="back-max-spacing-input"
             />
+            <p className="settings-hint" style={{ margin: 0 }}>
+              La cantidad se deriva de cada tramo del perímetro (#874): verticales según el alto del mueble,
+              horizontales según el ancho.
+            </p>
+          </div>
+
+          <div className="catalog-form__field">
+            <label htmlFor="back-start-margin">Margen esquina inicial (mm)</label>
+            <input
+              id="back-start-margin"
+              type="number"
+              min={20}
+              max={200}
+              step={1}
+              value={policy.backPanel.startMarginMm}
+              onChange={(e) => updateBack({ startMarginMm: Number(e.target.value) })}
+              disabled={disabled || saving}
+              data-testid="back-start-margin-input"
+            />
+          </div>
+
+          <div className="catalog-form__field">
+            <label htmlFor="back-end-margin">Margen esquina final (mm)</label>
+            <input
+              id="back-end-margin"
+              type="number"
+              min={20}
+              max={200}
+              step={1}
+              value={policy.backPanel.endMarginMm}
+              onChange={(e) => updateBack({ endMarginMm: Number(e.target.value) })}
+              disabled={disabled || saving}
+              data-testid="back-end-margin-input"
+            />
           </div>
         </div>
       </div>
