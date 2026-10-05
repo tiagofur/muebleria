@@ -9,7 +9,7 @@
  * (items, panels, totals) can pull what they need without prop threading.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type {
   Component,
   Customer,
@@ -431,6 +431,18 @@ function ProjectDetailViewInner(): ReactNode {
       window.history.replaceState(null, '', url);
     }
   };
+  // #1124 re-critique: cerrar el detalle limpia el panel — la obra siguiente
+  // nunca monta con el panel de la anterior ni un share lo filtra.
+  useEffect(
+    () => () => {
+      if (typeof window !== 'undefined' && window.location.search.includes('panel=')) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('panel');
+        window.history.replaceState(null, '', url);
+      }
+    },
+    [],
+  );
   const [releaseModalOpen, setReleaseModalOpen] = useState(false);
   const [changeOrderModalOpen, setChangeOrderModalOpen] = useState(false);
 
