@@ -76,7 +76,7 @@ func TestQuoteCommercialSnapshotCarriesProfileDemand(t *testing.T) {
 			if _, err := admin.Exec(context.Background(), `UPDATE library_releases SET version = '0.1.0-quote-demand' WHERE id = $1`, draftID); err != nil {
 				t.Fatalf("retarget draft: %v", err)
 			}
-			if _, err := application.PublishStandardRelease(context.Background(), &storage.PostgresStore{Pool: admin}, draftID, uuid.MustParse(rlsUserA)); err != nil {
+			if _, err := application.PublishStandardRelease(storage.WithOrgCtx(context.Background(), rlsOrgA), &storage.PostgresStore{Pool: admin}, draftID, uuid.MustParse(rlsUserA)); err != nil {
 				t.Fatalf("publish: %v", err)
 			}
 		},
