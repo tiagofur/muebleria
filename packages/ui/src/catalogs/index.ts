@@ -71,3 +71,8 @@ export {
   type AmbientMaterialDraft,
   type AmbientMaterialsCatalogProps,
 } from './ambient/AmbientMaterialsCatalog';
+
+export {
+  LibraryDraftWorkspaceBanner,
+  type LibraryDraftWorkspaceBannerProps,
+} from './LibraryDraftWorkspaceBanner';

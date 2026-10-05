@@ -39,6 +39,10 @@ func registerLibraryRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// writers of Standard library releases.
 	mux.Handle("POST /api/manufacturing-libraries/standard/releases", authMW(http.HandlerFunc(server.HandleCreateStandardLibraryRelease)))
 	mux.Handle("POST /api/manufacturing-libraries/standard/releases/{releaseId}/publish", authMW(http.HandlerFunc(server.HandlePublishStandardLibraryRelease)))
+	// #1102 (LIB-AUTH Slice A): authoring workspace draft read — platform
+	// staff only; the literal path wins over {releaseId} so a draft list is
+	// never parsed as a release id.
+	mux.Handle("GET /api/manufacturing-libraries/standard/releases/drafts", authMW(http.HandlerFunc(server.HandleStandardLibraryDraftReleases)))
 	// #773 (LIB-2): Manifest and content-addressed resource distribution
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/manifest", authMW(http.HandlerFunc(server.HandleStandardLibraryReleaseManifest)))
 	mux.Handle("GET /api/manufacturing-libraries/standard/releases/{releaseId}/resources/{resourceId}/blobs/{hash}", authMW(http.HandlerFunc(server.HandleStandardLibraryResourceBlob)))
