@@ -240,6 +240,7 @@ module Granete
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
           dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(dialog, p) }
+          register_hardware_inventory_callbacks(dialog)
           register_motion_callbacks(dialog)
           dialog.add_action_callback('delete_selected_furniture') { |_c, p| handle_delete(dialog, p) }
           dialog.add_action_callback('close_dialog') { dialog.close }
@@ -260,6 +261,16 @@ module Granete
         def register_inspection_callbacks(dialog)
           dialog.add_action_callback('manufacturing_inspection') { |_c, p| handle_manufacturing_inspection(dialog, p) }
           dialog.add_action_callback('preflight_review') { |_c, p| handle_preflight_review(dialog, p) }
+        end
+
+        # #1046 S2: inventory + select of REAL project hardware (metadata scan).
+        def register_hardware_inventory_callbacks(dialog)
+          dialog.add_action_callback('request_hardware_inventory') do |_c, _p|
+            handle_request_hardware_inventory(dialog)
+          end
+          dialog.add_action_callback('select_hardware_instance') do |_c, p|
+            handle_select_hardware_instance(dialog, p)
+          end
         end
 
         def register_motion_callbacks(dialog)
