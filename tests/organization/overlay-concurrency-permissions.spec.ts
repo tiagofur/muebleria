@@ -36,7 +36,7 @@ async function loginViaPage(page: Page, emailEnv: string, orgName: string | RegE
   await page.goto('/');
   await page.getByLabel('Email').fill(required(emailEnv));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   // Multi-org subjects land on the factory chooser; single-org ones don't.
   const chooser = page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' });
   try {

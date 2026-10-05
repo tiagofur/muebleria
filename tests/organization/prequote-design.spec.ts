@@ -31,7 +31,7 @@ async function loginOwner(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
   const tour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
   if (await tour.isVisible()) await tour.getByRole('button', { name: 'Omitir' }).click();

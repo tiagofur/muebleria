@@ -111,9 +111,31 @@ test.describe('F194 responsive UI gate', () => {
 
     test(`invitation acceptance is usable without overflow at ${viewport.width}px`, async ({ page }) => {
       await page.setViewportSize(viewport);
+      // #1108: la pantalla ahora hace preflight del token al montar; sin un
+      // preview exitoso no renderiza el formulario. Se mockea el endpoint con
+      // una identidad nueva (la variante más rica: nombre + contraseña).
+      await page.route('http://localhost:8080/api/**', async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        if (path.endsWith('/auth/invitations:preview')) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              organization_name: 'Taller Visual',
+              roles: ['vendedor'],
+              email_masked: 'i•••@taller.test',
+              account_exists: false,
+            }),
+          });
+          return;
+        }
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      });
       await page.goto('/accept-invitation?token=visual-review-token');
       await expect(page.getByRole('heading', { name: 'Unirte al equipo' })).toBeVisible();
-      await expect(page.getByLabel('Contraseña *')).toBeVisible();
+      await expect(page.getByText('Taller Visual')).toBeVisible();
+      await expect(page.getByText(/i•••@taller\.test/)).toBeVisible();
+      await expect(page.getByLabel('Creá tu contraseña *')).toBeVisible();
       await expect(page.getByRole('button', { name: /Aceptar invitación y entrar/ })).toBeVisible();
       await assertNoPageOverflow(page);
 

@@ -16,7 +16,7 @@ async function login(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_EMAIL'));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.getByRole('heading', { name: '¿En qué taller vas a trabajar?' })).toBeVisible();
   await page.getByRole('button', { name: /Browser Gate A/ }).click();
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A');
@@ -170,15 +170,15 @@ test('logout en una pestaña corta la sesión compartida: la otra termina en log
   await dismissTour(tabB);
 
   await tabA.getByTestId('app-logout').click();
-  await expect(tabA.getByRole('button', { name: 'Iniciar Sesión' })).toBeVisible({ timeout: 15_000 });
+  await expect(tabA.getByRole('button', { name: 'Iniciar sesión' })).toBeVisible({ timeout: 15_000 });
 
   // Wait for the broadcast-driven reload before requesting another navigation.
-  await expect(tabB.getByRole('button', { name: 'Iniciar Sesión' })).toBeVisible({ timeout: 15_000 });
+  await expect(tabB.getByRole('button', { name: 'Iniciar sesión' })).toBeVisible({ timeout: 15_000 });
   await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveCount(0);
 
   // An explicit reload must still bootstrap into login after cookie revocation.
   await tabB.reload();
-  await expect(tabB.getByRole('button', { name: 'Iniciar Sesión' })).toBeVisible({ timeout: 15_000 });
+  await expect(tabB.getByRole('button', { name: 'Iniciar sesión' })).toBeVisible({ timeout: 15_000 });
   // Sin business data residual visible.
   await expect(tabB.locator('.app-topbar__organization-text strong')).toHaveCount(0);
 });
@@ -209,7 +209,7 @@ test('FAIL CLOSED sin Web Locks: la rotación se rechaza aunque IndexedDB exista
   await page.goto('/');
   await page.getByLabel('Email').fill(required('ORGANIZATION_GATE_A_OWNER_EMAIL'));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText('Browser Gate A', { timeout: 15_000 });
   const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();

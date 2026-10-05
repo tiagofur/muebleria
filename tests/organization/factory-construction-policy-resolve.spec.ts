@@ -97,7 +97,7 @@ async function loginAndCaptureToken(page: Page, emailEnv: string, orgName: strin
   await page.goto('/');
   await page.getByLabel('Email').fill(required(emailEnv));
   await page.getByRole('textbox', { name: 'Contraseña', exact: true }).fill(required('ORGANIZATION_GATE_PASSWORD'));
-  await page.getByRole('button', { name: 'Iniciar Sesión' }).click();
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.locator('.app-topbar__organization-text strong')).toHaveText(orgName, { timeout: 15_000 });
   const welcomeTour = page.getByRole('dialog', { name: /Tour de Bienvenida/ });
   if (await welcomeTour.isVisible()) await welcomeTour.getByRole('button', { name: 'Omitir' }).click();
