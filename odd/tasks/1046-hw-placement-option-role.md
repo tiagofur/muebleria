@@ -131,3 +131,35 @@ honrando la elección; acabados de herraje (snapshot comercial v2).
   builder, selección, guard, provider); JS harness (inspector, child, selector);
   `bundle exec rake verify` + `verify_affected` al congelar. V2 host real
   (TestUp/smoke) queda NOT_RUN en este slice — se declara en el PR.
+
+## S3 — Entrega (2026-10-05)
+
+- **Candidato**: `feat/1046-hw-group-mueble-inspector` @ `d527f8f6`
+  (base `origin/main` @ `875f2b65`). 4 commits atómicos:
+  966dbefa (backend+contratos), c2e4ddbb (Ruby plugin), 0d843c00 (UI),
+  d527f8f6 (boundary fix).
+- **Decisión de producto tomada en vuelo**: el payload de hardware al
+  plugin NO lleva costos (precio sigue siendo del lado servidor;
+  estimado/preflight lo reflejan). Documentada acá para revisión.
+- **Hallazgo de extensión**: el eco de placements en mutaciones de
+  componente (#467) es equivalente-por-construcción para grupos (eco de la
+  elección vigente; el metadata hijo se escribe desde el layout resuelto
+  que preserva optionRole; materialChoices persiste) — sin pin real. El
+  único pin posible (sustitución/offset manual) queda guardeado en Ruby.
+- **Verificación local (HEAD d527f8f6)**:
+  - `bundle exec rake verify` (Ruby 3.2 pin): syntax+lint 0 offenses+unit
+    1348/0+boundary+RBZ readback (sha256 7df0c21f…).
+  - Go `./internal/api/ ./internal/domain/...` ok (golden del contrato
+    regenerado y revisado: sólo cambian los hash catalogRevision).
+  - `pnpm typecheck` ok; `@granete/domain` vitest 1792/1792.
+  - `check_openapi_drift.py` current; scripts factory/ci OK.
+  - Harness JS: inspector 52, child 25, selector 5 — todos los *_test.js
+    del diálogo pasan.
+  - NOT_RUN local (CI/owner): `go test ./...` storage (PG), `pnpm test`
+    web/ui completo, visual/browser/foundation gates, **smoke host real
+    (TestUp/SketchUp)** — el DoD de UX de autoría pide evidencia de host:
+    queda pendiente para el owner tras instalar el RBZ de este branch.
+- **Restante de #1046** (sigue partial): DoorHingeRule honrando la elección
+  (cantiad de bisagras dinámica → #1078), acabados de herraje (snapshot
+  comercial v2), hardwareChoices a nivel diseño (#784 extensión), y el
+  smoke host de este slice.
