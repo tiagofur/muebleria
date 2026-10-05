@@ -5008,6 +5008,51 @@
         }
       }
     },
+    "/manufacturing-libraries/standard/releases/{releaseId}/validate": {
+      "post": {
+        "operationId": "validateStandardLibraryDraft",
+        "summary": "Validate the authoring state against a Standard draft release (Granete platform staff)",
+        "description": "Read-only pre-publish validation (#1102 LIB-AUTH Slice B): runs the exact compile inputs the publisher will gather (fail-closed hardware + #912-valid hardware profiles) without persisting anything, plus a batch resolve of every furniture definition of the caller's organization through the plugin-insertion engine. Symmetric with /publish: 404 unknown release, 409 not draft. [#1102]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Validation report (ok=false carries the failures; nothing was written)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftValidationReport"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/manufacturing-libraries/standard/releases/{releaseId}/hardware-profiles": {
       "get": {
         "operationId": "getHardwareProfilesForRelease",
@@ -15152,6 +15197,113 @@
           "manifestHash",
           "resourceCount"
         ]
+      },
+      "StandardDraftValidationReport": {
+        "type": "object",
+        "required": [
+          "releaseId",
+          "version",
+          "ok",
+          "compile",
+          "furniture",
+          "validatedAt"
+        ],
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "true only when the compile dry-run succeeded AND every active furniture definition resolved"
+          },
+          "compile": {
+            "$ref": "#/components/schemas/DraftCompileCheck"
+          },
+          "furniture": {
+            "$ref": "#/components/schemas/DraftFurnitureCheck"
+          },
+          "validatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DraftCompileCheck": {
+        "type": "object",
+        "required": [
+          "ok",
+          "resourceCount"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "resourceCount": {
+            "type": "integer",
+            "description": "Resources the publisher would gather (0 when the gather itself failed)"
+          },
+          "manifestHash": {
+            "type": "string",
+            "description": "Deterministic hash the publish would record; empty when the dry-run failed"
+          },
+          "error": {
+            "type": "string",
+            "description": "Fail-closed gather/compile error; empty when ok"
+          }
+        }
+      },
+      "DraftFurnitureCheck": {
+        "type": "object",
+        "required": [
+          "total",
+          "resolved",
+          "failed"
+        ],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "description": "Furniture definitions attempted"
+          },
+          "resolved": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftFurnitureFailure"
+            }
+          }
+        }
+      },
+      "DraftFurnitureFailure": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "error"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
       },
       "LibraryReleaseSummary": {
         "type": "object",

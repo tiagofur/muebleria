@@ -76,3 +76,8 @@ export {
   LibraryDraftWorkspaceBanner,
   type LibraryDraftWorkspaceBannerProps,
 } from './LibraryDraftWorkspaceBanner';
+
+export {
+  LibraryDraftValidationPanel,
+  type LibraryDraftValidationPanelProps,
+} from './LibraryDraftValidationPanel';

@@ -145,6 +145,89 @@ func TestHandleCreateStandardLibraryReleaseDuplicateVersion(t *testing.T) {
 	}
 }
 
+// TestHandleValidateStandardLibraryDraft (#1102 Slice B): the read-only
+// "probar borrador" — platform staff gate, publish's 404/409 semantics and a
+// structured report instead of a write.
+func TestHandleValidateStandardLibraryDraft(t *testing.T) {
+	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
+
+	validateRequest := func(store *stubStore, platform bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/manufacturing-libraries/standard/releases/"+releaseID.String()+"/validate", nil)
+		req.SetPathValue("releaseId", releaseID.String())
+		req = platformClaims(req, platform)
+		rec := httptest.NewRecorder()
+		(&Server{Store: store}).HandleValidateStandardLibraryDraft(rec, req)
+		return rec
+	}
+
+	t.Run("validates a draft through the real compiler and engine", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.4.0", Status: domain.ReleaseStatusDraft, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+			listActiveHardwareProfilesAnyOrg: []domain.HardwareProfile{{
+				ID: "a0000010-0000-0000-0000-000000000001", Code: "PERF-X", Name: "X", Revision: "r1", Active: true,
+				Items: []domain.HardwareProfileItem{{HardwareID: "a0000003-0000-0000-0000-000000000012", Quantity: 1}},
+			}},
+			listHardwares: []domain.Hardware{},
+			listModules: []domain.Module{
+				{ID: "m-1", Code: "VIG-A", Name: "Vigas A", WidthMm: 600, HeightMm: 720, DepthMm: 560},
+			},
+		}
+		rec := validateRequest(store, true)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var report struct {
+			Ok      bool `json:"ok"`
+			Compile struct {
+				Ok            bool `json:"ok"`
+				ResourceCount int  `json:"resourceCount"`
+			} `json:"compile"`
+			Furniture struct {
+				Total    int `json:"total"`
+				Resolved int `json:"resolved"`
+				Failed   int `json:"failed"`
+			} `json:"furniture"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
+			t.Fatalf("body = %s err=%v", rec.Body.String(), err)
+		}
+		if !report.Ok || !report.Compile.Ok || report.Compile.ResourceCount != 1 {
+			t.Fatalf("report = %s", rec.Body.String())
+		}
+		if report.Furniture.Total != 1 || report.Furniture.Resolved != 1 || report.Furniture.Failed != 0 {
+			t.Fatalf("furniture = %+v", report.Furniture)
+		}
+	})
+
+	t.Run("409 when the release is not a draft", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.1.0", Status: domain.ReleaseStatusPublished, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+		}
+		rec := validateRequest(store, true)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("404 when the release does not exist", func(t *testing.T) {
+		rec := validateRequest(&stubStore{}, true)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects a non-platform user with 403", func(t *testing.T) {
+		rec := validateRequest(&stubStore{}, false)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+}
+
 func TestHandlePublishStandardLibraryRelease(t *testing.T) {
 	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
 

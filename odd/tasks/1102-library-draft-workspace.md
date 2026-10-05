@@ -1,5 +1,31 @@
 # ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
 
+**Slice B (rama apilada feat/1102-lib-draft-validate, base = rama A):**
+diseño publicado antes de codear (issuecomment-6000798162). Bajo la
+arquitectura de A, "browser con flag" y "plugin modo dev" son piezas de D
+(hoy browser y plugin ya leen las tablas canónicas = el borrador; el flag
+sólo cobra sentido cuando D corte consumidores a releases). El hueco real de
+B era "una acción que diga si el borrador resuelve completo":
+
+- `POST /api/manufacturing-libraries/standard/releases/{releaseId}/validate`
+  (platform staff, read-only, simétrico a /publish): dry-run de compilación
+  con los EXACTOS inputs del publisher (BuildStandardReleaseInputs →
+  CompileLibraryRelease, nada persiste) + batch resolve de TODAS las
+  definiciones de muebles del catálogo del caller con el motor del plugin
+  (ResolveFurnitureLayout, medidas propias, sin choices). Reporte
+  {ok, compile, furniture{total,resolved,failed,failures}, validatedAt}.
+  Los módulos no tienen flag Active (borrado físico): el batch cubre todos.
+- Web: botón "Probar borrador vN" en el banner + panel de reporte
+  (LibraryDraftValidationPanel) con estados distintos válido/inválido,
+  errores de compilación y fallas por definición. El reporte queda keyed al
+  draft validado (un draft más nuevo nunca muestra un veredicto viejo).
+- Tests: application (compile limpio / fail-closed sin perfiles / falla por
+  definición / guards 404-409), handler (200 con conteos reales vía
+  compilador y motor reales, 403/404/409), hook (validate keyed, no-op sin
+  draft), banner (botón sólo con draft), panel (4 estados).
+
+---
+
 - **Base:** origin/main `a3a8a250f1cf93d57f036bdb91c3dc0c3f6fb985`
 - **Lane:** Delegated Direct (1 Explorer read-only para la superficie web; 1 writer)
 - **Diseño:** decisión publicada ANTES de codear en

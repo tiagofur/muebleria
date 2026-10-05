@@ -28,16 +28,23 @@ const draft: LibraryReleaseSummary = {
 };
 
 describe('LibraryDraftWorkspaceBanner (#1102)', () => {
+  const baseProps = {
+    suggestedVersion: '0.3.5',
+    loading: false,
+    opening: false,
+    validating: false,
+    error: null,
+    onOpenDraft: vi.fn(),
+    onValidateDraft: vi.fn(),
+  };
+
   it('offers opening a draft when none is open, showing the published version', () => {
     const onOpenDraft = vi.fn();
     render(
       <LibraryDraftWorkspaceBanner
+        {...baseProps}
         currentPublished={published}
         currentDraft={null}
-        suggestedVersion="0.3.5"
-        loading={false}
-        opening={false}
-        error={null}
         onOpenDraft={onOpenDraft}
       />,
     );
@@ -48,35 +55,36 @@ describe('LibraryDraftWorkspaceBanner (#1102)', () => {
     expect(button.textContent).toContain('v0.3.5');
     fireEvent.click(button);
     expect(onOpenDraft).toHaveBeenCalledTimes(1);
+    // Sin draft no hay nada que probar.
+    expect(screen.queryByTestId('library-draft-validate-btn')).toBeNull();
   });
 
-  it('shows the editing state when a draft is open and hides the open button', () => {
+  it('shows the editing state with the draft test action and hides the open button', () => {
+    const onValidateDraft = vi.fn();
     render(
       <LibraryDraftWorkspaceBanner
+        {...baseProps}
         currentPublished={published}
         currentDraft={draft}
-        suggestedVersion="0.3.6"
-        loading={false}
-        opening={false}
-        error={null}
-        onOpenDraft={vi.fn()}
+        onValidateDraft={onValidateDraft}
       />,
     );
 
     expect(screen.getByTestId('library-draft-workspace-banner').textContent).toContain('próxima versión v0.3.5');
     expect(screen.queryByTestId('library-draft-open-btn')).toBeNull();
+    const validateButton = screen.getByTestId('library-draft-validate-btn');
+    expect(validateButton.textContent).toContain('Probar borrador v0.3.5');
+    fireEvent.click(validateButton);
+    expect(onValidateDraft).toHaveBeenCalledTimes(1);
   });
 
   it('renders a distinct alert state when the workspace cannot load', () => {
     render(
       <LibraryDraftWorkspaceBanner
+        {...baseProps}
         currentPublished={null}
         currentDraft={null}
-        suggestedVersion="0.1.0"
-        loading={false}
-        opening={false}
         error="Tu sesión ya no tiene autoridad de plataforma; recargá para sincronizar."
-        onOpenDraft={vi.fn()}
       />,
     );
 
@@ -84,18 +92,16 @@ describe('LibraryDraftWorkspaceBanner (#1102)', () => {
     expect(banner.getAttribute('role')).toBe('alert');
     expect(banner.textContent).toContain('autoridad de plataforma');
     expect(screen.queryByTestId('library-draft-open-btn')).toBeNull();
+    expect(screen.queryByTestId('library-draft-validate-btn')).toBeNull();
   });
 
   it('renders the loading state without content promises', () => {
     render(
       <LibraryDraftWorkspaceBanner
+        {...baseProps}
         currentPublished={null}
         currentDraft={null}
-        suggestedVersion="0.1.0"
         loading
-        opening={false}
-        error={null}
-        onOpenDraft={vi.fn()}
       />,
     );
 

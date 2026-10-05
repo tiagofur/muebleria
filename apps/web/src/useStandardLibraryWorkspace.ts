@@ -14,6 +14,7 @@ import {
   GraneteApiClient,
   GraneteApiError,
   type LibraryReleaseSummary,
+  type StandardDraftValidationReport,
 } from '@granete/storage';
 
 export interface UseStandardLibraryWorkspaceOptions {
@@ -69,6 +70,13 @@ export function useStandardLibraryWorkspace({
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #1102 Slice B: the "probar borrador" report — keyed by the draft it
+  // validated so a newer draft never shows a stale verdict.
+  const [validation, setValidation] = useState<{
+    draftId: string;
+    report: StandardDraftValidationReport;
+  } | null>(null);
+  const [validating, setValidating] = useState(false);
 
   const fetchState = useCallback(
     async (client: GraneteApiClient, authToken: string) => {
@@ -111,6 +119,18 @@ export function useStandardLibraryWorkspace({
     };
   }, [baseUrl, token, enabled, fetchState]);
 
+  const currentPublished = publishedReleases[0] ?? null;
+  // El workspace compone contra el borrador más reciente; C listará todos.
+  const currentDraft = draftReleases[0] ?? null;
+  const suggestedVersion = suggestNextLibraryVersion([
+    ...publishedReleases,
+    ...draftReleases,
+  ]);
+  const currentValidation =
+    validation && currentDraft && validation.draftId === currentDraft.id
+      ? validation.report
+      : null;
+
   const openDraft = useCallback(async (): Promise<LibraryReleaseSummary | null> => {
     if (!token) return null;
     const client = new GraneteApiClient(baseUrl);
@@ -138,13 +158,31 @@ export function useStandardLibraryWorkspace({
     }
   }, [baseUrl, token, publishedReleases, draftReleases, fetchState]);
 
-  const currentPublished = publishedReleases[0] ?? null;
-  // El workspace compone contra el borrador más reciente; C listará todos.
-  const currentDraft = draftReleases[0] ?? null;
-  const suggestedVersion = suggestNextLibraryVersion([
-    ...publishedReleases,
-    ...draftReleases,
-  ]);
+  // #1102 Slice B: read-only pre-publish validation — the exact compile the
+  // publisher would run plus a batch resolve of every furniture definition.
+  const validateDraft = useCallback(async (): Promise<StandardDraftValidationReport | null> => {
+    if (!token || !currentDraft) return null;
+    const client = new GraneteApiClient(baseUrl);
+    setValidating(true);
+    setError(null);
+    try {
+      const report = await client.validateStandardLibraryDraft(
+        token,
+        currentDraft.id,
+      );
+      setValidation({ draftId: currentDraft.id, report });
+      return report;
+    } catch (err: unknown) {
+      setError(
+        err instanceof GraneteApiError && err.status === 409
+          ? 'El borrador ya no está en draft; recargá el workspace.'
+          : 'No se pudo probar el borrador de la biblioteca.',
+      );
+      return null;
+    } finally {
+      setValidating(false);
+    }
+  }, [baseUrl, token, currentDraft]);
 
   return {
     currentPublished,
@@ -155,5 +193,8 @@ export function useStandardLibraryWorkspace({
     opening,
     error,
     openDraft,
+    validating,
+    currentValidation,
+    validateDraft,
   };
 }
