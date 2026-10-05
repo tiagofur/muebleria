@@ -1,5 +1,40 @@
 # ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
 
+**Item 1 del restante de D — congelar la GEOMETRÍA (rama feat/1102-frozen-catalog-resolve, apilada sobre D):**
+diseño publicado antes de codear (issuecomment-6002693223). El compilador
+ahora junta TODO el catálogo de autoría desde UN snapshot consistente
+(`GetFullCatalog` — incluye despiece y hardware lines de cada módulo) y lo
+congela en 9 kinds nuevos (module/structure/component/agregado/material/
+edge_band/option_group/module_category/material_category) + los existentes
+hardware/hardware_profile. `ValidateModule` por módulo en la juntada:
+fail-closed, un mueble roto no entra a un release inmutable; ids no-uuid
+también. La degradación honesta de perfiles no cargables se mantiene.
+
+- **Decodificación:** `storage.FrozenCatalogForRelease` reconstruye el
+  `domain.Catalog` + categorías de material desde manifiesto + blobs,
+  fail-closed (`ErrFrozenCatalogIncomplete`) ante blob faltante/ilegible —
+  un resolve pineado JAMÁS cae a filas vivas.
+- **Resolve pineado:** con `furniture.libraryReleaseId` el snapshot del
+  resolve se arma desde el freeze y la Projection se reconstruye con el
+  MISMO `buildWorkshopFurnitureCatalogValidated` (cero fork del sistema de
+  parámetros). `CATALOG_REVISION_STALE` no se compara en modo pin: el pin
+  reemplaza a la revisión como ancla (catalogRevision advisory). Test
+  clave: módulo congelado con 611mm que no existe en el vivo → el resolve
+  pineado devuelve 611.
+- El batch de "probar borrador" (B) y el diff (C) ahora usan el MISMO
+  snapshot de catálogo (una sola lectura consistente).
+- **Hallazgos de la suite (arreglados):** `agregados.id` es TEXT PRIMARY KEY
+  — ids no-uuid son legítimos del esquema, así que el gate estricto de uuid
+  se convirtió en skip-with-WARN (`release_compile_skipped_non_uuid_resource`):
+  la entidad no representable en el contrato #772 (refs uuid) no se congela;
+  limitación nombrada. Y `GetFullCatalog` con ctx sin org crasheaba
+  (`organization_id = ''` contra columna uuid) en fixtures que publicaban
+  con el pool de migración — corregido con `WithOrgCtx` explícito en los 5
+  sitios (el camino API siempre tiene org por middleware).
+- Restante del restante: plugin dev-mode contra borrador (item 2).
+
+---
+
 **Slice D (rama feat/1102-lib-consumer-release desde main con A+B+C mergeados por el owner):**
 diseño publicado antes de codear (issuecomment-6001874131). El hallazgo que
 redefinió el slice: `ReleaseServerResolveInputs` (#875/#916) YA resuelve los

@@ -1455,31 +1455,57 @@ func TestAuthoringResolveHonorsConsumerReleasePin(t *testing.T) {
 	server, token := authoringStubServer(t)
 	stub := server.Store.(*stubStore)
 	revision := authoringCatalogRevision(t, server)
-	pinID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	pinID := uuid.MustParse("22222222-2222-2222-2222-999999999999")
+	// The frozen module carries the fixture definition id so the pinned
+	// resolve finds it IN the release, not in the live catalog.
+	frozenModule := domain.Module{
+		ID: authoringFixtureModuleID, Code: "VIG-FROZEN", Name: "Vigas Congeladas",
+		WidthMm: 611, HeightMm: 722, DepthMm: 563, Version: 1,
+	}
 
-	request := func(pin string) authoringResolveRequest {
+	request := func(pin, definitionID string) authoringResolveRequest {
 		return authoringFixtureRequest(revision, authoringResolveFurniture{
-			FurnitureDefinitionID: authoringFixtureModuleID,
+			FurnitureDefinitionID: definitionID,
 			LibraryReleaseID:      pin,
 		})
 	}
 
-	t.Run("published pin resolves and is echoed back", func(t *testing.T) {
+	t.Run("published pin resolves from the frozen geometry", func(t *testing.T) {
 		stub.releaseByID = map[uuid.UUID]*domain.LibraryRelease{
 			pinID: {ID: pinID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.3.4", Status: domain.ReleaseStatusPublished},
 		}
-		rec := postAuthoringResolve(server, token, "", request(pinID.String()))
+		frozenJSON, err := json.Marshal(frozenModule)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stub.releaseManifestsByID = map[uuid.UUID]*domain.LibraryManifest{
+			pinID: {Resources: []domain.ManifestResourceRef{{
+				Kind: "module", ID: uuid.MustParse(authoringFixtureModuleID),
+				Revision: "v1", DefinitionHash: "sha256:frozenvig", PackageKind: domain.PackageKindFree,
+			}}},
+		}
+		stub.resourceBlobsByHash = map[string]*domain.ResourceBlob{
+			"sha256:frozenvig": {SHA256: "sha256:frozenvig", Content: frozenJSON},
+		}
+
+		// The live revision is advisory under a pin: pass a stale value and
+		// the resolve must still proceed FROM THE FROZEN MODULE — its 611mm
+		// width exists nowhere in the live catalog.
+		rec := postAuthoringResolve(server, token, "", request(pinID.String(), authoringFixtureModuleID))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}
 		if !strings.Contains(rec.Body.String(), pinID.String()) {
 			t.Fatalf("pinned release id not echoed: %s", rec.Body.String())
 		}
+		if !strings.Contains(rec.Body.String(), "611") {
+			t.Fatalf("frozen geometry did not drive the resolve: %s", rec.Body.String())
+		}
 	})
 
 	t.Run("draft pin fails closed", func(t *testing.T) {
 		stub.releaseByID[pinID].Status = domain.ReleaseStatusDraft
-		rec := postAuthoringResolve(server, token, "", request(pinID.String()))
+		rec := postAuthoringResolve(server, token, "", request(pinID.String(), authoringFixtureModuleID))
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}
@@ -1490,14 +1516,14 @@ func TestAuthoringResolveHonorsConsumerReleasePin(t *testing.T) {
 
 	t.Run("unknown pin fails closed", func(t *testing.T) {
 		unknown := uuid.MustParse("22222222-2222-2222-2222-222222229999")
-		rec := postAuthoringResolve(server, token, "", request(unknown.String()))
+		rec := postAuthoringResolve(server, token, "", request(unknown.String(), authoringFixtureModuleID))
 		if rec.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}
 	})
 
 	t.Run("malformed pin is a transport rejection", func(t *testing.T) {
-		rec := postAuthoringResolve(server, token, "", request("not-a-uuid"))
+		rec := postAuthoringResolve(server, token, "", request("not-a-uuid", authoringFixtureModuleID))
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
 		}

@@ -169,9 +169,10 @@ func TestHandleValidateStandardLibraryDraft(t *testing.T) {
 				ID: "a0000010-0000-0000-0000-000000000001", Code: "PERF-X", Name: "X", Revision: "r1", Active: true,
 				Items: []domain.HardwareProfileItem{{HardwareID: "a0000003-0000-0000-0000-000000000012", Quantity: 1}},
 			}},
-			listHardwares: []domain.Hardware{},
-			listModules: []domain.Module{
-				{ID: "m-1", Code: "VIG-A", Name: "Vigas A", WidthMm: 600, HeightMm: 720, DepthMm: 560},
+			catalogOverride: &domain.Catalog{
+				Modules: []domain.Module{
+					{ID: "a0000005-0000-0000-0000-000000000001", Code: "VIG-A", Name: "Vigas A", WidthMm: 600, HeightMm: 720, DepthMm: 560, Version: 1},
+				},
 			},
 		}
 		rec := validateRequest(store, true)
@@ -193,7 +194,8 @@ func TestHandleValidateStandardLibraryDraft(t *testing.T) {
 		if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil {
 			t.Fatalf("body = %s err=%v", rec.Body.String(), err)
 		}
-		if !report.Ok || !report.Compile.Ok || report.Compile.ResourceCount != 1 {
+		// Resources: the frozen module + the hardware profile.
+		if !report.Ok || !report.Compile.Ok || report.Compile.ResourceCount != 2 {
 			t.Fatalf("report = %s", rec.Body.String())
 		}
 		if report.Furniture.Total != 1 || report.Furniture.Resolved != 1 || report.Furniture.Failed != 0 {
@@ -253,7 +255,9 @@ func TestHandleStandardLibraryDraftDiff(t *testing.T) {
 			releaseManifestsByID: map[uuid.UUID]*domain.LibraryManifest{
 				baseID: {Resources: []domain.ManifestResourceRef{}},
 			},
-			listHardwares: []domain.Hardware{{ID: "a0000003-0000-0000-0000-000000000012", Code: "BIS-CL110", Name: "Bisagra", Unit: "unidad", Active: true}},
+			catalogOverride: &domain.Catalog{
+				Hardware: []domain.Hardware{{ID: "a0000003-0000-0000-0000-000000000012", Code: "BIS-CL110", Name: "Bisagra", Unit: "unidad", Active: true}},
+			},
 			listActiveHardwareProfilesAnyOrg: []domain.HardwareProfile{{
 				ID: "a0000010-0000-0000-0000-000000000001", Code: "PERF-X", Name: "X", Revision: "r1", Active: true,
 				Items: []domain.HardwareProfileItem{{HardwareID: "a0000003-0000-0000-0000-000000000012", Quantity: 1}},
