@@ -18,80 +18,35 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FileQuestion } from 'lucide-react';
 import type {
-  Catalog,
   Component,
-  Customer,
-  EdgeBand,
-  ExportIssue,
-  Hardware,
-  HardwarePurchaseRow,
-  ProductionCutRow,
-  MaterialBoard,
-  Module,
-  ModuleCategory,
-  ComponentPlacement,
-  OptionChoices,
-  OptionGroup,
   Project,
-  ProjectItem,
-  ProjectMaterialSummary,
-  ProjectStatus,
-  ProjectTemplate,
-  QuoteBreakdown,
   Structure,
   WorkshopSettings,
-  BoardSheetEstimate,
   Workspace,
-  ProjectPickingState,
   PickingMaterial,
   PickingStatus,
-  MaterialStock,
   StockMaterialKind,
-  StockMovement,
   StockMovementType,
-  PurchaseOrder,
-  Supplier,
 } from '@granete/domain';
 import { useWorkspaceLoad } from './shared/query/useWorkspaceLoad';
 import {
-  applyRoleChoiceToProject,
-  bumpStructureRevision,
-  calcProjectBreakdown,
-  computeProductionTotals,
-  defaultMeasurePresetId,
-  estimateBoardSheets,
   generateCutRows,
-  generateHardwareList,
-  generatePieceLabels,
-  generateModuleLabels,
-  generateProjectMaterialSummary,
   duplicateModule as deepCopyModule,
   duplicateProject as deepCopyProject,
-  projectToTemplate,
-  createProjectFromTemplate,
   navIdsForRoles,
   anyRole,
   rolesAllScopedBySector,
   rolesCanAssignOwner,
   rolesOfUser,
-  resolveOwnerOnCreate,
-  resolveOwnerOnUpdate,
-  resolveWorkshopSettings,
-  roleCanAssignOwner,
   roleCanDeleteProject,
-  canExportProductionForProject,
   roleCanExportProduction,
-  roleCanMarkPicking,
   roleCanMarkProduced,
   roleCanMutateCatalog,
   roleCanAccessPurchasingNav,
   roleCanManagePurchasing,
   roleCanMutateModules,
   roleCanMutateProjects,
-  roleCanReopenProject,
-  roleCanViewCosts,
   roleCanAppendProjectEvent,
   roleCanViewPortfolioDashboard,
   roleCanSuperviseFloor,
@@ -100,110 +55,36 @@ import {
   roleUsesProductionQueue,
   roleCanAccessProductionNav,
   roleCanAccessEngineeringNav,
-  roleIsScopedBySector,
   roleCanAccessFabricNav,
-  roleCanAccessShippingNav,
-  roleCanAccessEmbarquesNav,
-  isProductionReady,
-  suggestDuplicateCode,
-  transitionProjectStatus,
-  type WarehouseProjectInput,
   releaseAuthorityOf,
-  releaseBomItemsToProjectItems,
-  buildMaterialRequirements,
   consumePlannedMaterials,
-  type ReworkActionType,
-  type QualityIssueCategory,
 } from '@granete/domain';
 
 
 import {
-  AppShell,
-  EdgesCatalog,
-  HardwareCatalog,
-  AmbientMaterialsCatalog,
-  MaterialsCatalog,
   ModulesScreen,
-  ShowcaseScreen,
-  OptionGroupsScreen,
 
-  ProjectsScreen,
-  ProductionWorkspace,
-  PlantBoardScreen,
   FabricScreen,
-  EmbarquesScreen,
-  EmbarquesProjectDetail,
-  InstalacionesScreen,
   type DashboardMetrics,
   type FabricActiveClaim,
-  type FabricProjectMetrics,
   type FabricStation,
-  EmptyState,
-  ScreenBoundary,
-  EngineeringDashboard,
-  EngineeringScreen,
-  EngineeringWorkspace,
-  SalesDashboard,
-  ProductionManagerDashboard,
-  ProjectFloorProgressStrip,
   filterProductionVisible,
   parseProductionOrderTab,
-  Dashboard,
-  LoginScreen,
-  SettingsScreen,
-  UsersScreen,
   Modal,
-  OnboardingTourModal,
   getHasSeenOnboardingTour,
-  canShowPricePreview,
-  canShowProjectPricePreview,
-  aggregatePortfolioByOwner,
-  countActiveMaterials,
-  countActiveProjects,
-  countModules,
-  defaultOptionChoicesForModule,
-  edgesFromFlags,
-  parseOptionalNumber,
-  requiredGroupCodesForModule,
-  selectableGroupCodesForModule,
   resolveCustomerName,
-  sumMonthlyQuotedTotal,
   type AppNavId,
-  type EdgeDraft,
-  type HardwareDraft,
-  type MaterialDraft,
-  type ModuleDraft,
-  type CategoryDraft,
-  type OptionGroupDraft,
   type ProjectDraft,
-  type ActiveProjectMaterial,
-  PurchasingScreen,
-  WarehouseDashboard,
   type PoLineInput,
-  CustomersScreen,
   type CustomerDraft,
   StructuresScreen,
-  type StructureDraft,
   ComponentsScreen,
-  type ComponentDraft,
-  AgregadosScreen,
   PageLoading,
-  buildProductionOrderReadiness,
   type ProjectOverviewNav,
-  type CuttingOutputTargetView,
 } from '@granete/ui';
 import {
-  APIWorkspaceRepository,
-  LocalStorageWorkspaceRepository,
-  breakdownFromApi,
-  createSeedWorkspace,
   GraneteApiClient,
 } from '@granete/storage';
-import type {
-  CutPlan,
-  MachineOutputSelection,
-} from '@granete/domain';
-import { buildCommercialQuoteExport } from './exportCommercialQuote';
 import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
 import { useMachineOutputSelections } from './exports/useMachineOutputSelections';
@@ -216,33 +97,10 @@ import { useDashboardData } from './dashboard/useDashboardData';
 import { buildStockCatalog } from './derivations/stockCatalog';
 import { usePurchasingDerivations } from './derivations/usePurchasingDerivations';
 import { useQuoteDerivations } from './derivations/useQuoteDerivations';
-import {
-  computeModuleCostPreview,
-  computeSelectedProjectBreakdown,
-  resolveDisplayBreakdown,
-} from './derivations/breakdown';
 import { useProjectProfileDemand } from './derivations/useProjectProfileDemand';
 import { useProjectsServerEstimates } from './derivations/useProjectsServerEstimates';
-import { buildCommercialQuotePdfExport } from './exportCommercialQuotePdf';
-import { buildHardwareListExport } from './exportHardwareList';
-import {
-  buildPieceLabelsExport,
-  type PieceLabelsExportOptions,
-} from './exportPieceLabels';
-import {
-  buildModuleLabelsExport,
-  type ModuleLabelsExportOptions,
-} from './exportModuleLabels';
-import { buildProductionPackExport } from './exportProductionPack';
-import { buildWallElevationsExport } from './exportWallElevations';
-import { buildCutListCsvExport } from './exportCutListCsv';
-import { buildCncPilotExport } from './exportCncPilot';
-import { buildAssemblySheetsExport } from './exportAssemblySheets';
 import { buildCommercialScenarioPdfExport } from './exportScenarioPdf';
-import { downloadDespiecePdf } from './exportDespiecePdf';
-import { downloadCutPlanPdf } from './exportCutPlanPdf';
 import {
-  buildOptimizerExport,
   deliverExcelFile,
 } from './exportOptimizer';
 import {
@@ -286,7 +144,6 @@ import {
   resetProjectStore,
   useBackendBreakdownEffect,
   useUiStore,
-  getUiStoreState,
   usePurchasingStore,
   ensurePurchasingStore,
   getPurchasingStoreState,

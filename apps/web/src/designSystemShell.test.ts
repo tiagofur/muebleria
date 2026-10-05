@@ -88,7 +88,9 @@ describe('web shell AppShell wiring (F017)', () => {
     expect(/* F121 */ shellViewSrc()).toContain('hrefForNav={pathForNav}');
     expect(app).not.toContain('HomePlaceholder');
     expect(shellViewSrc()).toContain('Dashboard');
-    expect(/* F121 */ shellViewSrc()).toContain('navFromPath');
+    // R5: path resolution moved to AppContent (navFromPath consumed there);
+    // ShellView keeps activeId/onNavigate/hrefForNav wiring (asserted above).
+    expect(appContentSrc()).toContain('navFromPath');
     expect(/* F121 */ shellViewSrc()).toContain('pathForNav');
     expect(app).not.toContain('app-nav__tab');
     expect(app).not.toContain('className="app-nav"');
@@ -132,8 +134,11 @@ describe('web shell AppShell wiring (F017)', () => {
     expect(/* F121 */ shellViewSrc()).toContain('requestCreateKey={projectsCreateKey}');
     expect(/* F121 */ shellViewSrc()).toContain('requestCreateKey={modulesCreateKey}');
     expect(/* F121 */ shellViewSrc()).toContain('requestCreateKey={materialsCreateKey}');
-    expect(/* F121 */ shellViewSrc()).toContain('sumMonthlyQuotedTotal');
-    expect(/* F121 */ shellViewSrc()).toContain('selectRecentProjects');
+    // R5: the dashboard wiring moved to derivations/dashboard hooks — the
+    // guards follow the wiring (sumMonthlyQuotedTotal is consumed via
+    // useQuoteDerivations; the Cmd+K palette via useDashboardData).
+    expect(readFileSync(join(here, 'derivations/useQuoteDerivations.ts'), 'utf8')).toContain('sumMonthlyQuotedTotal');
+    expect(readFileSync(join(here, 'dashboard/useDashboardData.ts'), 'utf8')).toContain('selectRecentProjects');
   });
 
   it('optionGroups nav mounts only OptionGroupsScreen (no OPT-05 demo)', () => {
