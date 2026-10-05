@@ -161,6 +161,9 @@ type Structure struct {
 	History   []StructureRevision `json:"history,omitempty"`
 	CreatedAt time.Time           `json:"created_at"`
 	UpdatedAt time.Time           `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 // StructureRevision is an immutable snapshot of a Structure's BOM-relevant
@@ -214,6 +217,9 @@ type Agregado struct {
 	Active             bool           `json:"active"`
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 // HardwarePlacement attaches a visible hardware instance to a component face for
@@ -380,6 +386,9 @@ type Component struct {
 	Active                       bool      `json:"active"`
 	CreatedAt                    time.Time `json:"created_at"`
 	UpdatedAt                    time.Time `json:"updated_at"`
+	// Version is server-owned optimistic-concurrency state (#443/#448):
+	// writes carry the expected version as If-Match and the server bumps it.
+	Version int64 `json:"version"`
 }
 
 // ItemCustomDims is the free per-item dimensions override (F144 / #310), mm.

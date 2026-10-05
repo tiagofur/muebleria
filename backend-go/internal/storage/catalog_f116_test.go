@@ -66,7 +66,7 @@ func TestAgregado_HardDeleteWithUseGuard(t *testing.T) {
 
 	ctx := context.Background()
 	err := store.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
-		return store.DeleteAgregado(txCtx, a.ID)
+		return store.DeleteAgregado(txCtx, a.ID, 1)
 	})
 	if err == nil {
 		t.Fatal("delete of in-use agregado must fail")
@@ -79,7 +79,7 @@ func TestAgregado_HardDeleteWithUseGuard(t *testing.T) {
 		return store.DeleteModule(txCtx, mod.ID)
 	})
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
-		return store.DeleteAgregado(txCtx, a.ID)
+		return store.DeleteAgregado(txCtx, a.ID, 1)
 	})
 
 	err = store.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {

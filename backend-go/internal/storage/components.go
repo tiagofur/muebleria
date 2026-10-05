@@ -42,7 +42,7 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 		SELECT id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
 		       default_edges, option_roles, construction, length_formula, width_formula,
 		       x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z,
-		       notes, active, created_at, updated_at
+		       notes, active, created_at, updated_at, version
 		FROM components
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -65,8 +65,7 @@ func (s *PostgresStore) ListComponents(ctx context.Context) ([]domain.Component,
 			&c.LengthMm, &c.WidthMm, &c.ThicknessMm,
 			&c.DefaultEdges, &c.OptionRoles, &constructionRaw, &lengthFormula, &widthFormula,
 			&xFormula, &yFormula, &zFormula, &c.RotateX, &c.RotateY, &c.RotateZ,
-			&notes, &c.Active, &c.CreatedAt, &c.UpdatedAt,
-		); err != nil {
+			&notes, &c.Active, &c.CreatedAt, &c.UpdatedAt, &c.Version); err != nil {
 			return nil, err
 		}
 		if notes != nil {
@@ -105,7 +104,7 @@ func (s *PostgresStore) GetComponentByID(ctx context.Context, id string) (*domai
 		SELECT id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm,
 		       default_edges, option_roles, construction, length_formula, width_formula,
 		       x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z,
-		       notes, active, created_at, updated_at
+		       notes, active, created_at, updated_at, version
 		FROM components WHERE id = $1 AND organization_id = $2;
 	`
 	var c domain.Component
@@ -118,7 +117,7 @@ func (s *PostgresStore) GetComponentByID(ctx context.Context, id string) (*domai
 		&c.LengthMm, &c.WidthMm, &c.ThicknessMm,
 		&c.DefaultEdges, &c.OptionRoles, &constructionRaw, &lengthFormula, &widthFormula,
 		&xFormula, &yFormula, &zFormula, &c.RotateX, &c.RotateY, &c.RotateZ,
-		&notes, &c.Active, &c.CreatedAt, &c.UpdatedAt,
+		&notes, &c.Active, &c.CreatedAt, &c.UpdatedAt, &c.Version,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("component not found: %w", err)
@@ -163,26 +162,26 @@ func (s *PostgresStore) CreateComponent(ctx context.Context, c *domain.Component
 		err = s.db(ctx).QueryRow(ctx, `
 			INSERT INTO components (id, code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, construction, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-			RETURNING created_at, updated_at;
+			RETURNING created_at, updated_at, version;
 		`, c.ID, c.Code, c.Name, c.Placement, c.GeometryKind,
 			c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
 			c.OptionRoles, constructionJSON, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 			nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 			c.RotateX, c.RotateY, c.RotateZ,
 			nullIfEmpty(c.Notes), c.Active, OrgFromCtx(ctx),
-		).Scan(&c.CreatedAt, &c.UpdatedAt)
+		).Scan(&c.CreatedAt, &c.UpdatedAt, &c.Version)
 	} else {
 		err = s.db(ctx).QueryRow(ctx, `
 			INSERT INTO components (code, name, placement, geometry_kind, length_mm, width_mm, thickness_mm, default_edges, option_roles, construction, length_formula, width_formula, x_formula, y_formula, z_formula, rotate_x, rotate_y, rotate_z, notes, active, organization_id)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-			RETURNING id, created_at, updated_at;
+			RETURNING id, created_at, updated_at, version;
 		`, c.Code, c.Name, c.Placement, c.GeometryKind,
 			c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
 			c.OptionRoles, constructionJSON, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 			nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 			c.RotateX, c.RotateY, c.RotateZ,
 			nullIfEmpty(c.Notes), c.Active, OrgFromCtx(ctx),
-		).Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt)
+		).Scan(&c.ID, &c.CreatedAt, &c.UpdatedAt, &c.Version)
 	}
 	if err != nil {
 		return fmt.Errorf("error inserting component: %w", err)
@@ -190,7 +189,7 @@ func (s *PostgresStore) CreateComponent(ctx context.Context, c *domain.Component
 	return nil
 }
 
-func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, c *domain.Component) error {
+func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, expectedVersion int64, c *domain.Component) error {
 	edgesJSON, err := json.Marshal(c.DefaultEdges)
 	if err != nil {
 		return fmt.Errorf("marshaling default_edges: %w", err)
@@ -208,31 +207,32 @@ func (s *PostgresStore) UpdateComponent(ctx context.Context, id string, c *domai
 		    x_formula = $13, y_formula = $14, z_formula = $15,
 		    rotate_x = $16, rotate_y = $17, rotate_z = $18,
 		    notes = $19, active = $20,
-		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = $21 AND organization_id = $22;
+		    updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $21 AND organization_id = $22 AND version = $23;
 	`, c.Code, c.Name, c.Placement, c.GeometryKind,
 		c.LengthMm, c.WidthMm, c.ThicknessMm, edgesJSON,
 		c.OptionRoles, constructionJSON, nullIfEmpty(c.LengthFormula), nullIfEmpty(c.WidthFormula),
 		nullIfEmpty(c.XFormula), nullIfEmpty(c.YFormula), nullIfEmpty(c.ZFormula),
 		c.RotateX, c.RotateY, c.RotateZ,
-		nullIfEmpty(c.Notes), c.Active, id, OrgFromCtx(ctx))
+		nullIfEmpty(c.Notes), c.Active, id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
 		return fmt.Errorf("error updating component: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("component not found")
+		return s.disambiguateRowNotFound(ctx, "components", id, fmt.Errorf("component not found"))
 	}
 	c.ID = id
+	c.Version = expectedVersion + 1
 	return nil
 }
 
-func (s *PostgresStore) DeleteComponent(ctx context.Context, id string) error {
-	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM components WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
+func (s *PostgresStore) DeleteComponent(ctx context.Context, id string, expectedVersion int64) error {
+	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM components WHERE id = $1 AND organization_id = $2 AND version = $3;`, id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("component not found")
+		return s.disambiguateRowNotFound(ctx, "components", id, fmt.Errorf("component not found"))
 	}
 	return nil
 }

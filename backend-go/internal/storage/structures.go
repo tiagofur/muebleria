@@ -199,7 +199,7 @@ func loadStructurePresetsTx(ctx context.Context, tx pgx.Tx, structureID string) 
 // reusable Component instances instead of carrying their own board parts.
 func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure, error) {
 	query := `
-		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at
+		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at, version
 		FROM structures
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -217,7 +217,7 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 		var notes *string
 		var agrsRaw []byte
 		var jointRulesRaw []byte
-		if err := rows.Scan(&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt); err != nil {
+		if err := rows.Scan(&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt, &st.Version); err != nil {
 			return nil, err
 		}
 		if w != nil {
@@ -272,7 +272,7 @@ func (s *PostgresStore) ListStructures(ctx context.Context) ([]domain.Structure,
 
 func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domain.Structure, error) {
 	query := `
-		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at
+		SELECT id, code, name, width_mm, height_mm, depth_mm, notes, active, revision, agregados, joint_drilling_rules, created_at, updated_at, version
 		FROM structures WHERE id = $1 AND organization_id = $2;
 	`
 	var st domain.Structure
@@ -281,7 +281,7 @@ func (s *PostgresStore) GetStructureByID(ctx context.Context, id string) (*domai
 	var agrsRaw []byte
 	var jointRulesRaw []byte
 	err := s.db(ctx).QueryRow(ctx, query, id, OrgFromCtx(ctx)).Scan(
-		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt,
+		&st.ID, &st.Code, &st.Name, &w, &h, &d, &notes, &st.Active, &st.Revision, &agrsRaw, &jointRulesRaw, &st.CreatedAt, &st.UpdatedAt, &st.Version,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("structure not found: %w", err)
@@ -389,14 +389,14 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 		err = tx.QueryRow(ctx, `
 			INSERT INTO structures (id, code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules, organization_id)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-			RETURNING created_at, updated_at;
-		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON), OrgFromCtx(ctx)).Scan(&st.CreatedAt, &st.UpdatedAt)
+			RETURNING created_at, updated_at, version;
+		`, st.ID, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON), OrgFromCtx(ctx)).Scan(&st.CreatedAt, &st.UpdatedAt, &st.Version)
 	} else {
 		err = tx.QueryRow(ctx, `
 			INSERT INTO structures (code, name, width_mm, height_mm, depth_mm, notes, active, agregados, joint_drilling_rules, organization_id)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-			RETURNING id, created_at, updated_at;
-		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON), OrgFromCtx(ctx)).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt)
+			RETURNING id, created_at, updated_at, version;
+		`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), active, agrsJSON, nullableJSON(jointRulesJSON), OrgFromCtx(ctx)).Scan(&st.ID, &st.CreatedAt, &st.UpdatedAt, &st.Version)
 	}
 	if err != nil {
 		return fmt.Errorf("error inserting structure: %w", err)
@@ -442,7 +442,7 @@ func (s *PostgresStore) CreateStructure(ctx context.Context, st *domain.Structur
 // before mutating the row we snapshot the previous BOM-relevant fields into
 // structure_revisions and bump structures.revision by one. Components/presets
 // are then replaced as before. The bumped revision is written back onto st.
-func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *domain.Structure) error {
+func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, expectedVersion int64, st *domain.Structure) error {
 	tx, err := s.beginTx(ctx)
 	if err != nil {
 		return err
@@ -523,14 +523,16 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 
 	tag, err := tx.Exec(ctx, `
 		UPDATE structures
-		SET code = $1, name = $2, width_mm = $3, height_mm = $4, depth_mm = $5, notes = $6, active = $7, revision = $8, agregados = $9, joint_drilling_rules = $10, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $11 AND organization_id = $12;
-	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, agrsJSON, nullableJSON(jointRulesJSON), id, OrgFromCtx(ctx))
+		SET code = $1, name = $2, width_mm = $3, height_mm = $4, depth_mm = $5, notes = $6, active = $7, revision = $8, agregados = $9, joint_drilling_rules = $10, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $11 AND organization_id = $12 AND version = $13;
+	`, st.Code, st.Name, w, h, d, nullIfEmpty(st.Notes), st.Active, newRevision, agrsJSON, nullableJSON(jointRulesJSON), id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
 		return fmt.Errorf("error updating structure: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("structure not found")
+		// El rollback de la tx descarta el snapshot de revisión insertado:
+		// un write stale no deja revisiones huérfanas.
+		return s.disambiguateRowNotFound(ctx, "structures", id, fmt.Errorf("structure not found"))
 	}
 
 	if _, err := tx.Exec(ctx, `DELETE FROM structure_presets WHERE structure_id = $1;`, id); err != nil {
@@ -575,16 +577,17 @@ func (s *PostgresStore) UpdateStructure(ctx context.Context, id string, st *doma
 
 	st.ID = id
 	st.Revision = newRevision
+	st.Version = expectedVersion + 1
 	return tx.Commit(ctx)
 }
 
-func (s *PostgresStore) DeleteStructure(ctx context.Context, id string) error {
-	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM structures WHERE id = $1 AND organization_id = $2;`, id, OrgFromCtx(ctx))
+func (s *PostgresStore) DeleteStructure(ctx context.Context, id string, expectedVersion int64) error {
+	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM structures WHERE id = $1 AND organization_id = $2 AND version = $3;`, id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("structure not found")
+		return s.disambiguateRowNotFound(ctx, "structures", id, fmt.Errorf("structure not found"))
 	}
 	return nil
 }
