@@ -5008,6 +5008,55 @@
         }
       }
     },
+    "/manufacturing-libraries/standard/releases/{releaseId}/diff": {
+      "get": {
+        "operationId": "getStandardLibraryDraftDiff",
+        "summary": "Diff of a Standard draft against the current published release (Granete platform staff)",
+        "description": "Read-only publish-confirmation summary (#1102 LIB-AUTH Slice C): compiles the draft dry-run with the publisher's exact inputs and compares per resource (kind, id) against the published manifest — added / modified (definitionHash changed) / removed / unchanged. Labels come from the canonical payloads; removed resources are labeled from their content-addressed blob. Base is null when nothing has been published yet. [#1102]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "parameters": [
+          {
+            "name": "releaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Diff report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDraftDiffReport"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "422": {
+            "description": "The draft does not compile — it cannot publish; the error carries the fail-closed reason",
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/manufacturing-libraries/standard/releases/{releaseId}/validate": {
       "post": {
         "operationId": "validateStandardLibraryDraft",
@@ -15197,6 +15246,114 @@
           "manifestHash",
           "resourceCount"
         ]
+      },
+      "StandardDraftDiffReport": {
+        "type": "object",
+        "required": [
+          "releaseId",
+          "version",
+          "added",
+          "modified",
+          "removed",
+          "unchanged",
+          "computedAt"
+        ],
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          },
+          "base": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DraftDiffBase"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The published release the draft is compared against; null when nothing was published yet"
+          },
+          "added": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftResourceChange"
+            }
+          },
+          "modified": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftResourceChange"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftResourceChange"
+            }
+          },
+          "unchanged": {
+            "type": "integer"
+          },
+          "computedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DraftDiffBase": {
+        "type": "object",
+        "required": [
+          "releaseId",
+          "version"
+        ],
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "DraftResourceChange": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       },
       "StandardDraftValidationReport": {
         "type": "object",
