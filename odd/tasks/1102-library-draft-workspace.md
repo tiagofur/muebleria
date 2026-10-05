@@ -1,5 +1,34 @@
 # ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
 
+**Browser gates de C y D (rama feat/1102-library-dev-mode, PR stacked sobre D.2):**
+los dos gates que los prompts de C y D exigían y quedaron NO_RUN:
+
+- `tests/organization/library-publish-gate.spec.ts` (gate C): editar
+  borrador (alta de material por la API de Catálogos) → DIFF lo muestra como
+  agregado con label → publicar → el release nuevo queda PUBLICADO y es el
+  current; publicar dos veces es 409 con el current intacto; sin perfiles
+  activos el publish es 422 fail-closed con el vigente intacto, y recuperado
+  el perfil el MISMO draft publica.
+- `tests/organization/library-consumer-cycle-gate.spec.ts` (gate D, ciclo
+  COMPLETO): consumidor A fijado a R1 resuelve la geometría congelada; editar
+  el mueble (777mm) es visible sin pin pero INVISIBLE con el pin en R1;
+  publicar R2 → B (pin R2) ve 777, A sigue en 600 hasta mover su pin;
+  pinned reads de perfiles respetan el release. Sin pin el path vivo exige
+  la revisión real (no hay implícito).
+- **Contrato completado:** `furniture.libraryReleaseId` (introducido en el
+  Slice D) ahora está en el yaml + regeneración — faltaba y los specs lo
+  necesitaban tipado.
+- **Tolerancia del diff:** un release publicado SIN manifiesto (estado de
+  reparación #955) no es una base diferenciable — el diff lo trata como
+  "sin base, todo agregado" en vez de fallar.
+- Corridos con el harness de organización (contenedor PG desechable +
+  backend + web + usuarios con platform admin): gate C 3 passed, gate D
+  4 passed. Plan de shards: 41 specs, partición exacta PASS.
+
+---
+
+# ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
+
 **Item 2 del restante de D — plugin dev-mode (rama feat/1102-library-dev-mode, apilada sobre item 1):**
 diseño publicado antes de codear (issuecomment-6002996520). Bajo la
 arquitectura del issue, "resolver el borrador" desde el plugin YA ES el path

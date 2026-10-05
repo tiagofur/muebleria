@@ -3196,6 +3196,7 @@ type AuthoringPlacement struct {
 type AuthoringResolveFurniture struct {
 	FurnitureDefinitionId string                `json:"furnitureDefinitionId"`
 	CatalogRevision       string                `json:"catalogRevision"`
+	LibraryReleaseId      *string               `json:"libraryReleaseId,omitempty"`
 	Parameters            map[string]any        `json:"parameters,omitempty"`
 	MaterialChoices       map[string]string     `json:"materialChoices,omitempty"`
 	Components            []AuthoringOccurrence `json:"components,omitempty"`
