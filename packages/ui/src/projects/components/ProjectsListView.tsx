@@ -266,7 +266,11 @@ export function ProjectsListView({
       {!isTrulyEmpty ? (
         <div className="project-list-meta">
           <p aria-live="polite" data-testid="projects-results-summary">
-            {`Mostrando ${visibleProjects.length} de ${projects.length} ${quoteNoun(projects.length)}`}
+            {filtered.length < projects.length
+              ? filtered.length === 1
+                ? `Mostrando 1 de 1 cotización que coincide, de ${projects.length} en total`
+                : `Mostrando ${visibleProjects.length} de ${filtered.length} ${quoteNoun(filtered.length)} que coinciden, de ${projects.length} en total`
+              : `Mostrando ${visibleProjects.length} de ${projects.length} ${quoteNoun(projects.length)}`}
           </p>
           {summariesReady ? (
             <p

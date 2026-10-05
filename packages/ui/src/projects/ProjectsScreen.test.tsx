@@ -2659,7 +2659,7 @@ describe('#710 quotes list orientation and filter recovery', () => {
       screen.getByRole('searchbox', { name: 'Buscar cotizaciones' }),
       'Cocina',
     );
-    expect(await screen.findByText('Mostrando 1 de 2 cotizaciones')).toBeTruthy();
+    expect(await screen.findByText('Mostrando 1 de 1 cotización que coincide, de 2 en total')).toBeTruthy();
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
     expect(screen.getByTestId('projects-clear-filters')).toBeTruthy();
@@ -2668,7 +2668,7 @@ describe('#710 quotes list orientation and filter recovery', () => {
     const chips = screen.getByTestId('project-status-chips');
     await user.click(within(chips).getByRole('button', { name: /^Borrador \(/i }));
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
-      'Mostrando 1 de 2 cotizaciones',
+      'Mostrando 1 de 1 cotización que coincide, de 2 en total',
     );
 
     // One activation of the row action recovers the navigation set.
@@ -2807,5 +2807,51 @@ describe('Cotizaciones S3 (#1118)', () => {
     await user.click(screen.getByTestId('projects-show-more'));
     expect(screen.getAllByTestId(/^project-card-/).length).toBe(26);
     expect(screen.queryByTestId('projects-show-more')).toBeNull();
+  });
+});
+
+describe('Cotizaciones S3 corrección (#1118 re-critique)', () => {
+  it('resets the pagination window when the status filter changes', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 26 }, (_, i) => ({
+      id: `pg-${i + 1}`,
+      name: `Taller ${i + 1}`,
+      customerId: null,
+      currency: 'MXN',
+      marginFactor: 1.35,
+      laborFixedCost: 0,
+      status: 'quoted' as const,
+      items: [],
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      priceSnapshot: null,
+    }));
+    const summaries = new Map(
+      many.map((p, i) => [
+        p.id,
+        {
+          projectId: p.id,
+          projectName: p.name,
+          quoteStatus: i >= 24 ? ('draft' as const) : ('published' as const),
+          quoteRevisionNumber: 1,
+          isLegacy: false,
+          furnitureQuantity: 1,
+          saleTotal: 100,
+          currency: 'MXN',
+          commercialActivityAt: '2026-07-01T00:00:00.000Z',
+        },
+      ]),
+    );
+    renderScreen({ projects: many, commercialSummaries: summaries });
+
+    await user.click(screen.getByTestId('projects-show-more'));
+    expect(screen.getAllByTestId(/^project-card-/).length).toBe(26);
+
+    // Filtrar y volver: la ventana vuelve a 24 (reset al cambiar filtros).
+    await user.click(screen.getByRole('button', { name: /^Borrador \(/i }));
+    expect(screen.getAllByTestId(/^project-card-/).length).toBe(2);
+    await user.click(screen.getByRole('button', { name: /^Todas \(/i }));
+    expect(screen.getAllByTestId(/^project-card-/).length).toBe(24);
+    expect(screen.getByTestId('projects-show-more')).toBeTruthy();
   });
 });

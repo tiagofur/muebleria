@@ -2534,7 +2534,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onRetryCommercialSummaries={
             commercialSummaries.kind === 'error'
               ? commercialSummaries.retry
-              : undefined
+              : // #1118 re-critique: el stale también tiene salida — sin esto
+                // el Reintentar del banner nunca renderiza en producción.
+                commercialSummaries.kind === 'ready' &&
+                  commercialSummaries.staleMessage
+                ? commercialSummaries.retry
+                : undefined
           }
           modules={modules}
           categories={categories}

@@ -145,7 +145,7 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     });
 
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
-      'Mostrando 1 de 2 cotizaciones',
+      'Mostrando 1 de 1 cotización que coincide, de 2 en total',
     );
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
@@ -158,7 +158,7 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     renderView({ statusFilter: 'draft', filtered: [projects[0]!] });
 
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
-      'Mostrando 1 de 2 cotizaciones',
+      'Mostrando 1 de 1 cotización que coincide, de 2 en total',
     );
     expect(screen.getByTestId('projects-clear-filters')).toBeTruthy();
   });
@@ -172,7 +172,7 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     // User emptied the searchbox; filtered still holds the previous subset.
     rerenderWith({ search: '', filtered: [projects[0]!] });
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
-      'Mostrando 1 de 2 cotizaciones',
+      'Mostrando 1 de 1 cotización que coincide, de 2 en total',
     );
     // Restricted results still on screen → recovery action must survive.
     expect(screen.getByTestId('projects-clear-filters')).toBeTruthy();
@@ -326,6 +326,8 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     const cards = within(grid).getAllByRole('button');
     // Only the visible card button (no extra card-level actions added).
     expect(cards.length).toBe(1);
-    expect(screen.getByTestId('projects-results-summary').textContent).toContain('1 de 2');
+    expect(screen.getByTestId('projects-results-summary').textContent).toContain(
+      '1 de 1 cotización que coincide, de 2 en total',
+    );
   });
 });
