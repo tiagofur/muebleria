@@ -252,6 +252,11 @@ export function ProjectDetailHeader({
               ? 'workspace-chrome__total-value workspace-chrome__total-value--muted'
               : 'workspace-chrome__total-value'
           }
+          title={
+            chromeSale == null && frozenAuthority == null && quoteAuthority
+              ? 'El monto comercial requiere una sesión con acceso al servidor.'
+              : undefined
+          }
           data-testid={frozenAuthority?.amountsWithheld === true ? 'withheld-chrome-total' : undefined}
         >
           {frozenAuthority?.amountsWithheld === true ? (

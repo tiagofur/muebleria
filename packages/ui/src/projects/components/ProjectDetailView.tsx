@@ -880,10 +880,13 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onRecordDeposit,
   } = props;
 
-  const canEditContent =
-    canMutate &&
-    project.status === 'draft' &&
-    (!quoteAuthority || quoteAuthority.kind === 'empty');
+  // #1124: UNA regla compartida de edición de contenido — el header y los
+  // paneles nunca pueden diverger (el status queda draft eterno en DT).
+  const canEditContent = projectAllowsContentEdit(
+    project,
+    quoteAuthority,
+    canMutate,
+  );
 
   const contextValue = useMemo(
     (): ProjectDetailContextValue => ({
