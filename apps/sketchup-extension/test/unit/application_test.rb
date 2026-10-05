@@ -54,6 +54,11 @@ require_relative '../../src/granete_for_sketchup/connection/position_sync_coordi
 require_relative '../../src/granete_for_sketchup/application'
 
 class ApplicationTest < Minitest::Test
+  MENU_LABELS = [
+    'Abrir Granete', 'Migrar modelos anteriores…',
+    'Granete: alternar modo dev de biblioteca (borrador)'
+  ].freeze
+
   class ReadyPort
     def configured?
       true
@@ -169,7 +174,7 @@ class ApplicationTest < Minitest::Test
     @application.start
 
     labels = SketchupStub.menus['Extensions'].items.map(&:first)
-    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
+    assert_equal MENU_LABELS, labels
   end
 
   def test_dialog_close_and_reopen_recreates_callbacks_without_duplicates
@@ -239,7 +244,7 @@ class ApplicationTest < Minitest::Test
     @application.start
 
     labels = SketchupStub.menus['Extensions'].items.map(&:first)
-    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
+    assert_equal MENU_LABELS, labels
     refute UI::HtmlDialog.instances.first.visible?
   end
 

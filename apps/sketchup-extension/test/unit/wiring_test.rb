@@ -9,6 +9,10 @@ require_relative '../../src/granete_for_sketchup/runtime'
 # any support require from main.rb must break this test.
 class WiringTest < Minitest::Test
   SOURCE_DIR = File.join(PROJECT_ROOT, 'src')
+  MENU_LABELS = [
+    'Abrir Granete', 'Migrar modelos anteriores…',
+    'Granete: alternar modo dev de biblioteca (borrador)'
+  ].freeze
 
   def setup
     SketchupStub.reset!
@@ -23,9 +27,10 @@ class WiringTest < Minitest::Test
 
   def test_support_entrypoint_boots_the_runtime
     # #416: the Extensions menu carries the main entry plus the legacy
-    # migration review entry.
+    # migration review entry; #1102 adds the bibliotecario library dev-mode
+    # toggle.
     labels = SketchupStub.menus['Extensions'].items.map(&:first)
-    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
+    assert_equal MENU_LABELS, labels
     assert_equal 1, SketchupStub.observers.length
     assert Granete::SketchUpExtension::Runtime.application.started?
   end
@@ -48,7 +53,7 @@ class WiringTest < Minitest::Test
     load File.join(SOURCE_DIR, 'granete_for_sketchup', 'main.rb')
 
     labels = SketchupStub.menus['Extensions'].items.map(&:first)
-    assert_equal ['Abrir Granete', 'Migrar modelos anteriores…'], labels
+    assert_equal MENU_LABELS, labels
     assert_equal 1, SketchupStub.observers.length
   end
 end

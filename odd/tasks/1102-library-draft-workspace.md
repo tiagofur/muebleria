@@ -1,5 +1,25 @@
 # ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
 
+**Item 2 del restante de D — plugin dev-mode (rama feat/1102-library-dev-mode, apilada sobre item 1):**
+diseño publicado antes de codear (issuecomment-6002996520). Bajo la
+arquitectura del issue, "resolver el borrador" desde el plugin YA ES el path
+sin pin (tablas canónicas = estado de autoría), así que dev-mode es una
+decisión del plugin: dejar de enviar el pin.
+
+- `LibraryStore#dev_mode?/#set_dev_mode!`: marcador persistente en el store
+  dir (dev_mode.json).
+- `Application`: con dev ON, el `library_pin_provider` devuelve nil (ningún
+  resolve lleva `libraryReleaseId` → el servidor resuelve el ESTADO DE
+  AUTORÍA) y el sync de boot se salta (el pin no se mueve mientras probás).
+  `toggle_library_dev_mode` público.
+- Menú "Granete: alternar modo dev de biblioteca (borrador)" con messagebox
+  explicativo; RBZ 0.1.40; expectations de menú actualizadas en
+  wiring/application tests + 3 tests nuevos del flag.
+
+---
+
+# ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
+
 **Item 1 del restante de D — congelar la GEOMETRÍA (rama feat/1102-frozen-catalog-resolve, apilada sobre D):**
 diseño publicado antes de codear (issuecomment-6002693223). El compilador
 ahora junta TODO el catálogo de autoría desde UN snapshot consistente
