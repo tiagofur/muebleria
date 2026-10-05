@@ -147,7 +147,7 @@ export function LoginScreen({
             aria-busy={loading}
           >
             <LogIn size={16} strokeWidth={1.5} aria-hidden />
-            {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+            {loading ? 'Iniciando sesión…' : 'Iniciar sesión'}
           </button>
         </form>
 
