@@ -14,6 +14,7 @@ type factoryPolicyFixtureCase struct {
 	Expected  struct {
 		FloorToSide        *FactoryJointRule                         `json:"floorToSide"`
 		ShelfToSide        *FactoryJointRule                         `json:"shelfToSide"`
+		BackPanel          *FactoryJointRule                         `json:"backPanel"`
 		ComponentOverrides map[string]*ComponentConstructionOverride `json:"componentOverrides"`
 	} `json:"expected"`
 }
@@ -39,9 +40,10 @@ func TestParseFactoryConstructionPolicyParityFixture(t *testing.T) {
 				t.Fatalf("parse: %v", err)
 			}
 			if rulesDiffer(policy.FloorToSide, testCase.Expected.FloorToSide) ||
-				rulesDiffer(policy.ShelfToSide, testCase.Expected.ShelfToSide) {
-				t.Fatalf("rules = %+v, want floor=%+v shelf=%+v",
-					policy, testCase.Expected.FloorToSide, testCase.Expected.ShelfToSide)
+				rulesDiffer(policy.ShelfToSide, testCase.Expected.ShelfToSide) ||
+				rulesDiffer(policy.BackPanel, testCase.Expected.BackPanel) {
+				t.Fatalf("rules = %+v, want floor=%+v shelf=%+v back=%+v",
+					policy, testCase.Expected.FloorToSide, testCase.Expected.ShelfToSide, testCase.Expected.BackPanel)
 			}
 			if componentOverridesDiffer(policy.ComponentOverrides, testCase.Expected.ComponentOverrides) {
 				t.Fatalf("component overrides = %+v, want %+v", policy.ComponentOverrides, testCase.Expected.ComponentOverrides)
@@ -495,6 +497,31 @@ func TestApplyFactoryStationPatternsComponentExceptionBeatsFactoryRule(t *testin
 	}
 	if got := result[2].Parameters["stationCount"]; got != float64(6) {
 		t.Fatalf("authored explicit count stays immune to the exception, got %v", got)
+	}
+}
+
+// TestBackPanelFactorySpacingGovernsTheKind (#874): the backPanel family's
+// spacing rule governs back-panel relationships exactly like the other
+// families — the factory decides the perimeter pattern without touching
+// definitions.
+func TestBackPanelFactorySpacingGovernsTheKind(t *testing.T) {
+	spacing := 300.0
+	policy := &FactoryConstructionPolicy{
+		BackPanel: &FactoryJointRule{StartMarginMm: 40, EndMarginMm: 40, MaxSpacingMm: &spacing},
+	}
+	if policy.RuleForKind("back-panel") != policy.BackPanel {
+		t.Fatalf("back-panel must map to the backPanel family")
+	}
+	relationships := []AuthoringRelationship{
+		{RelationshipID: "undeclared", Kind: "back-panel", Parameters: map[string]any{}},
+		{RelationshipID: "authored", Kind: "back-panel", Parameters: map[string]any{"maxSpacingMm": float64(250)}},
+	}
+	result := applyFactoryStationPatterns(relationships, policy, nil)
+	if got := result[0].Parameters["maxSpacingMm"]; got != spacing {
+		t.Fatalf("undeclared back-panel must take the factory spacing, got %v", got)
+	}
+	if got := result[1].Parameters["maxSpacingMm"]; got != float64(250) {
+		t.Fatalf("authored spacing stays immune, got %v", got)
 	}
 }
 

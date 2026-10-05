@@ -70,6 +70,8 @@ describe('FactoryConstructionPolicy (#875)', () => {
         screwCode: 'HER-TOR-3.5X30',
         insetMm: 14,
         maxSpacingMm: 350,
+        startMarginMm: 50,
+        endMarginMm: 50,
         provenance: 'factory',
       },
       componentOverrides: {

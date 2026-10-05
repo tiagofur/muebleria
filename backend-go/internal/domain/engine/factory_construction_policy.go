@@ -14,9 +14,9 @@ import (
 // station pattern per engine-resolvable joint family. Hardware selection
 // stays with the pinned profile/assignment authority (#915/#918): the policy
 // never names catalog hardware into the resolve. Families the engine cannot
-// resolve yet (top-to-side, back-panel kinds are #874 deferred work) are
-// valid overlay data but produce no rule — honest absence, never fake
-// coverage.
+// resolve yet (top-to-side is #874 deferred work) are valid overlay data but
+// produce no rule — honest absence, never fake coverage. The back-panel kind
+// (#874 J1) resolves through the backPanel family's spacing rule.
 //
 // Precedence (mirrors the UI provenance ladder Biblioteca → Fábrica →
 // Componente/Excepción): explicit authored intent wins; the factory policy
@@ -67,6 +67,7 @@ type ComponentConstructionOverride struct {
 type FactoryConstructionPolicy struct {
 	FloorToSide        *FactoryJointRule                         `json:"floorToSide,omitempty"`
 	ShelfToSide        *FactoryJointRule                         `json:"shelfToSide,omitempty"`
+	BackPanel          *FactoryJointRule                         `json:"backPanel,omitempty"`
 	ComponentOverrides map[string]*ComponentConstructionOverride `json:"componentOverrides,omitempty"`
 }
 
@@ -74,6 +75,7 @@ type FactoryConstructionPolicy struct {
 const (
 	factoryFamilyKindFloorSide      = "floor-side"
 	factoryFamilyKindFixedShelfSide = "fixed-shelf-side"
+	factoryFamilyKindBackPanel      = "back-panel"
 )
 
 // Library-default pattern values (#875 C1): mirror
@@ -100,6 +102,8 @@ func (p *FactoryConstructionPolicy) RuleForKind(kind string) *FactoryJointRule {
 		return p.FloorToSide
 	case factoryFamilyKindFixedShelfSide:
 		return p.ShelfToSide
+	case factoryFamilyKindBackPanel:
+		return p.BackPanel
 	default:
 		return nil
 	}
@@ -109,7 +113,7 @@ func (p *FactoryConstructionPolicy) RuleForKind(kind string) *FactoryJointRule {
 // kind at all (the same families RuleForKind maps).
 func factoryKindResolvable(kind string) bool {
 	switch kind {
-	case factoryFamilyKindFloorSide, factoryFamilyKindFixedShelfSide:
+	case factoryFamilyKindFloorSide, factoryFamilyKindFixedShelfSide, factoryFamilyKindBackPanel:
 		return true
 	default:
 		return false
@@ -131,8 +135,8 @@ func (p *FactoryConstructionPolicy) RuleForComponent(componentID, kind string) *
 	}
 	factoryRule := p.RuleForKind(kind)
 	if factoryRule == nil && !factoryKindResolvable(kind) {
-		// The engine cannot resolve this kind at all (top-to-side, back-panel
-		// are #874 work): honest absence, never a fabricated pattern.
+		// The engine cannot resolve this kind at all (top-to-side is #874
+		// deferred work): honest absence, never a fabricated pattern.
 		return nil
 	}
 	if componentID == "" {
@@ -199,11 +203,15 @@ func ParseFactoryConstructionPolicy(overrides json.RawMessage) (*FactoryConstruc
 			if err != nil {
 				return nil, err
 			}
+			back, err := factoryRuleFromStructured(structured, "backPanel")
+			if err != nil {
+				return nil, err
+			}
 			overrides, err := parseFactoryComponentOverrides(structured["componentOverrides"])
 			if err != nil {
 				return nil, err
 			}
-			return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf, ComponentOverrides: overrides}, nil
+			return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf, BackPanel: back, ComponentOverrides: overrides}, nil
 		}
 	}
 
@@ -218,7 +226,11 @@ func ParseFactoryConstructionPolicy(overrides json.RawMessage) (*FactoryConstruc
 	if err != nil {
 		return nil, err
 	}
-	return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf}, nil
+	back, err := factoryRuleFromGranular(flat, "backPanel")
+	if err != nil {
+		return nil, err
+	}
+	return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf, BackPanel: back}, nil
 }
 
 // factoryRuleFromStructured reads one family out of the structured

@@ -346,7 +346,12 @@ func deriveAuthoringMachining(
 			joineryStatuses = append(joineryStatuses, deriveFloorSideJoinery(relationship, boardIndex, &issues, familyProfiles, &operations))
 			continue
 		}
-		if relationship.Kind == "fixed-shelf-side" {
+		if relationship.Kind == "fixed-shelf-side" || relationship.Kind == "back-panel" {
+			// #874 J1: the back panel joins through the SAME edge-face
+			// contact class (its left/right edges meet the sides' inner
+			// faces, its bottom/top edges meet the floor/top strips), so
+			// verification, station planning and recipes ride the shared
+			// panel-joint derivation with its own kind identity.
 			joineryStatuses = append(joineryStatuses, deriveFixedShelfJoinery(relationship, boardIndex, &issues, &operations))
 			continue
 		}
@@ -1172,7 +1177,16 @@ func resolveExplicitContacts(boards []ContactBoard, intents []ExplicitContact, r
 			fail(intent.ContactID, "CONTACT_FRAME_INVALID")
 			continue
 		}
-		if (intent.FaceA != "bottom" && intent.FaceA != "top") || (intent.FaceB != "front" && intent.FaceB != "back") {
+		// Two verified contact classes (#874 J2): participant A meets
+		// participant B through B's thickness face either with A's
+		// length-axis END face (floor/shelf edges) or — the back-panel class
+		// — with A's width-axis EDGE face (a vertical panel's left/right
+		// edge against the sides' inner faces). Anything else stays
+		// CONTACT_FACE_INCOMPATIBLE: the vocabulary is closed, never grown
+		// by proximity.
+		faceAlongLength := intent.FaceA == "bottom" || intent.FaceA == "top"
+		faceAlongWidth := intent.FaceA == "left" || intent.FaceA == "right"
+		if (!faceAlongLength && !faceAlongWidth) || (intent.FaceB != "front" && intent.FaceB != "back") {
 			fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
 			continue
 		}
@@ -1182,10 +1196,31 @@ func resolveExplicitContacts(boards []ContactBoard, intents []ExplicitContact, r
 			fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
 			continue
 		}
-		if math.Abs(math.Abs(dot3(a.Basis.X, b.Basis.X))-1) > 1e-6 ||
-			math.Abs(math.Abs(dot3(a.Basis.Y, b.Basis.Z))-1) > 1e-6 {
-			fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
-			continue
+		var spanAxis, crossAxis [3]float64
+		if faceAlongLength {
+			// Two source orientations: a HORIZONTAL source (floor/shelf)
+			// runs its width parallel to B's width with its thickness along
+			// B's length; a VERTICAL source (#874 back-panel) runs its width
+			// along B's length with its thickness along B's width. Either
+			// way the span is A's width axis — the run the stations follow.
+			horizontalSource := math.Abs(math.Abs(dot3(a.Basis.X, b.Basis.X))-1) <= 1e-6 &&
+				math.Abs(math.Abs(dot3(a.Basis.Y, b.Basis.Z))-1) <= 1e-6
+			verticalSource := math.Abs(math.Abs(dot3(a.Basis.X, b.Basis.Z))-1) <= 1e-6 &&
+				math.Abs(math.Abs(dot3(a.Basis.Y, b.Basis.X))-1) <= 1e-6
+			if !horizontalSource && !verticalSource {
+				fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
+				continue
+			}
+			spanAxis, crossAxis = a.Basis.X, a.Basis.Y
+		} else {
+			// A's thickness strip is parallel to B's width; the two panels
+			// stand along the same length axis.
+			if math.Abs(math.Abs(dot3(a.Basis.Y, b.Basis.X))-1) > 1e-6 ||
+				math.Abs(math.Abs(dot3(a.Basis.Z, b.Basis.Z))-1) > 1e-6 {
+				fail(intent.ContactID, "CONTACT_FACE_INCOMPATIBLE")
+				continue
+			}
+			spanAxis, crossAxis = a.Basis.Z, a.Basis.Y
 		}
 		overlap := func(direction [3]float64) (float64, float64) {
 			alo, ahi, blo, bhi := math.Inf(1), math.Inf(-1), math.Inf(1), math.Inf(-1)
@@ -1201,16 +1236,16 @@ func resolveExplicitContacts(boards []ContactBoard, intents []ExplicitContact, r
 			}
 			return math.Max(alo, blo), math.Min(ahi, bhi)
 		}
-		start, end := overlap(a.Basis.X)
-		crossStart, crossEnd := overlap(a.Basis.Y)
+		start, end := overlap(spanAxis)
+		crossStart, crossEnd := overlap(crossAxis)
 		if end-start <= 1e-6 || crossEnd-crossStart <= 1e-6 {
 			fail(intent.ContactID, "CONTACT_NO_OVERLAP")
 			continue
 		}
-		origin := contactAdd(contactAdd(ac[0], a.Basis.X, start-dot3(ac[0], a.Basis.X)),
-			a.Basis.Y, (crossStart+crossEnd)/2-dot3(ac[0], a.Basis.Y))
+		origin := contactAdd(contactAdd(ac[0], spanAxis, start-dot3(ac[0], spanAxis)),
+			crossAxis, (crossStart+crossEnd)/2-dot3(ac[0], crossAxis))
 		resolved := ResolvedContact{ExplicitContact: intent, OverlapMm: [2]float64{0, end - start}}
-		resolved.Frame.OriginAssemblyMm, resolved.Frame.AxisAssembly, resolved.Frame.NormalAssembly = origin, a.Basis.X, an
+		resolved.Frame.OriginAssemblyMm, resolved.Frame.AxisAssembly, resolved.Frame.NormalAssembly = origin, spanAxis, an
 		result.Contacts = append(result.Contacts, resolved)
 	}
 	return result

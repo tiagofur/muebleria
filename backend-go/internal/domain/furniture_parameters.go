@@ -182,7 +182,7 @@ var FurnitureRelationshipAnchorFaces = map[string]bool{
 // faceVerifiedRelationshipKind reports whether a structure relationship kind
 // resolves its contacts through declared anchor faces (#874 J1-B/J2-B).
 func faceVerifiedRelationshipKind(kind string) bool {
-	return kind == "floor-side" || kind == "fixed-shelf-side"
+	return kind == "floor-side" || kind == "fixed-shelf-side" || kind == "back-panel"
 }
 
 type FurnitureParameterDefinition struct {
