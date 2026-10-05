@@ -648,8 +648,8 @@ export function validateAuthoringResolveRequest(
       const recipePath = `${path}.recipes`;
       if (!Array.isArray(recipes)) {
         push('RELATIONSHIP_INVALID', 'recipes must be an array', recipePath);
-      } else if (relationship.kind !== 'fixed-shelf-side') {
-        push('RELATIONSHIP_INVALID', 'recipes are only valid on fixed-shelf-side relationships', recipePath);
+      } else if (relationship.kind !== 'fixed-shelf-side' && relationship.kind !== 'back-panel') {
+        push('RELATIONSHIP_INVALID', 'recipes are only valid on fixed-shelf-side and back-panel relationships', recipePath);
       } else {
         const contactIds = new Set((relationship.targets ?? [])
           .map((anchor) => `${relationship.relationshipId}:${anchor.componentInstanceId}`));
