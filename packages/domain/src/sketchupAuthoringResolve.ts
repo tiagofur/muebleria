@@ -267,6 +267,9 @@ export type ResolvedLayoutWireV1 = {
     readonly hostComponentInstanceId: string;
     readonly anchorFace: string;
     readonly placementKind: string;
+    /** #1046: group code when the placement resolved from an option-group
+     * choice (hardwareId is the chosen concrete). Empty = concrete placement. */
+    readonly optionRole?: string;
   }[];
 };
 

@@ -9,6 +9,7 @@ require_relative '../../src/granete_for_sketchup/metadata/store'
 require_relative '../../src/granete_for_sketchup/selection/capabilities'
 require_relative '../../src/granete_for_sketchup/selection/capability_reasons'
 require_relative '../../src/granete_for_sketchup/selection/selection_context'
+require_relative '../../src/granete_for_sketchup/selection/hardware_inventory'
 require_relative '../../src/granete_for_sketchup/selection/capability_policy'
 require_relative '../../src/granete_for_sketchup/selection/resolver'
 
@@ -59,6 +60,33 @@ class SelectionContextTest < Minitest::Test
     # #466: the preflight review is available for managed furniture with a
     # resolvable definition — it runs the AUTHORITATIVE resolve.
     assert context.capabilities.supported?('canReviewPreflight')
+  end
+
+  # #1046 S3: un mueble con placements por grupo publica sus grupos con la
+  # elección vigente (escaneo de hijos) y un hijo hardware ecoa su optionRole,
+  # ambos en el payload — la card de herrajes y el guard del hijo los consumen.
+  def test_furniture_payload_publishes_hardware_groups_and_child_option_role
+    definition = @provider.find_definition('kitchen-base-standard')
+    result = @builder.insert_furniture(@model, definition, { 'widthMm' => 700 })
+    furniture = @model.active_entities.instances.first
+
+    hw_def = @model.definitions.add('Granete · Herraje · bisagra-grupo')
+    hardware_child = furniture.definition.entities.add_instance(hw_def, Geom::Transformation.identity)
+    @store.write(hardware_child,
+                 'namespace' => 'com.granete.sketchup_extension',
+                 'metadataVersion' => 1,
+                 'kind' => 'componentInstance',
+                 'identity' => { 'instanceRef' => 'hp-bisagra-1', 'hardwarePlacementId' => 'hp-bisagra-1',
+                                 'furnitureInstanceRef' => result['instance_id'] },
+                 'intent' => { 'entityClass' => 'hardware', 'hardwareDefinitionId' => 'hw-hinge',
+                               'placementKind' => 'manual', 'optionRole' => 'BISAGRA' })
+
+    furniture_payload = @resolver.resolve(furniture).to_payload
+    child_payload = @resolver.resolve(hardware_child).to_payload
+
+    assert_equal [{ 'code' => 'BISAGRA', 'chosenHardwareId' => 'hw-hinge', 'count' => 1 }],
+                 furniture_payload['hardwareGroups']
+    assert_equal 'BISAGRA', child_payload['optionRole']
   end
 
   # #529: furniture resolved from a definition WITHOUT a doorSwing parameter

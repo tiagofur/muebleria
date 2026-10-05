@@ -576,6 +576,7 @@ module Granete
             hardware_definition_id: placement.hardware_id,
             host_component_instance_id: placement.host_component_instance_id,
             placement_kind: placement.placement_kind,
+            option_role: placement.respond_to?(:option_role) ? placement.option_role : nil,
             anchor_face: placement.anchor_face,
             offset_mm: placement.offset_mm,
             asset_id: placement.asset_id,
@@ -977,11 +978,15 @@ module Granete
 
         # write_hardware: managed hardware placement occurrence (#476 / #670-D).
         # rubocop:disable-next Metrics/ParameterLists
+        # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+        # — un campo opcional de intent más (#1046 S3 optionRole) supera el
+        # umbral; el writer documenta el contrato de metadata hijo campo a
+        # campo y un hash builder lo escondería.
         def write_hardware(store, entity, placement_id, furniture_ref:,
                            hardware_definition_id: nil, host_component_instance_id: nil,
                            placement_kind: nil, anchor_face: nil, offset_mm: nil,
                            asset_id: nil, asset_revision_id: nil, representation: nil,
-                           preparation_state: nil,
+                           preparation_state: nil, option_role: nil,
                            assembly_instance_id: nil, agregado_id: nil, member_id: nil,
                            recipe_revision: nil, snapshot_id: nil, is_historical: false)
           return unless store
@@ -1005,6 +1010,9 @@ module Granete
           # Only the contract's #350 provenance is stored; a missing/legacy
           # value stays absent so the resolver reports 'unknown' fail-closed.
           intent['placementKind'] = placement_kind if placement_kind
+          # #1046 S3: grupo que gobierna este placement (el modelo se elige por
+          # grupo en Herrajes del mueble, nunca pinnendo la ocurrencia).
+          intent['optionRole'] = option_role if option_role
           intent['anchorFace'] = anchor_face if anchor_face
           intent['offsetMm'] = offset_mm if offset_mm
           intent['assetId'] = asset_id if asset_id
@@ -1017,6 +1025,7 @@ module Granete
 
           write_child(store, entity, identity, intent)
         end
+        # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
         def apply_assembly_metadata(hash, assembly_instance_id, agregado_id, item_id, item_key,
                                     recipe_revision: nil, snapshot_id: nil, is_historical: false)

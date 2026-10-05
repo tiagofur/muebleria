@@ -849,6 +849,12 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 256
+        },
+        "optionRole": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "#1046 group code when the placement resolved from an option-group choice; absent = concrete placement."
         }
       },
       "required": [

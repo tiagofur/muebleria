@@ -166,6 +166,7 @@ function buildModuleSandbox(overrides) {
   sandbox.__toastCalls = toastCalls;
   sandbox.__docListeners = docListeners;
   sandbox.__hardwareCatalog = [];
+  sandbox.__optionGroups = [];
   return sandbox;
 }
 
@@ -183,7 +184,8 @@ function initChildDeps(sandbox, overrides) {
     showToast: (type, msg) => sandbox.__toastCalls.push({ type, msg }),
     capabilityEnabled: (context, name) =>
       !!(context && context.capabilities && context.capabilities[name] && context.capabilities[name].supported),
-    getHardwareCatalog: () => sandbox.__hardwareCatalog
+    getHardwareCatalog: () => sandbox.__hardwareCatalog,
+    getOptionGroups: () => sandbox.__optionGroups || []
   }, overrides || {});
   sandbox.window.GraneteUI.inspectorChild.init(deps);
   return deps;
@@ -741,6 +743,41 @@ test('lane hygiene: hide() drops the context reference; handlers go inert for ot
   el(sandbox, 'btn-apply-hw-offset').disabled = false;
   el(sandbox, 'btn-apply-hw-offset').click();
   assert.strictEqual(sandbox.__mutation.length, 0, 'part context never feeds the hardware handlers');
+});
+
+// #1046 S3 — a group-governed placement is honest about its provenance and
+// locks per-occurrence editing (the model change lives in the furniture's
+// Herrajes card), with the note and the derivation toast.
+test('hardware child: group placement renders Por grupo badge and locks per-occurrence edits', () => {
+  const sandbox = buildModuleSandbox();
+  runModule(sandbox);
+  initChildDeps(sandbox);
+  sandbox.__hardwareCatalog = [
+    { id: 'hw-blum', code: 'BIS-CL110', name: 'Bisagra Blum', category: 'hinge' },
+    { id: 'hw-eco', code: 'BIS-ECO', name: 'Bisagra económica', category: 'hinge' }
+  ];
+  sandbox.__optionGroups = [
+    { id: 'og-1', code: 'BISAGRA', name: 'Bisagras', kind: 'hardware', required: true, optionIds: ['hw-blum', 'hw-eco'] }
+  ];
+
+  sandbox.window.GraneteUI.inspectorChild.render(
+    hardwareContext('manual', { optionRole: 'BISAGRA', hardwareDefinitionId: 'hw-blum' })
+  );
+
+  assert.strictEqual(el(sandbox, 'hw-provenance-badge').textContent, 'Por grupo · Bisagras');
+  assert.strictEqual(el(sandbox, 'hw-def-name').textContent, 'Bisagra Blum');
+  assert.strictEqual(el(sandbox, 'hw-offset-input').disabled, true, 'group placement offset is locked');
+  assert.strictEqual(el(sandbox, 'btn-apply-hw-offset').disabled, true, 'group placement offset button is locked');
+  assert.strictEqual(el(sandbox, 'hw-replacement-select').disabled, true, 'group substitution select is locked');
+  assert.strictEqual(el(sandbox, 'btn-replace-hw').disabled, true, 'group substitution button is locked');
+  assert.strictEqual(el(sandbox, 'hw-group-managed-note').style.display, 'block');
+
+  // A direct click on the locked actions derives the user to the furniture
+  // card instead of mutating (the Ruby guard rejects the pin anyway).
+  el(sandbox, 'btn-replace-hw').disabled = false;
+  el(sandbox, 'btn-replace-hw').click();
+  assert.strictEqual(sandbox.__mutation.length, 0, 'no substitution is submitted for a group placement');
+  assert.ok(sandbox.__toastCalls.some((c) => c.type === 'info' && /Herrajes del mueble/.test(c.msg)));
 });
 
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector-child.js' }));

@@ -344,6 +344,10 @@ module Granete
           @logger.info('dialog_ready')
         end
 
+        def option_groups_payload
+          @catalog_provider.respond_to?(:all_option_groups) ? @catalog_provider.all_option_groups : []
+        end
+
         def update_status(dialog)
           status = @status_provider.call
           execute_bridge(dialog, 'setStatus', status)
@@ -365,6 +369,7 @@ module Granete
             'materialCategories' => material_categories,
             'materials' => @catalog_provider.respond_to?(:all_materials) ? @catalog_provider.all_materials : [],
             'hardware' => @catalog_provider.respond_to?(:all_hardware) ? @catalog_provider.all_hardware : [],
+            'optionGroups' => option_groups_payload,
             'source' => @catalog_provider.respond_to?(:last_source) ? @catalog_provider.last_source : 'local',
             'licenseBlocked' => @catalog_provider.respond_to?(:last_license_blocked) &&
                                 @catalog_provider.last_license_blocked

@@ -359,7 +359,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "materialChoices": {
             "FRENTE": "mat-oak18"
@@ -397,7 +397,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -1303,7 +1303,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -1391,7 +1391,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -2292,7 +2292,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -2405,7 +2405,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -3670,7 +3670,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -3729,7 +3729,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -4256,7 +4256,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -4358,7 +4358,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -5251,7 +5251,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -5323,7 +5323,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -6157,7 +6157,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "relationships": [
             {
@@ -6207,7 +6207,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -6230,7 +6230,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "relationships": [
             {
@@ -6280,7 +6280,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -6303,7 +6303,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -6336,7 +6336,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -6358,7 +6358,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "widthMm": 600
@@ -6466,7 +6466,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelf2Z": 520
@@ -6499,7 +6499,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -6521,7 +6521,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6585,7 +6585,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -6621,7 +6621,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6688,7 +6688,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -6709,7 +6709,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -6769,7 +6769,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -7662,7 +7662,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -7730,7 +7730,7 @@
         "responseMessageId": "resolve-msg-fixture-unicode-step",
         "inReplyToMessageId": "msg-fixture-unicode-step",
         "idempotencyKey": "fixture:unicode-step:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -8631,7 +8631,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -8694,7 +8694,7 @@
         "responseMessageId": "resolve-msg-fixture-material-pbr",
         "inReplyToMessageId": "msg-fixture-material-pbr",
         "idempotencyKey": "fixture:material-pbr:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -9600,7 +9600,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -9672,7 +9672,7 @@
         "responseMessageId": "resolve-msg-fixture-cost-only-hardware",
         "inReplyToMessageId": "msg-fixture-cost-only-hardware",
         "idempotencyKey": "fixture:cost-only-hardware:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -10438,7 +10438,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "label": "custom",
@@ -10476,7 +10476,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -12097,7 +12097,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "hasBackPanel": true
@@ -12130,7 +12130,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -13023,7 +13023,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "hasBackPanel": false
@@ -13056,7 +13056,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -13894,7 +13894,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -13927,7 +13927,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -14820,7 +14820,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "softClose": "true"
@@ -14853,7 +14853,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -14880,7 +14880,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "shelfCount": 6
@@ -14913,7 +14913,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -14944,7 +14944,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "tiltDeg": 12.1
@@ -14977,7 +14977,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -15007,7 +15007,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "style": "ornate"
@@ -15040,7 +15040,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -15071,7 +15071,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "furnitureDefinitionId": "22222222-2222-2222-2222-222222222222",
           "parameters": {
             "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -15104,7 +15104,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -15132,7 +15132,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -15224,7 +15224,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -16090,7 +16090,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -16182,7 +16182,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -17016,7 +17016,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -17094,7 +17094,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -17916,7 +17916,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -18011,7 +18011,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -19009,7 +19009,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -19104,7 +19104,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -20104,7 +20104,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -20199,7 +20199,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -21197,7 +21197,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "mod-comp-door",
@@ -21292,7 +21292,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -22290,7 +22290,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -22358,7 +22358,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -23259,7 +23259,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -23363,7 +23363,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -24440,7 +24440,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -24544,7 +24544,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -25527,7 +25527,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -25617,7 +25617,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -26573,7 +26573,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -26772,7 +26772,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "accepted",
         "normalizedSnapshot": {
           "parameters": {
@@ -27700,7 +27700,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -27773,7 +27773,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -27796,7 +27796,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -27868,7 +27868,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -27891,7 +27891,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -27971,7 +27971,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "status": "rejected",
         "issues": [
           {
@@ -27994,7 +27994,7 @@
           "upAxis": "z"
         },
         "furniture": {
-          "catalogRevision": "workshop-a95b3583a319",
+          "catalogRevision": "workshop-178b80aaa575",
           "components": [
             {
               "componentDefinitionId": "st-comp-side",
@@ -28097,7 +28097,7 @@
         "responseMessageId": "resolve-msg-fixture-0001",
         "inReplyToMessageId": "msg-fixture-0001",
         "idempotencyKey": "fixture:authoring-resolve:0001",
-        "catalogRevision": "workshop-a95b3583a319",
+        "catalogRevision": "workshop-178b80aaa575",
         "libraryReleaseId": "f9160000-0000-0000-0000-000000000001",
         "status": "accepted",
         "normalizedSnapshot": {

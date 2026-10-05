@@ -155,3 +155,17 @@
         border-color: var(--border-default);
         color: var(--text-primary);
       }
+
+/* #1046 S3 — hardware group selector modal rows (shares the finish
+   selector's modal chrome; members are a flat, small list by design). */
+.hw-group-list { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; }
+.hw-group-option {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+  background: var(--surface-card); padding: var(--space-2) var(--space-3);
+}
+.hw-group-option.selected { border-color: var(--accent-500); box-shadow: 0 0 0 1px var(--accent-500); }
+.hw-group-option-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.hw-group-option-name { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.hw-group-option-meta { font-size: var(--text-xs); color: var(--text-secondary); margin-top: var(--space-1); }
+.hw-group-option-notes { font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--space-1); }

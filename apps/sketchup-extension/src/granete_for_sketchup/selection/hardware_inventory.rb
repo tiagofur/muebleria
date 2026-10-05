@@ -64,6 +64,37 @@ module Granete
           identity['instanceRef']
         end
 
+        # #1046 S3: hardware option groups ONE furniture actually consumes,
+        # from its managed children metadata: each hardware child whose intent
+        # carries optionRole contributes to its group with the chosen concrete
+        # hardwareDefinitionId. Corrupt metadata fails closed per child (the
+        # group stays out), never for the whole scan. Result rows are
+        # presentation hashes for the SelectionContext payload:
+        #   { 'code' => group code, 'chosenHardwareId' => id, 'count' => n }
+        # ordered by code for stable rendering.
+        def groups_for_furniture(metadata_store, entity)
+          groups = {}
+          unless entity.respond_to?(:definition) && entity.definition.respond_to?(:entities)
+            return groups.values.sort_by { |g| g['code'].to_s }
+          end
+
+          entity.definition.entities.each do |child|
+            child_meta = read_metadata(metadata_store, child)
+            next unless child_meta
+
+            intent = child_meta['intent'] || {}
+            next unless intent['entityClass'] == 'hardware'
+
+            code = intent['optionRole'].to_s.strip
+            hardware_id = intent['hardwareDefinitionId'].to_s.strip
+            next if code.empty? || hardware_id.empty?
+
+            group = (groups[code] ||= { 'code' => code, 'chosenHardwareId' => hardware_id, 'count' => 0 })
+            group['count'] += 1
+          end
+          groups.values.sort_by { |g| g['code'].to_s }
+        end
+
         def scan_furniture_children(metadata_store, entity, furniture_ref, entries, seen)
           entity.definition.entities.each do |child|
             child_meta = read_metadata(metadata_store, child)

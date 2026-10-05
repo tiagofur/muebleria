@@ -99,6 +99,54 @@ class HardwareInventoryTest < Minitest::Test
     assert_empty scanned.items
   end
 
+  # #1046 S3: groups_for_furniture collects ONLY the option-group hardware
+  # of ONE furniture, with the chosen concrete and real counts. Concrete
+  # placements, board children and corrupt metadata stay out per child.
+  def test_groups_for_furniture_collects_group_placements_with_counts
+    furniture = build_managed_furniture('mueble-grupos') do |definition|
+      hinge_child(definition, 'bis-1', hardware_definition_id: 'hw-blum')
+      store_group_hinge(definition, 'bis-2', 'BISAGRA', 'hw-blum')
+      store_group_hinge(definition, 'bis-3', 'BISAGRA', 'hw-blum')
+      store_group_hinge(definition, 'jal-1', 'JALADERA', 'hw-pull-generic')
+      board_child(definition, 'side-panel')
+    end
+
+    groups = Granete::SketchUpExtension::Selection::HardwareInventory.groups_for_furniture(@store, furniture)
+
+    assert_equal [
+      { 'code' => 'BISAGRA', 'chosenHardwareId' => 'hw-blum', 'count' => 2 },
+      { 'code' => 'JALADERA', 'chosenHardwareId' => 'hw-pull-generic', 'count' => 1 }
+    ], groups
+  end
+
+  def test_groups_for_furniture_without_group_hardware_returns_empty
+    furniture = build_managed_furniture('mueble-concreto') do |definition|
+      hinge_child(definition, 'hinge-1')
+      board_child(definition, 'side-panel')
+    end
+
+    assert_equal [], Granete::SketchUpExtension::Selection::HardwareInventory.groups_for_furniture(@store, furniture)
+  end
+
+  def test_groups_for_furniture_skips_corrupt_child_metadata
+    furniture = build_managed_furniture('mueble-corrupto') do |definition|
+      store_group_hinge(definition, 'bis-1', 'BISAGRA', 'hw-blum')
+      corrupt = hinge_child(definition, 'corrupto')
+      corrupt.set_attribute('com.granete.sketchup_extension', 'bootstrap_intent.v1', '{not-json')
+    end
+
+    groups = Granete::SketchUpExtension::Selection::HardwareInventory.groups_for_furniture(@store, furniture)
+
+    assert_equal [{ 'code' => 'BISAGRA', 'chosenHardwareId' => 'hw-blum', 'count' => 1 }], groups
+  end
+
+  def store_group_hinge(definition, id, option_role, hardware_definition_id)
+    child = new_child(definition, id)
+    intent = hardware_intent(hardware_definition_id).merge('optionRole' => option_role)
+    @store.write(child, child_metadata(id, intent))
+    child
+  end
+
   private
 
   def scan

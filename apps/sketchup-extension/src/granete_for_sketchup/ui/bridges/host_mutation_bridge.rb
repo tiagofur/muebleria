@@ -388,15 +388,27 @@ module Granete
           hw_meta = child ? store.read(child) : nil
           hw_intent = hw_meta&.dig('intent') || {}
           hw_kind = hw_intent['placementKind'] || target['placementKind']
+          group = hw_intent['optionRole'].to_s.strip
 
-          return unless hw_kind == 'derived'
-
-          issue = Library::AuthoringResolveIssue.new(
-            'code' => 'HARDWARE_DERIVED_EDIT',
-            'message' => 'Los herrajes derivados se calculan por regla de ingeniería y no admiten edición manual',
-            'severity' => 'error'
-          )
-          raise Library::AuthoringResolveError.new(issue.message, issues: [issue])
+          issue =
+            if !group.empty?
+              # #1046 S3: un placement por grupo NO admite edición por
+              # ocurrencia: mandarlo como placement manual fijaría el
+              # concreto y rompería la semántica de grupo (la elección vive
+              # en materialChoices del mueble).
+              Library::AuthoringResolveIssue.new(
+                'code' => 'HARDWARE_GROUP_MANAGED',
+                'message' => "Este herraje se elige por grupo (#{group}); cambialo desde Herrajes del mueble",
+                'severity' => 'error'
+              )
+            elsif hw_kind == 'derived'
+              Library::AuthoringResolveIssue.new(
+                'code' => 'HARDWARE_DERIVED_EDIT',
+                'message' => 'Los herrajes derivados se calculan por regla de ingeniería y no admiten edición manual',
+                'severity' => 'error'
+              )
+            end
+          raise Library::AuthoringResolveError.new(issue.message, issues: [issue]) if issue
         end
 
         def layout_components(layout)

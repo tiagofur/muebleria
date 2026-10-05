@@ -138,6 +138,41 @@ type workshopFurnitureCatalog struct {
 	// Materials carries the workshop's active boards so clients can populate
 	// per-role material selectors without a second request.
 	Materials []workshopMaterial `json:"materials"`
+	// Hardware carries the workshop's active hardware definitions (#1046 S3)
+	// so the plugin's group selectors and family substitution list the REAL
+	// catalog instead of the packaged demo fallback. No costs: pricing stays
+	// server-side (estimate/preflight); the plugin never re-derives it.
+	Hardware []workshopHardwareCatalogEntry `json:"hardware"`
+	// OptionGroups carries the kind=hardware option groups (#1046): the
+	// members a furniture's role-based placements choose from. Material-kind
+	// groups stay out — board roles already ride each definition's
+	// materialRoles.
+	OptionGroups []workshopOptionGroup `json:"optionGroups"`
+}
+
+// workshopHardwareCatalogEntry is one active hardware definition as the
+// plugin consumes it. Deliberately cost-free and machining-free: commercial
+// and technical truth resolve server-side against the pinned catalog.
+type workshopHardwareCatalogEntry struct {
+	ID       string `json:"id"`
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	Category string `json:"category,omitempty"`
+	Unit     string `json:"unit,omitempty"`
+	Notes    string `json:"notes,omitempty"`
+	ImageURL string `json:"imageUrl,omitempty"`
+	Active   bool   `json:"active"`
+}
+
+// workshopOptionGroup mirrors domain.OptionGroup for the hardware-kind
+// subset the plugin needs (#1046 S3).
+type workshopOptionGroup struct {
+	ID        string   `json:"id"`
+	Code      string   `json:"code"`
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Required  bool     `json:"required"`
+	OptionIDs []string `json:"optionIds"`
 }
 
 type dimensionSpec struct {
@@ -186,6 +221,8 @@ func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories 
 		Definitions:        map[string]workshopFurnitureDefinition{},
 		Presets:            []workshopFurniturePreset{},
 		Materials:          buildWorkshopMaterials(composition.Materials),
+		Hardware:           buildWorkshopHardwareEntries(composition.Hardware),
+		OptionGroups:       buildWorkshopHardwareOptionGroups(composition.OptionGroups),
 	}
 
 	byID := make(map[string]domain.ModuleCategory, len(categories))
@@ -312,6 +349,64 @@ func buildWorkshopMaterials(materials []domain.MaterialBoard) []workshopMaterial
 			Grain:                      m.GrainDefault,
 		})
 	}
+	return out
+}
+
+// buildWorkshopHardwareEntries projects the workshop's ACTIVE hardware
+// definitions (#1046 S3), deterministically ordered (code, then id) because
+// the slice feeds the content-addressed revisionId.
+func buildWorkshopHardwareEntries(hardwares []domain.Hardware) []workshopHardwareCatalogEntry {
+	out := make([]workshopHardwareCatalogEntry, 0, len(hardwares))
+	for _, h := range hardwares {
+		if !h.Active {
+			continue
+		}
+		out = append(out, workshopHardwareCatalogEntry{
+			ID:       h.ID,
+			Code:     h.Code,
+			Name:     h.Name,
+			Category: h.Category,
+			Unit:     string(h.Unit),
+			Notes:    h.Notes,
+			ImageURL: h.ImageURL,
+			Active:   true,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Code != out[j].Code {
+			return out[i].Code < out[j].Code
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+// buildWorkshopHardwareOptionGroups projects ONLY the kind=hardware option
+// groups (#1046 S3), deterministically ordered (code, then id) because the
+// slice feeds the content-addressed revisionId.
+func buildWorkshopHardwareOptionGroups(groups []domain.OptionGroup) []workshopOptionGroup {
+	out := make([]workshopOptionGroup, 0, len(groups))
+	for _, g := range groups {
+		if g.Kind != "hardware" {
+			continue
+		}
+		optionIDs := make([]string, len(g.OptionIDs))
+		copy(optionIDs, g.OptionIDs)
+		out = append(out, workshopOptionGroup{
+			ID:        g.ID,
+			Code:      g.Code,
+			Name:      g.Name,
+			Kind:      g.Kind,
+			Required:  g.Required,
+			OptionIDs: optionIDs,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Code != out[j].Code {
+			return out[i].Code < out[j].Code
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
@@ -500,8 +595,13 @@ func workshopCatalogRevisionIDWithRules(c workshopFurnitureCatalog, industrialRu
 		Definitions        map[string]workshopFurnitureDefinition `json:"definitions"`
 		Presets            []workshopFurniturePreset              `json:"presets"`
 		Materials          []workshopMaterial                     `json:"materials"`
-		IndustrialRules    string                                 `json:"industrialRulesRevision"`
-	}{c.Categories, c.MaterialCategories, c.Definitions, c.Presets, c.Materials, industrialRulesRevision}
+		// Hardware and hardware-kind option groups join the content hash
+		// (#1046 S3): role-based placements resolve against them, so a group
+		// or member change MUST re-pin the catalog revision.
+		Hardware        []workshopHardwareCatalogEntry `json:"hardware"`
+		OptionGroups    []workshopOptionGroup          `json:"optionGroups"`
+		IndustrialRules string                         `json:"industrialRulesRevision"`
+	}{c.Categories, c.MaterialCategories, c.Definitions, c.Presets, c.Materials, c.Hardware, c.OptionGroups, industrialRulesRevision}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		// Marshal of these plain structs cannot fail in practice; fall back

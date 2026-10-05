@@ -152,28 +152,33 @@ type LayoutComponent struct {
 // joints once that machinery is projected into layouts. Clients must fail
 // closed on unknown values instead of treating them as derived.
 type LayoutHardware struct {
-	PlacementID             string                     `json:"placementId"`
-	HardwareID              string                     `json:"hardwareId"`
-	Name                    string                     `json:"name"`
-	Shape                   string                     `json:"shape"`
-	SizeMm                  float64                    `json:"sizeMm,omitempty"`
-	DiameterMm              float64                    `json:"diameterMm,omitempty"`
-	ProjectionMm            float64                    `json:"projectionMm"`
-	ColorHex                string                     `json:"colorHex,omitempty"`
-	HostComponentInstanceID string                     `json:"hostComponentInstanceId"`
-	AnchorFace              string                     `json:"anchorFace"`
-	PlacementKind           string                     `json:"placementKind"`
-	Transform               LayoutTransform            `json:"transform"`
-	DimensionsMm            [3]float64                 `json:"dimensionsMm"`
-	LocalTransform          LayoutLocalTransform       `json:"localTransform"`
-	AssetID                 string                     `json:"assetId,omitempty"`
-	AssetRevisionID         string                     `json:"assetRevisionId,omitempty"`
-	SHA256                  string                     `json:"sha256,omitempty"`
-	ExpectedBytes           int64                      `json:"expectedBytes,omitempty"`
-	Representation          string                     `json:"representation,omitempty"`
-	ValidationState         string                     `json:"validationState,omitempty"`
-	PreparationState        string                     `json:"preparationState,omitempty"`
-	MountFrame              *domain.HardwareMountFrame `json:"mountFrame,omitempty"`
+	PlacementID             string  `json:"placementId"`
+	HardwareID              string  `json:"hardwareId"`
+	Name                    string  `json:"name"`
+	Shape                   string  `json:"shape"`
+	SizeMm                  float64 `json:"sizeMm,omitempty"`
+	DiameterMm              float64 `json:"diameterMm,omitempty"`
+	ProjectionMm            float64 `json:"projectionMm"`
+	ColorHex                string  `json:"colorHex,omitempty"`
+	HostComponentInstanceID string  `json:"hostComponentInstanceId"`
+	AnchorFace              string  `json:"anchorFace"`
+	PlacementKind           string  `json:"placementKind"`
+	// OptionRole echoes the #1046 group code when this placement was authored
+	// by option group (resolved to the chosen concrete HardwareID from the
+	// effective option choices). Empty = concrete placement. Clients use it to
+	// offer group-level model changes instead of pinning one occurrence.
+	OptionRole       string                     `json:"optionRole,omitempty"`
+	Transform        LayoutTransform            `json:"transform"`
+	DimensionsMm     [3]float64                 `json:"dimensionsMm"`
+	LocalTransform   LayoutLocalTransform       `json:"localTransform"`
+	AssetID          string                     `json:"assetId,omitempty"`
+	AssetRevisionID  string                     `json:"assetRevisionId,omitempty"`
+	SHA256           string                     `json:"sha256,omitempty"`
+	ExpectedBytes    int64                      `json:"expectedBytes,omitempty"`
+	Representation   string                     `json:"representation,omitempty"`
+	ValidationState  string                     `json:"validationState,omitempty"`
+	PreparationState string                     `json:"preparationState,omitempty"`
+	MountFrame       *domain.HardwareMountFrame `json:"mountFrame,omitempty"`
 }
 
 const (
@@ -1374,6 +1379,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		HostComponentInstanceID: board.id,
 		AnchorFace:              hp.AnchorFace,
 		PlacementKind:           HardwarePlacementKindManual,
+		OptionRole:              strings.TrimSpace(hp.OptionRole),
 		Transform:               LayoutTransform{TranslationMm: boxMin},
 		DimensionsMm:            dims,
 		LocalTransform:          hwLocalTransform,

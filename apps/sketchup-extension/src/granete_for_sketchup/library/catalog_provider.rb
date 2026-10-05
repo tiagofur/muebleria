@@ -54,6 +54,12 @@ module Granete
           []
         end
 
+        # #1046 S3: kind=hardware option groups the plugin can offer per
+        # furniture (role-based placements choose a member from these).
+        def all_option_groups
+          []
+        end
+
         def find_hardware(hardware_id)
           all_hardware.find { |hw| hw['id'] == hardware_id || hw['code'] == hardware_id }
         end
@@ -296,7 +302,9 @@ module Granete
       # silently substitutes the packaged offline definitions. An explicit
       # +fallback_provider+ (development/tests) is the only path back to a
       # local catalog.
-      class RemoteCatalogProvider < BaseCatalogProvider
+      # La clase agrupa los lectores all_* del contrato de taller con su patrón
+      # fetch/fallback compartido; #1046 S3 añadió all_option_groups.
+      class RemoteCatalogProvider < BaseCatalogProvider # rubocop:disable Metrics/ClassLength
         include PlacementAuthoringResolve
 
         SOURCE_REMOTE = 'remote'
@@ -366,6 +374,17 @@ module Granete
           return remote.fetch('hardware', []) if remote && remote['hardware']
 
           serve_from_fallback(&:all_hardware) || StaticCatalogProvider::HARDWARE_DEFINITIONS
+        end
+
+        # #1046 S3: hardware-kind option groups from the SAME pinned catalog
+        # contract (they feed the revision hash server-side). Offline/local
+        # fallback serves [] — the groups UI simply does not appear, it never
+        # invents demo groups.
+        def all_option_groups(force: false)
+          remote = fetch_contract(force: force)
+          return remote.fetch('optionGroups', []) if remote
+
+          serve_from_fallback(&:all_option_groups) || []
         end
 
         def find_definition(definition_id)
