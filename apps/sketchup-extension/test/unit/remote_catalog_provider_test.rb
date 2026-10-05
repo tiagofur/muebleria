@@ -167,6 +167,27 @@ class RemoteCatalogProviderTest < Minitest::Test
     assert_equal 'remote', provider.last_source
   end
 
+  # #1046 S3: los grupos kind=hardware llegan del MISMO contrato de taller
+  # pineado; sin la clave (catálogo viejo) la respuesta es [] y offline nunca
+  # se inventan grupos de demo.
+  def test_serves_remote_option_groups_from_the_pinned_contract
+    groups = [{ 'id' => 'og-1', 'code' => 'BISAGRA', 'name' => 'Bisagras', 'kind' => 'hardware',
+                'required' => true, 'optionIds' => %w[hw-blum hw-eco] }]
+    provider = build_provider(status: 200, body: CONTRACT.merge('optionGroups' => groups))
+
+    assert_equal groups, provider.all_option_groups
+    assert_equal 'remote', provider.last_source
+  end
+
+  def test_option_groups_default_to_empty_without_the_key_and_offline
+    legacy = build_provider(status: 200, body: CONTRACT.except('optionGroups'))
+    assert_equal [], legacy.all_option_groups
+
+    offline = build_provider(status: 401, body: {})
+    assert_equal [], offline.all_option_groups
+    assert_equal 'unauthenticated', offline.last_source
+  end
+
   def test_invalid_parameter_definition_retires_the_remote_catalog_with_structured_diagnostic
     invalid = JSON.parse(JSON.generate(CONTRACT))
     invalid['definitions'].values.first['definitionHash'] = ''

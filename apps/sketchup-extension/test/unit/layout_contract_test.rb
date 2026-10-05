@@ -100,6 +100,23 @@ class LayoutContractTest < Minitest::Test
     raw.merge(overrides)
   end
 
+  # #1046 S3: optionRole es opcional (ausente = placement concreto), se
+  # parsea como string opaco y un tipo incorrecto falla cerrado.
+  def test_hardware_option_role_parses_when_present_and_absent
+    with_role = golden_layout.merge('hardware' => [golden_hardware('optionRole' => 'BISAGRA')])
+    placement = Granete::SketchUpExtension::Library::LayoutContract.parse!(with_role).hardware.first
+    assert_equal 'BISAGRA', placement.option_role
+
+    without_role = golden_layout.merge('hardware' => [golden_hardware.except('optionRole')])
+    placement = Granete::SketchUpExtension::Library::LayoutContract.parse!(without_role).hardware.first
+    assert_nil placement.option_role
+
+    body = golden_layout.merge('hardware' => [golden_hardware('optionRole' => 42)])
+    assert_raises(Granete::SketchUpExtension::Library::LayoutContract::ContractError) do
+      Granete::SketchUpExtension::Library::LayoutContract.parse!(body)
+    end
+  end
+
   def test_missing_transform_contract_fails_safe
     body = golden_layout.except('transformContract')
 

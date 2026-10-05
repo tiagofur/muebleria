@@ -41,7 +41,7 @@ module Granete
                         source_revision_ref host_locator semantic_path representation
                         placement_kind owner_recovery display definition parameters
                         component_placement assembly_translation_mm authoring_capability
-                        material_choices capabilities].freeze
+                        material_choices capabilities option_role hardware_groups].freeze
 
         # JSON name → context attribute; the payload never invents fields and
         # never copies one namespace's value into another.
@@ -73,7 +73,11 @@ module Granete
           'componentPlacement' => :component_placement,
           'assemblyTranslationMm' => :assembly_translation_mm,
           'authoringCapability' => :authoring_capability,
-          'materialChoices' => :material_choices
+          'materialChoices' => :material_choices,
+          # #1046 S3: grupo del placement (hijo hardware) y grupos consumidos
+          # por el mueble con su elección vigente (card de herrajes por grupo).
+          'optionRole' => :option_role,
+          'hardwareGroups' => :hardware_groups
         }.freeze
 
         attr_reader :kind, *ATTRIBUTES

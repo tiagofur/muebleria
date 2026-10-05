@@ -176,7 +176,7 @@ module Granete
                     :anchor_face, :offset_mm,
                     :asset_revision_id, :sha256, :expected_bytes, :representation,
                     :validation_state, :local_transform,
-                    :preparation_state, :mount_frame, :is_historical
+                    :preparation_state, :mount_frame, :is_historical, :option_role
 
         # rubocop:disable-next Metrics/ParameterLists
         def initialize(placement_id:, hardware_id: nil, asset_id: nil, name: nil,
@@ -184,7 +184,8 @@ module Granete
                        dimensions: nil, color_hex: nil, anchor_face: nil, offset_mm: nil,
                        asset_revision_id: nil, sha256: nil, expected_bytes: nil,
                        representation: nil, validation_state: nil, local_transform: nil,
-                       preparation_state: nil, mount_frame: nil, is_historical: false)
+                       preparation_state: nil, mount_frame: nil, is_historical: false,
+                       option_role: nil)
           @placement_id = placement_id
           @hardware_id = hardware_id
           @asset_id = asset_id
@@ -204,6 +205,9 @@ module Granete
           @local_transform = local_transform
           @preparation_state = preparation_state
           @mount_frame = mount_frame
+          # #1046 S3: código del grupo cuando el placement resolvió por elección
+          # (hardware_id es el concreto elegido). nil = placement concreto.
+          @option_role = option_role
           @is_historical = is_historical
         end
 
@@ -655,6 +659,8 @@ module Granete
             local_transform: local_transform,
             name: ContractCoercions.optional_opaque_string(raw['name'], "name de #{placement_id}"),
             placement_kind: placement_kind,
+            option_role: ContractCoercions.optional_opaque_string(raw['optionRole'],
+                                                                  "optionRole de #{placement_id}"),
             host_component_instance_id: ContractCoercions.optional_opaque_string(
               raw['hostComponentInstanceId'], "hostComponentInstanceId de #{placement_id}"
             ),

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'hardware_inventory'
+
 module Granete
   module SketchUpExtension
     module Selection
@@ -90,7 +92,11 @@ module Granete
             display: { 'name' => display_name(entity, definition) },
             definition: definition,
             parameters: intent['parameters'] || {},
-            material_choices: intent['materialChoices'] || {}
+            material_choices: intent['materialChoices'] || {},
+            # #1046 S3: grupos de herrajes que este mueble consume realmente
+            # (escaneo de hijos gestionados, fail-closed por hijo) con la
+            # elección vigente — la card del mueble ofrece el cambio de modelo.
+            hardware_groups: HardwareInventory.groups_for_furniture(@metadata_store, entity)
           )
           publish_door_actors(context, entity)
           context
@@ -165,6 +171,7 @@ module Granete
             # or unrecognized stays 'unknown' and fails closed — the context
             # never guesses 'derived'.
             placement_kind: placement_kind(intent['placementKind']),
+            option_role: intent['optionRole'],
             **common
           )
         end

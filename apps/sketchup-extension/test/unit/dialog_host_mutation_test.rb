@@ -664,4 +664,46 @@ class DialogHostMutationTest < Minitest::Test
     assert_includes mutation_script, '"outcome":"rejected"'
     assert_includes mutation_script, 'HARDWARE_INCOMPATIBLE'
   end
+
+  # #1046 S3: un placement por grupo NO admite sustitución por ocurrencia —
+  # fijaría el concreto y rompería la semántica de grupo. El guard rechaza
+  # ANTES de resolver, con el código estable HARDWARE_GROUP_MANAGED y la
+  # derivación a la card de herrajes del mueble.
+  def test_hardware_substitute_on_group_placement_rejects_fail_closed
+    dialog = @controller.show
+    furniture = native_furniture('inst-group-1')
+    dialog.callbacks.fetch('update_furniture').call(
+      nil, 'instanceId' => 'inst-group-1', 'definitionId' => 'kitchen-base-standard'
+    )
+
+    store = Granete::SketchUpExtension::Metadata::Store.new(@model)
+    top_instance = Granete::SketchUpExtension::Host::SelectionRestore
+                   .new(metadata_store_factory: ->(_) { store }, model_provider: -> { @model })
+                   .send(:locate_child, furniture, 'hardwarePlacementId' => 'HP-TOP')
+    refute_nil top_instance
+    meta = store.read(top_instance)
+    meta['intent'] = meta['intent'].merge('optionRole' => 'BISAGRA')
+    store.write(top_instance, meta)
+
+    cmd = {
+      'schemaId' => 'granete.sketchup-host-command.v1',
+      'messageId' => 'cmd-sub-group',
+      'mutation' => 'substitute_hardware',
+      'semanticTarget' => {
+        'furnitureInstanceRef' => 'inst-group-1',
+        'hardwarePlacementId' => 'HP-TOP'
+      },
+      'payload' => { 'targetHardwareDefinitionId' => 'hw-hinge-b' }
+    }
+    dialog.callbacks.fetch('authoring_mutation').call(nil, JSON.generate(cmd))
+
+    mutation_script = dialog.executed_scripts.find { |s| s.include?('cmd-sub-group') }
+    refute_nil mutation_script
+    assert_includes mutation_script, '"outcome":"rejected"'
+    assert_includes mutation_script, 'HARDWARE_GROUP_MANAGED'
+
+    after = store.read(top_instance)
+    assert_equal 'hw-hinge', after.dig('intent', 'hardwareDefinitionId'),
+                 'la ocurrencia no debe pinnearse cuando el grupo gobierna el placement'
+  end
 end
