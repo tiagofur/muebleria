@@ -2528,7 +2528,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               ? 'ready'
               : commercialSummaries.kind === 'error'
                 ? 'error'
-                : 'loading'
+                : // #1118: sesión local (invitado/demo) nunca consulta el
+                  // batch — estado explícito, no «Cargando…» eterno.
+                commercialSummaries.kind === 'idle'
+                  ? 'unavailable'
+                  : 'loading'
+          }
+          commercialSummariesStale={
+            commercialSummaries.kind === 'ready'
+              ? (commercialSummaries.staleMessage ?? null)
+              : null
           }
           commercialSummariesError={
             commercialSummaries.kind === 'error'
@@ -2538,7 +2547,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onRetryCommercialSummaries={
             commercialSummaries.kind === 'error'
               ? commercialSummaries.retry
-              : undefined
+              : // #1118 re-critique: el stale también tiene salida — sin esto
+                // el Reintentar del banner nunca renderiza en producción.
+                commercialSummaries.kind === 'ready' &&
+                  commercialSummaries.staleMessage
+                ? commercialSummaries.retry
+                : undefined
           }
           modules={modules}
           categories={categories}

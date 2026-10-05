@@ -338,3 +338,57 @@ export function filterProjectsByCommercialStatus(
     return quoteStatus === status;
   });
 }
+
+/** #1118: criterios de orden de la lista de Cotizaciones. */
+export type ProjectListSortKey = 'recent' | 'amount' | 'customer';
+
+export const PROJECT_LIST_SORT_OPTIONS: readonly {
+  readonly value: ProjectListSortKey;
+  readonly label: string;
+}[] = [
+  { value: 'recent', label: 'Recientes' },
+  { value: 'amount', label: 'Monto' },
+  { value: 'customer', label: 'Cliente' },
+];
+
+/**
+ * #1118 «¿qué mando hoy?»: el orden por defecto es actividad comercial
+ * descendente. Sin dataset ready no hay verdad comercial — el fallback es
+ * estable (nombre), nunca Project.updatedAt.
+ */
+export function sortProjectsForList(
+  projects: readonly Project[],
+  commercialSummaries: ReadonlyMap<string, ProjectCommercialSummary> | undefined,
+  summariesReady: boolean,
+  key: ProjectListSortKey,
+): Project[] {
+  const collator = new Intl.Collator('es');
+  const activity = (project: Project): string =>
+    summariesReady
+      ? (commercialSummaries?.get(project.id)?.commercialActivityAt ?? '')
+      : '';
+  const amount = (project: Project): number =>
+    summariesReady ? (commercialSummaries?.get(project.id)?.saleTotal ?? -1) : -1;
+  const customerName = (project: Project): string =>
+    summariesReady
+      ? (commercialSummaries?.get(project.id)?.customerName ?? project.name)
+      : project.name;
+  const sorted = [...projects];
+  switch (key) {
+    case 'amount':
+      sorted.sort((a, b) => amount(b) - amount(a) || collator.compare(a.name, b.name));
+      break;
+    case 'customer':
+      sorted.sort((a, b) => collator.compare(customerName(a), customerName(b)));
+      break;
+    case 'recent':
+    default:
+      sorted.sort(
+        (a, b) =>
+          activity(b).localeCompare(activity(a)) ||
+          collator.compare(a.name, b.name),
+      );
+      break;
+  }
+  return sorted;
+}
