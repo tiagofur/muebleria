@@ -43,6 +43,8 @@ module Granete
         library/library_store
         library/library_synchronizer
         library/local_library_resolver
+        library/release_api_client
+        library/consumer_pin
         host/message_identity
         host/interaction_state
         host/error_taxonomy

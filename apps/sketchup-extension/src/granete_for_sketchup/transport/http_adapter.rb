@@ -56,6 +56,27 @@ module Granete
           raise RequestError, "No se pudo conectar con el servidor de Granete: #{e.message}"
         end
 
+        # #1102 Slice D: raw variant for the library release contract — the
+        # manifest must reach LibraryStore as the EXACT server bytes (the
+        # synchronizer JSON-parses it itself) and blob bodies are verified
+        # against their sha256 before anything re-serializes them. Never use
+        # this for payloads the caller wants as parsed JSON.
+        def request_raw(payload, authorization_header: nil)
+          raise NotConfiguredError, 'Transport is not configured' unless configured?
+
+          uri = build_uri(payload.fetch('path'))
+          http = build_http(uri)
+          request = build_request(uri, payload, authorization_header)
+
+          response = perform(http, request)
+          { 'status' => response.code.to_i, 'body' => response.body.to_s }
+        rescue NotConfiguredError
+          raise
+        rescue StandardError => e
+          @logger&.error('transport_request_raw_failed', error: e)
+          raise RequestError, "No se pudo conectar con el servidor de Granete: #{e.message}"
+        end
+
         # Multipart file upload (#392 / DT-8). The artifact streams from disk
         # through MultipartBody — never a base64 JSON body — so publishing a
         # large .skp stays memory-flat.
