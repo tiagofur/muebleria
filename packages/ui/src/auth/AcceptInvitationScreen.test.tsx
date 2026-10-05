@@ -99,22 +99,30 @@ describe('AcceptInvitationScreen lifecycle', () => {
     }));
   });
 
-  it('shows the expired state before rendering any form and recovers on retry', async () => {
-    let expired = true;
-    const fetchMock = fetchRouter([['/auth/invitations:preview', () => expired
-      ? jsonResponse({ code: 'INVITATION_EXPIRED', message: 'expired', fieldErrors: {}, requestId: 'req-1', retryable: false, details: {} }, 410)
-      : previewOk()]]);
-    vi.stubGlobal('fetch', fetchMock);
-    const actor = userEvent.setup();
-    render(<AcceptInvitationScreen token="old-token" baseUrl="http://api.test" onAccepted={vi.fn()} />);
+  it('shows the expired state before rendering any form and offers login as the way out', async () => {
+    vi.stubGlobal('fetch', fetchRouter([['/auth/invitations:preview', () => jsonResponse({
+      code: 'INVITATION_EXPIRED', message: 'expired', fieldErrors: {}, requestId: 'req-1', retryable: false, details: {},
+    }, 410)]]));
+    render(<AcceptInvitationScreen token="old-token" baseUrl="http://api.test" onAccepted={vi.fn()} onBackToLogin={vi.fn()} />);
 
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('venció');
     expect(screen.queryByLabelText(/contraseña/i)).toBeNull();
+    // #1108 re-critique: en estados terminales reintentar es acción muerta —
+    // la salida es volver al login.
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Volver al inicio de sesión/ })).toBeTruthy();
+  });
 
-    expired = false;
-    await actor.click(screen.getByRole('button', { name: 'Reintentar' }));
-    expect(await screen.findByLabelText('Tu contraseña *')).toBeTruthy();
+  it('keeps retry available under rate limiting with its own copy', async () => {
+    vi.stubGlobal('fetch', fetchRouter([['/auth/invitations:preview', () => jsonResponse({
+      code: 'BAD_REQUEST', message: 'rate limited', fieldErrors: {}, requestId: 'req-1', retryable: true, details: {},
+    }, 429)]]));
+    render(<AcceptInvitationScreen token="invite-token" baseUrl="http://api.test" onAccepted={vi.fn()} />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Demasiados intentos');
+    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeTruthy();
   });
 
   it('explains a rotated token instead of exposing a generic API message', async () => {
