@@ -1,4 +1,4 @@
-import { GitBranch, Library, RefreshCw } from 'lucide-react';
+import { FlaskConical, GitBranch, Library, RefreshCw } from 'lucide-react';
 import type { LibraryReleaseSummary } from '@granete/storage';
 
 /**
@@ -9,6 +9,7 @@ import type { LibraryReleaseSummary } from '@granete/storage';
  * componiendo la próxima versión de la biblioteca y cuál es la versión
  * publicada vigente. No cambia el comportamiento de edición — los edits ya
  * fluyen al estado de autoría; este banner lo hace identificable.
+ * El botón "Probar borrador" (Slice B) lanza la validación read-only.
  */
 
 export interface LibraryDraftWorkspaceBannerProps {
@@ -18,8 +19,10 @@ export interface LibraryDraftWorkspaceBannerProps {
   readonly suggestedVersion: string;
   readonly loading: boolean;
   readonly opening: boolean;
+  readonly validating: boolean;
   readonly error: string | null;
   readonly onOpenDraft: () => void;
+  readonly onValidateDraft: () => void;
 }
 
 export function LibraryDraftWorkspaceBanner({
@@ -28,8 +31,10 @@ export function LibraryDraftWorkspaceBanner({
   suggestedVersion,
   loading,
   opening,
+  validating,
   error,
   onOpenDraft,
+  onValidateDraft,
 }: LibraryDraftWorkspaceBannerProps) {
   return (
     <div
@@ -120,6 +125,18 @@ export function LibraryDraftWorkspaceBanner({
                 ? `Publicado: v${currentPublished.version}`
                 : 'Sin versión publicada'}
             </span>
+            {currentDraft && !error ? (
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={onValidateDraft}
+                disabled={validating}
+                data-testid="library-draft-validate-btn"
+              >
+                <FlaskConical size={14} aria-hidden />
+                {validating ? 'Probando…' : `Probar borrador v${currentDraft.version}`}
+              </button>
+            ) : null}
             {!currentDraft && !error ? (
               <button
                 type="button"

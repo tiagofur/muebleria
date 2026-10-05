@@ -171,4 +171,48 @@ describe('useStandardLibraryWorkspace (#1102 Slice A)', () => {
 
     expect(draftsSpy).not.toHaveBeenCalled();
   });
+
+  it('validateDraft posts the current draft and keeps the report keyed to it', async () => {
+    const draft = release('draft-1', '0.3.5', 'draft');
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardCurrentRelease').mockResolvedValue(release('pub-1', '0.3.4', 'published'));
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardReleases').mockResolvedValue([release('pub-1', '0.3.4', 'published')]);
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftReleases').mockResolvedValue([draft]);
+    const validateSpy = vi
+      .spyOn(GraneteApiClient.prototype, 'validateStandardLibraryDraft')
+      .mockResolvedValue({
+        releaseId: draft.id,
+        version: '0.3.5',
+        ok: true,
+        compile: { ok: true, resourceCount: 3, manifestHash: 'sha256:x' },
+        furniture: { total: 1, resolved: 1, failed: 0, failures: [] },
+        validatedAt: '2026-10-05T12:00:00Z',
+      });
+
+    await renderHook({ token: 'token-test' });
+    expect(hook.currentValidation).toBeNull();
+
+    let report: unknown = null;
+    await act(async () => {
+      report = await hook.validateDraft();
+    });
+
+    expect(validateSpy).toHaveBeenCalledWith('token-test', 'draft-1');
+    expect(report).not.toBeNull();
+    expect(hook.currentValidation?.ok).toBe(true);
+    expect(hook.validating).toBe(false);
+  });
+
+  it('validateDraft is a no-op without an open draft', async () => {
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardCurrentRelease').mockResolvedValue(release('pub-1', '0.3.4', 'published'));
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardReleases').mockResolvedValue([]);
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftReleases').mockResolvedValue([]);
+    const validateSpy = vi.spyOn(GraneteApiClient.prototype, 'validateStandardLibraryDraft');
+
+    await renderHook({ token: 'token-test' });
+    await act(async () => {
+      await hook.validateDraft();
+    });
+
+    expect(validateSpy).not.toHaveBeenCalled();
+  });
 });

@@ -75,6 +75,7 @@ import {
   HardwareProfilesCatalog,
   AmbientMaterialsCatalog,
   MaterialsCatalog,
+  LibraryDraftValidationPanel,
   LibraryDraftWorkspaceBanner,
   ModulesScreen,
   ShowcaseScreen,
@@ -1008,17 +1009,27 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       onCommandItem={onCommandItem}
     >
       {libraryAuthoringSurface ? (
-        <LibraryDraftWorkspaceBanner
-          currentPublished={libraryWorkspace.currentPublished}
-          currentDraft={libraryWorkspace.currentDraft}
-          suggestedVersion={libraryWorkspace.suggestedVersion}
-          loading={libraryWorkspace.loading}
-          opening={libraryWorkspace.opening}
-          error={libraryWorkspace.error}
-          onOpenDraft={() => {
-            void libraryWorkspace.openDraft();
-          }}
-        />
+        <>
+          <LibraryDraftWorkspaceBanner
+            currentPublished={libraryWorkspace.currentPublished}
+            currentDraft={libraryWorkspace.currentDraft}
+            suggestedVersion={libraryWorkspace.suggestedVersion}
+            loading={libraryWorkspace.loading}
+            opening={libraryWorkspace.opening}
+            validating={libraryWorkspace.validating}
+            error={libraryWorkspace.error}
+            onOpenDraft={() => {
+              void libraryWorkspace.openDraft();
+            }}
+            onValidateDraft={() => {
+              void libraryWorkspace.validateDraft();
+            }}
+          />
+          <LibraryDraftValidationPanel
+            report={libraryWorkspace.currentValidation}
+            validating={libraryWorkspace.validating}
+          />
+        </>
       ) : null}
       {navId === 'home' ? (
         <Dashboard
