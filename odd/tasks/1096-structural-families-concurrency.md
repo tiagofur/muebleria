@@ -30,17 +30,12 @@
 - Browser proof: `tests/organization/catalog-ifmatch-concurrency.spec.ts` — login real en Browser Gate A, dos clientes: A gana (200), B stale → 412 VERSION_CONFLICT sin revertir, B reconcilia → 200.
 - Suites completas + CI: backend verde local (api 21s, storage 509s, pilotreadiness, EXIT=0); TS 8/8 + tests ✓; drift ✓.
 
-## Bloqueo abierto (post-implementación): polución cross-spec del gate
+## Resolución del bloqueo de shards (definitiva)
 
-CI rojo SOLO en los shards de browser por una **polución pre-existente del organization gate** que mi spec nuevo expone al recorrer el plan de shards (agregar un archivo mueve el reparto):
+El rojo de CI se reprodujo localmente y se diagnosticó con instrumentación temporal del servidor (layout.go + freeze): el módulo compartido GATE-A quedaba con **dimensiones 0/0/0** porque `seedDistinctModule` heredaba la forma de `catalog.modules[0]` (dependiente del orden/estado del catálogo) y el re-guardado perdía las medidas. El freeze rechaza correctamente un mueble sin medidas válidas (fail-closed del servidor) — el fallo era datos malformados del fixture, no regresión de slice 3.
 
-- Reproducido localmente: `quote-auth-refresh-replay` pasa SOLO y falla tras `hardware-profile-demo` en el mismo gate. El `createInitialProjectQuoteRevision` responde CONFLICT con `details.reason = "invalid revision snapshot: corrupt or malformed payload: el mueble \"Mueble real A\" (GATE-A) no tiene medidas válidas para resolver el layout"`.
-- "Mueble real A" (GATE-A) es el **módulo compartido** `GATE_MODULE_A_ID` que `seedDistinctModule` siembra en el setup (copiando `catalog.modules[0]`) y que `project-designs`/`quote-auth` usan/mutian. El spec de quote materializa sin parámetros y el freeze depende de las medidas vigentes del módulo compartido — cualquier spec previo que lo muta (o el release que otro spec publica) rompe el freeze.
-- NO es una regresión funcional de slice 3: el spec pasa solo y el backend/storage completo está verde; es un defecto de aislamiento del gate (specs comparten una org y su catálogo) latente que el reshuffle expone.
+**Fix de raíz (29b6befa)**: el módulo compartido se siembra con dimensiones explícitas 600×720×560 — auto-descriptivo, independiente del orden del catálogo y del estado que otros specs dejen. Además, los upserts de los specs del gate (5 archivos) migraron a learn-first + If-Match (requerido por el contrato) y el quote spec hace surface de `details.reason` (mejora permanente de diagnóstico).
 
-**Decisión pendiente del owner** (fuera del alcance #1096): (a) aislar GATE_MODULE_A por spec (seed/restore por spec), (b) fijar el reparto de shards con el timings baseline para preservar el orden previo, o (c) otra. El commit fcb7b17e además actualizó los upserts de los specs a learn-first + If-Match (requerido por el contrato nuevo).
+**Validación local definitiva**: demo + quote + proof en el mismo stack = 3 passed; set enfocado de 7 specs = 17/17 (un fallo transitorio de red local en la primera corrida del gate completo, no reproducible en re-corrida ni en CI); **CI 22/22 success** con el plan recorrido (3 shards, 39 specs).
 
-## Riesgos/limites
-
-- El fan-out `saveCatalog` sigue como transporte (decisión en la issue #1096): cada write es guardado; el write stale de una entidad NO tocada falla 412 y la shell reconcilia recargando.
-- El spec de browser proof es API-driven tras login real de browser (patrón del gate); la edición por UI de dos tabs simultáneos queda cubierta por la misma garantía de servidor.
+Estado: IMPLEMENTED_PENDING_REVIEW. HEAD: 29b6befa.
