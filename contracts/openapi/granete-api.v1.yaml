@@ -4887,6 +4887,40 @@
         }
       }
     },
+    "/manufacturing-libraries/standard/releases/drafts": {
+      "get": {
+        "operationId": "getStandardLibraryDraftReleases",
+        "summary": "List open Granete Standard library draft releases (Granete platform staff)",
+        "description": "Returns the draft (unpublished) releases of the Granete Standard manufacturing library ordered newest first — the authoring workspace read of the library cycle (#1102 LIB-AUTH Slice A). Only platform staff may call this: tenants keep the exact published-only surface (000156 read policy). The first entry is the draft the authoring workspace is composing. [#1102]",
+        "tags": [
+          "manufacturing-library"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of draft releases (empty when no draft is open)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LibraryReleaseSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/manufacturing-libraries/standard/releases/{releaseId}": {
       "get": {
         "operationId": "getStandardReleaseById",
