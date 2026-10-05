@@ -32,8 +32,6 @@ import type {
 import { useWorkspaceLoad } from './shared/query/useWorkspaceLoad';
 import {
   generateCutRows,
-  duplicateModule as deepCopyModule,
-  duplicateProject as deepCopyProject,
   navIdsForRoles,
   anyRole,
   rolesAllScopedBySector,
@@ -85,7 +83,6 @@ import {
 import {
   GraneteApiClient,
 } from '@granete/storage';
-import { runExport, type ExportDelivery } from './exports/runExport';
 import { useExportHandlers } from './exports/useExportHandlers';
 import { useMachineOutputSelections } from './exports/useMachineOutputSelections';
 import { useProductionActions } from './production/useProductionActions';
