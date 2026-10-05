@@ -30,16 +30,16 @@ module Granete
           options optionLabels integer maxLength binding
         ].freeze
         BINDING_KEYS = %w[version kind componentId dimension relationship].freeze
-        RELATIONSHIP_KEYS = %w[kind sourceRole sourceFace targets station families].freeze
+        RELATIONSHIP_KEYS = %w[kind sourceRole sourceFace targets station families recipes].freeze
         TARGET_KEYS = %w[componentId role face].freeze
-        STATION_KEYS = %w[startMarginMm endMarginMm].freeze
+        STATION_KEYS = %w[startMarginMm endMarginMm maxSpacingMm].freeze
         FAMILY_KEYS = %w[familyId count startMarginMm endMarginMm].freeze
         # Closed face vocabulary for construction-declared relationship anchors,
         # mirroring Go's FurnitureRelationshipAnchorFaces.
         ANCHOR_FACES = %w[top bottom left right front back].freeze
         # Kinds that resolve contacts through declared anchor faces; targets
         # must declare one, or the contact can never verify (Go #874 J1-B/J2-B).
-        FACE_VERIFIED_RELATIONSHIP_KINDS = %w[floor-side fixed-shelf-side].freeze
+        FACE_VERIFIED_RELATIONSHIP_KINDS = %w[floor-side fixed-shelf-side back-panel].freeze
 
         class ContractError < StandardError
           attr_reader :code, :path
@@ -331,7 +331,13 @@ module Granete
             next unless station.key?(key)
 
             validate_finite_number!(station[key], "#{path}.#{key}")
-            fail_at("#{path}.#{key}", 'must be nonnegative') if station[key].negative?
+            if key == 'maxSpacingMm'
+              # #1065: el espaciado máximo define estaciones — 0 no produce
+              # plan de estaciones, así que exige estrictamente positivo.
+              fail_at("#{path}.#{key}", 'must be positive') unless station[key].positive?
+            elsif station[key].negative?
+              fail_at("#{path}.#{key}", 'must be nonnegative')
+            end
           end
         end
 
