@@ -1,6 +1,6 @@
 {
   "contract": "granete.factory-construction-policy-parity.v1",
-  "description": "Overlay overrides -> effective factory station rules (#875 slice 2). The TS client (packages/domain/src/factoryConstructionPolicy.ts overlayOverridesToPolicy) and the Go resolver (backend-go internal/domain/engine factory_construction_policy.go ParseFactoryConstructionPolicy) must derive identical rules from the same overlay JSON. The flat dotted-key shape is deliberate: joint.constructionPolicy is one literal key whose value is the structured blob; joint.<family>.* are granular keys. Both sides fall missing scalars back to the library-default pattern (2 stations, 50/50mm). The Go resolver additionally enforces engine usability (stationsCount integer 2..1000, finite nonnegative margins) and rejects an explicit factory override that fails it; the client surfaces the same bounds as editor validation. Component construction exceptions (#875 slice 3) are stored RAW in the structured blob (componentOverrides[componentId] scalars): both readers keep the stored entries verbatim — the per-scalar resolution against the factory family rule happens where the relationship kind is known (Go RuleForComponent; the Go parser drops entries with no station scalar and the TS reader mirrors that drop). Spacing-derived factory rules (#1065) are the count alternative: a stored maxSpacingMm owns the pattern and zeroes stationsCount on both sides; declaring stationsCount and maxSpacingMm in the same family is a parse error on the server and editor validation on the client.",
+  "description": "Overlay overrides -> effective factory station rules (#875 slice 2). The TS client (packages/domain/src/factoryConstructionPolicy.ts overlayOverridesToPolicy) and the Go resolver (backend-go internal/domain/engine factory_construction_policy.go ParseFactoryConstructionPolicy) must derive identical rules from the same overlay JSON. The flat dotted-key shape is deliberate: joint.constructionPolicy is one literal key whose value is the structured blob; joint.<family>.* are granular keys. Both sides fall missing scalars back to the library-default pattern (2 stations, 50/50mm). The Go resolver additionally enforces engine usability (stationsCount integer 2..1000, finite nonnegative margins) and rejects an explicit factory override that fails it; the client surfaces the same bounds as editor validation. Component construction exceptions (#875 slice 3) are stored RAW in the structured blob (componentOverrides[componentId] scalars): both readers keep the stored entries verbatim — the per-scalar resolution against the factory family rule happens where the relationship kind is known (Go RuleForComponent; the Go parser drops entries with no station scalar and the TS reader mirrors that drop). Spacing-derived factory rules (#1065) are the count alternative: a stored maxSpacingMm owns the pattern and zeroes stationsCount on both sides; declaring stationsCount and maxSpacingMm in the same family is a parse error on the server and editor validation on the client. The backPanel family (#874 back-panel kind) carries the same rule shape (spacing-driven) plus the screw/inset identity the TS editor renders; both parsers read it with the same provenance gate.",
   "cases": [
     {
       "name": "structured factory floor override",
@@ -280,6 +280,32 @@
           "endMarginMm": 50
         },
         "shelfToSide": null
+      }
+    },
+    {
+      "name": "structured factory back panel spacing (#874)",
+      "overrides": {
+        "joint.constructionPolicy": {
+          "version": 1,
+          "backPanel": {
+            "provenance": "factory",
+            "screwCode": "HER-TOR-4X50",
+            "insetMm": 16,
+            "maxSpacingMm": 300,
+            "startMarginMm": 40,
+            "endMarginMm": 40
+          }
+        }
+      },
+      "expected": {
+        "floorToSide": null,
+        "shelfToSide": null,
+        "backPanel": {
+          "stationsCount": 0,
+          "startMarginMm": 40,
+          "endMarginMm": 40,
+          "maxSpacingMm": 300
+        }
       }
     }
   ]

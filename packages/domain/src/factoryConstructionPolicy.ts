@@ -50,6 +50,10 @@ export interface BackPanelFamilyRule {
   readonly screwCode: string;
   readonly insetMm: number;
   readonly maxSpacingMm: number;
+  /** Station margins along each perimeter run (#874 back-panel): corner
+   * clearance from the run's ends, mirroring the joint families. */
+  readonly startMarginMm: number;
+  readonly endMarginMm: number;
   readonly provenance?: JoineryProvenance;
 }
 
@@ -112,6 +116,8 @@ export const DEFAULT_FACTORY_CONSTRUCTION_POLICY: FactoryConstructionPolicy = {
     screwCode: 'HER-TOR-4X50',
     insetMm: 16,
     maxSpacingMm: 400,
+    startMarginMm: 50,
+    endMarginMm: 50,
     provenance: 'library',
   },
 };
@@ -205,6 +211,8 @@ export function policyToOverlayOverrides(policy: FactoryConstructionPolicy): Rec
     overrides['joint.backPanel.screwCode'] = policy.backPanel.screwCode;
     overrides['joint.backPanel.insetMm'] = policy.backPanel.insetMm;
     overrides['joint.backPanel.maxSpacingMm'] = policy.backPanel.maxSpacingMm;
+    overrides['joint.backPanel.startMarginMm'] = policy.backPanel.startMarginMm;
+    overrides['joint.backPanel.endMarginMm'] = policy.backPanel.endMarginMm;
   }
 
   if (policy.componentOverrides && Object.keys(policy.componentOverrides).length > 0) {
@@ -268,7 +276,11 @@ export function overlayOverridesToPolicy(overrides: Record<string, unknown> | nu
     'joint.shelfToSide.systemId' in overrides
     || 'joint.shelfToSide.stationsCount' in overrides
     || 'joint.shelfToSide.maxSpacingMm' in overrides;
-  const hasBack = 'joint.backPanel.screwCode' in overrides || 'joint.backPanel.insetMm' in overrides;
+  const hasBack =
+    'joint.backPanel.screwCode' in overrides
+    || 'joint.backPanel.insetMm' in overrides
+    || 'joint.backPanel.maxSpacingMm' in overrides
+    || 'joint.backPanel.startMarginMm' in overrides;
 
   return {
     version: 1,
@@ -286,6 +298,8 @@ export function overlayOverridesToPolicy(overrides: Record<string, unknown> | nu
           screwCode: (overrides['joint.backPanel.screwCode'] as string) ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel.screwCode,
           insetMm: Number(overrides['joint.backPanel.insetMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel.insetMm),
           maxSpacingMm: Number(overrides['joint.backPanel.maxSpacingMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel.maxSpacingMm),
+          startMarginMm: Number(overrides['joint.backPanel.startMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel.startMarginMm),
+          endMarginMm: Number(overrides['joint.backPanel.endMarginMm'] ?? DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel.endMarginMm),
           provenance: 'factory',
         }
       : DEFAULT_FACTORY_CONSTRUCTION_POLICY.backPanel,
@@ -435,6 +449,12 @@ export function validateConstructionPolicy(policy: FactoryConstructionPolicy): {
   }
   if (policy.backPanel.maxSpacingMm < 50 || policy.backPanel.maxSpacingMm > 1000) {
     issues.push('backPanel: maxSpacingMm must be between 50mm and 1000mm');
+  }
+  if (policy.backPanel.startMarginMm < 10 || policy.backPanel.startMarginMm > 300) {
+    issues.push('backPanel: startMarginMm must be between 10mm and 300mm');
+  }
+  if (policy.backPanel.endMarginMm < 10 || policy.backPanel.endMarginMm > 300) {
+    issues.push('backPanel: endMarginMm must be between 10mm and 300mm');
   }
 
   for (const [componentId, entry] of Object.entries(policy.componentOverrides ?? {})) {
