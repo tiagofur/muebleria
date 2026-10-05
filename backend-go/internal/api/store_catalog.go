@@ -47,8 +47,8 @@ type CatalogStore interface {
 	ListHardwares(ctx context.Context) ([]domain.Hardware, error)
 	GetHardwareByID(ctx context.Context, id string) (*domain.Hardware, error)
 	CreateHardware(ctx context.Context, h *domain.Hardware) error
-	UpdateHardware(ctx context.Context, id string, h *domain.Hardware) error
-	DeactivateHardware(ctx context.Context, id string) error
+	UpdateHardware(ctx context.Context, id string, expectedVersion int64, h *domain.Hardware) error
+	DeactivateHardware(ctx context.Context, id string, expectedVersion int64) error
 
 	// Catalog: hardware profiles (#913 / HW-PROFILE)
 	ListHardwareProfiles(ctx context.Context) ([]domain.HardwareProfile, error)

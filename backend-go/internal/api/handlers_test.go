@@ -353,7 +353,13 @@ type stubStore struct {
 	hardwareReturnedByID   *domain.Hardware
 	updateHardwareCalled   bool
 	updateHardwareReceived *domain.Hardware
-	moduleReturnedByID     *domain.Module
+	// #1084 (#443 slice 1): expected version observed on guarded writes.
+	updateHardwareExpectedVersion int64
+	updateHardwareErr             error
+	deactivateHardwareCalled      bool
+	deactivateHardwareExpectedVer int64
+	deactivateHardwareErr         error
+	moduleReturnedByID            *domain.Module
 	// Floor scan (F089-RN): per-id modules + floor status write log.
 	modulesByID       map[string]*domain.Module
 	floorStatusWrites []floorStatusWrite

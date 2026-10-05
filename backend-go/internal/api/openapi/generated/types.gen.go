@@ -2752,6 +2752,59 @@ type CatalogModule struct {
 	UpdatedAt            *string                        `json:"updated_at,omitempty"`
 }
 
+type Hardware struct {
+	ID                  string             `json:"id"`
+	Code                string             `json:"code"`
+	Name                string             `json:"name"`
+	Unit                string             `json:"unit"`
+	CostPerUnit         float64            `json:"cost_per_unit"`
+	PackageSize         *float64           `json:"package_size,omitempty"`
+	ImageURL            *string            `json:"image_url,omitempty"`
+	Notes               *string            `json:"notes,omitempty"`
+	PreviewShape        *string            `json:"preview_shape,omitempty"`
+	PreviewSizeMm       *float64           `json:"preview_size_mm,omitempty"`
+	PreviewProjectionMm *float64           `json:"preview_projection_mm,omitempty"`
+	PreviewDiameterMm   *float64           `json:"preview_diameter_mm,omitempty"`
+	PreviewColor        *string            `json:"preview_color,omitempty"`
+	PreviewRoughness    *float64           `json:"preview_roughness,omitempty"`
+	PreviewMetalness    *float64           `json:"preview_metalness,omitempty"`
+	PreviewClearcoat    *float64           `json:"preview_clearcoat,omitempty"`
+	PartFinishes        *map[string]string `json:"part_finishes,omitempty"`
+	Machining           *map[string]any    `json:"machining,omitempty"`
+	VisualAsset         *map[string]any    `json:"visual_asset,omitempty"`
+	Active              bool               `json:"active"`
+	CreatedAt           *string            `json:"created_at,omitempty"`
+	UpdatedAt           *string            `json:"updated_at,omitempty"`
+	Version             int64              `json:"version"`
+}
+
+type HardwareWrite struct {
+	ID                  *string            `json:"id,omitempty"`
+	Code                string             `json:"code"`
+	Name                string             `json:"name"`
+	Unit                string             `json:"unit"`
+	CostPerUnit         float64            `json:"cost_per_unit"`
+	PackageSize         *float64           `json:"package_size,omitempty"`
+	ImageURL            *string            `json:"image_url,omitempty"`
+	Notes               *string            `json:"notes,omitempty"`
+	PreviewShape        *string            `json:"preview_shape,omitempty"`
+	PreviewSizeMm       *float64           `json:"preview_size_mm,omitempty"`
+	PreviewProjectionMm *float64           `json:"preview_projection_mm,omitempty"`
+	PreviewDiameterMm   *float64           `json:"preview_diameter_mm,omitempty"`
+	PreviewColor        *string            `json:"preview_color,omitempty"`
+	PreviewRoughness    *float64           `json:"preview_roughness,omitempty"`
+	PreviewMetalness    *float64           `json:"preview_metalness,omitempty"`
+	PreviewClearcoat    *float64           `json:"preview_clearcoat,omitempty"`
+	PartFinishes        *map[string]string `json:"part_finishes,omitempty"`
+	Machining           *map[string]any    `json:"machining,omitempty"`
+	VisualAsset         *map[string]string `json:"visual_asset,omitempty"`
+	Active              bool               `json:"active"`
+}
+
+type HardwareDeactivation struct {
+	Message string `json:"message"`
+}
+
 type CatalogModuleWrite struct {
 	ID                   *string                        `json:"id,omitempty"`
 	Code                 string                         `json:"code"`

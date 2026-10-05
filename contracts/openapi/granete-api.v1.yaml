@@ -5827,6 +5827,180 @@
         }
       }
     },
+    "/catalog/hardware": {
+      "get": {
+        "operationId": "listHardware",
+        "responses": {
+          "200": {
+            "description": "Catalog hardware list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Hardware"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createHardware",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Hardware created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Hardware"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/catalog/hardware/{hardwareId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/HardwareId"
+        }
+      ],
+      "get": {
+        "operationId": "getHardware",
+        "responses": {
+          "200": {
+            "description": "The catalog hardware",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Hardware"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateHardware",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HardwareWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Hardware updated (server-owned version bumped)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Hardware"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deactivateHardware",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hardware deactivated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareDeactivation"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "428": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/catalog/hardware-profiles": {
       "get": {
         "operationId": "listHardwareProfiles",
@@ -6428,6 +6602,15 @@
       },
       "ComponentId": {
         "name": "componentId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "HardwareId": {
+        "name": "hardwareId",
         "in": "path",
         "required": true,
         "schema": {
@@ -16426,6 +16609,266 @@
           "base_labor_cost"
         ],
         "description": "Catalog furniture module template. version is the server-owned optimistic-concurrency token (strong ETag \"v<N>\"); request bodies never set it — If-Match is the only expected-version authority on PUT. Composition fields the editor does not author ride along verbatim."
+      },
+      "Hardware": {
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "unit",
+          "cost_per_unit",
+          "active",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string",
+            "description": "piece | set | meter"
+          },
+          "cost_per_unit": {
+            "type": "number"
+          },
+          "package_size": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Commercial pack size; null = no purchase rounding."
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "preview_shape": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preview_size_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_projection_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_diameter_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preview_roughness": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_metalness": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_clearcoat": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "part_finishes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Per-part finish presets keyed by structural role (F080)."
+          },
+          "machining": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "F127 CNC drilling footprint JSONB; the canonical nested shape is governed by the machining contract and its parity fixtures."
+          },
+          "visual_asset": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "description": "#667 M1 versioned 3D asset binding; representation/digest/validation state is resolved server-side."
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Server-owned optimistic-concurrency version (#443/#448); echoed back as the strong If-Match ETag."
+          }
+        }
+      },
+      "HardwareWrite": {
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "unit",
+          "cost_per_unit",
+          "active"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "cost_per_unit": {
+            "type": "number"
+          },
+          "package_size": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "image_url": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "preview_shape": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preview_size_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_projection_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_diameter_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preview_roughness": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_metalness": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview_clearcoat": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "part_finishes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "machining": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "visual_asset": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Identifiers only (assetId/assetRevisionId); resolved facts are replaced server-side."
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "HardwareDeactivation": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
       },
       "CatalogModuleWrite": {
         "type": "object",

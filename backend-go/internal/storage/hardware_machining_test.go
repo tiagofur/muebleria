@@ -67,7 +67,7 @@ func TestHardware_PersistsMachiningProfile(t *testing.T) {
 
 	// Case 3: update back to nil -> UPDATE clears the footprint.
 	minifix.Machining = nil
-	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateHardware(txCtx, minifix.ID, minifix) })
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateHardware(txCtx, minifix.ID, minifix.Version, minifix) })
 	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) { return store.GetHardwareByID(txCtx, minifix.ID) })
 	if got.Machining != nil {
 		t.Fatalf("machining not cleared on update: %+v", got.Machining)

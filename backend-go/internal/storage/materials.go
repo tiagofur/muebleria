@@ -308,7 +308,7 @@ func (s *PostgresStore) ListEdgeBands(ctx context.Context) ([]domain.EdgeBand, e
 
 func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id, version
 		FROM hardwares
 		WHERE organization_id = $1
 		ORDER BY name ASC, id ASC;
@@ -328,7 +328,7 @@ func (s *PostgresStore) ListHardwares(ctx context.Context) ([]domain.Hardware, e
 		var partFinishesRaw []byte
 		var machiningRaw []byte
 		var visualAssetID, visualRevisionID *string
-		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID)
+		err := rows.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID, &h.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -519,7 +519,7 @@ func (s *PostgresStore) ReactivateEdgeBand(ctx context.Context, id string) error
 
 func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain.Hardware, error) {
 	query := `
-		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id
+		SELECT id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, created_at, updated_at, visual_asset_id, visual_asset_revision_id, version
 		FROM hardwares
 		WHERE id = $1 AND organization_id = $2;
 	`
@@ -531,7 +531,7 @@ func (s *PostgresStore) GetHardwareByID(ctx context.Context, id string) (*domain
 	var partFinishesRaw []byte
 	var machiningRaw []byte
 	var visualAssetID, visualRevisionID *string
-	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID)
+	err := row.Scan(&h.ID, &h.Code, &h.Name, &h.Unit, &h.CostPerUnit, &packageSize, &imageURL, &h.PreviewShape, &h.PreviewSizeMm, &h.PreviewProjectionMm, &h.PreviewDiameterMm, &h.PreviewColor, &h.PreviewRoughness, &h.PreviewMetalness, &h.PreviewClearcoat, &partFinishesRaw, &machiningRaw, &notes, &h.Active, &h.CreatedAt, &h.UpdatedAt, &visualAssetID, &visualRevisionID, &h.Version)
 	if err != nil {
 		return nil, err
 	}
@@ -577,10 +577,10 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 		query := `
 			INSERT INTO hardwares (id, code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, organization_id, visual_asset_id, visual_asset_revision_id)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
-			RETURNING created_at, updated_at;
+			RETURNING created_at, updated_at, version;
 		`
 		err := s.db(ctx).QueryRow(ctx, query, h.ID, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx), visualAssetID, visualRevisionID).
-			Scan(&h.CreatedAt, &h.UpdatedAt)
+			Scan(&h.CreatedAt, &h.UpdatedAt, &h.Version)
 		if err != nil {
 			return fmt.Errorf("error creating hardware: %w", err)
 		}
@@ -589,17 +589,22 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 	query := `
 		INSERT INTO hardwares (code, name, unit, cost_per_unit, package_size, image_url, preview_shape, preview_size_mm, preview_projection_mm, preview_diameter_mm, preview_color, preview_roughness, preview_metalness, preview_clearcoat, part_finishes, machining, notes, active, organization_id, visual_asset_id, visual_asset_revision_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-		RETURNING id, created_at, updated_at;
+		RETURNING id, created_at, updated_at, version;
 	`
 	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, OrgFromCtx(ctx), visualAssetID, visualRevisionID).
-		Scan(&h.ID, &h.CreatedAt, &h.UpdatedAt)
+		Scan(&h.ID, &h.CreatedAt, &h.UpdatedAt, &h.Version)
 	if err != nil {
 		return fmt.Errorf("error creating hardware: %w", err)
 	}
 	return nil
 }
 
-func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain.Hardware) error {
+// UpdateHardware is If-Match guarded (#443/#448): version is server-owned and
+// bumped in the same statement that checks the expected version, so a stale
+// writer can never interleave between the check and the write. A missing row
+// and a stale expected version both surface as ErrNoRows here; they are
+// disambiguated so clients get 404 vs ErrVersionConflict instead of guessing.
+func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, expectedVersion int64, h *domain.Hardware) error {
 	var pkg interface{}
 	if h.PackageSize != nil {
 		pkg = *h.PackageSize
@@ -607,15 +612,24 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain
 	visualAssetID, visualRevisionID := hardwareVisualAssetArgs(h)
 	query := `
 		UPDATE hardwares
-		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, package_size = $5, image_url = $6, preview_shape = $7, preview_size_mm = $8, preview_projection_mm = $9, preview_diameter_mm = $10, preview_color = $11, preview_roughness = $12, preview_metalness = $13, preview_clearcoat = $14, part_finishes = $15, machining = $16, notes = $17, active = $18, visual_asset_id = $20, visual_asset_revision_id = $21, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $19 AND organization_id = $22
-		RETURNING updated_at;
+		SET code = $1, name = $2, unit = $3, cost_per_unit = $4, package_size = $5, image_url = $6, preview_shape = $7, preview_size_mm = $8, preview_projection_mm = $9, preview_diameter_mm = $10, preview_color = $11, preview_roughness = $12, preview_metalness = $13, preview_clearcoat = $14, part_finishes = $15, machining = $16, notes = $17, active = $18, visual_asset_id = $20, visual_asset_revision_id = $21, updated_at = CURRENT_TIMESTAMP, version = version + 1
+		WHERE id = $19 AND organization_id = $22 AND version = $23
+		RETURNING updated_at, version;
 	`
-	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, id, visualAssetID, visualRevisionID, OrgFromCtx(ctx)).
-		Scan(&h.UpdatedAt)
+	err := s.db(ctx).QueryRow(ctx, query, h.Code, h.Name, h.Unit, h.CostPerUnit, pkg, h.ImageURL, h.PreviewShape, h.PreviewSizeMm, h.PreviewProjectionMm, h.PreviewDiameterMm, h.PreviewColor, h.PreviewRoughness, h.PreviewMetalness, h.PreviewClearcoat, hardwarePartFinishesArg(h.PartFinishes), hardwareMachiningArg(h.Machining), h.Notes, h.Active, id, visualAssetID, visualRevisionID, OrgFromCtx(ctx), expectedVersion).
+		Scan(&h.UpdatedAt, &h.Version)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("hardware not found")
+			var exists bool
+			if checkErr := s.db(ctx).QueryRow(ctx,
+				`SELECT EXISTS (SELECT 1 FROM hardwares WHERE id = $1 AND organization_id = $2)`,
+				id, OrgFromCtx(ctx)).Scan(&exists); checkErr != nil {
+				return fmt.Errorf("error checking hardware existence: %w", checkErr)
+			}
+			if !exists {
+				return fmt.Errorf("hardware not found")
+			}
+			return ErrVersionConflict
 		}
 		return fmt.Errorf("error updating hardware: %w", err)
 	}
@@ -623,14 +637,23 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, h *domain
 	return nil
 }
 
-func (s *PostgresStore) DeactivateHardware(ctx context.Context, id string) error {
-	query := `UPDATE hardwares SET active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND organization_id = $2`
-	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx))
+func (s *PostgresStore) DeactivateHardware(ctx context.Context, id string, expectedVersion int64) error {
+	query := `UPDATE hardwares SET active = false, updated_at = CURRENT_TIMESTAMP, version = version + 1 WHERE id = $1 AND organization_id = $2 AND version = $3`
+	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("hardware not found")
+		var exists bool
+		if checkErr := s.db(ctx).QueryRow(ctx,
+			`SELECT EXISTS (SELECT 1 FROM hardwares WHERE id = $1 AND organization_id = $2)`,
+			id, OrgFromCtx(ctx)).Scan(&exists); checkErr != nil {
+			return fmt.Errorf("error checking hardware existence: %w", checkErr)
+		}
+		if !exists {
+			return fmt.Errorf("hardware not found")
+		}
+		return ErrVersionConflict
 	}
 	return nil
 }

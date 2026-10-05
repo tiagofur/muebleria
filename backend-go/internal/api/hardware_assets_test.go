@@ -321,6 +321,8 @@ func TestHardwarePut_VisualBindingResolvedServerSide(t *testing.T) {
 	body := `{"id":"66000000-0000-0000-0000-000000000001","code":"HW-VIS","name":"Tirador","unit":"piece","cost_per_unit":10,"active":true,
 		"visual_asset":{"assetId":"74000000-0000-0000-0000-000000000001","assetRevisionId":"75000000-0000-0000-0000-000000000001","sha256":"client-fake-digest"}}`
 	req := hwAssetRequest(http.MethodPut, "/api/catalog/hardware/66000000-0000-0000-0000-000000000001", body, string(domain.RoleAdmin))
+	// #1084 (#443 slice 1): guarded writes carry the expected version.
+	req.Header.Set("If-Match", `"v1"`)
 	req.SetPathValue("id", "66000000-0000-0000-0000-000000000001")
 	rr := httptest.NewRecorder()
 	srv.HandleHardwareByID(rr, req)
@@ -367,6 +369,7 @@ func TestHardwarePut_ExistingBindingToRetiredAssetPreserved(t *testing.T) {
 	body := `{"id":"66000000-0000-0000-0000-000000000001","code":"HW-VIS","name":"Tirador Renombrado","unit":"piece","cost_per_unit":15,"active":true,
 		"visual_asset":{"assetId":"74000000-0000-0000-0000-000000000001","assetRevisionId":"75000000-0000-0000-0000-000000000001"}}`
 	req := hwAssetRequest(http.MethodPut, "/api/catalog/hardware/66000000-0000-0000-0000-000000000001", body, string(domain.RoleAdmin))
+	req.Header.Set("If-Match", `"v1"`)
 	req.SetPathValue("id", "66000000-0000-0000-0000-000000000001")
 	rr := httptest.NewRecorder()
 	srv.HandleHardwareByID(rr, req)

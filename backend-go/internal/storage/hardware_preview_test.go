@@ -67,7 +67,7 @@ func TestHardware_PersistsPreviewGeometry(t *testing.T) {
 	noPreview.PreviewMetalness = ptrFloat64(1.0)
 	noPreview.PreviewClearcoat = ptrFloat64(0.0)
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
-		return store.UpdateHardware(txCtx, noPreview.ID, noPreview)
+		return store.UpdateHardware(txCtx, noPreview.ID, noPreview.Version, noPreview)
 	})
 	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
 		return store.GetHardwareByID(txCtx, noPreview.ID)

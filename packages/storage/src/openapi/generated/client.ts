@@ -55,12 +55,15 @@ import type {
   FactoryOrganization,
   FurnitureDefinitionLayout,
   FurnitureInstance,
+  Hardware,
   HardwareAsset,
   HardwareAssetRevision,
   HardwareAssetRevisionGrant,
   HardwareAssetUploadSession,
+  HardwareDeactivation,
   HardwareProfile,
   HardwareProfileWrite,
+  HardwareWrite,
   Invitation,
   LibraryManifest,
   LibraryOverlayConflictDetail,
@@ -333,6 +336,11 @@ export abstract class GeneratedGraneteApiClient {
   createCatalogModule(token: string, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("POST", "/catalog/modules", { schema: "CatalogModule", token, bodySchema: "CatalogModuleWrite", body, signal }); }
   getCatalogModule(token: string, moduleId: string, signal?: AbortSignal): Promise<CatalogModule> { return this.request("GET", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, signal }); }
   updateCatalogModule(token: string, moduleId: string, version: number, body: CatalogModuleWrite, signal?: AbortSignal): Promise<CatalogModule> { return this.request("PUT", `/catalog/modules/${encodeURIComponent(moduleId)}`, { schema: "CatalogModule", token, ifMatch: version, bodySchema: "CatalogModuleWrite", body, signal }); }
+  listHardware(token: string, signal?: AbortSignal): Promise<ReadonlyArray<Hardware>> { return this.request("GET", "/catalog/hardware", { arrayOf: "Hardware", token, signal }); }
+  createHardware(token: string, body: HardwareWrite, signal?: AbortSignal): Promise<Hardware> { return this.request("POST", "/catalog/hardware", { schema: "Hardware", token, bodySchema: "HardwareWrite", body, signal }); }
+  getHardware(token: string, hardwareId: string, signal?: AbortSignal): Promise<Hardware> { return this.request("GET", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "Hardware", token, signal }); }
+  updateHardware(token: string, hardwareId: string, version: number, body: HardwareWrite, signal?: AbortSignal): Promise<Hardware> { return this.request("PUT", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "Hardware", token, ifMatch: version, bodySchema: "HardwareWrite", body, signal }); }
+  deactivateHardware(token: string, hardwareId: string, version: number, signal?: AbortSignal): Promise<HardwareDeactivation> { return this.request("DELETE", `/catalog/hardware/${encodeURIComponent(hardwareId)}`, { schema: "HardwareDeactivation", token, ifMatch: version, signal }); }
   listHardwareProfiles(token: string, signal?: AbortSignal): Promise<ReadonlyArray<HardwareProfile>> { return this.request("GET", "/catalog/hardware-profiles", { arrayOf: "HardwareProfile", token, signal }); }
   createHardwareProfile(token: string, body: HardwareProfileWrite, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("POST", "/catalog/hardware-profiles", { schema: "HardwareProfile", token, bodySchema: "HardwareProfileWrite", body, signal }); }
   getHardwareProfile(token: string, profileId: string, signal?: AbortSignal): Promise<HardwareProfile> { return this.request("GET", `/catalog/hardware-profiles/${encodeURIComponent(profileId)}`, { schema: "HardwareProfile", token, signal }); }
