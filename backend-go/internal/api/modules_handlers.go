@@ -203,22 +203,32 @@ func (s *Server) HandleStructureByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "structure not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(st.Version))
 		respondWithJSON(w, http.StatusOK, st)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var st domain.Structure
 		if !decodeJSONBody(w, r, &st) {
 			return
 		}
-		err := s.Store.UpdateStructure(r.Context(), id, &st)
+		err := s.Store.UpdateStructure(r.Context(), id, expectedVersion, &st)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
+
 			if isDuplicateKey(err) {
 				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
@@ -226,13 +236,18 @@ func (s *Server) HandleStructureByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(st.Version))
 		respondWithJSON(w, http.StatusOK, st)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar estructuras") {
 			return
 		}
-		err := s.Store.DeleteStructure(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeleteStructure(r.Context(), id, expectedVersion)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
@@ -427,10 +442,15 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusNotFound, "component not found")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
 			return
 		}
 		var c domain.Component
@@ -442,10 +462,14 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 			respondWithError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		err := s.Store.UpdateComponent(r.Context(), id, &c)
+		err := s.Store.UpdateComponent(r.Context(), id, expectedVersion, &c)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			if isDuplicateKey(err) {
@@ -455,13 +479,18 @@ func (s *Server) HandleComponentByID(w http.ResponseWriter, r *http.Request) {
 			respondWithInternalError(w, err, "handler")
 			return
 		}
+		w.Header().Set("ETag", FormatVersionETag(c.Version))
 		respondWithJSON(w, http.StatusOK, c)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateModules), "no tenés permiso para modificar componentes") {
 			return
 		}
-		err := s.Store.DeleteComponent(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeleteComponent(r.Context(), id, expectedVersion)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())

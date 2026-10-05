@@ -103,7 +103,7 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 	}
 	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateComponent(txCtx, comp) })
 	t.Cleanup(func() {
-		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteComponent(txCtx, comp.ID) })
+		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteComponent(txCtx, comp.ID, 1) })
 	})
 
 	// Fresh structure (rev defaults to 1 at the DB level).
@@ -116,7 +116,7 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 	}
 	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.CreateStructure(txCtx, st) })
 	t.Cleanup(func() {
-		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteStructure(txCtx, st.ID) })
+		withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.DeleteStructure(txCtx, st.ID, st.Version) })
 	})
 
 	// Sanity: revision 1 after create.
@@ -133,7 +133,7 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 	// Edit 1: bump components to qty 3. UpdateStructure must snapshot rev 1 and
 	// advance the structure to rev 2.
 	st.Components = []domain.ComponentInstance{{ComponentID: comp.ID, Quantity: 3}}
-	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, st.ID, st) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, st.ID, st.Version, st) })
 	if st.Revision != 2 {
 		t.Errorf("in-memory revision after 1st edit: got %d want 2", st.Revision)
 	}
@@ -159,7 +159,7 @@ func TestStructureRevisionBumpAndSnapshot(t *testing.T) {
 
 	// Edit 2: bump to qty 5 → rev 3, history now has 2 entries (newest-first).
 	st.Components = []domain.ComponentInstance{{ComponentID: comp.ID, Quantity: 5}}
-	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, st.ID, st) })
+	withinInitialOrganization(t, store, func(txCtx context.Context) error { return store.UpdateStructure(txCtx, st.ID, st.Version, st) })
 	withinInitialOrganization(t, store, func(txCtx context.Context) error {
 		var err error
 		loaded, err = store.GetStructureByID(txCtx, st.ID)

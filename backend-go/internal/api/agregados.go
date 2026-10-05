@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"errors"
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // --- CATALOG / AGREGADOS (reusable sub-assemblies) ---
@@ -63,13 +66,21 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
 		var a domain.Agregado
 		if !decodeJSONBody(w, r, &a) {
 			return
 		}
-		if err := s.Store.UpdateAgregado(r.Context(), id, &a); err != nil {
+		if err := s.Store.UpdateAgregado(r.Context(), id, expectedVersion, &a); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
 				return
 			}
 			if isDuplicateKey(err) {
@@ -85,7 +96,11 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		if err := s.Store.DeleteAgregado(r.Context(), id); err != nil {
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		if err := s.Store.DeleteAgregado(r.Context(), id, expectedVersion); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return

@@ -435,7 +435,7 @@ func TestQuoteCommercialSnapshot_Q2Requote_PreservesFrozenPricingContext(t *test
 			return err
 		}
 		structure.Components[0].Quantity = 2
-		return fx.store.UpdateStructure(ctx, csStructure, structure)
+		return fx.store.UpdateStructure(ctx, csStructure, 1, structure)
 	})
 	if err != nil {
 		t.Fatalf("advance structure after Q1: %v", err)

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { expect, test, type Page, type Request, type Response } from '@playwright/test';
-import { APIWorkspaceRepository, GraneteApiClient } from '@granete/storage';
+import { APIWorkspaceRepository, GraneteApiClient, GraneteApiError } from '@granete/storage';
 import { GATE_MODULE_A_ID, required } from './support/api';
 
 /**
@@ -161,7 +161,14 @@ async function prepareQuoteFixture(): Promise<void> {
     PROJECT_ID,
     { notes: 'Prueba E2E de refresh de lectura' },
     'gate-460-q1-create',
-  );
+  ).catch((err: unknown) => {
+    // #443 slice 3 debugging aid: the typed envelope carries the snapshot
+    // defect in details.reason — surface it or the failure is undiagnosable.
+    if (err instanceof GraneteApiError) {
+      const dbg = err as { payload?: unknown; details?: unknown }; throw new Error(`createInitialProjectQuoteRevision falló: ${JSON.stringify(dbg.payload)} / ${JSON.stringify(dbg.details)}`, { cause: err });
+    }
+    throw err;
+  });
   await client.publishProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-460-q1-publish');
   await client.acceptProjectQuoteRevision(owner.token, PROJECT_ID, q1.id, 'gate-460-q1-accept');
 }

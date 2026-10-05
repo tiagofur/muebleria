@@ -138,12 +138,12 @@ func (s *stubStore) CreateStructure(context.Context, *domain.Structure) error {
 	return nil
 }
 
-func (s *stubStore) UpdateStructure(context.Context, string, *domain.Structure) error {
+func (s *stubStore) UpdateStructure(_ context.Context, _ string, _ int64, _ *domain.Structure) error {
 	s.stubNotUsed("UpdateStructure")
 	return nil
 }
 
-func (s *stubStore) DeleteStructure(context.Context, string) error {
+func (s *stubStore) DeleteStructure(_ context.Context, _ string, _ int64) error {
 	s.stubNotUsed("DeleteStructure")
 	return nil
 }
@@ -165,16 +165,16 @@ func (s *stubStore) CreateAgregado(context.Context, *domain.Agregado) error {
 	return nil
 }
 
-func (s *stubStore) UpdateAgregado(context.Context, string, *domain.Agregado) error {
+func (s *stubStore) UpdateAgregado(_ context.Context, _ string, _ int64, _ *domain.Agregado) error {
 	s.stubNotUsed("UpdateAgregado")
 	return nil
 }
 
-func (s *stubStore) DeleteAgregado(context.Context, string) error {
+func (s *stubStore) DeleteAgregado(_ context.Context, _ string, _ int64) error {
 	return nil
 }
 
-func (s *stubStore) DeactivateAgregado(context.Context, string) error {
+func (s *stubStore) DeactivateAgregado(_ context.Context, _ string, _ int64) error {
 	s.stubNotUsed("DeactivateAgregado")
 	return nil
 }
@@ -196,12 +196,12 @@ func (s *stubStore) CreateComponent(context.Context, *domain.Component) error {
 	return nil
 }
 
-func (s *stubStore) UpdateComponent(context.Context, string, *domain.Component) error {
+func (s *stubStore) UpdateComponent(_ context.Context, _ string, _ int64, _ *domain.Component) error {
 	s.stubNotUsed("UpdateComponent")
 	return nil
 }
 
-func (s *stubStore) DeleteComponent(context.Context, string) error {
+func (s *stubStore) DeleteComponent(_ context.Context, _ string, _ int64) error {
 	s.stubNotUsed("DeleteComponent")
 	return nil
 }

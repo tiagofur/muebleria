@@ -64,6 +64,12 @@ async function seedDistinctModule(token: string, id: string, tenant: 'A' | 'B'):
   await repository.saveCatalog({ ...catalog, modules: [{
     ...template, id, code: `GATE-${tenant}`, name: `Mueble real ${tenant}`, hardwareLines: template?.hardwareLines ?? [],
     imageUrl: tenant === 'A' ? GATE_MEDIA_A_URL : GATE_MEDIA_B_URL,
+    // #1096/#443: the shared gate module must be a WELL-FORMED commercial
+    // entity — explicit valid dimensions, never inherited from whichever
+    // module sorts first (catalog order changes across shards, and a
+    // dimensionless module makes every later materialize/quote freeze fail
+    // closed, which is the server behaving correctly).
+    widthMm: 600, heightMm: 720, depthMm: 560,
   }] });
 }
 

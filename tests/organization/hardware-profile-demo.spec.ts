@@ -39,11 +39,23 @@ async function authedFetch(token: string, path: string, init?: RequestInit): Pro
 }
 
 async function upsert(token: string, pathById: string, collection: string, body: unknown): Promise<void> {
-  const put = await authedFetch(token, pathById, { method: 'PUT', body: JSON.stringify(body) });
-  if (put.ok) return;
-  if (put.status !== 404 && put.status !== 405) {
+  // #1096 (#443 slice 3): guarded catalog writes — learn the server version
+  // first (404 keeps the POST-create fallback), then PUT under If-Match.
+  const learn = await authedFetch(token, pathById);
+  if (learn.ok) {
+    const current = (await learn.json()) as { version?: number };
+    const put = await authedFetch(token, pathById, {
+      method: 'PUT',
+      headers: { 'If-Match': `"v${current.version}"` },
+      body: JSON.stringify(body),
+    });
+    if (put.ok) return;
     const errText = await put.text().catch(() => '');
     throw new Error(`PUT ${pathById}: ${put.status} ${errText}`);
+  }
+  if (learn.status !== 404 && learn.status !== 405) {
+    const errText = await learn.text().catch(() => '');
+    throw new Error(`GET ${pathById}: ${learn.status} ${errText}`);
   }
   const created = await authedFetch(token, collection, { method: 'POST', body: JSON.stringify(body) });
   if (!created.ok) {
