@@ -2233,7 +2233,6 @@ describe('ProjectsScreen project templates (#110)', () => {
   });
 });
 
-
 describe('F101 page chrome migration', () => {
   it('places the Cotizaciones action hierarchy above its search and filters', () => {
     renderScreen();
@@ -2782,7 +2781,7 @@ describe('Cotizaciones S3 (#1118)', () => {
     const many = Array.from({ length: 26 }, (_, i) => ({
       id: `gen-${i + 1}`,
       name: `Obra ${i + 1}`,
-      customerId: null,
+      customerId: 'cust-ana',
       currency: 'MXN',
       marginFactor: 1.35,
       laborFixedCost: 0,
@@ -2790,7 +2789,6 @@ describe('Cotizaciones S3 (#1118)', () => {
       items: [],
       createdAt: '2026-07-01T00:00:00.000Z',
       updatedAt: '2026-07-01T00:00:00.000Z',
-      priceSnapshot: null,
     }));
     const summaries = new Map(
       many.map((p, i) => [
@@ -2816,7 +2814,7 @@ describe('Cotizaciones S3 corrección (#1118 re-critique)', () => {
     const many = Array.from({ length: 26 }, (_, i) => ({
       id: `pg-${i + 1}`,
       name: `Taller ${i + 1}`,
-      customerId: null,
+      customerId: 'cust-ana',
       currency: 'MXN',
       marginFactor: 1.35,
       laborFixedCost: 0,
@@ -2824,7 +2822,6 @@ describe('Cotizaciones S3 corrección (#1118 re-critique)', () => {
       items: [],
       createdAt: '2026-07-01T00:00:00.000Z',
       updatedAt: '2026-07-01T00:00:00.000Z',
-      priceSnapshot: null,
     }));
     const summaries = new Map(
       many.map((p, i) => [
