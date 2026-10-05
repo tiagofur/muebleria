@@ -1,9 +1,13 @@
 package api
 
 import (
-	"github.com/tiagofur/muebles-backend/internal/domain"
+	"errors"
 	"net/http"
 	"strings"
+
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // Contrato: CRUD de clientes y catálogo comercial — tableros, ambientales,
@@ -422,10 +426,17 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if !s.actorCanViewCosts(r) {
 			domain.RedactHardwareCosts(h)
 		}
+		// #1084 (#443 slice 1): the strong version ETag is the If-Match token
+		// writers must echo back on PUT/DELETE.
+		w.Header().Set("ETag", FormatVersionETag(h.Version))
 		respondWithJSON(w, http.StatusOK, h)
 
 	case http.MethodPut:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
+			return
+		}
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
 			return
 		}
 		var h domain.Hardware
@@ -452,10 +463,14 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		} else if !s.resolveHardwareVisualBindingForWrite(r, w, &h) {
 			return
 		}
-		err = s.Store.UpdateHardware(r.Context(), id, &h)
+		err = s.Store.UpdateHardware(r.Context(), id, expectedVersion, &h)
 		if err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión del herraje cambió; recargá y reintentá", nil)
 				return
 			}
 			if isDuplicateKey(err) {
@@ -468,14 +483,27 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 		if prevImage != h.ImageURL {
 			deleteMediaFileByURL(r.Context(), s.MediaDir, prevImage)
 		}
+		w.Header().Set("ETag", FormatVersionETag(h.Version))
 		respondWithJSON(w, http.StatusOK, h)
 
 	case http.MethodDelete:
 		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 			return
 		}
-		err := s.Store.DeactivateHardware(r.Context(), id)
+		expectedVersion, ok := RequireIfMatch(w, r)
+		if !ok {
+			return
+		}
+		err := s.Store.DeactivateHardware(r.Context(), id, expectedVersion)
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				respondWithError(w, http.StatusNotFound, err.Error())
+				return
+			}
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión del herraje cambió; recargá y reintentá", nil)
+				return
+			}
 			respondWithInternalError(w, err, "handler")
 			return
 		}

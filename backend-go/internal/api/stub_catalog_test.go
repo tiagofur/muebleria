@@ -176,14 +176,25 @@ func (s *stubStore) CreateHardware(context.Context, *domain.Hardware) error {
 	return nil
 }
 
-func (s *stubStore) UpdateHardware(_ context.Context, _ string, h *domain.Hardware) error {
+func (s *stubStore) UpdateHardware(_ context.Context, _ string, expectedVersion int64, h *domain.Hardware) error {
+	if s.updateHardwareErr != nil {
+		return s.updateHardwareErr
+	}
 	s.updateHardwareCalled = true
+	s.updateHardwareExpectedVersion = expectedVersion
+	// Simulate the server-owned bump so the handler's ETag reflects the
+	// persisted version, never the client payload's echoed one.
+	h.Version = expectedVersion + 1
 	cp := *h
 	s.updateHardwareReceived = &cp
 	return nil
 }
 
-func (s *stubStore) DeactivateHardware(context.Context, string) error {
-	s.stubNotUsed("DeactivateHardware")
+func (s *stubStore) DeactivateHardware(_ context.Context, _ string, expectedVersion int64) error {
+	if s.deactivateHardwareErr != nil {
+		return s.deactivateHardwareErr
+	}
+	s.deactivateHardwareCalled = true
+	s.deactivateHardwareExpectedVer = expectedVersion
 	return nil
 }

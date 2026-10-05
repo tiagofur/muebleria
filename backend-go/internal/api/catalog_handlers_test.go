@@ -2,11 +2,14 @@ package api
 
 import (
 	"encoding/json"
-	"github.com/tiagofur/muebles-backend/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
+	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // Contrato: tests de clientes y catálogo comercial — dup-key 409, RBAC de
@@ -324,6 +327,7 @@ func TestHandleHardwareByIDUpdateCleansReplacedImage(t *testing.T) {
 
 	body := strings.NewReader(`{"code":"HC","name":"N","unit":"pza","cost_per_unit":1,"image_url":"/api/media/hw-new.png","active":true}`)
 	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/hardware/h1", body), "eng", string(domain.RoleIngeniero))
+	req.Header.Set("If-Match", `"v1"`)
 	req.SetPathValue("id", "h1")
 	rr := httptest.NewRecorder()
 	srv.HandleHardwareByID(rr, req)
@@ -362,3 +366,118 @@ func TestHandleMaterialByIDSoftDeleteKeepsImage(t *testing.T) {
 
 // TestPublicUserDTONeverLeaksSecrets (OC-005) ensures that JSON serialization of PublicUserDTO
 // and LoginResponse never contains password hashes or raw passwords.
+
+// #1084 (#443 slice 1): catalog hardware writes are If-Match guarded with a
+// server-owned version (PUT and the deactivating DELETE).
+func TestHandleHardwareByID_IfMatchGuardsWrites(t *testing.T) {
+	newSrv := func(store *stubStore) *Server { return &Server{Store: store} }
+	writeBody := func() *strings.Reader {
+		return strings.NewReader(`{"code":"HC","name":"N","unit":"pza","cost_per_unit":1,"active":true}`)
+	}
+
+	t.Run("PUT sin If-Match es rechazado con 428 antes de escribir", func(t *testing.T) {
+		store := &stubStore{}
+		srv := newSrv(store)
+		req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/hardware/h1", writeBody()), "eng", string(domain.RoleIngeniero))
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+		if rr.Code != http.StatusPreconditionRequired {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if store.updateHardwareCalled {
+			t.Fatal("store must not be reached without If-Match")
+		}
+	})
+
+	t.Run("PUT con versión stale responde 412 VERSION_CONFLICT sin mutar", func(t *testing.T) {
+		store := &stubStore{hardwareReturnedByID: &domain.Hardware{ID: "h1"}, updateHardwareErr: storage.ErrVersionConflict}
+		srv := newSrv(store)
+		req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/hardware/h1", writeBody()), "eng", string(domain.RoleIngeniero))
+		req.Header.Set("If-Match", `"v1"`)
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+		if rr.Code != http.StatusPreconditionFailed {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), string(openapi.ApiErrorCodeVersionConflict)) {
+			t.Fatalf("body missing VERSION_CONFLICT code: %s", rr.Body.String())
+		}
+	})
+
+	t.Run("PUT con versión vigente responde 200 con ETag nuevo y versión esperada", func(t *testing.T) {
+		store := &stubStore{hardwareReturnedByID: &domain.Hardware{ID: "h1"}}
+		srv := newSrv(store)
+		req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/hardware/h1", writeBody()), "eng", string(domain.RoleIngeniero))
+		req.Header.Set("If-Match", `"v3"`)
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if store.updateHardwareExpectedVersion != 3 {
+			t.Fatalf("expected version passed to store = %d, want 3", store.updateHardwareExpectedVersion)
+		}
+		if got := rr.Header().Get("ETag"); got != `"v4"` {
+			t.Fatalf("ETag = %s, want the server-owned bumped version \"v4\"", got)
+		}
+	})
+
+	t.Run("GET expone ETag de versión", func(t *testing.T) {
+		store := &stubStore{hardwareReturnedByID: &domain.Hardware{ID: "h1", Version: 7}}
+		srv := newSrv(store)
+		req := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/hardware/h1", nil), "eng", string(domain.RoleIngeniero))
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d", rr.Code)
+		}
+		if got := rr.Header().Get("ETag"); got != `"v7"` {
+			t.Fatalf("ETag = %s, want \"v7\"", got)
+		}
+	})
+
+	t.Run("DELETE sin If-Match es rechazado con 428", func(t *testing.T) {
+		store := &stubStore{}
+		srv := newSrv(store)
+		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/hardware/h1", nil), "eng", string(domain.RoleIngeniero))
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+		if rr.Code != http.StatusPreconditionRequired {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+		if store.deactivateHardwareCalled {
+			t.Fatal("store must not be reached without If-Match")
+		}
+	})
+
+	t.Run("DELETE stale responde 412 y vigente desactiva", func(t *testing.T) {
+		store := &stubStore{deactivateHardwareErr: storage.ErrVersionConflict}
+		srv := newSrv(store)
+		req := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/hardware/h1", nil), "eng", string(domain.RoleIngeniero))
+		req.Header.Set("If-Match", `"v1"`)
+		req.SetPathValue("id", "h1")
+		rr := httptest.NewRecorder()
+		srv.HandleHardwareByID(rr, req)
+		if rr.Code != http.StatusPreconditionFailed {
+			t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+		}
+
+		okStore := &stubStore{}
+		req2 := withClaims(httptest.NewRequest(http.MethodDelete, "/api/catalog/hardware/h1", nil), "eng", string(domain.RoleIngeniero))
+		req2.Header.Set("If-Match", `"v2"`)
+		req2.SetPathValue("id", "h1")
+		rr2 := httptest.NewRecorder()
+		newSrv(okStore).HandleHardwareByID(rr2, req2)
+		if rr2.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rr2.Code, rr2.Body.String())
+		}
+		if !okStore.deactivateHardwareCalled || okStore.deactivateHardwareExpectedVer != 2 {
+			t.Fatalf("deactivate not called with expected version: called=%v v=%d", okStore.deactivateHardwareCalled, okStore.deactivateHardwareExpectedVer)
+		}
+	})
+}

@@ -35,7 +35,7 @@ func TestHardware_PersistsPartFinishes(t *testing.T) {
 	// Case 2: per-part overrides round-trip.
 	legacy.PartFinishes = map[string]string{"grip": "gold", "base": "black-matte"}
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
-		return store.UpdateHardware(txCtx, legacy.ID, legacy)
+		return store.UpdateHardware(txCtx, legacy.ID, legacy.Version, legacy)
 	})
 	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
 		return store.GetHardwareByID(txCtx, legacy.ID)
@@ -50,7 +50,7 @@ func TestHardware_PersistsPartFinishes(t *testing.T) {
 	// Case 3: clearing back to nil removes the overrides.
 	legacy.PartFinishes = nil
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
-		return store.UpdateHardware(txCtx, legacy.ID, legacy)
+		return store.UpdateHardware(txCtx, legacy.ID, legacy.Version, legacy)
 	})
 	got = withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Hardware, error) {
 		return store.GetHardwareByID(txCtx, legacy.ID)

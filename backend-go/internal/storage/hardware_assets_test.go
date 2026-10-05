@@ -163,7 +163,7 @@ func bindHardwareToRevision(t *testing.T, w *hwAssetWorld, hardwareID string, as
 			return err
 		}
 		current.VisualAsset = resolved
-		return w.fx.store.UpdateHardware(ctx, hardwareID, current)
+		return w.fx.store.UpdateHardware(ctx, hardwareID, current.Version, current)
 	})
 	if err != nil {
 		t.Fatalf("bind hardware: %v", err)
