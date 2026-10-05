@@ -1,5 +1,6 @@
 import type {
   Catalog,
+  Hardware,
   Customer,
   Project,
   ProjectInternalMessage,
@@ -63,7 +64,7 @@ import {
   ProjectInlineUpdateHttpError,
 } from './workspaceRepository';
 import { GraneteApiClient } from './apiClient';
-import { GraneteApiError, ModuleVersionUnknownError } from './apiErrors';
+import { GraneteApiError, HardwareVersionUnknownError, ModuleVersionUnknownError } from './apiErrors';
 import type {
   CatalogModule,
   ProductionRelease,
@@ -315,6 +316,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
    * version for a module PUT comes from here — never from the request body.
    */
   private readonly moduleVersions = new Map<string, number>();
+  // #1084 (#443 slice 1): server-owned hardware versions for If-Match writes.
+  private readonly hardwareVersions = new Map<string, number>();
 
   /**
    * #460 SEC-4B: el repository NO conoce storage de credenciales. El access
@@ -438,7 +441,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
-      fetchJson('/catalog/hardware'),
+      this.generatedClient.listHardware(this.getAccessToken?.() ?? ''),
       fetchJson('/catalog/option-groups'),
       fetchJson('/customers'),
       fetchJson('/catalog/categories'),
@@ -472,6 +475,16 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     for (const mod of catalog.modules) {
       if (typeof mod.version === 'number' && mod.version > 0) {
         this.moduleVersions.set(mod.id, mod.version);
+      }
+    }
+    // #1084 (#443 slice 1): seed the hardware version cache straight from the
+    // validated wire payload (the mapped domain shape carries no version), so
+    // every save goes out under If-Match against the loaded server state.
+    for (const hw of hardware) {
+      const version = (hw as { version?: unknown }).version;
+      const id = (hw as { id?: unknown }).id;
+      if (typeof version === 'number' && version > 0 && typeof id === 'string') {
+        this.hardwareVersions.set(id, version);
       }
     }
     return catalog;
@@ -558,6 +571,72 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
   }
 
+  /**
+   * #1084 (#443 slice 1): hardware writes are guarded by optimistic
+   * concurrency through the generated contract. Every PUT carries If-Match
+   * from the hardware version cache (seeded by getCatalog, refreshed from
+   * every accepted write response); a 412 surfaces as the server's typed
+   * GraneteApiError / VERSION_CONFLICT so the UI can tell a stale editor
+   * apart from a transport failure. Without a cached version the herraje is
+   * learned FIRST: a 404 keeps the POST-create fallback alive for
+   * locally-created herrajes, and a hit hands back the current version so
+   * the write still goes out under If-Match. Only a version the server never
+   * declares fails closed (HardwareVersionUnknownError) — a blind write can
+   * never clobber a concurrent catalog change.
+   */
+  private async upsertHardware(h: Hardware): Promise<void> {
+    const token = this.getAccessToken?.() ?? '';
+    const body = hardwareToApi(h) as never;
+
+    let expected = this.hardwareVersions.get(h.id);
+    if (expected === undefined) {
+      let learned: { readonly version?: unknown };
+      try {
+        learned = await this.generatedClient.getHardware(token, h.id);
+      } catch (err) {
+        if (err instanceof GraneteApiError && err.status === 404) {
+          await this.createHardwareThroughContract(token, body, h.id);
+          return;
+        }
+        throw err;
+      }
+      const learnedVersion = learned.version;
+      if (typeof learnedVersion !== 'number' || learnedVersion < 1) {
+        throw new HardwareVersionUnknownError(h.id);
+      }
+      expected = learnedVersion;
+      this.hardwareVersions.set(h.id, learnedVersion);
+    }
+
+    try {
+      const saved = await this.generatedClient.updateHardware(token, h.id, expected, body);
+      this.rememberHardwareVersion(h.id, saved as unknown as Record<string, unknown>);
+    } catch (err) {
+      if (err instanceof GraneteApiError && err.status === 404) {
+        // Deleted mid-session: recreate instead of failing the whole save.
+        await this.createHardwareThroughContract(token, body, h.id);
+        return;
+      }
+      throw err;
+    }
+  }
+
+  private async createHardwareThroughContract(
+    token: string,
+    body: never,
+    hardwareId: string,
+  ): Promise<void> {
+    const created = await this.generatedClient.createHardware(token, body);
+    this.rememberHardwareVersion(hardwareId, created as unknown as Record<string, unknown>);
+  }
+
+  private rememberHardwareVersion(hardwareId: string, saved: { readonly version?: unknown }): void {
+    const version = saved.version;
+    if (typeof version === 'number' && version > 0) {
+      this.hardwareVersions.set(hardwareId, version);
+    }
+  }
+
   private async upsert(
     pathById: string,
     pathCollection: string,
@@ -638,11 +717,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
 
     for (const h of catalog.hardware) {
-      await this.upsert(
-        `/catalog/hardware/${h.id}`,
-        '/catalog/hardware',
-        hardwareToApi(h),
-      );
+      await this.upsertHardware(h);
     }
 
     for (const og of catalog.optionGroups) {

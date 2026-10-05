@@ -35,6 +35,21 @@ export class ModuleVersionUnknownError extends Error {
   }
 }
 
+/**
+ * #1084 (#443 slice 1): a hardware save was refused BEFORE the wire because
+ * this session has no server version for the herraje. Fail-closed — a blind
+ * write could clobber a concurrent catalog change. Recovery: reload the
+ * catalog.
+ */
+export class HardwareVersionUnknownError extends Error {
+  constructor(readonly hardwareId: string) {
+    super(
+      `No se conoce la versión del herraje ${hardwareId} en esta sesión; recargá el catálogo antes de volver a guardar.`,
+    );
+    this.name = 'HardwareVersionUnknownError';
+  }
+}
+
 export function parseApiError(value: unknown): ApiError {
   return parseGenerated<ApiError>('ApiError', value);
 }

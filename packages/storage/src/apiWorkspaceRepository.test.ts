@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Hardware } from '@granete/domain';
 import { APIWorkspaceRepository } from './apiWorkspaceRepository';
 import type { Catalog } from '@granete/domain';
 import { ProjectInlineUpdateHttpError } from './workspaceRepository';
@@ -152,9 +153,11 @@ describe('APIWorkspaceRepository', () => {
 
   it('normalizes JSON null list payloads to empty arrays', async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
-      // Modules ride the generated contract: the list must be a real array;
-      // every other endpoint keeps the legacy null payload under test.
-      if (String(input).endsWith('/catalog/modules')) {
+      // Modules and hardware ride the generated contract: those lists must be
+      // real arrays; every other endpoint keeps the legacy null payload under
+      // test.
+      const url = String(input);
+      if (url.endsWith('/catalog/modules') || url.endsWith('/catalog/hardware')) {
         return { ok: true, json: async () => [] } as Response;
       }
       return { ok: true, json: async () => null } as Response;
@@ -1146,7 +1149,8 @@ describe('APIWorkspaceRepository auth dependency (SEC-4B)', () => {
   }
 
   function catalogOk(input?: Parameters<typeof fetch>[0]): Response {
-    const body = String(input).endsWith('/catalog/modules')
+    const url = String(input);
+    const body = url.endsWith('/catalog/modules') || url.endsWith('/catalog/hardware')
       ? []
       : { materials: [], edges: [], hardware: [], optionGroups: [], categories: [], customers: [], modules: [], structures: [], components: [] };
     return { ok: true, json: async () => body } as Response;
@@ -1643,5 +1647,162 @@ describe('APIWorkspaceRepository — module optimistic concurrency (#497)', () =
       modules: [{ ...catalog.modules[0]!, name: 'Nuevo' }],
     });
     expect(calls.map((c) => c.method)).toEqual(['POST']);
+  });
+});
+
+describe('APIWorkspaceRepository hardware optimistic concurrency (#1084 / #443 slice 1)', () => {
+  const hwWire = (version: number) => ({
+    id: 'hw-1',
+    code: 'BIS-1',
+    name: 'Bisagra',
+    unit: 'piece',
+    cost_per_unit: 10,
+    active: true,
+    version,
+  });
+  const hwDomain = (id = 'hw-1'): Hardware =>
+    ({
+      id,
+      code: 'BIS-1',
+      name: 'Bisagra',
+      unit: 'piece',
+      costPerUnit: 10,
+      active: true,
+    }) as unknown as Hardware;
+
+  const saveCatalogWith = async (repo: APIWorkspaceRepository, hardware: Hardware[]) => {
+    await repo.saveCatalog({
+      materials: [],
+      edges: [],
+      hardware,
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+    });
+  };
+
+  it('saveCatalog aprende la versión (GET) y envía If-Match en el PUT', async () => {
+    const ifMatchSeen: (string | null)[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const headers = new Headers(init?.headers);
+      if (method === 'GET' && url.includes('/catalog/hardware/hw-1')) {
+        return { ok: true, json: async () => hwWire(3) } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/hardware/hw-1')) {
+        ifMatchSeen.push(headers.get('If-Match'));
+        return { ok: true, json: async () => hwWire(4) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await saveCatalogWith(repo, [hwDomain()]);
+    expect(ifMatchSeen).toEqual(['"v3"']);
+  });
+
+  it('el segundo guardado usa la versión aprendida de la respuesta (sin re-GET)', async () => {
+    let learnGets = 0;
+    const ifMatchSeen: (string | null)[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const headers = new Headers(init?.headers);
+      if (method === 'GET' && url.includes('/catalog/hardware/hw-1')) {
+        learnGets += 1;
+        return { ok: true, json: async () => hwWire(3) } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/hardware/hw-1')) {
+        ifMatchSeen.push(headers.get('If-Match'));
+        return { ok: true, json: async () => hwWire(Number(headers.get('If-Match')!.slice(2, -1)) + 1) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await saveCatalogWith(repo, [hwDomain()]);
+    await saveCatalogWith(repo, [hwDomain()]);
+    expect(learnGets).toBe(1);
+    expect(ifMatchSeen).toEqual(['"v3"', '"v4"']);
+  });
+
+  it('saveCatalog crea por POST sin If-Match cuando el herraje no existe (404 al aprender)', async () => {
+    const methods: { method: string; ifMatch: string | null }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const headers = new Headers(init?.headers);
+      if (method === 'GET' && url.includes('/catalog/hardware/hw-1')) {
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({ code: 'NOT_FOUND', message: 'hardware not found', fieldErrors: {}, requestId: 'r', retryable: false, details: {} }),
+        } as unknown as Response;
+      }
+      if (method === 'POST' && url.endsWith('/catalog/hardware')) {
+        methods.push({ method, ifMatch: headers.get('If-Match') });
+        return { ok: true, json: async () => hwWire(1) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await saveCatalogWith(repo, [hwDomain()]);
+    expect(methods).toEqual([{ method: 'POST', ifMatch: null }]);
+  });
+
+  it('un PUT 412 VERSION_CONFLICT rechaza saveCatalog con el error tipado del contrato', async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.includes('/catalog/hardware/hw-1')) {
+        return { ok: true, json: async () => hwWire(3) } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/hardware/hw-1')) {
+        return {
+          ok: false,
+          status: 412,
+          json: async () => ({ code: 'VERSION_CONFLICT', message: 'la versión del herraje cambió; recargá y reintentá', fieldErrors: {}, requestId: 'r', retryable: false, details: {} }),
+        } as unknown as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    await expect(saveCatalogWith(repo, [hwDomain()])).rejects.toMatchObject({
+      status: 412,
+      code: 'VERSION_CONFLICT',
+    });
+  });
+
+  it('getCatalog siembra la caché de versiones (save posterior no re-aprende)', async () => {
+    let learnGets = 0;
+    const ifMatchSeen: (string | null)[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      const headers = new Headers(init?.headers);
+      if (method === 'GET' && url.endsWith('/catalog/hardware')) {
+        return { ok: true, json: async () => [hwWire(5)] } as Response;
+      }
+      if (method === 'GET' && url.includes('/catalog/hardware/hw-1')) {
+        learnGets += 1;
+        return { ok: true, json: async () => hwWire(5) } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/hardware/hw-1')) {
+        ifMatchSeen.push(headers.get('If-Match'));
+        return { ok: true, json: async () => hwWire(6) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const ws = await repo.load();
+    expect(ws.catalog.hardware).toHaveLength(1);
+    await saveCatalogWith(repo, [hwDomain()]);
+    expect(learnGets).toBe(0);
+    expect(ifMatchSeen).toEqual(['"v5"']);
   });
 });
