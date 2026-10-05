@@ -57,7 +57,7 @@ func deriveFixedShelfJoinery(relationship AuthoringRelationship, boardIndex map[
 		if err != nil {
 			pushIssue("TRANSFORM_INVALID",
 				fmt.Sprintf("component %s placement is not a rigid unit-scale frame", anchor.ComponentInstanceID),
-				"Resolve the board to a rigid local frame before declaring fixed-shelf contacts.")
+				fmt.Sprintf("Resolve the board to a rigid local frame before declaring %s contacts.", relationship.Kind))
 			return ContactBoard{}, false
 		}
 		return contactBoard, true
@@ -135,7 +135,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 		if anchorKind == "target" && !joineryFaces[anchor.Face] {
 			pushIssue("CONTACT_FACE_REQUIRED",
 				fmt.Sprintf("%s anchor must declare one concrete contact face (%s)", anchorKind, anchor.ComponentInstanceID),
-				"Declare the physical contact face on every fixed-shelf target; proximity never infers a union.")
+				fmt.Sprintf("Declare the physical contact face on every %s target; proximity never infers a union.", relationship.Kind))
 			return ContactBoard{}, false
 		}
 		if anchorKind == "source" && anchor.Face != "" && !joineryFaces[anchor.Face] {
@@ -164,7 +164,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 		if !okFace || (relationship.Source.Face != "" && relationship.Source.Face != faceA) {
 			pushIssue("CONTACT_FACE_REQUIRED",
 				fmt.Sprintf("declared target face does not coincide with exactly one face of %s", relationship.Source.ComponentInstanceID),
-				"Anchor fixed-shelf contacts on faces that physically coincide; proximity never infers a union.")
+				fmt.Sprintf("Anchor %s contacts on faces that physically coincide; proximity never infers a union.", relationship.Kind))
 			return failContacts("CONTACT_FACE_REQUIRED")
 		}
 		intents = append(intents, ExplicitContact{
@@ -182,7 +182,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 
 	if len(relationship.Families) > 0 {
 		pushIssue("STATION_PATTERN_INVALID",
-			"fixed-shelf-side declares one uniform station pattern; families are the floor-side mechanism",
+			relationship.Kind + " declares one uniform station pattern; families are the floor-side mechanism",
 			"Declare a stationCount parameter or use a floor-side relationship for operation families.")
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 			Stage: JoineryStationInvalid, Contacts: validContacts(),
@@ -202,7 +202,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 	}
 	if hasCount && hasMaxSpacing {
 		pushIssue("STATION_PATTERN_INVALID",
-			"fixed-shelf-side declares both stationCount and maxSpacingMm",
+			relationship.Kind + " declares both stationCount and maxSpacingMm",
 			"Declare either an explicit stationCount or a spacing-derived pattern, never both.")
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 			Stage: JoineryStationInvalid, Contacts: validContacts(),
@@ -212,7 +212,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 	}
 	if hasMaxSpacing && (math.IsNaN(maxSpacing) || math.IsInf(maxSpacing, 0) || maxSpacing <= 0) {
 		pushIssue("STATION_PATTERN_INVALID",
-			"fixed-shelf-side maxSpacingMm must be a positive finite number",
+			relationship.Kind + " maxSpacingMm must be a positive finite number",
 			"Declare a positive spacing so the station count derives from the real contact span.")
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 			Stage: JoineryStationInvalid, Contacts: validContacts(),
@@ -222,7 +222,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 	}
 	if !hasCount && !hasMaxSpacing {
 		pushIssue("STATION_PATTERN_INVALID",
-			fmt.Sprintf("fixed-shelf-side relationship %s declares no station pattern", relationshipID),
+			fmt.Sprintf("%s relationship %s declares no station pattern", relationship.Kind, relationshipID),
 			"Declare stationCount (>= 2) or maxSpacingMm (> 0) with optional margins.")
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 			Stage: JoineryStationInvalid, Contacts: validContacts(),
@@ -234,7 +234,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 		math.IsNaN(start) || math.IsInf(start, 0) || start < 0 ||
 		math.IsNaN(end) || math.IsInf(end, 0) || end < 0) {
 		pushIssue("STATION_PATTERN_INVALID",
-			"fixed-shelf station pattern needs an integer stationCount >= 2 and finite nonnegative margins",
+			relationship.Kind + " station pattern needs an integer stationCount >= 2 and finite nonnegative margins",
 			"Declare stationCount (>= 2) and optional nonnegative start/end margins on the relationship.")
 		return JoineryRelationshipStatus{RelationshipID: relationshipID, Kind: relationship.Kind,
 			Stage: JoineryStationInvalid, Contacts: validContacts(),
@@ -283,7 +283,7 @@ func deriveFixedShelfOperations(relationship AuthoringRelationship, boards []Con
 		// this joint: the honest terminal state, never a synthetic fallback
 		// (#874 §J4). Stations are published; zero operations are emitted.
 		pushIssue("TECHNICAL_PROFILE_REQUIRED",
-			fmt.Sprintf("fixed-shelf-side relationship %s declares no versioned recipe with a verified technical profile", relationshipID),
+			fmt.Sprintf("%s relationship %s declares no versioned recipe with a verified technical profile", relationship.Kind, relationshipID),
 			"Attach a versioned recipe with a verified technical profile before fabrication; synthetic fixtures never enter production.")
 		return plannedStatus([]string{"TECHNICAL_PROFILE_REQUIRED"}, JoineryTechnicalProfileMissing)
 	}
@@ -414,8 +414,8 @@ func validateRelationshipRecipes(relationship AuthoringRelationship) []domain.Co
 			Remediation: "Declare per-contact recipes with versioned identity, both participant roles and geometry that fits the joint.",
 		})
 	}
-	if relationship.Kind != "fixed-shelf-side" {
-		add("recipes are only valid on fixed-shelf-side relationships")
+	if relationship.Kind != "fixed-shelf-side" && relationship.Kind != "back-panel" {
+		add("recipes are only valid on fixed-shelf-side and back-panel relationships")
 		return issues
 	}
 	if len(relationship.Families) > 0 {
