@@ -217,6 +217,28 @@ class AuthoringResolveContractTest < Minitest::Test
     parse_response(scenario('28-fixed-shelf-recipes')['response'])
   end
 
+  # #1065 / #1056: the Go/TS wire gate publishes recipes on back-panel
+  # relationships and rules with optional stationMode (all|center); the Ruby
+  # mirror must accept the same shapes and fail closed on alien modes.
+  def test_recipe_rules_with_station_mode_center_and_back_panel_parse
+    body = deep_copy(scenario('28-fixed-shelf-recipes')['response'])
+    rel = body['normalizedSnapshot']['relationships'][0]
+    rel['kind'] = 'back-panel'
+    rel['recipes'][0]['rules'][0]['stationMode'] = 'center'
+    rel['recipes'][1]['rules'][0]['stationMode'] = 'all'
+    result = parse_response(body)
+    assert_equal 'accepted', result.status
+    refute_nil result.layout
+  end
+
+  def test_recipe_rules_with_invalid_station_mode_fails_closed
+    body = deep_copy(scenario('28-fixed-shelf-recipes')['response'])
+    body['normalizedSnapshot']['relationships'][0]['recipes'][0]['rules'][0]['stationMode'] = 'corner'
+    assert_raises(Granete::SketchUpExtension::Library::AuthoringResolveContract::ContractError) do
+      parse_response(body)
+    end
+  end
+
   def test_recipe_provenance_with_unknown_key_fails_closed
     raw_op = scenario('28-fixed-shelf-recipes')['response']['resolved']['machining']['operations'][0]
     op = raw_op.merge('provenance' => raw_op['provenance'].merge('recipeDiameterMm' => 3))

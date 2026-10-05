@@ -461,18 +461,20 @@ module Granete
         end
       end
 
-      # J2-B (#874): versioned per-contact recipes are fixed-shelf-side only;
-      # every contactId is one of the relationship's own contacts, coverage
-      # is complete, and each rule carries full versioned technical identity.
-      # An empty array is "no recipes" (the honest terminal), matching the
-      # TS/Go wire gates.
+      # J2-B (#874 / #1056): versioned per-contact recipes on fixed-shelf-side
+      # and back-panel relationships; every contactId is one of the relationship's
+      # own contacts, coverage is complete, and each rule carries full versioned
+      # technical identity (including optional stationMode center). An empty
+      # array is "no recipes" (the honest terminal), matching the TS/Go wire gates.
       module AuthoringRecipeValidation
+        RECIPE_RELATIONSHIP_KINDS = %w[fixed-shelf-side back-panel].freeze
         RECIPE_KEYS = %w[
           contactId recipeId recipeRevision technicalProfileId technicalProfileRevision rules
         ].freeze
         RECIPE_RULE_KEYS = %w[
-          ruleId ruleRevision participantRole operationRole entryFace offsetMm axis diameterMm depthMm
+          ruleId ruleRevision participantRole operationRole entryFace offsetMm axis diameterMm depthMm stationMode
         ].freeze
+        STATION_MODES = %w[all center].freeze
 
         module_function
 
@@ -482,7 +484,7 @@ module Granete
 
           recipes = relationship['recipes']
           return true if recipes.empty?
-          return false unless relationship['kind'] == 'fixed-shelf-side'
+          return false unless RECIPE_RELATIONSHIP_KINDS.include?(relationship['kind'])
           return false if relationship['families'].is_a?(Array) && !relationship['families'].empty?
 
           contact_ids = relationship['targets'].map do |target|
@@ -524,7 +526,8 @@ module Granete
             %w[A B].include?(rule['participantRole']) &&
             AuthoringSnapshotParsing::ANCHOR_FACES.include?(rule['entryFace']) &&
             finite_vec3?(rule['offsetMm']) && unit_vec3?(rule['axis']) &&
-            positive_number?(rule['diameterMm']) && positive_number?(rule['depthMm'])
+            positive_number?(rule['diameterMm']) && positive_number?(rule['depthMm']) &&
+            (!rule.key?('stationMode') || STATION_MODES.include?(rule['stationMode']))
         end
 
         def finite_vec3?(value)
