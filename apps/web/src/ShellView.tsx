@@ -13,6 +13,7 @@
 
 import {
   useMemo,
+  useState,
   type ReactNode,
 } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -77,6 +78,8 @@ import {
   MaterialsCatalog,
   LibraryDraftValidationPanel,
   LibraryDraftWorkspaceBanner,
+  LibraryPublishConfirmContent,
+  LibraryPublishHistoryPanel,
   ModulesScreen,
   ShowcaseScreen,
   OptionGroupsScreen,
@@ -913,6 +916,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   });
   const libraryAuthoringSurface =
     isPlatformAdmin === true && LIBRARY_AUTHORING_NAV_IDS.includes(navId);
+  // #1102 LIB-AUTH Slice C: confirmación de publicación — el modal pide el
+  // diff al abrirse y la confirmación dispara el publish atómico del backend.
+  const [libraryPublishOpen, setLibraryPublishOpen] = useState(false);
   // #669: session-scoped GLB byte source for every 3D consumer (Proyectar,
   // mueble, Agregado, herraje). Guest sessions fall back to the test seam /
   // procedural representations.
@@ -1024,11 +1030,44 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             onValidateDraft={() => {
               void libraryWorkspace.validateDraft();
             }}
+            onPublishClick={() => {
+              setLibraryPublishOpen(true);
+              void libraryWorkspace.requestDiff();
+            }}
           />
           <LibraryDraftValidationPanel
             report={libraryWorkspace.currentValidation}
             validating={libraryWorkspace.validating}
           />
+          <LibraryPublishHistoryPanel
+            releases={libraryWorkspace.publishedReleases}
+          />
+          <Modal
+            open={libraryPublishOpen && libraryWorkspace.currentDraft !== null}
+            onClose={() => {
+              if (!libraryWorkspace.publishing) setLibraryPublishOpen(false);
+            }}
+            title={
+              libraryWorkspace.currentDraft
+                ? `Publicar biblioteca v${libraryWorkspace.currentDraft.version}`
+                : 'Publicar biblioteca'
+            }
+            dataTestId="library-publish-modal"
+          >
+            <LibraryPublishConfirmContent
+              version={libraryWorkspace.currentDraft?.version ?? ''}
+              diff={libraryWorkspace.currentDiff}
+              loading={libraryWorkspace.diffLoading}
+              error={libraryWorkspace.error}
+              publishing={libraryWorkspace.publishing}
+              onCancel={() => setLibraryPublishOpen(false)}
+              onConfirm={() => {
+                void libraryWorkspace.publishDraft().then((published) => {
+                  if (published) setLibraryPublishOpen(false);
+                });
+              }}
+            />
+          </Modal>
         </>
       ) : null}
       {navId === 'home' ? (

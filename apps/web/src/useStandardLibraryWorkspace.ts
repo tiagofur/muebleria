@@ -14,6 +14,7 @@ import {
   GraneteApiClient,
   GraneteApiError,
   type LibraryReleaseSummary,
+  type StandardDraftDiffReport,
   type StandardDraftValidationReport,
 } from '@granete/storage';
 
@@ -77,6 +78,13 @@ export function useStandardLibraryWorkspace({
     report: StandardDraftValidationReport;
   } | null>(null);
   const [validating, setValidating] = useState(false);
+  // #1102 Slice C: the publish-confirmation diff and the publish transition.
+  const [diff, setDiff] = useState<{
+    draftId: string;
+    report: StandardDraftDiffReport;
+  } | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const fetchState = useCallback(
     async (client: GraneteApiClient, authToken: string) => {
@@ -184,8 +192,65 @@ export function useStandardLibraryWorkspace({
     }
   }, [baseUrl, token, currentDraft]);
 
+  // #1102 Slice C: the publish-confirmation diff, keyed to the draft like the
+  // validation report. 422 means the draft does not compile — the honest
+  // answer the confirm dialog must show instead of a diff.
+  const requestDiff = useCallback(async (): Promise<StandardDraftDiffReport | null> => {
+    if (!token || !currentDraft) return null;
+    const client = new GraneteApiClient(baseUrl);
+    setDiffLoading(true);
+    setError(null);
+    try {
+      const report = await client.getStandardLibraryDraftDiff(
+        token,
+        currentDraft.id,
+      );
+      setDiff({ draftId: currentDraft.id, report });
+      return report;
+    } catch (err: unknown) {
+      setDiff(null);
+      setError(
+        err instanceof GraneteApiError && err.status === 422
+          ? `El borrador no compila: ${err.message}`
+          : 'No se pudo calcular el diff del borrador.',
+      );
+      return null;
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [baseUrl, token, currentDraft]);
+
+  // #1102 Slice C: the only state transition of the cycle — compile and
+  // publish atomically (#955). Success refreshes the workspace: the draft
+  // leaves the drafts list and joins the published history.
+  const publishDraft = useCallback(async (): Promise<boolean> => {
+    if (!token || !currentDraft) return false;
+    const client = new GraneteApiClient(baseUrl);
+    setPublishing(true);
+    setError(null);
+    try {
+      await client.publishStandardLibraryRelease(token, currentDraft.id);
+      setDiff(null);
+      await fetchState(client, token);
+      return true;
+    } catch (err: unknown) {
+      const status = err instanceof GraneteApiError ? err.status : 0;
+      setError(
+        status === 409
+          ? 'El borrador ya no está en draft; recargá el workspace.'
+          : status === 422
+            ? `La compilación falló y no se publicó nada: ${err instanceof GraneteApiError ? err.message : 'entrada inválida'}`
+            : 'No se pudo publicar la biblioteca; el release vigente sigue intacto.',
+      );
+      return false;
+    } finally {
+      setPublishing(false);
+    }
+  }, [baseUrl, token, currentDraft, fetchState]);
+
   return {
     currentPublished,
+    publishedReleases,
     currentDraft,
     draftReleases,
     suggestedVersion,
@@ -196,5 +261,10 @@ export function useStandardLibraryWorkspace({
     validating,
     currentValidation,
     validateDraft,
+    diffLoading,
+    currentDiff: diff && currentDraft && diff.draftId === currentDraft.id ? diff.report : null,
+    requestDiff,
+    publishing,
+    publishDraft,
   };
 }

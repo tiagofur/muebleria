@@ -1,4 +1,4 @@
-import { FlaskConical, GitBranch, Library, RefreshCw } from 'lucide-react';
+import { FlaskConical, GitBranch, Library, RefreshCw, Rocket } from 'lucide-react';
 import type { LibraryReleaseSummary } from '@granete/storage';
 
 /**
@@ -23,6 +23,7 @@ export interface LibraryDraftWorkspaceBannerProps {
   readonly error: string | null;
   readonly onOpenDraft: () => void;
   readonly onValidateDraft: () => void;
+  readonly onPublishClick: () => void;
 }
 
 export function LibraryDraftWorkspaceBanner({
@@ -35,6 +36,7 @@ export function LibraryDraftWorkspaceBanner({
   error,
   onOpenDraft,
   onValidateDraft,
+  onPublishClick,
 }: LibraryDraftWorkspaceBannerProps) {
   return (
     <div
@@ -126,16 +128,27 @@ export function LibraryDraftWorkspaceBanner({
                 : 'Sin versión publicada'}
             </span>
             {currentDraft && !error ? (
-              <button
-                type="button"
-                className="btn btn--sm"
-                onClick={onValidateDraft}
-                disabled={validating}
-                data-testid="library-draft-validate-btn"
-              >
-                <FlaskConical size={14} aria-hidden />
-                {validating ? 'Probando…' : `Probar borrador v${currentDraft.version}`}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn--sm"
+                  onClick={onValidateDraft}
+                  disabled={validating}
+                  data-testid="library-draft-validate-btn"
+                >
+                  <FlaskConical size={14} aria-hidden />
+                  {validating ? 'Probando…' : `Probar borrador v${currentDraft.version}`}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  onClick={onPublishClick}
+                  data-testid="library-publish-open-btn"
+                >
+                  <Rocket size={14} aria-hidden />
+                  Publicar v{currentDraft.version}
+                </button>
+              </>
             ) : null}
             {!currentDraft && !error ? (
               <button

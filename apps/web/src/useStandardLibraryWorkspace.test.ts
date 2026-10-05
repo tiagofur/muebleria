@@ -215,4 +215,92 @@ describe('useStandardLibraryWorkspace (#1102 Slice A)', () => {
 
     expect(validateSpy).not.toHaveBeenCalled();
   });
+
+  it('requestDiff fetches the diff keyed to the current draft', async () => {
+    const draft = release('draft-1', '0.3.5', 'draft');
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardCurrentRelease').mockResolvedValue(release('pub-1', '0.3.4', 'published'));
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardReleases').mockResolvedValue([release('pub-1', '0.3.4', 'published')]);
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftReleases').mockResolvedValue([draft]);
+    const diffSpy = vi.spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftDiff').mockResolvedValue({
+      releaseId: draft.id,
+      version: '0.3.5',
+      base: { releaseId: 'pub-1', version: '0.3.4' },
+      added: [],
+      modified: [{ kind: 'hardware', id: 'hw-1', code: 'BIS-CL110', name: 'Bisagra' }],
+      removed: [],
+      unchanged: 3,
+      computedAt: '2026-10-05T12:00:00Z',
+    });
+
+    await renderHook({ token: 'token-test' });
+    expect(hook.currentDiff).toBeNull();
+
+    await act(async () => {
+      await hook.requestDiff();
+    });
+
+    expect(diffSpy).toHaveBeenCalledWith('token-test', 'draft-1');
+    expect(hook.currentDiff?.modified[0]?.code).toBe('BIS-CL110');
+  });
+
+  it('publishDraft publishes, refreshes and clears the diff', async () => {
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardCurrentRelease').mockResolvedValue(release('pub-1', '0.3.4', 'published'));
+    const releasesSpy = vi
+      .spyOn(GraneteApiClient.prototype, 'getStandardReleases')
+      .mockResolvedValue([release('pub-1', '0.3.4', 'published')]);
+    const draftsSpy = vi
+      .spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftReleases')
+      .mockResolvedValueOnce([release('draft-1', '0.3.5', 'draft')])
+      .mockResolvedValueOnce([]);
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftDiff').mockResolvedValue({
+      releaseId: 'draft-1',
+      version: '0.3.5',
+      base: null,
+      added: [],
+      modified: [],
+      removed: [],
+      unchanged: 0,
+      computedAt: '2026-10-05T12:00:00Z',
+    });
+    const publishSpy = vi
+      .spyOn(GraneteApiClient.prototype, 'publishStandardLibraryRelease')
+      .mockResolvedValue({ releaseId: 'draft-1', manifestHash: 'sha256:ok', resourceCount: 3 });
+
+    await renderHook({ token: 'token-test' });
+    await act(async () => {
+      await hook.requestDiff();
+    });
+    expect(hook.currentDiff).not.toBeNull();
+
+    let published = false;
+    await act(async () => {
+      published = await hook.publishDraft();
+    });
+
+    expect(published).toBe(true);
+    expect(publishSpy).toHaveBeenCalledWith('token-test', 'draft-1');
+    expect(releasesSpy).toHaveBeenCalledTimes(2);
+    expect(draftsSpy).toHaveBeenCalledTimes(2);
+    // El draft publicado ya no es el draft actual: diff y validación se van.
+    expect(hook.currentDiff).toBeNull();
+    expect(hook.currentDraft).toBeNull();
+    expect(hook.error).toBeNull();
+  });
+
+  it('publishDraft keeps the release intact in its error message on 422', async () => {
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardCurrentRelease').mockResolvedValue(release('pub-1', '0.3.4', 'published'));
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardReleases').mockResolvedValue([release('pub-1', '0.3.4', 'published')]);
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftReleases').mockResolvedValue([release('draft-1', '0.3.5', 'draft')]);
+    vi.spyOn(GraneteApiClient.prototype, 'publishStandardLibraryRelease').mockRejectedValue(
+      apiError(422, 'BAD_REQUEST'),
+    );
+
+    await renderHook({ token: 'token-test' });
+    await act(async () => {
+      await hook.publishDraft();
+    });
+
+    expect(hook.error).toContain('no se publicó nada');
+    expect(hook.publishing).toBe(false);
+  });
 });
