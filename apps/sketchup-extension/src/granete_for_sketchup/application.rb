@@ -53,7 +53,13 @@ module Granete
             synchronizer: library_synchronizer, auth_provider: @auth_provider,
             logger: logger
           )
+          @library_store = library_store
           resolved_catalog_provider.library_pin_provider = lambda do
+            # Dev mode (bibliotecario tool): NO pin → the server resolves the
+            # authoring state (the draft), exactly like the pre-release
+            # plugin. The pin only governs consumer-style resolves.
+            return nil if library_store.dev_mode?
+
             org = @auth_provider.respond_to?(:current_organization_id) ? @auth_provider.current_organization_id : nil
             org.to_s.strip.empty? ? nil : library_store.current_release_id(org)
           end
@@ -165,6 +171,7 @@ module Granete
           open_dialog: method(:open_dialog),
           close_dialog: method(:close_dialog),
           migrate_models: method(:open_migration_review),
+          toggle_library_dev_mode: method(:toggle_library_dev_mode),
           logger: logger
         )
       end
@@ -181,10 +188,23 @@ module Granete
       # the resolve) simply stays on the last successfully synced release.
       def refresh_library_pin
         return unless @library_pin
+        return if @library_store&.dev_mode?
 
         @library_pin.refresh!
       rescue StandardError => e
         @logger&.warn('library_pin_refresh_failed', error: e)
+      end
+
+      # #1102 restante 2: the bibliotecario dev-mode toggle — resolves the
+      # AUTHORING state (draft, unpublished edits included) and pauses the
+      # boot sync. Persists in the LibraryStore dir; the menu reflects it.
+      def toggle_library_dev_mode
+        return nil unless @library_store
+
+        @library_store.set_dev_mode!(!@library_store.dev_mode?)
+        state = @library_store.dev_mode? ? 'ON' : 'OFF'
+        @logger&.info('library_dev_mode_toggled', state: state)
+        state
       end
 
       def shutdown
