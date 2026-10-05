@@ -215,6 +215,80 @@ func mapStandardDraftValidationReport(report *application.DraftValidationReport)
 	}
 }
 
+// HandleStandardLibraryDraftDiff answers GET /api/manufacturing-libraries/standard/releases/{releaseId}/diff
+// (#1102 Slice C) — the publish-confirmation summary: what would change
+// between the current published release and the draft's authoring state.
+// Read-only; same platform-staff gate and 404/409 semantics as publish.
+func (s *Server) HandleStandardLibraryDraftDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	claims := claimsFromRequest(r)
+	if claims == nil || !claims.PlatformAdmin {
+		respondWithAPIError(w, http.StatusForbidden, openapi.ApiErrorCodeForbidden, "sólo el equipo de plataforma Granete puede ver el diff de un borrador Standard", nil)
+		return
+	}
+	releaseID, err := uuid.Parse(r.PathValue("releaseId"))
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid release id")
+		return
+	}
+	diff, err := application.DiffStandardDraft(r.Context(), s.Store, releaseID)
+	if err != nil {
+		if errors.Is(err, storage.ErrLibraryReleaseNotFound) {
+			respondWithError(w, http.StatusNotFound, "release not found")
+			return
+		}
+		if errors.Is(err, application.ErrStandardLibraryNotFound) {
+			respondWithError(w, http.StatusNotFound, "release not found in Granete Standard")
+			return
+		}
+		if errors.Is(err, application.ErrReleaseNotDraft) {
+			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "el release no está en draft", nil)
+			return
+		}
+		// A compile dry-run failure is the honest diff answer: the draft
+		// cannot publish — surface it as a structured 422, not a 500.
+		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, mapStandardDraftDiff(diff))
+}
+
+func mapStandardDraftDiff(diff *application.DraftDiffReport) openapi.StandardDraftDiffReport {
+	var base *openapi.DraftDiffBase
+	if diff.Base != nil {
+		base = &openapi.DraftDiffBase{
+			ReleaseId: diff.Base.ReleaseID,
+			Version:   diff.Base.Version,
+		}
+	}
+	return openapi.StandardDraftDiffReport{
+		ReleaseId:  diff.ReleaseID,
+		Version:    diff.Version,
+		Base:       base,
+		Added:      mapDraftResourceChanges(diff.Added),
+		Modified:   mapDraftResourceChanges(diff.Modified),
+		Removed:    mapDraftResourceChanges(diff.Removed),
+		Unchanged:  int64(diff.Unchanged),
+		ComputedAt: diff.ComputedAt.Format(time.RFC3339),
+	}
+}
+
+func mapDraftResourceChanges(changes []application.DraftResourceChange) []openapi.DraftResourceChange {
+	mapped := make([]openapi.DraftResourceChange, 0, len(changes))
+	for _, change := range changes {
+		mapped = append(mapped, openapi.DraftResourceChange{
+			Kind: change.Kind,
+			ID:   change.ID,
+			Code: stringPtr(change.Code),
+			Name: stringPtr(change.Name),
+		})
+	}
+	return mapped
+}
+
 // mapLibraryReleaseToSummary projects a domain release into the OpenAPI
 // LibraryReleaseSummary shape served by the catalog endpoint.
 func mapLibraryReleaseToSummary(release *domain.LibraryRelease) openapi.LibraryReleaseSummary {

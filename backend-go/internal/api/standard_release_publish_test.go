@@ -228,6 +228,96 @@ func TestHandleValidateStandardLibraryDraft(t *testing.T) {
 	})
 }
 
+// TestHandleStandardLibraryDraftDiff (#1102 Slice C): the publish-confirmation
+// summary — platform staff gate, publish's 404/409 semantics and a labeled
+// diff computed against the published manifest.
+func TestHandleStandardLibraryDraftDiff(t *testing.T) {
+	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
+	baseID := uuid.MustParse("00000000-0000-0000-0003-000000000001")
+
+	diffRequest := func(store *stubStore, platform bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/manufacturing-libraries/standard/releases/"+releaseID.String()+"/diff", nil)
+		req.SetPathValue("releaseId", releaseID.String())
+		req = platformClaims(req, platform)
+		rec := httptest.NewRecorder()
+		(&Server{Store: store}).HandleStandardLibraryDraftDiff(rec, req)
+		return rec
+	}
+
+	t.Run("diffs the draft against the published base with labels", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.4.0", Status: domain.ReleaseStatusDraft, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+			currentPublishedRelease: &domain.LibraryRelease{ID: baseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.3.4", Status: domain.ReleaseStatusPublished},
+			releaseManifestsByID: map[uuid.UUID]*domain.LibraryManifest{
+				baseID: {Resources: []domain.ManifestResourceRef{}},
+			},
+			listHardwares: []domain.Hardware{{ID: "a0000003-0000-0000-0000-000000000012", Code: "BIS-CL110", Name: "Bisagra", Unit: "unidad", Active: true}},
+			listActiveHardwareProfilesAnyOrg: []domain.HardwareProfile{{
+				ID: "a0000010-0000-0000-0000-000000000001", Code: "PERF-X", Name: "X", Revision: "r1", Active: true,
+				Items: []domain.HardwareProfileItem{{HardwareID: "a0000003-0000-0000-0000-000000000012", Quantity: 1}},
+			}},
+		}
+		rec := diffRequest(store, true)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var diff struct {
+			Version string `json:"version"`
+			Base    *struct {
+				Version string `json:"version"`
+			} `json:"base"`
+			Added []struct {
+				Code string `json:"code"`
+			} `json:"added"`
+			Unchanged int `json:"unchanged"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &diff); err != nil {
+			t.Fatalf("body = %s err=%v", rec.Body.String(), err)
+		}
+		if diff.Version != "0.4.0" || diff.Base == nil || diff.Base.Version != "0.3.4" {
+			t.Fatalf("diff header = %s", rec.Body.String())
+		}
+		codes := map[string]bool{}
+		for _, change := range diff.Added {
+			codes[change.Code] = true
+		}
+		if len(diff.Added) != 2 || !codes["BIS-CL110"] || !codes["PERF-X"] {
+			t.Fatalf("added = %s", rec.Body.String())
+		}
+		if diff.Unchanged != 0 {
+			t.Fatalf("unchanged = %d", diff.Unchanged)
+		}
+	})
+
+	t.Run("409 when the release is not a draft", func(t *testing.T) {
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.1.0", Status: domain.ReleaseStatusPublished, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+		}
+		rec := diffRequest(store, true)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+	})
+
+	t.Run("404 when the release does not exist", func(t *testing.T) {
+		rec := diffRequest(&stubStore{}, true)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+
+	t.Run("rejects a non-platform user with 403", func(t *testing.T) {
+		rec := diffRequest(&stubStore{}, false)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d", rec.Code)
+		}
+	})
+}
+
 func TestHandlePublishStandardLibraryRelease(t *testing.T) {
 	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
 
