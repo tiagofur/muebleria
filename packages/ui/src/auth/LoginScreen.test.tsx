@@ -23,8 +23,9 @@ describe('LoginScreen', () => {
 
     expect(screen.getByLabelText('Email')).toBeTruthy();
     expect(screen.getByLabelText('Contraseña')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Iniciar Sesión' })[0]).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Acceder sin conexión (Invitado)' })[0]).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Iniciar sesión' })[0]).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Explorar modo demo' })[0]).toBeTruthy();
+    expect(screen.getByText(/Datos de ejemplo en tu navegador/)).toBeTruthy();
   });
 
   it('submits email and password on form submit', () => {
@@ -38,7 +39,7 @@ describe('LoginScreen', () => {
 
     const emailInput = screen.getByLabelText('Email');
     const passwordInput = screen.getByLabelText('Contraseña');
-    const submitButton = screen.getAllByRole('button', { name: 'Iniciar Sesión' })[0] as HTMLElement;
+    const submitButton = screen.getAllByRole('button', { name: 'Iniciar sesión' })[0] as HTMLElement;
 
     fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
     fireEvent.change(passwordInput, { target: { value: 'password123' } });
@@ -56,7 +57,7 @@ describe('LoginScreen', () => {
       />
     );
 
-    const guestButton = screen.getAllByRole('button', { name: 'Acceder sin conexión (Invitado)' })[0] as HTMLElement;
+    const guestButton = screen.getAllByRole('button', { name: 'Explorar modo demo' })[0] as HTMLElement;
     fireEvent.click(guestButton);
 
     expect(onGuestAccess).toHaveBeenCalled();
@@ -163,7 +164,19 @@ describe('LoginScreen', () => {
     expect(tsx).toContain('LogIn');
     expect(tsx).toContain('Mail');
     expect(tsx).toContain('KeyRound');
-    expect(tsx).toContain('WifiOff');
+    expect(tsx).toContain('Compass');
+  });
+
+  it('moves focus to the error alert so screen readers announce it', () => {
+    render(
+      <LoginScreen
+        onLogin={vi.fn()}
+        onGuestAccess={vi.fn()}
+        error="Email o contraseña incorrectos"
+      />,
+    );
+    const alert = screen.getByRole('alert');
+    expect(document.activeElement).toBe(alert);
   });
 
   it('toggles password visibility between password and text', () => {

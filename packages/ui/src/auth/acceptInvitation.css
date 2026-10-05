@@ -3,7 +3,7 @@
  */
 
 .accept-invitation-screen {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -82,6 +82,47 @@
   box-sizing: border-box;
   width: 100%;
   padding-left: var(--space-8);
+}
+
+.accept-invitation-input--with-toggle {
+  padding-right: calc(var(--space-3) + 2.75rem);
+}
+
+.accept-invitation-field__toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--space-1);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px: baseline touch del design system. */
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-colors);
+}
+
+.accept-invitation-field__toggle:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.accept-invitation-field__toggle:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+
+.accept-invitation-card__footer--actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .accept-invitation-form__hint {
