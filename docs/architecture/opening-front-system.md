@@ -78,8 +78,8 @@ id/revision. Conceptual shape:
 openingProfile:
   id: profile.gola-l.alu            # exact identity, pinned by release
   gripType: gola
-  shape: L                          # L = top/upper boundary, C = intermediate boundary
-  placements: [top]                 # boundaries this profile can serve
+  crossSectionShape: 'L'            # extrusion geometry: 'L' | 'C' | 'J' | 'flat'
+  compatiblePlacements: [top]       # boundaries where it can mount: top | between | bottom
   geometry:                         # REQUIRED from the exact supplier datasheet
     profileHeightMm: <datasheet>
     profileDepthMm: <datasheet>
@@ -145,12 +145,11 @@ family enum is introduced.
 | Case | Type | Layout | Grip | Body effect | Front effect | BOM |
 | --- | --- | --- | --- | --- | --- | --- |
 | **A** | inferior | 2 hinged doors | gola L, `top` | Top shortened in depth (sits behind the profile); side notches at top front for the profile | Door height reduced by the profile's front reduction so fingers reach behind the door | Profile by length, supports, end caps |
-| **B** | inferior | drawers 1x / 1x / 2x | gola L `top` + gola C `between(z2,z3)` | Top as A; side notches at the C boundary | Heights from §5 with two grip boundaries | L + C profiles, supports, end caps |
+| **B** | inferior | drawers 1x / 1x / 2x | gola L `top` + gola C `between(z2,z3)` | Top as A; side notches at the C boundary | Drawer 1 gripped from above (gola L); drawer 2 gripped from below (gola C upward recess); drawer 3 gripped from above (gola C downward recess). Heights from §5 with two grip boundaries | L + C profiles, supports, end caps |
 | **C** | superior | 1–2 hinged doors | `bottom_overhang` (no hardware) | None | Door extends below the cabinet bottom by an overhang; user grips from underneath | No grip hardware |
 | Baseline | inferior | 2 hinged doors | handle | None | Standard overlay | Handle per door |
 
-Open questions that block fixtures (see §12): OQ-1 (case B grip of drawer 2),
-OQ-2 (datasheet values), OQ-3 (case C overhang value and body interaction).
+Open questions that block fixtures (see §12): OQ-2 (datasheet values), OQ-3 (case C overhang value and body interaction). OQ-1 is resolved by the dual-cavity mechanism of Gola C.
 
 ## 7. Library, factory capabilities and selection
 
@@ -229,9 +228,10 @@ grip-governed dimension is an authoring error, not a silent precedence rule.
 
 ## 12. Open questions
 
-- **OQ-1** Case B: with gola at `top` and `between(z2,z3)`, how is drawer 2
-  (z2) gripped? Options: from the reveal under z1, the top boundary serves z1+z2
-  as a coupled pair, or a third boundary `between(z1,z2)` is required.
+- **OQ-1 (Resolved)** Case B: with gola at `top` (L) and `between(z2,z3)` (C), drawer 2
+  is gripped from below using the upward recess cavity of the C profile, while drawer 3
+  is gripped from above using the downward cavity of the same C profile. Drawer 1 is
+  gripped from above using the top L profile. Thus only two profile runs are needed.
 - **OQ-2** Exact datasheet values for the pilot GOLA L and GOLA C (cross-section,
   front reduction, side notch, support spacing, length rule interior vs exterior).
 - **OQ-3** Case C: overhang value, whether the bottom panel moves, and how
