@@ -32,6 +32,7 @@ export type {
   HardwareLine,
   AnchorFace,
   HardwarePlacement,
+  DoorAffinity,
   ExternalDims,
   Module,
   Structure,

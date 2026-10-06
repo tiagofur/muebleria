@@ -820,8 +820,25 @@ function hardwarePlacementFromApi(
   const xMm = num(relRaw?.xMm ?? relRaw?.x_mm, 50);
   const yMm = num(relRaw?.yMm ?? relRaw?.y_mm, 50);
 
+  // #1168: optionRole/partRole/derivedMachining/doorAffinity are part of the
+  // placement's authored semantics (group elections, multi-part hardware,
+  // machining replacements, door grouping). Dropping them on load degraded
+  // every group election to "herraje específico" empty on refresh.
+  const optionRole = str(raw.optionRole ?? raw.option_role) || undefined;
+  const partRole = str(raw.partRole ?? raw.part_role) || undefined;
+  const derivedMachining =
+    raw.derivedMachining && typeof raw.derivedMachining === 'object'
+      ? (raw.derivedMachining as import('@granete/domain').HardwareMachiningProfile)
+      : undefined;
+  const doorAffinity =
+    raw.doorAffinity && typeof raw.doorAffinity === 'object'
+      ? (raw.doorAffinity as import('@granete/domain').DoorAffinity)
+      : undefined;
+
   return {
     hardwareId: str(raw.hardwareId ?? raw.hardware_id),
+    ...(optionRole ? { optionRole } : {}),
+    ...(partRole ? { partRole } : {}),
     anchorFace: (str(raw.anchorFace ?? raw.anchor_face, 'front') as any) || 'front',
     relativePosition: {
       xMm,
@@ -841,6 +858,8 @@ function hardwarePlacementFromApi(
     ...(typeof raw.scale === 'number' && Number.isFinite(raw.scale)
       ? { scale: raw.scale }
       : {}),
+    ...(derivedMachining ? { derivedMachining } : {}),
+    ...(doorAffinity ? { doorAffinity } : {}),
   };
 }
 

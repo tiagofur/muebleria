@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
+	"os"
 )
 
 const validSha256 = "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -1677,5 +1678,95 @@ func TestAgregadoRevisions_Migration_UpDownReplay(t *testing.T) {
 		if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = $1)`, tbl).Scan(&exists); err != nil || !exists {
 			t.Fatalf("re-applied migration missing table %s, exists=%v, err=%v", tbl, exists, err)
 		}
+	}
+}
+
+// #1168: the guarded catalog update and its audit revision commit in ONE
+// transaction — every persisted change leaves a revision + current_revision_id
+// behind, and a revision failure rolls the update back (no unaudited writes).
+func TestAgregados_UpdateWithRevision_DurableAuditTrail(t *testing.T) {
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	agregadoID, code := uniqueID("agr-upd-rev"), uniqueID("AGR-UPD-REV")
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, &domain.Agregado{
+			ID: agregadoID, Code: code, Name: "Puerta Izquierda",
+			WidthMm: 600, HeightMm: 720, DepthMm: 18, Active: true,
+		})
+	})
+	// Cleanup order (FK + #1052 immutability): detach the pointer, disable
+	// the immutable trigger over the ADMIN connection to drop the test's
+	// revisions, then the agregado. Runtime role cannot touch the trigger.
+	t.Cleanup(func() {
+		cleanupConnectStoreFixture(t, `UPDATE agregados SET current_revision_id = NULL WHERE id = $1`, agregadoID)
+		// The fixture migrates the DATABASE_URL database itself; the admin
+		// connection is its validated migration DSN (superuser in the test
+		// container).
+		admin, err := pgxpool.New(context.Background(), storage.TestMigrationDatabaseURLForRuntimeDatabase(t))
+		if err != nil {
+			t.Logf("cleanup admin pool: %v", err)
+			return
+		}
+		defer admin.Close()
+		if _, err := admin.Exec(context.Background(),
+			`ALTER TABLE agregado_revisions DISABLE TRIGGER protect_agregado_revisions_immutable`); err != nil {
+			t.Logf("cleanup disable trigger: %v", err)
+			return
+		}
+		cleanupConnectStoreFixture(t, `DELETE FROM agregado_revisions WHERE agregado_id = $1`, agregadoID)
+		if _, err := admin.Exec(context.Background(),
+			`ALTER TABLE agregado_revisions ENABLE TRIGGER protect_agregado_revisions_immutable`); err != nil {
+			t.Logf("cleanup re-enable trigger: %v", err)
+		}
+		cleanupConnectStoreFixture(t, `DELETE FROM agregados WHERE id = $1`, agregadoID)
+	})
+
+	// A real change commits together with its revision and the pointer.
+	edited := &domain.Agregado{
+		ID: agregadoID, Code: code, Name: "Puerta Izquierda Gabinete",
+		WidthMm: 600, HeightMm: 720, DepthMm: 18, Active: true,
+		HardwareLines: []domain.HardwareLine{{ID: "l1", Quantity: 1, OptionRole: "JALADERA"}},
+	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.UpdateAgregadoWithRevision(txCtx, agregadoID, 1, edited, &actor.UserID)
+	})
+	agr := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) {
+		return store.GetAgregadoByID(txCtx, agregadoID)
+	})
+	if agr.Name != "Puerta Izquierda Gabinete" || agr.Version != 2 {
+		t.Fatalf("update not persisted as expected: name=%q version=%d", agr.Name, agr.Version)
+	}
+	if agr.CurrentRevisionID == nil {
+		t.Fatal("current_revision_id must point at the revision the update created")
+	}
+	rev := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.AgregadoRevision, error) {
+		return store.GetAgregadoCurrentRevision(txCtx, agregadoID)
+	})
+	if rev.RevisionNumber != 1 || len(rev.Recipe.HardwareLines) != 1 || rev.Recipe.HardwareLines[0].OptionRole != "JALADERA" {
+		t.Fatalf("revision recipe does not capture the persisted state: %+v", rev)
+	}
+
+	// A revision failure rolls the update back: the created_by column is a
+	// UUID cast, so a malformed actor id fails the INSERT after the UPDATE
+	// ran — both must land in the discarded transaction.
+	badID := "not-a-uuid"
+	err := store.UpdateAgregadoWithRevision(
+		storage.WithOrgCtx(context.Background(), actor.OrganizationID), agregadoID, 2,
+		&domain.Agregado{ID: agregadoID, Code: code, Name: "Cambio sin auditoría", Active: true}, &badID,
+	)
+	if err == nil {
+		t.Fatal("expected the malformed created_by to fail the revision insert")
+	}
+	agrAfter := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) {
+		return store.GetAgregadoByID(txCtx, agregadoID)
+	})
+	if agrAfter.Name != "Puerta Izquierda Gabinete" || agrAfter.Version != 2 {
+		t.Fatalf("failed revision must roll the update back: name=%q version=%d", agrAfter.Name, agrAfter.Version)
+	}
+	revs := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) ([]domain.AgregadoRevision, error) {
+		return store.ListAgregadoRevisions(txCtx, agregadoID)
+	})
+	if len(revs) != 1 {
+		t.Fatalf("failed update must leave no revision behind: got %d", len(revs))
 	}
 }

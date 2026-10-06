@@ -135,6 +135,23 @@ func (s *PostgresStore) UpdateAgregado(ctx context.Context, id string, expectedV
 	return nil
 }
 
+// UpdateAgregadoWithRevision performs the guarded catalog update and its
+// audit revision in ONE tenant transaction (#1168): a failed revision rolls
+// the update back too, so the revision trail can never lag the state it
+// describes. The revision recipe is the freshly stored aggregate state.
+func (s *PostgresStore) UpdateAgregadoWithRevision(ctx context.Context, id string, expectedVersion int64, a *domain.Agregado, createdBy *string) error {
+	return runInTenantTxErr(s, ctx, func(ctx context.Context) error {
+		if err := s.UpdateAgregado(ctx, id, expectedVersion, a); err != nil {
+			return err
+		}
+		rev, err := s.CreateAgregadoRevision(ctx, id, a.ToRecipePayload(), createdBy)
+		if err != nil {
+			return fmt.Errorf("create agregado revision: %w", err)
+		}
+		return s.SetAgregadoCurrentRevision(ctx, id, rev.ID)
+	})
+}
+
 func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string, expectedVersion int64) error {
 	query := `UPDATE agregados SET active = false, updated_at = CURRENT_TIMESTAMP, version = version + 1 WHERE id = $1 AND organization_id = $2 AND version = $3;`
 	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx), expectedVersion)
