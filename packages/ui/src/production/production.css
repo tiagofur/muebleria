@@ -2152,75 +2152,12 @@
 }
 
 /* --- Tab bar --- */
-.fabric__tabs {
-  display: flex;
-  gap: var(--space-1);
-  border-bottom: 1px solid var(--border-subtle);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.fabric__tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.fabric__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
-}
-
-.fabric__tab:hover {
-  color: var(--text-primary);
-}
-
-.fabric__tab--active {
-  color: var(--text-brand);
-  border-bottom-color: var(--brand-500);
-  font-weight: var(--weight-semibold);
-}
-
-.fabric__tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 var(--space-1);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  color: var(--text-inverse);
-  background: var(--brand-500);
-  border-radius: var(--radius-full, 9999px);
-}
-
-.fabric__tab:not(.fabric__tab--active) .fabric__tab-count {
-  background: var(--text-muted);
-}
 
 /* --- Tab panel --- */
 .fabric__panel {
   min-height: 200px;
 }
 
-.fabric__empty-tab {
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
 
 .fabric__list {
   display: flex;
@@ -3011,4 +2948,62 @@
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* ── #1145 — scanner de piso, single-flight y targets táctiles ─────────── */
+
+.fabric__scan-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--surface-app, var(--surface-card));
+}
+
+.fabric__scan-status {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.fabric__scan-status--ok::before {
+  content: '✓ ';
+  color: var(--success-600, var(--success-500, var(--brand-600)));
+  font-weight: 600;
+}
+
+.fabric__scan-status--miss::before {
+  content: '✕ ';
+  color: var(--danger-600, var(--danger-500));
+  font-weight: 600;
+}
+
+.fabric__scan-count {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Targets táctiles: las filas de pieza/unidad se tocan con guantes (§8 HIG). */
+.fabric-card__item .btn,
+.fabric-card__item button.btn--small,
+.fabric__view-btn {
+  min-height: var(--touch-min);
+}
+
+/* Readiness: warning-500 como TEXTO 12px no llega a AA (3.2:1) — usar 700. */
+.fabric-card__assembly-readiness--missing {
+  color: var(--warning-700);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fabric__scan-status,
+  .fabric__scan-count {
+    transition: none;
+  }
 }

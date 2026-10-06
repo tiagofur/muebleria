@@ -1,6 +1,6 @@
 /** Production board by project for the four manufacturing stations. */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal } from '../common';
 import { Check, Factory, Play } from 'lucide-react';
 
@@ -16,6 +16,8 @@ import {
 import { QualityPanel, type QualityHandlers } from './QualityPanel';
 import type { QualityPanelView } from './qualityView';
 import { EmptyState, PageHeader, WorkflowTabs } from '../common';
+import { useHidScanner } from './useHidScanner';
+import { playScanFeedback } from './scanFeedback';
 import type {
   DashboardMetrics,
   SectorDashboard,
@@ -226,6 +228,8 @@ function ProjectCard({
   qualityHandlers,
   canOverrideQc = false,
   onGeneratePartExecutions,
+  onAdvanceFeedback,
+  onModalScanBlockChange,
 }: {
   readonly card: FabricProjectCard;
   readonly station: FabricStation;
@@ -261,8 +265,27 @@ function ProjectCard({
   ) => Promise<void>;
   /** #577 / OPS-DT-1: generate the physical executions from the release authority. */
   readonly onGeneratePartExecutions?: (projectId: string) => void;
+  /** #1145: feedback de avance por botón — announce + conteo de sesión. */
+  readonly onAdvanceFeedback?: (text: string) => void;
+  /** #1145 re-critique: bloquea el scanner del piso mientras el modal vive. */
+  readonly onModalScanBlockChange?: (blocked: boolean) => void;
 }): ReactNode {
   const canAdvance = canAdvanceRequested && !card.executionBlocker;
+  // #1145 P1: single-flight de fila — el doble tap del piso no duplica
+  // avances sobre handlers fire-and-forget (1.2s cubre el doble tap).
+  const [busyRows, setBusyRows] = useState<ReadonlySet<string>>(new Set());
+  const runAdvanceOnce = (rowKey: string, run: () => void): void => {
+    if (busyRows.has(rowKey)) return;
+    setBusyRows((prev) => new Set(prev).add(rowKey));
+    run();
+    setTimeout(() => {
+      setBusyRows((prev) => {
+        const next = new Set(prev);
+        next.delete(rowKey);
+        return next;
+      });
+    }, 1200);
+  };
   const target = TARGET_STATUS[station];
   const stationLabel = TAB_LABELS[station].toLowerCase();
   const hasClaims = card.activeClaims.length > 0;
@@ -293,6 +316,10 @@ function ProjectCard({
     }
     onAdvanceBatch?.(card.projectId, itemIds, target);
   };
+  useEffect(() => {
+    onModalScanBlockChange?.(pendingAction !== null);
+  }, [pendingAction, onModalScanBlockChange]);
+
   const runPending = async (): Promise<void> => {
     const pending = pendingAction;
     setPendingAction(null);
@@ -499,7 +526,16 @@ function ProjectCard({
                   <button
                     type="button"
                     className="btn btn--small"
-                    onClick={() => onAdvancePart(card.projectId, item.part!.id)}
+                    disabled={busyRows.has(rowKey)}
+                    aria-busy={busyRows.has(rowKey)}
+                    onClick={() =>
+                      runAdvanceOnce(rowKey, () => {
+                        onAdvancePart(card.projectId, item.part!.id);
+                        onAdvanceFeedback?.(
+                          `${item.part!.partCode} · U${item.part!.unitIndex} — ${PART_OPERATION_LABELS_ES[item.part!.operationType]} enviada`,
+                        );
+                      })
+                    }
                     data-testid={`fabric-advance-part-${rowKey}`}
                   >
                     Completar {PART_OPERATION_LABELS_ES[item.part.operationType]}
@@ -508,7 +544,14 @@ function ProjectCard({
                   <button
                     type="button"
                     className="btn btn--small"
-                    onClick={() => onAdvanceUnit(card.projectId, item.unit!.id)}
+                    disabled={busyRows.has(rowKey)}
+                    aria-busy={busyRows.has(rowKey)}
+                    onClick={() =>
+                      runAdvanceOnce(rowKey, () => {
+                        onAdvanceUnit(card.projectId, item.unit!.id);
+                        onAdvanceFeedback?.(`Unidad ${item.unit!.unitIndex} de ${item.moduleName} — enviada`);
+                      })
+                    }
                     data-testid={`fabric-advance-unit-${rowKey}`}
                   >
                     Avanzar unidad
@@ -517,7 +560,14 @@ function ProjectCard({
                   <button
                     type="button"
                     className="btn btn--small"
-                    onClick={() => onAdvance(card.projectId, item.itemId, target)}
+                    disabled={busyRows.has(rowKey)}
+                    aria-busy={busyRows.has(rowKey)}
+                    onClick={() =>
+                      runAdvanceOnce(rowKey, () => {
+                        onAdvance(card.projectId, item.itemId, target);
+                        onAdvanceFeedback?.(`Marcado ${ITEM_FLOOR_STATUS_LABELS_ES[target]}`);
+                      })
+                    }
                     data-testid={`fabric-advance-${item.itemId}`}
                   >
                     Marcar {ITEM_FLOOR_STATUS_LABELS_ES[target]}
@@ -662,6 +712,10 @@ export function FabricScreen({
     ? activeTab
     : (visibleTabs[0] ?? 'cutting');
   const [showMetrics, setShowMetrics] = useState(false);
+  // #1145 P0: scanner HID de piso — resuelve partCode contra la estación
+  // activa y avanza la pieza con feedback sonoro + announce (reuso F089).
+  const [scanStatus, setScanStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [sessionScans, setSessionScans] = useState(0);
   const metricsTotals = useMemo(
     () => (metrics ? summarizeFabricMetrics(metrics.sectors) : null),
     [metrics],
@@ -687,6 +741,58 @@ export function FabricScreen({
       moduleLabelFor,
     ],
   );
+  // #1145 P0: resolución partCode → pieza de la estación activa. Un código
+  // desconocido suena 'miss' con mensaje inline (sin navegación). Las
+  // estaciones de unidades (armado/embalaje) avanzan por botón: el
+  // escaneo sólo cubre filas de pieza con partCode.
+  const handleScan = useCallback(
+    (rawCode: string) => {
+      const code = rawCode.trim();
+      if (!canAdvance) {
+        playScanFeedback('miss');
+        setScanStatus({ ok: false, text: 'Reclamá la estación para avanzar piezas.' });
+        return;
+      }
+      for (const card of cards) {
+        for (const item of card.items) {
+          const part = item.part;
+          if (part && part.partCode.toUpperCase() === code.toUpperCase()) {
+            if (!onAdvancePart) {
+              playScanFeedback('miss');
+              return;
+            }
+            playScanFeedback('advance');
+            onAdvancePart(card.projectId, part.id);
+            setSessionScans((n) => n + 1);
+            setScanStatus({
+              ok: true,
+              text: `${part.partCode} · U${part.unitIndex} — ${PART_OPERATION_LABELS_ES[part.operationType]} enviada`,
+            });
+            return;
+          }
+        }
+      }
+      playScanFeedback('miss');
+      setScanStatus({
+        ok: false,
+        text: `${code} no está en la cola de ${TAB_LABELS[effectiveTab].toLowerCase()}.`,
+      });
+    },
+    [cards, canAdvance, effectiveTab, onAdvancePart],
+  );
+  // #1145 re-critique: sin escaneos detrás de un modal de confirmación.
+  const [modalScanBlock, setModalScanBlock] = useState(false);
+  const handleModalScanBlockChange = useCallback((blocked: boolean) => {
+    setModalScanBlock(blocked);
+  }, []);
+  useHidScanner({ onScan: handleScan, enabled: !modalScanBlock });
+
+  // #1145 P1: los avances por botón también alimentan announce + conteo.
+  const reportAdvance = useCallback((text: string) => {
+    setSessionScans((n) => n + 1);
+    setScanStatus({ ok: true, text });
+  }, []);
+
   const totalWaiting = useMemo(
     () =>
       FABRIC_STATIONS.filter((station) => visibleTabs.includes(station)).reduce(
@@ -712,7 +818,7 @@ export function FabricScreen({
     >
       <PageHeader
         title="Producción"
-        subtitle="Obras organizadas por estación. El avance se registra por módulo y se refleja en Estado de Planta."
+        subtitle="Obras organizadas por estación. El avance de piezas y módulos se refleja en Estado de Planta."
         icon={<Factory size={16} strokeWidth={1.5} />}
         contextualControls={
           <>
@@ -748,6 +854,24 @@ export function FabricScreen({
           </>
         }
       />
+      {/* #1145 P0/P1: resultado del escaneo + conteo de sesión del operario. */}
+      <div className="fabric__scan-bar" data-testid="fabric-scan-bar">
+        <p
+          aria-live="assertive"
+          data-testid="fabric-scan-status"
+          className={`fabric__scan-status ${scanStatus ? (scanStatus.ok ? 'fabric__scan-status--ok' : 'fabric__scan-status--miss') : ''}`}
+        >
+          {canAdvance
+            ? (scanStatus?.text ?? 'Escaneá el código de la pieza para avanzarla.')
+            : 'Reclamá la estación para avanzar piezas.'}
+        </p>
+        {canAdvance ? (
+          <span className="fabric__scan-count" data-testid="fabric-session-scans">
+            Avanzadas en esta sesión: {sessionScans}
+          </span>
+        ) : null}
+      </div>
+
       {showMetrics && metrics && metricsTotals ? (
         <div
           className="fabric__metrics"
@@ -828,9 +952,10 @@ export function FabricScreen({
                 description="Cuando entren obras a fábrica, acá aparece la cola por estación."
               />
             ) : cards.length === 0 ? (
-              <div className="fabric__empty-tab">
-                <p>Sin trabajos en cola para {TAB_LABELS[effectiveTab]}.</p>
-              </div>
+              <EmptyState
+                title={`Sin trabajos en cola para ${TAB_LABELS[effectiveTab]}`}
+                description="Cuando una obra llegue a esta estación, acá aparece su cola."
+              />
             ) : (
               <ul className="fabric__cards">
                 {cards.map((card) => (
@@ -850,6 +975,8 @@ export function FabricScreen({
                     qualityHandlers={qualityHandlers}
                     canOverrideQc={canOverrideQc}
                     onGeneratePartExecutions={onGeneratePartExecutions}
+                    onAdvanceFeedback={reportAdvance}
+                    onModalScanBlockChange={handleModalScanBlockChange}
                   />
                 ))}
               </ul>
