@@ -97,7 +97,7 @@ export function WarehouseDashboard({
   return (
     <section className="warehouse-dashboard" aria-label="Dashboard de Almacén" data-testid="warehouse-dashboard">
       <PageHeader
-        title="Dashboard de Almacén y Compras"
+        title="Dashboard Almacén"
         subtitle="Métricas de picking, demanda agregada de materiales, salud de inventario y órdenes de compra."
         icon={<Warehouse size={16} strokeWidth={1.5} />}
         secondaryActions={
@@ -418,7 +418,7 @@ export function WarehouseDashboard({
                           onClick={() => onOpenProject(p.projectId)}
                           data-testid={`wh-open-project-${p.projectId}`}
                         >
-                          Ver picking
+                          Ir a picking
                         </button>
                       ) : null}
                     </td>
