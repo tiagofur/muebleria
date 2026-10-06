@@ -187,3 +187,29 @@ func TestComposeEffectiveDefinitionMaterials_DefinitionFallbackDoesNotInflateOve
 		t.Errorf("needsRollout=%d designCurrent=%d; want 0/1", c.NeedsRollout, c.DesignCurrent)
 	}
 }
+
+// #1153: a kind=hardware option role composes exactly like a board role —
+// the connected insert's override must survive the composition (and a
+// missing override has no design default to fall back to: the caller fails
+// closed upstream, never here).
+func TestComposeEffectiveDefinitionMaterialsAcceptsHardwareRoleOverride(t *testing.T) {
+	roles := []DefinitionRoleOptionSpec{
+		{Role: "FRENTE", Label: "Frente", OptionIDs: []string{"mat-1"}},
+		{Role: "BISAGRA", Label: "Bisagras", OptionIDs: []string{"hw-blum", "hw-eco"}},
+	}
+	overrides := map[string]string{"BISAGRA": "hw-eco"}
+
+	res := ComposeEffectiveDefinitionMaterials("BASE-600", roles, DesignAuthoringDefaults{}, overrides)
+
+	if res.MaterialChoices["BISAGRA"] != "hw-eco" {
+		t.Fatalf("hardware override must survive the composition, got %+v", res.MaterialChoices)
+	}
+	if res.MaterialChoiceModes["BISAGRA"] != DesignMaterialChoiceModeOverride {
+		t.Fatalf("an explicit pre-insert choice is an override, got %+v", res.MaterialChoiceModes)
+	}
+	// Untouched roles keep the existing lineage contract: the curated
+	// definition fallback (first option) with mode definition.
+	if res.MaterialChoices["FRENTE"] != "mat-1" || res.MaterialChoiceModes["FRENTE"] != DesignMaterialChoiceModeDefinition {
+		t.Fatalf("untouched role keeps the definition fallback, got %+v", res.MaterialChoices)
+	}
+}

@@ -875,4 +875,34 @@ test('hardware roles: no consumed groups means no card and no gating', () => {
   assert.strictEqual(el(sandbox, 'btn-insert').disabled, false);
 });
 
+// #1153: connected inserts carry the hardware group choices as overrides —
+// the design has no hardware defaults, so without them the resolve loses
+// the choice ("grupo sin elección").
+test('hardware roles: connected insert sends group choices inside materialOverrides', () => {
+  const sandbox = runModule();
+  sandbox.__state.hardwareCatalog = [
+    { id: 'hw-blum', code: 'B-CL', name: 'Bisagra Blum' },
+    { id: 'hw-eco', code: 'B-ECO', name: 'Bisagra económica' }
+  ];
+  sandbox.__state.connected = true;
+  sandbox.window.GraneteUI.configurator.open(definition({
+    hardwareRoles: [
+      { code: 'BISAGRA', name: 'Bisagras', required: true, optionIds: ['hw-blum', 'hw-eco'] }
+    ]
+  }));
+
+  const select = el(sandbox, 'library-hardware-container').children[0].children[1];
+  select.value = 'hw-eco';
+  select.dispatchEvent({ type: 'change' });
+
+  sandbox.__calls.bridge.length = 0;
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert(sent, 'preview dispatched');
+  assert.strictEqual(sent.payload.materialOverrides.BISAGRA, 'hw-eco',
+    'the explicit hardware choice rides materialOverrides in connected mode');
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco',
+    'and the same map for the local/disconnected resolve path');
+});
+
 console.log(JSON.stringify({ success: true, testsPassed }));

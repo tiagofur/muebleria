@@ -559,6 +559,14 @@
           overrides[r] = libMaterialChoices[r];
         }
       }
+      // #1153: hardware group choices ALWAYS ride as overrides — they are
+      // explicit pre-insert selections and the design carries no hardware
+      // defaults yet; without them the connected resolve loses the choice.
+      hardwareRoles(activeLibDef).forEach(function (role) {
+        if (libMaterialChoices[role.code]) {
+          overrides[role.code] = libMaterialChoices[role.code];
+        }
+      });
       payload.materialOverrides = overrides;
     }
 
