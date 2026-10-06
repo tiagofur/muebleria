@@ -29,7 +29,7 @@ import {
   projectStatusLabel,
 } from '../projects/projectHelpers';
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
-import { FabricationFlowSteps } from '../common/FabricationFlowSteps';
+import { ProcessStrip } from '../common/ProcessStrip';
 import { WorkspaceTabs } from '../common/Tabs';
 import { ProjectFloorProgressStrip } from './ProjectFloorProgressStrip';
 import {
@@ -366,7 +366,7 @@ export function ProductionOrderHub({
 
         {/* #768 — the same compact semantics as Ingeniería, below the
             header; one primary action at most, honest text otherwise. */}
-        {fabFlow ? <FabricationFlowSteps flow={fabFlow} action={fabAction} testIdPrefix="prod" /> : null}
+        {fabFlow ? <ProcessStrip flow={fabFlow} action={fabAction} testIdPrefix="prod" /> : null}
 
         <div className="prod-hub__header-actions">
           {salePrice !== null && showCosts ? (
