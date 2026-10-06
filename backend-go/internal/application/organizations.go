@@ -13,7 +13,17 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
-const OrganizationEntitlementDefaultsRevision = "organization-foundation-v2-2026-08-30"
+const OrganizationEntitlementDefaultsRevision = "organization-foundation-v2-2026-10-06"
+
+// Plan-derived active-member seat defaults (#1172): a provisioned
+// organization must be able to hold a working team out of the box, so the
+// legacy one-seat default no longer applies to new provisions. The platform
+// can still override any value — including NULL = unlimited — via
+// entitlements; existing rows are never rewritten by a defaults change.
+const (
+	PlanDefaultMaxActiveMembersDemo = int64(5) // shared by none and trial
+	PlanDefaultMaxActiveMembersPro  = int64(25)
+)
 
 var (
 	ErrInvalidOrganizationCommand     = errors.New("invalid organization command")
@@ -142,9 +152,9 @@ func NewOrganizationService(store OrganizationStore) *OrganizationService {
 }
 
 func DefaultOrganizationEntitlements(orgType domain.OrganizationType, plan domain.LicensePlan) domain.OrganizationEntitlements {
-	one := int64(1)
+	seats := planDefaultMaxActiveMembers(plan)
 	out := domain.OrganizationEntitlements{
-		MaxActiveMembers: &one,
+		MaxActiveMembers: &seats,
 		Source:           domain.OrganizationEntitlementSourcePlanDefault,
 		DefaultsRevision: OrganizationEntitlementDefaultsRevision,
 	}
@@ -153,6 +163,13 @@ func DefaultOrganizationEntitlements(orgType domain.OrganizationType, plan domai
 		out.SketchupSeats = 1
 	}
 	return out
+}
+
+func planDefaultMaxActiveMembers(plan domain.LicensePlan) int64 {
+	if plan == domain.LicensePlanPro {
+		return PlanDefaultMaxActiveMembersPro
+	}
+	return PlanDefaultMaxActiveMembersDemo
 }
 
 func ValidateOrganizationEntitlements(value domain.OrganizationEntitlements) error {

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,11 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
+
+// selfServiceMaxActiveMembersCap (#1172) bounds the single entitlement knob a
+// factory admin may set when provisioning connected children; larger seat
+// values remain a platform entitlements update.
+const selfServiceMaxActiveMembersCap = 25
 
 func organizationApplicationStore(s Store) (application.OrganizationStore, bool) {
 	store, ok := s.(application.OrganizationStore)
@@ -89,6 +95,10 @@ func (s *Server) HandleProvisionOrganization(w http.ResponseWriter, r *http.Requ
 		if body.Entitlements != nil {
 			cmd.Entitlements = entitlementOverride(body.Entitlements)
 		}
+		if body.MaxActiveMembers != nil {
+			respondWithError(w, http.StatusBadRequest, "en provisioning de plataforma los seats se fijan vía entitlements.max_active_members")
+			return
+		}
 	} else {
 		_, source, ok := s.requireFactoryAdmin(w, r)
 		if !ok {
@@ -101,6 +111,16 @@ func (s *Server) HandleProvisionOrganization(w http.ResponseWriter, r *http.Requ
 		if plan != domain.LicensePlanNone || body.Entitlements != nil || body.CloneCatalogFrom != nil || body.BootstrapAdminUserID != nil {
 			respondWithError(w, http.StatusForbidden, "licencia, entitlements, catálogo y administrador son autoridad de la plataforma")
 			return
+		}
+		if body.MaxActiveMembers != nil {
+			if *body.MaxActiveMembers < 1 || *body.MaxActiveMembers > selfServiceMaxActiveMembersCap {
+				respondWithError(w, http.StatusBadRequest, fmt.Sprintf("max_active_members debe estar entre 1 y %d", selfServiceMaxActiveMembersCap))
+				return
+			}
+			// The one bounded entitlement knob a factory admin holds for
+			// connected children; the application layer records explicit
+			// provisioning entitlements as platform_override.
+			cmd.Entitlements = &domain.OrganizationEntitlements{MaxActiveMembers: body.MaxActiveMembers}
 		}
 		cmd.BootstrapAdminUserID = claims.UserID
 		cmd.ParentOrganizationID = &source.ID

@@ -48,6 +48,7 @@ export function SalesNetworkSection({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [type, setType] = useState<'store' | 'dealer'>('store');
+  const [seats, setSeats] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [justCreated, setJustCreated] = useState<FactoryOrganization | null>(null);
@@ -75,6 +76,16 @@ export function SalesNetworkSection({
       setCreateError('Poné un nombre para la nueva organización.');
       return;
     }
+    let maxActiveMembers: number | undefined;
+    const seatsRaw = seats.trim();
+    if (seatsRaw) {
+      const parsed = Number(seatsRaw);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 25) {
+        setCreateError('Los miembros activos deben ser un número entre 1 y 25.');
+        return;
+      }
+      maxActiveMembers = parsed;
+    }
     setCreating(true);
     setCreateError(null);
     try {
@@ -82,6 +93,7 @@ export function SalesNetworkSection({
         name: trimmed,
         type,
         license_plan: 'none',
+        ...(maxActiveMembers !== undefined ? { max_active_members: maxActiveMembers } : {}),
       });
       const provisioned = data.organization;
       if (provisioned.type !== 'store' && provisioned.type !== 'dealer') {
@@ -102,6 +114,7 @@ export function SalesNetworkSection({
       setOrgs((prev) => [organization, ...prev]);
       setJustCreated(organization);
       setName('');
+      setSeats('');
     } catch {
       setCreateError('No se pudo crear la organización. Revisá tu conexión.');
     } finally {
@@ -220,7 +233,8 @@ export function SalesNetworkSection({
           style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}
         >
           La nueva organización arranca con una copia del catálogo de tu fábrica y licencia
-          sin activar (la plataforma la asigna). Quedás como admin para invitar a su equipo.
+          sin activar (la plataforma la asigna). Quedás como admin para invitar a su equipo;
+          si no indicás un límite de miembros activos, arranca con 5.
         </p>
         <div
           style={{
@@ -255,6 +269,21 @@ export function SalesNetworkSection({
               <option value="store">Tienda comercial</option>
               <option value="dealer">Distribuidor</option>
             </select>
+          </div>
+          <div className="catalog-form__field" style={{ margin: 0 }}>
+            <label htmlFor="sales-network-seats">Miembros activos</label>
+            <input
+              id="sales-network-seats"
+              type="number"
+              className="input"
+              value={seats}
+              onChange={(e) => setSeats(e.target.value)}
+              placeholder="5"
+              min={1}
+              max={25}
+              step={1}
+              style={{ width: '9rem' }}
+            />
           </div>
           <button
             type="button"

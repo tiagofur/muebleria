@@ -8116,6 +8116,12 @@
             "type": "string",
             "format": "uuid"
           },
+          "max_active_members": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 25,
+            "description": "Optional active-member seat cap for factory self-service provisioning of connected organizations (1..25). Platform provisioning sets seats through entitlements.max_active_members; the platform path rejects this field."
+          },
           "entitlements": {
             "$ref": "#/components/schemas/ProvisionOrganizationEntitlements"
           }

@@ -185,16 +185,22 @@ func TestDefaultOrganizationEntitlementsFailClosed(t *testing.T) {
 		plan          domain.LicensePlan
 		manufacturing bool
 		seats         int64
+		wantMembers   int64
 	}{
-		{"factory pro", domain.OrganizationTypeFactory, domain.LicensePlanPro, true, 1},
-		{"factory none", domain.OrganizationTypeFactory, domain.LicensePlanNone, false, 0},
-		{"store pro", domain.OrganizationTypeStore, domain.LicensePlanPro, false, 0},
+		{"factory pro", domain.OrganizationTypeFactory, domain.LicensePlanPro, true, 1, PlanDefaultMaxActiveMembersPro},
+		{"factory trial", domain.OrganizationTypeFactory, domain.LicensePlanTrial, true, 1, PlanDefaultMaxActiveMembersDemo},
+		{"factory none", domain.OrganizationTypeFactory, domain.LicensePlanNone, false, 0, PlanDefaultMaxActiveMembersDemo},
+		{"store pro", domain.OrganizationTypeStore, domain.LicensePlanPro, false, 0, PlanDefaultMaxActiveMembersPro},
+		{"store none", domain.OrganizationTypeStore, domain.LicensePlanNone, false, 0, PlanDefaultMaxActiveMembersDemo},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			value := DefaultOrganizationEntitlements(test.kind, test.plan)
-			if value.ManufacturingEnabled != test.manufacturing || value.SketchupSeats != test.seats || value.SalesNetworkEnabled || value.AdvancedAuditEnabled || value.MaxSalesPartners != 0 || value.MaxActiveMembers == nil || *value.MaxActiveMembers != 1 {
+			if value.ManufacturingEnabled != test.manufacturing || value.SketchupSeats != test.seats || value.SalesNetworkEnabled || value.AdvancedAuditEnabled || value.MaxSalesPartners != 0 || value.MaxActiveMembers == nil || *value.MaxActiveMembers != test.wantMembers {
 				t.Fatalf("defaults = %+v", value)
+			}
+			if value.DefaultsRevision != OrganizationEntitlementDefaultsRevision {
+				t.Fatalf("defaults revision = %q", value.DefaultsRevision)
 			}
 		})
 	}
@@ -220,6 +226,48 @@ func TestProvisionOrganizationActivatesOnlyAfterReadiness(t *testing.T) {
 	if store.audits[0].Details["request_id"] != "request-provision-1" || store.audits[1].Details["request_id"] != "request-provision-1" {
 		t.Fatalf("provisioning audit lineage = %+v", store.audits)
 	}
+}
+
+func TestProvisionOrganizationWritesPlanDefaultSeatsAndExplicitOverride(t *testing.T) {
+	user := &domain.User{ID: "00000000-0000-0000-0000-000000000222", AccountStatus: domain.AccountStatusActive}
+	t.Run("plan default seats", func(t *testing.T) {
+		store := &organizationStoreFake{user: user}
+		_, err := NewOrganizationService(store).ProvisionOrganization(context.Background(), ProvisionOrganizationCommand{
+			ActorUserID: user.ID, BootstrapAdminUserID: user.ID,
+			Name: "Tienda", Slug: "tienda", Type: domain.OrganizationTypeStore,
+			LicensePlan: domain.LicensePlanNone, AllowEmptyCatalog: true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		written := store.entitlements
+		if written == nil || written.MaxActiveMembers == nil || *written.MaxActiveMembers != PlanDefaultMaxActiveMembersDemo {
+			t.Fatalf("default seats = %+v", written)
+		}
+		if written.Source != domain.OrganizationEntitlementSourcePlanDefault || written.DefaultsRevision != OrganizationEntitlementDefaultsRevision {
+			t.Fatalf("default entitlements source/revision = %+v", written)
+		}
+	})
+	t.Run("explicit seats override", func(t *testing.T) {
+		store := &organizationStoreFake{user: user}
+		seats := int64(12)
+		_, err := NewOrganizationService(store).ProvisionOrganization(context.Background(), ProvisionOrganizationCommand{
+			ActorUserID: user.ID, BootstrapAdminUserID: user.ID,
+			Name: "Tienda Dos", Slug: "tienda-dos", Type: domain.OrganizationTypeStore,
+			LicensePlan: domain.LicensePlanNone, AllowEmptyCatalog: true,
+			Entitlements: &domain.OrganizationEntitlements{MaxActiveMembers: &seats},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		written := store.entitlements
+		if written == nil || written.MaxActiveMembers == nil || *written.MaxActiveMembers != 12 {
+			t.Fatalf("override seats = %+v", written)
+		}
+		if written.Source != domain.OrganizationEntitlementSourcePlatformOverride {
+			t.Fatalf("override source = %+v", written)
+		}
+	})
 }
 
 func TestProvisionOrganizationRollsBackEveryMaterialStepFailure(t *testing.T) {
