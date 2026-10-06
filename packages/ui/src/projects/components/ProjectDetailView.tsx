@@ -9,7 +9,7 @@
  * (items, panels, totals) can pull what they need without prop threading.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type {
   Component,
   Customer,
@@ -63,6 +63,7 @@ import {
 } from './detail/ProjectDetailHeader';
 import {
   ProjectDetailToolsNav,
+  QUOTE_TOOLS_PANEL_IDS,
   type QuoteToolsPanel,
 } from './detail/ProjectDetailToolsNav';
 import { ProjectDetailToolsContent } from './detail/ProjectDetailToolsContent';
@@ -74,6 +75,7 @@ import {
   type ProjectDetailRemoveConfirm,
   type ProjectDetail3DHandlers,
   type ProjectDetailContextValue,
+  projectAllowsContentEdit,
 } from './projectDetailContext';
 
 // ─── Re-export context types for external consumers ──────────────────
@@ -408,7 +410,39 @@ function ProjectDetailViewInner(): ReactNode {
     ctx.quoteAuthority?.kind === 'ready' &&
     ctx.quoteAuthority.amountsWithheld === true;
   const chromeSale = retailWithheld ? null : breakdown?.salePrice ?? null;
-  const [toolsPanel, setToolsPanel] = useState<QuoteToolsPanel>(null);
+  // #1124: el panel activo vive en la URL (?panel=garantias) — deep-linkable
+  // y restaurable; sólo IDs conocidos.
+  const [toolsPanel, setToolsPanelState] = useState<QuoteToolsPanel>(() => {
+    if (typeof window === 'undefined') return null;
+    const panel = new URLSearchParams(window.location.search).get('panel');
+    return QUOTE_TOOLS_PANEL_IDS.includes(panel as Exclude<QuoteToolsPanel, null>)
+      ? (panel as Exclude<QuoteToolsPanel, null>)
+      : null;
+  });
+  const setToolsPanel = (panel: QuoteToolsPanel): void => {
+    setToolsPanelState(panel);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (panel) {
+        url.searchParams.set('panel', panel);
+      } else {
+        url.searchParams.delete('panel');
+      }
+      window.history.replaceState(null, '', url);
+    }
+  };
+  // #1124 re-critique: cerrar el detalle limpia el panel — la obra siguiente
+  // nunca monta con el panel de la anterior ni un share lo filtra.
+  useEffect(
+    () => () => {
+      if (typeof window !== 'undefined' && window.location.search.includes('panel=')) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('panel');
+        window.history.replaceState(null, '', url);
+      }
+    },
+    [],
+  );
   const [releaseModalOpen, setReleaseModalOpen] = useState(false);
   const [changeOrderModalOpen, setChangeOrderModalOpen] = useState(false);
 
@@ -426,10 +460,13 @@ function ProjectDetailViewInner(): ReactNode {
   }, [project, modules]);
 
   const hasOpenInProduction = Boolean(onOpenInProduction);
-  const canEditContent =
-    canMutate &&
-    project.status === 'draft' &&
-    (!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty');
+  // #1124: UNA regla compartida de edición de contenido — el header y los
+  // paneles nunca pueden diverger (el status queda draft eterno en DT).
+  const canEditContent = projectAllowsContentEdit(
+    project,
+    ctx.quoteAuthority,
+    canMutate,
+  );
   // #642/#577: ONE shared rule with the list chrome (projectAllowsProductionChrome):
   // canonical ProductionRelease for modern projects; legacy statuses only when
   // we POSITIVELY know there is no Digital Thread quote authority (undefined /
@@ -438,11 +475,25 @@ function ProjectDetailViewInner(): ReactNode {
     project,
     ctx.quoteAuthority,
   );
-  const primary = resolveChromePrimary({
+  const manufacturingPrimary = resolveChromePrimary({
     hasProductionReleaseAuthority,
     hasExport: Boolean(ctx.onExport),
     hasOpenInProduction,
   });
+  // #1124: el detalle es el hub comercial — la acción del ciclo de vida de la
+  // cotización gana la primaria; la manufactura pierde a secundaria (§4.1a:
+  // exactamente una primaria por nivel, en cualquier estado del ciclo).
+  const reconciliationPrimary: ChromePrimary | null =
+    ctx.quoteAuthority?.kind === 'ready' &&
+    Boolean(onOpenReconciliation) &&
+    ctx.quoteAuthority.status !== 'accepted'
+      ? 'manage-quote'
+      : (ctx.quoteAuthority?.kind === 'empty' ||
+           ctx.quoteAuthority?.kind === 'legacy') &&
+          Boolean(onOpenReconciliation)
+        ? 'quote-revision'
+        : null;
+  const chromePrimary = reconciliationPrimary ?? manufacturingPrimary;
 
   const moreSections = useMemo((): readonly DropdownMenuSection[] => {
     const sections: DropdownMenuSection[] = [];
@@ -578,13 +629,13 @@ function ProjectDetailViewInner(): ReactNode {
   ]);
 
   const toggleTools = (panel: Exclude<QuoteToolsPanel, null>): void => {
-    setToolsPanel((current) => (current === panel ? null : panel));
+    setToolsPanel(toolsPanel === panel ? null : panel);
   };
 
   return (
     <div className="project-detail" data-testid="project-detail">
       <ProjectDetailHeader
-        primary={primary}
+        chromePrimary={chromePrimary}
         chromeSale={chromeSale}
         moreSections={moreSections}
         exportMenuClose={exportMenu.onClose}
@@ -627,12 +678,27 @@ function ProjectDetailViewInner(): ReactNode {
           <ProjectMeasureDefaults />
           <ProjectItemsSection />
 
-          {!ctx.quoteAuthority || ctx.quoteAuthority.kind === 'empty' ? (
+          {/* #1124 P0: los paneles son de LECTURA cuando la cotización vive en
+              el Digital Thread — ocultarlos amputaba Comunicaciones/Fotos/
+              Garantías justo al publicar, cuando el seguimiento empieza. Sólo
+              loading/error (UNKNOWN) falla cerrado; la edición interna sigue
+              gated por canEditContent. */}
+          {(!ctx.quoteAuthority ||
+            ctx.quoteAuthority.kind === 'empty' ||
+            ctx.quoteAuthority.kind === 'ready') ? (
             <section
               className="project-detail__tools"
               data-testid="project-quote-tools"
               aria-label="Herramientas de cotización"
             >
+              {ctx.quoteAuthority?.kind === 'ready' && !canEditContent ? (
+                <p
+                  className="project-detail__tools-readonly"
+                  data-testid="project-tools-readonly-note"
+                >
+                  Modo lectura: el contenido se edita por revisión.
+                </p>
+              ) : null}
               <ProjectDetailToolsNav
                 toolsPanel={toolsPanel}
                 onToggleTools={toggleTools}
@@ -814,10 +880,13 @@ export function ProjectDetailView(props: ProjectDetailViewProps): ReactNode {
     onRecordDeposit,
   } = props;
 
-  const canEditContent =
-    canMutate &&
-    project.status === 'draft' &&
-    (!quoteAuthority || quoteAuthority.kind === 'empty');
+  // #1124: UNA regla compartida de edición de contenido — el header y los
+  // paneles nunca pueden diverger (el status queda draft eterno en DT).
+  const canEditContent = projectAllowsContentEdit(
+    project,
+    quoteAuthority,
+    canMutate,
+  );
 
   const contextValue = useMemo(
     (): ProjectDetailContextValue => ({

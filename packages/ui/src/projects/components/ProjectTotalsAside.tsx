@@ -227,7 +227,7 @@ export const ProjectTotalsAside = memo(function ProjectTotalsAside(): ReactNode 
           <p className="project-totals__empty">
             {project.items.length === 0
               ? 'Agregá muebles para ver totales.'
-              : 'No se pudo calcular el desglose con las opciones actuales.'}
+              : 'No se pudo calcular el desglose con las opciones actuales. El resumen de materiales usa el catálogo local; el monto comercial necesita la conexión.'}
           </p>
         )}
       </PricePreviewGate>

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { Activity, Camera, ClipboardList, MessageSquare, Ruler, Wrench } from 'lucide-react';
 import { surveyFabricationBlockers } from '@granete/domain';
 import { useProjectDetail } from '../projectDetailContext';
@@ -15,6 +15,19 @@ export type QuoteToolsPanel =
   | 'warranties'
   | null;
 
+/** #1124: IDs válidos para el deep-link ?panel= de la URL. */
+export const QUOTE_TOOLS_PANEL_IDS: readonly Exclude<QuoteToolsPanel, null>[] = [
+  'overview',
+  'lifecycle',
+  'survey',
+  'kitchen',
+  'scenarios',
+  'checklist',
+  'photos',
+  'internal_comms',
+  'warranties',
+];
+
 export interface ProjectDetailToolsNavProps {
   readonly toolsPanel: QuoteToolsPanel;
   readonly onToggleTools: (panel: Exclude<QuoteToolsPanel, null>) => void;
@@ -27,56 +40,89 @@ export function ProjectDetailToolsNav({
   kitchenUnplacedCount,
 }: ProjectDetailToolsNavProps): ReactNode {
   const ctx = useProjectDetail();
+  const tablistRef = useRef<HTMLDivElement>(null);
   const surveyBlockers = ctx.project.siteSurvey
     ? surveyFabricationBlockers(ctx.project.siteSurvey).length
     : 0;
+
+  // #1124: roving tabindex + flechas — los toggles no fuerzan Tab×9 para
+  // atravesarlos (§4.8; Sam).
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const buttons = Array.from(
+      tablistRef.current?.querySelectorAll<HTMLButtonElement>(
+        'button[data-tools-tab]',
+      ) ?? [],
+    );
+    if (buttons.length === 0) return;
+    const currentIndex = buttons.findIndex(
+      (button) => button.tabIndex === 0,
+    );
+    const nextIndex = (() => {
+      switch (event.key) {
+        case 'ArrowDown':
+        case 'ArrowRight':
+          return (currentIndex + 1 + buttons.length) % buttons.length;
+        case 'ArrowUp':
+        case 'ArrowLeft':
+          return (currentIndex - 1 + buttons.length) % buttons.length;
+        case 'Home':
+          return 0;
+        case 'End':
+          return buttons.length - 1;
+        default:
+          return null;
+      }
+    })();
+    if (nextIndex === null) return;
+    event.preventDefault();
+    buttons.forEach((button, index) => {
+      button.tabIndex = index === nextIndex ? 0 : -1;
+    });
+    buttons[nextIndex]?.focus();
+  };
+
+  const tabProps = (panel: Exclude<QuoteToolsPanel, null>) => ({
+    'aria-pressed': toolsPanel === panel,
+    'aria-controls': toolsPanel === panel ? 'project-tools-panel' : undefined,
+    className:
+      toolsPanel === panel
+        ? 'project-detail__tools-tab project-detail__tools-tab--active'
+        : 'project-detail__tools-tab',
+    tabIndex: toolsPanel === panel || toolsPanel === null ? 0 : -1,
+    'data-tools-tab': true,
+    onClick: () => onToggleTools(panel),
+  });
 
   return (
     <div className="project-detail__tools-header">
       <h3 className="project-detail__section-title">Herramientas</h3>
       <div
+        ref={tablistRef}
         className="project-detail__tools-tabs"
         role="group"
         aria-label="Paneles avanzados"
+        onKeyDown={handleKeyDown}
       >
         <button
           type="button"
-          aria-pressed={toolsPanel === 'overview'}
-          className={
-            toolsPanel === 'overview'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('overview')}
           data-testid="project-tools-overview"
-          onClick={() => onToggleTools('overview')}
         >
           <ClipboardList size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
           Resumen de obra
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'lifecycle'}
-          className={
-            toolsPanel === 'lifecycle'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('lifecycle')}
           data-testid="project-tools-lifecycle"
-          onClick={() => onToggleTools('lifecycle')}
         >
           <Activity size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
-          Lifecycle / Entregas
+          Ciclo de vida y entregas
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'survey'}
-          className={
-            toolsPanel === 'survey'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('survey')}
           data-testid="project-tools-survey"
-          onClick={() => onToggleTools('survey')}
         >
           <Ruler size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
           Levantamiento
@@ -92,14 +138,8 @@ export function ProjectDetailToolsNav({
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'kitchen'}
-          className={
-            toolsPanel === 'kitchen'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('kitchen')}
           data-testid="project-tools-kitchen"
-          onClick={() => onToggleTools('kitchen')}
         >
           Plano / ambiente
           {kitchenUnplacedCount > 0 ? (
@@ -114,40 +154,22 @@ export function ProjectDetailToolsNav({
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'scenarios'}
-          className={
-            toolsPanel === 'scenarios'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('scenarios')}
           data-testid="project-tools-scenarios"
-          onClick={() => onToggleTools('scenarios')}
         >
           Escenarios A/B
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'checklist'}
-          className={
-            toolsPanel === 'checklist'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('checklist')}
           data-testid="project-tools-checklist"
-          onClick={() => onToggleTools('checklist')}
         >
           Checklist instalación
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'photos'}
-          className={
-            toolsPanel === 'photos'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('photos')}
           data-testid="project-tools-photos"
-          onClick={() => onToggleTools('photos')}
         >
           <Camera size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
           Fotos / Galería
@@ -162,14 +184,8 @@ export function ProjectDetailToolsNav({
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'internal_comms'}
-          className={
-            toolsPanel === 'internal_comms'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('internal_comms')}
           data-testid="project-tools-internal-comms"
-          onClick={() => onToggleTools('internal_comms')}
         >
           <MessageSquare size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
           Comunicaciones
@@ -184,14 +200,8 @@ export function ProjectDetailToolsNav({
         </button>
         <button
           type="button"
-          aria-pressed={toolsPanel === 'warranties'}
-          className={
-            toolsPanel === 'warranties'
-              ? 'project-detail__tools-tab project-detail__tools-tab--active'
-              : 'project-detail__tools-tab'
-          }
+          {...tabProps('warranties')}
           data-testid="project-tools-warranties"
-          onClick={() => onToggleTools('warranties')}
         >
           <Wrench size={14} aria-hidden="true" style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
           Garantías

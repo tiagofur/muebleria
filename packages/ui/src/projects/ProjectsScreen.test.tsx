@@ -11,6 +11,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { resetRequestCreateKeyConsumers } from '../common/consumeRequestCreateKey';
+import type { ProjectDetailQuoteAuthority } from './components/projectDetailContext';
 import { demoExperience } from '../demoExperience';
 import type {
   Customer,
@@ -760,7 +761,7 @@ describe('ProjectsScreen F022', () => {
         capturedAt: '2026-09-10T12:00:00Z',
         onRetry: vi.fn(),
         snapshot: {
-          schema: 'granete.quote-commercial-snapshot.v1',
+          schema: 'granete.quote-commercial-snapshot.v1' as const,
           capturedAt: '2026-09-10T12:00:00Z',
           currency: 'MXN',
           customer: { id: 'cust-bruno', name: 'Cliente congelado Q2' },
@@ -851,7 +852,10 @@ describe('ProjectsScreen F022', () => {
     expect(within(detail).queryByLabelText(/Cantidad/i)).toBeNull();
     expect(within(detail).queryByLabelText(/Medida/i)).toBeNull();
     expect(screen.queryByTestId('project-level-options')).toBeNull();
-    expect(screen.queryByTestId('project-quote-tools')).toBeNull();
+    // #1124 P0: las herramientas son LECTURA en revisión congelada — visibles
+    // (seguimiento al cliente), con nota de modo y sin edición.
+    expect(screen.getByTestId('project-quote-tools')).toBeTruthy();
+    expect(screen.getByTestId('project-tools-readonly-note')).toBeTruthy();
   });
 
   it('preserves distinct lines with identical names and renders quantity > 1 with unit configurations', async () => {
@@ -871,7 +875,7 @@ describe('ProjectsScreen F022', () => {
         capturedAt: '2026-09-10T12:00:00Z',
         onRetry: vi.fn(),
         snapshot: {
-          schema: 'granete.quote-commercial-snapshot.v1',
+          schema: 'granete.quote-commercial-snapshot.v1' as const,
           capturedAt: '2026-09-10T12:00:00Z',
           currency: 'MXN',
           customer: { id: 'cust-bruno', name: 'Cliente congelado Q2' },
@@ -1273,7 +1277,7 @@ describe('ProjectsScreen F022', () => {
 
   it('handles non-dollar currency, visible real zero, hidden amounts, and terminal units', async () => {
     const eurSnapshot: QuoteCommercialSnapshot = {
-      schema: 'granete.quote-commercial-snapshot.v1',
+      schema: 'granete.quote-commercial-snapshot.v1' as const,
       capturedAt: '2026-09-10T12:00:00Z',
       currency: 'EUR',
       customer: { id: 'cust-1', name: 'Cliente Euro' },
@@ -2685,6 +2689,122 @@ describe('#710 quotes list orientation and filter recovery', () => {
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.getByTestId('project-card-prj-2')).toBeTruthy();
     expect(screen.queryByTestId('projects-clear-filters')).toBeNull();
+  });
+});
+
+describe('Detalle S4 (#1124)', () => {
+  const publishedAuthority = (): ProjectDetailQuoteAuthority => ({
+    kind: 'ready',
+    revisionId: 'quote-pub',
+    revisionNumber: 1,
+    status: 'published',
+    projectName: 'Cocina Publicada',
+    customerId: 'cust-ana',
+    customerName: 'Ana Pública',
+    furnitureQuantity: 3,
+    currency: 'MXN',
+    capturedAt: '2026-09-10T12:00:00Z',
+    onRetry: () => undefined,
+    snapshot: {
+      schema: 'granete.quote-commercial-snapshot.v1',
+      capturedAt: '2026-09-10T12:00:00Z',
+      currency: 'MXN',
+      customer: { id: 'cust-ana', name: 'Ana Pública' },
+      project: { id: 'prj-1', name: 'Cocina Publicada' },
+      breakdown: {
+        materialsCost: 50,
+        edgeTotal: 10,
+        hardwareTotal: 10,
+        directCost: 70,
+        laborModular: 20,
+        laborFixedCost: 0,
+        marginFactor: 1.35,
+        salePrice: 120,
+      },
+      lines: [
+        {
+          quoteLineId: 'line-pub-1',
+          quantity: 1,
+          furnitureInstanceIds: ['fi-pub-1'],
+          amounts: { materialsCost: 50, edgeTotal: 10, hardwareTotal: 10, directCost: 70, laborModular: 20, salePrice: 120 },
+        },
+      ],
+      units: [
+        {
+          furnitureInstanceId: 'fi-pub-1',
+          quoteLineId: 'line-pub-1',
+          moduleCode: 'MOD-PUB-01',
+          moduleName: 'Mueble Publicado',
+          lifecycleStatus: 'active',
+          options: [],
+        },
+      ],
+    },
+  }) as ProjectDetailQuoteAuthority;
+
+  async function mountDetail(overrides: Parameters<typeof renderScreen>[0] = {}) {
+    const user = userEvent.setup();
+    renderScreen(overrides);
+    await user.click(screen.getByTestId('project-card-prj-1'));
+    return user;
+  }
+
+  it('P0: keeps the nine hub tools available in read-only mode after publishing', async () => {
+    await mountDetail({
+      quoteAuthority: publishedAuthority(),
+      onOpenReconciliation: vi.fn(),
+    });
+    // Publicada ≠ amputada: los paneles de seguimiento siguen accesibles.
+    expect(screen.getByTestId('project-quote-tools')).toBeTruthy();
+    expect(screen.getByTestId('project-tools-internal-comms')).toBeTruthy();
+    expect(screen.getByTestId('project-tools-photos')).toBeTruthy();
+    expect(screen.getByTestId('project-tools-warranties')).toBeTruthy();
+    expect(screen.getByTestId('project-tools-readonly-note')).toBeTruthy();
+  });
+
+  it('P1: exactly one primary action in the chrome when reconciliation and production compete', async () => {
+    await mountDetail({
+      quoteAuthority: publishedAuthority(),
+      onOpenReconciliation: vi.fn(),
+      onOpenInProduction: vi.fn(),
+      onExport: vi.fn(),
+    });
+    const actions = screen.getByTestId('project-chrome-actions');
+    const primaries = Array.from(
+      actions.querySelectorAll('.btn--primary'),
+    );
+    expect(primaries.length).toBe(1);
+    // El ciclo de vida comercial gana la primaria; sin release canónica la
+    // manufactura ni siquiera candita (gate projectAllowsProductionChrome).
+    expect(
+      screen.getByTestId('quote-revision-lifecycle-action').className,
+    ).toContain('btn--primary');
+    expect(screen.queryByTestId('project-open-in-production')).toBeNull();
+  });
+
+  it('P1: the chrome Edit button follows the same authority rule as the panels', async () => {
+    await mountDetail({
+      quoteAuthority: publishedAuthority(),
+      canMutate: true,
+      onOpenReconciliation: vi.fn(),
+    });
+    // DT publicada: nada de edición en vivo, ni en el header.
+    expect(screen.queryByTestId('project-chrome-edit')).toBeNull();
+  });
+
+  it('P2: the active tools panel deep-links through ?panel= in the URL', async () => {
+    const user = await mountDetail({
+      quoteAuthority: publishedAuthority(),
+      onOpenReconciliation: vi.fn(),
+    });
+    await user.click(screen.getByTestId('project-tools-warranties'));
+    expect(window.location.search).toContain('panel=warranties');
+    expect(
+      screen.getByTestId('project-tools-warranties').getAttribute('aria-controls'),
+    ).toBe('project-tools-panel');
+    // Cerrar limpia el parámetro.
+    await user.click(screen.getByTestId('project-tools-warranties'));
+    expect(window.location.search).not.toContain('panel=');
   });
 });
 
