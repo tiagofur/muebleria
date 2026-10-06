@@ -28,7 +28,7 @@ import {
   releaseAuthorityOf,
   releaseWorkContinuityOf,
 } from '@granete/domain';
-import { EmptyState } from '../common';
+import { EmptyState, PageLoading } from '../common';
 import { Factory } from 'lucide-react';
 import { ProductionQueue, type ProductionQueueProps } from './ProductionQueue';
 import {
@@ -39,6 +39,7 @@ import type { FabricActiveClaim } from './fabricProjectCards';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   buildProductionOrderReadiness,
+  HUB_TABS,
   projectAllowsProductionOrder,
   type ProductionOrderTab,
 } from './productionOrderModel';
@@ -91,6 +92,8 @@ export type ProductionWorkspaceProps = {
   readonly catalog?: Catalog | null;
   readonly resolveMediaUrl?: (url: string | undefined) => string | undefined;
   readonly hideHardwareCosts?: boolean;
+  /** #1151 P2: gate del dato comercial «Cotizado» en el hub. */
+  readonly showCosts?: boolean;
   readonly onImportNesting?: (
     projectId: string,
     nesting: NestingImportResult,
@@ -156,6 +159,7 @@ export function ProductionWorkspace({
   resolveMediaUrl,
   resolveHardware,
   hideHardwareCosts = false,
+  showCosts = false,
   onImportNesting,
   canImportNesting = false,
   onSetFloorStatus,
@@ -175,6 +179,21 @@ export function ProductionWorkspace({
     if (!orderProjectId) return null;
     return projects.find((p) => p.id === orderProjectId) ?? null;
   }, [orderProjectId, projects]);
+
+  // #1151 P1: deep links a tabs técnicas (modulos/despiece/vistas/
+  // optimizacion) son rutas válidas pero el hub sólo pinta HUB_TABS —
+  // clamp a Resumen + aviso con salida a Proyectos.
+  const orderTabIsTechnical = !(HUB_TABS as readonly string[]).includes(orderTab);
+  const hubTab = (orderTabIsTechnical ? 'resumen' : orderTab) as ProductionOrderTab;
+
+  if (orderProjectId && loading && !orderProject) {
+    // #1151 P1: datos en vuelo con deep link — nunca «Orden no encontrada».
+    return (
+      <section className="prod-hub" aria-label="Producción">
+        <PageLoading label="Cargando orden de producción…" />
+      </section>
+    );
+  }
 
   if (orderProjectId) {
     if (!orderProject) {
@@ -343,13 +362,29 @@ export function ProductionWorkspace({
       : undefined;
 
     return (
+      <>
+        {orderTabIsTechnical ? (
+          <div className="alert alert--info" role="status" data-testid="prod-hub-technical-tab-notice">
+            <span>
+              La vista «{orderTab}» se trabaja en Ingeniería — acá está el estado de la orden.
+            </span>
+            <button
+              type="button"
+              className="btn btn--small btn--ghost"
+              onClick={() => onOpenDesign(orderProject.id)}
+              data-testid="prod-hub-technical-tab-projects"
+            >
+              Abrir en Proyectos
+            </button>
+          </div>
+        ) : null}
       <ProductionOrderHub
         project={projectForHub}
         catalog={catalog}
         customerLabel={customerLabelFor(orderProject.customerId)}
         salePrice={salePriceFor(orderProject.id)}
         readiness={readiness}
-        activeTab={orderTab}
+        activeTab={hubTab}
         onTabChange={onOrderTabChange}
         onBackToQueue={onBackToQueue}
         onOpenDesign={() => onOpenDesign(orderProject.id)}
@@ -428,7 +463,9 @@ export function ProductionWorkspace({
         spaceOptions={spaceOptions}
         productionScopeId={productionScopeId}
         onProductionScopeChange={setProductionScopeId}
+        showCosts={showCosts}
       />
+      </>
     );
   }
 

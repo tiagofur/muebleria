@@ -31,6 +31,7 @@ import {
 import { formatMoneyDisplay } from '../common/formatMoneyDisplay';
 import { FabricationFlowSteps } from '../common/FabricationFlowSteps';
 import { WorkspaceTabs } from '../common/Tabs';
+import { ProjectFloorProgressStrip } from './ProjectFloorProgressStrip';
 import {
   HUB_TABS,
   PRODUCTION_ORDER_TAB_LABELS,
@@ -84,6 +85,8 @@ export type ProductionOrderHubProps = {
   readonly hardwareRows?: readonly HardwarePurchaseRow[] | null;
   readonly hardwareError?: string | null;
   readonly hideHardwareCosts?: boolean;
+  /** #1151 P2: gate del dato comercial «Cotizado» en el header. */
+  readonly showCosts?: boolean;
   /** Has kitchen walls for elevations PDF. */
   readonly elevationsAvailable?: boolean;
   readonly onSetFloorStatus?: (
@@ -180,6 +183,8 @@ export function ProductionOrderHub({
   hardwareRows = null,
   hardwareError = null,
   hideHardwareCosts = false,
+  /** #1151 P2: gate del dato comercial «Cotizado» — paridad con Ingeniería. */
+  showCosts = false,
   elevationsAvailable = false,
   onSetFloorStatus,
   canSetFloorStatus = false,
@@ -364,7 +369,7 @@ export function ProductionOrderHub({
         {fabFlow ? <FabricationFlowSteps flow={fabFlow} action={fabAction} testIdPrefix="prod" /> : null}
 
         <div className="prod-hub__header-actions">
-          {salePrice !== null ? (
+          {salePrice !== null && showCosts ? (
             <div className="prod-hub__price">
               <span className="prod-hub__price-label">Cotizado</span>
               <span className="prod-hub__price-value">
@@ -430,6 +435,12 @@ export function ProductionOrderHub({
         id={`prod-hub-panel-${activeTab}`}
         aria-labelledby={`prod-hub-tab-${activeTab}`}
       >
+        {activeTab === 'resumen' && project ? (
+          <ProjectFloorProgressStrip
+            project={project}
+            data-testid="prod-hub-floor-strip"
+          />
+        ) : null}
         {activeTab === 'resumen' && (
           <ProductionHubResumenTab
             project={project}

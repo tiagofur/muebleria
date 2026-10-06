@@ -322,7 +322,7 @@ export function ProductionOrderPaperlessPanel({
                 {canSetFloorStatus && onSetFloorStatus && next ? (
                   <button
                     type="button"
-                    className="btn btn--primary prod-paperless__advance"
+                    className="btn prod-paperless__advance"
                     data-testid={`prod-piso-advance-${row.itemId}`}
                     onClick={() => onSetFloorStatus(row.itemId, next)}
                   >
