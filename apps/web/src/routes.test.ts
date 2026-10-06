@@ -218,6 +218,14 @@ describe('plant board route (F093)', () => {
       expect(navBlockedForSession('auth', 'admin', 'platform', true)).toBe(false);
       expect(navBlockedForSession('auth', 'user', 'platform', true)).toBe(false);
     });
+
+    it('#1184: library hub follows the platform rule (bibliotecario only)', () => {
+      expect(navBlockedForSession('guest', null, 'library', true)).toBe(true);
+      expect(navBlockedForSession('auth', 'admin', 'library', false)).toBe(true);
+      expect(navBlockedForSession('auth', 'admin', 'library', true)).toBe(false);
+      expect(navBlockedForSession('auth', 'user', 'library', true)).toBe(false);
+      expect(navFromPath('/library')).toBe('library');
+    });
   });
 });
 

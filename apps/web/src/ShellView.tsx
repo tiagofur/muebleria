@@ -76,11 +76,8 @@ import {
   HardwareProfilesCatalog,
   AmbientMaterialsCatalog,
   MaterialsCatalog,
-  LibraryConsumerViewPanel,
-  LibraryDraftValidationPanel,
-  LibraryDraftWorkspaceBanner,
-  LibraryPublishConfirmContent,
-  LibraryPublishHistoryPanel,
+  LibraryDraftContextLine,
+  LibraryWorkspaceScreen,
   ModulesScreen,
   ShowcaseScreen,
   OptionGroupsScreen,
@@ -541,9 +538,11 @@ export interface ShellViewCtx {
   readonly isPlatformAdmin?: boolean;
 }
 
-// #1102 LIB-AUTH Slice A: superficies de autoría del catálogo (Catálogos +
-// Librería) donde el bibliotecario compone la próxima versión de la
-// biblioteca — el banner del workspace de borrador se muestra sobre ellas.
+// #1102 LIB-AUTH Slice A / #1184: superficies de autoría del catálogo
+// (Catálogos + Librería) donde el bibliotecario compone la próxima versión de
+// la biblioteca — sobre ellas la línea contextual identifica el borrador; el
+// ciclo completo (probar/publicar/historial/consumidor) vive en el hub
+// Biblioteca (navId 'library').
 const LIBRARY_AUTHORING_NAV_IDS: readonly AppNavId[] = [
   'materials',
   'edges',
@@ -925,9 +924,6 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
   });
   const libraryAuthoringSurface =
     isPlatformAdmin === true && LIBRARY_AUTHORING_NAV_IDS.includes(navId);
-  // #1102 LIB-AUTH Slice C: confirmación de publicación — el modal pide el
-  // diff al abrirse y la confirmación dispara el publish atómico del backend.
-  const [libraryPublishOpen, setLibraryPublishOpen] = useState(false);
   // #669: session-scoped GLB byte source for every 3D consumer (Proyectar,
   // mueble, Agregado, herraje). Guest sessions fall back to the test seam /
   // procedural representations.
@@ -1023,69 +1019,46 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
       commandItems={commandItems}
       onCommandItem={onCommandItem}
     >
-      {libraryAuthoringSurface ? (
-        <>
-          <LibraryDraftWorkspaceBanner
-            currentPublished={libraryWorkspace.currentPublished}
-            currentDraft={libraryWorkspace.currentDraft}
-            suggestedVersion={libraryWorkspace.suggestedVersion}
-            loading={libraryWorkspace.loading}
-            opening={libraryWorkspace.opening}
-            validating={libraryWorkspace.validating}
-            error={libraryWorkspace.error}
-            onOpenDraft={() => {
-              void libraryWorkspace.openDraft();
-            }}
-            onValidateDraft={() => {
-              void libraryWorkspace.validateDraft();
-            }}
-            onPublishClick={() => {
-              setLibraryPublishOpen(true);
-              void libraryWorkspace.requestDiff();
-            }}
-          />
-          <LibraryDraftValidationPanel
-            report={libraryWorkspace.currentValidation}
-            validating={libraryWorkspace.validating}
-          />
-          <LibraryPublishHistoryPanel
-            releases={libraryWorkspace.publishedReleases}
-          />
-          <LibraryConsumerViewPanel
-            pin={libraryWorkspace.consumerPin}
-            published={libraryWorkspace.publishedReleases}
-            profiles={libraryWorkspace.consumerProfiles}
-            loading={libraryWorkspace.consumerLoading}
-            error={libraryWorkspace.consumerError}
-            onPin={(releaseId) => libraryWorkspace.pinConsumerRelease(releaseId)}
-          />
-          <Modal
-            open={libraryPublishOpen && libraryWorkspace.currentDraft !== null}
-            onClose={() => {
-              if (!libraryWorkspace.publishing) setLibraryPublishOpen(false);
-            }}
-            title={
-              libraryWorkspace.currentDraft
-                ? `Publicar biblioteca v${libraryWorkspace.currentDraft.version}`
-                : 'Publicar biblioteca'
-            }
-            dataTestId="library-publish-modal"
-          >
-            <LibraryPublishConfirmContent
-              version={libraryWorkspace.currentDraft?.version ?? ''}
-              diff={libraryWorkspace.currentDiff}
-              loading={libraryWorkspace.diffLoading}
-              error={libraryWorkspace.error}
-              publishing={libraryWorkspace.publishing}
-              onCancel={() => setLibraryPublishOpen(false)}
-              onConfirm={() => {
-                void libraryWorkspace.publishDraft().then((published) => {
-                  if (published) setLibraryPublishOpen(false);
-                });
-              }}
-            />
-          </Modal>
-        </>
+      {/* #1184: en las superficies de autoría el stack de revisiones se
+          reduce a una línea contextual — el ciclo completo vive en el hub
+          Biblioteca (navId 'library'), no se repite por pantalla. */}
+      {libraryAuthoringSurface && libraryWorkspace.currentDraft && !libraryWorkspace.error ? (
+        <LibraryDraftContextLine
+          draftVersion={libraryWorkspace.currentDraft.version}
+          href={pathForNav('library')}
+        />
+      ) : null}
+      {navId === 'library' && isPlatformAdmin === true ? (
+        <LibraryWorkspaceScreen
+          onGoHome={goHomeFromScreen}
+          currentPublished={libraryWorkspace.currentPublished}
+          currentDraft={libraryWorkspace.currentDraft}
+          suggestedVersion={libraryWorkspace.suggestedVersion}
+          loading={libraryWorkspace.loading}
+          opening={libraryWorkspace.opening}
+          error={libraryWorkspace.error}
+          onOpenDraft={() => {
+            void libraryWorkspace.openDraft();
+          }}
+          onValidateDraft={() => {
+            void libraryWorkspace.validateDraft();
+          }}
+          publishedReleases={libraryWorkspace.publishedReleases}
+          currentValidation={libraryWorkspace.currentValidation}
+          validating={libraryWorkspace.validating}
+          currentDiff={libraryWorkspace.currentDiff}
+          diffLoading={libraryWorkspace.diffLoading}
+          onRequestDiff={() => {
+            void libraryWorkspace.requestDiff();
+          }}
+          publishing={libraryWorkspace.publishing}
+          onPublish={() => libraryWorkspace.publishDraft()}
+          consumerPin={libraryWorkspace.consumerPin}
+          consumerProfiles={libraryWorkspace.consumerProfiles}
+          consumerLoading={libraryWorkspace.consumerLoading}
+          consumerError={libraryWorkspace.consumerError}
+          onPinConsumer={(releaseId) => libraryWorkspace.pinConsumerRelease(releaseId)}
+        />
       ) : null}
       {navId === 'home' ? (
         <Dashboard

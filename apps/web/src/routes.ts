@@ -23,6 +23,7 @@ export const NAV_PATHS: Readonly<Record<AppNavId, string>> = {
   engineering: '/engineering',
   warehouseDashboard: '/warehouse-dashboard',
   warehouse: '/warehouse',
+  library: '/library',
   modules: '/modules',
   structures: '/structures',
   components: '/components',
@@ -55,6 +56,11 @@ export function navBlockedForSession(
   if (navId === 'platform') {
     return session !== 'auth' || !isPlatformAdmin;
   }
+  // #1184: el hub de la biblioteca es del bibliotecario (platform admin) —
+  // misma regla que /platform; el RBAC por roles no conoce este destino.
+  if (navId === 'library') {
+    return session !== 'auth' || !isPlatformAdmin;
+  }
   // Multi-role union (ADR-0005): accept a legacy single role too.
   const roleSet =
     typeof roles === 'string' ? [roles] : session === 'auth' ? (roles ?? []) : [];
@@ -67,6 +73,7 @@ export type EntitySection = Exclude<
   | 'home'
   | 'users'
   | 'platform'
+  | 'library'
   | 'settings'
   | 'showcase'
   | 'plantBoard'

@@ -487,6 +487,8 @@ export function AppContent({
     const ids = new Set(navIdsForRoles(session === 'auth' ? rolesOfUser(authUser ?? { role: null }) : []));
     if (session === 'auth' && authUser?.platform_admin) {
       ids.add('platform');
+      // #1184: el hub Biblioteca también es del bibliotecario.
+      ids.add('library');
     }
     return ids;
   }, [session, authUser]);

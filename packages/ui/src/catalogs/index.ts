@@ -96,3 +96,8 @@ export {
   LibraryConsumerViewPanel,
   type LibraryConsumerViewPanelProps,
 } from './LibraryConsumerViewPanel';
+
+export {
+  LibraryDraftContextLine,
+  type LibraryDraftContextLineProps,
+} from './LibraryDraftContextLine';
