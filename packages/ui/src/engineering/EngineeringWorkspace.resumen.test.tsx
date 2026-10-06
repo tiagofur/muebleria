@@ -5,12 +5,14 @@
  * vocabulary (common/statCard.css) with the engineering area variant
  * --eng, instead of the old local eng-resumen__stat family.
  */
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Project } from '@granete/domain';
 import type { ProductionOrderReadiness } from '../production/productionOrderModel';
 
 import { EngineeringWorkspace } from './EngineeringWorkspace';
+
+const onTabChange = vi.fn();
 
 afterEach(cleanup);
 
@@ -77,5 +79,51 @@ describe('EngineeringWorkspace — Resumen KPI stat cards (F111)', () => {
     // Old local stat family is gone.
     expect(container.querySelector('.eng-resumen__stat')).toBeNull();
     expect(container.querySelector('.eng-resumen__stat-icon')).toBeNull();
+  });
+
+  // #1183 P3: el tab activo se persiste en la URL — inicial desde `?tab=`
+  // (validado) y cada cambio notificado para escribirlo.
+  it('honors initialTab and reports tab changes', () => {
+    const { rerender } = render(
+      <EngineeringWorkspace
+        project={project}
+        modules={[]}
+        catalog={null}
+        cutRows={[]}
+        labels={[]}
+        hardwareRows={[]}
+        readiness={readiness}
+        onBack={() => undefined}
+        initialTab="despiece"
+        onTabChange={onTabChange}
+      />,
+    );
+    // Arranca en el tab de la URL…
+    expect(
+      screen.getByRole('tab', { name: 'Despiece' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    // …y un cambio notifica el nuevo tab.
+    fireEvent.click(screen.getByRole('tab', { name: 'Resumen' }));
+    expect(onTabChange).toHaveBeenCalledWith('resumen');
+
+    // Tab inválido por URL cae al resumen (fail-closed del deep link).
+    onTabChange.mockClear();
+    rerender(
+      <EngineeringWorkspace
+        project={project}
+        modules={[]}
+        catalog={null}
+        cutRows={[]}
+        labels={[]}
+        hardwareRows={[]}
+        readiness={readiness}
+        onBack={() => undefined}
+        initialTab="no-existe"
+        onTabChange={onTabChange}
+      />,
+    );
+    expect(
+      screen.getByRole('tab', { name: 'Resumen' }).getAttribute('aria-selected'),
+    ).toBe('true');
   });
 });

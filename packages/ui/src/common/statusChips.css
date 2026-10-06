@@ -50,3 +50,11 @@
     transform: none;
   }
 }
+
+/* #1183 P2 (paridad con buttons.css): target táctil de 44px en pantallas
+   táctiles — los chips de filtro son controles primarios en tablet de campo. */
+@media (hover: none) and (pointer: coarse) {
+  .ui-status-chips__chip {
+    min-height: var(--touch-min);
+  }
+}

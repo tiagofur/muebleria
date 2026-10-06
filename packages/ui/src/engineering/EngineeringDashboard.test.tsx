@@ -177,4 +177,77 @@ describe('EngineeringDashboard', () => {
     fireEvent.click(openBtns[0]!);
     expect(onOpen).toHaveBeenCalled();
   });
+  // #1183 P0: sin packs el KPI muestra «—» con causa, nunca un v1.0 fabricado.
+  it('marks the average-revision KPI as missing when no packs exist', () => {
+    const noPacks = mockProjects.filter((p) => p.id === 'p1');
+    render(
+      <EngineeringDashboard
+        projects={noPacks}
+        onOpenProject={vi.fn()}
+        onOpenQueue={vi.fn()}
+      />,
+    );
+    const kpi = screen.getByText('Revisiones promedio').parentElement!;
+    expect(kpi.textContent).toContain('—');
+    expect(kpi.textContent).toContain('sin packs generados aún');
+    expect(kpi.textContent).not.toContain('v1.0');
+  });
+
+  // #1183 P1: una obra sin log no inventa «Rev. 1».
+  it('shows Rev. — for works without an engineering log', () => {
+    render(
+      <EngineeringDashboard
+        projects={mockProjects}
+        onOpenProject={vi.fn()}
+        onOpenQueue={vi.fn()}
+      />,
+    );
+    const p1Row = screen.getByTestId('eng-row-p1');
+    expect(p1Row.textContent).toContain('Rev. —');
+    // Con log real, la revisión del log se muestra tal cual.
+    const p4Row = screen.getByTestId('eng-row-p4');
+    expect(p4Row.textContent).toContain('Rev. 2');
+  });
+
+  // #1183 P2: el período filtra por el inicio real de ingeniería; las obras
+  // sin log quedan fuera y se avisa, no se sustituye por createdAt.
+  it('period filter uses the real engineering start and discloses exclusions', () => {
+    render(
+      <EngineeringDashboard
+        projects={mockProjects}
+        onOpenProject={vi.fn()}
+        onOpenQueue={vi.fn()}
+      />,
+    );
+    // p1 no tiene engineeringLog: con «Mes actual» queda fuera y se avisa.
+    fireEvent.click(screen.getByRole('button', { name: 'Mes actual' }));
+    expect(screen.queryByTestId('eng-row-p1')).toBeNull();
+    expect(screen.getByTestId('eng-period-note').textContent).toContain(
+      'sin inicio de ingeniería',
+    );
+    // Volver a «Todos los períodos» la restaura (y el aviso desaparece).
+    fireEvent.click(screen.getByRole('button', { name: 'Todos los períodos' }));
+    expect(screen.getByTestId('eng-row-p1')).not.toBeNull();
+    expect(screen.queryByTestId('eng-period-note')).toBeNull();
+  });
+
+  // #1183 P3: salida honesta «Limpiar filtros» cuando nada coincide.
+  it('offers to clear filters from the empty table state', () => {
+    render(
+      <EngineeringDashboard
+        projects={mockProjects}
+        onOpenProject={vi.fn()}
+        onOpenQueue={vi.fn()}
+      />,
+    );
+    fireEvent.change(
+      screen.getByLabelText('Buscar en proyectos de ingeniería'),
+      { target: { value: 'zzz-sin-coincidencia' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(screen.getByTestId('eng-row-p1')).not.toBeNull();
+    expect(
+      (screen.getByLabelText('Buscar en proyectos de ingeniería') as HTMLInputElement).value,
+    ).toBe('');
+  });
 });

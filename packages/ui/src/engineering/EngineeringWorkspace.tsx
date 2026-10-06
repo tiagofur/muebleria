@@ -75,6 +75,11 @@ const ENGINEERING_TABS = [
 
 type EngineeringTab = (typeof ENGINEERING_TABS)[number];
 
+/** #1183 P3: valida el tab que llega por URL (`?tab=`). */
+export function isEngineeringTab(value: string | null | undefined): value is EngineeringTab {
+  return (ENGINEERING_TABS as readonly string[]).includes(value ?? '');
+}
+
 const TAB_LABELS: Readonly<Record<EngineeringTab, string>> = {
   resumen: 'Resumen',
   modulos: 'Módulos',
@@ -161,6 +166,16 @@ const LIVE_TAB_NOUN_ES: Readonly<Partial<Record<EngineeringTab, string>>> = {
   optimizacion: 'la optimización',
 };
 
+/** #1183 P3: remate específico por tab — el genérico de despiece mentía en
+    tabs que no leen el despiece (documentos, resumen, herrajes…). */
+const LIVE_TAB_CAVEAT_ES: Readonly<Partial<Record<EngineeringTab, string>>> = {
+  despiece: 'El despiece exacto de esta liberación no está disponible aún.',
+  optimizacion: 'La optimización exacta de esta liberación no está disponible aún.',
+  etiquetas: 'Las etiquetas de la liberación se generan desde sus documentos.',
+  herrajes: 'El listado de herrajes de esta liberación vive en sus documentos.',
+  vistas: 'Las vistas congeladas de la liberación no están disponibles aún.',
+};
+
 /* ── Main workspace ─────────────────────────────────────────────────────── */
 
 export function EngineeringWorkspace({
@@ -178,6 +193,8 @@ export function EngineeringWorkspace({
   hardwareRows,
   hardwareError,
   customerLabel,
+  initialTab,
+  onTabChange,
   defaultCutStrategy,
   onBack,
   resolveMediaUrl,
@@ -243,6 +260,10 @@ export function EngineeringWorkspace({
   readonly hardwareRows: readonly HardwarePurchaseRow[] | null;
   readonly hardwareError?: string | null;
   readonly customerLabel?: string;
+  /** #1183 P3: tab inicial desde la URL (`?tab=`); inválido → resumen. */
+  readonly initialTab?: string;
+  /** Notifica el tab activo para persistirlo en la URL. */
+  readonly onTabChange?: (tab: EngineeringTab) => void;
   /** Workshop-level cut strategy default (F133) passed to the Optimización tab. */
   readonly defaultCutStrategy?: import('@granete/domain').CutStrategy;
   readonly onBack: () => void;
@@ -337,7 +358,15 @@ export function EngineeringWorkspace({
   readonly releaseEngineeringBusy?: boolean;
   readonly releaseEngineeringError?: string | null;
 }): ReactNode {
-  const [activeTab, setActiveTab] = useState<EngineeringTab>('resumen');
+  const [activeTab, setActiveTabState] = useState<EngineeringTab>(
+    isEngineeringTab(initialTab) ? initialTab : 'resumen',
+  );
+  // #1183 P3: el tab activo se persiste en la URL (con replace, sin ruido
+  // de historial); recargar mantiene el tab donde estaba.
+  const setActiveTab = (tab: EngineeringTab) => {
+    setActiveTabState(tab);
+    onTabChange?.(tab);
+  };
 
   // #738 — canonical obra: the release context governs presentation. The
   // legacy per-project log actions are not offered and the live-data
@@ -380,7 +409,7 @@ export function EngineeringWorkspace({
           busy: releaseEngineeringBusy,
           testId: 'eng-start-engineering',
           title:
-            'Registra el inicio de la preparación de Ingeniería para esta liberación (quién/cuándo, autoridad del servidor)',
+            'Registrá el inicio de la preparación de Ingeniería para esta liberación (quién/cuándo, autoridad del servidor)',
         }
       : fabFlow.nextAction === 'complete-engineering' && onCompleteReleaseEngineering
         ? {
@@ -389,7 +418,7 @@ export function EngineeringWorkspace({
             busy: releaseEngineeringBusy,
             testId: 'eng-complete-engineering',
             title:
-              'Confirma que la preparación de esta liberación terminó. Es final, con actor y fecha del servidor. No autoriza materiales ni inicia producción.',
+              'Confirmá que la preparación de esta liberación terminó. Es final, con actor y fecha del servidor. No autoriza materiales ni inicia producción.',
           }
         : fabFlow.nextAction === 'prepare-materials' && onAuthorizeMaterials
           ? {
@@ -519,7 +548,7 @@ export function EngineeringWorkspace({
             data-testid="eng-send-to-production"
             title={
               canSendToProduction(project)
-                ? 'Registra el envío en el log de ingeniería (quién/cuándo/rev.) y pasa la obra a Almacén'
+                ? 'Registrá el envío en el log de ingeniería (quién/cuándo/rev.) y pasa la obra a Almacén'
                 : 'Primero marcá la ingeniería como documentada (generar documentos)'
             }
           >
@@ -613,7 +642,7 @@ export function EngineeringWorkspace({
       {hasReleaseContext && !tabUsesFrozenContent && activeTab !== 'documentos' ? (
         <p className="eng-workspace__live-notice eng-workspace__live-notice--compact" data-testid="eng-live-view-notice">
           <span className="eng-workspace__live-notice-icon" aria-hidden>ⓘ</span>
-          Vista provisional: {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} calculados desde el proyecto/catálogo actuales. El despiece exacto de esta liberación no está disponible aún.
+          Vista provisional: {LIVE_TAB_NOUN_ES[activeTab] ?? 'estos datos'} calculados desde el proyecto/catálogo actuales. {LIVE_TAB_CAVEAT_ES[activeTab] ?? 'El contenido congelado de la liberación vive en sus documentos.'}
         </p>
       ) : null}
 

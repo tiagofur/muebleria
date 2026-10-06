@@ -173,7 +173,8 @@ export interface EngineeringDashboardProjectMetrics {
   readonly startedAt?: string;
   readonly generatedAt?: string;
   readonly sentToProductionAt?: string;
-  readonly revision: number;
+  /** Contador real del log; null = obra sin log todavía (no fabricar la 1). */
+  readonly revision: number | null;
   readonly waitTimeHours?: number;
   readonly cycleTimeHours?: number;
   readonly moduleCount: number;
@@ -388,7 +389,7 @@ export function computeEngineeringDashboardStats(
       generatedAt:
         durable?.status === 'completed' ? durable.completedAt : log?.generatedAt,
       sentToProductionAt: log?.sentToProductionAt,
-      revision: log?.revision ?? 1,
+      revision: log?.revision ?? null,
       waitTimeHours,
       cycleTimeHours,
       moduleCount,

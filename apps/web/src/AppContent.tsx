@@ -781,6 +781,7 @@ export function AppContent({
       : null;
   const routeEngineeringProjectId = routeEngineeringProject?.projectId ?? null;
   const routeEngineeringReleaseId = routeEngineeringProject?.releaseId ?? null;
+  const routeEngineeringTab = routeEngineeringProject?.tab ?? null;
   // Fase 3 UI: editor routes /section/:id/edit (separate from view /section/:id).
   const routeModuleEditId =
     navId === 'modules' ? moduleEditIdFromPath(location.pathname) : null;
@@ -1948,6 +1949,7 @@ export function AppContent({
     routeComponentId,
     routeEngineeringProjectId,
     routeEngineeringReleaseId,
+    routeEngineeringTab,
     routeEntityId,
     routeModuleEditId,
     routeModuleId,

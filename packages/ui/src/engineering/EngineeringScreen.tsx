@@ -43,7 +43,7 @@ const STATUS_CHIP_OPTIONS: readonly StatusChipOption<FilterStatus>[] = [
   { value: 'all', label: 'Todos' },
   { value: 'pending', label: 'Pendientes' },
   { value: 'in_progress', label: 'En proceso' },
-  { value: 'completed', label: 'Completas' },
+  { value: 'completed', label: 'Completados' },
   { value: 'documented', label: 'Documentados' },
   { value: 'unverified', label: 'Sin verificar' },
 ];
@@ -121,11 +121,11 @@ export function EngineeringScreen({
           onOpenDashboard ? (
             <button
               type="button"
-              className="btn btn--secondary btn--small"
+              className="btn btn--small"
               onClick={onOpenDashboard}
               data-testid="eng-goto-dashboard"
             >
-              <LayoutDashboard size={14} strokeWidth={1.5} />
+              <LayoutDashboard size={14} strokeWidth={1.5} aria-hidden />
               Dashboard
             </button>
           ) : undefined
@@ -188,15 +188,15 @@ export function EngineeringScreen({
                   className="eng-project-card__body"
                   onClick={() => onOpenProject(project.id)}
                 >
-                  <div className="eng-project-card__main">
+                  <span className="eng-project-card__main">
                     <span className="eng-project-card__name">{project.name}</span>
                     {project.customerLabel ? (
                       <span className="eng-project-card__customer">
                         {project.customerLabel}
                       </span>
                     ) : null}
-                  </div>
-                  <div className="eng-project-card__meta">
+                  </span>
+                  <span className="eng-project-card__meta">
                     {canonical ? (
                       <span
                         className="eng-project-card__revision"
@@ -206,20 +206,20 @@ export function EngineeringScreen({
                       </span>
                     ) : null}
                     {log?.startedAt ? (
-                      <div className="eng-project-card__date-block">
+                      <span className="eng-project-card__date-block">
                         <span className="eng-project-card__date-label">Inicio</span>
                         <span className="eng-project-card__date-value">
                           {new Date(log.startedAt).toLocaleDateString('es-AR')}
                         </span>
-                      </div>
+                      </span>
                     ) : null}
                     {log?.generatedAt ? (
-                      <div className="eng-project-card__date-block">
+                      <span className="eng-project-card__date-block">
                         <span className="eng-project-card__date-label">Docs</span>
                         <span className="eng-project-card__date-value">
                           {new Date(log.generatedAt).toLocaleDateString('es-AR')}
                         </span>
-                      </div>
+                      </span>
                     ) : null}
                     {log?.revision ? (
                       <span className="eng-project-card__revision">
@@ -233,7 +233,7 @@ export function EngineeringScreen({
                     {status === 'pending' && !canonical && (
                       <span className="eng-project-card__start-slot" aria-hidden />
                     )}
-                  </div>
+                  </span>
                 </button>
                 {status === 'pending' && !canonical && (
                   <button
@@ -241,7 +241,7 @@ export function EngineeringScreen({
                     className="btn btn--primary btn--small eng-project-card__start"
                     onClick={(e) => { e.stopPropagation(); onStartEngineering(project.id); }}
                   >
-                    <FileText size={14} strokeWidth={1.5} />
+                    <FileText size={14} strokeWidth={1.5} aria-hidden />
                     Iniciar
                   </button>
                 )}
@@ -269,15 +269,15 @@ export function EngineeringScreen({
                   className="eng-project-card__body"
                   onClick={() => onOpenProject(project.id)}
                 >
-                  <div className="eng-project-card__main">
+                  <span className="eng-project-card__main">
                     <span className="eng-project-card__name">{project.name}</span>
                     {project.customerLabel ? (
                       <span className="eng-project-card__customer">
                         {project.customerLabel}
                       </span>
                     ) : null}
-                  </div>
-                  <div className="eng-project-card__meta">
+                  </span>
+                  <span className="eng-project-card__meta">
                     {project.engineeringLog?.sentToProductionAt ? (
                       <span className="eng-project-card__date-value">
                         Enviada{' '}
@@ -286,15 +286,16 @@ export function EngineeringScreen({
                         ).toLocaleDateString('es-AR')}
                       </span>
                     ) : null}
+                    {/* #1183 P3: almacén es etapa activa, no cancelada. */}
                     <span
-                      className={`status-badge status-badge--${project.materialsRelease ? 'progress' : 'cancelled'}`}
+                      className={`status-badge status-badge--${project.materialsRelease ? 'done' : 'progress'}`}
                     >
                       <span className="status-badge__dot" aria-hidden>●</span>
                       {project.materialsRelease
                         ? 'En producción'
                         : 'En almacén'}
                     </span>
-                  </div>
+                  </span>
                 </button>
               </li>
             ))}

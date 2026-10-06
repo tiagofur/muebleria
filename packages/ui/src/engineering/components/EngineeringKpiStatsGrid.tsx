@@ -126,15 +126,17 @@ export function EngineeringKpiStatsGrid({
 
             <div className="eng-dashboard__cycle-item">
               <span className="eng-dashboard__cycle-value">
+                {/* #1183 P0: sin packs no hay promedio — «—», nunca un v1.0 fabricado. */}
                 {stats.avgRevisionCount !== null
                   ? `v${stats.avgRevisionCount}`
-                  : 'v1.0'}
+                  : '—'}
               </span>
               <span className="eng-dashboard__cycle-label">
                 Revisiones promedio
                 <span className="eng-dashboard__cycle-sub">
-                  {' '}
-                  (packs generados por obra)
+                  {stats.avgRevisionCount !== null
+                    ? ' (packs generados por obra)'
+                    : ' (sin packs generados aún)'}
                 </span>
               </span>
             </div>

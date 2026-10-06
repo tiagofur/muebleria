@@ -118,6 +118,18 @@ describe('EngineeringWorkspace — exact release context (#738)', () => {
     render(<EngineeringWorkspace {...baseProps} releaseContext={readyContext} />);
     const notice = screen.getByTestId('eng-live-view-notice');
     expect(notice.textContent).toContain('Vista provisional');
+    // #1183 P3: el remate es específico por tab — en Resumen no menciona el
+    // despiece (que este tab no lee); apunta a los documentos de la lib.
+    expect(notice.textContent).toContain(
+      'El contenido congelado de la liberación vive en sus documentos',
+    );
+    expect(notice.textContent).not.toContain('despiece exacto');
+  });
+
+  it('names the despiece caveat only on the despiece tab (#1183)', () => {
+    render(<EngineeringWorkspace {...baseProps} releaseContext={readyContext} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Despiece' }));
+    const notice = screen.getByTestId('eng-live-view-notice');
     expect(notice.textContent).toContain(
       'El despiece exacto de esta liberación no está disponible aún',
     );

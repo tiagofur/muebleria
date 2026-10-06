@@ -50,10 +50,11 @@ export function EngineeringStagnantAlerts({
             </div>
             <button
               type="button"
-              className="btn btn--secondary btn--small"
+              className="btn btn--small"
               onClick={() => onOpenProject(alert.projectId)}
+              aria-label={`Abrir obra estancada ${alert.projectName}`}
             >
-              Abrir obra <ArrowRight size={12} strokeWidth={1.5} />
+              Abrir obra <ArrowRight size={12} strokeWidth={1.5} aria-hidden />
             </button>
           </li>
         ))}
