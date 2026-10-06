@@ -1,9 +1,10 @@
 /**
  * Production Manager Dashboard (gerente_produccion).
  *
- * Full visibility across all production areas: queues, active operators,
- * machine status, metrics, and time tracking. Allows moving items between
- * queues, reassigning operators, and changing priorities.
+ * Read-only monitoring across all production areas: queues per sector,
+ * active operators, metrics and the project list with per-sector progress.
+ * Mutations (moving items, reassigning operators) live in the floor screens,
+ * not here.
  *
  * Distinct from PlantBoardScreen (F093) which is read-only for all roles.
  */
@@ -111,10 +112,23 @@ export function ProductionManagerDashboard({
       totalItems,
       totalInstalled,
       avgProgress,
-      todayCompleted: 0,
-      todayDamages: 0,
+      // #1173 P0: sin servidor no hay «completados hoy» — las marcas de
+      // tiempo de actividad no se pueden derivar del proyecto local.
+      todayCompleted: null,
+      todayDamages: null,
     };
   }, [metrics, productionProjects]);
+
+  // #1173 P1: el filtro de sector también recorta la tabla de obras —
+  // quedan las que tienen trabajo pendiente en ese sector.
+  const filteredProjects = useMemo(() => {
+    if (selectedSector === 'all') return productionProjects;
+    return productionProjects.filter(({ summary }) =>
+      summary.stages.some(
+        (s) => s.sector === selectedSector && s.total > 0 && s.done < s.total,
+      ),
+    );
+  }, [productionProjects, selectedSector]);
 
   // Use backend sector data if available, fallback to local
   const sectorStatuses = useMemo(() => {
@@ -150,7 +164,9 @@ export function ProductionManagerDashboard({
     });
   }, [activeJobs, selectedSector, sectorStatuses]);
 
-  if (loading) {
+  // #1173 P1: stale-while-revalidate — el refresco no borra la pantalla;
+  // el spinner completo sólo cubre la primera carga (sin datos aún).
+  if (loading && !metrics) {
     return (
       <section
         className="pm-dashboard"
@@ -170,7 +186,7 @@ export function ProductionManagerDashboard({
     );
   }
 
-  if (error) {
+  if (error && !metrics) {
     return (
       <section
         className="pm-dashboard"
@@ -179,7 +195,10 @@ export function ProductionManagerDashboard({
       >
         <div className="pm-dashboard__error" role="alert">
           <AlertTriangle size={32} strokeWidth={1.5} aria-hidden />
-          <p>Error al cargar el dashboard: {error}</p>
+          <p>No pudimos cargar los datos de producción.</p>
+          {error ? (
+            <p className="pm-dashboard__error-detail">{error}</p>
+          ) : null}
           <button type="button" onClick={refresh} className="btn btn--primary">
             Reintentar
           </button>
@@ -192,6 +211,7 @@ export function ProductionManagerDashboard({
     <section
       className="pm-dashboard"
       aria-label="Dashboard del Gerente de Producción"
+      aria-busy={loading}
       data-testid={testId}
     >
       <PageHeader
@@ -200,7 +220,12 @@ export function ProductionManagerDashboard({
         icon={<BarChart3 size={16} strokeWidth={1.5} />}
         secondaryActions={
           <>
-            <button type="button" className="btn" onClick={refresh}>
+            <button
+              type="button"
+              className="btn"
+              onClick={refresh}
+              disabled={loading}
+            >
               <RefreshCw size={16} strokeWidth={1.5} aria-hidden />
               Actualizar
             </button>
@@ -216,6 +241,13 @@ export function ProductionManagerDashboard({
           </>
         }
       />
+
+      {/* Refresco fallido con datos stale: aviso honesto sobre el contenido. */}
+      {error ? (
+        <div className="pm-dashboard__error-banner" role="alert">
+          No pudimos actualizar los datos; mostramos la última versión cargada.
+        </div>
+      ) : null}
 
       {/* Summary Cards */}
       <div className="pm-dashboard__summary">
@@ -247,9 +279,14 @@ export function ProductionManagerDashboard({
           </div>
           <div className="stat-card__body">
             <span className="stat-card__value">
-              {totalMetrics.todayCompleted}
+              {totalMetrics.todayCompleted ?? '—'}
             </span>
             <span className="stat-card__label">Completados Hoy</span>
+            {totalMetrics.todayCompleted == null ? (
+              <span className="stat-card__subtext">
+                sin registro del servidor
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -259,7 +296,7 @@ export function ProductionManagerDashboard({
           </div>
           <div className="stat-card__body">
             <span className="stat-card__value">
-              {totalMetrics.avgProgress.toFixed(2)}%
+              {Math.round(totalMetrics.avgProgress)}%
             </span>
             <span className="stat-card__label">Avance Promedio</span>
           </div>
@@ -271,14 +308,14 @@ export function ProductionManagerDashboard({
         selectedSector={selectedSector}
         onSelectSector={setSelectedSector}
         showMetrics={showMetrics}
-        todayCompleted={totalMetrics.todayCompleted ?? 0}
-        todayDamages={totalMetrics.todayDamages ?? 0}
+        todayDamages={totalMetrics.todayDamages}
       />
 
       <ProductionManagerActiveJobs jobs={filteredJobs} />
 
       <ProductionManagerProjectsTable
-        productionProjects={productionProjects}
+        productionProjects={filteredProjects}
+        selectedSector={selectedSector === 'all' ? null : selectedSector}
         customerLabelFor={customerLabelFor}
         onOpenProject={onOpenProject}
         onOpenOrder={onOpenOrder}

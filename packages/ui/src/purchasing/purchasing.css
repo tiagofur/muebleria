@@ -217,18 +217,18 @@
 }
 
 .purch-stock-chip--ok {
-  background: hsl(142 60% 92%);
-  color: hsl(142 50% 30%);
+  background: var(--success-50);
+  color: var(--success-700);
 }
 
 .purch-stock-chip--bajo {
-  background: hsl(38 100% 91%);
-  color: hsl(35 90% 32%);
+  background: var(--warning-50);
+  color: var(--warning-700);
 }
 
 .purch-stock-chip--agotado {
-  background: hsl(0 70% 94%);
-  color: hsl(0 70% 40%);
+  background: var(--danger-50);
+  color: var(--danger-700);
 }
 
 .purch-stock-chip--none {
@@ -258,9 +258,9 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  background: hsl(38 100% 93%);
-  border: 1px solid hsl(35 90% 75%);
-  color: hsl(35 90% 30%);
+  background: var(--warning-50);
+  border: 1px solid color-mix(in srgb, var(--warning-700) 35%, transparent);
+  color: var(--warning-700);
   font-size: var(--text-base);
   font-weight: 600;
 }
@@ -483,6 +483,13 @@
 
 .purch-card--inactive {
   opacity: 0.62;
+}
+
+/* #1173 P0: resaltado temporal del card enfocado por el deep link del
+   dashboard de almacén («Ver picking»). */
+.purch-card--focus {
+  border-color: var(--border-brand);
+  box-shadow: 0 0 0 3px var(--surface-selected);
 }
 
 .purch-po-line-state {

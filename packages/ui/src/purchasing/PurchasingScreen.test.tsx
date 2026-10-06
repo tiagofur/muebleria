@@ -427,6 +427,8 @@ it('shows canonical planning without presenting mutable picking quantities', () 
 
 
 describe('Almacén S10 (#1165)', () => {
+  afterEach(cleanup);
+
   it('P0: «sin registro» distingue material no trackeado de agotado', () => {
     render(<PurchasingScreen projects={projects} role="almacen" />);
     // Sin stock prop: los chips muestran «sin registro» (no «sin stock»).
@@ -459,5 +461,26 @@ describe('Almacén S10 (#1165)', () => {
     expect(lines.length).toBeGreaterThan(0);
     const input = lines[0]!.querySelector('input[type="checkbox"]');
     expect(input).not.toBeNull();
+  });
+
+  it('P0 #1173: el deep link del dashboard enfoca el picking de la obra', () => {
+    sessionStorage.setItem('warehouse_picking_focus', 'p2');
+    render(<PurchasingScreen projects={projects} role="almacen" />);
+    // El handoff se consume (una sola vez) y el card de p2 queda resaltado.
+    expect(sessionStorage.getItem('warehouse_picking_focus')).toBeNull();
+    const p2Card = screen.getByTestId('purch-project-p2');
+    expect(p2Card.className).toContain('purch-card--focus');
+    // El resto de los cards no llevan el resaltado.
+    expect(screen.getByTestId('purch-project-p1').className).not.toContain(
+      'purch-card--focus',
+    );
+  });
+
+  it('P0 #1173: handoff de obra desconocida es un no-op honesto', () => {
+    sessionStorage.setItem('warehouse_picking_focus', 'p-desconocida');
+    render(<PurchasingScreen projects={projects} role="almacen" />);
+    // La key se limpia igualmente y ningún card queda resaltado.
+    expect(sessionStorage.getItem('warehouse_picking_focus')).toBeNull();
+    expect(document.querySelectorAll('.purch-card--focus').length).toBe(0);
   });
 });

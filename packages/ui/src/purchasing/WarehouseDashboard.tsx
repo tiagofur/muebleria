@@ -331,13 +331,13 @@ export function WarehouseDashboard({
             <table className="table" data-testid="wh-projects-table">
               <thead>
                 <tr>
-                  <th>Obra / Proyecto</th>
-                  <th>Herrajes</th>
-                  <th>Tableros</th>
-                  <th>Cintillas</th>
-                  <th>Material Completo</th>
-                  <th className="table__cell--numeric">Días</th>
-                  <th className="table__cell--actions">Acciones</th>
+                  <th scope="col">Obra / Proyecto</th>
+                  <th scope="col">Herrajes</th>
+                  <th scope="col">Tableros</th>
+                  <th scope="col">Cintillas</th>
+                  <th scope="col">Material Completo</th>
+                  <th scope="col" className="table__cell--numeric">Días</th>
+                  <th scope="col" className="table__cell--actions">Acciones</th>
                 </tr>
               </thead>
               <tbody>
