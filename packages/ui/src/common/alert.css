@@ -1,0 +1,45 @@
+/**
+ * Alert banners — shared styles for `alert` / `alert--danger|warning|info`.
+ * #1142: las clases eran fantasma (0 definiciones en el repo) — error y
+ * banner de handoff renderizaban como texto plano sin tratamiento visual.
+ */
+
+.alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.alert > span {
+  min-width: 0;
+}
+
+.alert--danger {
+  background: color-mix(in srgb, var(--danger-500) 12%, var(--surface-card));
+  border: 1px solid color-mix(in srgb, var(--danger-500) 35%, transparent);
+  color: var(--text-primary);
+}
+
+.alert--warning {
+  background: color-mix(in srgb, var(--warning-500) 14%, var(--surface-card));
+  border: 1px solid color-mix(in srgb, var(--warning-500) 40%, transparent);
+  color: var(--text-primary);
+}
+
+.alert--info {
+  background: color-mix(in srgb, var(--brand-500) 10%, var(--surface-card));
+  border: 1px solid color-mix(in srgb, var(--brand-400) 35%, transparent);
+  color: var(--text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alert {
+    transition: none;
+  }
+}

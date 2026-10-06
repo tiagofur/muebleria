@@ -55,6 +55,7 @@ import {
 } from '../common';
 import { demoExperience } from '../demoExperience';
 import '../catalogs/catalogs.css';
+import '../common/alert.css';
 import { ExportIssueList } from './ExportIssueList';
 import { ProjectDetailView } from './components/ProjectDetailView';
 import { projectAllowsProductionChrome } from './components/projectDetailContext';

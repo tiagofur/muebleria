@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { EmptyState, FullscreenDialog, SearchInput, useDebouncedValue } from '../common';
 import './projectsPortfolio.css';
+import '../common/alert.css';
 
 export interface ProjectsPortfolioViewProps {
   readonly photos: readonly ShowcasePhotoItem[];

@@ -55,6 +55,7 @@ import { RevisionSnapshotItemsPanel } from './RevisionSnapshotItemsPanel';
 import { DesignWorkingMaterialsPanel } from './DesignWorkingMaterialsPanel';
 import { JoineryResolveSection, type JoineryResolveItem } from './JoineryResolveSection';
 import './digitalThread.css';
+import '../common/alert.css';
 
 /**
  * #501 / WEB-DT-2 — Designs, immutable revisions and 3D artifact history.

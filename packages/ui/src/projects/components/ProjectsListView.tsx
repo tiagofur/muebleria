@@ -9,6 +9,7 @@
  * cards and offers filter recovery while results are on screen. It describes
  * the navigation set only — never commercial dataset truth.
  */
+import '../../common/alert.css';
 
 import { useEffect, useState, type ReactNode } from 'react';
 import {
