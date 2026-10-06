@@ -117,6 +117,8 @@ export function InstallationJobPanel({
   const [punchOwner, setPunchOwner] = useState('');
   const [punchDueDate, setPunchDueDate] = useState('');
   const [punchSeverity, setPunchSeverity] = useState<PunchSeverity>('major');
+  // #1169 P1: confirmación de dos pasos para el cierre destructivo de obra.
+  const [closeConfirm, setCloseConfirm] = useState(false);
   const [punchIsBlocker, setPunchIsBlocker] = useState(true);
   const [closingPunchId, setClosingPunchId] = useState<string | null>(null);
   const [closePunchNotes, setClosePunchNotes] = useState('');
@@ -611,14 +613,38 @@ export function InstallationJobPanel({
               </div>
             ) : null}
             {canCloseout && view.closeoutSigned && !view.closed ? (
-              <button
-                type="button"
-                className="btn btn--small btn--danger"
-                onClick={() => handlers.onCloseProject?.(projectId)}
-                data-testid={`installation-close-${projectId}`}
-              >
-                Cerrar proyecto
-              </button>
+              closeConfirm ? (
+                <span className="installation-closeout__confirm" role="alert" data-testid={`installation-close-confirm-${projectId}`}>
+                  <span>¿Cerrar esta obra?</span>
+                  <button
+                    type="button"
+                    className="btn btn--small btn--danger"
+                    onClick={() => {
+                      handlers.onCloseProject?.(projectId);
+                      setCloseConfirm(false);
+                    }}
+                    data-testid={`installation-close-confirm-${projectId}`}
+                  >
+                    Sí, cerrar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--small btn--ghost"
+                    onClick={() => setCloseConfirm(false)}
+                  >
+                    Cancelar
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn--small btn--danger"
+                  onClick={() => setCloseConfirm(true)}
+                  data-testid={`installation-close-${projectId}`}
+                >
+                  Cerrar proyecto
+                </button>
+              )
             ) : null}
           </div>
         )}
