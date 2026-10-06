@@ -141,16 +141,26 @@ func validateDraftCompile(release *domain.LibraryRelease, catalog domain.Catalog
 // assembled catalog through the plugin-insertion engine.
 func validateDraftFurniture(catalog domain.Catalog) DraftFurnitureCheck {
 	modules := catalog.Modules
-	// The engine accepts nil dims/choices: the module's own dimensions and its
-	// catalog defaults — what a consumer gets before touching any dialog.
+	// The engine accepts nil dims: the module's own dimensions — what a
+	// consumer gets before touching any dialog. Hardware choices are seeded
+	// like the insertion configurator does (#1174): first ACTIVE member of
+	// every kind=hardware group. Since #1046/#1146 a required hardware group
+	// without a choice fails the resolve closed by design — the concrete
+	// model is the consumer's pick, never the release's — so the old
+	// nil-choices baseline failed every definition that consumes one. A
+	// required group with no active member still fails: a real catalog
+	// defect the report must surface (the configurator blocks Insert with a
+	// reason in that case). Board-kind roles stay unseeded: an unchosen
+	// board role keeps its deterministic fallback, exactly as before.
 
 	check := DraftFurnitureCheck{Failures: []DraftFurnitureFailure{}}
+	choices := defaultHardwareChoices(catalog)
 	// Modules carry no active flag (hard delete owns retirement): every
 	// module row in the caller's catalog IS the draft's furniture surface.
 	for i := range modules {
 		module := &modules[i]
 		check.Total++
-		if _, err := engine.ResolveFurnitureLayout(*module, catalog, nil, nil); err != nil {
+		if _, err := engine.ResolveFurnitureLayout(*module, catalog, nil, choices); err != nil {
 			check.Failed++
 			check.Failures = append(check.Failures, DraftFurnitureFailure{
 				ID:    module.ID,
@@ -163,4 +173,36 @@ func validateDraftFurniture(catalog domain.Catalog) DraftFurnitureCheck {
 		check.Resolved++
 	}
 	return check
+}
+
+// defaultHardwareChoices seeds every kind=hardware option group with its
+// first ACTIVE member — the same default the insertion configurator
+// preselects before Insert (seedLibraryHardwareChoices: optionIds[0] of the
+// active-filtered role). Groups with no active member stay unseeded:
+// required ones fail the resolve closed (a real catalog defect) and
+// optional ones keep the engine's drop-the-placement semantics. Board-kind
+// groups are never seeded — board roles own their deterministic fallback.
+func defaultHardwareChoices(catalog domain.Catalog) map[string]string {
+	active := make(map[string]bool, len(catalog.Hardware))
+	for _, h := range catalog.Hardware {
+		if h.Active {
+			active[h.ID] = true
+		}
+	}
+	choices := make(map[string]string)
+	for _, g := range catalog.OptionGroups {
+		if g.Kind != "hardware" {
+			continue
+		}
+		for _, optionID := range g.OptionIDs {
+			if active[optionID] {
+				choices[g.Code] = optionID
+				break
+			}
+		}
+	}
+	if len(choices) == 0 {
+		return nil
+	}
+	return choices
 }
