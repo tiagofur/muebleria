@@ -371,6 +371,44 @@ test('setStatus shows the taller row by organization name when scoped', () => {
   assert.strictEqual(el(sb, 'session-user-name').textContent, '--');
 });
 
+// #1160: the Biblioteca row mirrors the consumer's local library pin
+// (LibraryStore) — never the plugin build, never an invented version.
+test('setStatus renders the Biblioteca row from the synced release version', () => {
+  const sb = runModule();
+  sb.window.GraneteUI.account.setStatus({
+    state: 'logged_in',
+    user: { name: 'Ana', email: 'ana@taller.com' },
+    library: { devMode: false, releaseId: '6f1d2c3a-0000-0000-0000-000000000001', version: '0.3.4' }
+  });
+  assert.strictEqual(el(sb, 'session-library').textContent, 'v0.3.4');
+});
+
+test('Biblioteca row distinguishes dev mode, live catalog and missing values', () => {
+  const sb = runModule();
+  sb.window.GraneteUI.account.setStatus({
+    state: 'logged_in',
+    library: { devMode: true, releaseId: null, version: null }
+  });
+  assert.strictEqual(el(sb, 'session-library').textContent, 'Modo desarrollo');
+
+  sb.window.GraneteUI.account.setStatus({
+    state: 'logged_in',
+    library: { devMode: false, releaseId: null, version: null }
+  });
+  assert.strictEqual(el(sb, 'session-library').textContent, 'Catálogo vivo');
+
+  sb.window.GraneteUI.account.setStatus({
+    state: 'logged_in',
+    library: { devMode: false, releaseId: 'r-unreadable', version: null }
+  });
+  assert.strictEqual(el(sb, 'session-library').textContent, '--',
+    'a pointer without a readable manifest is a missing value, not a version');
+
+  sb.window.GraneteUI.account.setStatus({ state: 'logged_in' });
+  assert.strictEqual(el(sb, 'session-library').textContent, '--',
+    'no library payload renders the unknown placeholder');
+});
+
 // --- enrollment lifecycle ---
 
 test('login click without a server shows the error and never calls Ruby', () => {

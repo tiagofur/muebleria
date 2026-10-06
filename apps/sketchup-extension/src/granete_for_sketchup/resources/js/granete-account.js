@@ -56,6 +56,7 @@
   var sessionOrgName = document.getElementById("session-org-name");
   var sessionServer = document.getElementById("session-server");
   var sessionLicense = document.getElementById("session-license");
+  var sessionLibrary = document.getElementById("session-library");
 
   var accountPopover = document.getElementById("account-popover");
   var accountCloseBtn = document.getElementById("btn-close");
@@ -141,6 +142,25 @@
     }
   }
 
+  // #1160: la fila Biblioteca refleja el pin local del consumidor
+  // (LibraryStore), nunca el build del plugin ni una versión inventada.
+  // Sin payload es un valor desconocido (--); cada estado del pin es
+  // explícito y un puntero sin manifest legible no muestra versión.
+  function renderSessionLibrary(library) {
+    if (!sessionLibrary) return;
+    if (!library) {
+      sessionLibrary.textContent = "--";
+    } else if (library.devMode) {
+      sessionLibrary.textContent = "Modo desarrollo";
+    } else if (library.version) {
+      sessionLibrary.textContent = "v" + String(library.version);
+    } else if (library.releaseId) {
+      sessionLibrary.textContent = "--";
+    } else {
+      sessionLibrary.textContent = "Catálogo vivo";
+    }
+  }
+
   function setStatus(status) {
     status = status || {};
     if (status.heading) connectionHeading.textContent = String(status.heading);
@@ -170,6 +190,7 @@
       renderSessionOrganization(status.organization);
       sessionServer.textContent = status.server_url || "--";
       renderSessionLicense(status.license);
+      renderSessionLibrary(status.library);
     }
   }
 
