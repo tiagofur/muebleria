@@ -302,7 +302,12 @@
     btnDesignSync.disabled = true;
     btnDesignSync.textContent = "Sincronizando…";
     if (window.sketchup && window.sketchup.synchronize_design) {
-      window.sketchup.synchronize_design();
+      // #1177 smoke fix: the auto sync must never carry removal intents —
+      // a deleted component's recovery lane (↶ Restaurar posición) dies the
+      // moment the Working Copy drops the item, and 1.5s is no recovery
+      // window at all. Ruby withholds removals for auto: true; the explicit
+      // "Sincronizar diseño" keeps them.
+      window.sketchup.synchronize_design(JSON.stringify({ isAuto: isAuto }));
     } else {
       designSyncBusy = false;
       isAutoSyncInFlight = false;
@@ -514,77 +519,115 @@
 
     card.appendChild(main);
 
-    if (row.reconciliationState === "pending_confirmation") {
-        var actionsGroup = document.createElement("div");
-        actionsGroup.style.display = "flex";
-        actionsGroup.style.gap = "6px";
-
-        var btnConfirm = document.createElement("button");
-        btnConfirm.className = "btn btn-secondary";
-        btnConfirm.style.width = "auto";
-        btnConfirm.textContent = pfConfirming[row.id] ? "Sincronizando…" : "Reintentar sincronización";
-        btnConfirm.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id] || !!pfRemoving[row.id];
-        btnConfirm.addEventListener("click", function () { confirmPlacementInstance(row.id, btnConfirm); });
-        actionsGroup.appendChild(btnConfirm);
-
-        var btnCancel = document.createElement("button");
-        btnCancel.className = "btn btn-secondary";
-        btnCancel.style.width = "auto";
-        btnCancel.textContent = pfCancelling[row.id] ? "Cancelando…" : "Cancelar";
-        btnCancel.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id] || !!pfRemoving[row.id];
-        btnCancel.addEventListener("click", function () { cancelPlacementInstance(row.id, btnCancel); });
-        actionsGroup.appendChild(btnCancel);
-
-        card.appendChild(actionsGroup);
-    } else if (row.reconciliationState === "unplaced") {
-        var action = document.createElement("button");
-        action.className = "btn btn-secondary";
-        action.style.width = "auto";
-        action.textContent = pfPlacing[row.id] ? "Colocando…" : "Colocar";
-        action.disabled = !!pfPlacing[row.id] || !!pfRemoving[row.id];
-        action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
-        card.appendChild(action);
-    } else if (missing) {
-      // #870 — two same-level recovery intents for the SAME unit: the
-      // recorded-position restore (Restorer) or a manual placement of the
-      // existing unit through the shared #469 preview. Never a new unit.
-      var busy = pfRestoring[row.id] || pfPlacing[row.id] || pfRemoving[row.id];
-      var actions = document.createElement("div");
-      actions.className = "pf-unit-actions";
-
-      var restore = document.createElement("button");
-      restore.className = "btn btn-secondary";
-      restore.style.width = "auto";
-      restore.textContent = pfRestoring[row.id] ? "Restaurando…" : "↶ Restaurar posición";
-      restore.disabled = !!busy;
-      restore.addEventListener("click", function () { restoreFurnitureInstance(row.id, restore); });
-      actions.appendChild(restore);
-
-      var manual = document.createElement("button");
-      manual.className = "btn btn-secondary";
-      manual.style.width = "auto";
-      manual.textContent = pfPlacing[row.id] ? "Colocando…" : "+ Colocar manualmente";
-      manual.disabled = !!busy;
-      manual.addEventListener("click", function () {
-        placeFurnitureInstance(row.id, manual, "+ Colocar manualmente", "missing");
-      });
-      actions.appendChild(manual);
-
-      card.appendChild(actions);
-    } else if (row.reconciliationState === "present_synced") {
-      var action = document.createElement("button");
-      action.className = "btn btn-secondary";
-      action.style.width = "auto";
-      action.textContent = "Seleccionar";
-      action.addEventListener("click", function () {
-        if (window.sketchup && window.sketchup.select_project_furniture) {
-          window.sketchup.select_project_furniture(JSON.stringify({ furnitureInstanceId: row.id }));
-        }
-      });
-      card.appendChild(action);
-    }
-    appendRemoveSection(card, row);
+    appendActionFooter(card, row, missing);
     return card;
+  }
+
+  // #1177 smoke fix: ONE compact footer owns every card action (the #870
+  // recovery pattern extended to every card). Buttons are small and sit in
+  // the card's rodapié — the old [info | buttons] row collapsed the name
+  // column as soon as "Quitar del proyecto" joined. When the remove
+  // confirm is armed, the footer renders the confirm instead of the
+  // buttons — one call to action at a time.
+  function appendActionFooter(card, row, missing) {
+    var armed = removableRow(row) && removeArmed === row.id && !pfRemoving[row.id];
+    var buttons = [];
+    if (!armed) {
+      if (row.reconciliationState === "pending_confirmation") {
+        buttons.push(retrySyncButton(row), cancelPlacementButton(row));
+      } else if (row.reconciliationState === "unplaced") {
+        buttons.push(placeUnitButton(row));
+      } else if (missing) {
+        // #870 — two same-level recovery intents for the SAME unit: the
+        // recorded-position restore (Restorer) or a manual placement of
+        // the existing unit through the shared #469 preview. Never a unit.
+        var busy = pfRestoring[row.id] || pfPlacing[row.id] || pfRemoving[row.id];
+        buttons.push(restorePositionButton(row, busy), manualPlaceButton(row, busy));
+      } else if (row.reconciliationState === "present_synced") {
+        buttons.push(selectUnitButton(row));
+      }
+      if (removableRow(row)) buttons.push(removeUnitButton(row));
+    }
+    if (!armed && !buttons.length) return;
+
+    var footer = document.createElement("div");
+    footer.className = "pf-unit-actions";
+    if (armed) footer.appendChild(armedRemoveGroup(row));
+    buttons.forEach(function (button) { footer.appendChild(button); });
+    card.appendChild(footer);
+  }
+
+  function footerButton(className, label, disabled) {
+    var button = document.createElement("button");
+    button.className = className;
+    button.textContent = label;
+    button.disabled = !!disabled;
+    return button;
+  }
+
+  function retrySyncButton(row) {
+    var button = footerButton("btn btn-secondary",
+      pfConfirming[row.id] ? "Sincronizando…" : "Reintentar sincronización",
+      pfConfirming[row.id] || pfCancelling[row.id] || pfRemoving[row.id]);
+    button.addEventListener("click", function () { confirmPlacementInstance(row.id, button); });
+    return button;
+  }
+
+  function cancelPlacementButton(row) {
+    var button = footerButton("btn btn-secondary",
+      pfCancelling[row.id] ? "Cancelando…" : "Cancelar",
+      pfConfirming[row.id] || pfCancelling[row.id] || pfRemoving[row.id]);
+    button.addEventListener("click", function () { cancelPlacementInstance(row.id, button); });
+    return button;
+  }
+
+  function placeUnitButton(row) {
+    var button = footerButton("btn btn-secondary",
+      pfPlacing[row.id] ? "Colocando…" : "Colocar",
+      pfPlacing[row.id] || pfRemoving[row.id]);
+    button.addEventListener("click", function () { placeFurnitureInstance(row.id, button); });
+    return button;
+  }
+
+  function restorePositionButton(row, busy) {
+    var button = footerButton("btn btn-secondary",
+      pfRestoring[row.id] ? "Restaurando…" : "↶ Restaurar posición", busy);
+    button.addEventListener("click", function () { restoreFurnitureInstance(row.id, button); });
+    return button;
+  }
+
+  function manualPlaceButton(row, busy) {
+    var button = footerButton("btn btn-secondary",
+      pfPlacing[row.id] ? "Colocando…" : "+ Colocar manualmente", busy);
+    button.addEventListener("click", function () {
+      placeFurnitureInstance(row.id, button, "+ Colocar manualmente", "missing");
+    });
+    return button;
+  }
+
+  function selectUnitButton(row) {
+    var button = footerButton("btn btn-secondary", "Seleccionar", false);
+    button.addEventListener("click", function () {
+      if (window.sketchup && window.sketchup.select_project_furniture) {
+        window.sketchup.select_project_furniture(JSON.stringify({ furnitureInstanceId: row.id }));
+      }
+    });
+    return button;
+  }
+
+  function removeUnitButton(row) {
+    var quit = document.createElement("button");
+    quit.className = "btn btn-danger";
+    quit.style.display = "inline-flex";
+    quit.style.alignItems = "center";
+    quit.style.gap = "6px";
+    quit.disabled = removeActionsBusy(row);
+    quit.appendChild(trashIcon());
+    var label = document.createElement("span");
+    label.textContent = pfRemoving[row.id] ? "Quitando…" : "Quitar del proyecto";
+    quit.appendChild(label);
+    quit.addEventListener("click", function () { armRemoveFurniture(row.id); });
+    return quit;
   }
 
   // #1177 — the explicit terminal output every non-terminal card offers:
@@ -612,32 +655,12 @@
     return icon;
   }
 
-  function appendRemoveSection(card, row) {
-    if (!removableRow(row)) return;
-    if (removeArmed === row.id && !pfRemoving[row.id]) {
-      card.appendChild(armedRemoveGroup(row));
-      return;
-    }
-    var quit = document.createElement("button");
-    quit.className = "btn btn-danger";
-    quit.style.display = "inline-flex";
-    quit.style.alignItems = "center";
-    quit.style.gap = "6px";
-    quit.style.width = "auto";
-    quit.disabled = removeActionsBusy(row);
-    quit.appendChild(trashIcon());
-    var label = document.createElement("span");
-    label.textContent = pfRemoving[row.id] ? "Quitando…" : "Quitar del proyecto";
-    quit.appendChild(label);
-    quit.addEventListener("click", function () { armRemoveFurniture(row.id); });
-    card.appendChild(quit);
-  }
-
   function armedRemoveGroup(row) {
     var group = document.createElement("div");
     group.style.display = "flex";
     group.style.flexDirection = "column";
     group.style.gap = "6px";
+    group.style.flex = "1 1 100%";
 
     var question = document.createElement("div");
     question.className = "pf-unit-meta";
@@ -656,7 +679,6 @@
 
     var yes = document.createElement("button");
     yes.className = "btn btn-danger";
-    yes.style.width = "auto";
     yes.textContent = "Quitar";
     yes.disabled = removeActionsBusy(row);
     yes.addEventListener("click", function () { removeFurnitureInstance(row.id); });
@@ -664,7 +686,6 @@
 
     var no = document.createElement("button");
     no.className = "btn btn-secondary";
-    no.style.width = "auto";
     no.textContent = "No";
     no.disabled = removeActionsBusy(row);
     no.addEventListener("click", function () { disarmRemoveFurniture(); });

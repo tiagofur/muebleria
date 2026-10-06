@@ -354,7 +354,8 @@ test('unit cards: per-unit badge, reconciliation copy, ref slice and empty list 
     'Granete IDs are diagnostics: muted "Unidad <short-id>" secondary line (#870)');
 
   const placed = el(sandbox, 'pf-placed-list');
-  assert.equal(placed.children[0].children[1].textContent, 'Seleccionar');
+  assert.ok(buttonWithLabel(placed.children[0], 'Seleccionar'),
+    'the placed card footer owns the Seleccionar action');
 
   pf.renderProjectFurniture({ state: 'connected', items: [], pending: 0, placed: 0, dirty: 0 });
   // Empty connected went to the empty state; force a list render through
@@ -381,7 +382,7 @@ test('Colocar prefers the #469 preview and sends identity only, with in-flight g
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
-  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
   button.click();
   assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_placement_preview').length, 1);
   assert.equal(sandbox.__bridge[0].payload.furnitureInstanceId, FI_1);
@@ -390,7 +391,7 @@ test('Colocar prefers the #469 preview and sends identity only, with in-flight g
   button.click();
   assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_placement_preview').length, 1,
     'double click must not re-send');
-  const second = el(sandbox, 'pf-pending-list').children[1].children[1];
+  const second = buttonWithLabel(el(sandbox, 'pf-pending-list').children[1], 'Colocar');
   second.click();
   assert.equal(sandbox.__bridge.filter((c) => c.action === 'begin_placement_preview').length, 2);
 });
@@ -400,7 +401,7 @@ test('Colocar falls back to place_furniture_instance without the preview bridge'
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
   delete sandbox.window.sketchup.begin_placement_preview;
-  el(sandbox, 'pf-pending-list').children[0].children[1].click();
+  buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar').click();
   const call = sandbox.__bridge.find((c) => c.action === 'place_furniture_instance');
   assert.ok(call, 'legacy place command must be the fallback');
   assert.equal(call.payload.furnitureInstanceId, FI_1);
@@ -411,8 +412,8 @@ test('Colocar without any bridge re-arms honestly with the exact toast', () => {
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
   delete sandbox.window.sketchup;
-  el(sandbox, 'pf-pending-list').children[0].children[1].click();
-  assert.equal(el(sandbox, 'pf-pending-list').children[0].children[1].textContent, 'Colocar');
+  buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar').click();
+  assert.equal(buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar').textContent, 'Colocar');
   assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
     'Colocar disponible sólo dentro de SketchUp.');
 });
@@ -421,7 +422,7 @@ test('Seleccionar dispatches select_project_furniture with exact identity', () =
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
-  el(sandbox, 'pf-placed-list').children[0].children[1].click();
+  buttonWithLabel(el(sandbox, 'pf-placed-list').children[0], 'Seleccionar').click();
   const call = sandbox.__bridge.find((c) => c.action === 'select_project_furniture');
   assert.ok(call);
   assert.equal(call.payload.furnitureInstanceId, '51000000-0000-0000-0000-0000000000f3');
@@ -462,15 +463,15 @@ test('missing card: full-width information first, then the two compact recovery 
 
   assert.equal(card.className, 'card pf-unit-card pf-unit-card--recovery',
     'the recovery card stacks vertically — no side-by-side giant button');
-  assert.equal(card.children.length, 3, 'information block + actions row + #1177 remove section');
+  assert.equal(card.children.length, 2, 'information block + one unified action footer (#1177 smoke fix)');
   const main = card.children[0];
   const actions = card.children[1];
-  const removeSection = card.children[2];
   assert.equal(main.className, 'pf-unit-main');
   assert.equal(actions.className, 'pf-unit-actions');
-  assert.equal(actions.children.length, 2, 'exactly two same-level recovery intents');
+  assert.equal(actions.children.length, 3, 'two recovery intents + the danger remove exit');
   assert.equal(actions.children[0].textContent, '↶ Restaurar posición');
   assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
+  const removeSection = actions.children[2];
   assert.equal(removeSection.className, 'btn btn-danger', 'the remove action is the danger exit (#1177)');
   assert.equal(removeSection.children[1].textContent, 'Quitar del proyecto');
   assert.equal(removeSection.disabled, false);
@@ -603,7 +604,7 @@ test('handlePlaceFurnitureResult: pending_position re-arms the button (preserved
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
-  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
   button.click();
   pf.handlePlaceFurnitureResult({ ok: true, code: 'pending_position', instanceId: FI_1 });
   assert.equal(button.disabled, false);
@@ -616,7 +617,7 @@ test('handlePlaceFurnitureResult: failure re-arms and writes the exact diagnosti
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
-  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
   button.click();
   pf.handlePlaceFurnitureResult({ ok: false, code: 'resolution_failed', reason: 'MATERIAL_CHOICE_INVALID', instanceId: FI_1 });
   assert.equal(button.disabled, false);
@@ -703,7 +704,7 @@ test('handlePlacementPreviewStarted: refusal re-arms the unit + catalog entry po
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
-  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
   button.click();
   pf.handlePlacementPreviewStarted({ ok: false, code: 'preview_busy', instanceId: FI_1 });
   assert.equal(button.textContent, 'Colocar');
@@ -722,7 +723,7 @@ test('handlePlacementPreviewCancelled: unit stays pending / catalog lane re-arms
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
-  const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+  const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
   button.click();
   pf.handlePlacementPreviewCancelled({ instanceId: FI_1 });
   assert.equal(button.textContent, 'Colocar');
@@ -1235,11 +1236,24 @@ test('debounced auto-sync: silent in presentation mode with zero toasts and live
 // ---------------------------------------------------------------------
 
 function removeButtonOf(card) {
-  return card.children.filter((child) => child.className === 'btn btn-danger')[0] || null;
+  return allCardElements(card).filter((el) => el.className === 'btn btn-danger' && el.children.length <= 2)[0] || null;
 }
 
 function armedGroupOf(card) {
-  return card.children.filter((child) => child.style && child.style.flexDirection === 'column')[0] || null;
+  return allCardElements(card).filter((el) => el.style && el.style.flexDirection === 'column')[0] || null;
+}
+
+function footerOf(card) {
+  return card.children.filter((child) => child.className === 'pf-unit-actions')[0] || null;
+}
+
+function allCardElements(el) {
+  return el.children.flatMap((child) => [child, ...allCardElements(child)]);
+}
+
+function buttonWithLabel(card, label) {
+  return allCardElements(card).filter((el) =>
+    String(el.className).includes('btn') && el.children.length === 0 && el.textContent === label)[0] || null;
 }
 
 function missingCardPanel(id, state) {
@@ -1418,9 +1432,8 @@ test('other card actions stay gated while a remove is in flight', () => {
 
   // A fresh render keeps pfRemoving (only the result clears it).
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
-  const card = el(sandbox, 'pf-pending-list').children[0];
-  const place = card.children.filter((child) => child.className === 'btn btn-secondary')[0];
-  assert.equal(place.textContent, 'Colocar');
+  const place = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
+  assert.ok(place, 'the Colocar entry stays in the footer');
   assert.equal(place.disabled, true, 'Colocar waits while the remove flies');
 
   pf.handleRemoveFurnitureResult({ ok: true, code: 'removed', instanceId: FI_1,

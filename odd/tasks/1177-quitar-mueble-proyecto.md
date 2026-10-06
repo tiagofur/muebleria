@@ -85,3 +85,31 @@ backend, contrato OpenAPI ni migraciones: sólo su consumo.
 Un PR, `Closes #1177 + Delivery: complete` (pendiente del smoke V2 del owner
 antes del merge), un escritor, rama aislada `feat/1177-quitar-mueble-proyecto`,
 base main @480a29b5.
+
+---
+
+## Ronda 2 (2026-10-06 noche) — correcciones del smoke V2 del owner
+
+Feedback del owner sobre 0.1.46 (captura real del panel):
+
+1. **Layout roto (regresión mía)**: `.pf-unit-card` era fila [info | botones];
+   con dos acciones (Colocar + Quitar) la columna de info colapsaba y el
+   texto se distribuía mal. Fix: el patrón rodapié #870 extendido a TODAS las
+   cards — card en columna, footer único `.pf-unit-actions` con botones
+   compactos (`--text-xs`, padding reducido), y la confirmación armada
+   reemplaza los botones dentro del mismo footer (un CTA por vez).
+2. **"Restaurar posición" invisible**: el auto-sync debounced (1.5s) llevaba
+   intents de eliminación y destruía el carril de recuperación #870 antes de
+   que el usuario lo viera. Fix: `synchronize_design(auto:)` — el auto-sync
+   withhold removals (`IntentBuilder.build(include_removals: false)`);
+   las eliminaciones viajan sólo con el "Sincronizar diseño" explícito o con
+   "Quitar del proyecto". Alineado con la regla durable del owner (nada
+   no-visto se pisa). Los huecos restantes (posición perdida en syncs
+   ANTERIORES a este fix) quedaron fileados en #1189 (diario de posiciones
+   durable, alcance a aprobar).
+
+Verificación ronda 2: unit 1357 runs / 0 fallos (2 tests nuevos del gate:
+auto withhold + explicit keeps), harness módulo 68/68, dialog 27/27,
+placement preview 13/13, rubocop limpio, `rake verify` verde, RBZ 0.1.47
+reproducible e instalado en limpio. PR: rama
+`feat/1177-pf-card-rodapie-autosync`, base main @a59b550e.

@@ -130,7 +130,13 @@ module Granete
         module IntentBuilder
           module_function
 
-          def build(working:, local:)
+          # include_removals: false (#1177 smoke fix) builds the SAME desired
+          # state but leaves would-be-removed items untouched — the debounced
+          # AUTO sync carries adds/updates only and never destroys the
+          # Working Copy item a "↶ Restaurar posición" recovery depends on.
+          # The explicit "Sincronizar diseño" keeps removals (they are the
+          # conscious Design-intent delete, #810 Caso 1).
+          def build(working:, local:, include_removals: true)
             items = working.items.dup
             added = []
             updated = []
@@ -144,7 +150,7 @@ module Granete
               updated << id if outcome[:change] == :updated
             end
 
-            removed = remove_missing_locals(items, working, local)
+            removed = include_removals ? remove_missing_locals(items, working, local) : []
             { items: items, added: added, updated: updated, removed: removed }
           end
 
@@ -216,7 +222,12 @@ module Granete
 
           attr_reader :service
 
-          def synchronize_design
+          # auto: true (#1177 smoke fix) marks the debounced background sync:
+          # identical conflict-safe frontier, but removal intents are
+          # withheld — deleting a component never destroys the recorded
+          # position behind the user's back. Only the explicit
+          # "Sincronizar diseño" carries removals.
+          def synchronize_design(auto: false)
             model = @model_provider.call
             return failure(:no_model, 'no hay un modelo activo') unless model
 
@@ -225,7 +236,7 @@ module Granete
             )
             return context unless context['ok']
 
-            sync_connected_design(model, context['binding'])
+            sync_connected_design(model, context['binding'], auto)
           rescue ProjectFurniture::Service::Error => e
             code = SafeWrite.version_conflict?(e) ? 'conflict' : e.kind.to_s
             @logger.error('design_sync_failed', error: e)
@@ -240,12 +251,12 @@ module Granete
 
           private
 
-          def sync_connected_design(model, binding)
+          def sync_connected_design(model, binding, auto)
             working, local = read_authorities(model, binding)
             guard = local_guards(local)
             return guard if guard
 
-            intent = IntentBuilder.build(working: working, local: local)
+            intent = IntentBuilder.build(working: working, local: local, include_removals: !auto)
             changes = { 'added' => intent[:added], 'updated' => intent[:updated],
                         'removed' => intent[:removed] }
             if changes.values.all?(&:empty?)

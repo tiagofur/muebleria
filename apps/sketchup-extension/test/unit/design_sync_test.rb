@@ -421,6 +421,50 @@ class DesignSyncTest < Minitest::Test
     assert(items.none? { |item| item['furniture_instance_id'] == FI_3 })
   end
 
+  # #1177 smoke fix: the debounced AUTO sync never carries removals — a
+  # deleted component's "↶ Restaurar posición" recovery lane dies the moment
+  # the Working Copy drops the item, and 1.5s is no recovery window. Adds
+  # and updates still travel through the same conflict-safe frontier; the
+  # removal waits for the explicit sync (or "Quitar del proyecto").
+  def test_auto_sync_withholds_removals_but_keeps_adds_and_updates
+    untouched = place_local_root(FI_1, parameters: { 'widthMm' => 600 })
+    stub_working_copy([
+                        working_item(FI_1, {}, untouched),
+                        working_item(FI_2, 'widthMm' => 600),
+                        working_item(FI_3, 'widthMm' => 600)
+                      ])
+    place_local_root(FI_2, parameters: { 'widthMm' => 600 })
+    edit_authoring!(FI_2, 'widthMm' => 750)
+    # FI_3 has no local root: a would-be remove intent the auto sync withholds.
+
+    result = @synchronizer.synchronize_design(auto: true)
+    assert result['ok'], result.inspect
+    assert_equal [FI_2], result['changes']['updated']
+    assert_empty result['changes']['removed'], 'auto never destroys the recovery lane'
+    assert_empty result['changes']['added']
+
+    items = @transport.working_copy_puts.first['body']['items']
+    assert(items.any? { |item| item['furniture_instance_id'] == FI_3 },
+           'the withheld item travels verbatim — nothing is destroyed')
+    assert(items.any? { |item| item['furniture_instance_id'] == FI_1 },
+           'unmodified items keep their server authoring')
+  end
+
+  def test_explicit_sync_keeps_removals
+    untouched = place_local_root(FI_1, parameters: { 'widthMm' => 600 })
+    stub_working_copy([
+                        working_item(FI_1, {}, untouched),
+                        working_item(FI_3, 'widthMm' => 600)
+                      ])
+    # FI_3 has no local root: the explicit sync carries the conscious remove.
+
+    result = @synchronizer.synchronize_design
+    assert result['ok'], result.inspect
+    assert_equal [FI_3], result['changes']['removed']
+    items = @transport.working_copy_puts.first['body']['items']
+    assert(items.none? { |item| item['furniture_instance_id'] == FI_3 })
+  end
+
   # Rule E, convergence half: the server already committed the intention but
   # the response was lost — the retry converges instead of overwriting.
   def test_retry_after_lost_response_converges

@@ -31,8 +31,8 @@ module Granete
           dialog.add_action_callback('rescan_duplicates') do
             handle_rescan_duplicates(dialog)
           end
-          dialog.add_action_callback('synchronize_design') do
-            handle_synchronize_design(dialog)
+          dialog.add_action_callback('synchronize_design') do |_c, p|
+            handle_synchronize_design(dialog, p)
           end
         end
 
@@ -50,8 +50,14 @@ module Granete
         # by authoritative readback. Success refreshes the panel and marks the
         # commercial projection synchronized; the HtmlDialog refetches the
         # confirmed total from the backend (no local price math).
-        def handle_synchronize_design(dialog)
-          result = design_sync_synchronizer.synchronize_design
+        # #1177 smoke fix: the DEBOUNCED AUTO sync (isAuto) never carries
+        # removal intents — a deleted component's recovery lane
+        # ("↶ Restaurar posición") dies the moment the Working Copy drops the
+        # item, and 1.5s is no recovery window. Removals travel only with the
+        # explicit sync (user's conscious decision) — never silently.
+        def handle_synchronize_design(dialog, payload_json = nil)
+          payload = payload_json.is_a?(String) && !payload_json.strip.empty? ? JSON.parse(payload_json) : {}
+          result = design_sync_synchronizer.synchronize_design(auto: payload['isAuto'] == true)
           execute_bridge(dialog, 'onSynchronizeDesignResult', result)
           if result['ok']
             notify_commercial_projection_synchronization(:full)
