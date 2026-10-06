@@ -189,18 +189,15 @@ module Granete
         def test_manifest_hash_verification_uses_parity_not_served_bytes
           # #1164 regression: the backend records the parity digest of the
           # pre-hash payload, NOT the sha256 of the served bytes — jsonb
-          # re-serialization guarantees the two differ. Verifying served
-          # bytes could never pass; verifying the parity digest always must.
+          # re-serialization guarantees the two differ (here: destroyed key
+          # order and whitespace). Verifying served bytes could never pass;
+          # verifying the parity digest must.
           rel_id = SecureRandom.uuid
-          manifest = {
-            'schemaVersion' => 1,
-            'libraryVersion' => '3.0.0',
-            'effectiveReleaseId' => rel_id,
-            'resources' => []
-          }
-          raw = JSON.generate(manifest)
+          raw = <<-JSON
+            { "resources": [], "effectiveReleaseId": "#{rel_id}", "libraryVersion": "3.0.0", "schemaVersion": 1 }
+          JSON
           expected = ManifestHash.compute(JSON.parse(raw))
-          refute_equal Digest::SHA256.hexdigest(raw), ManifestHash.normalize(expected),
+          refute_equal Digest::SHA256.hexdigest(raw.strip), ManifestHash.normalize(expected),
                        'the served-bytes hash and the parity digest are different by construction'
 
           client = MockApiClient.new(manifest_json: raw)

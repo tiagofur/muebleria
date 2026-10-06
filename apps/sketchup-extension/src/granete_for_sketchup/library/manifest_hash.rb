@@ -61,6 +61,10 @@ module Granete
           when 'resources'
             sorted_resources(value).map { |r| canonical_resource(r) }
           when 'upstream'
+            # Go omitempty on the pointer: an absent upstream drops the key
+            # entirely (never a null-valued object).
+            return nil if value.nil?
+
             canonical_keys(UPSTREAM_KEYS, value)
           else
             value
