@@ -65,7 +65,7 @@ Rutas según `apps/web/src/routes.ts` / `ShellView.tsx`; archivos principales en
 | O4 | Instalaciones | `/installations(/:projectId)` | `production/InstalacionesScreen.tsx` (191 ln + detail) | concluida | 35/40 | #1169 (PR #1179, cierre) | S11 ✅ |
 | O5 | Embarques | `/shipments(/:projectId)` | `production/EmbarquesScreen.tsx` (174 ln + detail) | concluida | 36/40 | #1169 (PR #1179, cierre) | S11 ✅ |
 | E1 | Dashboard Ingeniería | `/engineering-dashboard` | `engineering/EngineeringDashboard.tsx` (205 ln) | concluida | 32/40 | #1183 (PR, cierre) | S13 ✅ |
-| E2 | Ingeniería (workspace) | `/engineering(/:projectId)` | `engineering/EngineeringScreen.tsx` → `EngineeringWorkspace.tsx` | planeada | — | referencia migrada (baseline ago) | S13 |
+| E2 | Ingeniería (workspace) | `/engineering(/:projectId)` | `engineering/EngineeringScreen.tsx` → `EngineeringWorkspace.tsx` | concluida | 32/40 | #1183 (PR, cierre); referencia migrada (baseline ago) | S13 ✅ |
 | A1 | Dashboard Almacén | `/warehouse-dashboard` | `purchasing/WarehouseDashboard.tsx` (434 ln) | concluida | 34/40 | #1173 (PR, cierre) | S12 ✅ |
 | A2 | Almacén (stock/POs/planning) | `/warehouse` | `purchasing/PurchasingScreen.tsx` (864 ln) | concluida | 34/40 | #1165 (PR feat/1165-s10-almacen) | S10 ✅ |
 
