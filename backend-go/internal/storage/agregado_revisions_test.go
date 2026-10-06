@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
+	"os"
 )
 
 const validSha256 = "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -1700,8 +1700,9 @@ func TestAgregados_UpdateWithRevision_DurableAuditTrail(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupConnectStoreFixture(t, `UPDATE agregados SET current_revision_id = NULL WHERE id = $1`, agregadoID)
 		// The fixture migrates the DATABASE_URL database itself; the admin
-		// connection is that same DSN (superuser in the test container).
-		admin, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+		// connection is its validated migration DSN (superuser in the test
+		// container).
+		admin, err := pgxpool.New(context.Background(), storage.TestMigrationDatabaseURLForRuntimeDatabase(t))
 		if err != nil {
 			t.Logf("cleanup admin pool: %v", err)
 			return
