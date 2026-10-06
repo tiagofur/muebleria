@@ -381,7 +381,7 @@ export function ProductionOrderDispatchPanel({
 
         {lastScannedMessage ? (
           <div
-            className="prod-paperless__scan-result prod-paperless__scan-result--advance"
+            aria-live="polite" className="prod-paperless__scan-result prod-paperless__scan-result--advance"
             data-testid="prod-dispatch-scan-feedback"
           >
             <CheckCircle2 size={16} /> {lastScannedMessage}
@@ -390,7 +390,7 @@ export function ProductionOrderDispatchPanel({
 
         {scanMiss ? (
           <div
-            className="prod-paperless__scan-result prod-paperless__scan-result--miss"
+            aria-live="polite" className="prod-paperless__scan-result prod-paperless__scan-result--miss"
             data-testid="prod-dispatch-scan-miss"
           >
             No se encontró ningún bulto que coincida con el código escaneado.

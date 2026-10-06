@@ -7,7 +7,7 @@
  * home screen stays a project list; the process work lives here.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowLeft, Hammer, Mail, MapPin, Phone } from 'lucide-react';
 
 import {
@@ -34,6 +34,8 @@ export type InstalacionesProjectDetailProps = {
   readonly canCloseout?: boolean;
   readonly jobHandlers?: InstallationJobPanelHandlers;
   readonly onBack?: () => void;
+  /** #1169 P2: revert one installed item back to loaded (undo). */
+  readonly onUndoInstalled?: (projectId: string, itemId: string) => void;
   readonly testId?: string;
 };
 
@@ -49,9 +51,12 @@ export function InstalacionesProjectDetail({
   canCloseout = false,
   jobHandlers,
   onBack,
+  onUndoInstalled,
   testId,
 }: InstalacionesProjectDetailProps): ReactNode {
   const view = installationJobCardView(project);
+  // #1169 P2: deshacer el último avance — paridad con Deshacer carga de Embarques.
+  const [lastInstalled, setLastInstalled] = useState<{ itemId: string } | null>(null);
   const toInstall = project.items.filter(
     (item) => normalizeItemFloorStatus(item.floorStatus) === 'loaded',
   );
@@ -157,7 +162,10 @@ export function InstalacionesProjectDetail({
                   <button
                     type="button"
                     className="btn btn--primary"
-                    onClick={() => onAdvance(project.id, item.id, 'installed')}
+                    onClick={() => {
+                      onAdvance(project.id, item.id, 'installed');
+                      setLastInstalled({ itemId: item.id });
+                    }}
                     data-testid={`instalaciones-advance-${item.id}`}
                   >
                     <Hammer size={16} strokeWidth={1.5} aria-hidden />
@@ -171,6 +179,20 @@ export function InstalacionesProjectDetail({
               </li>
             ))}
           </ul>
+          {lastInstalled && onAdvance ? (
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={() => {
+                onAdvance(project.id, lastInstalled.itemId, 'loaded');
+                setLastInstalled(null);
+              }}
+              data-testid="instalaciones-undo"
+            >
+              <ArrowLeft size={14} strokeWidth={1.5} aria-hidden />
+              Deshacer última instalación
+            </button>
+          ) : null}
         </div>
       ) : null}
 
