@@ -128,6 +128,31 @@ module Granete
           File.join(@store_dir, 'current', "#{clean_org}.json")
         end
 
+        # ─── Dev Mode (#1102 restante 2) ──────────────────────────────────────
+
+        # Dev mode is a bibliotecario tool: ON, the consumer stops pinning its
+        # resolves (the server then resolves the AUTHORING state — the draft —
+        # exactly like the pre-release plugin did) and the boot sync pauses so
+        # the pin never moves while testing. Persisted next to the pointers.
+        def dev_mode?
+          File.file?(dev_mode_path)
+        end
+
+        def set_dev_mode!(enabled)
+          path = dev_mode_path
+          if enabled
+            FileUtils.mkdir_p(File.dirname(path))
+            File.write(path, JSON.generate({ 'enabled' => true, 'updatedAt' => Time.now.utc.strftime('%FT%TZ') }))
+          elsif File.file?(path)
+            File.delete(path)
+          end
+          nil
+        end
+
+        def dev_mode_path
+          File.join(@store_dir, 'dev_mode.json')
+        end
+
         def current_release_id(org_id)
           path = current_pointer_path(org_id)
           return nil unless path && File.file?(path)

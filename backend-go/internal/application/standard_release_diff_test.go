@@ -60,6 +60,14 @@ func (s *stubDiffStore) ListHardwares(context.Context) ([]domain.Hardware, error
 	return s.hardware, nil
 }
 
+func (s *stubDiffStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
+	return domain.Catalog{Hardware: s.hardware}, nil
+}
+
+func (s *stubDiffStore) ListMaterialCategories(context.Context) ([]domain.MaterialCategory, error) {
+	return nil, nil
+}
+
 func (s *stubDiffStore) ListActiveHardwareProfilesAnyOrg(context.Context) ([]domain.HardwareProfile, error) {
 	return s.profiles, nil
 }

@@ -3,11 +3,13 @@
 module Granete
   module SketchUpExtension
     class Lifecycle
-      def initialize(open_dialog:, close_dialog:, logger:, migrate_models: nil)
+      def initialize(open_dialog:, close_dialog:, logger:, migrate_models: nil, toggle_library_dev_mode: nil)
         @open_dialog = open_dialog
         @close_dialog = close_dialog
         # #416: optional entry point for the legacy-model migration review.
         @migrate_models = migrate_models
+        # #1102 restante 2: optional bibliotecario dev-mode toggle.
+        @toggle_library_dev_mode = toggle_library_dev_mode
         @logger = logger
         @menu_registered = false
         @started = false
@@ -40,6 +42,7 @@ module Granete
       def register_menu
         ::UI.menu('Extensions').add_item('Abrir Granete') { @open_dialog.call }
         register_migration_menu
+        register_library_dev_mode_menu
         register_toolbar
         @menu_registered = true
       end
@@ -50,6 +53,19 @@ module Granete
         return unless @migrate_models
 
         ::UI.menu('Extensions').add_item('Migrar modelos anteriores…') { @migrate_models.call }
+      end
+
+      # #1102 restante 2: bibliotecario dev tool — with dev mode ON the
+      # plugin resolves the AUTHORING state (draft edits included) and the
+      # release pin never moves. Present only when the application wires it.
+      def register_library_dev_mode_menu
+        return unless @toggle_library_dev_mode
+
+        ::UI.menu('Extensions').add_item('Granete: alternar modo dev de biblioteca (borrador)') do
+          state = @toggle_library_dev_mode.call
+          ::UI.messagebox("Modo dev de biblioteca: #{state}. " \
+                          'Los resolves usan el ESTADO DE AUTORÍA (borrador) mientras esté en ON.')
+        end
       end
 
       # A toolbar button keeps the panel one click away: the Extensions menu

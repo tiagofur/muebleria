@@ -76,6 +76,7 @@ import {
   HardwareProfilesCatalog,
   AmbientMaterialsCatalog,
   MaterialsCatalog,
+  LibraryConsumerViewPanel,
   LibraryDraftValidationPanel,
   LibraryDraftWorkspaceBanner,
   LibraryPublishConfirmContent,
@@ -497,6 +498,8 @@ export interface ShellViewCtx {
   readonly showAdminUsers: boolean;
   readonly showCosts: boolean;
   readonly showOnboardingTour: boolean;
+  readonly onboardingOffered: boolean;
+  readonly dismissOnboardingOffer: () => void;
   readonly showcasePhotos: readonly ShowcasePhotoItem[];
   readonly startEngineering: (projectId: string) => void;
   readonly stockCatalog: StockCatalogView;
@@ -787,6 +790,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     setMaterialActive,
     setShowOnboardingTour,
     setStructureActive,
+    dismissOnboardingOffer,
+    onboardingOffered,
     showAdminUsers,
     showCosts,
     showOnboardingTour,
@@ -1042,6 +1047,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           <LibraryPublishHistoryPanel
             releases={libraryWorkspace.publishedReleases}
           />
+          <LibraryConsumerViewPanel
+            pin={libraryWorkspace.consumerPin}
+            published={libraryWorkspace.publishedReleases}
+            profiles={libraryWorkspace.consumerProfiles}
+            loading={libraryWorkspace.consumerLoading}
+            error={libraryWorkspace.consumerError}
+            onPin={(releaseId) => libraryWorkspace.pinConsumerRelease(releaseId)}
+          />
           <Modal
             open={libraryPublishOpen && libraryWorkspace.currentDraft !== null}
             onClose={() => {
@@ -1077,6 +1090,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           {...homeCommercialSummariesProps(session, commercialSummaries)}
           projectsCount={projects.length}
           onOpenProject={onDashboardOpenProject}
+          onOpenQuotes={() => onNavigate('quotes')}
+          onOpenTour={() => {
+            dismissOnboardingOffer();
+            setShowOnboardingTour(true);
+          }}
+          onboardingOffered={onboardingOffered}
+          onDismissOnboardingOffer={dismissOnboardingOffer}
+          isDemoWorkspace={session === 'guest'}
           onNewProject={canMutateProjects ? onDashboardNewProject : undefined}
           onNewModule={canMutateModules ? onDashboardNewModule : undefined}
           onNewMaterial={canMutateCatalog ? onDashboardNewMaterial : undefined}
@@ -1094,16 +1115,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               ? onDashboardOpenShowcase
               : undefined
           }
-          onOpenMaterials={
-            dashboardHomeMode === 'engineering'
-              ? onDashboardOpenMaterials
-              : undefined
-          }
-          onOpenModules={
-            dashboardHomeMode === 'engineering'
-              ? onDashboardOpenModules
-              : undefined
-          }
+          onOpenMaterials={onDashboardOpenMaterials}
+          onOpenModules={onDashboardOpenModules}
           modulesWithoutPhotoCount={
             dashboardHomeMode === 'engineering'
               ? modulesWithoutPhotoCount
@@ -2515,7 +2528,16 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               ? 'ready'
               : commercialSummaries.kind === 'error'
                 ? 'error'
-                : 'loading'
+                : // #1118: sesión local (invitado/demo) nunca consulta el
+                  // batch — estado explícito, no «Cargando…» eterno.
+                commercialSummaries.kind === 'idle'
+                  ? 'unavailable'
+                  : 'loading'
+          }
+          commercialSummariesStale={
+            commercialSummaries.kind === 'ready'
+              ? (commercialSummaries.staleMessage ?? null)
+              : null
           }
           commercialSummariesError={
             commercialSummaries.kind === 'error'
@@ -2525,7 +2547,12 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           onRetryCommercialSummaries={
             commercialSummaries.kind === 'error'
               ? commercialSummaries.retry
-              : undefined
+              : // #1118 re-critique: el stale también tiene salida — sin esto
+                // el Reintentar del banner nunca renderiza en producción.
+                commercialSummaries.kind === 'ready' &&
+                  commercialSummaries.staleMessage
+                ? commercialSummaries.retry
+                : undefined
           }
           modules={modules}
           categories={categories}

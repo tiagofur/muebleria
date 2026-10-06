@@ -48,12 +48,14 @@ type StepData = {
   readonly highlights: readonly string[];
 };
 
+// Voz del producto: voseo de taller, claims verificables (nada de cifras
+// hardcodeadas ni tono de marketing) — critique S2 #1116.
 const STEPS: readonly StepData[] = [
   {
-    badge: 'Paso 1 de 3 · Experiencia 3D Instantánea',
-    title: '¡Bienvenido a Granete! — Tu Taller en 3D',
+    badge: 'Paso 1 de 3 · Tu taller en 3D',
+    title: 'Arrancá con Cocina López en 3D',
     description:
-      'Explora el proyecto de demostración "Cocina López": una cocina en L completa (4 bajomesadas, 4 alacenas, isla central y despensa) con ambientación 3D de pisos y muros lista para mostrar a tus clientes.',
+      'El proyecto de demostración "Cocina López" es una cocina en L completa (4 bajomesadas, 4 alacenas, isla central y despensa) con ambientación 3D de pisos y muros lista para mostrar a tus clientes.',
     icon: <Sparkles className="onboarding-tour__header-icon" size={20} strokeWidth={1.5} />,
     highlights: [
       'Visualización 3D interactiva en tiempo real',
@@ -62,10 +64,10 @@ const STEPS: readonly StepData[] = [
     ],
   },
   {
-    badge: 'Paso 2 de 3 · Catálogo de Ingeniería',
-    title: 'Catálogo de Muebles LatAm',
+    badge: 'Paso 2 de 3 · Catálogo de ingeniería',
+    title: 'Muebles paramétricos listos para adaptar',
     description:
-      'Dispones de 17+ módulos prediseñados y paramétricos ideales para carpinterías de Latinoamérica: bajomesadas 1/2 puertas, cajoneras 3/4 cajones, bajo fregadero, esquineros L, alacenas sobrecampana, torres de horno e islas.',
+      'El catálogo trae módulos prediseñados para carpinterías de Latinoamérica: bajomesadas de 1 y 2 puertas, cajoneras, bajo fregadero, esquineros, alacenas sobrecampana y más. Ajustalos a la medida que necesites.',
     icon: <Layers className="onboarding-tour__header-icon" size={20} strokeWidth={1.5} />,
     highlights: [
       'Muebles ajustables a cualquier medida',
@@ -74,15 +76,15 @@ const STEPS: readonly StepData[] = [
     ],
   },
   {
-    badge: 'Paso 3 de 3 · Preparación para Taller',
-    title: 'Exportación a Producción en 1 Clic',
+    badge: 'Paso 3 de 3 · Del diseño al taller',
+    title: 'Exportá a producción cuando apruebes',
     description:
-      'Genera directamente el plan de corte oficial Plantilla_Optimizer.xlsx, el mapa de corte visual PDF para sierras manuales, etiquetas térmicas ZPL para impresoras Zebra y datos estructurados de mecanizado CNC.',
+      'Generá el plan de corte para tu sierra u Optimizer, etiquetas para la impresora térmica y los datos de perforaciones para la CNC, directamente desde la ingeniería de la obra.',
     icon: <Factory className="onboarding-tour__header-icon" size={20} strokeWidth={1.5} />,
     highlights: [
-      'Exportador oficial Optimizer Excel',
-      'PDF de cortes visuales y etiquetas Zebra',
-      'Datos de perforaciones estructurados (JSON/CSV)',
+      'Plan de corte Optimizer en Excel',
+      'PDF de cortes visuales para sierra',
+      'Perforaciones estructuradas para CNC',
     ],
   },
 ];
@@ -117,7 +119,7 @@ export function OnboardingTourModal({
     <Modal
       open={isOpen}
       onClose={handleDismiss}
-      title="Tour de Bienvenida — Granete App"
+      title="Tour de bienvenida — Granete"
       size="md"
       dataTestId="onboarding-tour-modal"
       footer={
@@ -166,7 +168,11 @@ export function OnboardingTourModal({
         </div>
       }
     >
-      <div className="onboarding-tour__step-indicator" aria-label="Progreso del tour">
+      {/* #1116: el cambio de paso se anuncia; los dots son decorativos. */}
+      <p className="onboarding-tour__sr-only" aria-live="polite" data-testid="onboarding-tour-live">
+        {`Paso ${currentStepIndex + 1} de ${STEPS.length}: ${currentStep.title}`}
+      </p>
+      <div className="onboarding-tour__step-indicator" aria-hidden="true">
         {STEPS.map((_, idx) => (
           <div
             key={idx}

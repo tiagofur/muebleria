@@ -109,6 +109,7 @@ describe('WorkshopAnalyticsPanel (F090)', () => {
         analytics={analytics()}
         period="all"
         onPeriodChange={() => undefined}
+        defaultExpanded
       />,
     );
 
@@ -117,10 +118,12 @@ describe('WorkshopAnalyticsPanel (F090)', () => {
     expect(screen.getByTestId('analytics-quote-won-rate').textContent).toContain(
       '50%',
     );
-    // createdAt 10d ago → accepted 6d ago = 4 days
+    // #1116: «Tiempo al cierre» vive como hint del rate — createdAt 10d ago →
+    // accepted 6d ago = 4 days
     expect(
-      screen.getByTestId('analytics-avg-close-days').textContent,
-    ).toContain('4.0');
+      screen.getByTestId('analytics-quote-won-rate').textContent,
+    ).toContain('cierre prom. 4.0');
+    expect(screen.queryByTestId('analytics-avg-close-days')).toBeNull();
     expect(screen.getByTestId('analytics-avg-ticket').textContent).toContain(
       '1,000.00',
     );
@@ -164,10 +167,38 @@ describe('WorkshopAnalyticsPanel (F090)', () => {
         analytics={analytics()}
         period="all"
         onPeriodChange={onPeriodChange}
+        defaultExpanded
       />,
     );
     await user.click(screen.getByTestId('analytics-period-30'));
     expect(onPeriodChange).toHaveBeenCalledWith(30);
+  });
+
+  it('collapses by default with a real-data teaser and expands on toggle', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkshopAnalyticsPanel
+        analytics={analytics()}
+        period="all"
+        onPeriodChange={() => undefined}
+      />,
+    );
+
+    // #1116: colapsada por defecto — teaser con datos reales, sin informe.
+    expect(screen.getByTestId('analytics-teaser').textContent).toContain(
+      'Pipeline abierto: 1',
+    );
+    expect(screen.getByTestId('analytics-teaser').textContent).toContain(
+      'Reclamos: 1',
+    );
+    expect(screen.queryByTestId('analytics-period-30')).toBeNull();
+
+    const toggle = screen.getByTestId('analytics-toggle');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await user.click(toggle);
+    expect(screen.getByTestId('analytics-toggle').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('analytics-period-30')).toBeTruthy();
+    expect(screen.queryByTestId('analytics-teaser')).toBeNull();
   });
 
   it('shows the empty state for a period without activity', () => {
@@ -190,6 +221,8 @@ describe('WorkshopAnalyticsPanel (F090)', () => {
       />,
     );
     expect(screen.getByTestId('analytics-empty')).toBeTruthy();
+    // #1116 re-critique: sin actividad no hay teaser de ceros.
+    expect(screen.queryByTestId('analytics-teaser')).toBeNull();
   });
 
   it('shows loading state', () => {

@@ -145,7 +145,7 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     });
 
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
-      'Mostrando 1 de 2 cotizaciones',
+      'Mostrando 1 de 1 cotización que coincide, de 2 en total',
     );
     expect(screen.getByTestId('project-card-prj-1')).toBeTruthy();
     expect(screen.queryByTestId('project-card-prj-2')).toBeNull();
@@ -158,7 +158,7 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     renderView({ statusFilter: 'draft', filtered: [projects[0]!] });
 
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
-      'Mostrando 1 de 2 cotizaciones',
+      'Mostrando 1 de 1 cotización que coincide, de 2 en total',
     );
     expect(screen.getByTestId('projects-clear-filters')).toBeTruthy();
   });
@@ -172,7 +172,7 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     // User emptied the searchbox; filtered still holds the previous subset.
     rerenderWith({ search: '', filtered: [projects[0]!] });
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
-      'Mostrando 1 de 2 cotizaciones',
+      'Mostrando 1 de 1 cotización que coincide, de 2 en total',
     );
     // Restricted results still on screen → recovery action must survive.
     expect(screen.getByTestId('projects-clear-filters')).toBeTruthy();
@@ -271,17 +271,19 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     );
   });
 
-  it('8c. guest/unavailable dataset keeps the list behavior unchanged (#642 round 2)', () => {
-    // The shared status union gained `unavailable` (Inicio wiring). The list
-    // keeps its pre-existing treatment for a not-ready dataset: pending badge
-    // and no error banner — this locks that preserved behavior.
+  it('8c. guest/unavailable dataset shows the explicit unavailable state (#642 round 2, #1118)', () => {
+    // #1118: la sesión local (invitado/demo) nunca consulta el batch — ya no
+    // hay «Cargando…» eterno: badge unavailable por card + banner de estado,
+    // sin banner de error.
     renderView({
       commercialSummaries: undefined,
       commercialSummariesStatus: 'unavailable',
       commercialFiltersDisabled: true,
     });
 
-    expect(screen.getAllByTestId('commercial-status-badge-loading').length).toBe(2);
+    expect(screen.getAllByTestId('commercial-status-badge-unavailable').length).toBe(2);
+    expect(screen.getByTestId('commercial-summaries-unavailable')).toBeTruthy();
+    expect(screen.queryByTestId('commercial-status-badge-loading')).toBeNull();
     expect(screen.queryByTestId('commercial-summaries-error')).toBeNull();
     expect(screen.getByTestId('projects-results-summary').textContent).toBe(
       'Mostrando 2 de 2 cotizaciones',
@@ -324,6 +326,8 @@ describe('#710 visible results summary + clear filters (ProjectsListView)', () =
     const cards = within(grid).getAllByRole('button');
     // Only the visible card button (no extra card-level actions added).
     expect(cards.length).toBe(1);
-    expect(screen.getByTestId('projects-results-summary').textContent).toContain('1 de 2');
+    expect(screen.getByTestId('projects-results-summary').textContent).toContain(
+      '1 de 1 cotización que coincide, de 2 en total',
+    );
   });
 });

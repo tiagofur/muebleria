@@ -70,6 +70,7 @@ import {
   parseProductionOrderTab,
   Modal,
   getHasSeenOnboardingTour,
+  setHasSeenOnboardingTour,
   resolveCustomerName,
   type AppNavId,
   type ProjectDraft,
@@ -807,13 +808,18 @@ export function AppContent({
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [showOnboardingTour, setShowOnboardingTour] = useState(false);
 
-  // Welcome tour auto-opens at Inicio only — never above factory routes
-  // (/production) or deep links. Any dismiss persists (see modal).
+  // #1116 §4.9: el tour es opt-in — Inicio ofrece una card una sola vez;
+  // el modal sólo abre por CTA explícito (card o Ajustes), nunca automático.
+  const [onboardingOffered, setOnboardingOffered] = useState(false);
   useEffect(() => {
     if (navId === 'home' && !getHasSeenOnboardingTour()) {
-      setShowOnboardingTour(true);
+      setOnboardingOffered(true);
     }
   }, [navId]);
+  const dismissOnboardingOffer = useCallback(() => {
+    setHasSeenOnboardingTour(true);
+    setOnboardingOffered(false);
+  }, []);
 
   // Load commercial portfolio photos when visiting showcase
   useEffect(() => {
@@ -1960,6 +1966,8 @@ export function AppContent({
     setMaterialActive,
     setShowOnboardingTour,
     setStructureActive,
+    dismissOnboardingOffer,
+    onboardingOffered,
     showAdminUsers,
     showCosts,
     showOnboardingTour,

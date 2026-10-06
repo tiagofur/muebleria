@@ -572,6 +572,15 @@ var extensionClientExactGetPaths = map[string]struct{}{
 }
 
 var extensionClientGetPatterns = []*regexp.Regexp{
+	// #1102 LIB-AUTH Slice D: the published-release consumer contract — the
+	// plugin pins a release (LibraryStore) and syncs its content. READ-ONLY
+	// published-release surface only: current discovery, exact release,
+	// manifest and content-addressed blobs. Drafts stay unreachable for
+	// extension tokens (RLS hides them; these patterns match published reads).
+	regexp.MustCompile(`^/api/manufacturing-libraries/standard/releases/current$`),
+	regexp.MustCompile(`^/api/manufacturing-libraries/standard/releases/[^/]+$`),
+	regexp.MustCompile(`^/api/manufacturing-libraries/standard/releases/[^/]+/manifest$`),
+	regexp.MustCompile(`^/api/manufacturing-libraries/standard/releases/[^/]+/resources/[^/]+/blobs/[^/]+$`),
 	// Project designs list only (exact project prefix is intentionally NOT
 	// granted: manufacturing/project reads stay out of the extension scope).
 	regexp.MustCompile(`^/api/projects/[^/]+/designs$`),

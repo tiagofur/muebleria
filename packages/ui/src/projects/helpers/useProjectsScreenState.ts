@@ -44,7 +44,9 @@ import {
 } from '../projectHelpers';
 import {
   filterProjectsByCommercialStatus,
+  sortProjectsForList,
   type CommercialSummariesStatus,
+  type ProjectListSortKey,
   type QuoteCommercialStatusFilter,
 } from '../quoteRevisionPresentation';
 
@@ -140,6 +142,8 @@ export function useProjectsScreenState({
   const debouncedSearch = useDebouncedValue(search);
   const [statusFilter, setStatusFilter] =
     useState<QuoteCommercialStatusFilter>('all');
+  // #1118 «¿qué mando hoy?» — actividad comercial descendente por defecto.
+  const [sortKey, setSortKey] = useState<ProjectListSortKey>('recent');
   // Deep-link mount (refresh / post-login remount): seed from the URL so the
   // first paint already shows the detail instead of flashing the list.
   const [selectedId, setSelectedIdState] = useState<string | null>(() =>
@@ -224,15 +228,20 @@ export function useProjectsScreenState({
   const commercialFiltersDisabled = commercialSummariesStatus !== 'ready';
   const filtered = useMemo(
     () =>
-      filterProjectsByCommercialStatus(
-        projects,
-        debouncedSearch,
-        statusFilter,
-        customers,
+      sortProjectsForList(
+        filterProjectsByCommercialStatus(
+          projects,
+          debouncedSearch,
+          statusFilter,
+          customers,
+          commercialSummaries,
+          commercialSummariesStatus,
+        ),
         commercialSummaries,
-        commercialSummariesStatus,
+        commercialSummariesStatus === 'ready',
+        sortKey,
       ),
-    [projects, debouncedSearch, statusFilter, customers, commercialSummaries, commercialSummariesStatus],
+    [projects, debouncedSearch, statusFilter, customers, commercialSummaries, commercialSummariesStatus, sortKey],
   );
 
   const selectedProject =
@@ -499,6 +508,8 @@ export function useProjectsScreenState({
     setSearch,
     statusFilter,
     setStatusFilter,
+    sortKey,
+    setSortKey,
     commercialFiltersDisabled,
     selectedId,
     /** Local intent selection (state + URL). Raw state stays internal. */

@@ -303,4 +303,32 @@ describe('useStandardLibraryWorkspace (#1102 Slice A)', () => {
     expect(hook.error).toContain('no se publicó nada');
     expect(hook.publishing).toBe(false);
   });
+
+  it('the consumer pin reads the pinned release profiles and moves on re-pin', async () => {
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardCurrentRelease').mockResolvedValue(release('pub-1', '0.3.4', 'published'));
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardReleases').mockResolvedValue([
+      release('pub-1', '0.3.4', 'published'),
+      release('pub-0', '0.2.0', 'published'),
+    ]);
+    vi.spyOn(GraneteApiClient.prototype, 'getStandardLibraryDraftReleases').mockResolvedValue([]);
+    const profilesSpy = vi
+      .spyOn(GraneteApiClient.prototype, 'getHardwareProfilesForRelease')
+      .mockResolvedValue([{ id: 'p1', code: 'PERF-X', name: 'Perfil X', revision: 'r1', active: true, items: [], version: 1, createdAt: '2026-10-05T00:00:00Z', updatedAt: '2026-10-05T00:00:00Z' }]);
+
+    await renderHook({ token: 'token-test' });
+    expect(hook.consumerPin).toBeNull();
+    expect(hook.consumerProfiles).toEqual([]);
+
+    await act(async () => {
+      hook.pinConsumerRelease('pub-0');
+    });
+    // El primer fetch corresponde al pin recién fijado.
+    expect(hook.consumerPin).toBe('pub-0');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(profilesSpy).toHaveBeenCalledWith('token-test', 'pub-0');
+    expect(hook.consumerProfiles[0]?.code).toBe('PERF-X');
+    expect(hook.consumerError).toBeNull();
+  });
 });

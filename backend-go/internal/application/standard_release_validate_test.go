@@ -37,6 +37,14 @@ func (s *stubValidationStore) ListHardwares(context.Context) ([]domain.Hardware,
 	return s.hardware, nil
 }
 
+func (s *stubValidationStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
+	return domain.Catalog{Modules: s.modules}, nil
+}
+
+func (s *stubValidationStore) ListMaterialCategories(context.Context) ([]domain.MaterialCategory, error) {
+	return nil, nil
+}
+
 func (s *stubValidationStore) ListActiveHardwareProfilesAnyOrg(context.Context) ([]domain.HardwareProfile, error) {
 	return s.profiles, nil
 }
@@ -84,7 +92,7 @@ func TestValidateStandardDraft(t *testing.T) {
 	releaseID := uuid.MustParse(domain.GraneteStandardDraftReleaseID)
 
 	resolvableModule := func() domain.Module {
-		return domain.Module{ID: "m-1", Code: "VIG-A", Name: "Vigas A", WidthMm: 600, HeightMm: 720, DepthMm: 560}
+		return domain.Module{ID: "a0000005-0000-0000-0000-000000000001", Code: "VIG-A", Name: "Vigas A", WidthMm: 600, HeightMm: 720, DepthMm: 560}
 	}
 
 	t.Run("reports a clean draft: compile dry-run and every module resolve", func(t *testing.T) {
@@ -100,7 +108,8 @@ func TestValidateStandardDraft(t *testing.T) {
 		if !report.OK {
 			t.Fatalf("report not ok: %+v", report)
 		}
-		if !report.Compile.OK || report.Compile.ResourceCount != 1 || report.Compile.ManifestHash == "" {
+		// Two resources: the module frozen as geometry + the hardware profile.
+		if !report.Compile.OK || report.Compile.ResourceCount != 2 || report.Compile.ManifestHash == "" {
 			t.Fatalf("compile check = %+v", report.Compile)
 		}
 		if report.Furniture.Total != 1 || report.Furniture.Resolved != 1 || report.Furniture.Failed != 0 {
@@ -132,7 +141,7 @@ func TestValidateStandardDraft(t *testing.T) {
 
 	t.Run("unresolvable furniture is reported per definition", func(t *testing.T) {
 		broken := resolvableModule()
-		broken.ID = "m-2"
+		broken.ID = "a0000005-0000-0000-0000-000000000002"
 		broken.Code = "VIG-B"
 		broken.WidthMm = 0 // no valid measures → resolve error
 		store := &stubValidationStore{
@@ -151,7 +160,7 @@ func TestValidateStandardDraft(t *testing.T) {
 			t.Fatalf("furniture check = %+v", report.Furniture)
 		}
 		failure := report.Furniture.Failures[0]
-		if failure.ID != "m-2" || failure.Code != "VIG-B" || failure.Error == "" {
+		if failure.ID != "a0000005-0000-0000-0000-000000000002" || failure.Code != "VIG-B" || failure.Error == "" {
 			t.Fatalf("failure = %+v", failure)
 		}
 	})

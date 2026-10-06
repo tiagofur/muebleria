@@ -18592,7 +18592,21 @@
           "catalogRevision": {
             "type": "string",
             "maxLength": 128,
-            "description": "revisionId from GET /furniture/definitions — required, no implicit latest."
+            "description": "revisionId from GET /furniture/definitions — required, no implicit latest. Advisory when libraryReleaseId is present (the release pin replaces the revision as the reproducibility anchor)."
+          },
+          "libraryReleaseId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "#1102 Slice D: the consumer's pinned library release. Present → manufacturing inputs AND the geometry catalog resolve from THAT release's frozen content (fail-closed on unpublished/unknown); the live-revision staleness check does not apply. Absent → current published release for manufacturing inputs, live catalog for geometry. [#1102]",
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "parameters": {
             "type": "object",

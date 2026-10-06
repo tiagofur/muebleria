@@ -1,5 +1,124 @@
 # ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
 
+**Browser gates de C y D (rama feat/1102-library-dev-mode, PR stacked sobre D.2):**
+los dos gates que los prompts de C y D exigían y quedaron NO_RUN:
+
+- `tests/organization/library-publish-gate.spec.ts` (gate C): editar
+  borrador (alta de material por la API de Catálogos) → DIFF lo muestra como
+  agregado con label → publicar → el release nuevo queda PUBLICADO y es el
+  current; publicar dos veces es 409 con el current intacto; sin perfiles
+  activos el publish es 422 fail-closed con el vigente intacto, y recuperado
+  el perfil el MISMO draft publica.
+- `tests/organization/library-consumer-cycle-gate.spec.ts` (gate D, ciclo
+  COMPLETO): consumidor A fijado a R1 resuelve la geometría congelada; editar
+  el mueble (777mm) es visible sin pin pero INVISIBLE con el pin en R1;
+  publicar R2 → B (pin R2) ve 777, A sigue en 600 hasta mover su pin;
+  pinned reads de perfiles respetan el release. Sin pin el path vivo exige
+  la revisión real (no hay implícito).
+- **Contrato completado:** `furniture.libraryReleaseId` (introducido en el
+  Slice D) ahora está en el yaml + regeneración — faltaba y los specs lo
+  necesitaban tipado.
+- **Tolerancia del diff:** un release publicado SIN manifiesto (estado de
+  reparación #955) no es una base diferenciable — el diff lo trata como
+  "sin base, todo agregado" en vez de fallar.
+- Corridos con el harness de organización (contenedor PG desechable +
+  backend + web + usuarios con platform admin): gate C 3 passed, gate D
+  4 passed. Plan de shards: 41 specs, partición exacta PASS.
+
+---
+
+# ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
+
+**Item 2 del restante de D — plugin dev-mode (rama feat/1102-library-dev-mode, apilada sobre item 1):**
+diseño publicado antes de codear (issuecomment-6002996520). Bajo la
+arquitectura del issue, "resolver el borrador" desde el plugin YA ES el path
+sin pin (tablas canónicas = estado de autoría), así que dev-mode es una
+decisión del plugin: dejar de enviar el pin.
+
+- `LibraryStore#dev_mode?/#set_dev_mode!`: marcador persistente en el store
+  dir (dev_mode.json).
+- `Application`: con dev ON, el `library_pin_provider` devuelve nil (ningún
+  resolve lleva `libraryReleaseId` → el servidor resuelve el ESTADO DE
+  AUTORÍA) y el sync de boot se salta (el pin no se mueve mientras probás).
+  `toggle_library_dev_mode` público.
+- Menú "Granete: alternar modo dev de biblioteca (borrador)" con messagebox
+  explicativo; RBZ 0.1.40; expectations de menú actualizadas en
+  wiring/application tests + 3 tests nuevos del flag.
+
+---
+
+# ODD — #1102 Slice A: Workspace de borrador (LIB-AUTH)
+
+**Item 1 del restante de D — congelar la GEOMETRÍA (rama feat/1102-frozen-catalog-resolve, apilada sobre D):**
+diseño publicado antes de codear (issuecomment-6002693223). El compilador
+ahora junta TODO el catálogo de autoría desde UN snapshot consistente
+(`GetFullCatalog` — incluye despiece y hardware lines de cada módulo) y lo
+congela en 9 kinds nuevos (module/structure/component/agregado/material/
+edge_band/option_group/module_category/material_category) + los existentes
+hardware/hardware_profile. `ValidateModule` por módulo en la juntada:
+fail-closed, un mueble roto no entra a un release inmutable; ids no-uuid
+también. La degradación honesta de perfiles no cargables se mantiene.
+
+- **Decodificación:** `storage.FrozenCatalogForRelease` reconstruye el
+  `domain.Catalog` + categorías de material desde manifiesto + blobs,
+  fail-closed (`ErrFrozenCatalogIncomplete`) ante blob faltante/ilegible —
+  un resolve pineado JAMÁS cae a filas vivas.
+- **Resolve pineado:** con `furniture.libraryReleaseId` el snapshot del
+  resolve se arma desde el freeze y la Projection se reconstruye con el
+  MISMO `buildWorkshopFurnitureCatalogValidated` (cero fork del sistema de
+  parámetros). `CATALOG_REVISION_STALE` no se compara en modo pin: el pin
+  reemplaza a la revisión como ancla (catalogRevision advisory). Test
+  clave: módulo congelado con 611mm que no existe en el vivo → el resolve
+  pineado devuelve 611.
+- El batch de "probar borrador" (B) y el diff (C) ahora usan el MISMO
+  snapshot de catálogo (una sola lectura consistente).
+- **Hallazgos de la suite (arreglados):** `agregados.id` es TEXT PRIMARY KEY
+  — ids no-uuid son legítimos del esquema, así que el gate estricto de uuid
+  se convirtió en skip-with-WARN (`release_compile_skipped_non_uuid_resource`):
+  la entidad no representable en el contrato #772 (refs uuid) no se congela;
+  limitación nombrada. Y `GetFullCatalog` con ctx sin org crasheaba
+  (`organization_id = ''` contra columna uuid) en fixtures que publicaban
+  con el pool de migración — corregido con `WithOrgCtx` explícito en los 5
+  sitios (el camino API siempre tiene org por middleware).
+- Restante del restante: plugin dev-mode contra borrador (item 2).
+
+---
+
+**Slice D (rama feat/1102-lib-consumer-release desde main con A+B+C mergeados por el owner):**
+diseño publicado antes de codear (issuecomment-6001874131). El hallazgo que
+redefinió el slice: `ReleaseServerResolveInputs` (#875/#916) YA resuelve los
+inputs de manufactura desde el release publicado (implícito "current"); el
+trío LibraryStore de #774 estaba DORMIDO (sin adapter de API ni wiring).
+
+- **Backend:** `furniture.libraryReleaseId` opcional en el request de
+  authoring resolve. Presente → `ReleaseServerInputsForRelease` arma los
+  inputs desde ESE release; no publicado/desconocido → 422
+  LIBRARY_RELEASE_UNAVAILABLE (el pin significa exactamente ese release).
+  La degradación honesta de blobs no cargables se mantiene (#875). La
+  respuesta ya hacía echo del release id — ahora hace eco del pin del
+  consumidor.
+- **Allowlist extensión** (grant deliberado #1102): GET current / release /
+  manifest / blobs — lectura de PUBLICADOS (RLS los limita).
+- **Plugin:** `request_raw` en HttpAdapter (manifiesto y blobs viajan como
+  bytes exactos — el store verifica sha256); `ReleaseApiClient` (puerto del
+  synchronizer); `ConsumerPin#refresh!` (boot best-effort: sync current con
+  expected hash + org-change guard; offline → pin viejo persiste);
+  `RemoteCatalogProvider.library_pin_provider` inyecta
+  `furniture.libraryReleaseId` en cada resolve; RBZ 0.1.39.
+- **Web:** Vista consumidor — pin explícito por release, muestra los
+  perfiles congelados vía el pinned read existente; "Actualizar a la última"
+  mueve el pin; fijar manualmente una versión vieja simula al "otro
+  consumidor" que se queda atrás.
+
+**Restante nombrado (no implementado, a filear como issue propia):** congelar
+la GEOMETRÍA del catálogo en releases (compilador extenso a
+muebles/estructuras/materiales + resolve desde el freeze). Hoy la geometría
+sigue leyendo tablas vivas; el pin cubre la capa de manufactura completa.
+Plugin dev-mode contra borrador: también restante (probar borrador vive en la
+web B).
+
+---
+
 **Slice C (rama apilada feat/1102-lib-draft-publish, base = rama B):**
 diseño publicado antes de codear (issuecomment-6001287796). C = UI + wiring
 más UN endpoint nuevo de lectura:

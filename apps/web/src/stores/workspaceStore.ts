@@ -69,6 +69,24 @@ import {
   type SupportInfo,
 } from '../session';
 
+// La navegación cancela los fetch en vuelo: esa cancelación no es un fallo del
+// workspace (#13 pide surfear fallos reales, no abortos del unload). `pageshow`
+// rearma el flag porque bfcache revive el documento en volver atrás.
+let pageUnloading = false;
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    pageUnloading = true;
+  });
+  window.addEventListener('pageshow', () => {
+    pageUnloading = false;
+  });
+}
+
+/** Test-only: simula la descarga del documento (pagehide) sin DOM real. */
+export function __setWorkspacePageUnloadingForTests(value: boolean): void {
+  pageUnloading = value;
+}
+
 /**
  * Assignable owner (RBAC) — solo se carga si `roleCanAssignOwner(actorRole)`.
  * Traído de `/assignable-owners` en auth mode.
@@ -822,6 +840,9 @@ export function createWorkspaceStore(options?: InternalOptions) {
             });
           } catch (err) {
             if (!isSameWorkspaceSession(requestedSession, get())) return;
+            // El documento se fue: el fetch fue cancelado por la navegación,
+            // no falló el workspace. Nada que surfear en una página muerta.
+            if (pageUnloading) return;
             // Do not silently seed — surface failure (#13).
             console.error('Failed to load workspace:', err);
             const message =

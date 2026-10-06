@@ -102,7 +102,7 @@ func TestReleaseServerInputsTenantIsolation(t *testing.T) {
 	if _, err := migrationPool.Exec(ctx, `UPDATE library_releases SET version = '0.1.0-loader-iso' WHERE id = $1`, draftID); err != nil {
 		t.Fatalf("retarget draft: %v", err)
 	}
-	if _, err := application.PublishStandardRelease(ctx, adminStore, draftID, uuid.MustParse(userA)); err != nil {
+	if _, err := application.PublishStandardRelease(storage.WithOrgCtx(ctx, rlsOrgA), adminStore, draftID, uuid.MustParse(userA)); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 

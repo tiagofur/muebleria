@@ -24,7 +24,8 @@ import (
 // handler-test stubs.
 type StandardDraftValidationStore interface {
 	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
-	HardwareReader
+	CatalogReader
+	MaterialCategoryReader
 	HardwareProfileReader
 	ListModules(ctx context.Context) ([]domain.Module, error)
 	ListStructures(ctx context.Context) ([]domain.Structure, error)
@@ -95,13 +96,24 @@ func ValidateStandardDraft(
 		ValidatedAt: time.Now().UTC(),
 	}
 
-	report.Compile = validateDraftCompile(ctx, store, release)
-
-	furniture, err := validateDraftFurniture(ctx, store)
-	if err != nil {
-		return nil, err
+	// ONE catalog snapshot feeds both checks — the exact rows the publisher
+	// would freeze.
+	catalog, catalogErr := store.GetFullCatalog(ctx)
+	if catalogErr != nil {
+		return nil, fmt.Errorf("gather authoring catalog: %w", catalogErr)
 	}
-	report.Furniture = furniture
+	materialCategories, err := store.ListMaterialCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather material categories: %w", err)
+	}
+	profiles, err := store.ListActiveHardwareProfilesAnyOrg(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather hardware profile resources: %w", err)
+	}
+
+	report.Compile = validateDraftCompile(release, catalog, materialCategories, profiles)
+
+	report.Furniture = validateDraftFurniture(catalog)
 
 	report.OK = report.Compile.OK && report.Furniture.Failed == 0
 	return report, nil
@@ -109,8 +121,8 @@ func ValidateStandardDraft(
 
 // validateDraftCompile mirrors PublishStandardRelease's gather+compile step
 // and discards the result — the pre-publish answer to "would this publish?".
-func validateDraftCompile(ctx context.Context, store StandardDraftValidationStore, release *domain.LibraryRelease) DraftCompileCheck {
-	inputs, err := BuildStandardReleaseInputs(ctx, store, store)
+func validateDraftCompile(release *domain.LibraryRelease, catalog domain.Catalog, materialCategories []domain.MaterialCategory, profiles []domain.HardwareProfile) DraftCompileCheck {
+	inputs, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
 	if err != nil {
 		return DraftCompileCheck{OK: false, Error: err.Error()}
 	}
@@ -126,42 +138,11 @@ func validateDraftCompile(ctx context.Context, store StandardDraftValidationStor
 }
 
 // validateDraftFurniture resolves every furniture definition of the
-// caller's organization catalog through the plugin-insertion engine.
-func validateDraftFurniture(ctx context.Context, store StandardDraftValidationStore) (DraftFurnitureCheck, error) {
-	modules, err := store.ListModules(ctx)
-	if err != nil {
-		return DraftFurnitureCheck{}, fmt.Errorf("list modules: %w", err)
-	}
-	structures, err := store.ListStructures(ctx)
-	if err != nil {
-		return DraftFurnitureCheck{}, fmt.Errorf("list structures: %w", err)
-	}
-	components, err := store.ListComponents(ctx)
-	if err != nil {
-		return DraftFurnitureCheck{}, fmt.Errorf("list components: %w", err)
-	}
-	agregados, err := store.ListAgregados(ctx)
-	if err != nil {
-		return DraftFurnitureCheck{}, fmt.Errorf("list agregados: %w", err)
-	}
-	hardware, err := store.ListHardwares(ctx)
-	if err != nil {
-		return DraftFurnitureCheck{}, fmt.Errorf("list hardware: %w", err)
-	}
-	materials, err := store.ListMaterialBoards(ctx)
-	if err != nil {
-		return DraftFurnitureCheck{}, fmt.Errorf("list materials: %w", err)
-	}
-
+// assembled catalog through the plugin-insertion engine.
+func validateDraftFurniture(catalog domain.Catalog) DraftFurnitureCheck {
+	modules := catalog.Modules
 	// The engine accepts nil dims/choices: the module's own dimensions and its
 	// catalog defaults — what a consumer gets before touching any dialog.
-	catalog := domain.Catalog{
-		Structures: structures,
-		Components: components,
-		Agregados:  agregados,
-		Hardware:   hardware,
-		Materials:  materials,
-	}
 
 	check := DraftFurnitureCheck{Failures: []DraftFurnitureFailure{}}
 	// Modules carry no active flag (hard delete owns retirement): every
@@ -181,5 +162,5 @@ func validateDraftFurniture(ctx context.Context, store StandardDraftValidationSt
 		}
 		check.Resolved++
 	}
-	return check, nil
+	return check
 }

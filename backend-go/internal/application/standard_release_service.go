@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/google/uuid"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 // StandardReleaseService orchestrates the Granete Standard publish flow
@@ -33,50 +35,148 @@ type HardwareReader interface {
 	ListHardwares(ctx context.Context) ([]domain.Hardware, error)
 }
 
+// CatalogReader reads the assembled organization catalog (one consistent
+// snapshot incl. module board parts / hardware lines) for compilation.
+type CatalogReader interface {
+	GetFullCatalog(ctx context.Context) (domain.Catalog, error)
+}
+
+// MaterialCategoryReader reads material categories for compilation (#1102
+// frozen geometry: the furniture projection needs them).
+type MaterialCategoryReader interface {
+	ListMaterialCategories(ctx context.Context) ([]domain.MaterialCategory, error)
+}
+
+// Compilation resource kinds. hardware/hardware_profile predate #1102; the
+// frozen-geometry kinds freeze the authoring org's catalog so a pinned
+// resolve never reads live tables for geometry.
+const (
+	ModuleResourceKind           = "module"
+	StructureResourceKind        = "structure"
+	ComponentResourceKind        = "component"
+	AgregadoResourceKind         = "agregado"
+	MaterialResourceKind         = "material"
+	EdgeBandResourceKind         = "edge_band"
+	OptionGroupResourceKind      = "option_group"
+	ModuleCategoryResourceKind   = "module_category"
+	MaterialCategoryResourceKind = "material_category"
+)
+
 // BuildStandardReleaseInputs assembles the compilation resources from the
-// store: canonical hardware (kind hardware) and every active hardware
-// profile (kind hardware_profile). Fail-closed on any invalid profile —
-// a broken definition never enters an immutable release.
+// assembled organization catalog (one consistent GetFullCatalog snapshot —
+// module board parts and hardware lines included) plus every active
+// hardware profile (cross-org, Granete-staff authority). Fail-closed: an
+// invalid module or a non-uuid id never enters an immutable release.
 func BuildStandardReleaseInputs(
-	ctx context.Context,
-	hardware HardwareReader,
-	profiles HardwareProfileReader,
+	catalog domain.Catalog,
+	materialCategories []domain.MaterialCategory,
+	profiles []domain.HardwareProfile,
 ) ([]CompilationResourceInput, error) {
-	hardwareList, err := hardware.ListHardwares(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("gather hardware resources: %w", err)
-	}
-	inputs := make([]CompilationResourceInput, 0, len(hardwareList)+8)
-	for i := range hardwareList {
-		hw := &hardwareList[i]
-		if !hw.Active {
-			continue
-		}
-		raw, err := json.Marshal(hw)
+	inputs := make([]CompilationResourceInput, 0, 64)
+
+	emit := func(kind, rawID, revision, label string, entity any) error {
+		id, err := uuid.Parse(rawID)
 		if err != nil {
-			return nil, fmt.Errorf("marshal hardware %s: %w", hw.Code, err)
+			// The release contract pins resources by uuid (#772); some
+			// catalog tables legitimately carry TEXT ids (agregados). A
+			// non-uuid entity cannot be represented in a release, so it is
+			// skipped loudly rather than failing the publish — a pinned
+			// consumer will not see it.
+			slog.Warn("release_compile_skipped_non_uuid_resource", "kind", kind, "id", rawID, "label", label)
+			return nil
 		}
-		id, err := uuid.Parse(hw.ID)
+		raw, err := json.Marshal(entity)
 		if err != nil {
-			return nil, fmt.Errorf("hardware %s id is not a uuid: %w", hw.Code, err)
+			return fmt.Errorf("marshal %s %s: %w", kind, label, err)
 		}
 		inputs = append(inputs, CompilationResourceInput{
-			Kind:        HardwareResourceKind,
+			Kind:        kind,
 			ID:          id,
-			Revision:    hardwareRevision(hw),
+			Revision:    revision,
 			PackageKind: domain.PackageKindFree,
 			RawJSON:     raw,
 		})
+		return nil
+	}
+	versionRevision := func(version int64) string {
+		if version <= 0 {
+			return "rev-1"
+		}
+		return fmt.Sprintf("v%d", version)
 	}
 
-	profileList, err := profiles.ListActiveHardwareProfilesAnyOrg(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("gather hardware profile resources: %w", err)
+	for i := range catalog.Hardware {
+		hw := &catalog.Hardware[i]
+		if !hw.Active {
+			continue
+		}
+		if err := emit(HardwareResourceKind, hw.ID, hardwareRevision(hw), hw.Code, hw); err != nil {
+			return nil, err
+		}
 	}
+	for i := range catalog.Materials {
+		material := &catalog.Materials[i]
+		if err := emit(MaterialResourceKind, material.ID, versionRevision(material.Version), material.Code, material); err != nil {
+			return nil, err
+		}
+	}
+	for i := range catalog.Edges {
+		edge := &catalog.Edges[i]
+		if err := emit(EdgeBandResourceKind, edge.ID, versionRevision(edge.Version), edge.Code, edge); err != nil {
+			return nil, err
+		}
+	}
+	for i := range catalog.OptionGroups {
+		group := &catalog.OptionGroups[i]
+		if err := emit(OptionGroupResourceKind, group.ID, versionRevision(group.Version), group.Code, group); err != nil {
+			return nil, err
+		}
+	}
+	for i := range catalog.Categories {
+		category := &catalog.Categories[i]
+		if err := emit(ModuleCategoryResourceKind, category.ID, versionRevision(category.Version), category.Name, category); err != nil {
+			return nil, err
+		}
+	}
+	for i := range materialCategories {
+		category := &materialCategories[i]
+		if err := emit(MaterialCategoryResourceKind, category.ID, versionRevision(category.Version), category.Name, category); err != nil {
+			return nil, err
+		}
+	}
+	for i := range catalog.Agregados {
+		agregado := &catalog.Agregados[i]
+		if err := emit(AgregadoResourceKind, agregado.ID, versionRevision(agregado.Version), agregado.Code, agregado); err != nil {
+			return nil, err
+		}
+	}
+	for i := range catalog.Components {
+		component := &catalog.Components[i]
+		if err := emit(ComponentResourceKind, component.ID, versionRevision(component.Version), component.Code, component); err != nil {
+			return nil, err
+		}
+	}
+	for i := range catalog.Structures {
+		structure := &catalog.Structures[i]
+		if err := emit(StructureResourceKind, structure.ID, versionRevision(int64(structure.Revision)), structure.Code, structure); err != nil {
+			return nil, err
+		}
+	}
+	for i := range catalog.Modules {
+		module := &catalog.Modules[i]
+		// Same gate the resolve runs: a module that cannot validate must not
+		// be frozen into an immutable release.
+		if err := engine.ValidateModule(*module); err != nil {
+			return nil, fmt.Errorf("module %s (%s): %w", module.Code, module.ID, err)
+		}
+		if err := emit(ModuleResourceKind, module.ID, versionRevision(module.Version), module.Code, module); err != nil {
+			return nil, err
+		}
+	}
+
 	profileCount := 0
-	for i := range profileList {
-		profile := &profileList[i]
-		resource, err := BuildHardwareProfileResource(profile, domain.PackageKindFree)
+	for i := range profiles {
+		resource, err := BuildHardwareProfileResource(&profiles[i], domain.PackageKindFree)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +221,22 @@ func PublishStandardRelease(
 		return nil, ErrReleaseNotDraft
 	}
 
-	inputs, err := BuildStandardReleaseInputs(ctx, store, store)
+	// ONE consistent org-catalog snapshot feeds the frozen geometry: the
+	// same assembled rows (board parts, hardware lines) the live resolve
+	// reads, frozen per entity into the release.
+	catalog, err := store.GetFullCatalog(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather authoring catalog: %w", err)
+	}
+	materialCategories, err := store.ListMaterialCategories(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather material categories: %w", err)
+	}
+	profiles, err := store.ListActiveHardwareProfilesAnyOrg(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gather hardware profile resources: %w", err)
+	}
+	inputs, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +257,8 @@ func PublishStandardRelease(
 // StandardReleaseStore is the surface the publish flow needs: satisfied by
 // *storage.PostgresStore and by handler-test stubs.
 type StandardReleaseStore interface {
-	HardwareReader
+	CatalogReader
+	MaterialCategoryReader
 	HardwareProfileReader
 	GetReleaseByID(ctx context.Context, releaseID uuid.UUID) (*domain.LibraryRelease, error)
 	PublishReleaseWithManifest(ctx context.Context, releaseID uuid.UUID, manifest *domain.LibraryManifest, manifestBytes []byte, blobs []domain.ResourceBlob, publishedBy *uuid.UUID) error

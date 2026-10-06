@@ -130,21 +130,6 @@
   text-align: right;
 }
 
-.dashboard-owners-table__name {
-  font-weight: var(--weight-semibold);
-  color: var(--text-primary);
-}
-
-.dashboard-owners-table__num {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.dashboard-owners-table th:nth-child(n + 3),
-.dashboard-owners-table td:nth-child(n + 3) {
-  text-align: right;
-}
-
 .dashboard__recent {
   display: grid;
   grid-template-columns: 1fr;
@@ -627,4 +612,130 @@
 .ops-exceptions__action {
   font-size: var(--text-sm);
   color: var(--text-secondary);
+}
+
+/* ── #1116 — Tour opt-in (§4.9: nunca modal auto-abierto) ──────────────── */
+
+.dashboard-tour-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--brand-400) 35%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--brand-50) 60%, var(--surface-card));
+  color: var(--text-primary);
+}
+
+.dashboard-tour-card > svg {
+  flex-shrink: 0;
+  color: var(--brand-600);
+}
+
+.dashboard-tour-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-tour-card__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+.dashboard-tour-card__lead {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.dashboard-tour-card__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .dashboard-tour-card {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-tour-card__actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ── #1116 — Franja «Seguí donde dejaste» ──────────────────────────────── */
+
+.dashboard-resume {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--brand-50) 40%, var(--surface-card));
+}
+
+.dashboard-resume__text {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+/* ── #1116 — Chip «Demo» en cards recientes ────────────────────────────── */
+
+.dashboard-recent-card__demo {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--warning-500) 14%, transparent);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+/* ── #1116 — Métricas colapsables ──────────────────────────────────────── */
+
+.analytics__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.analytics__toggle:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.analytics__toggle:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 1px;
+}
+
+.analytics__toggle-chevron--up {
+  transform: rotate(180deg);
+}
+
+.analytics__teaser {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
