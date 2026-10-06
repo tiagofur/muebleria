@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { Pool } from 'pg';
 import { GraneteApiClient } from '@granete/storage';
 import { TotpProvider, secretFromProvisioningUri } from './support/totp';
 import { required } from './support/api';
@@ -93,6 +94,44 @@ test.describe.serial('Password reset (#1178) admin-issued browser E2E', () => {
     if (!target || target.membership_status !== 'active') throw new Error('password reset target is not an active member');
     targetMembershipId = target.membership_id;
     resetAdmin = { email: ADMIN_EMAIL, totp, organizationName: provisioned.organization.name };
+  });
+
+  test.afterAll(async () => {
+    // The dedicated store was bootstrapped by the SHARED gate owner: without
+    // this cleanup the owner keeps a second membership and every later spec
+    // that logs in without an org hint lands on the organization picker
+    // instead of its workshop. The spec's own admin keeps the store's
+    // last-active-admin invariant satisfied.
+    const pool = new Pool({ connectionString: required('ORGANIZATION_TEST_DATABASE_URL') });
+    try {
+      const ownerChildParams = [
+        required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
+        'tienda-reset-1178',
+      ];
+      await pool.query(
+        `DELETE FROM auth_refresh_families f
+          USING auth_sessions s, users u, organizations o
+          WHERE f.session_id = s.id AND s.user_id = u.id AND s.active_organization_id = o.id
+            AND u.email = $1 AND o.slug = $2`,
+        ownerChildParams,
+      );
+      await pool.query(
+        `DELETE FROM auth_sessions
+          USING users u, organizations o
+          WHERE auth_sessions.user_id = u.id AND auth_sessions.active_organization_id = o.id
+            AND u.email = $1 AND o.slug = $2`,
+        ownerChildParams,
+      );
+      await pool.query(
+        `DELETE FROM memberships
+          USING users u, organizations o
+          WHERE memberships.user_id = u.id AND memberships.organization_id = o.id
+            AND u.email = $1 AND o.slug = $2`,
+        ownerChildParams,
+      );
+    } finally {
+      await pool.end();
+    }
   });
 
   test('admin issues the one-time link from Usuarios and the member completes it', async ({ page, browser }) => {
