@@ -43,7 +43,7 @@ const ISSUE_STATUS_BADGE: Record<string, string> = {
 function formatDayDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString('es-MX', {
+  return new Date(y, m - 1, d).toLocaleDateString('es-AR', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -118,7 +118,9 @@ export function InstallationJobPanel({
   const [punchDueDate, setPunchDueDate] = useState('');
   const [punchSeverity, setPunchSeverity] = useState<PunchSeverity>('major');
   // #1169 P1: confirmación de dos pasos para el cierre destructivo de obra.
-  const [closeConfirm, setCloseConfirm] = useState(false);
+  // Keyed por obra: cambiar de proyecto nunca deja la confirmación abierta.
+  const [closeConfirmFor, setCloseConfirmFor] = useState<string | null>(null);
+  const closeConfirm = closeConfirmFor === projectId;
   const [punchIsBlocker, setPunchIsBlocker] = useState(true);
   const [closingPunchId, setClosingPunchId] = useState<string | null>(null);
   const [closePunchNotes, setClosePunchNotes] = useState('');
@@ -566,7 +568,7 @@ export function InstallationJobPanel({
           <p className="ship-board__closeout-audit" data-testid={`installation-closeout-audit-${projectId}`}>
             Conformidad firmada por <strong>{job.closeout.signedOffBy}</strong>
             {job.closeout.closedAt
-              ? ` · obra cerrada el ${new Date(job.closeout.closedAt).toLocaleDateString('es-MX')}`
+              ? ` · obra cerrada el ${new Date(job.closeout.closedAt).toLocaleDateString('es-AR')}`
               : ''}
           </p>
         ) : (
@@ -621,16 +623,16 @@ export function InstallationJobPanel({
                     className="btn btn--small btn--danger"
                     onClick={() => {
                       handlers.onCloseProject?.(projectId);
-                      setCloseConfirm(false);
+                      setCloseConfirmFor(null);
                     }}
-                    data-testid={`installation-close-confirm-${projectId}`}
+                    data-testid={`installation-close-confirm-yes-${projectId}`}
                   >
                     Sí, cerrar
                   </button>
                   <button
                     type="button"
                     className="btn btn--small btn--ghost"
-                    onClick={() => setCloseConfirm(false)}
+                    onClick={() => setCloseConfirmFor(null)}
                   >
                     Cancelar
                   </button>
@@ -639,7 +641,7 @@ export function InstallationJobPanel({
                 <button
                   type="button"
                   className="btn btn--small btn--danger"
-                  onClick={() => setCloseConfirm(true)}
+                  onClick={() => setCloseConfirmFor(projectId)}
                   data-testid={`installation-close-${projectId}`}
                 >
                   Cerrar proyecto

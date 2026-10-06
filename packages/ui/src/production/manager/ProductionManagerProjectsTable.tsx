@@ -4,7 +4,7 @@
 
 import type { ReactNode } from 'react';
 import { CircleAlert } from 'lucide-react';
-import type { Project, ProjectFloorSummary } from '@granete/domain';
+import type { Project, ProjectFloorSummary, ProductionSector } from '@granete/domain';
 import { PRODUCTION_SECTOR_LABELS_ES } from '@granete/domain';
 import { EmptyState } from '../../common';
 import { SectorIcon } from './ProductionManagerSectorsGrid';
@@ -86,7 +86,7 @@ export function ProjectDashboardRow({
           />
         </div>
         <span className="pm-dashboard__progress-text">
-          {hasItems ? `${summary.percentage.toFixed(2)}%` : '—'}
+          {hasItems ? `${summary.percentage}%` : '—'}
         </span>
       </div>
 
@@ -132,6 +132,8 @@ export function ProjectDashboardRow({
 
 export interface ProductionManagerProjectsTableProps {
   readonly productionProjects: readonly ProductionProjectItem[];
+  /** Sector activo del filtro (null = todas); contextualiza lista vacía. */
+  readonly selectedSector?: ProductionSector | null;
   readonly customerLabelFor?: (customerId: string) => string;
   readonly onOpenProject?: (projectId: string) => void;
   readonly onOpenOrder?: (projectId: string) => void;
@@ -139,18 +141,31 @@ export interface ProductionManagerProjectsTableProps {
 
 export function ProductionManagerProjectsTable({
   productionProjects,
+  selectedSector = null,
   customerLabelFor,
   onOpenProject,
   onOpenOrder,
 }: ProductionManagerProjectsTableProps): ReactNode {
   return (
     <div className="pm-dashboard__projects">
-      <h3 className="pm-dashboard__section-title">Proyectos en Producción</h3>
+      <h3 className="pm-dashboard__section-title">
+        {selectedSector
+          ? `Proyectos en ${PRODUCTION_SECTOR_LABELS_ES[selectedSector]}`
+          : 'Proyectos en Producción'}
+      </h3>
 
       {productionProjects.length === 0 ? (
         <EmptyState
-          title="Sin proyectos en planta"
-          description="Cuando se apruebe una cotización, aparecerá acá con su estado completo."
+          title={
+            selectedSector
+              ? `Sin obras en ${PRODUCTION_SECTOR_LABELS_ES[selectedSector]}`
+              : 'Sin proyectos en planta'
+          }
+          description={
+            selectedSector
+              ? 'Elegí «Todas» para volver a ver todas las obras en producción.'
+              : 'Cuando se apruebe una cotización, aparecerá acá con su estado completo.'
+          }
         />
       ) : (
         <div className="pm-dashboard__project-list">

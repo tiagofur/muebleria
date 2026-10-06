@@ -24,6 +24,12 @@ import (
 // instead of silently passing. This mirrors the httptest.ResponseRecorder style
 // of middleware_test.go and avoids any database dependency.
 type stubStore struct {
+	// #1178 password reset: configurable issuance outcome, org team fixture
+	// and capture of the issued reset target.
+	passwordResetIssuance *storage.PasswordResetIssuance
+	orgTeam               []storage.OrgTeamMember
+	issuedResetUserID     string
+	issuedResetVia        string
 	// Hardware 3D assets (#667 M1)
 	assetSessionResult           *storage.HardwareAssetUploadSessionResult
 	assetSession                 *domain.HardwareAssetUploadSession

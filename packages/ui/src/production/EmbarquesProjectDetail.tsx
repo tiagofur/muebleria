@@ -61,7 +61,12 @@ export function EmbarquesProjectDetail({
   onBack,
   testId,
 }: EmbarquesProjectDetailProps): ReactNode {
-  const [crossAlert, setCrossAlert] = useState<CrossProjectAlert | null>(null);
+  // Keyed by project: navigating between obras never shows a stale alert.
+  const [lastAlert, setLastAlert] = useState<{
+    projectId: string;
+    alert: CrossProjectAlert;
+  } | null>(null);
+  const crossAlert = lastAlert?.projectId === project.id ? lastAlert.alert : null;
 
   // Resolve module labels for cross-project validation and checklist
   const labels = useMemo(() => {
@@ -87,10 +92,13 @@ export function EmbarquesProjectDetail({
       if (!belongsToProject && status === 'loaded') {
         // Find the label to get a human-readable name
         const label = labels.find((l) => l.itemId === itemId);
-        setCrossAlert({
-          scannedCode: label?.factoryCode ?? label?.moduleCode ?? itemId,
-          expectedProject: project.name,
-          actualProject: label?.moduleName ?? 'Otra obra',
+        setLastAlert({
+          projectId: project.id,
+          alert: {
+            scannedCode: label?.factoryCode ?? label?.moduleCode ?? itemId,
+            expectedProject: project.name,
+            actualProject: label?.moduleName ?? 'Otra obra',
+          },
         });
         return; // Block the advance
       }
@@ -133,7 +141,7 @@ export function EmbarquesProjectDetail({
           role="alert"
           data-testid="embarques-cross-alert"
         >
-          <AlertTriangle size={20} className="embarques-detail__alert-icon" />
+          <AlertTriangle size={20} aria-hidden="true" className="embarques-detail__alert-icon" />
           <div className="embarques-detail__alert-content">
             <strong>Bulto no pertenece a esta obra</strong>
             <p>
@@ -145,7 +153,7 @@ export function EmbarquesProjectDetail({
           <button
             type="button"
             className="btn btn--ghost btn--small"
-            onClick={() => setCrossAlert(null)}
+            onClick={() => setLastAlert(null)}
             aria-label="Descartar alerta de bulto equivocado"
             data-testid="embarques-dismiss-alert"
           >

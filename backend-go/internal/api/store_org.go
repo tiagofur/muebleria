@@ -48,6 +48,10 @@ type OrgStore interface {
 	RevokeInvitation(ctx context.Context, organizationID, id, reason, actorID string, expectedVersion int64) (*storage.Invitation, error)
 	AcceptInvitation(ctx context.Context, cmd storage.AcceptInvitationCommand, verifyPassword func(string, string) bool, validateNewPassword func(string) error) (*storage.AcceptInvitationResult, error)
 	PreviewInvitation(ctx context.Context, tokenHash string) (*storage.InvitationPreview, error)
+	// Password reset (#1178): one-time token lifecycle + user-level session cut.
+	RequestPasswordReset(ctx context.Context, email, ip, requestID string) (*storage.PasswordResetIssuance, error)
+	IssuePasswordResetToken(ctx context.Context, userID, issuedVia string, issuedBy *string, ttl time.Duration, ip, requestID string) (*storage.PasswordResetIssuance, error)
+	ConfirmPasswordReset(ctx context.Context, cmd storage.ConfirmPasswordResetCommand) (int, error)
 	ListSecurityAuditEvents(ctx context.Context, organizationID string, limit int) ([]openapi.SecurityAuditEvent, error)
 	GetUserByEmailAnyState(ctx context.Context, email string) (*domain.User, error)
 }

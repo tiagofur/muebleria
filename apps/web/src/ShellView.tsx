@@ -1698,7 +1698,14 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             const target = pathForNav('warehouse');
             if (location.pathname !== target) navigate(target);
           }}
-          onOpenProject={(_id) => {
+          onOpenProject={(id) => {
+            // #1173 P0: «Ver picking» respeta la obra — el deep link enfoca
+            // su card de picking en el almacén (PurchasingScreen lo consume).
+            try {
+              sessionStorage.setItem('warehouse_picking_focus', id);
+            } catch {
+              /* sin storage el deep link degrada a la cola general */
+            }
             const target = pathForNav('warehouse');
             if (location.pathname !== target) navigate(target);
           }}

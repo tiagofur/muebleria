@@ -189,7 +189,7 @@ function runTests() {
     const card = el(sandbox, 'pf-pending-list').children[0];
     const labels = card.children[0].children[0].children.map((child) => child.textContent);
     assert.ok(labels.includes('Falta en este archivo'));
-    assert.equal(card.children.length, 2, 'information block + actions row');
+    assert.equal(card.children.length, 3, 'information block + actions row + #1177 remove section');
     const actions = card.children[1];
     assert.equal(actions.className, 'pf-unit-actions');
     assert.equal(actions.children.length, 2, 'missing_local exposes the two same-level recovery intents');

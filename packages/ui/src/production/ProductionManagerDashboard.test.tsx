@@ -206,9 +206,38 @@ describe('ProductionManagerDashboard', () => {
       />,
     );
 
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      'Error al cargar el dashboard: Sin conexión',
-    );
+    // #1173 P2: copy humano + detalle técnico secundario, no string crudo.
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('No pudimos cargar los datos');
+    expect(alert.textContent).toContain('Sin conexión');
     expect(screen.getByRole('button', { name: 'Reintentar' })).not.toBeNull();
+  });
+
+  it('filters the obras table by sector with an exit back to «Todas» (#1173)', async () => {
+    render(<ProductionManagerDashboard projects={projects} />);
+    await screen.findByTestId('pm-sector-all');
+
+    // Sin filtro: todas las obras.
+    const allRows = screen.queryAllByTestId(/^pm-project-row-/);
+    expect(allRows.length).toBe(projects.length);
+
+    // Filtrar por Corte recorta la tabla (y el título lo contextualiza).
+    fireEvent.click(screen.getByRole('button', { name: /Corte/ }));
+    const cutRows = screen.queryAllByTestId(/^pm-project-row-/);
+    expect(cutRows.length).toBeLessThan(projects.length);
+    expect(screen.getByText('Proyectos en Corte')).not.toBeNull();
+
+    // «Todas» restaura la lista completa.
+    fireEvent.click(screen.getByTestId('pm-sector-all'));
+    expect(screen.queryAllByTestId(/^pm-project-row-/).length).toBe(projects.length);
+    expect(screen.getByText('Proyectos en Producción')).not.toBeNull();
+  });
+
+  it('marks missing server metrics as missing, not zero (#1173)', async () => {
+    render(<ProductionManagerDashboard projects={projects} />);
+    // Sin repo, «Completados Hoy» es «—» con causa visible, no un 0 fabricado.
+    const completed = screen.getByText('Completados Hoy').parentElement!;
+    expect(completed.textContent).toContain('—');
+    expect(completed.textContent).toContain('sin registro del servidor');
   });
 });

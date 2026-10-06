@@ -7,7 +7,7 @@
  * home screen stays a project list; the process work lives here.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowLeft, Hammer, Mail, MapPin, Phone } from 'lucide-react';
 
 import {
@@ -52,6 +52,14 @@ export function InstalacionesProjectDetail({
   testId,
 }: InstalacionesProjectDetailProps): ReactNode {
   const view = installationJobCardView(project);
+  // #1169 P2: deshacer el último avance — paridad con Deshacer carga de
+  // Embarques. Keyed por obra: cambiar de proyecto nunca ofrece un undo ajeno.
+  const [lastInstalledFor, setLastInstalledFor] = useState<{
+    projectId: string;
+    itemId: string;
+  } | null>(null);
+  const lastInstalled =
+    lastInstalledFor?.projectId === project.id ? lastInstalledFor : null;
   const toInstall = project.items.filter(
     (item) => normalizeItemFloorStatus(item.floorStatus) === 'loaded',
   );
@@ -157,7 +165,10 @@ export function InstalacionesProjectDetail({
                   <button
                     type="button"
                     className="btn btn--primary"
-                    onClick={() => onAdvance(project.id, item.id, 'installed')}
+                    onClick={() => {
+                      onAdvance(project.id, item.id, 'installed');
+                      setLastInstalledFor({ projectId: project.id, itemId: item.id });
+                    }}
                     data-testid={`instalaciones-advance-${item.id}`}
                   >
                     <Hammer size={16} strokeWidth={1.5} aria-hidden />
@@ -171,6 +182,20 @@ export function InstalacionesProjectDetail({
               </li>
             ))}
           </ul>
+          {lastInstalled && onAdvance ? (
+            <button
+              type="button"
+              className="btn btn--secondary btn--small"
+              onClick={() => {
+                onAdvance(project.id, lastInstalled.itemId, 'loaded');
+                setLastInstalledFor(null);
+              }}
+              data-testid="instalaciones-undo"
+            >
+              <ArrowLeft size={14} strokeWidth={1.5} aria-hidden />
+              Deshacer última instalación
+            </button>
+          ) : null}
         </div>
       ) : null}
 

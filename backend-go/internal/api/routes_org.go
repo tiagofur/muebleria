@@ -23,14 +23,15 @@ func registerOrgRoutes(server *Server, mux *http.ServeMux, authRL, authMW func(h
 	mux.Handle("PUT /api/org/memberships/{membershipId}/roles", authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.update-membership-roles", http.HandlerFunc(server.HandleOrgMemberRoles)))))
 	mux.Handle("PUT /api/org/memberships/{membershipId}/status", authMW(server.RequireIdempotency("org.update-membership-status", http.HandlerFunc(server.HandleOrgMemberStatus))))
 	mux.Handle("POST /api/org/memberships/{membershipCommand...}", membershipCommandRouter(map[string]http.Handler{
-		"change-roles":        authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.change-membership-roles", http.HandlerFunc(server.HandleChangeMembershipRoles)))),
-		"suspend":             authMW(server.RequireIdempotency("org.suspend-membership", http.HandlerFunc(server.HandleSuspendMembership))),
-		"reactivate":          authMW(server.RequireIdempotency("org.reactivate-membership", http.HandlerFunc(server.HandleReactivateMembership))),
-		"revoke-sessions":     authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.revoke-membership-sessions", http.HandlerFunc(server.HandleRevokeMembershipSessions)))),
-		"offboarding-preview": authMW(server.RequireIdempotency("org.offboarding-preview", http.HandlerFunc(server.HandleMembershipOffboardingPreview))),
-		"transfer-admin":      authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.transfer-admin", http.HandlerFunc(server.HandleTransferOrganizationAdmin)))),
-		"change-sectors":      authMW(server.RequireIdempotency("org.change-membership-sectors", http.HandlerFunc(server.HandleChangeMembershipSectors))),
-		"offboard":            authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.offboard-membership", http.HandlerFunc(server.HandleOffboardMembership)))),
+		"change-roles":         authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.change-membership-roles", http.HandlerFunc(server.HandleChangeMembershipRoles)))),
+		"suspend":              authMW(server.RequireIdempotency("org.suspend-membership", http.HandlerFunc(server.HandleSuspendMembership))),
+		"reactivate":           authMW(server.RequireIdempotency("org.reactivate-membership", http.HandlerFunc(server.HandleReactivateMembership))),
+		"revoke-sessions":      authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.revoke-membership-sessions", http.HandlerFunc(server.HandleRevokeMembershipSessions)))),
+		"issue-password-reset": authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.issue-password-reset", http.HandlerFunc(server.HandleIssueMembershipPasswordReset)))),
+		"offboarding-preview":  authMW(server.RequireIdempotency("org.offboarding-preview", http.HandlerFunc(server.HandleMembershipOffboardingPreview))),
+		"transfer-admin":       authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.transfer-admin", http.HandlerFunc(server.HandleTransferOrganizationAdmin)))),
+		"change-sectors":       authMW(server.RequireIdempotency("org.change-membership-sectors", http.HandlerFunc(server.HandleChangeMembershipSectors))),
+		"offboard":             authMW(server.RequireStepUp(domain.StepUpScopeOrganizationAdmin, server.RequireIdempotency("org.offboard-membership", http.HandlerFunc(server.HandleOffboardMembership)))),
 	}))
 	mux.Handle("GET /api/org/invitations", authMW(http.HandlerFunc(server.HandleOrgListInvitations)))
 	mux.Handle("POST /api/org/invitations", noStoreMiddleware(authMW(server.RequireIdempotency("org.create-invitation", http.HandlerFunc(server.HandleOrgCreateInvitation)))))
