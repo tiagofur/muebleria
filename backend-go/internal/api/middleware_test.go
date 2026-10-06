@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -494,27 +495,159 @@ func TestRateLimitMiddleware(t *testing.T) {
 	}
 }
 
+// withTrustedProxies installs the SEC-8 policy directly on the request
+// context, exactly as TrustedProxyMiddleware does at the handler root.
+func withTrustedProxies(r *http.Request, cidrs ...string) *http.Request {
+	parsed := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		_, cidr, err := net.ParseCIDR(c)
+		if err != nil {
+			panic(err)
+		}
+		parsed = append(parsed, cidr)
+	}
+	return r.WithContext(context.WithValue(r.Context(), trustedProxiesContextKey{}, parsed))
+}
+
 func TestClientIP(t *testing.T) {
-	// X-Forwarded-For with multiple IPs -> first IP
+	// SEC-8 default (no policy in the context): forwarded headers from an
+	// untrusted peer are IGNORED — the direct peer is the client. A spoofed
+	// XFF can no longer rotate rate-limit buckets or poison audit IPs.
 	req1 := httptest.NewRequest("GET", "/", nil)
+	req1.RemoteAddr = "192.0.2.50:54321"
 	req1.Header.Set("X-Forwarded-For", "203.0.113.195, 70.41.3.18, 150.172.238.178")
-	if got := clientIP(req1); got != "203.0.113.195" {
-		t.Errorf("XFF multiple: got %q, want 203.0.113.195", got)
+	if got := clientIP(req1); got != "192.0.2.50" {
+		t.Errorf("XFF without trusted proxy: got %q, want the peer 192.0.2.50", got)
 	}
 
-	// X-Real-IP
 	req2 := httptest.NewRequest("GET", "/", nil)
+	req2.RemoteAddr = "192.0.2.50:54321"
 	req2.Header.Set("X-Real-IP", "198.51.100.42")
-	if got := clientIP(req2); got != "198.51.100.42" {
-		t.Errorf("X-Real-IP: got %q, want 198.51.100.42", got)
+	if got := clientIP(req2); got != "192.0.2.50" {
+		t.Errorf("X-Real-IP without trusted proxy: got %q, want the peer 192.0.2.50", got)
 	}
 
-	// RemoteAddr with port
+	// No headers at all: the peer, with or without policy.
 	req3 := httptest.NewRequest("GET", "/", nil)
 	req3.RemoteAddr = "192.0.2.50:54321"
 	if got := clientIP(req3); got != "192.0.2.50" {
 		t.Errorf("RemoteAddr: got %q, want 192.0.2.50", got)
 	}
+	if got := clientIP(withTrustedProxies(req3, "10.0.0.0/8")); got != "192.0.2.50" {
+		t.Errorf("RemoteAddr with policy: got %q, want 192.0.2.50", got)
+	}
+}
+
+func TestClientIPWithTrustedProxy(t *testing.T) {
+	// The direct peer is a trusted reverse proxy: the forwarded chain becomes
+	// verifiable and rightmost-untrusted wins.
+	newRequest := func(xff, realIP string) *http.Request {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "10.0.0.5:44301" // inside the trusted CIDR below
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		if realIP != "" {
+			req.Header.Set("X-Real-IP", realIP)
+		}
+		return withTrustedProxies(req, "10.0.0.0/8", "127.0.0.1/32")
+	}
+
+	t.Run("rightmost untrusted hop wins", func(t *testing.T) {
+		req := newRequest("203.0.113.195, 70.41.3.18, 10.0.0.5", "")
+		if got := clientIP(req); got != "70.41.3.18" {
+			t.Fatalf("got %q, want 70.41.3.18", got)
+		}
+	})
+	t.Run("all hops trusted falls back to the leftmost as origin", func(t *testing.T) {
+		req := newRequest("10.0.0.9, 10.0.0.5", "")
+		if got := clientIP(req); got != "10.0.0.9" {
+			t.Fatalf("got %q, want 10.0.0.9", got)
+		}
+	})
+	t.Run("malformed hop degrades to the trusted peer", func(t *testing.T) {
+		req := newRequest("203.0.113.195, not-an-ip, 10.0.0.5", "")
+		if got := clientIP(req); got != "10.0.0.5" {
+			t.Fatalf("got %q, want the peer 10.0.0.5", got)
+		}
+	})
+	t.Run("X-Real-IP honored from a trusted peer without XFF", func(t *testing.T) {
+		req := newRequest("", "198.51.100.42")
+		if got := clientIP(req); got != "198.51.100.42" {
+			t.Fatalf("got %q, want 198.51.100.42", got)
+		}
+	})
+	t.Run("garbage X-Real-IP degrades to the peer", func(t *testing.T) {
+		req := newRequest("", "not-an-ip")
+		if got := clientIP(req); got != "10.0.0.5" {
+			t.Fatalf("got %q, want the peer 10.0.0.5", got)
+		}
+	})
+	t.Run("spoofed chain from an untrusted peer is ignored even with policy", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "203.0.113.200:40000" // NOT in the trusted CIDRs
+		req.Header.Set("X-Forwarded-For", "198.51.100.1")
+		if got := clientIP(withTrustedProxies(req, "10.0.0.0/8")); got != "203.0.113.200" {
+			t.Fatalf("got %q, want the untrusted peer 203.0.113.200", got)
+		}
+	})
+}
+
+// TestRateLimitBucketsFollowResolvedClientIP (#1191): the limiter buckets by
+// the RESOLVED client — two real clients behind a trusted proxy get
+// independent buckets, while a spoofed XFF from an untrusted client cannot
+// escape the bucket its peer already occupies.
+func TestRateLimitBucketsFollowResolvedClientIP(t *testing.T) {
+	handler := TrustedProxyMiddleware(mustCIDRs(t, "10.0.0.0/8"))(
+		RateLimitMiddleware(0.05, 1)(okHandler()))
+
+	attempt := func(peer, xff string) int {
+		req := httptest.NewRequest("POST", "/api/auth/login", nil)
+		req.RemoteAddr = peer
+		if xff != "" {
+			req.Header.Set("X-Forwarded-For", xff)
+		}
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	// Proxy peer, real client A: the bucket allows 1 in-flight token.
+	if code := attempt("10.0.0.5:1000", "198.51.100.10"); code != http.StatusOK {
+		t.Fatalf("client A first request: got %d, want 200", code)
+	}
+	// Same resolved client A again: 429 (bucket spent).
+	if code := attempt("10.0.0.5:1001", "198.51.100.10"); code != http.StatusTooManyRequests {
+		t.Fatalf("client A second request: got %d, want 429", code)
+	}
+	// A DIFFERENT real client behind the same proxy: own bucket, passes.
+	if code := attempt("10.0.0.5:1002", "198.51.100.11"); code != http.StatusOK {
+		t.Fatalf("client B first request: got %d, want 200", code)
+	}
+	// An untrusted client rotating XFF: every spoofed identity lands in the
+	// SAME bucket as its peer — the first request passes (bucket was empty),
+	// the next is limited regardless of the rotated header.
+	if code := attempt("203.0.113.200:2000", "198.51.100.50"); code != http.StatusOK {
+		t.Fatalf("untrusted first request: got %d, want 200", code)
+	}
+	for i, spoofed := range []string{"198.51.100.51", "198.51.100.52", "198.51.100.53"} {
+		if code := attempt("203.0.113.200:2001", spoofed); code != http.StatusTooManyRequests {
+			t.Fatalf("untrusted rotation %d (%s): got %d, want 429", i, spoofed, code)
+		}
+	}
+}
+
+func mustCIDRs(t *testing.T, cidrs ...string) []*net.IPNet {
+	t.Helper()
+	out := make([]*net.IPNet, 0, len(cidrs))
+	for _, c := range cidrs {
+		_, cidr, err := net.ParseCIDR(c)
+		if err != nil {
+			t.Fatalf("parse cidr %q: %v", c, err)
+		}
+		out = append(out, cidr)
+	}
+	return out
 }
 
 // --- Multi-org auth context (ADR-0004 / #325) ---

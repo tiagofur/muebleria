@@ -526,23 +526,98 @@ func RateLimitMiddleware(rps float64, burst int) func(http.Handler) http.Handler
 	}
 }
 
-// clientIP extracts the client address, honoring X-Forwarded-For when present.
-// Falls back to RemoteAddr.
+// clientIP resolves the requesting client's IP for rate limiting and audit
+// (SEC-8, #1191). The direct peer is the client BY DEFAULT: X-Forwarded-For
+// and X-Real-IP are honored only when the direct peer is a configured trusted
+// proxy (TrustedProxyMiddleware), so a spoofed header from an untrusted
+// client can no longer rotate rate-limit buckets or poison audit IPs.
+// Behind a trusted proxy, the rightmost untrusted XFF hop wins; if every hop
+// is trusted, the leftmost is the origin client. A malformed hop degrades to
+// the peer — fail closed, never to an unverifiable value.
 func clientIP(r *http.Request) string {
+	remote := remoteHost(r)
+	trusted := trustedProxiesFromContext(r)
+	if !ipInTrusted(remote, trusted) {
+		// The peer is not a trusted proxy: the peer IS the client, whatever
+		// the forwarded headers claim.
+		return remote
+	}
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			return strings.TrimSpace(xff[:i])
+		hops := strings.Split(xff, ",")
+		for i := len(hops) - 1; i >= 0; i-- {
+			candidate := strings.TrimSpace(hops[i])
+			ip := net.ParseIP(candidate)
+			if ip == nil {
+				// A malformed entry breaks the verifiable chain: degrade to
+				// the (trusted) peer instead of trusting later entries.
+				return remote
+			}
+			if ipInTrusted(ip.String(), trusted) {
+				continue
+			}
+			return ip.String()
 		}
-		return strings.TrimSpace(xff)
+		// Every hop is a trusted proxy: the leftmost entry is the origin.
+		if origin := net.ParseIP(strings.TrimSpace(hops[0])); origin != nil {
+			return origin.String()
+		}
+		return remote
 	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return strings.TrimSpace(xri)
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		if ip := net.ParseIP(xri); ip != nil {
+			return ip.String()
+		}
 	}
+	return remote
+}
+
+// remoteHost extracts the host part of the request's direct peer address.
+func remoteHost(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return strings.TrimSpace(r.RemoteAddr)
 	}
 	return strings.TrimSpace(host)
+}
+
+type trustedProxiesContextKey struct{}
+
+// TrustedProxyMiddleware installs the SEC-8 trusted-proxy policy for the
+// request: the CIDRs of reverse proxies allowed to speak for clients via
+// forwarded headers. With no policy configured the middleware installs
+// nothing and clientIP trusts only the direct peer — an unset deployment is
+// fail-closed by construction, never header-trusting by accident.
+func TrustedProxyMiddleware(cidrs []*net.IPNet) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(cidrs) == 0 {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ctx := context.WithValue(r.Context(), trustedProxiesContextKey{}, cidrs)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func trustedProxiesFromContext(r *http.Request) []*net.IPNet {
+	cidrs, _ := r.Context().Value(trustedProxiesContextKey{}).([]*net.IPNet)
+	return cidrs
+}
+
+// ipInTrusted reports whether the (dotted, port-less) address falls inside
+// any configured trusted-proxy CIDR. An unparseable address is never trusted.
+func ipInTrusted(address string, trusted []*net.IPNet) bool {
+	ip := net.ParseIP(address)
+	if ip == nil {
+		return false
+	}
+	for _, cidr := range trusted {
+		if cidr != nil && cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // extensionTokenMayPost is the explicit POST capability allowlist for

@@ -5,6 +5,7 @@ package api
 // Consumido por routes.go y todos los handlers del paquete.
 
 import (
+	"net"
 	"net/http"
 	"sync"
 
@@ -33,6 +34,11 @@ type Server struct {
 	rateLimitBurst int
 	// MediaDir filesystem root for catalog images (F040). Empty disables upload.
 	MediaDir string
+	// TrustedProxies (SEC-8, #1191): CIDRs of reverse proxies allowed to
+	// speak for clients via X-Forwarded-For/X-Real-IP. Nil/empty trusts
+	// nothing — the client IP is the request's direct peer. Wired from
+	// GRANETE_TRUSTED_PROXIES by cmd/server.
+	TrustedProxies []*net.IPNet
 	// Tokens mints and validates ver5 credentials under the exact HS256 policy
 	// (#460). When nil, a single-key authority is derived lazily from JWTSecret
 	// (tests and minimal embedders); production always sets it from config so

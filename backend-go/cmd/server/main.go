@@ -97,6 +97,10 @@ func main() {
 	// #667 M1: configurable per-representation upload caps for hardware 3D
 	// assets (HARDWARE_ASSET_MAX_*_BYTES; defaults apply when unset).
 	serverAPI.SetHardwareAssetLimits(cfg.HardwareAssetLimits)
+	// SEC-8 (#1191): reverse proxies allowed to speak for clients via
+	// X-Forwarded-For/X-Real-IP. Empty trusts nothing (client IP = direct
+	// peer); LoadConfig already refused the boot on an invalid entry.
+	serverAPI.TrustedProxies = cfg.TrustedProxies
 	// #460 SEC-7: TOTP secrets are AES-256-GCM encrypted and recovery codes
 	// hash to keyed verifiers under the dedicated MFA_ENCRYPTION_KEYS keyring
 	// — disjoint from every other credential secret. Config already refused
