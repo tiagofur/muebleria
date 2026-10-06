@@ -593,6 +593,42 @@ func TestProvisionOrganizationRequiresGeneratedFields(t *testing.T) {
 	}
 }
 
+func TestSelfServiceProvisioningBoundsMaxActiveMembers(t *testing.T) {
+	factory := &domain.Organization{ID: "org-1", Type: domain.OrganizationTypeFactory, Status: domain.OrganizationStatusActive, CredentialVersion: 1}
+	for name, body := range map[string]string{
+		"over cap":  `{"name":"Tienda X","type":"store","license_plan":"none","max_active_members":26}`,
+		"below one": `{"name":"Tienda X","type":"store","license_plan":"none","max_active_members":0}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := &stubStore{getOrgByID: factory}
+			server := NewServer(store, "secret", nil, 1, 1)
+			req := withClaims(httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(body)), "factory-admin", string(domain.RoleAdmin))
+			claimsFromRequest(req).OrgID = "org-1"
+			rec := httptest.NewRecorder()
+			server.HandleProvisionOrganization(rec, req)
+			if rec.Code != http.StatusBadRequest || len(store.createdOrgs) != 0 {
+				t.Fatalf("status=%d created=%d body=%s", rec.Code, len(store.createdOrgs), rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestPlatformProvisioningRejectsSelfServiceSeatField(t *testing.T) {
+	store := &stubStore{}
+	server := NewServer(store, "secret", nil, 1, 1)
+	req := withClaims(httptest.NewRequest(http.MethodPost, "/api/organizations", bytes.NewBufferString(`{"name":"Org P","slug":"org-p","type":"factory","license_plan":"trial","bootstrap_admin_user_id":"00000000-0000-0000-0000-000000000001","max_active_members":10}`)), "platform-admin", string(domain.RoleAdmin))
+	claimsFromRequest(req).PlatformAdmin = true
+	rec := httptest.NewRecorder()
+	server.HandleProvisionOrganization(rec, req)
+	if rec.Code != http.StatusBadRequest || len(store.createdOrgs) != 0 {
+		t.Fatalf("status=%d created=%d body=%s", rec.Code, len(store.createdOrgs), rec.Body.String())
+	}
+	var payload openapi.ApiError
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil || payload.Code != openapi.ApiErrorCodeBadRequest {
+		t.Fatalf("single typed error required: payload=%+v err=%v", payload, err)
+	}
+}
+
 func TestSensitiveIdempotencyReceiptCipherDoesNotPersistPlaintext(t *testing.T) {
 	seal, open, err := idempotencyReceiptCipher("stable-test-secret")
 	if err != nil {

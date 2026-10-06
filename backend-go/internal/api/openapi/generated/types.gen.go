@@ -376,6 +376,7 @@ type ProvisionOrganizationRequest struct {
 	LicenseExpiresAt     *string                            `json:"license_expires_at,omitempty"`
 	BootstrapAdminUserID *string                            `json:"bootstrap_admin_user_id,omitempty"`
 	CloneCatalogFrom     *string                            `json:"clone_catalog_from,omitempty"`
+	MaxActiveMembers     *int64                             `json:"max_active_members,omitempty"`
 	Entitlements         *ProvisionOrganizationEntitlements `json:"entitlements,omitempty"`
 }
 
