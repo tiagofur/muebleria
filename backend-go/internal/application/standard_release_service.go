@@ -62,27 +62,44 @@ const (
 	MaterialCategoryResourceKind = "material_category"
 )
 
+// SkippedReleaseResource is one authoring-catalog entity that could not enter
+// the immutable release because its identity is not a UUID (#1185). Only the
+// agregados table carries TEXT ids today (the UI mints agr-<timestamp>
+// identities by design); everything else is UUID-typed at the column, so a
+// skip there is defensive. Skips are NEVER silent: the gather returns them and
+// validate/publish surface the exact list to the bibliotecario.
+type SkippedReleaseResource struct {
+	Kind  string `json:"kind"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
 // BuildStandardReleaseInputs assembles the compilation resources from the
 // assembled organization catalog (one consistent GetFullCatalog snapshot —
 // module board parts and hardware lines included) plus every active
 // hardware profile (cross-org, Granete-staff authority). Fail-closed: an
-// invalid module or a non-uuid id never enters an immutable release.
+// invalid module or a non-uuid hardware profile rejects the gather. A
+// non-uuid catalog entity cannot be represented in the release (the refs pin
+// resources by uuid, #772), so it is EXCLUDED but reported: the returned skip
+// list feeds validate and publish, which surface it — a release never looks
+// complete while silently dropping content (#1185).
 func BuildStandardReleaseInputs(
 	catalog domain.Catalog,
 	materialCategories []domain.MaterialCategory,
 	profiles []domain.HardwareProfile,
-) ([]CompilationResourceInput, error) {
+) ([]CompilationResourceInput, []SkippedReleaseResource, error) {
 	inputs := make([]CompilationResourceInput, 0, 64)
+	skipped := make([]SkippedReleaseResource, 0)
 
 	emit := func(kind, rawID, revision, label string, entity any) error {
 		id, err := uuid.Parse(rawID)
 		if err != nil {
-			// The release contract pins resources by uuid (#772); some
-			// catalog tables legitimately carry TEXT ids (agregados). A
-			// non-uuid entity cannot be represented in a release, so it is
-			// skipped loudly rather than failing the publish — a pinned
-			// consumer will not see it.
+			// The release contract pins resources by uuid (#772); the
+			// agregados table legitimately carries TEXT ids (the UI mints
+			// them), so exclusion is the current contract — but never a
+			// silent one (#1185): the caller reports the exact list.
 			slog.Warn("release_compile_skipped_non_uuid_resource", "kind", kind, "id", rawID, "label", label)
+			skipped = append(skipped, SkippedReleaseResource{Kind: kind, ID: rawID, Label: label})
 			return nil
 		}
 		raw, err := json.Marshal(entity)
@@ -111,55 +128,55 @@ func BuildStandardReleaseInputs(
 			continue
 		}
 		if err := emit(HardwareResourceKind, hw.ID, hardwareRevision(hw), hw.Code, hw); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.Materials {
 		material := &catalog.Materials[i]
 		if err := emit(MaterialResourceKind, material.ID, versionRevision(material.Version), material.Code, material); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.Edges {
 		edge := &catalog.Edges[i]
 		if err := emit(EdgeBandResourceKind, edge.ID, versionRevision(edge.Version), edge.Code, edge); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.OptionGroups {
 		group := &catalog.OptionGroups[i]
 		if err := emit(OptionGroupResourceKind, group.ID, versionRevision(group.Version), group.Code, group); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.Categories {
 		category := &catalog.Categories[i]
 		if err := emit(ModuleCategoryResourceKind, category.ID, versionRevision(category.Version), category.Name, category); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range materialCategories {
 		category := &materialCategories[i]
 		if err := emit(MaterialCategoryResourceKind, category.ID, versionRevision(category.Version), category.Name, category); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.Agregados {
 		agregado := &catalog.Agregados[i]
 		if err := emit(AgregadoResourceKind, agregado.ID, versionRevision(agregado.Version), agregado.Code, agregado); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.Components {
 		component := &catalog.Components[i]
 		if err := emit(ComponentResourceKind, component.ID, versionRevision(component.Version), component.Code, component); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.Structures {
 		structure := &catalog.Structures[i]
 		if err := emit(StructureResourceKind, structure.ID, versionRevision(int64(structure.Revision)), structure.Code, structure); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	for i := range catalog.Modules {
@@ -167,10 +184,10 @@ func BuildStandardReleaseInputs(
 		// Same gate the resolve runs: a module that cannot validate must not
 		// be frozen into an immutable release.
 		if err := engine.ValidateModule(*module); err != nil {
-			return nil, fmt.Errorf("module %s (%s): %w", module.Code, module.ID, err)
+			return nil, nil, fmt.Errorf("module %s (%s): %w", module.Code, module.ID, err)
 		}
 		if err := emit(ModuleResourceKind, module.ID, versionRevision(module.Version), module.Code, module); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -178,15 +195,15 @@ func BuildStandardReleaseInputs(
 	for i := range profiles {
 		resource, err := BuildHardwareProfileResource(&profiles[i], domain.PackageKindFree)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		inputs = append(inputs, resource)
 		profileCount++
 	}
 	if profileCount == 0 {
-		return nil, ErrNoHardwareProfileResource
+		return nil, nil, ErrNoHardwareProfileResource
 	}
-	return inputs, nil
+	return inputs, skipped, nil
 }
 
 // hardwareRevision derives the canonical hardware resource revision: the
@@ -204,21 +221,23 @@ func hardwareRevision(hw *domain.Hardware) string {
 // release of the Granete Standard library. The release must exist in draft
 // status (create it with storage.CreateDraftRelease first); publish is
 // fail-closed and leaves the previous current release untouched on error.
+// The returned skip list (#1185) carries the non-UUID authoring entities the
+// immutable release excludes — the caller surfaces it, never silently.
 func PublishStandardRelease(
 	ctx context.Context,
 	store StandardReleaseStore,
 	releaseID uuid.UUID,
 	publishedBy uuid.UUID,
-) (*CompilationResult, error) {
+) (*CompilationResult, []SkippedReleaseResource, error) {
 	release, err := store.GetReleaseByID(ctx, releaseID)
 	if err != nil {
-		return nil, fmt.Errorf("load release: %w", err)
+		return nil, nil, fmt.Errorf("load release: %w", err)
 	}
 	if release.LibraryID.String() != domain.GraneteStandardLibraryID {
-		return nil, ErrStandardLibraryNotFound
+		return nil, nil, ErrStandardLibraryNotFound
 	}
 	if release.Status != domain.ReleaseStatusDraft {
-		return nil, ErrReleaseNotDraft
+		return nil, nil, ErrReleaseNotDraft
 	}
 
 	// ONE consistent org-catalog snapshot feeds the frozen geometry: the
@@ -226,19 +245,19 @@ func PublishStandardRelease(
 	// reads, frozen per entity into the release.
 	catalog, err := store.GetFullCatalog(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("gather authoring catalog: %w", err)
+		return nil, nil, fmt.Errorf("gather authoring catalog: %w", err)
 	}
 	materialCategories, err := store.ListMaterialCategories(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("gather material categories: %w", err)
+		return nil, nil, fmt.Errorf("gather material categories: %w", err)
 	}
 	profiles, err := store.ListActiveHardwareProfilesAnyOrg(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("gather hardware profile resources: %w", err)
+		return nil, nil, fmt.Errorf("gather hardware profile resources: %w", err)
 	}
-	inputs, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
+	inputs, skipped, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	result, err := CompileLibraryRelease(CompilationInput{
 		Library:   &domain.ManufacturingLibrary{ID: release.LibraryID, Code: "0001", Kind: domain.LibraryKindStandard, Status: "active"},
@@ -246,12 +265,12 @@ func PublishStandardRelease(
 		Resources: inputs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("compile standard release %s: %w", release.Version, err)
+		return nil, nil, fmt.Errorf("compile standard release %s: %w", release.Version, err)
 	}
 	if err := store.PublishReleaseWithManifest(ctx, releaseID, result.Manifest, result.ManifestBytes, result.Blobs, &publishedBy); err != nil {
-		return nil, fmt.Errorf("publish standard release %s: %w", release.Version, err)
+		return nil, nil, fmt.Errorf("publish standard release %s: %w", release.Version, err)
 	}
-	return result, nil
+	return result, skipped, nil
 }
 
 // StandardReleaseStore is the surface the publish flow needs: satisfied by

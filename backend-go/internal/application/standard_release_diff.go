@@ -94,7 +94,7 @@ func DiffStandardDraft(
 	if err != nil {
 		return nil, fmt.Errorf("gather hardware profile resources: %w", err)
 	}
-	inputs, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
+	inputs, _, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
 	if err != nil {
 		return nil, fmt.Errorf("gather draft resources: %w", err)
 	}

@@ -118,7 +118,7 @@ func (s *Server) HandlePublishStandardLibraryRelease(w http.ResponseWriter, r *h
 		respondWithError(w, http.StatusUnauthorized, "invalid user id")
 		return
 	}
-	result, err := application.PublishStandardRelease(r.Context(), s.Store, releaseID, publishedBy)
+	result, skipped, err := application.PublishStandardRelease(r.Context(), s.Store, releaseID, publishedBy)
 	if err != nil {
 		if errors.Is(err, application.ErrReleaseNotDraft) {
 			respondWithAPIError(w, http.StatusConflict, openapi.ApiErrorCodeConflict, "el release no está en draft (publicar es inmutable: creá un draft nuevo)", nil)
@@ -136,11 +136,23 @@ func (s *Server) HandlePublishStandardLibraryRelease(w http.ResponseWriter, r *h
 		respondWithAPIError(w, http.StatusUnprocessableEntity, openapi.ApiErrorCodeBadRequest, err.Error(), nil)
 		return
 	}
-	respondWithJSON(w, http.StatusOK, map[string]any{
-		"releaseId":     releaseID.String(),
-		"manifestHash":  result.ManifestHash,
-		"resourceCount": len(result.Manifest.Resources),
+	respondWithJSON(w, http.StatusOK, openapi.StandardReleasePublishResult{
+		ReleaseId:     releaseID.String(),
+		ManifestHash:  result.ManifestHash,
+		ResourceCount: int64(len(result.Manifest.Resources)),
+		Skipped:       mapSkippedReleaseResources(skipped),
 	})
+}
+
+// mapSkippedReleaseResources carries the non-UUID exclusions to the response
+// (#1185): a publish never reports a healthy-looking smaller release without
+// naming exactly what stayed out.
+func mapSkippedReleaseResources(skipped []application.SkippedReleaseResource) []openapi.SkippedReleaseResource {
+	out := make([]openapi.SkippedReleaseResource, 0, len(skipped))
+	for _, resource := range skipped {
+		out = append(out, openapi.SkippedReleaseResource{Kind: resource.Kind, ID: resource.ID, Label: resource.Label})
+	}
+	return out
 }
 
 // HandleValidateStandardLibraryDraft answers POST /api/manufacturing-libraries/standard/releases/{releaseId}/validate
@@ -211,6 +223,7 @@ func mapStandardDraftValidationReport(report *application.DraftValidationReport)
 		Ok:          report.OK,
 		Compile:     compile,
 		Furniture:   furniture,
+		Skipped:     mapSkippedReleaseResources(report.Skipped),
 		ValidatedAt: report.ValidatedAt.Format(time.RFC3339),
 	}
 }

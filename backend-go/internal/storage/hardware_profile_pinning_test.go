@@ -79,7 +79,7 @@ func TestHardwareProfilePinningThroughStandardRelease(t *testing.T) {
 	if _, err := migrationPool.Exec(ctx, `UPDATE library_releases SET version = '0.1.0-pinning-r1' WHERE id = $1`, r1ID); err != nil {
 		t.Fatalf("retarget seeded draft: %v", err)
 	}
-	r1Result, err := application.PublishStandardRelease(storage.WithOrgCtx(ctx, orgA), adminStore, r1ID, uuid.MustParse(adminUser))
+	r1Result, _, err := application.PublishStandardRelease(storage.WithOrgCtx(ctx, orgA), adminStore, r1ID, uuid.MustParse(adminUser))
 	if err != nil {
 		t.Fatalf("publish R1: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestHardwareProfilePinningThroughStandardRelease(t *testing.T) {
 		t.Fatalf("create R2 draft: %v", err)
 	}
 	r2ID := r2Rel.ID
-	r2Result, err := application.PublishStandardRelease(storage.WithOrgCtx(ctx, orgA), adminStore, r2ID, uuid.MustParse(adminUser))
+	r2Result, _, err := application.PublishStandardRelease(storage.WithOrgCtx(ctx, orgA), adminStore, r2ID, uuid.MustParse(adminUser))
 	if err != nil {
 		t.Fatalf("publish R2: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestHardwareProfilePinningThroughStandardRelease(t *testing.T) {
 		t.Fatalf("create R3 draft: %v", err)
 	}
 	r3ID := r3Rel.ID
-	r3Result, err := application.PublishStandardRelease(storage.WithOrgCtx(ctx, orgA), adminStore, r3ID, uuid.MustParse(adminUser))
+	r3Result, _, err := application.PublishStandardRelease(storage.WithOrgCtx(ctx, orgA), adminStore, r3ID, uuid.MustParse(adminUser))
 	if err != nil {
 		t.Fatalf("publish R3: %v", err)
 	}

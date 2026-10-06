@@ -72,7 +72,7 @@ func TestProductionManufacturingSnapshotEndpointServesFrozenRouting(t *testing.T
 			if _, err := admin.Exec(context.Background(), `UPDATE library_releases SET version = '0.1.0-k1' WHERE id = $1`, draftID); err != nil {
 				t.Fatalf("retarget draft: %v", err)
 			}
-			if _, err := application.PublishStandardRelease(storage.WithOrgCtx(context.Background(), rlsOrgA), &storage.PostgresStore{Pool: admin}, draftID, uuid.MustParse(rlsUserA)); err != nil {
+			if _, _, err := application.PublishStandardRelease(storage.WithOrgCtx(context.Background(), rlsOrgA), &storage.PostgresStore{Pool: admin}, draftID, uuid.MustParse(rlsUserA)); err != nil {
 				t.Fatalf("publish: %v", err)
 			}
 		},
