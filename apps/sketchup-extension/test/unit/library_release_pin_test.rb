@@ -162,13 +162,16 @@ class LibraryReleasePinTest < Minitest::Test
   def test_fetch_current_release_parses_the_summary
     client = Granete::SketchUpExtension::Library::ReleaseApiClient.new(
       transport: ParsedTransport.new(
-        status: 200, body: { 'effectiveReleaseId' => RELEASE, 'manifestHash' => 'sha256:x' }
+        # #1162: contract-shaped LibraryReleaseSummary — the generated
+        # contract has id/version/manifestHash, never effectiveReleaseId.
+        status: 200, body: { 'id' => RELEASE, 'version' => '0.3.5', 'manifestHash' => 'sha256:x' }
       ),
       auth_provider: OrgAuth.new(ORG)
     )
     current = client.fetch_current_release
 
-    assert_equal RELEASE, current['effectiveReleaseId']
+    assert_equal RELEASE, current['id']
+    assert_equal '0.3.5', current['version']
   end
 
   class FakeReleaseApi
@@ -193,7 +196,7 @@ class LibraryReleasePinTest < Minitest::Test
     store = temp_store
     store.write_manifest(RELEASE, RAW_MANIFEST)
     store.set_current_release(ORG, RELEASE)
-    api = FakeReleaseApi.new({ 'effectiveReleaseId' => RELEASE, 'manifestHash' => 'sha256:x' })
+    api = FakeReleaseApi.new({ 'id' => RELEASE, 'version' => '0.3.5', 'manifestHash' => 'sha256:x' })
     synchronizer = RecordingSynchronizer.new
     pin = Granete::SketchUpExtension::Library::ConsumerPin.new(
       store: store, api_client: api, synchronizer: synchronizer, auth_provider: OrgAuth.new(ORG)
@@ -205,7 +208,10 @@ class LibraryReleasePinTest < Minitest::Test
 
   def test_consumer_pin_syncs_when_server_moves_to_a_new_release
     store = temp_store
-    api = FakeReleaseApi.new({ 'effectiveReleaseId' => RELEASE, 'manifestHash' => 'sha256:new' })
+    # #1162 regression: a contract-shaped summary (no effectiveReleaseId)
+    # must sync from `id` — the old code read the nonexistent key and
+    # silently never installed anything.
+    api = FakeReleaseApi.new({ 'id' => RELEASE, 'version' => '0.3.5', 'manifestHash' => 'sha256:new' })
     synchronizer = RecordingSynchronizer.new
     pin = Granete::SketchUpExtension::Library::ConsumerPin.new(
       store: store, api_client: api, synchronizer: synchronizer, auth_provider: OrgAuth.new(ORG)
@@ -216,6 +222,16 @@ class LibraryReleasePinTest < Minitest::Test
     assert_equal :synced, result[:status]
     assert_equal RELEASE, synchronizer.calls.last[:release_id]
     assert_equal 'sha256:new', synchronizer.calls.last[:hash]
+  end
+
+  def test_consumer_pin_reports_unavailable_for_a_summary_without_an_id
+    api = FakeReleaseApi.new({ 'version' => '0.3.5', 'manifestHash' => 'sha256:x' })
+    pin = Granete::SketchUpExtension::Library::ConsumerPin.new(
+      store: temp_store, api_client: api, synchronizer: NeverSynchronizer.new,
+      auth_provider: OrgAuth.new(ORG)
+    )
+
+    assert_equal :unavailable, pin.refresh!
   end
 
   def test_consumer_pin_reports_unavailable_without_a_current_release
@@ -229,7 +245,7 @@ class LibraryReleasePinTest < Minitest::Test
   end
 
   def test_consumer_pin_without_org_is_a_no_op
-    api = FakeReleaseApi.new({ 'effectiveReleaseId' => RELEASE })
+    api = FakeReleaseApi.new({ 'id' => RELEASE })
     pin = Granete::SketchUpExtension::Library::ConsumerPin.new(
       store: temp_store, api_client: api, synchronizer: NeverSynchronizer.new,
       auth_provider: NullAuth.new
