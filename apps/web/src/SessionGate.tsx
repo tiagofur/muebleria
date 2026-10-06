@@ -11,7 +11,7 @@
 
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
-import { BrandMark, LoginScreen, AcceptInvitationScreen } from '@granete/ui';
+import { BrandMark, LoginScreen, AcceptInvitationScreen, ResetPasswordScreen, ForgotPasswordScreen } from '@granete/ui';
 
 import { useWorkspaceStore } from './stores/workspaceStore';
 import { OrgPicker } from './OrgPicker';
@@ -55,10 +55,21 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
 
   const isAcceptInvitation =
     typeof window !== 'undefined' && window.location.pathname === '/accept-invitation';
+  // #1178: rutas públicas del restablecimiento de contraseña.
+  const isResetPassword =
+    typeof window !== 'undefined' && window.location.pathname === '/reset-password';
+  const isForgotPassword =
+    typeof window !== 'undefined' && window.location.pathname === '/forgot-password';
   const invitationToken =
     typeof window !== 'undefined'
       ? new URLSearchParams(window.location.search).get('token') || ''
       : '';
+  const backToLogin = () => {
+    if (typeof window !== 'undefined') {
+      window.history.replaceState({}, '', '/');
+      window.location.reload();
+    }
+  };
 
   if (session === null && authBootstrapping) {
     return (
@@ -101,6 +112,28 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
             window.location.reload();
           }
         }}
+      />
+    );
+  }
+
+  if (session === null && isResetPassword && invitationToken) {
+    return (
+      <ResetPasswordScreen
+        token={invitationToken}
+        baseUrl={DEFAULT_API_BASE}
+        fetchImpl={CREDENTIALED_WEB_FETCH}
+        onCompleted={backToLogin}
+        onBackToLogin={backToLogin}
+      />
+    );
+  }
+
+  if (session === null && isForgotPassword) {
+    return (
+      <ForgotPasswordScreen
+        baseUrl={DEFAULT_API_BASE}
+        fetchImpl={CREDENTIALED_WEB_FETCH}
+        onBackToLogin={backToLogin}
       />
     );
   }
@@ -150,6 +183,11 @@ export function SessionGate({ children }: { readonly children: ReactNode }): Rea
           onGuestAccess={enterAsGuest}
           loading={loginLoading}
           error={loginError}
+          onForgotPassword={() => {
+            if (typeof window !== 'undefined') {
+              window.location.assign('/forgot-password');
+            }
+          }}
           notice={
             sessionEndReason
               ? SESSION_END_NOTICES[sessionEndReason] ?? null

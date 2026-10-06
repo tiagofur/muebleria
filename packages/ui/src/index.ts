@@ -373,6 +373,8 @@ export {
 export {
   LoginScreen,
   AcceptInvitationScreen,
+  ResetPasswordScreen,
+  ForgotPasswordScreen,
   type LoginScreenProps,
   type AcceptInvitationScreenProps,
 } from './auth';

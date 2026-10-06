@@ -11,6 +11,8 @@ export interface LoginScreenProps {
   readonly error?: string | null;
   /** Non-blocking info banner (e.g. session expired notice). */
   readonly notice?: string | null;
+  /** #1178: entrada a la solicitud de restablecimiento de contraseña. */
+  readonly onForgotPassword?: () => void;
 }
 
 export function LoginScreen({
@@ -19,6 +21,7 @@ export function LoginScreen({
   loading = false,
   error = null,
   notice = null,
+  onForgotPassword,
 }: LoginScreenProps): ReactNode {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -169,6 +172,18 @@ export function LoginScreen({
         <p className="login-guest-hint">
           Datos de ejemplo en tu navegador; tu cuenta y tus datos no se modifican.
         </p>
+
+        {onForgotPassword && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--small login-forgot"
+            onClick={onForgotPassword}
+            disabled={loading}
+          >
+            <KeyRound size={14} strokeWidth={1.5} aria-hidden />
+            ¿Olvidaste tu contraseña?
+          </button>
+        )}
 
         <p className="login-invitation-note">
           El acceso a talleres se realiza mediante invitación del administrador.
