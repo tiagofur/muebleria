@@ -90,6 +90,9 @@
   var libParamsCard = document.getElementById("library-params-card");
   var libParamsContainer = document.getElementById("library-params-container");
   var libMaterialsCard = document.getElementById("library-materials-card");
+  // #1144: pre-insert hardware group selectors (one per consumed group).
+  var libHardwareCard = document.getElementById("library-hardware-card");
+  var libHardwareContainer = document.getElementById("library-hardware-container");
   var libMaterialsContainer = document.getElementById("library-materials-container");
   var libSummaryDims = document.getElementById("library-summary-dims");
   var libSummaryParts = document.getElementById("library-summary-parts");
@@ -144,11 +147,116 @@
         deps.setProjectDefaultMaterial(role, id);
       }
     }, configuratorLineageContext(def));
+    // #1144: herrajes por grupo — elijo el modelo ANTES de insertar.
+    seedLibraryHardwareChoices(def);
+    renderLibraryHardwareRoles(def);
     renderRegisteredMeasuresButton(def);
     renderPresetChips();
 
     updateLibrarySummary();
     updateLibraryInsertButton();
+  }
+
+  // ------------------------------------------------------------------
+  // #1144 — Herrajes del mueble en la configuración de inserción. Los
+  // grupos (hardwareRoles de la definición, proyección del taller) se
+  // eligen ACÁ y viajan en el MISMO mapa materialChoices del insert: el
+  // resolve sustituye el concreto antes de posiciones/perforaciones/
+  // demanda/precio. Default = primer miembro activo (igual que los
+  // acabados); la elección es visible y cambiable, nunca un pin oculto.
+  // ------------------------------------------------------------------
+  function hardwareEntryById(id) {
+    var list = typeof deps.getHardwareCatalog === "function" ? (deps.getHardwareCatalog() || []) : [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && (list[i].id === id || list[i].code === id)) return list[i];
+    }
+    return null;
+  }
+
+  function hardwareRoles(def) {
+    return (def && Array.isArray(def.hardwareRoles)) ? def.hardwareRoles : [];
+  }
+
+  function seedLibraryHardwareChoices(def) {
+    hardwareRoles(def).forEach(function (role) {
+      if (role.optionIds && role.optionIds.length > 0) {
+        libMaterialChoices[role.code] = role.optionIds[0];
+      } else {
+        delete libMaterialChoices[role.code];
+      }
+    });
+  }
+
+  function renderLibraryHardwareRoles(def) {
+    if (!libHardwareCard || !libHardwareContainer) return;
+    var roles = hardwareRoles(def);
+    if (roles.length === 0) {
+      libHardwareCard.style.display = "none";
+      return;
+    }
+    libHardwareCard.style.display = "block";
+
+    libHardwareContainer.innerHTML = "";
+    roles.forEach(function (role) {
+      var block = document.createElement("div");
+      block.className = "material-role-block";
+
+      var labelRow = document.createElement("div");
+      labelRow.className = "kv-row";
+      var k = document.createElement("span");
+      k.className = "k";
+      k.textContent = role.name || role.code;
+      labelRow.appendChild(k);
+      var v = document.createElement("span");
+      v.className = "v";
+      var chosen = hardwareEntryById(libMaterialChoices[role.code]);
+      v.textContent = chosen ? (chosen.name || chosen.code) : "--";
+      labelRow.appendChild(v);
+      if (role.required) {
+        var req = document.createElement("span");
+        req.className = "status-badge neutral";
+        req.textContent = "requerido";
+        labelRow.appendChild(req);
+      }
+      block.appendChild(labelRow);
+
+      var select = document.createElement("select");
+      select.style.width = "100%";
+      select.style.marginTop = "var(--space-1)";
+      if (!role.optionIds || role.optionIds.length === 0) {
+        var none = document.createElement("option");
+        none.textContent = "Sin miembros activos en el catálogo";
+        none.selected = true;
+        select.appendChild(none);
+        select.disabled = true;
+      } else {
+        role.optionIds.forEach(function (hwId) {
+          var entry = hardwareEntryById(hwId);
+          var opt = document.createElement("option");
+          opt.value = hwId;
+          opt.textContent = entry ? ((entry.name || entry.code) + (entry.code ? " · " + entry.code : "")) : hwId;
+          if (libMaterialChoices[role.code] === hwId) opt.selected = true;
+          select.appendChild(opt);
+        });
+        select.addEventListener("change", function () {
+          libMaterialChoices[role.code] = select.value;
+          clearCatalogIntentKey();
+          v.textContent = (hardwareEntryById(select.value) || {}).name || select.value;
+          updateLibraryInsertButton();
+        });
+      }
+      block.appendChild(select);
+
+      libHardwareContainer.appendChild(block);
+    });
+  }
+
+  // Un grupo requerido sin elección real (sin miembros activos) bloquea
+  // Insertar con motivo honesto — el resolve lo rechazaría igual.
+  function unchosenRequiredHardwareRoles(def) {
+    return hardwareRoles(def).filter(function (role) {
+      return role.required && (!libMaterialChoices[role.code] || !hardwareEntryById(libMaterialChoices[role.code]));
+    });
   }
 
   // #784 R4: explicit lineage context for the shared material renderer.
@@ -199,6 +307,15 @@
 
   function updateLibraryInsertButton() {
     if (!btnInsert) return;
+    // #1144: un grupo requerido sin elección bloquea la inserción con el
+    // motivo concreto (el resolve fallaría cerrado igual — nunca a ciegas).
+    var missing = unchosenRequiredHardwareRoles(activeLibDef);
+    if (missing.length > 0) {
+      btnInsert.disabled = true;
+      btnInsert.title = "Elegí herraje para: " +
+        missing.map(function (r) { return r.name || r.code; }).join(", ");
+      return;
+    }
     var isConnected = deps.isModelConnected();
     if (isConnected) {
       btnInsert.innerHTML = deps.icon("plus") + "<span>Agregar al diseño</span>";

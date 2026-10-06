@@ -143,7 +143,7 @@ function runModule(overrides) {
     createElement: (tag) => createMockElement('', tag)
   };
 
-  const state = { connected: false, mediaUrls: {}, catalog: [], failBegin: false };
+  const state = { connected: false, mediaUrls: {}, catalog: [], failBegin: false, hardwareCatalog: [] };
 
   const deps = {
     icon: (name) => '<svg-' + name + '>',
@@ -187,7 +187,8 @@ function runModule(overrides) {
     setProjectDefaultMaterial: (role, id) => calls.setProjectDefaultMaterial.push({ role, id }),
     switchTab: (tab) => calls.switchTab.push(tab),
     requestProjectFurniture: () => calls.requestProjectFurniture.push('reload'),
-    pfPlaceFailureMessage: (result) => (result && result.reason) || 'fallo de colocación'
+    pfPlaceFailureMessage: (result) => (result && result.reason) || 'fallo de colocación',
+    getHardwareCatalog: () => state.hardwareCatalog
   };
 
   const sandbox = {
@@ -814,6 +815,64 @@ test('structural: the module owns no material catalog or project furniture state
     'function parameterIssueMessage', 'function materialById'].forEach((symbol) => {
     assert.ok(!SOURCE.includes(symbol), 'shared helper must stay injected, not duplicated: ' + symbol);
   });
+});
+
+// #1144 — pre-insert hardware group selection: the configurator seeds the
+// default (first active member), renders one selector per consumed group,
+// sends the choice inside materialChoices on insert, and blocks Insert
+// honestly when a required group has no members.
+test('hardware roles: seed + render selectors + choice rides materialChoices to the insert payload', () => {
+  const sandbox = runModule();
+  sandbox.__state.hardwareCatalog = [
+    { id: 'hw-blum', code: 'B-CL', name: 'Bisagra Blum' },
+    { id: 'hw-eco', code: 'B-ECO', name: 'Bisagra económica' }
+  ];
+  sandbox.window.GraneteUI.configurator.open(definition({
+    hardwareRoles: [
+      { code: 'BISAGRA', name: 'Bisagras', required: true, optionIds: ['hw-blum', 'hw-eco'] }
+    ]
+  }));
+
+  assert(visible(el(sandbox, 'library-hardware-card')), 'the hardware card appears for consumed groups');
+  const block = el(sandbox, 'library-hardware-container').children[0];
+  assert.strictEqual(block.children[0].children[0].textContent, 'Bisagras');
+  assert.strictEqual(block.children[0].children[1].textContent, 'Bisagra Blum',
+    'default choice = first active member, shown in the row');
+  const select = block.children[1];
+  assert.strictEqual(select.children.length, 2, 'one option per active member');
+
+  sandbox.__calls.bridge.length = 0;
+  select.value = 'hw-eco';
+  select.dispatchEvent({ type: 'change' });
+  el(sandbox, 'btn-insert').click();
+  const sent = sandbox.__calls.bridge.filter((c) => c.fn === 'begin_catalog_placement_preview').pop();
+  assert(sent, 'insert payload sent');
+  assert.strictEqual(sent.payload.materialChoices.BISAGRA, 'hw-eco',
+    'the group choice rides materialChoices next to the board roles');
+  assert.strictEqual(sent.payload.materialChoices.INTERIOR, 'mat-a', 'board roles untouched');
+});
+
+test('hardware roles: required group without active members disables Insert with an honest reason', () => {
+  const sandbox = runModule();
+  sandbox.window.GraneteUI.configurator.open(definition({
+    hardwareRoles: [
+      { code: 'CORREDERA', name: 'Correderas', required: true, optionIds: [] }
+    ]
+  }));
+
+  assert(visible(el(sandbox, 'library-hardware-card')));
+  const select = el(sandbox, 'library-hardware-container').children[0].children[1];
+  assert(select.disabled, 'empty group renders a disabled selector');
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, true, 'Insert is blocked');
+  assert(/Correderas/.test(el(sandbox, 'btn-insert').title), 'the reason names the missing group');
+});
+
+test('hardware roles: no consumed groups means no card and no gating', () => {
+  const sandbox = runModule();
+  sandbox.window.GraneteUI.configurator.open(definition({}));
+
+  assert(!visible(el(sandbox, 'library-hardware-card')), 'no groups, no card noise');
+  assert.strictEqual(el(sandbox, 'btn-insert').disabled, false);
 });
 
 console.log(JSON.stringify({ success: true, testsPassed }));
