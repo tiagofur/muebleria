@@ -1,0 +1,45 @@
+{
+  "description": "Go<->Ruby parity fixture for the library manifestHash contract (#1164). ComputeManifestHash (backend-go/internal/domain) and Granete::SketchUpExtension::Library::ManifestHash.compute (SketchUp extension) must both produce expectedDigest from this manifest. Resources and assets arrive UNSORTED on purpose: the digest is computed over the sorted canonical pre-hash payload (manifest WITHOUT its own manifestHash field).",
+  "manifest": {
+    "schemaVersion": 1,
+    "libraryId": "00000000-0000-0000-0001-000000000001",
+    "libraryCode": "0001",
+    "libraryVersion": "9.9.9-parity",
+    "effectiveReleaseId": "dea31880-93e0-4775-9970-c0f8b2606fc1",
+    "minPluginVersion": "0.1.44",
+    "upstream": {
+      "libraryId": "00000000-0000-0000-0001-000000000001",
+      "releaseId": "0fc7875e-ab7d-45e0-9c89-b235896090d7",
+      "version": "0.3.4"
+    },
+    "manifestHash": "sha256:17452a0b2099a60623e53367b1f8234a275b8ecf26007c97aa8b9cedfe2a2655",
+    "resources": [
+      {
+        "kind": "hardware_profile",
+        "id": "c0000005-0000-0000-0000-000000000002",
+        "revision": "2026-10-06T15:53:33Z",
+        "definitionHash": "sha256:3e63635c01ee25dd43612fc553139ac35159c15f9d34416da013adde7738c34d",
+        "packageKind": "standard"
+      },
+      {
+        "kind": "furniture_definition",
+        "id": "b0000005-0000-0000-0000-000000000001",
+        "revision": "v8",
+        "definitionHash": "sha256:dbf718a97e928c9035dc8ad86f7b46946acf9469fe0c82786bd6240fcb73976d",
+        "packageKind": "free",
+        "assets": [
+          { "kind": "preview", "sha256": "sha256:bbbb", "size": 2 },
+          { "kind": "skp", "sha256": "sha256:aaaa", "size": 1 }
+        ]
+      },
+      {
+        "kind": "agregado",
+        "id": "a0000005-0000-0000-0000-000000000003",
+        "revision": "v1",
+        "definitionHash": "sha256:5ec5bb66e9372fdd43612fc553139ac35159c15f9d34416da013adde7738c34d",
+        "packageKind": "free"
+      }
+    ]
+  },
+  "expectedDigest": "sha256:17452a0b2099a60623e53367b1f8234a275b8ecf26007c97aa8b9cedfe2a2655"
+}

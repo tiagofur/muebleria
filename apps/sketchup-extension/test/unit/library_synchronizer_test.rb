@@ -4,6 +4,7 @@ require 'test_helper'
 require 'securerandom'
 require_relative '../../src/granete_for_sketchup/library/library_store'
 require_relative '../../src/granete_for_sketchup/library/library_synchronizer'
+require_relative '../../src/granete_for_sketchup/library/manifest_hash'
 
 module Granete
   module SketchUpExtension
@@ -167,6 +168,47 @@ module Granete
             sync.sync_release(release_id: SecureRandom.uuid, org_id: @org_id)
           end
           assert_includes err.message, 'requires plugin version >= 2.5.0'
+        end
+
+        def test_manifest_hash_mismatch_fails_closed_and_installs_nothing
+          manifest = { 'schemaVersion' => 1, 'libraryVersion' => '3.0.0', 'resources' => [] }
+          client = MockApiClient.new(manifest_json: JSON.generate(manifest))
+          sync = LibrarySynchronizer.new(store: @store, api_client: client)
+
+          err = assert_raises(SyncError) do
+            sync.sync_release(
+              release_id: SecureRandom.uuid,
+              org_id: @org_id,
+              expected_manifest_hash: "sha256:#{'0' * 64}"
+            )
+          end
+          assert_includes err.message, 'manifest hash mismatch'
+          assert_nil @store.current_release_id(@org_id), 'a failed verification installs nothing'
+        end
+
+        def test_manifest_hash_verification_uses_parity_not_served_bytes
+          # #1164 regression: the backend records the parity digest of the
+          # pre-hash payload, NOT the sha256 of the served bytes — jsonb
+          # re-serialization guarantees the two differ. Verifying served
+          # bytes could never pass; verifying the parity digest always must.
+          rel_id = SecureRandom.uuid
+          manifest = {
+            'schemaVersion' => 1,
+            'libraryVersion' => '3.0.0',
+            'effectiveReleaseId' => rel_id,
+            'resources' => []
+          }
+          raw = JSON.generate(manifest)
+          expected = ManifestHash.compute(JSON.parse(raw))
+          refute_equal Digest::SHA256.hexdigest(raw), ManifestHash.normalize(expected),
+                       'the served-bytes hash and the parity digest are different by construction'
+
+          client = MockApiClient.new(manifest_json: raw)
+          sync = LibrarySynchronizer.new(store: @store, api_client: client)
+
+          res = sync.sync_release(release_id: rel_id, org_id: @org_id, expected_manifest_hash: expected)
+          assert_equal :synced, res[:status]
+          assert_equal rel_id, @store.current_release_id(@org_id)
         end
 
         def test_context_change_during_sync_aborts_and_prevents_leak

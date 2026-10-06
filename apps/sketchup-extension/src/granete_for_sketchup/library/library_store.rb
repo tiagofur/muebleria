@@ -99,19 +99,9 @@ module Granete
           nil
         end
 
-        def write_manifest(release_id, raw_bytes, expected_manifest_hash: nil)
+        def write_manifest(release_id, raw_bytes)
           rel_id = release_id.to_s.strip
           raise StoreError, "invalid release_id: #{release_id}" unless UUID_REGEX.match?(rel_id)
-
-          if expected_manifest_hash
-            expected_hex = clean_sha(expected_manifest_hash)
-            raise IntegrityError, "invalid expected_manifest_hash format: #{expected_manifest_hash}" unless expected_hex
-
-            computed_hex = Digest::SHA256.hexdigest(raw_bytes).downcase
-            if computed_hex != expected_hex
-              raise IntegrityError, "manifest hash mismatch: expected #{expected_hex}, got #{computed_hex}"
-            end
-          end
 
           target_path = manifest_path(rel_id)
           FileUtils.mkdir_p(File.dirname(target_path))

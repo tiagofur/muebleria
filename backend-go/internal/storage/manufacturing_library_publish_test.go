@@ -40,7 +40,9 @@ func TestManufacturingLibraryPublish_AtomicTransactionAndImmutability(t *testing
 
 	resID := uuid.New()
 	blobContent := []byte(`{"id":"` + resID.String() + `","name":"Base Cabinet 60"}`)
-	blobHash := "sha256:1111222233334444555566667777888899990000aaaa"
+	// The recorded content address must be the real digest of the blob's
+	// canonical bytes: reads fail closed against it (#1164).
+	blobHash := domain.ComputeSHA256Digest(blobContent)
 
 	// Insert resource ref into draft release
 	_, err = fx.admin.Exec(ctx, `
@@ -300,8 +302,10 @@ func TestManufacturingLibraryPublish_GetResourceBlobWithEntitlementCheck(t *test
 		t.Fatalf("insert refs: %v", err)
 	}
 
-	freeHash := "sha256:freeblob12345"
-	stdHash := "sha256:standardblob67890"
+	// Recorded digests must be the real canonical-form hashes of the blob
+	// contents: reads fail closed against them (#1164).
+	freeHash := domain.ComputeSHA256Digest([]byte(`{"name":"Free"}`))
+	stdHash := domain.ComputeSHA256Digest([]byte(`{"name":"Standard"}`))
 
 	freeBlob := domain.ResourceBlob{
 		SHA256:       freeHash,
