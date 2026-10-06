@@ -70,6 +70,12 @@ type workshopFurnitureDefinition struct {
 	// (role == option group code) with the workshop's curated material options,
 	// so clients can render per-role material selectors.
 	MaterialRoles []workshopMaterialRole `json:"materialRoles,omitempty"`
+	// HardwareRoles lists the kind=hardware option groups the definition's
+	// default composition consumes (#1144): the plugin's pre-insert
+	// configurator offers one selector per role so a group-required
+	// furniture can ALWAYS be inserted with an explicit choice. Mirror of
+	// materialRoles; members carry active hardware only, no pricing.
+	HardwareRoles []workshopHardwareRole `json:"hardwareRoles,omitempty"`
 }
 
 // workshopMaterialRole is one board role of a definition's composition with
@@ -78,6 +84,16 @@ type workshopFurnitureDefinition struct {
 type workshopMaterialRole struct {
 	Role      string   `json:"role"`
 	Label     string   `json:"label"`
+	OptionIDs []string `json:"optionIds"`
+}
+
+// workshopHardwareRole is one hardware option group a definition consumes,
+// with its active member hardware for the plugin's pre-insert selector
+// (#1144). Deliberately cost-free: commercial truth resolves server-side.
+type workshopHardwareRole struct {
+	Code      string   `json:"code"`
+	Name      string   `json:"name"`
+	Required  bool     `json:"required"`
 	OptionIDs []string `json:"optionIds"`
 }
 
@@ -292,6 +308,11 @@ func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories 
 			definition.EstimatedHardwareCount = len(layout.Hardware)
 			definition.MaterialRoles = buildMaterialRoles(layout, composition)
 		}
+		// Static scan on purpose (#1144): a group-required furniture's default
+		// layout FAILS closed without a choice — exactly when the configurator
+		// must offer the selector — so the roles can never depend on the
+		// layout succeeding.
+		definition.HardwareRoles = buildHardwareRoles(m, composition)
 
 		catalog.Definitions[m.ID] = definition
 
@@ -440,6 +461,102 @@ func buildMaterialRoles(layout engine.FurnitureLayout, composition domain.Catalo
 			}
 		}
 		roles = append(roles, entry)
+	}
+	return roles
+}
+
+// buildHardwareRoles derives the definition's hardware option-group roles
+// with the ACTIVE members the workshop curated for each (#1144), scanning
+// the module's composition statically (module components, structure
+// components and every agregado instance — the same traversal the engine's
+// consumed-roles walk uses). A consumed role without a hardware-kind group
+// still surfaces — with empty members — so the configurator can explain the
+// unresolvable choice instead of hiding it; the engine fails that resolve
+// fail-closed either way.
+func buildHardwareRoles(m domain.Module, composition domain.Catalog) []workshopHardwareRole {
+	active := make(map[string]bool, len(composition.Hardware))
+	for _, h := range composition.Hardware {
+		if h.Active {
+			active[h.ID] = true
+		}
+	}
+	findGroup := func(code string) (domain.OptionGroup, bool) {
+		for _, g := range composition.OptionGroups {
+			if strings.EqualFold(g.Code, code) && g.Kind == "hardware" {
+				return g, true
+			}
+		}
+		return domain.OptionGroup{}, false
+	}
+
+	seen := map[string]bool{}
+	roles := make([]workshopHardwareRole, 0)
+	record := func(instances []domain.ComponentInstance) {
+		for _, inst := range instances {
+			if inst.Overrides == nil {
+				continue
+			}
+			for _, hp := range inst.Overrides.HardwarePlacements {
+				code := strings.TrimSpace(hp.OptionRole)
+				if code == "" || seen[code] {
+					continue
+				}
+				seen[code] = true
+
+				entry := workshopHardwareRole{Code: code, Name: code, Required: true, OptionIDs: []string{}}
+				if group, ok := findGroup(code); ok {
+					entry.Name = group.Name
+					entry.Required = group.Required
+					entry.OptionIDs = make([]string, 0, len(group.OptionIDs))
+					for _, optionID := range group.OptionIDs {
+						if active[optionID] {
+							entry.OptionIDs = append(entry.OptionIDs, optionID)
+						}
+					}
+				}
+				roles = append(roles, entry)
+			}
+		}
+	}
+
+	// Local lookups on purpose: the engine's find* stay unexported and the
+	// static scan needs none of its resolution semantics.
+	findStructure := func(id string) (domain.Structure, bool) {
+		if id == "" {
+			return domain.Structure{}, false
+		}
+		for _, st := range composition.Structures {
+			if st.ID == id {
+				return st, true
+			}
+		}
+		return domain.Structure{}, false
+	}
+	findAgregado := func(id string) (domain.Agregado, bool) {
+		if id == "" {
+			return domain.Agregado{}, false
+		}
+		for _, agr := range composition.Agregados {
+			if agr.ID == id {
+				return agr, true
+			}
+		}
+		return domain.Agregado{}, false
+	}
+
+	record(m.Components)
+	if structure, ok := findStructure(m.StructureID); ok {
+		record(structure.Components)
+		for _, agrInst := range structure.Agregados {
+			if agr, ok := findAgregado(agrInst.AgregadoID); ok {
+				record(agr.Components)
+			}
+		}
+	}
+	for _, agrInst := range m.Agregados {
+		if agr, ok := findAgregado(agrInst.AgregadoID); ok {
+			record(agr.Components)
+		}
 	}
 	return roles
 }

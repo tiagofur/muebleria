@@ -17996,6 +17996,13 @@
           "role": {
             "type": "string"
           },
+          "hardwareRoles": {
+            "type": "array",
+            "description": "Hardware option groups the default composition consumes (#1144). The plugin's pre-insert configurator offers one selector per role; members carry active hardware only, never pricing.",
+            "items": {
+              "$ref": "#/components/schemas/WorkshopHardwareRole"
+            }
+          },
           "label": {
             "type": "string"
           },
@@ -18078,6 +18085,21 @@
           },
           "sortOrder": {
             "type": "integer"
+          }
+        }
+      },
+      "WorkshopHardwareRole": {
+        "type": "object",
+        "description": "One hardware option group a furniture definition consumes, with its active member hardware (#1144). Cost-free: commercial truth resolves server-side.",
+        "required": ["code", "name", "required", "optionIds"],
+        "properties": {
+          "code": { "type": "string", "description": "Option group code (the placement optionRole)." },
+          "name": { "type": "string", "description": "Group display name." },
+          "required": { "type": "boolean", "description": "Required groups fail the resolve closed without a choice." },
+          "optionIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Active hardware ids the group offers."
           }
         }
       },
