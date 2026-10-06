@@ -211,4 +211,51 @@ describe('InstalacionesScreen (lista de obras)', () => {
       '0 para instalar',
     );
   });
+
+  it('hides closed works by default and reveals them under "Todas" (#1169)', () => {
+    const closed: Project = {
+      ...makeProject('p2', [makeItem('c', 'loaded')]),
+      installation: {
+        id: 'ijob-2',
+        projectId: 'p2',
+        visits: [],
+        fieldIssues: [],
+        punchItems: [],
+        createdAt: '2026-09-01T10:00:00.000Z',
+        closeout: {
+          signedOffBy: 'Cliente',
+          signedOffAt: '2026-09-19T10:00:00.000Z',
+          closedAt: '2026-09-20T10:00:00.000Z',
+        },
+      },
+    } as unknown as Project;
+    render(
+      <InstalacionesScreen
+        projects={[makeProject('p1', [makeItem('a', 'loaded')]), closed]}
+        onOpenProject={() => undefined}
+      />,
+    );
+    // Por defecto "Activas": la obra cerrada no aparece.
+    expect(
+      screen.getByTestId('instalaciones-filter-activas').getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(screen.getByTestId('instalaciones-card-p1')).not.toBeNull();
+    expect(screen.queryByTestId('instalaciones-card-p2')).toBeNull();
+    // "Todas" revela la cerrada.
+    fireEvent.click(screen.getByTestId('instalaciones-filter-todas'));
+    expect(screen.getByTestId('instalaciones-card-p2')).not.toBeNull();
+    expect(
+      screen.getByTestId('instalaciones-filter-todas').getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('hides the filter when there is a single work', () => {
+    render(
+      <InstalacionesScreen
+        projects={[makeProject('p1', [makeItem('a', 'loaded')])]}
+        onOpenProject={() => undefined}
+      />,
+    );
+    expect(screen.queryByTestId('instalaciones-filter')).toBeNull();
+  });
 });

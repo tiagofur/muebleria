@@ -69,7 +69,7 @@ function formatAvgMinutes(minutes: number): string {
 function formatClaimStart(startedAt: string): string {
   const date = new Date(startedAt);
   if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat('es-MX', {
+  return new Intl.DateTimeFormat('es-AR', {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);

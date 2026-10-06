@@ -43,7 +43,7 @@ const ISSUE_STATUS_BADGE: Record<string, string> = {
 function formatDayDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString('es-MX', {
+  return new Date(y, m - 1, d).toLocaleDateString('es-AR', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -566,7 +566,7 @@ export function InstallationJobPanel({
           <p className="ship-board__closeout-audit" data-testid={`installation-closeout-audit-${projectId}`}>
             Conformidad firmada por <strong>{job.closeout.signedOffBy}</strong>
             {job.closeout.closedAt
-              ? ` · obra cerrada el ${new Date(job.closeout.closedAt).toLocaleDateString('es-MX')}`
+              ? ` · obra cerrada el ${new Date(job.closeout.closedAt).toLocaleDateString('es-AR')}`
               : ''}
           </p>
         ) : (

@@ -2242,6 +2242,37 @@
   border-color: var(--border-default);
 }
 
+.ship-board__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+}
+
+.ship-board__filter-btn {
+  background: none;
+  border: 1px solid transparent;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium, 500);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ship-board__filter-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.ship-board__filter-btn--active {
+  background: var(--surface-selected);
+  color: var(--text-brand);
+  border-color: var(--border-brand);
+  font-weight: var(--weight-semibold);
+}
+
 .ship-board__cards {
   display: flex;
   flex-direction: column;
