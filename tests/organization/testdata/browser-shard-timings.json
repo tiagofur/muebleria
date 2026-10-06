@@ -21,6 +21,7 @@
     "tests/organization/machine-output-selection.spec.ts": 34.1,
     "tests/organization/mfa.spec.ts": 4.9,
     "tests/organization/parameters-authoring.spec.ts": 7.9,
+    "tests/organization/password-reset.spec.ts": 60.0,
     "tests/organization/prequote-design.spec.ts": 29.8,
     "tests/organization/production-release-continuity.spec.ts": 11.6,
     "tests/organization/production-release-discovery.spec.ts": 13.8,

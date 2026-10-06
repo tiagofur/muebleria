@@ -46,6 +46,7 @@ import {
   type MembershipOffboardingPreview,
   type MembershipReassignmentPlan,
   type Invitation,
+  type PasswordResetIssuanceResponse,
 } from '@granete/storage';
 import { useStepUp } from '../security';
 
@@ -169,6 +170,7 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
   const [suspendReason, setSuspendReason] = useState('');
   const [revokeSessionsMember, setRevokeSessionsMember] = useState<UserRow | null>(null);
   const [revokeSessionsReason, setRevokeSessionsReason] = useState('');
+  const [resetLink, setResetLink] = useState<PasswordResetIssuanceResponse | null>(null);
   const [transferSource, setTransferSource] = useState<UserRow | null>(null);
   const [transferTargetId, setTransferTargetId] = useState('');
   const [transferReason, setTransferReason] = useState('');
@@ -544,6 +546,39 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
     }
   };
 
+  // #1178: emisión del enlace one-time de restablecimiento para un miembro
+  // activo. Misma clase de autoridad que revocar sesiones (step-up incluido):
+  // quien puede cortar el acceso puede entregar una nueva contraseña.
+  const handleIssuePasswordReset = async (u: UserRow) => {
+    setActionId(u.membership_id);
+    setActionError(null);
+    try {
+      await mutation.mutateAsync(async () => {
+        const data = await stepUp.run(
+          'organization_admin',
+          'emitir un enlace de restablecimiento de contraseña',
+          (key) => api.issuePasswordReset(token, u.membership_id, key),
+        );
+        setResetLink(data);
+      });
+      showToast('Enlace de restablecimiento creado. Cualquier enlace anterior ya no sirve.');
+    } catch (error) {
+      setActionError(mutationError(error, 'No se pudo emitir el enlace de restablecimiento. Revisá tu conexión e intentá de nuevo.'));
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleCopyResetLink = async () => {
+    if (!resetLink) return;
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${resetLink.reset_url}`);
+      showToast('✓ Enlace copiado al portapapeles');
+    } catch {
+      setActionError('No se pudo copiar el enlace. Seleccionalo y copialo manualmente.');
+    }
+  };
+
   const roleChips = (u: UserRow) => {
     const rolesList = u.roles.length > 0 ? u.roles : ['user'];
     return (
@@ -825,6 +860,15 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
                         >
                           Revocar sesiones
                         </button> : null}
+                        {canRevokeSessions && u.membership_status === 'active' ? <button
+                          type="button"
+                          className="btn btn--ghost btn--small"
+                          onClick={() => void handleIssuePasswordReset(u)}
+                          disabled={isWorking}
+                          aria-label={`Restablecer contraseña de ${u.name || u.email}`}
+                        >
+                          Restablecer contraseña
+                        </button> : null}
                         {!canManageMember && !canRevokeSessions ? <span aria-hidden="true">—</span> : null}
                       </div>
                     </td>
@@ -1073,6 +1117,37 @@ export function UsersScreen({ baseUrl, token, queryKeys, orgType }: UsersScreenP
           <div className="users-modal-actions users-modal-actions--flush">
             <button type="button" className="btn btn--secondary" onClick={() => setRevokeSessionsMember(null)}>Cancelar</button>
             <button type="button" className="btn btn--primary" disabled={!revokeSessionsReason.trim() || actionId === revokeSessionsMember?.membership_id} onClick={() => void confirmSessionRevocation()}>Revocar sesiones</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* PASSWORD RESET LINK MODAL (#1178) */}
+      <Modal
+        open={resetLink !== null}
+        onClose={() => setResetLink(null)}
+        title="Enlace de restablecimiento"
+      >
+        <div className="users-modal-stack">
+          <p className="users-modal-copy">
+            Enlace de un solo uso para <strong>{resetLink?.email_masked}</strong>; vence{' '}
+            {resetLink ? new Date(resetLink.expires_at).toLocaleString() : ''}. Entregáselo en
+            persona o por el canal que prefieran: al usarlo, todas las sesiones de esa cuenta se
+            cierran. Si emitís otro enlace, este deja de servir.
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <input
+              className="input"
+              readOnly
+              value={resetLink ? `${window.location.origin}${resetLink.reset_url}` : ''}
+              onFocus={(e) => e.currentTarget.select()}
+              aria-label="Enlace de restablecimiento"
+            />
+            <button type="button" className="btn btn--secondary" onClick={() => void handleCopyResetLink()}>
+              Copiar
+            </button>
+          </div>
+          <div className="users-modal-actions users-modal-actions--flush">
+            <button type="button" className="btn btn--secondary" onClick={() => setResetLink(null)}>Cerrar</button>
           </div>
         </div>
       </Modal>
