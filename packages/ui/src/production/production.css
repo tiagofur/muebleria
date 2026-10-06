@@ -2282,6 +2282,59 @@
   list-style: none;
 }
 
+.ship-board__cards-empty {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Barra de progreso de carga por obra (Embarques). #1169 añade el rol
+   progressbar; estas reglas dan el visual que el markup ya esperaba. */
+.ship-board__progress-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.ship-board__progress-label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.ship-board__progress-pct {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.ship-board__progress-bar-bg {
+  height: 6px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--surface-hover);
+  overflow: hidden;
+}
+
+.ship-board__progress-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--brand-500);
+  transition: width 0.2s ease;
+}
+
+.ship-board__progress-bar-fill--complete {
+  background: var(--success-500);
+}
+
+.ship-board__complete-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--success-700);
+}
+
 .ship-board__card {
   display: flex;
   flex-direction: column;

@@ -258,4 +258,33 @@ describe('InstalacionesScreen (lista de obras)', () => {
     );
     expect(screen.queryByTestId('instalaciones-filter')).toBeNull();
   });
+
+  it('explains the empty «Activas» list when every work is closed', () => {
+    const closed: Project = {
+      ...makeProject('p2', [makeItem('c', 'installed')]),
+      installation: {
+        id: 'ijob-2',
+        projectId: 'p2',
+        visits: [],
+        fieldIssues: [],
+        punchItems: [],
+        createdAt: '2026-09-01T10:00:00.000Z',
+        closeout: {
+          signedOffBy: 'Cliente',
+          signedOffAt: '2026-09-19T10:00:00.000Z',
+          closedAt: '2026-09-20T10:00:00.000Z',
+        },
+      },
+    } as unknown as Project;
+    render(
+      <InstalacionesScreen
+        projects={[closed]}
+        onOpenProject={() => undefined}
+      />,
+    );
+    // Por defecto «Activas»: sin obras vivas hay explicación, no un vacío mudo.
+    expect(screen.getByText('Sin obras activas')).not.toBeNull();
+    fireEvent.click(screen.getByTestId('instalaciones-filter-todas'));
+    expect(screen.getByTestId('instalaciones-card-p2')).not.toBeNull();
+  });
 });

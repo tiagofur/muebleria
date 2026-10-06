@@ -34,8 +34,6 @@ export type InstalacionesProjectDetailProps = {
   readonly canCloseout?: boolean;
   readonly jobHandlers?: InstallationJobPanelHandlers;
   readonly onBack?: () => void;
-  /** #1169 P2: revert one installed item back to loaded (undo). */
-  readonly onUndoInstalled?: (projectId: string, itemId: string) => void;
   readonly testId?: string;
 };
 
@@ -51,12 +49,17 @@ export function InstalacionesProjectDetail({
   canCloseout = false,
   jobHandlers,
   onBack,
-  onUndoInstalled,
   testId,
 }: InstalacionesProjectDetailProps): ReactNode {
   const view = installationJobCardView(project);
-  // #1169 P2: deshacer el último avance — paridad con Deshacer carga de Embarques.
-  const [lastInstalled, setLastInstalled] = useState<{ itemId: string } | null>(null);
+  // #1169 P2: deshacer el último avance — paridad con Deshacer carga de
+  // Embarques. Keyed por obra: cambiar de proyecto nunca ofrece un undo ajeno.
+  const [lastInstalledFor, setLastInstalledFor] = useState<{
+    projectId: string;
+    itemId: string;
+  } | null>(null);
+  const lastInstalled =
+    lastInstalledFor?.projectId === project.id ? lastInstalledFor : null;
   const toInstall = project.items.filter(
     (item) => normalizeItemFloorStatus(item.floorStatus) === 'loaded',
   );
@@ -164,7 +167,7 @@ export function InstalacionesProjectDetail({
                     className="btn btn--primary"
                     onClick={() => {
                       onAdvance(project.id, item.id, 'installed');
-                      setLastInstalled({ itemId: item.id });
+                      setLastInstalledFor({ projectId: project.id, itemId: item.id });
                     }}
                     data-testid={`instalaciones-advance-${item.id}`}
                   >
@@ -185,7 +188,7 @@ export function InstalacionesProjectDetail({
               className="btn btn--secondary btn--small"
               onClick={() => {
                 onAdvance(project.id, lastInstalled.itemId, 'loaded');
-                setLastInstalled(null);
+                setLastInstalledFor(null);
               }}
               data-testid="instalaciones-undo"
             >

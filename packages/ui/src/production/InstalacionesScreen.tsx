@@ -93,8 +93,10 @@ export function InstalacionesScreen({
   const totalToInstall = cards.reduce((acc, c) => acc + c.toInstallCount, 0);
 
   // #1169 P2: obras cerradas se acumulan sin filtro — el listado de Casey
-  // degrada con el tiempo. Filtro simple Activas/Cerradas.
+  // degrada con el tiempo. Filtro simple Activas/Cerradas; visible también
+  // con una sola obra si está cerrada (siempre hay salida a «Todas»).
   const [closedFilter, setClosedFilter] = useState<'activas' | 'todas'>('activas');
+  const hasClosedWorks = cards.some((c) => c.job.closed);
   const filteredCards = closedFilter === 'activas'
     ? cards.filter((c) => !c.job.closed)
     : cards;
@@ -123,7 +125,7 @@ export function InstalacionesScreen({
         />
       ) : (
         <>
-          {cards.length > 1 ? (
+          {cards.length > 1 || hasClosedWorks ? (
             <div
               className="ship-board__filter"
               role="group"
@@ -151,7 +153,15 @@ export function InstalacionesScreen({
             </div>
           ) : null}
           <ul className="ship-board__cards">
-            {filteredCards.map((card) => (
+            {filteredCards.length === 0 ? (
+              <li className="ship-board__cards-empty">
+                <EmptyState
+                  title="Sin obras activas"
+                  description="Todas las obras con instalación están cerradas. Pasá a «Todas» para verlas."
+                />
+              </li>
+            ) : (
+              filteredCards.map((card) => (
             <li
               key={card.projectId}
               className="ship-board__card card-open-host"
@@ -218,7 +228,8 @@ export function InstalacionesScreen({
                 </span>
               </p>
             </li>
-            ))}
+            ))
+            )}
           </ul>
         </>
       )}
