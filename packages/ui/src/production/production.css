@@ -3007,3 +3007,45 @@
     transition: none;
   }
 }
+
+/* ── #1169 — confirmación de cierre de obra + alertas de embarque ──────── */
+
+.installation-closeout__confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.embarques-detail__alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger-500) 12%, var(--surface-card));
+  border: 1px solid color-mix(in srgb, var(--danger-500) 35%, transparent);
+  color: var(--text-primary);
+}
+
+.embarques-detail__alert-icon {
+  flex-shrink: 0;
+  color: var(--danger-600);
+}
+
+.embarques-detail__alert-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.embarques-detail__alert-content strong {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.embarques-detail__alert-content p {
+  margin: 0;
+  font-size: var(--text-sm);
+}

@@ -146,9 +146,10 @@ export function EmbarquesProjectDetail({
             type="button"
             className="btn btn--ghost btn--small"
             onClick={() => setCrossAlert(null)}
+            aria-label="Descartar alerta de bulto equivocado"
             data-testid="embarques-dismiss-alert"
           >
-            <X size={16} />
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
       ) : null}
