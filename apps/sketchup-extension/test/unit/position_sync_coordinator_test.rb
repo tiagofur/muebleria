@@ -139,6 +139,7 @@ class PositionSyncCoordinatorTest < Minitest::Test
                                'project_id' => PROJECT_ID,
                                'furniture_definition_id' => DEFINITION_ID,
                                'lifecycle_status' => 'active',
+                               'version' => 1,
                                'origin' => 'design',
                                'display_name' => 'Módulo 1'
                              }

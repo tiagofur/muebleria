@@ -23,6 +23,10 @@ module Granete
                                    :authoring_defaults,
                                    keyword_init: true)
           Instance = Struct.new(:id, :project_id, :furniture_definition_id, :origin, :lifecycle_status,
+                                # #1177: optimistic-concurrency token of the unit —
+                                # the If-Match version the terminal :remove command
+                                # must echo back.
+                                :version,
                                 :display_name, :display_dimensions, :display_material_choices,
                                 # #977 recovery seed captured when the design
                                 # working copy dropped this unit's item —
@@ -136,6 +140,7 @@ module Granete
             assert_instance_field!(entry, 'id') { |v| ProjectFurniture.uuid?(v) }
             assert_instance_field!(entry, 'lifecycle_status') { |v| LIFECYCLE_STATUSES.include?(v) }
             assert_instance_field!(entry, 'origin') { |v| ORIGINS.include?(v) }
+            assert_instance_field!(entry, 'version') { |v| v.is_a?(Integer) && v >= 1 }
             raise ContractError, 'project_id faltante' unless entry['project_id'].is_a?(String)
 
             definition_id = entry['furniture_definition_id']
@@ -149,7 +154,7 @@ module Granete
             Instance.new(
               id: entry['id'], project_id: entry['project_id'],
               furniture_definition_id: definition_id, origin: entry['origin'],
-              lifecycle_status: entry['lifecycle_status'],
+              lifecycle_status: entry['lifecycle_status'], version: entry['version'],
               display_name: name, display_dimensions: dims,
               display_material_choices: choices,
               authoring_parameters: authoring[0],

@@ -12,6 +12,7 @@ require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/host_restore'
+require_relative '../../src/granete_for_sketchup/connection/design_sync'
 require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/library/catalog_provider'
@@ -402,7 +403,7 @@ class ProjectFurnitureTest < Minitest::Test
     quoted_finish = { 'INTERIOR' => 'white-id', 'FRENTES' => 'moscato-id' }
     instance = PF::Contract.parse_instance!(
       'id' => FI_1, 'project_id' => PROJECT_ID, 'origin' => 'quote', 'lifecycle_status' => 'active',
-      'furniture_definition_id' => DEFINITION_ID,
+      'version' => 1, 'furniture_definition_id' => DEFINITION_ID,
       'display' => { 'name' => 'Gabinete Base 600',
                      'dimensions_mm' => { 'width' => 600, 'height' => 720, 'depth' => 560 },
                      'material_choices' => quoted_finish }
@@ -505,7 +506,7 @@ class ProjectFurnitureTest < Minitest::Test
   # instead of letting recovery guess.
   def test_parse_instance_authoring_snapshot_fail_closed
     base = instance_body(FI_1, 'design', display_choices: nil).slice(
-      'id', 'project_id', 'origin', 'lifecycle_status'
+      'id', 'project_id', 'origin', 'lifecycle_status', 'version'
     )
 
     plain = PF::Contract.parse_instance!(base.dup)
@@ -2249,6 +2250,182 @@ class ProjectFurnitureTest < Minitest::Test
     display['material_choices'] = display_choices if display_choices
     entry['display'] = display
     entry
+  end
+
+  # ---------------------------------------------------------------------
+  # #1177 — Quitar del proyecto: the terminal :remove lifecycle command.
+  # Order is server → working copy → host; partial outcomes are honest
+  # flags, never false success; the If-Match version comes from the FRESH
+  # authority read, never from the possibly-stale panel row.
+  # ---------------------------------------------------------------------
+
+  def wc_item(id)
+    { 'furniture_instance_id' => id, 'parameters' => {}, 'material_choices' => {},
+      'transform' => { 'translation_mm' => [0.0, 0.0, 0.0], 'rotation_deg' => [0.0, 0.0, 0.0] } }
+  end
+
+  def stub_remove_success(version: 1, lifecycle: 'active')
+    stub_project_furniture([instance_body(FI_1, 'quote', lifecycle: lifecycle).merge('version' => version)])
+    stub_working_copy(working_copy_body([]))
+    @transport.respond(:post, "/furniture-instances/#{FI_1}:remove", 200,
+                       instance_body(FI_1, 'quote', lifecycle: 'removed').merge('version' => version + 1))
+  end
+
+  def test_remove_sends_the_fresh_authority_version_as_strong_if_match
+    stub_remove_success(version: 3)
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok'], result.inspect
+    assert_equal 'removed', result['code']
+    request = @transport.requests_for('POST', %r{/furniture-instances/#{FI_1}:remove}).first
+    assert_equal '"v3"', request['headers']['If-Match'],
+                 'the If-Match version comes from the authority read, not the panel row'
+  end
+
+  def test_remove_parses_the_removed_instance_back
+    stub_remove_success
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok']
+    assert_equal false, result['designPending']
+    assert_equal false, result['localErased']
+    assert_equal false, result['localPending']
+  end
+
+  def test_remove_refuses_a_terminal_unit_without_calling_the_backend
+    stub_project_furniture([instance_body(FI_1, 'quote', lifecycle: 'removed')])
+    stub_working_copy(working_copy_body([]))
+
+    result = @placer.remove(FI_1)
+
+    refute result['ok']
+    assert_equal 'terminal', result['code']
+    assert_empty @transport.requests_for('POST', /:remove/),
+                 'an already-terminal identity is never removed twice'
+  end
+
+  def test_remove_refuses_a_unit_outside_the_connected_project
+    stub_project_furniture([instance_body(FI_2, 'quote')])
+    stub_working_copy(working_copy_body([]))
+
+    result = @placer.remove(FI_1)
+
+    refute result['ok']
+    assert_equal 'not_found', result['code']
+    assert_empty @transport.requests_for('POST', /:remove/)
+  end
+
+  def test_remove_surfaces_the_typed_conflict_for_a_concurrent_transition
+    stub_project_furniture([instance_body(FI_1, 'quote').merge('version' => 3)])
+    stub_working_copy(working_copy_body([]))
+    @transport.respond(:post, "/furniture-instances/#{FI_1}:remove", 409,
+                       { 'error' => { 'code' => 'VERSION_CONFLICT', 'message' => 'El mueble cambió' } })
+
+    result = @placer.remove(FI_1)
+
+    refute result['ok']
+    assert_equal 'conflict', result['code']
+    assert_match(/intentá de nuevo/, result['reason'])
+  end
+
+  def test_remove_drops_only_the_removed_working_copy_item
+    stub_project_furniture([instance_body(FI_1, 'quote')])
+    stub_working_copy(working_copy_body([wc_item(FI_1), wc_item(FI_2)]))
+    @transport.respond(:post, "/furniture-instances/#{FI_1}:remove", 200,
+                       instance_body(FI_1, 'quote', lifecycle: 'removed').merge('version' => 2))
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok']
+    assert_equal false, result['designPending']
+    put_requests = @transport.requests_for('PUT', %r{/designs/#{DESIGN_ID}/working-copy})
+    assert_equal 1, put_requests.length, 'a leftover item converges through exactly one safe write'
+    sent_ids = put_requests.first['body']['items'].map { |item| item['furniture_instance_id'] }
+    refute_includes sent_ids, FI_1
+    assert_includes sent_ids, FI_2, 'other working items travel verbatim'
+    assert_equal '2026-09-03T00:00:00Z', put_requests.first['body']['expected_working_version']
+  end
+
+  def test_remove_keeps_success_with_design_pending_when_the_working_copy_conflicts
+    # The GET always answers the item back, so SafeWrite's conflict re-read
+    # can never converge: the design keeps a pending divergence, but the
+    # PROJECT remove already landed and must surface as success.
+    stub_project_furniture([instance_body(FI_1, 'quote')])
+    @transport.respond(:get, "/designs/#{DESIGN_ID}/working-copy", 200,
+                       working_copy_body([wc_item(FI_1), wc_item(FI_2)]))
+    @transport.respond(:put, "/designs/#{DESIGN_ID}/working-copy", 409,
+                       { 'error' => { 'code' => 'VERSION_CONFLICT', 'message' => 'el diseño cambió' } })
+    @transport.respond(:post, "/furniture-instances/#{FI_1}:remove", 200,
+                       instance_body(FI_1, 'quote', lifecycle: 'removed').merge('version' => 2))
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok'], 'the project remove is the user-visible truth'
+    assert_equal 'removed', result['code']
+    assert_equal true, result['designPending']
+  end
+
+  def test_remove_erases_the_managed_local_root
+    create_managed_root(FI_1)
+    stub_remove_success
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok']
+    assert_equal true, result['localErased']
+    assert_equal false, result['localPending']
+    assert_nil PF::ManagedFurniture.locate(@model, MS.new(@model), FI_1)['entity'],
+               'the local geometry leaves the model with the unit'
+  end
+
+  def test_remove_reports_no_local_geometry_when_the_unit_is_not_placed
+    stub_remove_success
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok']
+    assert_equal false, result['localErased']
+    assert_equal false, result['localPending']
+  end
+
+  def test_remove_reports_local_pending_when_the_erase_fails
+    create_managed_root(FI_1)
+    stub_remove_success
+    builder = Object.new
+    builder.define_singleton_method(:rollback_placement) { |_model, _entity| false }
+    placer = build_placer_with_builder(builder)
+
+    result = placer.remove(FI_1)
+
+    assert result['ok'], 'the unit IS removed from the project even if the erase fails'
+    assert_equal false, result['localErased']
+    assert_equal true, result['localPending']
+    assert_match(/borrala manualmente/, result['reason'])
+  end
+
+  def test_remove_reports_local_pending_on_duplicate_roots
+    create_managed_root(FI_1)
+    create_managed_root(FI_1)
+    stub_remove_success
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok']
+    assert_equal true, result['localPending']
+    assert_match(/duplicad/, result['reason'])
+  end
+
+  def test_parse_instance_requires_a_positive_version
+    base = instance_body(FI_1, 'quote')
+
+    assert_raises(PF::Contract::ContractError) do
+      PF::Contract.parse_instance!(base.except('version'))
+    end
+    assert_raises(PF::Contract::ContractError) { PF::Contract.parse_instance!(base.merge('version' => 0)) }
+    assert_raises(PF::Contract::ContractError) { PF::Contract.parse_instance!(base.merge('version' => '3')) }
+    assert_equal 3, PF::Contract.parse_instance!(base.merge('version' => 3)).version
   end
 
   def list_body

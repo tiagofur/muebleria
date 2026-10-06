@@ -5,13 +5,15 @@
 // lastPfState (the rendered-state guard: the loading card shows only when
 // nothing is rendered yet and the Proyecto tab reloads exactly once), the
 // per-action in-flight maps (pfPlacing / pfConfirming / pfCancelling /
-// pfRestoring), the #810 design-sync card state (designSyncBusy +
+// pfRestoring / pfRemoving), the #810 design-sync card state (designSyncBusy +
 // lastDesignSyncOutcome + the #969 stale-response drain), the
 // request/reload orchestration
 // (requestProjectFurniture), the render of every distinct panel state
 // (loading / empty / error / unbound / connected list), the per-unit rows
 // and action lifecycle (Colocar / Reintentar sincronización / Cancelar /
-// Restaurar / Seleccionar), the missing-unit recovery pair #870 (Restaurar
+// Restaurar / Seleccionar / #1177 Quitar del proyecto — the two-step
+// danger confirm whose command is the terminal :remove), the missing-unit
+// recovery pair #870 (Restaurar
 // posición — the Restorer at the recorded WorkingCopy transform — and
 // Colocar manualmente — the SAME existing unit driven through the shared
 // #469 placement preview; neither ever creates a new unit), the shared #469
@@ -27,7 +29,8 @@
 // Everything else call-time, never cached: window.sketchup bridges
 // (get_project_furniture, begin_placement_preview, place_furniture_instance,
 // confirm_placement_instance, cancel_placement_instance,
-// restore_furniture_instance, select_project_furniture,
+// restore_furniture_instance, remove_project_furniture,
+// select_project_furniture,
 // synchronize_design); window.GraneteUI.configurator
 // (isRepeatPreviewActive / cancelRepeatPreview / rearmInsertButton — the
 // catalog entry point of the shared #469 handlers);
@@ -45,6 +48,7 @@
 // onConfirmPlacementResult → handleConfirmPlacementResult,
 // onCancelPlacementResult → handleCancelPlacementResult,
 // onRestoreFurnitureResult → handleRestoreFurnitureResult,
+// onRemoveFurnitureResult → handleRemoveFurnitureResult,
 // onSynchronizeDesignResult → handleSynchronizeDesignResult,
 // onHostSaveAwareness → renderHostSaveAwareness.
 // Dialog seams: switchTab("project") → onProjectTabVisible() (the
@@ -135,6 +139,14 @@
   var pfConfirming = {};
   var pfCancelling = {};
   var pfRestoring = {};
+
+  // #1177 — Quitar del proyecto: per-identity in-flight guard plus the
+  // two-step confirm. removeArmed holds the armed row id; a fresh
+  // authority render always disarms it (the arm/disarm re-render passes
+  // the SAME payload object identity through lastRenderedPayload).
+  var pfRemoving = {};
+  var removeArmed = null;
+  var lastRenderedPayload = null;
 
   // Re-arms the entry point that started a placement (preview refused,
   // cancelled, failed or position-pending). Returns the button, if any.
@@ -373,6 +385,10 @@
 
   function renderProjectFurniture(payload) {
     payload = payload || {};
+    // A fresh authority render always disarms the remove confirm; the
+    // arm/disarm re-render re-passes the same payload object to keep it.
+    if (payload !== lastRenderedPayload) removeArmed = null;
+    lastRenderedPayload = payload;
     lastPfState = payload.state;
     hidePfStates();
 
@@ -507,7 +523,7 @@
         btnConfirm.className = "btn btn-secondary";
         btnConfirm.style.width = "auto";
         btnConfirm.textContent = pfConfirming[row.id] ? "Sincronizando…" : "Reintentar sincronización";
-        btnConfirm.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id];
+        btnConfirm.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id] || !!pfRemoving[row.id];
         btnConfirm.addEventListener("click", function () { confirmPlacementInstance(row.id, btnConfirm); });
         actionsGroup.appendChild(btnConfirm);
 
@@ -515,7 +531,7 @@
         btnCancel.className = "btn btn-secondary";
         btnCancel.style.width = "auto";
         btnCancel.textContent = pfCancelling[row.id] ? "Cancelando…" : "Cancelar";
-        btnCancel.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id];
+        btnCancel.disabled = !!pfConfirming[row.id] || !!pfCancelling[row.id] || !!pfRemoving[row.id];
         btnCancel.addEventListener("click", function () { cancelPlacementInstance(row.id, btnCancel); });
         actionsGroup.appendChild(btnCancel);
 
@@ -525,14 +541,14 @@
         action.className = "btn btn-secondary";
         action.style.width = "auto";
         action.textContent = pfPlacing[row.id] ? "Colocando…" : "Colocar";
-        action.disabled = !!pfPlacing[row.id];
+        action.disabled = !!pfPlacing[row.id] || !!pfRemoving[row.id];
         action.addEventListener("click", function () { placeFurnitureInstance(row.id, action); });
         card.appendChild(action);
     } else if (missing) {
       // #870 — two same-level recovery intents for the SAME unit: the
       // recorded-position restore (Restorer) or a manual placement of the
       // existing unit through the shared #469 preview. Never a new unit.
-      var busy = pfRestoring[row.id] || pfPlacing[row.id];
+      var busy = pfRestoring[row.id] || pfPlacing[row.id] || pfRemoving[row.id];
       var actions = document.createElement("div");
       actions.className = "pf-unit-actions";
 
@@ -567,7 +583,158 @@
       });
       card.appendChild(action);
     }
+    appendRemoveSection(card, row);
     return card;
+  }
+
+  // #1177 — the explicit terminal output every non-terminal card offers:
+  // "Quitar del proyecto" (danger). Two-step confirm inside the card, no
+  // modal: the armed state renders the question, the honest commercial
+  // caveat (quantity truth lives in the quote — a current quote line may
+  // re-materialize the unit from the web) and [Quitar] [No]. Rows whose
+  // identity no longer exists in the project authority or is not
+  // verifiable offer nothing to remove.
+  function removableRow(row) {
+    if (!row.id) return false;
+    return ["terminal_or_orphan_local", "unknown", "incompatible"].indexOf(row.reconciliationState) === -1;
+  }
+
+  function removeActionsBusy(row) {
+    return !!(pfRemoving[row.id] || pfPlacing[row.id] || pfConfirming[row.id] ||
+      pfCancelling[row.id] || pfRestoring[row.id]);
+  }
+
+  function trashIcon() {
+    var icon = document.createElement("span");
+    icon.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    return icon;
+  }
+
+  function appendRemoveSection(card, row) {
+    if (!removableRow(row)) return;
+    if (removeArmed === row.id && !pfRemoving[row.id]) {
+      card.appendChild(armedRemoveGroup(row));
+      return;
+    }
+    var quit = document.createElement("button");
+    quit.className = "btn btn-danger";
+    quit.style.display = "inline-flex";
+    quit.style.alignItems = "center";
+    quit.style.gap = "6px";
+    quit.style.width = "auto";
+    quit.disabled = removeActionsBusy(row);
+    quit.appendChild(trashIcon());
+    var label = document.createElement("span");
+    label.textContent = pfRemoving[row.id] ? "Quitando…" : "Quitar del proyecto";
+    quit.appendChild(label);
+    quit.addEventListener("click", function () { armRemoveFurniture(row.id); });
+    card.appendChild(quit);
+  }
+
+  function armedRemoveGroup(row) {
+    var group = document.createElement("div");
+    group.style.display = "flex";
+    group.style.flexDirection = "column";
+    group.style.gap = "6px";
+
+    var question = document.createElement("div");
+    question.className = "pf-unit-meta";
+    question.style.color = "var(--danger-600)";
+    question.textContent = "¿Quitar “" + (row.name || "este mueble") + "” del proyecto?";
+    group.appendChild(question);
+
+    var caveat = document.createElement("div");
+    caveat.className = "pf-unit-meta";
+    caveat.textContent = "Si la cotización vigente sigue pidiendo este mueble, puede volver a materializarse desde la web.";
+    group.appendChild(caveat);
+
+    var actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "6px";
+
+    var yes = document.createElement("button");
+    yes.className = "btn btn-danger";
+    yes.style.width = "auto";
+    yes.textContent = "Quitar";
+    yes.disabled = removeActionsBusy(row);
+    yes.addEventListener("click", function () { removeFurnitureInstance(row.id); });
+    actions.appendChild(yes);
+
+    var no = document.createElement("button");
+    no.className = "btn btn-secondary";
+    no.style.width = "auto";
+    no.textContent = "No";
+    no.disabled = removeActionsBusy(row);
+    no.addEventListener("click", function () { disarmRemoveFurniture(); });
+    actions.appendChild(no);
+
+    group.appendChild(actions);
+    return group;
+  }
+
+  function rerenderPfLists() {
+    if (lastRenderedPayload && lastRenderedPayload.state === "connected") {
+      renderProjectFurniture(lastRenderedPayload);
+    }
+  }
+
+  function armRemoveFurniture(furnitureInstanceId) {
+    if (!furnitureInstanceId || pfRemoving[furnitureInstanceId]) return;
+    removeArmed = furnitureInstanceId;
+    rerenderPfLists();
+  }
+
+  function disarmRemoveFurniture() {
+    removeArmed = null;
+    rerenderPfLists();
+  }
+
+  function removeFurnitureInstance(furnitureInstanceId) {
+    if (!furnitureInstanceId || pfRemoving[furnitureInstanceId]) return;
+    removeArmed = null;
+    pfRemoving[furnitureInstanceId] = true;
+    rerenderPfLists();
+    if (window.sketchup && window.sketchup.remove_project_furniture) {
+      window.sketchup.remove_project_furniture(JSON.stringify({ furnitureInstanceId: furnitureInstanceId }));
+    } else {
+      delete pfRemoving[furnitureInstanceId];
+      deps.showToast("error", "Quitar está disponible sólo dentro de SketchUp.");
+      rerenderPfLists();
+    }
+  }
+
+  // #1177 — the panel rows converge through the Ruby-side refresh that
+  // always follows this result; the local re-render only clears the
+  // in-flight state of the (possibly stale) rendered cards.
+  function handleRemoveFurnitureResult(result) {
+    result = result || {};
+    delete pfRemoving[result.instanceId];
+    rerenderPfLists();
+    if (result.ok) {
+      deps.showToast("success", "✓ Mueble quitado del proyecto.");
+      if (result.designPending) {
+        deps.showToast("info", "El diseño aún referencia la unidad: ejecutá “Sincronizar diseño” para convergerlo.");
+      }
+      if (result.localPending) {
+        deps.showToast("error", result.reason ||
+          "La unidad fue quitada del proyecto, pero la geometría local sigue en el modelo; borrala manualmente.");
+      }
+      return;
+    }
+    deps.showToast("error", pfRemoveFailureMessage(result));
+  }
+
+  function pfRemoveFailureMessage(result) {
+    switch (result.code) {
+      case "conflict": return result.reason || "El mueble cambió en el servidor; panel actualizado, intentá de nuevo.";
+      case "action_in_progress": return "Hay otra modificación del modelo en curso; esperá un momento e intentá de nuevo.";
+      case "not_found": return "El mueble ya no pertenece al proyecto conectado.";
+      case "terminal": return "El mueble ya fue eliminado del proyecto.";
+      case "remove_failed": return result.reason || "No se pudo quitar el mueble del proyecto.";
+      default: return result.reason || pfPlaceFailureMessage(result);
+    }
   }
 
   function placeFurnitureInstance(furnitureInstanceId, button, label, lane) {
@@ -862,6 +1029,7 @@
     handleConfirmPlacementResult: function (result) { requireDeps(); handleConfirmPlacementResult(result); },
     handleCancelPlacementResult: function (result) { requireDeps(); handleCancelPlacementResult(result); },
     handleRestoreFurnitureResult: function (result) { requireDeps(); handleRestoreFurnitureResult(result); },
+    handleRemoveFurnitureResult: function (result) { requireDeps(); handleRemoveFurnitureResult(result); },
     handleSynchronizeDesignResult: function (result) { requireDeps(); handleSynchronizeDesignResult(result); },
     renderHostSaveAwareness: function (payload) { requireDeps(); renderHostSaveAwareness(payload); },
     pfPlaceFailureMessage: function (result) { return pfPlaceFailureMessage(result); },
