@@ -245,8 +245,13 @@ func RegisterRoutes(server *Server) http.Handler {
 	// the clients. Team management lives in /api/org/* (memberships, #326) and
 	// exposes no global-user management bridge.
 
+	// SEC-8 (#1191): the trusted-proxy policy wraps EVERYTHING (outermost) so
+	// the rate limiter, audit IP and every clientIP(r) reader see the same
+	// resolved client. With no proxies configured it is a pass-through and
+	// clientIP trusts only the direct peer — fail-closed by construction.
 	// Aplicar CORS a toda la aplicación (allowlist, nunca wildcard)
-	return CORSMiddleware(server.allowedOrigins)(RequestIDMiddleware(mux))
+	return TrustedProxyMiddleware(server.TrustedProxies)(
+		CORSMiddleware(server.allowedOrigins)(RequestIDMiddleware(mux)))
 }
 
 // The coherent source view must be selected before AuthMiddleware opens its tenant transaction.

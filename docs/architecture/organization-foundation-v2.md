@@ -897,7 +897,11 @@ device approval, platform support entry, MFA management, team authority
 changes, org lifecycle, entitlements, global account status) answer a typed
 403 (`MFA_REQUIRED`/`STEP_UP_REQUIRED`/`STEP_UP_EXPIRED`) that no client can
 mistake for access expiry; MFA proves identity and adds no authority.
-Trusted-proxy rate limiting remains target work of SEC-8.
+Trusted-proxy handling is implemented (SEC-8, #1191): the client IP for rate
+limiting and audit is the direct peer by default, and `X-Forwarded-For` /
+`X-Real-IP` are honored only from proxies declared in
+`GRANETE_TRUSTED_PROXIES` (rightmost-untrusted resolution; an invalid entry
+refuses the boot).
 
 Mandatory hardening:
 

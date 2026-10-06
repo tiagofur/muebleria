@@ -308,3 +308,40 @@ func TestWebRefreshCookieSecurityResolution(t *testing.T) {
 		})
 	}
 }
+
+// SEC-8 (#1191): GRANETE_TRUSTED_PROXIES parsing is fail-closed — empty
+// trusts nothing, bare IPs widen to /32|/128, and any unparseable entry
+// refuses the boot instead of half-trusting forwarded headers.
+func TestLoadConfig_TrustedProxies(t *testing.T) {
+	baseEnv := func() {
+		t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+		t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+		t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+		t.Setenv("MFA_ENCRYPTION_KEYS", strings.Repeat("k", 60))
+		t.Setenv("MFA_ENCRYPTION_KEY", "")
+		t.Setenv("GRANETE_TRUSTED_PROXIES", "")
+	}
+
+	baseEnv()
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load without proxies: %v", err)
+	}
+	if len(cfg.TrustedProxies) != 0 {
+		t.Fatalf("empty env must trust nothing, got %+v", cfg.TrustedProxies)
+	}
+
+	t.Setenv("GRANETE_TRUSTED_PROXIES", "10.0.0.0/8, 127.0.0.1, ::1")
+	cfg, err = LoadConfig()
+	if err != nil {
+		t.Fatalf("load with proxies: %v", err)
+	}
+	if len(cfg.TrustedProxies) != 3 {
+		t.Fatalf("trusted proxies = %d entries, want 3", len(cfg.TrustedProxies))
+	}
+
+	t.Setenv("GRANETE_TRUSTED_PROXIES", "10.0.0.0/8,not-a-cidr")
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "GRANETE_TRUSTED_PROXIES") {
+		t.Fatalf("expected boot refusal on invalid cidr, got %v", err)
+	}
+}

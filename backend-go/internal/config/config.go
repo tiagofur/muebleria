@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -48,6 +49,10 @@ type Config struct {
 	AllowedOrigins []string // CORS allowlist (reflected per-request); never "*"
 	RateLimitRPS   float64  // sustained requests/second for auth endpoints
 	RateLimitBurst int      // maximum burst for auth endpoints
+	// TrustedProxies (SEC-8, #1191): CIDRs of reverse proxies allowed to
+	// speak for clients via X-Forwarded-For/X-Real-IP. Empty trusts nothing:
+	// the client IP is the direct peer. Built from GRANETE_TRUSTED_PROXIES.
+	TrustedProxies []*net.IPNet
 	// MediaDir is the filesystem root for catalog image uploads (F040).
 	MediaDir string
 	// HardwareAssetLimits are the configurable per-representation byte caps
@@ -151,6 +156,15 @@ func LoadConfig() (Config, error) {
 		mediaDir = filepath.Join(home, ".muebles-media")
 	}
 
+	// SEC-8 (#1191): reverse proxies allowed to speak for clients via
+	// X-Forwarded-For/X-Real-IP. Empty (the default) trusts nothing — client
+	// IP is the direct peer — and an invalid entry refuses the boot rather
+	// than half-trusting a header.
+	trustedProxies, err := parseTrustedProxies(os.Getenv("GRANETE_TRUSTED_PROXIES"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	hardwareAssetLimits := parseHardwareAssetLimitsEnv()
 
 	return Config{
@@ -166,6 +180,7 @@ func LoadConfig() (Config, error) {
 		AllowedOrigins:       allowed,
 		RateLimitRPS:         rps,
 		RateLimitBurst:       burst,
+		TrustedProxies:       trustedProxies,
 		MediaDir:             mediaDir,
 		HardwareAssetLimits:  hardwareAssetLimits,
 
@@ -329,6 +344,43 @@ func parseOrigins(raw string) []string {
 		}
 	}
 	return out
+}
+
+// parseTrustedProxies (SEC-8, #1191) parses GRANETE_TRUSTED_PROXIES: a
+// comma-separated list of CIDR blocks or bare IPs (a bare IP becomes /32 or
+// /128). Empty input trusts nothing; any unparseable entry is a boot error —
+// a typo must never silently downgrade to "trust the header from anyone" or
+// "ignore the real proxy".
+func parseTrustedProxies(raw string) ([]*net.IPNet, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]*net.IPNet, 0, len(parts))
+	for _, p := range parts {
+		entry := strings.TrimSpace(p)
+		if entry == "" {
+			continue
+		}
+		if strings.Contains(entry, "/") {
+			_, cidr, err := net.ParseCIDR(entry)
+			if err != nil {
+				return nil, fmt.Errorf("GRANETE_TRUSTED_PROXIES: %q is not a valid CIDR: %w", entry, err)
+			}
+			out = append(out, cidr)
+			continue
+		}
+		ip := net.ParseIP(entry)
+		if ip == nil {
+			return nil, fmt.Errorf("GRANETE_TRUSTED_PROXIES: %q is not a valid IP or CIDR", entry)
+		}
+		bits := 32
+		if ip.To4() == nil {
+			bits = 128
+		}
+		out = append(out, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+	}
+	return out, nil
 }
 
 func parseRateLimit() (float64, int, error) {
