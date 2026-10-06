@@ -39,6 +39,7 @@ import type { FabricActiveClaim } from './fabricProjectCards';
 import type { Module3DCatalogInput } from '../modules/module3dPreview';
 import {
   buildProductionOrderReadiness,
+  PRODUCTION_ORDER_TAB_LABELS,
   HUB_TABS,
   projectAllowsProductionOrder,
   type ProductionOrderTab,
@@ -366,7 +367,7 @@ export function ProductionWorkspace({
         {orderTabIsTechnical ? (
           <div className="alert alert--info" role="status" data-testid="prod-hub-technical-tab-notice">
             <span>
-              La vista «{orderTab}» se trabaja en Ingeniería — acá está el estado de la orden.
+              La vista «{PRODUCTION_ORDER_TAB_LABELS[orderTab]}» se trabaja en Ingeniería — acá está el estado de la orden.
             </span>
             <button
               type="button"

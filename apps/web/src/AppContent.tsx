@@ -222,6 +222,7 @@ export function AppContent({
     (s) => s.setWorkspaceLoadError,
   );
   const loadWorkspace = useWorkspaceStore((s) => s.loadWorkspace);
+  const workspaceLoading = useWorkspaceStore((s) => s.workspaceLoading);
   const loadAssignableOwners = useWorkspaceStore(
     (s) => s.loadAssignableOwners,
   );
@@ -1933,6 +1934,7 @@ export function AppContent({
     projectTemplates,
     projects,
     projectsCreateKey,
+    workspaceLoading,
     projectsForRole,
     purchaseOrders,
     purchasingProjects,
