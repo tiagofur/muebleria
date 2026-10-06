@@ -6,6 +6,7 @@
 import {
   useMemo,
   type ReactNode,
+	useState,
 } from 'react';
 import type {
   AmbientCategory,
@@ -54,6 +55,7 @@ import {
 } from '../common';
 import { demoExperience } from '../demoExperience';
 import '../catalogs/catalogs.css';
+import '../common/alert.css';
 import { ExportIssueList } from './ExportIssueList';
 import { ProjectDetailView } from './components/ProjectDetailView';
 import { projectAllowsProductionChrome } from './components/projectDetailContext';
@@ -583,6 +585,26 @@ export function ProjectsScreen({
   onChangeCommercialStatus,
   onRecordDeposit,
 }: ProjectsScreenProps): ReactNode {
+  // #1142 P2: referencia desde la Vitrina — persiste hasta que el usuario la resuelve.
+  const [referenceHandoff, setReferenceHandoff] = useState<
+    { kind: 'module' | 'project'; name: string; code?: string } | null
+ >(() => {
+    try {
+      const raw = sessionStorage.getItem('quotes_reference_handoff');
+      return raw ? (JSON.parse(raw) as { kind: 'module' | 'project'; name: string; code?: string }) : null;
+    } catch {
+      return null;
+    }
+  });
+  const dismissReferenceHandoff = () => {
+    try {
+      sessionStorage.removeItem('quotes_reference_handoff');
+    } catch {
+      // ignore
+    }
+    setReferenceHandoff(null);
+  };
+
   const state = useProjectsScreenState({
     projects,
     commercialSummaries,
@@ -906,7 +928,25 @@ export function ProjectsScreen({
           onRecordDeposit={onRecordDeposit}
         />
       ) : (
-        <ProjectsListView
+        <>
+          {referenceHandoff ? (
+            <div className="alert alert--info" role="status" data-testid="quotes-reference-banner">
+              <span>
+                {referenceHandoff.kind === 'module'
+                  ? `Vas a cotizar con «${referenceHandoff.name}» (${referenceHandoff.code ?? ''}) — agregalo con «Agregar mueble».`
+                  : `Nueva cotización inspirada en «${referenceHandoff.name}».`}
+              </span>
+              <button
+                type="button"
+                className="btn btn--small btn--ghost"
+                onClick={dismissReferenceHandoff}
+                data-testid="quotes-reference-banner-dismiss"
+              >
+                Entendido
+              </button>
+            </div>
+          ) : null}
+          <ProjectsListView
           projects={projects}
           filtered={state.filtered}
           customers={customers}
@@ -937,6 +977,7 @@ export function ProjectsScreen({
           onManageTemplates={() => state.setTemplatesManagementOpen(true)}
           onOpenProject={state.openDetail}
         />
+        </>
       )}
 
       <ProjectModalsContainer

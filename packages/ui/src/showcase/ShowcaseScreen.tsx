@@ -14,6 +14,9 @@ export interface ShowcaseScreenProps {
   readonly onUseModuleInQuote?: (moduleId: string) => void;
   readonly onUseProjectAsReference?: (projectId: string) => void;
   readonly isLoadingPhotos?: boolean;
+  /** #1142: fallo de carga del portafolio — estado explícito con salida. */
+  readonly photosError?: string | null;
+  readonly onRetryPhotos?: () => void;
 }
 
 export function ShowcaseScreen({
@@ -24,6 +27,8 @@ export function ShowcaseScreen({
   onUseModuleInQuote,
   onUseProjectAsReference,
   isLoadingPhotos = false,
+  photosError,
+  onRetryPhotos,
 }: ShowcaseScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<'portfolio' | 'modules'>('portfolio');
 
@@ -74,6 +79,8 @@ export function ShowcaseScreen({
             resolveImageUrl={resolveImageUrl}
             onUseAsReference={onUseProjectAsReference}
             isLoading={isLoadingPhotos}
+            photosError={photosError}
+            onRetryPhotos={onRetryPhotos}
           />
         ) : (
           <ModuleShowcase

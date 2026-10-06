@@ -132,6 +132,18 @@ export function useDashboardData({
     (moduleId: string) => {
       const mod = modules.find((m) => m.id === moduleId);
       bumpProjectsCreateKey();
+      // #1142 P2: el handoff sobrevive al toast — estado en sessionStorage
+      // que la lista de Cotizaciones muestra hasta que el usuario lo resuelve.
+      if (mod) {
+        try {
+          sessionStorage.setItem(
+            'quotes_reference_handoff',
+            JSON.stringify({ kind: 'module', code: mod.code, name: mod.name }),
+          );
+        } catch {
+          // storage no disponible: queda el toast como única señal.
+        }
+      }
       navigate(pathForNav('quotes'));
       toast({
         type: 'info',
@@ -147,6 +159,16 @@ export function useDashboardData({
     (projectId: string) => {
       const proj = projects.find((p) => p.id === projectId);
       bumpProjectsCreateKey();
+      if (proj) {
+        try {
+          sessionStorage.setItem(
+            'quotes_reference_handoff',
+            JSON.stringify({ kind: 'project', name: proj.name }),
+          );
+        } catch {
+          // storage no disponible: queda el toast como única señal.
+        }
+      }
       navigate(pathForNav('quotes'));
       toast({
         type: 'info',

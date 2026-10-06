@@ -3,6 +3,7 @@
  * Empty workspace: «Primeros pasos» checklist (issue #33).
  * Role-focused home variants (F043 / #88).
  */
+import '../common/alert.css';
 
 import type { AnalyticsPeriodDays, OpsException, WorkshopAnalytics } from '@granete/domain';
 import type { ProjectCommercialSummary } from '@granete/storage';

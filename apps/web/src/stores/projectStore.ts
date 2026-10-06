@@ -591,6 +591,7 @@ export interface ProjectState {
   // --- Showcase & Commercial Portfolio (CRM Phase 4) ---
   readonly showcasePhotos: readonly ShowcasePhotoItem[];
   readonly isLoadingShowcase: boolean;
+  readonly showcasePhotosError: string | null;
   readonly loadShowcasePhotos: (onlyShowcase?: boolean) => Promise<void>;
 
   // --- Project Lifecycle & Operational Core (OC-010..OC-024) ---
@@ -2157,16 +2158,23 @@ export function createProjectStore(options: InternalOptions) {
     // --- Showcase & Commercial Portfolio (CRM Phase 4) ---
     showcasePhotos: [],
     isLoadingShowcase: false,
+    showcasePhotosError: null as string | null,
 
     loadShowcasePhotos: async (onlyShowcase = false) => {
       if (!options.deps.listShowcasePhotos) return;
-      set({ isLoadingShowcase: true });
+      set({ isLoadingShowcase: true, showcasePhotosError: null });
       try {
         const photos = await options.deps.listShowcasePhotos(onlyShowcase);
         set({ showcasePhotos: photos, isLoadingShowcase: false });
       } catch (err) {
+        // #1142: el fallo es un estado propio — nunca se disfraza de
+        // «portafolio vacío» con instrucciones de recuperación equivocadas.
         console.error('Error loading showcase photos:', err);
-        set({ isLoadingShowcase: false });
+        set({
+          isLoadingShowcase: false,
+          showcasePhotosError:
+            'No se pudo cargar el portafolio comercial. Revisá tu conexión e intentá de nuevo.',
+        });
       }
     },
 
