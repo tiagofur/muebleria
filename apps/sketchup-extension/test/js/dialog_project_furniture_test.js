@@ -122,6 +122,16 @@ function el(sandbox, id) {
   return sandbox.__registry[id];
 }
 
+function cardElements(el) {
+  return el.children.flatMap((child) => [child, ...cardElements(child)]);
+}
+
+function buttonWithLabel(card, label) {
+  return cardElements(card).filter((candidate) =>
+    String(candidate.className).includes('btn') && candidate.children.length === 0 &&
+    candidate.textContent === label)[0] || null;
+}
+
 function visible(elm) {
   return elm.style.display !== 'none';
 }
@@ -172,10 +182,10 @@ function runTests() {
 
   test('placed list offers Seleccionar, pending offers Colocar', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
-    const pendingButton = el(sandbox, 'pf-pending-list').children[0].children[1];
-    assert.equal(pendingButton.textContent, 'Colocar');
-    const placedButton = el(sandbox, 'pf-placed-list').children[0].children[1];
-    assert.equal(placedButton.textContent, 'Seleccionar');
+    assert.ok(buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar'),
+      'the pending card footer owns Colocar');
+    assert.ok(buttonWithLabel(el(sandbox, 'pf-placed-list').children[0], 'Seleccionar'),
+      'the placed card footer owns Seleccionar');
   });
 
   test('missing local is visible and exposes exactly the two #870 recovery actions', (sandbox) => {
@@ -189,10 +199,10 @@ function runTests() {
     const card = el(sandbox, 'pf-pending-list').children[0];
     const labels = card.children[0].children[0].children.map((child) => child.textContent);
     assert.ok(labels.includes('Falta en este archivo'));
-    assert.equal(card.children.length, 3, 'information block + actions row + #1177 remove section');
+    assert.equal(card.children.length, 2, 'information block + one unified action footer (#1177 smoke fix)');
     const actions = card.children[1];
     assert.equal(actions.className, 'pf-unit-actions');
-    assert.equal(actions.children.length, 2, 'missing_local exposes the two same-level recovery intents');
+    assert.equal(actions.children.length, 3, 'two recovery intents + the danger remove exit');
     assert.equal(actions.children[0].textContent, '↶ Restaurar posición');
     assert.equal(actions.children[1].textContent, '+ Colocar manualmente');
     assert.ok(card.children[0].children.some((child) =>
@@ -234,7 +244,7 @@ function runTests() {
 
   test('Colocar sends the exact furnitureInstanceId and guards double clicks', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
-    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
     button.click();
     const call = sandbox.__bridge.find((c) => c.action === 'place_furniture_instance');
     assert.ok(call, 'place_furniture_instance must be called');
@@ -249,7 +259,7 @@ function runTests() {
 
   test('Seleccionar focuses the placed unit in the viewport', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
-    el(sandbox, 'pf-placed-list').children[0].children[1].click();
+    buttonWithLabel(el(sandbox, 'pf-placed-list').children[0], 'Seleccionar').click();
     const call = sandbox.__bridge.find((c) => c.action === 'select_project_furniture');
     assert.ok(call, 'select_project_furniture must be called');
     assert.equal(call.payload.furnitureInstanceId, FI_3);
@@ -263,7 +273,7 @@ function runTests() {
 
   test('failed placement never flips into success', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
-    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
     button.click();
     sandbox.window.GraneteDialog.onPlaceFurnitureResult({
       ok: false, code: 'sync_failed', reason: 'el diseño no se pudo actualizar', instanceId: FI_1
@@ -271,8 +281,8 @@ function runTests() {
     // The panel stays on the last rendered rows; the failed unit is still
     // pending and its button is re-armed for an honest retry.
     assert.ok(visible(el(sandbox, 'pf-list-view')));
-    const retry = el(sandbox, 'pf-pending-list').children[0].children[1];
-    assert.equal(retry.textContent, 'Colocar');
+    const retry = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
+    assert.ok(retry, 'the failed unit re-arms its Colocar entry');
     retry.click();
     assert.equal(
       sandbox.__bridge.filter((c) => c.action === 'place_furniture_instance').length, 2
@@ -281,7 +291,7 @@ function runTests() {
 
   test('placement failure stays selectable after the toast disappears', (sandbox) => {
     sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
-    const button = el(sandbox, 'pf-pending-list').children[0].children[1];
+    const button = buttonWithLabel(el(sandbox, 'pf-pending-list').children[0], 'Colocar');
     button.click();
     sandbox.window.GraneteDialog.onPlaceFurnitureResult({
       ok: false, code: 'resolution_failed', instanceId: FI_1,
@@ -339,7 +349,7 @@ function runTests() {
     assert.ok(badges.includes('Posición pendiente'), 'pendingConfirm badge must be visible');
 
     const actions = pendingCard.children[1];
-    assert.equal(actions.children.length, 2, 'actions group must have confirm and cancel');
+    assert.equal(actions.children.length, 3, 'confirm + cancel + the danger remove exit');
     assert.equal(actions.children[0].textContent, 'Reintentar sincronización');
     assert.equal(actions.children[1].textContent, 'Cancelar');
 
