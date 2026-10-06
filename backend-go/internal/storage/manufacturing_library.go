@@ -14,8 +14,9 @@ import (
 )
 
 // #772 [P1][LIB-1]: Manufacturing library storage operations.
-// Phase 1 scope: identity, release lifecycle, resource refs, and project pinning.
-// Overlay logic (LIB-4) is not implemented here.
+// Scope: identity, release lifecycle, resource refs, and project pinning.
+// Overlay storage lives in overlay_store.go (LIB-4, #1065) and composes at
+// resolve time via release_server_inputs.go — never here.
 //
 // AUTHORIZATION RULE: All read operations go through PostgreSQL RLS using the
 // tenant context already set by the request middleware. Never use domain.LibraryCode
@@ -365,9 +366,12 @@ func (s *PostgresStore) AddResourceRef(ctx context.Context, params AddResourceRe
 // GetEffectiveReleaseForOrg returns the current effective library release for an
 // organization.
 //
-// Phase 1 behavior: always returns the current published Granete Standard release.
-// There are no org overlays yet (that is LIB-4 / #775). If no published release
-// exists, returns ErrLibraryReleaseNotFound.
+// The organization pin recorded on design revisions is the exact published
+// Granete Standard release, so the effective release here IS the current
+// published Standard release. The organization's overlays exist (#1065) and
+// compose at resolve time as live configuration (see
+// ReleaseServerInputsForRelease / assembleReleaseInputs), not as part of this
+// identity. If no published release exists, returns ErrLibraryReleaseNotFound.
 func (s *PostgresStore) GetEffectiveReleaseForOrg(ctx context.Context, _ uuid.UUID) (*domain.LibraryRelease, error) {
 	standardID, err := uuid.Parse(domain.GraneteStandardLibraryID)
 	if err != nil {

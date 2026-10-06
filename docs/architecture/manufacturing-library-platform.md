@@ -222,6 +222,13 @@ organization-owned replacement/addition references
 
 It must not store a blind full copy merely to change one property.
 
+> **Implemented status (2026-10-06, verified for #1193):** the overlay row
+> (namespace-restricted `overrides` JSONB, optimistic versioning, policy
+> drafts, three-way rebase with explicit conflicts) is implemented. Its
+> `custom_resource_ids` column is persisted and rebased but has **no runtime
+> consumer yet** — resolve and publish ignore it. It is scaffolding for
+> organization-owned additions, not a working feature.
+
 ### 6.6 `EffectiveLibraryRelease`
 
 Server-resolved, immutable distribution snapshot for a particular accessible library state.
@@ -241,6 +248,39 @@ EffectiveLibraryRelease
 SketchUp consumes the effective result. It does not reproduce merge/rebase policy.
 
 Implementations may materialize an explicit DB entity or use an immutable release/build record with equivalent semantics. What is mandatory is a stable effective-release identity and deterministic manifest.
+
+> **Implemented resolution contract (2026-10-06, verified for #1193):** today
+> the effective library is composed **at resolve time**, not materialized as
+> a composed identity:
+>
+> - the consumer's pin is the **exact published Granete Standard release**;
+>   frozen geometry (modules, materials, hardware, agregados, …) decodes
+>   fail-closed from that release's content-addressed blobs;
+> - the organization's **factory construction policy overlay** and
+>   **component side assignments** are live configuration the backend
+>   applies per resolve (`assembleReleaseInputs`) — the backend still owns
+>   all merge/rebase policy; SketchUp never composes anything;
+> - design revisions materialize `authoring_defaults_snapshot` plus the
+>   immutable `effective_library_release_id` pin, and production releases
+>   capture a full manufacturing snapshot at release time — **the
+>   materialized revisions/snapshots are the reproducibility guarantee**.
+>   Re-resolving a pin after an overlay change yields the new composition
+>   for NEW work; already-materialized revisions never change.
+>
+> A materialized composed `EffectiveLibraryRelease` identity remains future
+> work, not a current promise: nothing today may claim that a composed
+> identity exists.
+
+### 6.7 Identity exclusions from releases
+
+Release resources are pinned by UUID (`library_release_resource_refs.resource_id`
+is `UUID NOT NULL`). The agregados table legitimately carries TEXT identities —
+the UI mints `agr-<timestamp>` ids by design — so **UI-created agregados are
+live-catalog-only**: they do not enter published releases, and validate/publish
+report every exclusion explicitly (#1185/#1186). The root fix is widening the
+refs to TEXT (future work); until then, a pinned resolve answering
+`CATALOG_REFERENCE_MISSING` for one of these entities is the documented
+contract, not a bug.
 
 ---
 
@@ -374,6 +414,17 @@ minPluginVersion = minimum SketchUp plugin that can interpret the release
 A plugin that does not support the manifest/resource schema must refuse activation of that release and keep the previous valid compatible release available.
 
 Semantic versioning is recommended for human-visible library versions, but compatibility decisions must be based on explicit schema/capability metadata, not only version-string heuristics.
+
+> **Enforcement contract (2026-10-06, decided for #1193):** `min_plugin_version`
+> is enforced **client-side at sync time** — the SketchUp extension compares
+> it against its own version and refuses to download/activate an incompatible
+> release, keeping the previously valid local release current
+> (`library_synchronizer.rb`). The backend serves manifests and blobs without
+> comparing versions: distribution-time server enforcement is an explicit
+> non-goal for now, not an omission. The protection this gate exists for is
+> **reproducibility** (an outdated consumer must not silently activate
+> content it cannot interpret), which the client-side check fully provides;
+> a direct API caller fetching a manifest it cannot interpret gains nothing.
 
 ---
 
