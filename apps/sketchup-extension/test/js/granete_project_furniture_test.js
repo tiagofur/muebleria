@@ -291,7 +291,7 @@ test('connected render: counts, titles, pending/placed split and terminal exclus
     terminal: true, placed: false, reconciliationState: 'terminal', unitIndex: 3, unitTotal: 3 });
   pf.renderProjectFurniture(panel);
   assert.equal(visible(el(sandbox, 'pf-list-view')), true);
-  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puestos · 2 pendientes');
+  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puesto · 2 pendientes');
   assert.equal(el(sandbox, 'pf-pending-title').textContent, 'Pendientes y divergencias (2)');
   assert.equal(el(sandbox, 'pf-placed-title').textContent, 'Puestos / Sincronizados (1)');
   assert.equal(el(sandbox, 'pf-pending-list').children.length, 2);
@@ -303,11 +303,11 @@ test('attention suffix renders only when attention > 0', () => {
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(connectedPanel());
-  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puestos · 2 pendientes');
+  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puesto · 2 pendientes');
   const panel = connectedPanel();
   panel.attention = 2;
   pf.renderProjectFurniture(panel);
-  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puestos · 2 pendientes · 2 requieren atención');
+  assert.equal(el(sandbox, 'pf-count-badge').textContent, '1 puesto · 2 pendientes · 2 requieren atención');
 });
 
 test('empty project renders the honest empty state (and hides the sync card)', () => {

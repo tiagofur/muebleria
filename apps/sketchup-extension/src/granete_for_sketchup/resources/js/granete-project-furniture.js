@@ -405,7 +405,9 @@
         return;
       }
       pfListView.style.display = "block";
-      pfCountBadge.textContent = (payload.placed || 0) + " puestos · " + (payload.pending || 0) + " pendientes" +
+      pfCountBadge.textContent =
+        (payload.placed || 0) + " " + (payload.placed === 1 ? "puesto" : "puestos") + " · " +
+        (payload.pending || 0) + " " + (payload.pending === 1 ? "pendiente" : "pendientes") +
         ((payload.attention || 0) > 0 ? " · " + payload.attention + " requieren atención" : "");
       pfPendingTitle.textContent = "Pendientes y divergencias (" + (payload.pending || 0) + ")";
       pfPlacedTitle.textContent = "Puestos / Sincronizados (" + (payload.placed || 0) + ")";

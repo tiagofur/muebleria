@@ -59,6 +59,7 @@
       .pf-unit-actions {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: var(--space-2);
         width: 100%;
       }
@@ -67,6 +68,10 @@
         width: auto;
         padding: var(--space-1) var(--space-2);
         font-size: var(--text-xs);
+        /* #1177 smoke: .btn-danger carries a global margin-top from another
+           context — inside this footer it pushed Quitar del proyecto below
+           its siblings. The footer owns the rhythm. */
+        margin-top: 0;
       }
 
       /* #1177 — armed remove confirm: one calm tonal surface in the same
