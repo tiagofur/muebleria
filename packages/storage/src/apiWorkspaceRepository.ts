@@ -323,6 +323,9 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   // families, keyed "family:id". Seeded by getCatalog, refreshed from every
   // accepted write response.
   private readonly entityVersions = new Map<string, number>();
+  // #1168: JSON body of the last successful write per entity — byte-identical
+  // re-saves are skipped instead of rewritten catalog-wide.
+  private readonly lastSentBody = new Map<string, string>();
 
   /**
    * #460 SEC-4B: el repository NO conoce storage de credenciales. El access
@@ -695,6 +698,18 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     id: string,
   ): Promise<void> {
     const key = this.versionKey(family, id);
+    // #1168: a catalog edit re-runs saveCatalog for EVERY entity; re-PUTting
+    // byte-identical bodies turned any client-side mapping loss into
+    // catalog-wide data damage (and spammed server-side versions). Skip
+    // writes this session already stored unchanged — only when the version
+    // is known, so a fresh session still learns before deciding.
+    const bodyJson = JSON.stringify(body);
+    if (
+      this.entityVersions.get(key) !== undefined &&
+      this.lastSentBody.get(key) === bodyJson
+    ) {
+      return;
+    }
     let expected = this.entityVersions.get(key);
     if (expected === undefined) {
       const learnRes = await this.fetch(`${this.baseUrl}${pathById}`, { method: 'GET', headers: this.getHeaders() });
@@ -745,6 +760,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
     const saved = (await res.json().catch(() => ({}))) as { version?: unknown };
     this.rememberEntityVersion(family, id, saved);
+    this.lastSentBody.set(key, bodyJson);
   }
 
   private async createThroughApi(
@@ -764,6 +780,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
     const saved = (await created.json().catch(() => ({}))) as { version?: unknown };
     this.rememberEntityVersion(family, id, saved);
+    this.lastSentBody.set(this.versionKey(family, id), JSON.stringify(body));
   }
 
   private async upsert(

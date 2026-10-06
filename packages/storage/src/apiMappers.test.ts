@@ -2908,3 +2908,89 @@ describe('component construction block round-trip (#1052 slice 1)', () => {
     expect(emptyBlock.construction).toBeUndefined();
   });
 });
+
+describe('agregado round-trip — elecciones de grupo sobreviven (#1168)', () => {
+  // Payload con el shape EXACTO que sirve el backend (tags Go): placements
+  // de componente con optionRole camelCase y líneas de herraje snake_case.
+  // El bug #1168: hardwarePlacementFromApi descartaba optionRole (y
+  // partRole/derivedMachining/doorAffinity), degradando cada elección de
+  // grupo a "herraje específico" vacío al recargar, y el re-save del
+  // catálogo completo persistía la degradación.
+  const backendPayload = {
+    id: 'b0000005-0000-0000-0000-000000000001',
+    code: 'AGR-PUE-IZQ',
+    name: 'Puerta Izquierda Gabinete',
+    width_mm: 600,
+    height_mm: 720,
+    depth_mm: 18,
+    components: [
+      {
+        componentId: 'b0000004-0000-0000-0000-00000000000e',
+        quantity: 1,
+        placementOverride: 'puerta',
+        overrides: {
+          hardwarePlacements: [
+            {
+              optionRole: 'JALADERA',
+              anchorFace: 'front',
+              relativePosition: { xMm: 30, yMm: 0, xFormula: 'PW-30', yFormula: 'PH-30' },
+              rotationDeg: { y: 90 },
+            },
+            {
+              optionRole: 'BISAGRA',
+              partRole: 'cam',
+              anchorFace: 'back',
+              relativePosition: { xMm: 20.5, yMm: 90 },
+            },
+          ],
+        },
+      },
+    ],
+    hardware_lines: [
+      { id: 'l1', quantity: 1, option_role: 'JALADERA', hardware_id: '' },
+      { id: 'l2', quantity: 4, option_role: 'BISAGRA', hardware_id: '' },
+      { id: 'l3', quantity: 1, option_role: '', hardware_id: 'hw-tornillo-35' },
+    ],
+  };
+
+  it('preserva optionRole/partRole de los placements a través del round-trip', () => {
+    const parsed = agregadoFromApi(backendPayload as Record<string, unknown>);
+    const placements = parsed.components?.[0]?.overrides?.hardwarePlacements ?? [];
+    expect(placements).toHaveLength(2);
+    expect(placements[0]?.optionRole).toBe('JALADERA');
+    expect(placements[0]?.hardwareId).toBe('');
+    expect(placements[0]?.rotationDeg).toEqual({ x: 0, y: 90, z: 0 });
+    expect(placements[0]?.relativePosition.xFormula).toBe('PW-30');
+    expect(placements[1]?.optionRole).toBe('BISAGRA');
+    expect(placements[1]?.partRole).toBe('cam');
+
+    // Re-serializado: lo que va por PUT conserva la elección.
+    const out = agregadoToApi(parsed);
+    const outPlacements = (out.components as Record<string, unknown>[])[0] as Record<
+      string,
+      unknown
+    >;
+    const hw = (
+      (outPlacements.overrides as Record<string, unknown>).hardwarePlacements as Record<
+        string,
+        unknown
+      >[]
+    );
+    expect(hw[0]?.optionRole).toBe('JALADERA');
+    expect(hw[1]?.optionRole).toBe('BISAGRA');
+    expect(hw[1]?.partRole).toBe('cam');
+  });
+
+  it('preserva líneas de herraje de grupo (option_role sin hardware_id) y específicas', () => {
+    const parsed = agregadoFromApi(backendPayload as Record<string, unknown>);
+    expect(parsed.hardwareLines).toHaveLength(3);
+    expect(parsed.hardwareLines?.[0]).toMatchObject({ optionRole: 'JALADERA', hardwareId: undefined });
+    expect(parsed.hardwareLines?.[2]).toMatchObject({ hardwareId: 'hw-tornillo-35' });
+
+    const out = agregadoToApi(parsed);
+    const lines = out.hardware_lines as Record<string, unknown>[];
+    expect(lines[0]?.option_role).toBe('JALADERA');
+    expect(lines[0]?.hardware_id).toBe('');
+    expect(lines[2]?.hardware_id).toBe('hw-tornillo-35');
+  });
+});

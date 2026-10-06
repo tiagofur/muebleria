@@ -2055,8 +2055,15 @@ describe('APIWorkspaceRepository simple families concurrency (#1091 / #443 slice
 
     const repo = new APIWorkspaceRepository();
     await saveCatalogWith(repo, [matDomain()]);
+    // #1168: a byte-identical re-save is a no-op — no re-learn, no re-PUT.
+    // Rewriting every entity on each save is what turned one mapping loss
+    // into catalog-wide data damage.
     await saveCatalogWith(repo, [matDomain()]);
     expect(learnGets).toBe(1);
+    expect(ifMatchSeen).toEqual(['"v3"']);
+
+    // A real change goes out guarded with the remembered version.
+    await saveCatalogWith(repo, [{ ...matDomain(), name: 'Entidad S2 editada' }]);
     expect(ifMatchSeen).toEqual(['"v3"', '"v4"']);
   });
 
