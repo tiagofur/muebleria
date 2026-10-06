@@ -170,6 +170,11 @@ func (s *stubStore) UpdateAgregado(_ context.Context, _ string, _ int64, _ *doma
 	return nil
 }
 
+func (s *stubStore) UpdateAgregadoWithRevision(_ context.Context, _ string, _ int64, _ *domain.Agregado, _ *string) error {
+	s.stubNotUsed("UpdateAgregadoWithRevision")
+	return nil
+}
+
 func (s *stubStore) DeleteAgregado(_ context.Context, _ string, _ int64) error {
 	return nil
 }

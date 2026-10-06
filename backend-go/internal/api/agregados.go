@@ -74,13 +74,24 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		if !decodeJSONBody(w, r, &a) {
 			return
 		}
-		if err := s.Store.UpdateAgregado(r.Context(), id, expectedVersion, &a); err != nil {
+		// #1168: the catalog update and its audit revision commit in ONE
+		// transaction — every persisted change leaves a revision behind and
+		// current_revision_id pointing at it.
+		var createdBy *string
+		if claims := claimsFromRequest(r); claims != nil && claims.UserID != "" {
+			createdBy = &claims.UserID
+		}
+		if err := s.Store.UpdateAgregadoWithRevision(r.Context(), id, expectedVersion, &a, createdBy); err != nil {
 			if strings.Contains(err.Error(), "not found") {
 				respondWithError(w, http.StatusNotFound, err.Error())
 				return
 			}
 			if errors.Is(err, storage.ErrVersionConflict) {
 				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
+			if errors.Is(err, domain.ErrAgregadoRevisionConflict) {
+				respondWithError(w, http.StatusConflict, err.Error())
 				return
 			}
 			if isDuplicateKey(err) {

@@ -21,6 +21,7 @@ type ModuleStore interface {
 	GetAgregadoByID(ctx context.Context, id string) (*domain.Agregado, error)
 	CreateAgregado(ctx context.Context, a *domain.Agregado) error
 	UpdateAgregado(ctx context.Context, id string, expectedVersion int64, a *domain.Agregado) error
+	UpdateAgregadoWithRevision(ctx context.Context, id string, expectedVersion int64, a *domain.Agregado, createdBy *string) error
 	DeactivateAgregado(ctx context.Context, id string, expectedVersion int64) error
 	// DeleteAgregado hard-deletes with an in-use guard (F116 C4).
 	DeleteAgregado(ctx context.Context, id string, expectedVersion int64) error
