@@ -130,7 +130,7 @@ describe('PurchasingScreen (Fase 3)', () => {
     expect(screen.getAllByText(/7,2 ml/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('"Material completo" releases the work to production (stage gate)', () => {
+  it('"Material completo" releases the work to production (stage gate) after picking lines (#1165)', () => {
     const onRelease = vi.fn();
     render(
       <PurchasingScreen
@@ -139,6 +139,13 @@ describe('PurchasingScreen (Fase 3)', () => {
         onReleaseMaterials={onRelease}
       />,
     );
+    // #1165 P1: marcar las líneas de picking antes de liberar.
+    const checkboxes = screen.getAllByRole('checkbox', {
+      name: 'Marcar como surtida',
+    });
+    for (const cb of checkboxes) {
+      if (!(cb as HTMLInputElement).checked) fireEvent.click(cb);
+    }
     const btn = screen.getByTestId('purch-release-p1');
     fireEvent.click(btn);
     expect(onRelease).toHaveBeenCalledWith('p1');

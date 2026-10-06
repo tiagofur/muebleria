@@ -418,11 +418,11 @@ export function PurchasingScreen({
   };
 
 
-  /** #1165 P1: rowKeys de picking por material para una card. */
+  /** #1165 P1: rowKeys de picking por material — DEBEN matchear las keys del render. */
   const pickRowKeys = (projectId: string, material: MaterialTab): readonly string[] => {
     const view = projectViews.find((v) => v.projectId === projectId);
     if (!view) return [];
-    if (material === 'herrajes') return view.hardware.map((_, i) => `${projectId}-h-${i}`);
+    if (material === 'herrajes') return view.hardware.map((row) => row.hardwareId);
     if (material === 'tableros') return view.materials.map((m) => m.key);
     return view.edges.map((e) => e.key);
   };
@@ -502,8 +502,33 @@ export function PurchasingScreen({
   const projectsWithEdges = projectViews.filter((p) => p.edges.length > 0);
 
   /** Release-to-production action shown on every project card. */
-  const renderReleaseAction = (projectId: string): ReactNode => {
+  const renderReleaseAction = (
+    projectId: string,
+    material?: MaterialTab,
+  ): ReactNode => {
     if (!canMarkPicked || !onReleaseMaterials) return null;
+    // #1165 P1: gate por líneas — si hay líneas y no todas están surtidas,
+    // el release se deshabilita con explicación.
+    if (material) {
+      const total = pickRowKeys(projectId, material).length;
+      if (total > 0) {
+        const prog = pickProgress(projectId, material, total);
+        if (!prog.complete) {
+          return (
+            <button
+              type="button"
+              className="btn btn--primary btn--small"
+              disabled
+              title={`Faltan ${total - prog.picked} de ${total} líneas por surtir`}
+              data-testid={`purch-release-blocked-${projectId}`}
+            >
+              <PackageCheck size={14} strokeWidth={1.5} aria-hidden />
+              Material completo ({prog.picked}/{total})
+            </button>
+          );
+        }
+      }
+    }
     const hasPlanning = planningByProject?.[projectId] !== undefined;
     if (hasPlanning) {
       return (
@@ -636,7 +661,7 @@ export function PurchasingScreen({
                   {p.hardware.length} {p.hardware.length === 1 ? 'línea' : 'líneas'}
                 </span>
               </div>
-              {renderReleaseAction(p.projectId)}
+              {renderReleaseAction(p.projectId, 'herrajes')}
               {renderProjectActions(p.projectId, 'herrajes')}
             </div>
             {/* #1165 P1: progreso por línea */}
@@ -716,12 +741,19 @@ export function PurchasingScreen({
                 <span className="purch-card__name">{p.projectName}</span>
                 <span className="purch-card__sub">{formatAreaM2(p.totalAreaM2)}</span>
               </div>
-              {renderReleaseAction(p.projectId)}
+              {renderReleaseAction(p.projectId, 'tableros')}
               {renderProjectActions(p.projectId, 'tableros')}
             </div>
             <ul className="purch-card__rows">
-              {p.materials.map((m) => (
+              {p.materials.map((m) => {
+                const lineKey = `${p.projectId}:tableros:${m.key}`;
+                return (
                 <li key={m.key} className="purch-row">
+                  <PickLineToggle
+                    checked={pickedLines.has(lineKey)}
+                    onToggle={() => togglePickLine(p.projectId, 'tableros', m.key)}
+                    testId={`purch-pick-line-${m.key}`}
+                  />
                   <span className="purch-row__name">
                     {m.name}
                     {m.thicknessMm ? ` · ${m.thicknessMm} mm` : ''}
@@ -734,7 +766,8 @@ export function PurchasingScreen({
                     {renderStockChip('tableros', m.materialId)}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
             {p.sheetEstimates && p.sheetEstimates.length > 0 ? (
               <div className="purch-card__sheets">
@@ -792,12 +825,19 @@ export function PurchasingScreen({
                   ml
                 </span>
               </div>
-              {renderReleaseAction(p.projectId)}
+              {renderReleaseAction(p.projectId, 'cintillas')}
               {renderProjectActions(p.projectId, 'cintillas')}
             </div>
             <ul className="purch-card__rows">
-              {p.edges.map((e) => (
+              {p.edges.map((e) => {
+                const lineKey = `${p.projectId}:cintillas:${e.key}`;
+                return (
                 <li key={e.key} className="purch-row">
+                  <PickLineToggle
+                    checked={pickedLines.has(lineKey)}
+                    onToggle={() => togglePickLine(p.projectId, 'cintillas', e.key)}
+                    testId={`purch-pick-line-${e.key}`}
+                  />
                   <span className="purch-row__name">
                     {e.name}
                     {e.thicknessMm ? ` · ${e.thicknessMm} mm` : ''}
@@ -810,7 +850,8 @@ export function PurchasingScreen({
                     {renderStockChip('cintillas', e.edgeId)}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
             {renderPlanningSection(p.projectId)}
           </li>
