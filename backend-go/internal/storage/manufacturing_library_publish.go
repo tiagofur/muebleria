@@ -1,10 +1,13 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,7 +19,43 @@ var (
 	ErrManifestNotFound     = errors.New("library release manifest not found")
 	ErrResourceBlobNotFound = errors.New("library resource blob not found")
 	ErrResourceNotInRelease = errors.New("resource not found in specified release")
+	// ErrResourceBlobDigestMismatch surfaces a corrupted content-addressed
+	// store: the canonical bytes of a stored blob no longer hash to their
+	// recorded content address. Fail closed — the consumer must never
+	// receive bytes its sha256 verification cannot prove (#1164).
+	ErrResourceBlobDigestMismatch = errors.New("library resource blob digest mismatch")
 )
+
+// canonicalStoredJSON re-canonicalizes a jsonb-round-tripped document back
+// into the canonical byte form the publish pipeline hashed. Postgres jsonb
+// preserves the logical JSON but not the original bytes — reads re-serialize
+// in Postgres text form — so content-addressed reads must normalize before
+// any sha256 verification (#1164). UseNumber keeps number literals verbatim
+// so 1 vs 1.0 drift cannot appear.
+func canonicalStoredJSON(raw []byte) ([]byte, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var doc any
+	if err := dec.Decode(&doc); err != nil {
+		return nil, fmt.Errorf("decode stored json: %w", err)
+	}
+	canonical, err := domain.CanonicalizeJSON(doc)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize stored json: %w", err)
+	}
+	return canonical, nil
+}
+
+// verifyStoredBlobDigest fails closed when the canonical bytes of a stored
+// blob no longer hash to their recorded content address.
+func verifyStoredBlobDigest(b *domain.ResourceBlob, canonical []byte) error {
+	expected := strings.TrimPrefix(b.SHA256, "sha256:")
+	digest := fmt.Sprintf("%x", sha256.Sum256(canonical))
+	if digest != expected {
+		return fmt.Errorf("%w: canonical sha256 %s != recorded %s", ErrResourceBlobDigestMismatch, digest, expected)
+	}
+	return nil
+}
 
 // PublishReleaseWithManifest atomically publishes a draft release along with its
 // materialized manifest and all content-addressed JSON definition blobs.
@@ -178,12 +217,21 @@ func (s *PostgresStore) GetReleaseManifest(ctx context.Context, releaseID uuid.U
 		return nil, nil, fmt.Errorf("get release manifest %s: %w", releaseID, err)
 	}
 
+	// jsonb round-trip destroyed the original bytes; serve the canonical
+	// form so ETags and byte-level consumers see deterministic content
+	// (#1164). The manifestHash itself covers the pre-hash payload (the
+	// manifest without its own manifestHash field), not these bytes.
+	canonical, err := canonicalStoredJSON(raw)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get release manifest %s: %w", releaseID, err)
+	}
+
 	var m domain.LibraryManifest
-	if err := json.Unmarshal(raw, &m); err != nil {
+	if err := json.Unmarshal(canonical, &m); err != nil {
 		return nil, nil, fmt.Errorf("unmarshal release manifest %s: %w", releaseID, err)
 	}
 
-	return &m, raw, nil
+	return &m, canonical, nil
 }
 
 // GetResourceBlob retrieves a raw definition blob by its cryptographic content hash.
@@ -206,7 +254,18 @@ func (s *PostgresStore) GetResourceBlob(ctx context.Context, sha256 string) (*do
 		return nil, fmt.Errorf("get resource blob %s: %w", sha256, err)
 	}
 
-	b.Content = contentRaw
+	// jsonb round-trip destroyed the original bytes: re-canonicalize and
+	// fail closed unless the result hashes to the recorded content address
+	// (#1164).
+	canonical, err := canonicalStoredJSON(contentRaw)
+	if err != nil {
+		return nil, fmt.Errorf("get resource blob %s: %w", sha256, err)
+	}
+	if err := verifyStoredBlobDigest(&b, canonical); err != nil {
+		return nil, fmt.Errorf("get resource blob %s: %w", sha256, err)
+	}
+	b.Content = canonical
+	b.SizeBytes = int64(len(canonical))
 	return &b, nil
 }
 
@@ -244,6 +303,17 @@ func (s *PostgresStore) GetResourceBlobWithEntitlementCheck(
 		return nil, "", fmt.Errorf("get resource blob with entitlement check: %w", err)
 	}
 
-	b.Content = contentRaw
+	// Same jsonb re-canonicalization + fail-closed digest check as
+	// GetResourceBlob (#1164): the distribution endpoint must serve bytes
+	// whose sha256 equals the requested content address.
+	canonical, err := canonicalStoredJSON(contentRaw)
+	if err != nil {
+		return nil, "", fmt.Errorf("get resource blob with entitlement check: %w", err)
+	}
+	if err := verifyStoredBlobDigest(&b, canonical); err != nil {
+		return nil, "", err
+	}
+	b.Content = canonical
+	b.SizeBytes = int64(len(canonical))
 	return &b, pkgKind, nil
 }

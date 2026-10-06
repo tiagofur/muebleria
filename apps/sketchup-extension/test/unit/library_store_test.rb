@@ -56,9 +56,11 @@ module Granete
             'resources' => []
           }
           manifest_json = JSON.generate(manifest)
-          manifest_hash = Digest::SHA256.hexdigest(manifest_json)
 
-          path = @store.write_manifest(rel_id, manifest_json, expected_manifest_hash: manifest_hash)
+          # #1164: the store keeps the exact served bytes; manifest
+          # integrity is the synchronizer's parity-verification job, so
+          # write_manifest carries no digest argument anymore.
+          path = @store.write_manifest(rel_id, manifest_json)
           assert File.file?(path)
           assert @store.manifest_exist?(rel_id)
 

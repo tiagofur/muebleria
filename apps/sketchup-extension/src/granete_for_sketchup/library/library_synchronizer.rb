@@ -42,6 +42,14 @@ module Granete
 
           manifest = parse_and_validate_manifest(manifest_raw)
 
+          # 1b. Manifest integrity (#1164): the backend's manifestHash covers
+          # the canonical pre-hash payload (the manifest WITHOUT its own
+          # manifestHash field), not the served bytes — jsonb storage
+          # re-serializes them. Verification is Ruby parity of
+          # domain.ComputeManifestHash; a mismatch fails closed and the
+          # previously installed release stays untouched.
+          verify_manifest_integrity!(rel_id, manifest, expected_manifest_hash)
+
           # 2. Check context before doing network work
           assert_active_org!(clean_org, active_org_checker)
 
@@ -69,8 +77,10 @@ module Granete
             downloaded += 1
           end
 
-          # 5. Persist manifest into LibraryStore
-          @store.write_manifest(rel_id, manifest_raw, expected_manifest_hash: expected_manifest_hash)
+          # 5. Persist manifest into LibraryStore — integrity was already
+          # proven against the parity digest above; the store keeps the
+          # exact served bytes for logical reads.
+          @store.write_manifest(rel_id, manifest_raw)
 
           # 6. Final context check before atomic activation
           assert_active_org!(clean_org, active_org_checker)
@@ -87,6 +97,19 @@ module Granete
         end
 
         private
+
+        # Fail-closed parity check against the summary's manifestHash. No
+        # expected hash (local/manual sync paths) skips the check.
+        def verify_manifest_integrity!(rel_id, manifest, expected_manifest_hash)
+          return if expected_manifest_hash.nil? || expected_manifest_hash.to_s.strip.empty?
+
+          computed = ManifestHash.compute(manifest)
+          return if ManifestHash.match?(computed, expected_manifest_hash)
+
+          raise SyncError,
+                "manifest hash mismatch for release #{rel_id}: " \
+                "expected #{expected_manifest_hash}, computed #{computed}"
+        end
 
         def parse_and_validate_manifest(raw_json)
           data = JSON.parse(raw_json)
