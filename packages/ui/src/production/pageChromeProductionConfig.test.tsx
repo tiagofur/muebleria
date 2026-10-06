@@ -29,7 +29,7 @@ function expectSharedHeader(title: string): void {
 }
 
 describe('F106 page chrome — Producción, Almacén y Config', () => {
-  it('Dashboard de Producción renders shared header with secondary-only actions', () => {
+  it('Dashboard Producción renders shared header with secondary-only actions', () => {
     render(
       <ProductionManagerDashboard
         projects={[]}
@@ -38,7 +38,7 @@ describe('F106 page chrome — Producción, Almacén y Config', () => {
         onOpenOrder={vi.fn()}
       />,
     );
-    expectSharedHeader('Dashboard de Producción');
+    expectSharedHeader('Dashboard Producción');
     const header = screen.getByTestId('page-header');
     expect(header.querySelectorAll('.btn--primary')).toHaveLength(0);
     expect(within(header).getByRole('button', { name: /Actualizar/ })).toBeDefined();
