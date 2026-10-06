@@ -333,7 +333,8 @@ module Granete
             'server_url' => session_status['server_url'],
             'user' => session_status['user'],
             'license' => license,
-            'organization' => session_status['organization']
+            'organization' => session_status['organization'],
+            'library' => library_status_payload
           }
         elsif transport.configured? && auth_provider.configured?
           {
@@ -350,6 +351,32 @@ module Granete
                          'la extensión funciona con el catálogo local de respaldo.'
           }
         end
+      end
+
+      # #1160: projection of the consumer's local library pin for the session
+      # card. Structured data only — the JS renders the human label (same
+      # pattern as license/organization). Reads the on-disk store pointer +
+      # manifest; no network and no invented version: a failed read is nil
+      # and the dialog renders the unknown placeholder.
+      def library_status_payload
+        return nil unless @library_store
+
+        org = @auth_provider.respond_to?(:current_organization_id) ? @auth_provider.current_organization_id : nil
+        return nil if org.to_s.strip.empty?
+
+        return { 'devMode' => true, 'releaseId' => nil, 'version' => nil } if @library_store.dev_mode?
+
+        release_id = @library_store.current_release_id(org)
+        version = release_id ? manifest_library_version(release_id) : nil
+        { 'devMode' => false, 'releaseId' => release_id, 'version' => version }
+      rescue StandardError => e
+        @logger.warn('library_status_read_failed', error: e)
+        nil
+      end
+
+      def manifest_library_version(release_id)
+        manifest = @library_store.read_manifest(release_id)
+        manifest && manifest['libraryVersion']
       end
     end
   end

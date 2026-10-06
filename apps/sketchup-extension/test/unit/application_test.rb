@@ -43,6 +43,8 @@ require_relative '../../src/granete_for_sketchup/assets/hardware_asset_grant_man
 require_relative '../../src/granete_for_sketchup/assets/hardware_asset_downloader'
 require_relative '../../src/granete_for_sketchup/assets/texture_cache'
 require_relative '../../src/granete_for_sketchup/ui/option_selector_controller'
+require_relative '../../src/granete_for_sketchup/paths'
+require_relative '../../src/granete_for_sketchup/library/library_store'
 require_relative '../support/host_runtime'
 require_relative '../../src/granete_for_sketchup/tools/internal_component_move_tool'
 require_relative '../../src/granete_for_sketchup/ui/component_authoring_bridge'
@@ -235,6 +237,64 @@ class ApplicationTest < Minitest::Test
     assert_includes status_script, 'La conexión está configurada'
     assert_includes status_script, 'Conexión configurada'
     assert_includes status_script, '"state":"configured"'
+  end
+
+  # #1160: the session card's Biblioteca row projects the consumer's local
+  # library pin. The projection is local-only (no release fetch): it reads
+  # the LibraryStore pointer + manifest for the authenticated organization.
+  def test_connection_status_projects_library_pin_states
+    logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+    Dir.mktmpdir('granete-lib-status') do |root|
+      Granete::SketchUpExtension::GranetePaths.with_roots(root: root) do
+        release_id = '6f1d2c3a-0000-0000-0000-000000000001'
+        session = AuthenticatedHermeticSession.new(logger: logger, transport: RecordingSessionTransport.new)
+        application = Granete::SketchUpExtension::Application.new(
+          transport: FakeCatalogTransport.new,
+          auth_provider: session,
+          logger: logger,
+          session_provider: session
+        )
+        store = Granete::SketchUpExtension::Library::LibraryStore.new
+
+        # Without a synced release the pin is empty: live catalog, no version.
+        dialog = application.open_dialog
+        dialog.callbacks.fetch('dialog_ready').call(nil)
+        status_script = dialog.executed_scripts.find { |s| s.include?('setStatus') }
+        assert_includes status_script, '"library":{"devMode":false,"releaseId":null,"version":null}'
+
+        # A synced release projects the manifest's libraryVersion.
+        manifest = JSON.generate('schemaVersion' => 1, 'libraryVersion' => '0.3.4', 'resources' => [])
+        store.write_manifest(release_id, manifest)
+        store.set_current_release(session.current_organization_id, release_id)
+        dialog.callbacks.fetch('dialog_ready').call(nil)
+        status_script = dialog.executed_scripts.reverse.find { |s| s.include?('setStatus') }
+        assert_includes status_script, "\"releaseId\":\"#{release_id}\""
+        assert_includes status_script, '"version":"0.3.4"'
+
+        # Dev mode is the bibliotecario no-pin state — never a version.
+        store.set_dev_mode!(true)
+        dialog.callbacks.fetch('dialog_ready').call(nil)
+        status_script = dialog.executed_scripts.reverse.find { |s| s.include?('setStatus') }
+        assert_includes status_script, '"library":{"devMode":true,"releaseId":null,"version":null}'
+      end
+    end
+  end
+
+  def test_connection_status_omits_library_payload_without_an_organization_pin
+    logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+    session = AuthenticatedHermeticSession.new(logger: logger, transport: RecordingSessionTransport.new)
+    application = Granete::SketchUpExtension::Application.new(
+      transport: FakeCatalogTransport.new,
+      auth_provider: FakeCatalogAuth.new,
+      logger: logger,
+      session_provider: session
+    )
+
+    dialog = application.open_dialog
+    dialog.callbacks.fetch('dialog_ready').call(nil)
+    status_script = dialog.executed_scripts.reverse.find { |s| s.include?('setStatus') }
+    assert_includes status_script, '"library":null',
+                    'without a resolvable organization the library value is unknown, not invented'
   end
 
   def test_shutdown_closes_dialog_without_adding_another_menu_item_on_restart
