@@ -37,7 +37,12 @@ module Granete
           current = @api_client.fetch_current_release
           return :unavailable unless current.is_a?(Hash)
 
-          release_id = current['effectiveReleaseId'].to_s.strip
+          # #1162: the generated LibraryReleaseSummary carries the current
+          # release id in `id` — there is no effectiveReleaseId on the
+          # summary (that field lives on the manifest). Reading the
+          # nonexistent key made every refresh fail :unavailable and the
+          # pin never installed anything.
+          release_id = current['id'].to_s.strip
           return :unavailable if release_id.empty?
 
           return :current if @store.current_release_id(org) == release_id
