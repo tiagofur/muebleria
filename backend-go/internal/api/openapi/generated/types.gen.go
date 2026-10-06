@@ -2347,9 +2347,16 @@ type CreateStandardReleaseRequest struct {
 }
 
 type StandardReleasePublishResult struct {
-	ReleaseId     string `json:"releaseId"`
-	ManifestHash  string `json:"manifestHash"`
-	ResourceCount int64  `json:"resourceCount"`
+	ReleaseId     string                   `json:"releaseId"`
+	ManifestHash  string                   `json:"manifestHash"`
+	ResourceCount int64                    `json:"resourceCount"`
+	Skipped       []SkippedReleaseResource `json:"skipped,omitempty"`
+}
+
+type SkippedReleaseResource struct {
+	Kind  string `json:"kind"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 type StandardDraftDiffReport struct {
@@ -2376,12 +2383,13 @@ type DraftResourceChange struct {
 }
 
 type StandardDraftValidationReport struct {
-	ReleaseId   string              `json:"releaseId"`
-	Version     string              `json:"version"`
-	Ok          bool                `json:"ok"`
-	Compile     DraftCompileCheck   `json:"compile"`
-	Furniture   DraftFurnitureCheck `json:"furniture"`
-	ValidatedAt string              `json:"validatedAt"`
+	ReleaseId   string                   `json:"releaseId"`
+	Version     string                   `json:"version"`
+	Ok          bool                     `json:"ok"`
+	Compile     DraftCompileCheck        `json:"compile"`
+	Furniture   DraftFurnitureCheck      `json:"furniture"`
+	Skipped     []SkippedReleaseResource `json:"skipped,omitempty"`
+	ValidatedAt string                   `json:"validatedAt"`
 }
 
 type DraftCompileCheck struct {

@@ -15491,6 +15491,13 @@
           },
           "resourceCount": {
             "type": "integer"
+          },
+          "skipped": {
+            "type": "array",
+            "description": "Authoring-catalog entities excluded from the immutable release because their identity is not a UUID (today: UI-created agregados, whose text ids the release refs cannot carry). Empty when nothing was excluded — a release never looks complete while silently dropping content. [#1185]",
+            "items": {
+              "$ref": "#/components/schemas/SkippedReleaseResource"
+            }
           }
         },
         "required": [
@@ -15498,6 +15505,26 @@
           "manifestHash",
           "resourceCount"
         ]
+      },
+      "SkippedReleaseResource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "id",
+          "label"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
       },
       "StandardDraftDiffReport": {
         "type": "object",
@@ -15634,6 +15661,13 @@
           },
           "furniture": {
             "$ref": "#/components/schemas/DraftFurnitureCheck"
+          },
+          "skipped": {
+            "type": "array",
+            "description": "Authoring-catalog entities the publish would exclude for carrying a non-UUID identity (today: UI-created agregados). Reported so the bibliotecario sees exactly what stays out of the immutable release BEFORE publishing; does not flip ok. [#1185]",
+            "items": {
+              "$ref": "#/components/schemas/SkippedReleaseResource"
+            }
           },
           "validatedAt": {
             "type": "string",

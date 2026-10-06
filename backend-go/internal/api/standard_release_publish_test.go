@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/application"
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -352,6 +353,47 @@ func TestHandlePublishStandardLibraryRelease(t *testing.T) {
 		var result map[string]any
 		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil || result["manifestHash"] == "" {
 			t.Fatalf("result = %s err=%v", rec.Body.String(), err)
+		}
+	})
+
+	// #1185: a text-id agregado stays out of the immutable release, and the
+	// publish response NAMES it — a release never looks complete while
+	// silently dropping content.
+	t.Run("reports non-UUID exclusions in the response", func(t *testing.T) {
+		textID := "agr-1788636544276-xfbr"
+		store := &stubStore{
+			releaseByID: map[uuid.UUID]*domain.LibraryRelease{
+				releaseID: {ID: releaseID, LibraryID: uuid.MustParse(domain.GraneteStandardLibraryID), Version: "0.1.0", Status: domain.ReleaseStatusDraft, SchemaVersion: domain.LibraryManifestSchemaVersion},
+			},
+			listActiveHardwareProfilesAnyOrg: []domain.HardwareProfile{{
+				ID: "a0000010-0000-0000-0000-000000000001", Code: "PERF-X", Name: "X", Revision: "r1", Active: true,
+				Items: []domain.HardwareProfileItem{{HardwareID: "a0000003-0000-0000-0000-000000000012", Quantity: 1}},
+			}},
+			listHardwares: []domain.Hardware{},
+			catalogOverride: &domain.Catalog{
+				Agregados: []domain.Agregado{
+					{ID: textID, Code: "AGR-TEXT", Name: "Puerta texto", Version: 1, Active: true},
+				},
+			},
+		}
+		rec := publishRequest(store)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		var result struct {
+			ReleaseId     string                           `json:"releaseId"`
+			ManifestHash  string                           `json:"manifestHash"`
+			ResourceCount int64                            `json:"resourceCount"`
+			Skipped       []openapi.SkippedReleaseResource `json:"skipped"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+			t.Fatalf("result = %s err=%v", rec.Body.String(), err)
+		}
+		if result.ManifestHash == "" || result.ResourceCount == 0 {
+			t.Fatalf("result = %+v", result)
+		}
+		if len(result.Skipped) != 1 || result.Skipped[0].Kind != "agregado" || result.Skipped[0].ID != textID || result.Skipped[0].Label != "AGR-TEXT" {
+			t.Fatalf("skipped = %+v", result.Skipped)
 		}
 	})
 

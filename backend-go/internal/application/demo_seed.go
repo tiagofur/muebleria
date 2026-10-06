@@ -83,7 +83,7 @@ func SeedDemoForOrg(ctx context.Context, store StandardReleaseStore, orgID, publ
 			return profileID, nil // already really published (or withdrawn): never recompile
 		}
 	}
-	if _, err := PublishStandardRelease(ctx, store, releaseID, uuid.MustParse(publisherID)); err != nil {
+	if _, _, err := PublishStandardRelease(ctx, store, releaseID, uuid.MustParse(publisherID)); err != nil {
 		return "", fmt.Errorf("demo release publish: %w", err)
 	}
 	slog.Info("demo standard release published", "release", releaseID.String())

@@ -61,11 +61,16 @@ type DraftFurnitureCheck struct {
 
 // DraftValidationReport is the structured "probar borrador" result.
 type DraftValidationReport struct {
-	ReleaseID   uuid.UUID
-	Version     string
-	OK          bool
-	Compile     DraftCompileCheck
-	Furniture   DraftFurnitureCheck
+	ReleaseID uuid.UUID
+	Version   string
+	OK        bool
+	Compile   DraftCompileCheck
+	Furniture DraftFurnitureCheck
+	// Skipped (#1185): the non-UUID authoring entities the publish would
+	// exclude from the immutable release. Reported, never silent; it does
+	// not flip OK — the chronic text-id agregados must not mask new
+	// breakage, and the list itself is the explicit channel.
+	Skipped     []SkippedReleaseResource
 	ValidatedAt time.Time
 }
 
@@ -111,7 +116,7 @@ func ValidateStandardDraft(
 		return nil, fmt.Errorf("gather hardware profile resources: %w", err)
 	}
 
-	report.Compile = validateDraftCompile(release, catalog, materialCategories, profiles)
+	report.Compile, report.Skipped = validateDraftCompile(release, catalog, materialCategories, profiles)
 
 	report.Furniture = validateDraftFurniture(catalog)
 
@@ -121,10 +126,12 @@ func ValidateStandardDraft(
 
 // validateDraftCompile mirrors PublishStandardRelease's gather+compile step
 // and discards the result — the pre-publish answer to "would this publish?".
-func validateDraftCompile(release *domain.LibraryRelease, catalog domain.Catalog, materialCategories []domain.MaterialCategory, profiles []domain.HardwareProfile) DraftCompileCheck {
-	inputs, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
+// The skip list rides along (#1185): the bibliotecario sees exactly which
+// authoring entities would stay out of the immutable release.
+func validateDraftCompile(release *domain.LibraryRelease, catalog domain.Catalog, materialCategories []domain.MaterialCategory, profiles []domain.HardwareProfile) (DraftCompileCheck, []SkippedReleaseResource) {
+	inputs, skipped, err := BuildStandardReleaseInputs(catalog, materialCategories, profiles)
 	if err != nil {
-		return DraftCompileCheck{OK: false, Error: err.Error()}
+		return DraftCompileCheck{OK: false, Error: err.Error()}, nil
 	}
 	result, err := CompileLibraryRelease(CompilationInput{
 		Library:   &domain.ManufacturingLibrary{ID: release.LibraryID, Code: "0001", Kind: domain.LibraryKindStandard, Status: "active"},
@@ -132,9 +139,9 @@ func validateDraftCompile(release *domain.LibraryRelease, catalog domain.Catalog
 		Resources: inputs,
 	})
 	if err != nil {
-		return DraftCompileCheck{OK: false, ResourceCount: len(inputs), Error: err.Error()}
+		return DraftCompileCheck{OK: false, ResourceCount: len(inputs), Error: err.Error()}, skipped
 	}
-	return DraftCompileCheck{OK: true, ResourceCount: len(result.Manifest.Resources), ManifestHash: result.ManifestHash}
+	return DraftCompileCheck{OK: true, ResourceCount: len(result.Manifest.Resources), ManifestHash: result.ManifestHash}, skipped
 }
 
 // validateDraftFurniture resolves every furniture definition of the

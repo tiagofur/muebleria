@@ -126,7 +126,7 @@ func TestProvisionDemoProfileMultiOrg(t *testing.T) {
 	}
 	platformActor := storage.TenantActor{OrganizationID: multiOrgInitialOrgID, UserID: userA, MembershipID: membershipA, PlatformAdmin: true}
 	if err := tenantStore.WithinTenantTx(storage.WithOrgCtx(ctx, multiOrgInitialOrgID), platformActor, func(txCtx context.Context) error {
-		_, err := application.PublishStandardRelease(txCtx, tenantStore, draftID, uuid.MustParse(userA))
+		_, _, err := application.PublishStandardRelease(txCtx, tenantStore, draftID, uuid.MustParse(userA))
 		return err
 	}); err != nil {
 		t.Fatalf("publish under the platform tenant tx: %v", err)
