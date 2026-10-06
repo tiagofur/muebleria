@@ -180,7 +180,7 @@ export function EngineeringScreen({
             return (
               <li
                 key={project.id}
-                className={`eng-project-card${status === 'pending' && !canonical ? ' eng-project-card--startable' : ''}`}
+                className="eng-project-card"
                 data-testid={`eng-project-${project.id}`}
               >
                 <button
@@ -215,7 +215,9 @@ export function EngineeringScreen({
                     ) : null}
                     {log?.generatedAt ? (
                       <span className="eng-project-card__date-block">
-                        <span className="eng-project-card__date-label">Docs</span>
+                        <span className="eng-project-card__date-label">
+                          Documentos
+                        </span>
                         <span className="eng-project-card__date-value">
                           {new Date(log.generatedAt).toLocaleDateString('es-AR')}
                         </span>
