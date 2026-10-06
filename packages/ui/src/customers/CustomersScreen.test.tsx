@@ -178,6 +178,7 @@ describe('Clientes S5 (#1127)', () => {
 		await vi.waitFor(() => expect(screen.getByText('Tiago Furniture')).toBeTruthy());
 		expect(screen.queryByText('Cliente Plantilla')).toBeNull();
 
+		await user.clear(search);
 		await user.type(search, 'zzzznada');
 		await vi.waitFor(() => expect(screen.getByText('Sin resultados')).toBeTruthy());
 		expect(screen.getByTestId('customers-results-summary').textContent).toContain(

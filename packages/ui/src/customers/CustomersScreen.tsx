@@ -121,7 +121,11 @@ export function CustomersScreen({
 	const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
 
 	const normalizeForSearch = (value: string): string =>
-		value.trim().toLocaleLowerCase('es-UY');
+		value
+			.trim()
+			.toLocaleLowerCase('es-UY')
+			.normalize('NFD')
+			.replace(/\p{Diacritic}/gu, '');
 
 	const rows = useMemo(
 		() =>
@@ -130,9 +134,15 @@ export function CustomersScreen({
 				query: debouncedSearch,
 				// #1127 P0: Customer no tiene `code` — el matcher por defecto era
 				// no-op. Buscar por nombre, email y teléfono normalizados.
-				matchItem: (customer, q) =>
-					[normalizeForSearch(customer.name), normalizeForSearch(customer.email ?? ''), normalizeForSearch(customer.phone ?? '')]
-						.some((hay) => hay.includes(q)),
+				matchItem: (customer, q) => {
+					// #1127 re-critique: el teléfono matchea también sin espacios.
+					const qDigits = q.replace(/\D/g, '');
+					if (qDigits.length >= 6 && normalizeForSearch(customer.phone ?? '').replace(/\D/g, '').includes(qDigits)) {
+						return true;
+					}
+					return [normalizeForSearch(customer.name), normalizeForSearch(customer.email ?? ''), normalizeForSearch(customer.phone ?? '')]
+						.some((hay) => hay.includes(q));
+				},
 			}),
 		[customers, status, debouncedSearch],
 	);
@@ -424,6 +434,7 @@ export function CustomersScreen({
 												<button
 													type="button"
 													className="btn btn--small btn--danger"
+													autoFocus
 													onClick={() => {
 														onDeactivate(row.id);
 														confirmDeactivate(null);
@@ -485,6 +496,7 @@ export function CustomersScreen({
 											<button
 												type="button"
 												className="btn btn--small btn--danger"
+												autoFocus
 												aria-label={`Confirmar desactivar ${row.name}`}
 												onClick={() => {
 													onDeactivate(row.id);
