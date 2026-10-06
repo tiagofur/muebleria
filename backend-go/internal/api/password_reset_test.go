@@ -140,3 +140,26 @@ func TestIssuePasswordResetAuthorityAndTarget(t *testing.T) {
 		}
 	})
 }
+
+// Review #1195: config accepts "prod"/case variants as production — the link
+// withholding gate must agree, or a prod deployment logs the raw credential.
+func TestIsProductionEnvMatchesConfigSemantics(t *testing.T) {
+	cases := map[string]bool{
+		"production": true, "PRODUCTION": true, " prod ": true, "Prod": true,
+		"development": false, "dev": false, "": false, "  ": false,
+	}
+	for env, want := range cases {
+		t.Setenv("GRANETE_ENV", env)
+		if got := isProductionEnv(); got != want {
+			t.Fatalf("GRANETE_ENV=%q: isProductionEnv()=%v, want %v", env, got, want)
+		}
+	}
+}
+
+// Review #1195: the issuance response embeds the raw one-time token, so its
+// replayed idempotency receipt must be sealed like the invitation links.
+func TestIssuePasswordResetReceiptIsSealed(t *testing.T) {
+	if !sensitiveIdempotencyOperations["org.issue-password-reset"] {
+		t.Fatal("org.issue-password-reset must be a sensitive idempotency operation (raw token in the 201 body)")
+	}
+}
