@@ -2,6 +2,7 @@
 
 - Status: **Proposed** (target architecture — nothing here is implemented yet)
 - Decision record: [ADR-0009](../adr/0009-opening-front-system.md)
+- Epic: [#1128](https://github.com/tiagofur/muebleria/issues/1128)
 - Related: [`manufacturing-library-platform.md`](manufacturing-library-platform.md) (ADR-0008),
   [`factory-construction-and-joinery.md`](factory-construction-and-joinery.md) (#875/#1052),
   [`catalog-option-selector.md`](catalog-option-selector.md),
@@ -214,17 +215,17 @@ grip-governed dimension is an authoring error, not a silent precedence rule.
 
 ## 11. Delivery order
 
-1. Contract + parity fixtures for the matrix (cases A, B, C, baseline).
-2. Opening Profile catalog entity with datasheet-backed gola L / gola C.
-3. Opening Layout resolver (zones, ratios, grip boundaries) feeding agregado boxes.
-4. Body modifiers by constructive role (top depth, side notches as machining).
-5. BOM integration (profile length, supports, end caps).
-6. Factory capability overlay `opening.*` + Web settings.
-7. Validation (`INVALID_OPENING_CONFIGURATION`) and available-vs-valid behaviour.
-8. Migration of `jaladera-gola-*` handle options to the grip model.
-9. SketchUp Inspector *Apertura* section.
-10. Bottom overhang (case C).
-11. Construction Variants for the body (separate track; same overlay pattern).
+1. [#1129](https://github.com/tiagofur/muebleria/issues/1129) Contract + parity fixtures for the matrix (cases A, B, C, baseline).
+2. [#1130](https://github.com/tiagofur/muebleria/issues/1130) Opening Profile catalog entity with datasheet-backed gola L / gola C.
+3. [#1131](https://github.com/tiagofur/muebleria/issues/1131) Opening Layout resolver (zones, ratios, grip boundaries) feeding agregado boxes.
+4. [#1132](https://github.com/tiagofur/muebleria/issues/1132) Body modifiers by constructive role (top depth, side notches as machining).
+5. [#1133](https://github.com/tiagofur/muebleria/issues/1133) BOM integration (profile length, supports, end caps).
+6. [#1134](https://github.com/tiagofur/muebleria/issues/1134) Factory capability overlay `opening.*` + Web settings.
+7. [#1135](https://github.com/tiagofur/muebleria/issues/1135) Validation (`INVALID_OPENING_CONFIGURATION`) and available-vs-valid behaviour.
+8. [#1136](https://github.com/tiagofur/muebleria/issues/1136) Migration of `jaladera-gola-*` handle options to the grip model.
+9. [#1137](https://github.com/tiagofur/muebleria/issues/1137) SketchUp Inspector *Apertura* section.
+10. [#1138](https://github.com/tiagofur/muebleria/issues/1138) Bottom overhang (case C).
+11. [#1139](https://github.com/tiagofur/muebleria/issues/1139) Construction Variants for the body (separate track; same overlay pattern).
 
 ## 12. Open questions
 

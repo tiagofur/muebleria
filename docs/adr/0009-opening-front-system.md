@@ -3,6 +3,7 @@
 - Status: **Proposed**
 - Date: 2026-10-05
 - Decision owners: Granete architecture
+- Epic: [#1128](https://github.com/tiagofur/muebleria/issues/1128)
 - Canonical detail: [`docs/architecture/opening-front-system.md`](../architecture/opening-front-system.md)
 
 ## Context
