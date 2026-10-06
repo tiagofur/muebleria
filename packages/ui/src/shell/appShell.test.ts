@@ -113,6 +113,7 @@ describe('AppShell nav model (F017)', () => {
     ]);
 
     expect(libreria.items.map((i) => i.id)).toEqual([
+      'library',
       'modules',
       'structures',
       'addOns',
@@ -120,6 +121,7 @@ describe('AppShell nav model (F017)', () => {
       'optionGroups',
     ]);
     expect(libreria.items.map((i) => i.label)).toEqual([
+      'Biblioteca',
       'Muebles',
       'Estructuras',
       'Agregados',

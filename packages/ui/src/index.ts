@@ -18,6 +18,7 @@ export {
   HardwareCatalog,
   HardwareProfilesCatalog,
   LibraryConsumerViewPanel,
+  LibraryDraftContextLine,
   LibraryDraftValidationPanel,
   LibraryPublishConfirmContent,
   LibraryPublishHistoryPanel,
@@ -48,6 +49,7 @@ export {
   type HardwareProfileDraft,
   type HardwareProfileItemDraft,
   type LibraryConsumerViewPanelProps,
+  type LibraryDraftContextLineProps,
   type LibraryDraftValidationPanelProps,
   type LibraryPublishConfirmContentProps,
   type LibraryPublishHistoryPanelProps,
@@ -56,6 +58,11 @@ export {
   type MaterialsCatalogProps,
   type SearchableCoded,
 } from './catalogs';
+
+export {
+  LibraryWorkspaceScreen,
+  type LibraryWorkspaceScreenProps,
+} from './library/LibraryWorkspaceScreen';
 
 export {
   canShowPricePreview,

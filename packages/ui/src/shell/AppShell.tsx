@@ -17,6 +17,7 @@ import {
   Factory,
   KanbanSquare,
   LayoutDashboard,
+  Library,
   Layers,
   LayoutGrid,
   Boxes,
@@ -76,6 +77,7 @@ export type AppNavId =
   | 'warehouseDashboard'
   | 'warehouse'
   | 'salesDashboard'
+  | 'library'
   | 'modules'
   | 'structures'
   | 'components'
@@ -304,6 +306,9 @@ export const APP_NAV_SECTIONS: readonly NavSectionDef[] = [
     id: 'libreria',
     label: 'LIBRERÍA',
     items: [
+      // #1184: el hub del ciclo de revisiones de la biblioteca. Sólo se
+      // incluye en la nav del bibliotecario (platform admin, allowedNavIds).
+      { id: 'library', label: 'Biblioteca', icon: Library },
       { id: 'modules', label: 'Muebles', icon: Package },
       { id: 'structures', label: 'Estructuras', icon: LayoutGrid },
       { id: 'addOns', label: 'Agregados', icon: Boxes },

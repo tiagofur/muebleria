@@ -12,12 +12,15 @@ import type { LibraryReleaseSummary } from '@granete/storage';
 
 export interface LibraryPublishHistoryPanelProps {
   readonly releases: ReadonlyArray<LibraryReleaseSummary>;
+  /** #1184: el hub Biblioteca lo abre por defecto; en superficies sueltas no. */
+  readonly defaultOpen?: boolean;
 }
 
 export function LibraryPublishHistoryPanel({
   releases,
+  defaultOpen = false,
 }: LibraryPublishHistoryPanelProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div
