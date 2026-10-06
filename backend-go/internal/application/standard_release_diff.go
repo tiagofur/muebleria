@@ -141,22 +141,31 @@ func DiffStandardDraft(
 		ComputedAt: time.Now().UTC(),
 	}
 
-	// The published side: nil base means the library never published — the
-	// whole draft is then "added".
+	// The published side: nil base means the library has NO usable published
+	// base — either nothing was ever published, or the current release is in
+	// the #955 manifestless repair state (it cannot serve pinned content, so
+	// it is not a base the draft can be diffed against). Either way the whole
+	// draft is then "added".
 	base, err := store.GetCurrentPublishedRelease(ctx, release.LibraryID)
-	if err != nil {
-		if errors.Is(err, storage.ErrLibraryReleaseNotFound) {
-			report.Base = nil
-			for _, entry := range draft {
-				report.Added = append(report.Added, entry.change)
-			}
-			return report, nil
-		}
+	if err != nil && !errors.Is(err, storage.ErrLibraryReleaseNotFound) {
 		return nil, fmt.Errorf("load published base: %w", err)
 	}
-	baseManifest, _, err := store.GetReleaseManifest(ctx, base.ID)
-	if err != nil {
-		return nil, fmt.Errorf("load published manifest for diff: %w", err)
+	var baseManifest *domain.LibraryManifest
+	if base != nil {
+		baseManifest, _, err = store.GetReleaseManifest(ctx, base.ID)
+		if err != nil {
+			if !errors.Is(err, storage.ErrManifestNotFound) {
+				return nil, fmt.Errorf("load published manifest for diff (base %s): %w", base.ID, err)
+			}
+			base = nil
+		}
+	}
+	if base == nil {
+		report.Base = nil
+		for _, entry := range draft {
+			report.Added = append(report.Added, entry.change)
+		}
+		return report, nil
 	}
 	report.Base = &DraftDiffBase{ReleaseID: base.ID.String(), Version: base.Version}
 
