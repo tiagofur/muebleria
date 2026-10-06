@@ -209,11 +209,8 @@ export function CustomersScreen({
 				header: 'Teléfono / WhatsApp',
 				render: (r) => (
 					// #1127 P1: contactar no togglea la fila — el click queda
-					// aislado del manejador de fila.
-					<div
-						style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
-						onClick={(e) => e.stopPropagation()}
-					>
+					// aislado en el botón (el texto del teléfono sigue toggleando).
+					<div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
 						<span>{formatEmpty(r.phone)}</span>
 						{r.phone ? (
 							<WhatsAppButton

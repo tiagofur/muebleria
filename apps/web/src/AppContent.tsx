@@ -41,6 +41,7 @@ import {
   roleCanExportProduction,
   roleCanMarkProduced,
   roleCanMutateCatalog,
+  roleCanMutateCustomers,
   roleCanAccessPurchasingNav,
   roleCanManagePurchasing,
   roleCanMutateModules,
@@ -610,6 +611,10 @@ export function AppContent({
   const stockCatalog = useMemo(() => buildStockCatalog(catalog), [catalog]);
   const canMutateCatalog =
     session === 'guest' || anyRole(actorRoles, roleCanMutateCatalog);
+  // #1127: los clientes mutan con la autoridad del fan-out (admin|gerente_ventas|vendedor)
+  // — NO canMutateCatalog (admin|ingeniero), que además no tiene nav a la pantalla.
+  const canMutateCustomers =
+    session === 'guest' || anyRole(actorRoles, roleCanMutateCustomers);
   const canMutateModules =
     session === 'guest' || anyRole(actorRoles, roleCanMutateModules);
   const canMutateProjects =
@@ -1765,6 +1770,7 @@ export function AppContent({
     canExportProduction,
     canMarkProduced,
     canMutateCatalog,
+    canMutateCustomers,
     canMutateModules,
     canMutateProjects,
     canOpenFabric,

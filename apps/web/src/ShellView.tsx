@@ -266,6 +266,7 @@ export interface ShellViewCtx {
   readonly canExportProduction: boolean;
   readonly canMarkProduced: boolean;
   readonly canMutateCatalog: boolean;
+  readonly canMutateCustomers: boolean;
   readonly canMutateModules: boolean;
   readonly canMutateProjects: boolean;
   readonly canOpenFabric: boolean;
@@ -585,6 +586,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canExportProduction,
     canMarkProduced,
     canMutateCatalog,
+    canMutateCustomers,
     canMutateModules,
     canMutateProjects,
     canOpenFabric,
@@ -2070,7 +2072,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           workshopName={workshopSettings?.workshopName}
           // #1127 P1: paridad de gating con Cotizaciones — los clientes son
           // catálogo (fan-out #1091); sin permiso la pantalla es lectura.
-          canMutateCustomers={canMutateCatalog}
+          canMutateCustomers={canMutateCustomers}
           onCreate={createCustomer}
           onUpdate={updateCustomer}
           onDeactivate={(id) => setCustomerActive(id, false)}
