@@ -2068,6 +2068,9 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             navigate(projectPath(projectId));
           }}
           workshopName={workshopSettings?.workshopName}
+          // #1127 P1: paridad de gating con Cotizaciones — los clientes son
+          // catálogo (fan-out #1091); sin permiso la pantalla es lectura.
+          canMutateCustomers={canMutateCatalog}
           onCreate={createCustomer}
           onUpdate={updateCustomer}
           onDeactivate={(id) => setCustomerActive(id, false)}

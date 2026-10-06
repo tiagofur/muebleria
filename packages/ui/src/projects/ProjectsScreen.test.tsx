@@ -563,8 +563,8 @@ describe('ProjectsScreen F022', () => {
     expect(screen.queryByTestId('project-accept-quote')).toBeNull();
 
     await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
-    expect((screen.getByLabelText('Número de Teléfono / WhatsApp:') as HTMLInputElement).value).toBe('+52 322 100 0002');
-    expect((screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement).value).toContain('Cocina congelada Q2');
+    expect((screen.getByLabelText('Teléfono de WhatsApp') as HTMLInputElement).value).toBe('+52 322 100 0002');
+    expect((screen.getByLabelText('Mensaje') as HTMLTextAreaElement).value).toContain('Cocina congelada Q2');
   });
 
   it.each([
@@ -2414,7 +2414,7 @@ describe('WITHHELD ≠ ZERO — org-redacted retail amount in the detail chrome 
 
     await user.click(screen.getByTestId('project-card-prj-1'));
     await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
-    const message = screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement;
+    const message = screen.getByLabelText('Mensaje') as HTMLTextAreaElement;
     expect(message.value).toContain('Cocina congelada Q2');
     expect(message.value).not.toContain('$0');
     expect(message.value).not.toContain('$ 0');
@@ -2434,7 +2434,7 @@ describe('WITHHELD ≠ ZERO — org-redacted retail amount in the detail chrome 
     expect(total.textContent).not.toContain('No disponible');
 
     await user.click(screen.getByTitle('Enviar WhatsApp a Cliente congelado Q2'));
-    const message = screen.getByLabelText('Mensaje a Enviar:') as HTMLTextAreaElement;
+    const message = screen.getByLabelText('Mensaje') as HTMLTextAreaElement;
     expect(message.value).toContain('$15,000.00 USD');
   });
 });
