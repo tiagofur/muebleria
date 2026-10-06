@@ -2768,7 +2768,11 @@ export function FurnitureScene3D({
             }
           >
             <Canvas
-              shadows
+              // #1158: "percentage" = PCFShadowMap explícito. El booleano fija
+              // PCFSoftShadowMap, deprecado en three 0.185, que ya lo degrada
+              // a PCFShadowMap al renderizar: píxeles idénticos, sin warning
+              // por frame en consola.
+              shadows="percentage"
               dpr={[1, 2]}
               style={
                 fillViewport
