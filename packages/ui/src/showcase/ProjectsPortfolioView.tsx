@@ -25,6 +25,10 @@ export interface ProjectsPortfolioViewProps {
   /** Sales CTA: navigate to create a project or quote based on this reference. */
   readonly onUseAsReference?: (projectId: string) => void;
   readonly isLoading?: boolean;
+  /** #1142: fallo de carga del portafolio — estado explícito, nunca «vacío». */
+  readonly photosError?: string | null;
+  /** #1142: reintentar la carga del portafolio. */
+  readonly onRetryPhotos?: () => void;
 }
 
 const STAGE_NAMES: Record<ProjectPhotoStage, string> = {
@@ -39,6 +43,8 @@ export function ProjectsPortfolioView({
   resolveImageUrl = (u) => u,
   onUseAsReference,
   isLoading = false,
+  photosError,
+  onRetryPhotos,
 }: ProjectsPortfolioViewProps): ReactNode {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query);
@@ -96,6 +102,7 @@ export function ProjectsPortfolioView({
       <div className="portfolio-controls">
         <div className="portfolio-filters" role="group" aria-label="Filtros de fotos">
           <button
+          aria-pressed={stageFilter === 'all' && !onlyShowcase}
             type="button"
             className={`portfolio-filter-btn ${
               stageFilter === 'all' && !onlyShowcase ? 'portfolio-filter-btn--active' : ''
@@ -120,6 +127,7 @@ export function ProjectsPortfolioView({
             Destacadas ({photos.filter((p) => p.isShowcase).length})
           </button>
           <button
+          aria-pressed={stageFilter === 'installed'}
             type="button"
             className={`portfolio-filter-btn ${
               stageFilter === 'installed' ? 'portfolio-filter-btn--active' : ''
@@ -130,6 +138,7 @@ export function ProjectsPortfolioView({
             Instaladas / Terminadas
           </button>
           <button
+          aria-pressed={stageFilter === 'in_workshop'}
             type="button"
             className={`portfolio-filter-btn ${
               stageFilter === 'in_workshop' ? 'portfolio-filter-btn--active' : ''
@@ -140,6 +149,7 @@ export function ProjectsPortfolioView({
             En Taller
           </button>
           <button
+          aria-pressed={stageFilter === 'survey'}
             type="button"
             className={`portfolio-filter-btn ${
               stageFilter === 'survey' ? 'portfolio-filter-btn--active' : ''
@@ -167,6 +177,7 @@ export function ProjectsPortfolioView({
           }`}
           onClick={() => setIsPresentationMode(!isPresentationMode)}
           title="Oculta nombres de clientes y datos privados para mostrar en tablet/showroom"
+          aria-pressed={isPresentationMode}
           data-testid="portfolio-presentation-mode-toggle"
         >
           {isPresentationMode ? (
@@ -186,6 +197,20 @@ export function ProjectsPortfolioView({
       {isLoading ? (
         <div className="portfolio-grid">
           <p className="text-secondary">Cargando portafolio comercial...</p>
+        </div>
+      ) : photosError ? (
+        <div className="alert alert--danger" role="alert" data-testid="portfolio-error">
+          <span>{photosError}</span>
+          {onRetryPhotos ? (
+            <button
+              type="button"
+              className="btn btn--small btn--secondary"
+              onClick={onRetryPhotos}
+              data-testid="portfolio-retry"
+            >
+              Reintentar
+            </button>
+          ) : null}
         </div>
       ) : filteredPhotos.length === 0 ? (
         <EmptyState

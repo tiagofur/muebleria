@@ -1749,6 +1749,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           currentUserId={authUser?.id}
           vendedores={assignableOwners.map((u) => ({ id: u.id, name: u.name }))}
           ownerLabels={ownerLabels}
+          onOpenShowcase={() => navigate(pathForNav('showcase'))}
+          onNewProject={
+            canMutateProjects ? onDashboardNewProject : undefined
+          }
         />
         </ScreenBoundary>
       ) : null}
@@ -2187,6 +2191,8 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
           categories={categories}
           resolveImageUrl={resolveMediaUrl}
           isLoadingPhotos={isLoadingShowcase}
+          photosError={projectActions.showcasePhotosError}
+          onRetryPhotos={() => void projectActions.loadShowcasePhotos()}
           onUseModuleInQuote={
             canMutateProjects ? onShowcaseUseInQuote : undefined
           }

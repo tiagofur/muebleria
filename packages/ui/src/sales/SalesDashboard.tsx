@@ -56,6 +56,8 @@ export function SalesDashboard({
   currentUserId,
   vendedores = [],
   ownerLabels = {},
+  onOpenShowcase,
+  onNewProject,
 }: {
   /** All projects (already role-filtered by caller). */
   readonly projects: readonly ProjectWithCustomer[];
@@ -71,6 +73,10 @@ export function SalesDashboard({
   readonly ownerLabels?: Record<string, string>;
   /** Called when user explicitly cancels a project (sets cancelledAt). */
   readonly onCancelProject?: (projectId: string) => void;
+  /** #1142: salida contextual del pipeline vacío — ver la vitrina. */
+  readonly onOpenShowcase?: () => void;
+  /** #1142: salida contextual del pipeline vacío — nueva cotización. */
+  readonly onNewProject?: () => void;
 }): ReactNode {
   const [selectedVendedor, setSelectedVendedor] = useState<string | null>(null);
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
@@ -258,10 +264,20 @@ export function SalesDashboard({
   if (projects.length === 0) {
     return (
       <section className="sales-dashboard" aria-label="Dashboard de Ventas">
+        <PageHeader
+          title="Dashboard de Ventas"
+          subtitle="Pipeline comercial y estadísticas del equipo."
+          icon={<TrendingUp size={16} strokeWidth={1.5} />}
+        />
+        {/* #1142 P2: el pipeline vacío tiene salidas — inspirarse y arrancar. */}
         <EmptyState
           icon={TrendingUp}
-          title="Sin proyectos"
-          description="No hay proyectos disponibles para mostrar."
+          title="Sin proyectos todavía"
+          description="Recorré la vitrina de obras terminadas para inspirarte o creá la primera cotización."
+          actionLabel={onNewProject ? 'Nueva cotización' : undefined}
+          onAction={onNewProject}
+          secondaryActionLabel={onOpenShowcase ? 'Explorar la vitrina' : undefined}
+          onSecondaryAction={onOpenShowcase}
         />
       </section>
     );
@@ -309,6 +325,10 @@ export function SalesDashboard({
           }
         />
       ) : null}
+
+      {/* #1142 P1: las alertas responden «¿qué hago hoy?» — primero, y cada
+          una lleva a su obra (patrón fila-estirada F150). */}
+      <AlertsSection alerts={alerts} onOpenProject={onOpenProject} />
 
       {/* Monthly + total stats */}
       <MonthlyStatsSection
@@ -363,93 +383,88 @@ export function SalesDashboard({
         <ul className="sales-list__items">
           {rows.map((row) => (
             <li key={row.project.id} className="sales-list__row">
-              <button
-                type="button"
-                className="sales-list__link"
-                onClick={() => onOpenProject(row.project.id)}
-              >
-                <div className="sales-list__main">
-                  <span className="sales-list__name">{row.project.name}</span>
-                  <div className="sales-list__meta-row">
-                    {row.customerLabel ? (
-                      <span className="sales-list__customer">{row.customerLabel}</span>
-                    ) : null}
-                    {!isVendedor && !selectedVendedor && row.ownerLabel ? (
-                      <span className="sales-list__owner">· {row.ownerLabel}</span>
-                    ) : null}
+              {/* #1142 P1: sin botones anidados — link de fila + acciones
+                  hermanas (patrón overlay-link F150). */}
+              <div className="sales-list__item">
+                <button
+                  type="button"
+                  className="sales-list__link"
+                  onClick={() => onOpenProject(row.project.id)}
+                >
+                  <div className="sales-list__main">
+                    <span className="sales-list__name">{row.project.name}</span>
+                    <div className="sales-list__meta-row">
+                      {row.customerLabel ? (
+                        <span className="sales-list__customer">{row.customerLabel}</span>
+                      ) : null}
+                      {!isVendedor && !selectedVendedor && row.ownerLabel ? (
+                        <span className="sales-list__owner">· {row.ownerLabel}</span>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-                <div className="sales-list__meta">
-                  {row.salePrice !== null ? (
-                    <span className="sales-list__price">
-                      {formatMoneyDisplay(row.salePrice, { currency: row.project.currency })}
-                    </span>
-                  ) : null}
-                  <span className={`status-badge ${projectStatusBadgeClass(row.project.status)}`}>
-                    <span className="status-badge__dot" aria-hidden>
-                      ●
-                    </span>
-                    {projectStatusLabel(row.project.status)}
-                  </span>
-                  {row.project.cancelledAt ? (
-                    <span className="status-badge status-badge--cancelled">
+                  <div className="sales-list__meta">
+                    {row.salePrice !== null ? (
+                      <span className="sales-list__price">
+                        {formatMoneyDisplay(row.salePrice, { currency: row.project.currency })}
+                      </span>
+                    ) : null}
+                    <span className={`status-badge ${projectStatusBadgeClass(row.project.status)}`}>
                       <span className="status-badge__dot" aria-hidden>
                         ●
                       </span>
-                      Cancelada
+                      {projectStatusLabel(row.project.status)}
                     </span>
-                  ) : null}
-                  <span className="sales-list__date">
-                    {formatIsoDate(row.project.updatedAt)}
-                  </span>
-                  {onCancelProject && !row.project.cancelledAt && isOpen(row.project) ? (
-                    confirmCancelId === row.project.id ? (
-                      <span className="sales-list__confirm-cancel">
-                        <button
-                          type="button"
-                          className="btn btn--danger btn--small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onCancelProject(row.project.id);
-                            setConfirmCancelId(null);
-                          }}
-                        >
-                          Sí, cancelar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmCancelId(null);
-                          }}
-                        >
-                          No
-                        </button>
+                    {row.project.cancelledAt ? (
+                      <span className="status-badge status-badge--cancelled">
+                        <span className="status-badge__dot" aria-hidden>
+                          ●
+                        </span>
+                        Cancelada
                       </span>
-                    ) : (
+                    ) : null}
+                    <span className="sales-list__date">
+                      {formatIsoDate(row.project.updatedAt)}
+                    </span>
+                  </div>
+                </button>
+                {onCancelProject && !row.project.cancelledAt && isOpen(row.project) ? (
+                  confirmCancelId === row.project.id ? (
+                    <span className="sales-list__confirm-cancel">
                       <button
                         type="button"
-                        className="btn btn--ghost btn--small sales-list__cancel-btn"
-                        title="Cancelar cotización"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setConfirmCancelId(row.project.id);
+                        className="btn btn--danger btn--small"
+                        onClick={() => {
+                          onCancelProject(row.project.id);
+                          setConfirmCancelId(null);
                         }}
                       >
-                        Cancelar
+                        Sí, cancelar
                       </button>
-                    )
-                  ) : null}
-                </div>
-              </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--small"
+                        onClick={() => setConfirmCancelId(null)}
+                      >
+                        No
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--small sales-list__cancel-btn"
+                      title="Cancelar cotización"
+                      onClick={() => setConfirmCancelId(row.project.id)}
+                    >
+                      Cancelar
+                    </button>
+                  )
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
       </div>
 
-      {/* Alerts */}
-      <AlertsSection alerts={alerts} />
     </section>
   );
 }

@@ -37,12 +37,20 @@ function makeProject(
 describe('SalesDashboard', () => {
   afterEach(cleanup);
 
-  it('shows empty state when no projects', () => {
+  it('shows empty state with contextual exits when no projects (#1142)', () => {
+    const onOpenShowcase = vi.fn();
+    const onNewProject = vi.fn();
     render(
-      <SalesDashboard projects={[]} onOpenProject={vi.fn()} />,
+      <SalesDashboard
+        projects={[]}
+        onOpenProject={vi.fn()}
+        onOpenShowcase={onOpenShowcase}
+        onNewProject={onNewProject}
+      />,
     );
 
-    expect(screen.getByText('Sin proyectos')).toBeDefined();
+    expect(screen.getByText('Sin proyectos todavía')).toBeDefined();
+    expect(screen.getByText('Explorar la vitrina')).toBeDefined();
   });
 
   it('renders monthly stats section', () => {

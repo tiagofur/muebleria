@@ -255,3 +255,10 @@
   color: #e2e8f0;
   max-width: 600px;
 }
+
+/* ── #1142 — foco visible en cards del portafolio ──────────────────────── */
+
+.portfolio-card:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+}
