@@ -111,7 +111,8 @@ export type PurchasingScreenProps = {
     status: PickingStatus;
   }) => void;
   /** Open warehouse analytics dashboard. */
-  readonly onOpenDashboard?: () => void;  /**
+  readonly onOpenDashboard?: () => void;
+  /**
    * Process stage gating — releases a project's materials to the production
    * floor ("Material completo"). Projects passed to this screen are already
    * in the almacén stage (engineering sent, materials not released). Only
@@ -520,7 +521,8 @@ export function PurchasingScreen({
   // #1173 P0: deep link «Ver picking» — aterriza en el tab correcto de la obra
   // (uno con picking pendiente antes que uno despachado), scrollea al card y
   // lo resalta unos segundos. Una sola vez por handoff; sin obra visible es
-  // un no-op honesto.
+  // un no-op honesto. Sin cleanup que cancele el rAF: la re-ejecución que
+  // consume el handoff no debe desarmar el scroll ya programado (B1 review).
   useEffect(() => {
     const pid = pickingFocus?.projectId;
     if (!pid) return;
@@ -533,25 +535,33 @@ export function PurchasingScreen({
           : projectsWithEdges.some((p) => p.projectId === pid);
     const presentTabs = visibleMaterialTabs.filter(inTab);
     if (presentTabs.length === 0) return;
+    // La preferencia se lee del prop: al montar el estado `picking` todavía
+    // no se hidrató, y `initialPicking` es la verdad disponible síncrona.
+    const hydrated = new Map(
+      (initialPicking ?? []).map((s) => [pickingKey(s.projectId, s.material), s.status]),
+    );
     const pending = presentTabs.find(
-      (t) => picking[pickingKey(pid, t)] !== 'despachado',
+      (t) => hydrated.get(pickingKey(pid, t)) !== 'despachado',
     );
     setActiveTab(pending ?? presentTabs[0] ?? 'herrajes');
     setFocusedProjectId(pid);
-    const raf = requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
       const el = document.querySelector(`[data-testid="purch-project-${pid}"]`);
       if (el && typeof el.scrollIntoView === 'function') {
         el.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
     });
-    const timer = window.setTimeout(() => setFocusedProjectId(null), 2400);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(timer);
-    };
     // Corre una sola vez por handoff; las listas ya están resueltas al montar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickingFocus]);
+
+  // El resaltado expira en su propio efecto, keyed por obra: consumir el
+  // handoff (setPickingFocus) no cancela este timer.
+  useEffect(() => {
+    if (focusedProjectId == null) return;
+    const timer = window.setTimeout(() => setFocusedProjectId(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [focusedProjectId]);
 
   /** Release-to-production action shown on every project card. */
   const renderReleaseAction = (

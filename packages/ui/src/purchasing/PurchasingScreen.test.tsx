@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 import {
   PurchasingScreen,
   type ActiveProjectMaterial,
@@ -463,17 +463,30 @@ describe('Almacén S10 (#1165)', () => {
     expect(input).not.toBeNull();
   });
 
-  it('P0 #1173: el deep link del dashboard enfoca el picking de la obra', () => {
-    sessionStorage.setItem('warehouse_picking_focus', 'p2');
-    render(<PurchasingScreen projects={projects} role="almacen" />);
-    // El handoff se consume (una sola vez) y el card de p2 queda resaltado.
-    expect(sessionStorage.getItem('warehouse_picking_focus')).toBeNull();
-    const p2Card = screen.getByTestId('purch-project-p2');
-    expect(p2Card.className).toContain('purch-card--focus');
-    // El resto de los cards no llevan el resaltado.
-    expect(screen.getByTestId('purch-project-p1').className).not.toContain(
-      'purch-card--focus',
-    );
+  it('P0 #1173: el deep link enfoca el picking y el resaltado expira solo', () => {
+    vi.useFakeTimers();
+    try {
+      sessionStorage.setItem('warehouse_picking_focus', 'p2');
+      render(<PurchasingScreen projects={projects} role="almacen" />);
+      // El handoff se consume (una sola vez) y el card de p2 queda resaltado.
+      expect(sessionStorage.getItem('warehouse_picking_focus')).toBeNull();
+      const p2Card = screen.getByTestId('purch-project-p2');
+      expect(p2Card.className).toContain('purch-card--focus');
+      // B1 review: el resaltado NO queda pegado — expira a los 2.4s aunque el
+      // efecto del handoff se re-ejecute al consumirse.
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+      expect(screen.getByTestId('purch-project-p2').className).not.toContain(
+        'purch-card--focus',
+      );
+      // El resto de los cards nunca llevan el resaltado.
+      expect(screen.getByTestId('purch-project-p1').className).not.toContain(
+        'purch-card--focus',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('P0 #1173: handoff de obra desconocida es un no-op honesto', () => {
