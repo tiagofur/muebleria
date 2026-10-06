@@ -121,6 +121,7 @@ export function ProjectsPortfolioView({
             className={`portfolio-filter-btn ${
               onlyShowcase ? 'portfolio-filter-btn--active' : ''
             }`}
+            aria-pressed={onlyShowcase}
             onClick={() => setOnlyShowcase(!onlyShowcase)}
             data-testid="filter-showcase"
           >
@@ -219,7 +220,7 @@ export function ProjectsPortfolioView({
           description={
             query || stageFilter !== 'all' || onlyShowcase
               ? 'No se encontraron fotos que coincidan con los filtros seleccionados.'
-              : 'Sube fotos en la pestaña "Fotos de Obra" de cualquier proyecto y márcalas con la estrella para destacarlas aquí.'
+              : 'Subí fotos en la pestaña «Fotos de Obra» de cualquier proyecto y marcalas con la estrella para destacarlas aquí.'
           }
           icon={ImageIcon}
           data-testid="portfolio-empty-state"
@@ -232,7 +233,15 @@ export function ProjectsPortfolioView({
               <article
                 key={photo.id}
                 className="portfolio-card"
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedPhotoIndex(idx)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedPhotoIndex(idx);
+                  }
+                }}
                 data-testid={`portfolio-card-${photo.id}`}
               >
                 <div className="portfolio-card-media">

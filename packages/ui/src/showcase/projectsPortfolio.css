@@ -158,7 +158,7 @@
 }
 
 .portfolio-badge--showcase {
-  background: #f59e0b;
+  background: var(--warning-500);
   color: #fff;
   display: inline-flex;
   align-items: center;
