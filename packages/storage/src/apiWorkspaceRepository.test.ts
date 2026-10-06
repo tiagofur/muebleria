@@ -301,17 +301,23 @@ describe('APIWorkspaceRepository', () => {
   });
 
   it('saveCatalog PUTs snake_case ambientMaterials body', async () => {
-    const putRequests: { url: string; body: Record<string, unknown> }[] = [];
+    const putRequests: {
+      url: string;
+      body: Record<string, unknown>;
+      ifMatch?: string;
+    }[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
       if (init?.method === 'PUT' && url.includes('/catalog/ambient-materials/')) {
         putRequests.push({
           url,
           body: JSON.parse(String(init.body)) as Record<string, unknown>,
+          ifMatch: (init.headers as Record<string, string>)['If-Match'],
         });
         return { ok: true, json: async () => ({}) } as Response;
       }
       if (init?.method === 'GET' && url.includes('/catalog/ambient-materials/')) {
+        // #1091/#1149: the guarded write learns the server version first.
         return { ok: true, json: async () => ({ id: 'amb-1', version: 1 }) } as Response;
       }
       return { ok: true, json: async () => [] } as Response;
@@ -340,13 +346,143 @@ describe('APIWorkspaceRepository', () => {
       ],
     });
 
-    expect(putRequests).toHaveLength(1);
-    expect(putRequests[0]?.url).toContain('/catalog/ambient-materials/amb-1');
-    expect(putRequests[0]?.body.code).toBe('PISO-01');
-    expect(putRequests[0]?.body.surface_type).toBe('floor');
-    expect(putRequests[0]?.body.preview_color).toBe('#cccccc');
-    expect(putRequests[0]?.body.preview_texture_tile_width_mm).toBe(600);
+  expect(putRequests).toHaveLength(1);
+  expect(putRequests[0]?.url).toContain('/catalog/ambient-materials/amb-1');
+  expect(putRequests[0]?.body.code).toBe('PISO-01');
+  expect(putRequests[0]?.body.surface_type).toBe('floor');
+  expect(putRequests[0]?.body.preview_color).toBe('#cccccc');
+  expect(putRequests[0]?.body.preview_texture_tile_width_mm).toBe(600);
+  // #1149: the edit goes out under If-Match — a bare PUT is now a server 428.
+  expect(putRequests[0]?.ifMatch).toBe('"v1"');
+});
+
+it('saveCatalog edits an existing material category under If-Match (#1149)', async () => {
+  const requests: { method: string; url: string; ifMatch?: string }[] = [];
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? 'GET';
+    if (url.includes('/catalog/material-categories/')) {
+      requests.push({
+        method,
+        url,
+        ifMatch: (init?.headers as Record<string, string> | undefined)?.['If-Match'],
+      });
+      if (method === 'GET') {
+        return {
+          ok: true,
+          json: async () => ({ id: 'mcat-1', name: 'Maderas', version: 3 }),
+        } as Response;
+      }
+      if (method === 'PUT') {
+        return { ok: true, json: async () => ({ id: 'mcat-1', version: 4 }) } as Response;
+      }
+    }
+    return { ok: true, json: async () => [] } as Response;
   });
+
+  const repo = new APIWorkspaceRepository();
+  await repo.saveCatalog({
+    materials: [],
+    edges: [],
+    hardware: [],
+    optionGroups: [],
+    modules: [],
+    categories: [],
+    customers: [],
+    materialCategories: [{ id: 'mcat-1', name: 'Maderas editada', sortOrder: 0 }],
+  });
+
+  const put = requests.find(
+    (r) => r.method === 'PUT' && r.url.includes('/catalog/material-categories/mcat-1'),
+  );
+  expect(put, 'PUT material-categories/mcat-1').toBeTruthy();
+  expect(put?.ifMatch, 'If-Match from learned version').toBe('"v3"');
+});
+
+it('saveCatalog reuses the version seeded by getCatalog for material categories (#1149)', async () => {
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    if ((init?.method ?? 'GET') === 'GET' && url.includes('/catalog/material-categories')) {
+      return {
+        ok: true,
+        json: async () => [
+          { id: 'mcat-1', name: 'Maderas', parent_id: null, sort_order: 0, version: 7 },
+        ],
+      } as Response;
+    }
+    if (init?.method === 'PUT' && url.includes('/catalog/material-categories/mcat-1')) {
+      return { ok: true, json: async () => ({ id: 'mcat-1', version: 8 }) } as Response;
+    }
+    return { ok: true, json: async () => [] } as Response;
+  });
+
+  const repo = new APIWorkspaceRepository();
+  await repo.getCatalog();
+  const seen: { method: string; url: string; ifMatch?: string }[] = [];
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? 'GET';
+    if (url.includes('/catalog/material-categories/')) {
+      seen.push({
+        method,
+        url,
+        ifMatch: (init?.headers as Record<string, string> | undefined)?.['If-Match'],
+      });
+      if (method === 'PUT') {
+        return { ok: true, json: async () => ({ id: 'mcat-1', version: 8 }) } as Response;
+      }
+    }
+    return { ok: true, json: async () => [] } as Response;
+  });
+
+  await repo.saveCatalog({
+    materials: [],
+    edges: [],
+    hardware: [],
+    optionGroups: [],
+    modules: [],
+    categories: [],
+    customers: [],
+    materialCategories: [{ id: 'mcat-1', name: 'Maderas v2', sortOrder: 0 }],
+  });
+
+  const learnGets = seen.filter((r) => r.method === 'GET');
+  expect(learnGets, 'no learn GET needed: version was seeded').toHaveLength(0);
+  const put = seen.find((r) => r.method === 'PUT');
+  expect(put?.ifMatch).toBe('"v7"');
+});
+
+it('saveCatalog creates a locally-new material category via POST fallback (#1149)', async () => {
+  const posts: { url: string; body: Record<string, unknown> }[] = [];
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? 'GET';
+    if (method === 'GET' && url.includes('/catalog/material-categories/mcat-new')) {
+      // Locally-created entity: the server does not know it yet.
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }
+    if (method === 'POST' && url.endsWith('/catalog/material-categories')) {
+      posts.push({ url, body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+      return { ok: true, json: async () => ({ id: 'mcat-new', version: 1 }) } as Response;
+    }
+    return { ok: true, json: async () => [] } as Response;
+  });
+
+  const repo = new APIWorkspaceRepository();
+  await repo.saveCatalog({
+    materials: [],
+    edges: [],
+    hardware: [],
+    optionGroups: [],
+    modules: [],
+    categories: [],
+    customers: [],
+    materialCategories: [{ id: 'mcat-new', name: 'Nueva categoría', sortOrder: 0 }],
+  });
+
+  expect(posts).toHaveLength(1);
+  expect(posts[0]?.body.name).toBe('Nueva categoría');
+});
 
   it('saveCatalog PUTs ambientCategories body', async () => {
     const putRequests: { url: string; body: Record<string, unknown> }[] = [];
