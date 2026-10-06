@@ -24,6 +24,7 @@ module Granete
         DEFINITION_KEYS = %w[
           furnitureDefinitionId code name category categoryId version schemaRevision definitionHash description
           imageUrl thumbnailUrl previewUrl parameters estimatedPartCount estimatedHardwareCount materialRoles
+          hardwareRoles
         ].freeze
         PARAMETER_KEYS = %w[
           name label sortOrder type defaultValue required unit category min max step

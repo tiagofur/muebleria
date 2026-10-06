@@ -580,24 +580,37 @@ module Granete
           result
         end
 
+        # #1144: grupos kind=hardware que la definición consume — el
+        # Configurator ofrece un selector por rol antes de insertar.
+        def translated_hardware_roles(defn)
+          return unless defn['hardwareRoles'].is_a?(Array)
+
+          defn['hardwareRoles']
+        end
+
         def translate_definitions(contract)
           contract.fetch('definitions', {}).map do |_id, defn|
-            item = {
-              'furniture_definition_id' => defn['furnitureDefinitionId'],
-              'code' => defn['code'], 'name' => defn['name'],
-              'category' => defn['category'], 'version' => defn['version'],
-              'description' => defn['description'],
-              'parameters' => translate_parameters(defn['parameters'])
-            }
-            item['schemaRevision'] = defn['schemaRevision'] unless defn['schemaRevision'].nil?
-            item['definitionHash'] = defn['definitionHash'] if defn['definitionHash']
-            image_url = defn['imageUrl'] || defn['thumbnailUrl'] || defn['previewUrl']
-            item['imageUrl'] = image_url if image_url
-            item['categoryId'] = defn['categoryId'] if defn['categoryId']
-            ESTIMATED_COUNT_KEYS.each { |key| item[key] = defn[key] if defn[key] }
-            item['materialRoles'] = defn['materialRoles'] if defn['materialRoles'].is_a?(Array)
-            item
+            translate_definition(defn)
           end
+        end
+
+        def translate_definition(defn)
+          item = {
+            'furniture_definition_id' => defn['furnitureDefinitionId'],
+            'code' => defn['code'], 'name' => defn['name'],
+            'category' => defn['category'], 'version' => defn['version'],
+            'description' => defn['description'],
+            'parameters' => translate_parameters(defn['parameters'])
+          }
+          item['schemaRevision'] = defn['schemaRevision'] unless defn['schemaRevision'].nil?
+          item['definitionHash'] = defn['definitionHash'] if defn['definitionHash']
+          image_url = defn['imageUrl'] || defn['thumbnailUrl'] || defn['previewUrl']
+          item['imageUrl'] = image_url if image_url
+          item['categoryId'] = defn['categoryId'] if defn['categoryId']
+          ESTIMATED_COUNT_KEYS.each { |key| item[key] = defn[key] if defn[key] }
+          item['materialRoles'] = defn['materialRoles'] if defn['materialRoles'].is_a?(Array)
+          item['hardwareRoles'] = translated_hardware_roles(defn)
+          item
         end
 
         def translate_parameters(parameters)

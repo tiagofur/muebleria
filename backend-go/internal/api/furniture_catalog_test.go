@@ -463,3 +463,86 @@ func TestWorkshopCatalogRevisionCoversHardwareGroups(t *testing.T) {
 		t.Fatal("revision must change when a hardware group membership changes")
 	}
 }
+
+// #1144: the definition projection exposes the hardware option groups the
+// default composition consumes, with ACTIVE members and the group's
+// required flag — the plugin's pre-insert selector reads this. Inactive
+// members stay out; a consumed role without a group surfaces empty (the
+// engine fails that resolve fail-closed either way).
+func TestBuildHardwareRolesProjectsGroupsWithActiveMembers(t *testing.T) {
+	composition := domain.Catalog{
+		Hardware: []domain.Hardware{
+			{ID: "hw-blum", Code: "B-CL", Name: "Blum", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-eco", Code: "B-ECO", Name: "Económica", Unit: domain.UnitPiece, Active: true},
+			{ID: "hw-ret", Code: "B-RET", Name: "Retirada", Unit: domain.UnitPiece, Active: false},
+		},
+		OptionGroups: []domain.OptionGroup{{
+			ID: "og-1", Code: "BISAGRA", Name: "Bisagras", Kind: "hardware", Required: true,
+			OptionIDs: []string{"hw-blum", "hw-eco", "hw-ret"},
+		}},
+		Structures: []domain.Structure{{
+			ID: "st-1", Code: "CUERPO", Name: "Cuerpo", Active: true,
+			Components: []domain.ComponentInstance{{ComponentID: "comp-x", Quantity: 1}},
+			Agregados:  []domain.ModuleAgregadoInstance{{AgregadoID: "agr-1"}},
+		}},
+		Agregados: []domain.Agregado{{
+			ID: "agr-1", Code: "AGR-PUERTA", Name: "Puerta", Active: true,
+			Components: []domain.ComponentInstance{{
+				ComponentID: "comp-door", Quantity: 1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					HardwarePlacements: []domain.HardwarePlacement{
+						{OptionRole: "BISAGRA", AnchorFace: "front"},
+						{OptionRole: "BISAGRA", AnchorFace: "front"},   // 2ª bisagra: un solo rol
+						{HardwareID: "hw-handle", AnchorFace: "front"}, // concreto: nunca es rol
+					},
+				},
+			}},
+		}},
+	}
+	module := domain.Module{ID: "m1", Code: "M1", Name: "M", StructureID: "st-1"}
+
+	roles := buildHardwareRoles(module, composition)
+	if len(roles) != 1 {
+		t.Fatalf("expected exactly one hardware role, got %+v", roles)
+	}
+	role := roles[0]
+	if role.Code != "BISAGRA" || role.Name != "Bisagras" || !role.Required {
+		t.Fatalf("role must carry group identity, got %+v", role)
+	}
+	if len(role.OptionIDs) != 2 || role.OptionIDs[0] != "hw-blum" || role.OptionIDs[1] != "hw-eco" {
+		t.Fatalf("inactive members must stay out of the selector, got %+v", role.OptionIDs)
+	}
+
+	// Rol sin grupo en el catálogo: superficie honesta vacía.
+	orphanModule := domain.Module{ID: "m2", Code: "M2", Name: "M2", Components: []domain.ComponentInstance{{
+		ComponentID: "comp-x", Quantity: 1,
+		Overrides: &domain.ComponentInstanceOverrides{
+			HardwarePlacements: []domain.HardwarePlacement{{OptionRole: "CORREDERA", AnchorFace: "front"}},
+		},
+	}}}
+	orphan := buildHardwareRoles(orphanModule, composition)
+	if len(orphan) != 1 || orphan[0].Code != "CORREDERA" || len(orphan[0].OptionIDs) != 0 {
+		t.Fatalf("orphan role must surface with empty members, got %+v", orphan)
+	}
+}
+
+// #1144: hardwareRoles viven dentro del mapa de definiciones, así que el
+// pin content-addressed del catálogo las cubre sin tocar el hash payload.
+func TestWorkshopCatalogRevisionCoversHardwareRoles(t *testing.T) {
+	build := func(roles []workshopHardwareRole) workshopFurnitureCatalog {
+		return workshopFurnitureCatalog{
+			Definitions: map[string]workshopFurnitureDefinition{
+				"m1": {FurnitureDefinitionID: "m1", HardwareRoles: roles},
+			},
+		}
+	}
+	role := []workshopHardwareRole{{Code: "BISAGRA", Name: "Bisagras", Required: true, OptionIDs: []string{"hw-1"}}}
+	base := build(role)
+	if workshopCatalogRevisionID(base) != workshopCatalogRevisionID(build(role)) {
+		t.Fatal("revision must be stable for identical hardware roles")
+	}
+	changed := build([]workshopHardwareRole{{Code: "BISAGRA", Name: "Bisagras", Required: true, OptionIDs: []string{"hw-2"}}})
+	if workshopCatalogRevisionID(base) == workshopCatalogRevisionID(changed) {
+		t.Fatal("revision must change when a role's members change")
+	}
+}

@@ -3036,9 +3036,10 @@ type WorkshopFurnitureDefinition struct {
 }
 
 type WorkshopMaterialRole struct {
-	Role      string   `json:"role"`
-	Label     string   `json:"label"`
-	OptionIds []string `json:"optionIds"`
+	Role          string                 `json:"role"`
+	HardwareRoles []WorkshopHardwareRole `json:"hardwareRoles,omitempty"`
+	Label         string                 `json:"label"`
+	OptionIds     []string               `json:"optionIds"`
 }
 
 type WorkshopFurniturePreset struct {
@@ -3061,6 +3062,13 @@ type WorkshopMaterialCategory struct {
 	Name      string  `json:"name"`
 	ParentId  *string `json:"parentId,omitempty"`
 	SortOrder int64   `json:"sortOrder"`
+}
+
+type WorkshopHardwareRole struct {
+	Code      string   `json:"code"`
+	Name      string   `json:"name"`
+	Required  bool     `json:"required"`
+	OptionIds []string `json:"optionIds"`
 }
 
 type WorkshopMaterial struct {

@@ -251,6 +251,23 @@ class CatalogParameterContractTest < Minitest::Test
     assert_same definition, Contract.validate_definition!(definition, 'definition')
   end
 
+  # #1144: hardwareRoles (grupos kind=hardware consumidos) es una clave
+  # conocida de la definición; una clave ajena sigue fallando cerrado.
+  def test_accepts_definition_with_hardware_roles_and_rejects_unknown
+    definition = valid_definition
+    definition['hardwareRoles'] = [
+      { 'code' => 'BISAGRA', 'name' => 'Bisagras', 'required' => true,
+        'optionIds' => %w[hw-blum hw-eco] }
+    ]
+    assert_same definition, Contract.validate_definition!(definition, 'definition')
+
+    alien = valid_definition
+    alien['hardwareColors'] = [{ code: 'X' }]
+    assert_raises(Granete::SketchUpExtension::Library::CatalogParameterContract::ContractError) do
+      Contract.validate_definition!(alien, 'definition')
+    end
+  end
+
   def test_rejects_structure_relationship_mutations_at_go_parity_fields
     valid_relationship = structure_relationship_parameter.fetch('binding').fetch('relationship')
     mutations = [

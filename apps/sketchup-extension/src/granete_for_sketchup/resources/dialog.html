@@ -259,6 +259,18 @@
               <div id="library-materials-container" style="margin-top: var(--space-2);"></div>
             </div>
 
+            <!-- #1144: Herrajes por grupo — un selector por grupo kind=hardware
+                 que la definición consume; la elección viaja en el MISMO mapa
+                 materialChoices del insert y el resolve la aplica. Sin grupos
+                 consumidos la card no aparece. -->
+            <div class="card" id="library-hardware-card" style="display: none;">
+              <div class="card-title">Herrajes del Mueble</div>
+              <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0 0;">
+                Elegí el modelo de cada grupo; se aplica al insertar.
+              </p>
+              <div id="library-hardware-container" style="margin-top: var(--space-2);"></div>
+            </div>
+
             <div id="configurator-actionbar" class="action-dock">
               <div class="actionbar-summary">
                 <span id="library-summary-dims" class="actionbar-dims">-- × -- × --</span>
@@ -1917,7 +1929,8 @@
           },
           switchTab: switchTab,
           requestProjectFurniture: window.GraneteUI.projectFurniture.requestProjectFurniture,
-          pfPlaceFailureMessage: window.GraneteUI.projectFurniture.pfPlaceFailureMessage
+          pfPlaceFailureMessage: window.GraneteUI.projectFurniture.pfPlaceFailureMessage,
+          getHardwareCatalog: function () { return window.GraneteUI.inspector.getHardwareCatalog(); }
         });
 
         // #848 C4.5: the finish selector module owns the visual material
