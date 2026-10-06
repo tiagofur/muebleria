@@ -21,6 +21,9 @@ module Granete
           dialog.add_action_callback('restore_furniture_instance') do |_c, p|
             handle_restore_furniture_instance(dialog, p)
           end
+          dialog.add_action_callback('remove_project_furniture') do |_c, p|
+            handle_remove_project_furniture(dialog, p)
+          end
           dialog.add_action_callback('select_project_furniture') { |_c, p| handle_select_project_furniture(p) }
           dialog.add_action_callback('validate_managed_furniture_identity') do
             handle_validate_managed_furniture_identity(dialog)
@@ -172,6 +175,36 @@ module Granete
           @logger.error('project_furniture_restore_failed', error: e)
           execute_bridge(dialog, 'onRestoreFurnitureResult',
                          { 'ok' => false, 'code' => 'error', 'reason' => e.message })
+        end
+
+        # #1177 — Quitar del proyecto: the explicit terminal lifecycle output.
+        # The placer owns the order (server :remove → working copy → host
+        # erase); the bridge owns the honest panel convergence: the rows
+        # refresh after EVERY outcome (success drops the row, a 409 refreshes
+        # the If-Match source so the retry works) and the host save flag only
+        # fires when local geometry actually changed.
+        def handle_remove_project_furniture(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          fi_id = payload['furnitureInstanceId'].to_s
+          result = if mutation_coordinator.busy?
+                     {
+                       'ok' => false, 'code' => 'action_in_progress',
+                       'reason' => 'hay otra modificación del modelo en curso',
+                       'instanceId' => fi_id
+                     }
+                   else
+                     project_furniture_placer.remove(fi_id)
+                   end
+          result['instanceId'] ||= fi_id
+          execute_bridge(dialog, 'onRemoveFurnitureResult', result)
+          mark_host_save_pending if result['ok'] && result['localErased'] == true
+          handle_get_project_furniture(dialog)
+        rescue StandardError => e
+          @logger.error('project_furniture_remove_bridge_failed', error: e)
+          execute_bridge(dialog, 'onRemoveFurnitureResult',
+                         { 'ok' => false, 'code' => 'error', 'instanceId' => fi_id,
+                           'reason' => 'No se pudo quitar el mueble del proyecto (error interno de SketchUp).' })
+          handle_get_project_furniture(dialog)
         end
 
         # Focus an already-placed unit: pure viewport selection state.

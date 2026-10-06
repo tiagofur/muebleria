@@ -196,6 +196,7 @@ class ApplicationTest < Minitest::Test
       manufacturing_inspection open_external_url open_material_selector
       place_furniture_instance poll_enrollment preflight_review prepare_hardware_mount publish_design_revision
       refresh_media_url refresh_model_binding
+      remove_project_furniture
       request_hardware_inventory rescan_duplicates restore_furniture_instance
       select_furniture select_hardware_instance select_project_furniture
       synchronize_design toggle_door_motion update_furniture update_furniture_batch

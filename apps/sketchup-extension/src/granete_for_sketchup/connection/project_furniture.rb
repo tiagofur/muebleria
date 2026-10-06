@@ -112,6 +112,22 @@ module Granete
             Contract.parse_instance!(body)
           end
 
+          # #1177: the terminal lifecycle command — POST
+          # /furniture-instances/{id}:remove marks the unit lifecycle_status
+          # 'removed' (durable history, never a hard delete). Optimistic
+          # concurrency via the strong version ETag: If-Match must be
+          # `"v<version>"` exactly as the server formats it; a stale version
+          # surfaces as the typed 409 VERSION_CONFLICT.
+          def remove_furniture_instance(instance_id, expected_version:)
+            unless expected_version.is_a?(Integer) && expected_version >= 1
+              raise ArgumentError, 'expected_version es obligatorio (token If-Match)'
+            end
+
+            body = request(:post, "/furniture-instances/#{instance_id}:remove", {},
+                           extra_headers: { 'If-Match' => "\"v#{expected_version}\"" })
+            Contract.parse_instance!(body)
+          end
+
           # #784 R3: the server-side inheritance projection (badge authority).
           def get_design_inheritance(design_id)
             body = request(:get, "/designs/#{design_id}/working-copy/material-provenance")
@@ -718,6 +734,57 @@ module Granete
             @restorer.restore(furniture_instance_id)
           end
 
+          # #1177 — the explicit terminal output the panel lacked: QUITAR del
+          # proyecto. Order is server → design → host:
+          #   1. POST :remove with If-Match against the FRESH authority read
+          #      (a stale panel row version must never fail the remove; a real
+          #      concurrent transition surfaces as the typed conflict);
+          #   2. the design working copy drops the unit's item through the
+          #     canonical #810 SafeWrite frontier (a leftover item would keep
+          #     a zombie "Identidad no vigente" row alive until a manual sync);
+          #   3. the local entity is erased in one undoable operation.
+          # The identity survives server-side as auditable 'removed' history
+          # (never a hard delete) and disappears from the panel, the project
+          # and future materializations. Partial outcomes are honest flags —
+          # never false success: designPending asks for one explicit
+          # "Sincronizar diseño"; localPending asks for a manual cleanup.
+          def remove(furniture_instance_id)
+            model = @model_provider.call
+            return failure(:no_model, 'no hay un modelo activo') unless model
+
+            context = placement_context(model)
+            return context unless context['ok']
+
+            binding = context['binding']
+
+            instance = @service.list_project_furniture(binding.project_id)
+                               .find { |candidate| candidate.id == furniture_instance_id }
+            return failure(:not_found, 'el mueble no pertenece al proyecto conectado') unless instance
+            if instance.lifecycle_status != 'active'
+              return failure(:terminal, 'el mueble ya fue eliminado del proyecto')
+            end
+
+            @service.remove_furniture_instance(furniture_instance_id, expected_version: instance.version)
+            @intent_store.clear(furniture_instance_id)
+            @logger.info('project_furniture_removed', furniture_instance_id: furniture_instance_id,
+                                                      project_id: binding.project_id)
+
+            result = { 'ok' => true, 'code' => 'removed', 'instanceId' => furniture_instance_id,
+                       'designPending' => drop_working_copy_item(binding, furniture_instance_id) }
+            result.merge(erase_local_unit(model, furniture_instance_id))
+          rescue Service::Error => e
+            if e.status == 409
+              failure(:conflict, 'el mueble cambió en el servidor; panel actualizado, intentá de nuevo')
+            else
+              failure(:service_error, e.message)
+            end
+          rescue Contract::ContractError => e
+            failure(:bad_contract, e.message)
+          rescue StandardError => e
+            @logger.error('project_furniture_remove_failed', error: e)
+            failure(:remove_failed, e.message)
+          end
+
           private
 
           # #784 R4: resolves definition-aware effective materials against
@@ -995,6 +1062,50 @@ module Granete
             return if builder.rollback_placement(model, entity)
 
             @logger.error('project_furniture_rollback_failed', furniture_instance_id: furniture_instance_id)
+          end
+
+          # #1177 step 2: the removed unit's working-copy item leaves through
+          # the shared conflict-safe frontier — other items travel verbatim,
+          # the write is verified, and a lost response converges. Failure is
+          # swallowed into the honest designPending flag (the unit IS already
+          # removed from the project; the next "Sincronizar diseño" converges
+          # the design) — it must never undo the server remove.
+          def drop_working_copy_item(binding, furniture_instance_id)
+            working = @service.get_working_copy(binding.design_id)
+            return false if working.items.none? { |item| item.furniture_instance_id == furniture_instance_id }
+
+            remaining = working.items.reject { |item| item.furniture_instance_id == furniture_instance_id }
+            DesignSync::SafeWrite.write(service: @service, working: working, items: remaining,
+                                        base_revision_id: binding.base_revision_id)
+            false
+          rescue Service::Error => e
+            @logger.error('project_furniture_remove_design_pending', error: e,
+                                                                     furniture_instance_id: furniture_instance_id)
+            true
+          end
+
+          # #1177 step 3: erase the managed local root (same undoable
+          # erase+purge a failed placement rollback uses). Honest flags:
+          # localErased for the host mutation (save-pending), localPending
+          # when geometry survives (duplicate roots or a failed erase).
+          def erase_local_unit(model, furniture_instance_id)
+            located = locate_unit(model, furniture_instance_id)
+            return { 'localErased' => false, 'localPending' => false } unless located['entity']
+
+            if located['duplicates'] > 1
+              @logger.error('project_furniture_remove_duplicates', furniture_instance_id: furniture_instance_id)
+              return { 'localErased' => false, 'localPending' => true,
+                       'reason' => "#{DUPLICATE_MESSAGE}; la unidad ya fue quitada del proyecto" }
+            end
+
+            if @furniture_builder_factory.call(model).rollback_placement(model, located['entity'])
+              { 'localErased' => true, 'localPending' => false }
+            else
+              @logger.error('project_furniture_remove_erase_failed', furniture_instance_id: furniture_instance_id)
+              { 'localErased' => false, 'localPending' => true,
+                'reason' => 'la unidad fue quitada del proyecto, pero no se pudo borrar la geometría local; ' \
+                            'borrala manualmente del modelo' }
+            end
           end
 
           def failure(code, reason)

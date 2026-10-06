@@ -160,7 +160,9 @@ function pendingCardButton(sandbox) {
   sandbox.window.GraneteDialog.onProjectFurniture(connectedPanel());
   const card = el(sandbox, 'pf-pending-list').children[0];
   assert.ok(card, 'pending card exists');
-  return card.children[card.children.length - 1];
+  // #1177: the card ends with the danger remove section — the Colocar
+  // entry point is the card's secondary action, selected by class.
+  return card.children.filter((child) => child.className === 'btn btn-secondary')[0];
 }
 
 const tests = [];
