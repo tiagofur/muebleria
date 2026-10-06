@@ -104,6 +104,26 @@ describe('InstalacionesProjectDetail', () => {
     expect(onAdvance).toHaveBeenCalledWith('p1', 'a', 'installed' satisfies ItemFloorStatus);
   });
 
+  it('offers undo after installing, reverting the unit to loaded (#1169)', () => {
+    const onAdvance = vi.fn();
+    render(
+      <InstalacionesProjectDetail
+        project={makeProject([makeItem('a', 'loaded')])}
+        canAdvance
+        onAdvance={onAdvance}
+        jobHandlers={makeHandlers()}
+      />,
+    );
+    // Sin undo antes de instalar:
+    expect(screen.queryByTestId('instalaciones-undo')).toBeNull();
+    fireEvent.click(screen.getByTestId('instalaciones-advance-a'));
+    // El undo revierte la última instalación a loaded:
+    fireEvent.click(screen.getByTestId('instalaciones-undo'));
+    expect(onAdvance).toHaveBeenCalledWith('p1', 'a', 'loaded' satisfies ItemFloorStatus);
+    // Un paso por vez: tras deshacer, el undo desaparece.
+    expect(screen.queryByTestId('instalaciones-undo')).toBeNull();
+  });
+
   it('goes back to the list via the callback', () => {
     const onBack = vi.fn();
     render(

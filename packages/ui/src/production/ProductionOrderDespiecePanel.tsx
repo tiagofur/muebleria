@@ -104,9 +104,9 @@ function totalsLabel(totals: GroupTotals): string {
   const parts = [
     `${totals.lines} línea${totals.lines === 1 ? '' : 's'}`,
     `${totals.units} pieza${totals.units === 1 ? '' : 's'}`,
-    `${totals.areaM2.toLocaleString('es-MX')} m²`,
+    `${totals.areaM2.toLocaleString('es-AR')} m²`,
   ];
-  if (totals.edgeMl > 0) parts.push(`${totals.edgeMl.toLocaleString('es-MX')} ml canto`);
+  if (totals.edgeMl > 0) parts.push(`${totals.edgeMl.toLocaleString('es-AR')} ml canto`);
   return parts.join(' · ');
 }
 

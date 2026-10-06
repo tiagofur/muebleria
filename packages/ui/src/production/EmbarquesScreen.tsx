@@ -149,7 +149,14 @@ export function EmbarquesScreen({
                     {card.percentage}%
                   </span>
                 </div>
-                <div className="ship-board__progress-bar-bg">
+                <div
+                  className="ship-board__progress-bar-bg"
+                  role="progressbar"
+                  aria-valuenow={card.percentage}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`Carga de ${card.projectName}`}
+                >
                   <div
                     className={`ship-board__progress-bar-fill ${
                       card.percentage === 100

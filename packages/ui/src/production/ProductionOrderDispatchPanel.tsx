@@ -381,6 +381,7 @@ export function ProductionOrderDispatchPanel({
 
         {lastScannedMessage ? (
           <div
+            role="status"
             className="prod-paperless__scan-result prod-paperless__scan-result--advance"
             data-testid="prod-dispatch-scan-feedback"
           >
@@ -390,6 +391,7 @@ export function ProductionOrderDispatchPanel({
 
         {scanMiss ? (
           <div
+            role="alert"
             className="prod-paperless__scan-result prod-paperless__scan-result--miss"
             data-testid="prod-dispatch-scan-miss"
           >
