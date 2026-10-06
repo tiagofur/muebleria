@@ -56,6 +56,7 @@ mirror context but never overrides repository, GitHub, code, tests, or remote st
 | Producto / prioridad | `docs/prd-v2.md`, `docs/roadmap-comercial-v2.md`, `docs/demo-mvp-plan-2026-09-05.md` |
 | Users / Auth / Memberships / Organizations / Sales Network | `docs/architecture/organization-foundation-v2.md`, ADR-0005, ADR-0006, #446 y child exacta, proofs #462 |
 | Librerías de manufactura / releases / overlays / distribución local | `docs/architecture/manufacturing-library-platform.md`, ADR-0008; además `parametric-furniture-library.md` y `3d-asset-library.md` cuando toque definiciones/assets |
+| Apertura / frentes / gola / agarre (target) | `docs/architecture/opening-front-system.md`, ADR-0009 (Proposed) |
 | Project / FurnitureInstance / Design / Q-R-P | `docs/architecture/project-design-digital-thread.md`, ADR-0003, #384; cliente generado #496 |
 | Integración SketchUp ↔ Go ↔ React | `docs/architecture/sketchup-backend-web-integration-excellence.md`, #465 y contrato generado #496 |
 | Mutación / interacción SketchUp | `apps/sketchup-extension/AGENTS.md`, contrato de autoría/nativo, runtime #498; no coordinadores por feature |
