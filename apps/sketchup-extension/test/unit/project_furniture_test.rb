@@ -2281,6 +2281,8 @@ class ProjectFurnitureTest < Minitest::Test
     request = @transport.requests_for('POST', %r{/furniture-instances/#{FI_1}:remove}).first
     assert_equal '"v3"', request['headers']['If-Match'],
                  'the If-Match version comes from the authority read, not the panel row'
+    assert_match(/\A[A-Za-z0-9._:-]{16,128}\z/, request['headers']['Idempotency-Key'],
+                 'the route RequireIdempotency gate demands a 16-128 char key')
   end
 
   def test_remove_parses_the_removed_instance_back

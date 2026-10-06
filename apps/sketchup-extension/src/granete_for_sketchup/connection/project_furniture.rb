@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'digest'
 require 'json'
 
 module Granete
@@ -117,14 +118,21 @@ module Granete
           # 'removed' (durable history, never a hard delete). Optimistic
           # concurrency via the strong version ETag: If-Match must be
           # `"v<version>"` exactly as the server formats it; a stale version
-          # surfaces as the typed 409 VERSION_CONFLICT.
+          # surfaces as the typed 409 VERSION_CONFLICT. The route's
+          # RequireIdempotency gate demands a 16-128 char key: one fresh key
+          # per user action (each click is a distinct command attempt; the
+          # panel refresh after success makes a double-remove a typed 404).
+          # Digest, not SecureRandom — the SketchUp OpenSSL cop: random-bit
+          # generation can freeze the host; uniqueness is all this token needs.
           def remove_furniture_instance(instance_id, expected_version:)
             unless expected_version.is_a?(Integer) && expected_version >= 1
               raise ArgumentError, 'expected_version es obligatorio (token If-Match)'
             end
 
+            key = Digest::SHA256.hexdigest("#{instance_id}-#{expected_version}-#{Time.now.to_f}-#{rand}")[0, 32]
             body = request(:post, "/furniture-instances/#{instance_id}:remove", {},
-                           extra_headers: { 'If-Match' => "\"v#{expected_version}\"" })
+                           extra_headers: { 'If-Match' => "\"v#{expected_version}\"",
+                                            'Idempotency-Key' => key })
             Contract.parse_instance!(body)
           end
 

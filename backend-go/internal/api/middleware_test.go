@@ -923,7 +923,11 @@ func TestExtensionClientBoundaryProjectFurniture(t *testing.T) {
 		{"create furniture instance from catalog (#390)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances", true},
 		// #391 / DT-7 grant: duplicate furniture instance.
 		{"duplicate furniture instance (#391)", http.MethodPost, "/api/projects/" + projectID + "/furniture-instances/" + projectID + ":duplicate", true},
-		{"remove furniture instance (#385) denied", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", false},
+		// #1177 grant: the panel's explicit "Quitar del proyecto" — terminal
+		// :remove lifecycle command, every guard owned server-side (If-Match,
+		// owner scope, live roles, audit).
+		{"remove furniture instance (#1177)", http.MethodPost, "/api/furniture-instances/" + projectID + ":remove", true},
+		{"quote-line materialize stays denied", http.MethodPost, "/api/projects/" + projectID + "/quote-lines/" + projectID + ":materialize", false},
 		{"reset working copy", http.MethodPost, "/api/designs/" + designID + "/working-copy:reset", false},
 		{"publish revision (#392)", http.MethodPost, "/api/designs/" + designID + "/revisions", false},
 		// #668 hardware asset revision read-only authorization grant

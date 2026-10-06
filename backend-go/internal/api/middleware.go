@@ -687,6 +687,12 @@ var extensionTokenMayPostPatterns = []*regexp.Regexp{
 	// Allocates authoritative identity (origin='duplicate', origin_furniture_instance_id=source)
 	// for the bound project when a managed unit is copied in the host.
 	regexp.MustCompile(`^/api/projects/[^/]+/furniture-instances/[^/]+:duplicate$`),
+	// #1177: the panel's explicit "Quitar del proyecto" — the terminal :remove
+	// lifecycle command. Same command class as the #391 duplicate grant: the
+	// backend owns every lifecycle guard (If-Match, owner scope, live roles,
+	// audit); the grant only lets the extension bearer REACH them. No other
+	// lifecycle route is implied — quote commands stay denied.
+	regexp.MustCompile(`^/api/furniture-instances/[^/]+:remove$`),
 	// #718 consumes #717's Q1-only command with the exact Project/Design
 	// working-version tokens. Quote lifecycle commands remain denied.
 	regexp.MustCompile(`^/api/projects/[^/]+/designs/[^/]+/quote-revisions$`),
