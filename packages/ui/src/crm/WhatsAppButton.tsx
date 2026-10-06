@@ -33,8 +33,16 @@ export function WhatsAppButton({
       <button
         type="button"
         className={`btn btn--secondary whatsapp-btn ${compact ? 'whatsapp-btn--compact' : ''} ${className}`}
-        onClick={() => setModalOpen(true)}
+        onClick={(e) => {
+          // #1127: el botón vive dentro de filas clickeables — contactar no
+          // debe togglear la selección.
+          e.stopPropagation();
+          setModalOpen(true);
+        }}
         title={`Enviar WhatsApp a ${customerName || 'cliente'}`}
+        // #1127 §4.8: icon-only necesita nombre accesible SIEMPRE (el title
+        // no alcanza para lectores de pantalla).
+        aria-label={`Enviar WhatsApp a ${customerName || 'cliente'}`}
       >
         <MessageSquare size={16} className="whatsapp-btn__icon" aria-hidden="true" />
         {!compact && <span>{label}</span>}

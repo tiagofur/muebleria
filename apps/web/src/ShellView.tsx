@@ -266,6 +266,7 @@ export interface ShellViewCtx {
   readonly canExportProduction: boolean;
   readonly canMarkProduced: boolean;
   readonly canMutateCatalog: boolean;
+  readonly canMutateCustomers: boolean;
   readonly canMutateModules: boolean;
   readonly canMutateProjects: boolean;
   readonly canOpenFabric: boolean;
@@ -585,6 +586,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     canExportProduction,
     canMarkProduced,
     canMutateCatalog,
+    canMutateCustomers,
     canMutateModules,
     canMutateProjects,
     canOpenFabric,
@@ -2068,6 +2070,10 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             navigate(projectPath(projectId));
           }}
           workshopName={workshopSettings?.workshopName}
+          // #1127: autoridad propia del fan-out de clientes
+          // (admin|gerente_ventas|vendedor — roleCanMutateCustomers), NO
+          // canMutateCatalog; sin permiso la pantalla es lectura.
+          canMutateCustomers={canMutateCustomers}
           onCreate={createCustomer}
           onUpdate={updateCustomer}
           onDeactivate={(id) => setCustomerActive(id, false)}

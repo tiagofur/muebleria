@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { CustomersScreen } from './CustomersScreen';
 import type { Customer } from '@granete/domain';
 
@@ -131,5 +132,84 @@ describe('CustomersScreen', () => {
 				ownerUserId: 'v1',
 			}),
 		);
+	});
+});
+
+
+describe('Clientes S5 (#1127)', () => {
+	afterEach(cleanup);
+
+	const setup = () => {
+		const onCreate = vi.fn();
+		const onUpdate = vi.fn();
+		const onDeactivate = vi.fn();
+		const onReactivate = vi.fn();
+		const utils = render(
+			<CustomersScreen
+				customers={mockCustomers}
+				onCreate={onCreate}
+				onUpdate={onUpdate}
+				onDeactivate={onDeactivate}
+				onReactivate={onReactivate}
+			/>,
+		);
+		return { ...utils, onCreate, onUpdate, onDeactivate, onReactivate };
+	};
+
+	it('P0: la búsqueda filtra por nombre, email y teléfono', async () => {
+		const user = userEvent.setup();
+		setup();
+		const search = screen.getByLabelText('Buscar clientes');
+
+		// Nombre (Juan está inactivo: el chip default es Activos).
+		await user.clear(search);
+		await user.type(search, 'tiago furn');
+		await vi.waitFor(() => expect(screen.getByText('Tiago Furniture')).toBeTruthy());
+		expect(screen.queryByText('Juan Perez')).toBeNull();
+
+		// Email.
+		await user.clear(search);
+		await user.type(search, 'tiago@example');
+		await vi.waitFor(() => expect(screen.getByText('Tiago Furniture')).toBeTruthy());
+
+		// Teléfono (con «busca esto y no lo otro»).
+		await user.clear(search);
+		await user.type(search, '123456789');
+		await vi.waitFor(() => expect(screen.getByText('Tiago Furniture')).toBeTruthy());
+		expect(screen.queryByText('Cliente Plantilla')).toBeNull();
+
+		await user.clear(search);
+		await user.type(search, 'zzzznada');
+		await vi.waitFor(() => expect(screen.getByText('Sin resultados')).toBeTruthy());
+		expect(screen.getByTestId('customers-results-summary').textContent).toContain(
+			'Mostrando 0 de 2 clientes',
+		);
+	});
+
+	it('P1: sin canMutateCustomers la pantalla es sólo lectura (WhatsApp queda)', () => {
+		render(
+			<CustomersScreen
+				customers={mockCustomers}
+				onCreate={vi.fn()}
+				onUpdate={vi.fn()}
+				onDeactivate={vi.fn()}
+				onReactivate={vi.fn()}
+				canMutateCustomers={false}
+			/>,
+		);
+		expect(screen.queryByRole('button', { name: /Nuevo cliente/ })).toBeNull();
+		expect(screen.queryByRole('button', { name: /Editar Tiago/ })).toBeNull();
+		expect(screen.queryByRole('button', { name: /Desactivar Tiago/ })).toBeNull();
+		// Contactar no muta: queda disponible.
+		expect(screen.getByRole('button', { name: 'Enviar WhatsApp a Tiago Furniture' })).toBeTruthy();
+	});
+
+	it('P2: desactivar pide confirmación inline antes de mutar', async () => {
+		const user = userEvent.setup();
+		const { onDeactivate } = setup();
+		await user.click(screen.getByRole('button', { name: 'Desactivar Tiago Furniture' }));
+		expect(onDeactivate).not.toHaveBeenCalled();
+		await user.click(screen.getByRole('button', { name: 'Confirmar desactivar Tiago Furniture' }));
+		expect(onDeactivate).toHaveBeenCalledWith('c1');
 	});
 });

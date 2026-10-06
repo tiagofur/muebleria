@@ -76,6 +76,11 @@ export interface CustomersScreenProps {
 	readonly projects?: readonly Project[];
 	readonly onOpenProject?: (projectId: string) => void;
 	readonly workshopName?: string;
+	/**
+	 * #1127 P1: gating de mutación con paridad a Cotizaciones — sin permiso,
+	 * la pantalla es sólo lectura (contactar por WhatsApp sigue disponible).
+	 */
+	readonly canMutateCustomers?: boolean;
 }
 
 export function CustomersScreen({
@@ -93,6 +98,7 @@ export function CustomersScreen({
 	projects = [],
 	onOpenProject,
 	workshopName,
+	canMutateCustomers = true,
 }: CustomersScreenProps): ReactNode {
 	const formId = useId();
 	const [search, setSearch] = useState('');
@@ -111,15 +117,39 @@ export function CustomersScreen({
 		emptyDraft(currentUserId),
 	);
 	const [error, setError] = useState<string | null>(null);
+	/** #1127 P2: desactivar pide confirmación inline (§4.2), nunca 1 click. */
+	const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
+
+	const normalizeForSearch = (value: string): string =>
+		value
+			.trim()
+			.toLocaleLowerCase('es-UY')
+			.normalize('NFD')
+			.replace(/\p{Diacritic}/gu, '');
 
 	const rows = useMemo(
 		() =>
 			filterCatalogItems(customers, {
 				status,
 				query: debouncedSearch,
+				// #1127 P0: Customer no tiene `code` — el matcher por defecto era
+				// no-op. Buscar por nombre, email y teléfono normalizados.
+				matchItem: (customer, q) => {
+					// #1127 re-critique: el teléfono matchea también sin espacios.
+					const qDigits = q.replace(/\D/g, '');
+					if (qDigits.length >= 6 && normalizeForSearch(customer.phone ?? '').replace(/\D/g, '').includes(qDigits)) {
+						return true;
+					}
+					return [normalizeForSearch(customer.name), normalizeForSearch(customer.email ?? ''), normalizeForSearch(customer.phone ?? '')]
+						.some((hay) => hay.includes(q));
+				},
 			}),
 		[customers, status, debouncedSearch],
 	);
+
+	const confirmDeactivate = (id: string | null) => {
+		setConfirmDeactivateId(id);
+	};
 
 	const closeModal = () => {
 		setModalOpen(false);
@@ -178,6 +208,8 @@ export function CustomersScreen({
 				key: 'phone',
 				header: 'Teléfono / WhatsApp',
 				render: (r) => (
+					// #1127 P1: contactar no togglea la fila — el click queda
+					// aislado en el botón (el texto del teléfono sigue toggleando).
 					<div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
 						<span>{formatEmpty(r.phone)}</span>
 						{r.phone ? (
@@ -222,10 +254,12 @@ export function CustomersScreen({
 				subtitle="Personas y talleres a los que cotizás"
 				icon={<Users size={16} strokeWidth={1.5} />}
 				primaryAction={
-					<button type="button" className="btn btn--primary" onClick={startCreate}>
-						<Plus size={16} strokeWidth={1.5} aria-hidden />
-						Nuevo cliente
-					</button>
+					canMutateCustomers ? (
+						<button type="button" className="btn btn--primary" onClick={startCreate}>
+							<Plus size={16} strokeWidth={1.5} aria-hidden />
+							Nuevo cliente
+						</button>
+					) : undefined
 				}
 			/>
 
@@ -244,14 +278,21 @@ export function CustomersScreen({
 				/>
 			) : null}
 
+			{/* #1127: contador de resultados con paridad a Cotizaciones. */}
+			{!isTrulyEmpty ? (
+				<div className="project-list-meta" aria-live="polite" data-testid="customers-results-summary">
+					{`Mostrando ${rows.length} de ${customers.length} ${customers.length === 1 ? 'cliente' : 'clientes'}`}
+				</div>
+			) : null}
+
 			<div className="catalog-layout">
 				{isTrulyEmpty ? (
 					<EmptyState
 						icon={Users}
 						title="No hay clientes"
 						description="Agregá el primer cliente para asignarle cotizaciones."
-						actionLabel="Nuevo cliente"
-						onAction={startCreate}
+						actionLabel={canMutateCustomers ? 'Nuevo cliente' : undefined}
+						onAction={canMutateCustomers ? startCreate : undefined}
 					/>
 				) : isFilterEmpty ? (
 					<EmptyState
@@ -328,7 +369,7 @@ export function CustomersScreen({
 									return (
 										<div className="catalog-row-detail__field" style={{ gridColumn: '1 / -1', marginTop: '0.5rem' }}>
 											<span className="catalog-row-detail__label">
-												Proyectos Asociados ({customerProjects.length})
+												Proyectos asociados ({customerProjects.length})
 											</span>
 											<div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginTop: '0.375rem' }}>
 												{customerProjects.map((p) => (
@@ -339,15 +380,15 @@ export function CustomersScreen({
 															alignItems: 'center',
 															justifyContent: 'space-between',
 															padding: '0.4rem 0.75rem',
-															background: 'var(--color-surface-subtle, #f8fafc)',
+															background: 'var(--surface-app)',
 															borderRadius: 'var(--radius-sm, 4px)',
-															border: '1px solid var(--color-border, #e2e8f0)',
+															border: '1px solid var(--border-default)',
 														}}
 													>
 														<div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-															<span style={{ fontWeight: 600, color: 'var(--color-text, #1e293b)' }}>{p.name}</span>
+															<span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
 															<StatusBadge status={p.status} />
-															<span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted, #64748b)' }}>
+															<span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
 																· {p.items.length} mueble{p.items.length === 1 ? '' : 's'}
 															</span>
 														</div>
@@ -371,24 +412,53 @@ export function CustomersScreen({
 								})()}
 
 								<div className="catalog-row-detail__actions">
-									<button
-										type="button"
-										className="btn btn--small"
-										onClick={() => startEdit(row)}
-									>
-										<Pencil size={14} strokeWidth={1.5} aria-hidden />
-										Editar
-									</button>
-									{row.active ? (
+									{canMutateCustomers ? (
 										<button
 											type="button"
-											className="btn btn--small btn--danger"
-											onClick={() => onDeactivate(row.id)}
+											className="btn btn--small"
+											onClick={() => startEdit(row)}
 										>
-											<EyeOff size={14} strokeWidth={1.5} aria-hidden />
-											Desactivar
+											<Pencil size={14} strokeWidth={1.5} aria-hidden />
+											Editar
 										</button>
-									) : (
+									) : null}
+									{canMutateCustomers && row.active ? (
+										confirmDeactivateId === row.id ? (
+											<>
+												<span className="project-list-meta" role="alert">
+													¿Desactivar a {row.name}?
+												</span>
+												<button
+													type="button"
+													className="btn btn--small btn--danger"
+													autoFocus
+													onClick={() => {
+														onDeactivate(row.id);
+														confirmDeactivate(null);
+													}}
+													data-testid={`customer-confirm-deactivate-${row.id}`}
+												>
+													Sí, desactivar
+												</button>
+												<button
+													type="button"
+													className="btn btn--small btn--ghost"
+													onClick={() => confirmDeactivate(null)}
+												>
+													Cancelar
+												</button>
+											</>
+										) : (
+											<button
+												type="button"
+												className="btn btn--small btn--danger"
+												onClick={() => confirmDeactivate(row.id)}
+											>
+												<EyeOff size={14} strokeWidth={1.5} aria-hidden />
+												Desactivar
+											</button>
+										)
+									) : canMutateCustomers && !row.active ? (
 										<button
 											type="button"
 											className="btn btn--small"
@@ -397,32 +467,62 @@ export function CustomersScreen({
 											<Eye size={14} strokeWidth={1.5} aria-hidden />
 											Reactivar
 										</button>
-									)}
+									) : null}
 								</div>
 							</>
 						)}
 						getRowActions={(row) => (
 							<>
-								<button
-									type="button"
-									className="btn btn--small btn--ghost"
-									aria-label={`Editar ${row.name}`}
-									onClick={() => startEdit(row)}
-								>
-									<Pencil size={14} strokeWidth={1.5} aria-hidden />
-									Editar
-								</button>
-								{row.active ? (
+								{canMutateCustomers ? (
 									<button
 										type="button"
-										className="btn btn--small btn--ghost btn--danger"
-										aria-label={`Desactivar ${row.name}`}
-										onClick={() => onDeactivate(row.id)}
+										className="btn btn--small btn--ghost"
+										aria-label={`Editar ${row.name}`}
+										onClick={() => startEdit(row)}
 									>
-										<EyeOff size={14} strokeWidth={1.5} aria-hidden />
-										Desactivar
+										<Pencil size={14} strokeWidth={1.5} aria-hidden />
+										Editar
 									</button>
-								) : (
+								) : null}
+								{canMutateCustomers && row.active ? (
+									confirmDeactivateId === row.id ? (
+										<>
+											<span className="project-list-meta" role="alert">
+												¿Desactivar?
+											</span>
+											<button
+												type="button"
+												className="btn btn--small btn--danger"
+												autoFocus
+												aria-label={`Confirmar desactivar ${row.name}`}
+												onClick={() => {
+													onDeactivate(row.id);
+													confirmDeactivate(null);
+												}}
+											>
+												Sí
+											</button>
+											<button
+												type="button"
+												className="btn btn--small btn--ghost"
+												aria-label="Cancelar desactivar"
+												onClick={() => confirmDeactivate(null)}
+											>
+												No
+											</button>
+										</>
+									) : (
+										<button
+											type="button"
+											className="btn btn--small btn--ghost btn--danger"
+											aria-label={`Desactivar ${row.name}`}
+											onClick={() => confirmDeactivate(row.id)}
+										>
+											<EyeOff size={14} strokeWidth={1.5} aria-hidden />
+											Desactivar
+										</button>
+									)
+								) : canMutateCustomers && !row.active ? (
 									<button
 										type="button"
 										className="btn btn--small btn--ghost"
@@ -432,7 +532,7 @@ export function CustomersScreen({
 										<Eye size={14} strokeWidth={1.5} aria-hidden />
 										Reactivar
 									</button>
-								)}
+								) : null}
 							</>
 						)}
 					/>
@@ -456,12 +556,17 @@ export function CustomersScreen({
 				}
 			>
 				<form id={formId} className="catalog-form" onSubmit={handleSubmit}>
-					{error ? <p className="catalog-form__error">{error}</p> : null}
+					{error ? (
+						<p id={`${formId}-error`} className="catalog-form__error" role="alert">
+							{error}
+						</p>
+					) : null}
 
 					<div className="catalog-form__field">
 						<label htmlFor="cust-name">Nombre completo</label>
 						<input
 							id="cust-name"
+							aria-describedby={error ? `${formId}-error` : undefined}
 							value={draft.name}
 							onChange={(e) => setDraft({ ...draft, name: e.target.value })}
 							required

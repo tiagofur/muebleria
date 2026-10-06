@@ -60,7 +60,14 @@ export function WhatsAppModal({
     }
   }, [selectedTemplate, customerName, projectName, quoteAmount, scheduledDate, workshopName]);
 
+  // #1127 P1: wa.me exige formato internacional — un local («099…») abre
+  // WhatsApp con error de número FUERA de la app. Guardarraíl inline.
+  const digits = customPhone.replace(/\D/g, '');
+  const phoneInvalid =
+    digits.length > 0 && (digits.length < 9 || digits.startsWith('0'));
+
   const handleSend = () => {
+    if (phoneInvalid) return;
     const url = formatWhatsAppUrl(customPhone, messageText);
     window.open(url, '_blank', 'noopener,noreferrer');
     onClose();
@@ -81,7 +88,7 @@ export function WhatsAppModal({
             type="button"
             className="btn btn--primary whatsapp-modal__send-btn"
             onClick={handleSend}
-            disabled={!messageText.trim()}
+            disabled={!messageText.trim() || phoneInvalid}
           >
             <ExternalLink size={16} aria-hidden="true" />
             <span>Abrir en WhatsApp</span>
@@ -102,7 +109,7 @@ export function WhatsAppModal({
 
         <div className="whatsapp-modal__field">
           <label htmlFor={phoneInputId} className="whatsapp-modal__label">
-            Número de Teléfono / WhatsApp:
+            Teléfono de WhatsApp
           </label>
           <input
             id={phoneInputId}
@@ -110,18 +117,36 @@ export function WhatsAppModal({
             className="input-text whatsapp-modal__input"
             value={customPhone}
             onChange={(e) => setCustomPhone(e.target.value)}
-            placeholder="Ej. +52 55 1234 5678 o 099 123 456"
+            aria-describedby={
+              phoneInvalid
+                ? `${phoneInputId}-error`
+                : !customPhone
+                  ? `${phoneInputId}-help`
+                  : undefined
+            }
+            placeholder="Ej. +598 99 123 456"
           />
-          {!customPhone && (
-            <p className="whatsapp-modal__help-text">
-              Si dejas el teléfono vacío, se abrirá WhatsApp para que elijas el contacto.
+          {phoneInvalid ? (
+            <p
+              id={`${phoneInputId}-error`}
+              className="whatsapp-modal__help-text"
+              role="alert"
+              data-testid="whatsapp-phone-error"
+            >
+              Usá el formato internacional con código de país (ej. +598 99 123
+              456).
             </p>
-          )}
+          ) : !customPhone ? (
+            <p id={`${phoneInputId}-help`} className="whatsapp-modal__help-text">
+              Si dejás el teléfono vacío, se abrirá WhatsApp para que elijas el
+              contacto.
+            </p>
+          ) : null}
         </div>
 
         <div className="whatsapp-modal__field">
           <label htmlFor={templateSelectId} className="whatsapp-modal__label">
-            Plantilla de Mensaje:
+            Plantilla de mensaje
           </label>
           <select
             id={templateSelectId}
@@ -139,7 +164,7 @@ export function WhatsAppModal({
 
         <div className="whatsapp-modal__field">
           <label htmlFor={messageTextId} className="whatsapp-modal__label">
-            Mensaje a Enviar:
+            Mensaje
           </label>
           <textarea
             id={messageTextId}
@@ -147,7 +172,7 @@ export function WhatsAppModal({
             rows={5}
             value={messageText}
             onChange={(e) => setMessageText(e.target.value)}
-            placeholder="Escribe el mensaje..."
+            placeholder="Escribí el mensaje…"
           />
         </div>
       </div>
