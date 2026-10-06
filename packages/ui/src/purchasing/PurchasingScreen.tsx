@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  AlertTriangle,
   CheckCircle2,
   CircleDashed,
   Layers,
@@ -225,6 +226,42 @@ type ProjectView = ActiveProjectMaterial & {
   readonly totalEdgeMl: number;
 };
 
+
+/** #1165 P1: checkbox de línea individual para el picking. */
+function PickLineToggle({
+  checked,
+  onToggle,
+  testId,
+}: {
+  readonly checked: boolean;
+  readonly onToggle: () => void;
+  readonly testId: string;
+}): ReactNode {
+  return (
+    <label className="purch-pick-line" data-testid={testId}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        aria-label={checked ? 'Marcar como no surtida' : 'Marcar como surtida'}
+      />
+    </label>
+  );
+}
+
+/** #1165 P1: progreso «N/M surtidas» de una card. */
+function PickProgress({ picked, total }: { readonly picked: number; readonly total: number }): ReactNode {
+  return (
+    <span
+      className="purch-pick-progress"
+      data-testid={`purch-pick-progress-${picked}-${total}`}
+      aria-label={`${picked} de ${total} líneas surtidas`}
+    >
+      {picked}/{total} surtidas
+    </span>
+  );
+}
+
 function formatQty(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
@@ -275,6 +312,18 @@ export function PurchasingScreen({
   const [activeTab, setActiveTab] = useState<ScreenTab>('herrajes');
   const [comprasTab, setComprasTab] = useState<'stock' | 'purchase'>('stock');
   const [expandedPlanning, setExpandedPlanning] = useState<Record<string, boolean>>({});
+  // #1165 P1: progreso de picking por línea — la unidad de trabajo pasa de
+  // obra×material a línea individual. Estado local de sesión; «Material
+  // completo» persiste el estado obra×material como antes.
+  const [pickedLines, setPickedLines] = useState<ReadonlySet<string>>(new Set());
+  const togglePickedLine = (rowKey: string): void => {
+    setPickedLines((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  };
 
   // Fase 5.2 — ARIA tabs keyboard pattern (arrows/Home/End + roving tabindex).
   // Wired below once visibleMaterialTabs resolves to the effective tabs.
@@ -349,8 +398,11 @@ export function PurchasingScreen({
   ): ReactNode => {
     const row = stockFor(kind, materialId);
     if (!row) {
+      // #1165 P1: «sin registro» ≠ «agotado» — el material no está trackeado.
       return (
-        <span className="purch-stock-chip purch-stock-chip--none">sin stock</span>
+        <span className="purch-stock-chip purch-stock-chip--none" data-testid={`purch-stock-none-${kind}-${materialId}`}>
+          sin registro
+        </span>
       );
     }
     const unit = stockUnitLabel(kind, hardwareUnit);
@@ -363,6 +415,32 @@ export function PurchasingScreen({
         stock {formatQty(row.quantity)} {stockUnitPlural(unit, row.quantity)}
       </span>
     );
+  };
+
+
+  /** #1165 P1: rowKeys de picking por material — DEBEN matchear las keys del render. */
+  const pickRowKeys = (projectId: string, material: MaterialTab): readonly string[] => {
+    const view = projectViews.find((v) => v.projectId === projectId);
+    if (!view) return [];
+    if (material === 'herrajes') return view.hardware.map((row) => row.hardwareId);
+    if (material === 'tableros') return view.materials.map((m) => m.key);
+    return view.edges.map((e) => e.key);
+  };
+
+
+  /** #1165 P1: progreso de picking por línea — «N/M surtidas» para una card. */
+  const pickProgress = (projectId: string, material: MaterialTab, total: number): {
+    picked: number;
+    total: number;
+    complete: boolean;
+  } => {
+    const keys = pickRowKeys(projectId, material);
+    const picked = keys.filter((k) => pickedLines.has(`${projectId}:${material}:${k}`)).length;
+    return { picked, total, complete: picked >= total };
+  };
+
+  const togglePickLine = (projectId: string, material: MaterialTab, rowKey: string): void => {
+    togglePickedLine(`${projectId}:${material}:${rowKey}`);
   };
 
   const statusFor = (projectId: string, material: MaterialTab): PickingStatus =>
@@ -424,14 +502,39 @@ export function PurchasingScreen({
   const projectsWithEdges = projectViews.filter((p) => p.edges.length > 0);
 
   /** Release-to-production action shown on every project card. */
-  const renderReleaseAction = (projectId: string): ReactNode => {
+  const renderReleaseAction = (
+    projectId: string,
+    material?: MaterialTab,
+  ): ReactNode => {
     if (!canMarkPicked || !onReleaseMaterials) return null;
+    // #1165 P1: gate por líneas — si hay líneas y no todas están surtidas,
+    // el release se deshabilita con explicación.
+    if (material) {
+      const total = pickRowKeys(projectId, material).length;
+      if (total > 0) {
+        const prog = pickProgress(projectId, material, total);
+        if (!prog.complete) {
+          return (
+            <button
+              type="button"
+              className="btn btn--primary btn--small"
+              disabled
+              title={`Faltan ${total - prog.picked} de ${total} líneas por surtir`}
+              data-testid={`purch-release-blocked-${projectId}`}
+            >
+              <PackageCheck size={14} strokeWidth={1.5} aria-hidden />
+              Material completo ({prog.picked}/{total})
+            </button>
+          );
+        }
+      }
+    }
     const hasPlanning = planningByProject?.[projectId] !== undefined;
     if (hasPlanning) {
       return (
         <button
           type="button"
-          className="btn btn--secondary btn--small"
+          className="btn btn--primary btn--small"
           onClick={() =>
             setExpandedPlanning((prev) => ({ ...prev, [projectId]: !prev[projectId] }))
           }
@@ -447,7 +550,7 @@ export function PurchasingScreen({
     return (
       <button
         type="button"
-        className="btn btn--secondary btn--small"
+        className="btn btn--primary btn--small"
         onClick={() => onReleaseMaterials(projectId)}
         data-testid={`purch-release-${projectId}`}
         title="Marca el material de la obra como completo y la libera al piso de producción"
@@ -521,7 +624,7 @@ export function PurchasingScreen({
         </span>
         <button
           type="button"
-          className="btn btn--primary btn--small"
+          className="btn btn--secondary btn--small"
           onClick={() => togglePick(projectId, material)}
           data-testid={`purch-mark-${projectId}-${material}`}
         >
@@ -558,30 +661,54 @@ export function PurchasingScreen({
                   {p.hardware.length} {p.hardware.length === 1 ? 'línea' : 'líneas'}
                 </span>
               </div>
-              {renderReleaseAction(p.projectId)}
+              {renderReleaseAction(p.projectId, 'herrajes')}
               {renderProjectActions(p.projectId, 'herrajes')}
             </div>
+            {/* #1165 P1: progreso por línea */}
+            <PickProgress picked={pickProgress(p.projectId, 'herrajes', p.hardware.length).picked} total={p.hardware.length} />
+            {/* #1165 P2: badge de bloqueo si hay agotados */}
+            {(() => {
+              const agotados = p.hardware.filter((row) => {
+                const row_ = stockFor('herrajes', row.hardwareId);
+                return row_ && row_.quantity <= 0;
+              }).length;
+              return agotados > 0 ? (
+                <div className="purch-card__blocker" role="status" data-testid={`purch-blocker-${p.projectId}`}>
+                  <AlertTriangle size={14} strokeWidth={1.5} aria-hidden />
+                  {agotados} {agotados === 1 ? 'material agotado' : 'materiales agotados'} — creá una OC para cubrir el faltante.
+                </div>
+              ) : null;
+            })()}
             <ul className="purch-card__rows">
-              {p.hardware.map((row, i) => (
-                <li
-                  key={row.hardwareId ?? `${p.projectId}-h-${i}`}
-                  className="purch-row"
-                >
-                  <span className="purch-row__name">
-                    {row.description}
-                    <code className="purch-row__code">{row.code}</code>
-                  </span>
-                  <div className="purch-row__right">
-                    <span className="purch-row__qty">
-                      {formatQty(row.purchaseQuantity)} {unitLabel(row.unit)}
-                      {row.purchasePackages
-                        ? ` · ${row.purchasePackages} paq.`
-                        : ''}
+              {p.hardware.map((row, i) => {
+                const rowKey = row.hardwareId ?? `${p.projectId}-h-${i}`;
+                const lineKey = `${p.projectId}:herrajes:${rowKey}`;
+                return (
+                  <li
+                    key={rowKey}
+                    className="purch-row"
+                  >
+                    <PickLineToggle
+                      checked={pickedLines.has(lineKey)}
+                      onToggle={() => togglePickLine(p.projectId, 'herrajes', rowKey)}
+                      testId={`purch-pick-line-${rowKey}`}
+                    />
+                    <span className="purch-row__name">
+                      {row.description}
+                      <code className="purch-row__code">{row.code}</code>
                     </span>
-                    {renderStockChip('herrajes', row.hardwareId, row.unit)}
-                  </div>
-                </li>
-              ))}
+                    <div className="purch-row__right">
+                      <span className="purch-row__qty">
+                        {formatQty(row.purchaseQuantity)} {unitLabel(row.unit)}
+                        {row.purchasePackages
+                          ? ` · ${row.purchasePackages} paq.`
+                          : ''}
+                      </span>
+                      {renderStockChip('herrajes', row.hardwareId, row.unit)}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
             {renderPlanningSection(p.projectId)}
           </li>
@@ -614,12 +741,20 @@ export function PurchasingScreen({
                 <span className="purch-card__name">{p.projectName}</span>
                 <span className="purch-card__sub">{formatAreaM2(p.totalAreaM2)}</span>
               </div>
-              {renderReleaseAction(p.projectId)}
+              {renderReleaseAction(p.projectId, 'tableros')}
               {renderProjectActions(p.projectId, 'tableros')}
             </div>
+            <PickProgress picked={pickProgress(p.projectId, 'tableros', p.materials.length).picked} total={p.materials.length} />
             <ul className="purch-card__rows">
-              {p.materials.map((m) => (
+              {p.materials.map((m) => {
+                const lineKey = `${p.projectId}:tableros:${m.key}`;
+                return (
                 <li key={m.key} className="purch-row">
+                  <PickLineToggle
+                    checked={pickedLines.has(lineKey)}
+                    onToggle={() => togglePickLine(p.projectId, 'tableros', m.key)}
+                    testId={`purch-pick-line-${m.key}`}
+                  />
                   <span className="purch-row__name">
                     {m.name}
                     {m.thicknessMm ? ` · ${m.thicknessMm} mm` : ''}
@@ -632,7 +767,8 @@ export function PurchasingScreen({
                     {renderStockChip('tableros', m.materialId)}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
             {p.sheetEstimates && p.sheetEstimates.length > 0 ? (
               <div className="purch-card__sheets">
@@ -690,12 +826,20 @@ export function PurchasingScreen({
                   ml
                 </span>
               </div>
-              {renderReleaseAction(p.projectId)}
+              {renderReleaseAction(p.projectId, 'cintillas')}
               {renderProjectActions(p.projectId, 'cintillas')}
             </div>
+            <PickProgress picked={pickProgress(p.projectId, 'cintillas', p.edges.length).picked} total={p.edges.length} />
             <ul className="purch-card__rows">
-              {p.edges.map((e) => (
+              {p.edges.map((e) => {
+                const lineKey = `${p.projectId}:cintillas:${e.key}`;
+                return (
                 <li key={e.key} className="purch-row">
+                  <PickLineToggle
+                    checked={pickedLines.has(lineKey)}
+                    onToggle={() => togglePickLine(p.projectId, 'cintillas', e.key)}
+                    testId={`purch-pick-line-${e.key}`}
+                  />
                   <span className="purch-row__name">
                     {e.name}
                     {e.thicknessMm ? ` · ${e.thicknessMm} mm` : ''}
@@ -708,7 +852,8 @@ export function PurchasingScreen({
                     {renderStockChip('cintillas', e.edgeId)}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
             {renderPlanningSection(p.projectId)}
           </li>
