@@ -69,6 +69,69 @@
         font-size: var(--text-xs);
       }
 
+      /* #1177 — armed remove confirm: one calm tonal surface in the same
+         danger-callout world as the drilling-conflict banner (§2.2.4: the
+         same problem always gets the same solution). Never floating text.
+         The destructive action is the strip's only solid control. */
+      .pf-remove-confirm {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        background: var(--danger-50);
+        border: 1px solid hsl(0 74% 42% / 22%);
+        border-radius: var(--radius-md);
+      }
+
+      .pf-remove-confirm-head {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--danger-600);
+      }
+
+      .pf-remove-confirm-title {
+        font-size: var(--text-sm);
+        font-weight: var(--weight-semibold);
+        color: var(--danger-600);
+        line-height: 1.35;
+      }
+
+      .pf-remove-confirm-note {
+        margin: 0;
+        font-size: var(--text-xs);
+        line-height: 1.45;
+        color: hsl(0 45% 38%);
+      }
+
+      .pf-remove-confirm-actions {
+        display: flex;
+        gap: var(--space-2);
+        margin-top: var(--space-1);
+      }
+
+      .pf-remove-confirm-actions .btn {
+        width: auto;
+      }
+
+      /* M3 filled-danger: the unmistakable destructive confirmation. */
+      .btn-danger-solid {
+        background: var(--danger-600);
+        border-color: var(--danger-600);
+        color: #fff;
+      }
+
+      .btn-danger-solid:hover {
+        background: hsl(0 74% 36%);
+        border-color: hsl(0 74% 36%);
+      }
+
+      .btn-danger-solid:active {
+        background: hsl(0 74% 32%);
+        border-color: hsl(0 74% 32%);
+        transform: translateY(1px);
+      }
+
       .status-badge.passed {
         background: var(--success-50);
         color: var(--success-600);

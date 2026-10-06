@@ -1240,7 +1240,7 @@ function removeButtonOf(card) {
 }
 
 function armedGroupOf(card) {
-  return allCardElements(card).filter((el) => el.style && el.style.flexDirection === 'column')[0] || null;
+  return allCardElements(card).filter((el) => el.className === 'pf-remove-confirm')[0] || null;
 }
 
 function footerOf(card) {
@@ -1305,14 +1305,16 @@ test('two-step confirm: the first click arms inside the card and never calls the
 
   const armed = armedGroupOf(el(sandbox, 'pf-pending-list').children[0]);
   assert.ok(armed, 'the confirm renders inside the same card — no modal');
-  const texts = armed.children.map((child) => child.textContent).join('\n');
+  const texts = allCardElements(armed).map((el) => el.textContent).join('\n');
   assert.ok(texts.includes('¿Quitar “Base 600” del proyecto?'));
   assert.ok(texts.includes('puede volver a materializarse desde la web'),
     'the honest commercial caveat is part of the confirm');
-  const [yes, no] = armed.children[2].children;
-  assert.equal(yes.textContent, 'Quitar');
-  assert.equal(yes.className, 'btn btn-danger');
+  const [no, yes] = armed.children[2].children;
   assert.equal(no.textContent, 'No');
+  assert.equal(no.className, 'btn btn-secondary');
+  assert.equal(yes.textContent, 'Quitar');
+  assert.equal(yes.className, 'btn btn-danger-solid',
+    'the destructive confirmation is the strip only solid control');
   assert.equal(sandbox.__bridge.filter((c) => c.action === 'remove_project_furniture').length, 0,
     'arming must not touch the backend');
 });
@@ -1323,7 +1325,7 @@ test('[No] disarms without calling the backend', () => {
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
   removeButtonOf(el(sandbox, 'pf-pending-list').children[0]).click();
 
-  const [, no] = armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children;
+  const [no] = armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children;
   no.click();
 
   const card = el(sandbox, 'pf-pending-list').children[0];
@@ -1350,7 +1352,7 @@ test('Quitar calls the bridge with the instance id and shows the honest in-fligh
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
   removeButtonOf(el(sandbox, 'pf-pending-list').children[0]).click();
-  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[0].click();
+  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[1].click();
 
   const calls = sandbox.__bridge.filter((c) => c.action === 'remove_project_furniture');
   assert.equal(calls.length, 1);
@@ -1367,7 +1369,7 @@ test('removing without the bridge fails honest and re-arms the action', () => {
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
   removeButtonOf(el(sandbox, 'pf-pending-list').children[0]).click();
-  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[0].click();
+  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[1].click();
 
   assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].type, 'error');
   assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].message,
@@ -1382,7 +1384,7 @@ test('handleRemoveFurnitureResult: success toasts once; partial outcomes keep th
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
   removeButtonOf(el(sandbox, 'pf-pending-list').children[0]).click();
-  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[0].click();
+  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[1].click();
 
   pf.handleRemoveFurnitureResult({ ok: true, code: 'removed', instanceId: FI_1,
     designPending: false, localPending: false, localErased: true });
@@ -1397,7 +1399,7 @@ test('handleRemoveFurnitureResult: designPending and localPending surface their 
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
   removeButtonOf(el(sandbox, 'pf-pending-list').children[0]).click();
-  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[0].click();
+  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[1].click();
 
   pf.handleRemoveFurnitureResult({ ok: true, code: 'removed', instanceId: FI_1,
     designPending: true, localPending: true,
@@ -1414,7 +1416,7 @@ test('handleRemoveFurnitureResult: conflict asks for one honest retry', () => {
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
   removeButtonOf(el(sandbox, 'pf-pending-list').children[0]).click();
-  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[0].click();
+  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[1].click();
 
   pf.handleRemoveFurnitureResult({ ok: false, code: 'conflict', instanceId: FI_1 });
   const last = sandbox.__toasts[sandbox.__toasts.length - 1];
@@ -1428,7 +1430,7 @@ test('other card actions stay gated while a remove is in flight', () => {
   const pf = runModule(sandbox);
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
   removeButtonOf(el(sandbox, 'pf-pending-list').children[0]).click();
-  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[0].click();
+  armedGroupOf(el(sandbox, 'pf-pending-list').children[0]).children[2].children[1].click();
 
   // A fresh render keeps pfRemoving (only the result clears it).
   pf.renderProjectFurniture(missingCardPanel(FI_1, 'unplaced'));
