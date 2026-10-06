@@ -38,8 +38,8 @@ export type DashboardMetrics = {
   readonly totalItems: number;
   readonly totalInstalled: number;
   readonly avgProgress: number;
-  readonly todayCompleted: number;
-  readonly todayDamages: number;
+  readonly todayCompleted: number | null;
+  readonly todayDamages: number | null;
   readonly sectors: readonly SectorDashboard[];
 };
 
@@ -72,8 +72,8 @@ export function useProductionDashboard(repo?: ProductionManagerRepo) {
           totalItems: 0,
           totalInstalled: 0,
           avgProgress: 0,
-          todayCompleted: 0,
-          todayDamages: 0,
+          todayCompleted: null,
+          todayDamages: null,
           sectors: PIPELINE_SECTORS.map((sector) => ({
             sector,
             label: PRODUCTION_SECTOR_LABELS_ES[sector],

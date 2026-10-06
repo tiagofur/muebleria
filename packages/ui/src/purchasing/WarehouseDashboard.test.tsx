@@ -94,7 +94,7 @@ describe('WarehouseDashboard', () => {
     );
 
     expect(screen.getByTestId('warehouse-dashboard')).not.toBeNull();
-    expect(screen.getByText('Dashboard de Almacén y Compras')).not.toBeNull();
+    expect(screen.getByText('Dashboard Almacén')).not.toBeNull();
 
     // 4 Stat cards
     expect(screen.getByTestId('wh-stat-projects')).not.toBeNull();

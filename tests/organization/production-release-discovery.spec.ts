@@ -535,7 +535,7 @@ test('#642 discovers one UI-created draft project with canonical P1 on the produ
 
   await page.goto('/production-dashboard');
   await expect(
-    page.getByRole('heading', { name: 'Dashboard de Producción' }),
+    page.getByRole('heading', { name: 'Dashboard Producción' }),
   ).toBeVisible();
   await expect(page.getByTestId(`pm-project-row-${project.id}`)).toBeVisible();
 });

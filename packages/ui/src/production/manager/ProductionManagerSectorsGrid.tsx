@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import {
   Armchair,
   House,
+  LayoutGrid,
   Package,
   Scissors,
   Settings2,
@@ -41,10 +42,10 @@ export function SectorIcon({
 export interface ProductionManagerSectorsGridProps {
   readonly sectorStatuses: readonly SectorDashboard[];
   readonly selectedSector: PipelineSector | 'all';
-  readonly onSelectSector: (sector: PipelineSector) => void;
+  readonly onSelectSector: (sector: PipelineSector | 'all') => void;
   readonly showMetrics: boolean;
-  readonly todayCompleted: number;
-  readonly todayDamages: number;
+  /** Piezas dañadas hoy; null = sin registro del servidor (se muestra «—»). */
+  readonly todayDamages: number | null;
 }
 
 export function ProductionManagerSectorsGrid({
@@ -52,7 +53,6 @@ export function ProductionManagerSectorsGrid({
   selectedSector,
   onSelectSector,
   showMetrics,
-  todayCompleted,
   todayDamages,
 }: ProductionManagerSectorsGridProps): ReactNode {
   return (
@@ -61,6 +61,24 @@ export function ProductionManagerSectorsGrid({
       <div className="pm-dashboard__sectors">
         <h3 className="pm-dashboard__section-title">Estado por Sector</h3>
         <div className="pm-dashboard__sector-grid">
+          {/* #1173 P1: salida a «Todas» — volver a la vista completa. */}
+          <button
+            type="button"
+            className={`pm-dashboard__sector-btn ${
+              selectedSector === 'all' ? 'pm-dashboard__sector-btn--active' : ''
+            }`}
+            onClick={() => onSelectSector('all')}
+            aria-pressed={selectedSector === 'all'}
+            data-testid="pm-sector-all"
+          >
+            <span className="pm-dashboard__sector-icon">
+              <LayoutGrid size={20} strokeWidth={1.5} aria-hidden />
+            </span>
+            <span className="pm-dashboard__sector-name">Todas</span>
+            <span className="pm-dashboard__sector-count">
+              {sectorStatuses.reduce((acc, s) => acc + s.queueLength, 0)} en cola
+            </span>
+          </button>
           {sectorStatuses.map((status) => (
             <button
               key={status.sector}
@@ -97,19 +115,14 @@ export function ProductionManagerSectorsGrid({
         <div className="pm-dashboard__metrics">
           <h3 className="pm-dashboard__section-title">Métricas de Producción</h3>
           <div className="pm-dashboard__metrics-grid">
-            <div className="pm-dashboard__metric">
-              <span className="pm-dashboard__metric-label">
-                Piezas Completadas Hoy
-              </span>
-              <span className="pm-dashboard__metric-value">
-                {todayCompleted}
-              </span>
-            </div>
+            {/* «Completadas hoy» vive en las stat cards (sin duplicar). */}
             <div className="pm-dashboard__metric">
               <span className="pm-dashboard__metric-label">
                 Piezas Dañadas Hoy
               </span>
-              <span className="pm-dashboard__metric-value">{todayDamages}</span>
+              <span className="pm-dashboard__metric-value">
+                {todayDamages ?? '—'}
+              </span>
             </div>
             {sectorStatuses.map((sector) => (
               <div key={sector.sector} className="pm-dashboard__metric">

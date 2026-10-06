@@ -97,7 +97,7 @@ export function WarehouseDashboard({
   return (
     <section className="warehouse-dashboard" aria-label="Dashboard de Almacén" data-testid="warehouse-dashboard">
       <PageHeader
-        title="Dashboard de Almacén y Compras"
+        title="Dashboard Almacén"
         subtitle="Métricas de picking, demanda agregada de materiales, salud de inventario y órdenes de compra."
         icon={<Warehouse size={16} strokeWidth={1.5} />}
         secondaryActions={
@@ -331,13 +331,13 @@ export function WarehouseDashboard({
             <table className="table" data-testid="wh-projects-table">
               <thead>
                 <tr>
-                  <th>Obra / Proyecto</th>
-                  <th>Herrajes</th>
-                  <th>Tableros</th>
-                  <th>Cintillas</th>
-                  <th>Material Completo</th>
-                  <th className="table__cell--numeric">Días</th>
-                  <th className="table__cell--actions">Acciones</th>
+                  <th scope="col">Obra / Proyecto</th>
+                  <th scope="col">Herrajes</th>
+                  <th scope="col">Tableros</th>
+                  <th scope="col">Cintillas</th>
+                  <th scope="col">Material Completo</th>
+                  <th scope="col" className="table__cell--numeric">Días</th>
+                  <th scope="col" className="table__cell--actions">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -418,7 +418,7 @@ export function WarehouseDashboard({
                           onClick={() => onOpenProject(p.projectId)}
                           data-testid={`wh-open-project-${p.projectId}`}
                         >
-                          Ver picking
+                          Ir a picking
                         </button>
                       ) : null}
                     </td>

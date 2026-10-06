@@ -208,6 +208,9 @@ type ScreenTab = MaterialTab | 'compras';
 
 const MATERIAL_TABS: readonly MaterialTab[] = ['herrajes', 'tableros', 'cintillas'];
 
+/** #1173 P0: handoff «Ver picking» del dashboard de almacén → obra enfocada. */
+const PICKING_FOCUS_KEY = 'warehouse_picking_focus';
+
 const TAB_LABELS: Readonly<Record<ScreenTab, string>> = {
   herrajes: 'Herrajes',
   tableros: 'Tableros',
@@ -310,6 +313,20 @@ export function PurchasingScreen({
 }: PurchasingScreenProps): ReactNode {
   const [picking, setPicking] = useState<Record<string, PickingStatus>>({});
   const [activeTab, setActiveTab] = useState<ScreenTab>('herrajes');
+  // #1173 P0: deep link «Ver picking» — obra enfocada al montar (una vez).
+  const [pickingFocus, setPickingFocus] = useState<{ projectId: string } | null>(
+    () => {
+      try {
+        const raw = sessionStorage.getItem(PICKING_FOCUS_KEY);
+        if (!raw) return null;
+        sessionStorage.removeItem(PICKING_FOCUS_KEY);
+        return { projectId: raw };
+      } catch {
+        return null;
+      }
+    },
+  );
+  const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
   const [comprasTab, setComprasTab] = useState<'stock' | 'purchase'>('stock');
   const [expandedPlanning, setExpandedPlanning] = useState<Record<string, boolean>>({});
   // #1165 P1: progreso de picking por línea — la unidad de trabajo pasa de
@@ -501,6 +518,51 @@ export function PurchasingScreen({
   const projectsWithMaterials = projectViews.filter((p) => p.materials.length > 0);
   const projectsWithEdges = projectViews.filter((p) => p.edges.length > 0);
 
+  // #1173 P0: deep link «Ver picking» — aterriza en el tab correcto de la obra
+  // (uno con picking pendiente antes que uno despachado), scrollea al card y
+  // lo resalta unos segundos. Una sola vez por handoff; sin obra visible es
+  // un no-op honesto. Sin cleanup que cancele el rAF: la re-ejecución que
+  // consume el handoff no debe desarmar el scroll ya programado (B1 review).
+  useEffect(() => {
+    const pid = pickingFocus?.projectId;
+    if (!pid) return;
+    setPickingFocus(null);
+    const inTab = (t: MaterialTab): boolean =>
+      t === 'herrajes'
+        ? projectsWithHardware.some((p) => p.projectId === pid)
+        : t === 'tableros'
+          ? projectsWithMaterials.some((p) => p.projectId === pid)
+          : projectsWithEdges.some((p) => p.projectId === pid);
+    const presentTabs = visibleMaterialTabs.filter(inTab);
+    if (presentTabs.length === 0) return;
+    // La preferencia se lee del prop: al montar el estado `picking` todavía
+    // no se hidrató, y `initialPicking` es la verdad disponible síncrona.
+    const hydrated = new Map(
+      (initialPicking ?? []).map((s) => [pickingKey(s.projectId, s.material), s.status]),
+    );
+    const pending = presentTabs.find(
+      (t) => hydrated.get(pickingKey(pid, t)) !== 'despachado',
+    );
+    setActiveTab(pending ?? presentTabs[0] ?? 'herrajes');
+    setFocusedProjectId(pid);
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-testid="purch-project-${pid}"]`);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    });
+    // Corre una sola vez por handoff; las listas ya están resueltas al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickingFocus]);
+
+  // El resaltado expira en su propio efecto, keyed por obra: consumir el
+  // handoff (setPickingFocus) no cancela este timer.
+  useEffect(() => {
+    if (focusedProjectId == null) return;
+    const timer = window.setTimeout(() => setFocusedProjectId(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [focusedProjectId]);
+
   /** Release-to-production action shown on every project card. */
   const renderReleaseAction = (
     projectId: string,
@@ -651,7 +713,11 @@ export function PurchasingScreen({
         {projectsWithHardware.map((p) => (
           <li
             key={p.projectId}
-            className="purch-card"
+            className={
+              focusedProjectId === p.projectId
+                ? 'purch-card purch-card--focus'
+                : 'purch-card'
+            }
             data-testid={`purch-project-${p.projectId}`}
           >
             <div className="purch-card__header">
@@ -733,7 +799,11 @@ export function PurchasingScreen({
         {projectsWithMaterials.map((p) => (
           <li
             key={p.projectId}
-            className="purch-card"
+            className={
+              focusedProjectId === p.projectId
+                ? 'purch-card purch-card--focus'
+                : 'purch-card'
+            }
             data-testid={`purch-project-${p.projectId}`}
           >
             <div className="purch-card__header">
@@ -815,7 +885,11 @@ export function PurchasingScreen({
         {projectsWithEdges.map((p) => (
           <li
             key={p.projectId}
-            className="purch-card"
+            className={
+              focusedProjectId === p.projectId
+                ? 'purch-card purch-card--focus'
+                : 'purch-card'
+            }
             data-testid={`purch-project-${p.projectId}`}
           >
             <div className="purch-card__header">
