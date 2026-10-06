@@ -5,7 +5,7 @@
  * per-project detail screen, docs/operational-ux.md §4).
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Hammer, MapPin, Phone } from 'lucide-react';
 
 import {
@@ -92,6 +92,13 @@ export function InstalacionesScreen({
   );
   const totalToInstall = cards.reduce((acc, c) => acc + c.toInstallCount, 0);
 
+  // #1169 P2: obras cerradas se acumulan sin filtro — el listado de Casey
+  // degrada con el tiempo. Filtro simple Activas/Cerradas.
+  const [closedFilter, setClosedFilter] = useState<'activas' | 'todas'>('activas');
+  const filteredCards = closedFilter === 'activas'
+    ? cards.filter((c) => !c.job.closed)
+    : cards;
+
   return (
     <section
       className="ship-board"
@@ -115,8 +122,36 @@ export function InstalacionesScreen({
           description="Cuando cargues muebles desde Embarques, las obras aparecen acá para instalar en obra."
         />
       ) : (
-        <ul className="ship-board__cards">
-          {cards.map((card) => (
+        <>
+          {cards.length > 1 ? (
+            <div
+              className="ship-board__filter"
+              role="group"
+              aria-label="Filtrar instalaciones"
+              data-testid="instalaciones-filter"
+            >
+              <button
+                type="button"
+                className={closedFilter === 'activas' ? 'ship-board__filter-btn ship-board__filter-btn--active' : 'ship-board__filter-btn'}
+                aria-pressed={closedFilter === 'activas'}
+                onClick={() => setClosedFilter('activas')}
+                data-testid="instalaciones-filter-activas"
+              >
+                Activas
+              </button>
+              <button
+                type="button"
+                className={closedFilter === 'todas' ? 'ship-board__filter-btn ship-board__filter-btn--active' : 'ship-board__filter-btn'}
+                aria-pressed={closedFilter === 'todas'}
+                onClick={() => setClosedFilter('todas')}
+                data-testid="instalaciones-filter-todas"
+              >
+                Todas
+              </button>
+            </div>
+          ) : null}
+          <ul className="ship-board__cards">
+            {filteredCards.map((card) => (
             <li
               key={card.projectId}
               className="ship-board__card card-open-host"
@@ -183,8 +218,9 @@ export function InstalacionesScreen({
                 </span>
               </p>
             </li>
-          ))}
-        </ul>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );
