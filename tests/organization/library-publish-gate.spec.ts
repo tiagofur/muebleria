@@ -164,8 +164,14 @@ test.describe.serial('Library publish gate (#1102 Slice C)', () => {
     const draft = await client.createStandardLibraryRelease(token, { version: v3 });
 
     // Romper la condición de compilación: sin perfiles activos no hay nada
-    // que congelar — el validate lo reporta y el publish rechaza.
-    await client.deactivateHardwareProfile(token, profileId, profileVersion);
+    // que congelar — el validate lo reporta y el publish rechaza. Se
+    // desactivan TODOS los activos: el stack puede compartir org con otros
+    // specs (y el compile es global, no por perfil del spec).
+    const activeProfiles = (await client.listHardwareProfiles(token)).filter((p) => p.active);
+    expect(activeProfiles.length).toBeGreaterThan(0);
+    for (const profile of activeProfiles) {
+      await client.deactivateHardwareProfile(token, profile.id, profile.version);
+    }
 
     const validation = await client.validateStandardLibraryDraft(token, draft.id);
     expect(validation.ok).toBe(false);
