@@ -742,8 +742,9 @@ export function FabricScreen({
     ],
   );
   // #1145 P0: resolución partCode → pieza de la estación activa. Un código
-  // desconocido suena 'miss' con mensaje inline (sin navegación); un
-  // unit-row en estación de unidades explica que el escaneo avanza piezas.
+  // desconocido suena 'miss' con mensaje inline (sin navegación). Las
+  // estaciones de unidades (armado/embalaje) avanzan por botón: el
+  // escaneo sólo cubre filas de pieza con partCode.
   const handleScan = useCallback(
     (rawCode: string) => {
       const code = rawCode.trim();
