@@ -546,3 +546,59 @@ func TestWorkshopCatalogRevisionCoversHardwareRoles(t *testing.T) {
 		t.Fatal("revision must change when a role's members change")
 	}
 }
+
+// #1156: a required hardware group makes the default layout FAIL closed,
+// and the definition must STILL publish its material roles (and hardware
+// roles, #1144) — the layout only feeds the estimates.
+func TestMaterialRolesSurviveAFailingDefaultLayout(t *testing.T) {
+	doorID := "f11560000-0000-0000-0000-0000000000d1"
+	moduleID := "f11560000-0000-0000-0000-0000000000a1"
+	module := domain.Module{
+		ID: moduleID, Code: "M-1156", Name: "Puerta grupos required",
+		WidthMm: 600, HeightMm: 720, DepthMm: 500,
+		Agregados: []domain.ModuleAgregadoInstance{{AgregadoID: "agr-1156"}},
+	}
+	composition := domain.Catalog{
+		Components: []domain.Component{{
+			ID: doorID, Code: "C-DOOR", Name: "Puerta", Active: true,
+			OptionRoles: []string{"FRENTE"},
+		}},
+		Agregados: []domain.Agregado{{
+			ID: "agr-1156", Code: "AGR-1156", Name: "Puerta", Active: true,
+			Components: []domain.ComponentInstance{{
+				ComponentID: doorID, Quantity: 1,
+				Overrides: &domain.ComponentInstanceOverrides{
+					HardwarePlacements: []domain.HardwarePlacement{{
+						OptionRole: "BISAGRA", AnchorFace: "back",
+					}},
+				},
+			}},
+		}},
+		Materials: []domain.MaterialBoard{{ID: "mat-1", Code: "M1", Name: "Roble", Active: true}},
+		Hardware:  []domain.Hardware{{ID: "hw-1", Code: "B-1", Name: "Blum", Unit: domain.UnitPiece, Active: true}},
+		OptionGroups: []domain.OptionGroup{
+			{ID: "og-b", Code: "FRENTE", Name: "Frentes", Kind: "board", Required: true, OptionIDs: []string{"mat-1"}},
+			{ID: "og-h", Code: "BISAGRA", Name: "Bisagras", Kind: "hardware", Required: true, OptionIDs: []string{"hw-1"}},
+		},
+	}
+
+	catalog, err := buildWorkshopFurnitureCatalogValidated([]domain.Module{module}, nil, nil, composition)
+	if err != nil {
+		t.Fatalf("workshop catalog: %v", err)
+	}
+	definition := catalog.Definitions[moduleID]
+
+	if len(definition.HardwareRoles) != 1 || definition.HardwareRoles[0].Code != "BISAGRA" {
+		t.Fatalf("hardware roles must survive the failing layout, got %+v", definition.HardwareRoles)
+	}
+	if len(definition.MaterialRoles) != 1 || definition.MaterialRoles[0].Role != "FRENTE" {
+		t.Fatalf("material roles must survive the failing layout, got %+v", definition.MaterialRoles)
+	}
+	mr := definition.MaterialRoles[0]
+	if mr.Label != "Frentes" || len(mr.OptionIDs) != 1 || mr.OptionIDs[0] != "mat-1" {
+		t.Fatalf("board group contributes label + curated options, got %+v", mr)
+	}
+	if definition.EstimatedPartCount != 0 || definition.EstimatedHardwareCount != 0 {
+		t.Fatal("estimates stay layout-gated (resolve evidence), got nonzero")
+	}
+}

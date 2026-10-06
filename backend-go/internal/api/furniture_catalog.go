@@ -304,14 +304,16 @@ func buildWorkshopFurnitureCatalogValidated(modules []domain.Module, categories 
 		// composition cannot resolve here keeps zero counts (the layout
 		// endpoint reports the concrete error when the user inserts it).
 		if layout, err := engine.ResolveFurnitureLayout(m, composition, nil, nil); err == nil {
+			// Estimates are resolve EVIDENCE, not role authority: they only
+			// exist when the default layout resolves.
 			definition.EstimatedPartCount = len(layout.Components)
 			definition.EstimatedHardwareCount = len(layout.Hardware)
-			definition.MaterialRoles = buildMaterialRoles(layout, composition)
 		}
-		// Static scan on purpose (#1144): a group-required furniture's default
-		// layout FAILS closed without a choice — exactly when the configurator
-		// must offer the selector — so the roles can never depend on the
-		// layout succeeding.
+		// Static scan on purpose (#1144/#1156): a group-required furniture's
+		// default layout FAILS closed without a choice — exactly when the
+		// configurator must offer the selectors — so the roles (board AND
+		// hardware) can never depend on the layout succeeding.
+		definition.MaterialRoles = buildMaterialRoles(m, composition)
 		definition.HardwareRoles = buildHardwareRoles(m, composition)
 
 		catalog.Definitions[m.ID] = definition
@@ -435,34 +437,92 @@ func buildWorkshopHardwareOptionGroups(groups []domain.OptionGroup) []workshopOp
 // order) with the options the workshop curated for each. Roles are option
 // group codes; a role without a curated board group offers every active
 // material so the selector is never empty.
-func buildMaterialRoles(layout engine.FurnitureLayout, composition domain.Catalog) []workshopMaterialRole {
+// buildMaterialRoles derives the definition's board roles statically —
+// module components, structure components and every agregado instance
+// (#1156) — so a furniture whose default layout fails closed (required
+// hardware group without a choice) still publishes its material selectors.
+// Semantics unchanged from the layout-derived version: roles in
+// composition order; a board-kind group contributes label + curated
+// options, otherwise the role offers every active material.
+func buildMaterialRoles(m domain.Module, composition domain.Catalog) []workshopMaterialRole {
 	allActive := make([]string, 0)
-	for _, m := range composition.Materials {
-		if m.Active {
-			allActive = append(allActive, m.ID)
+	for _, mat := range composition.Materials {
+		if mat.Active {
+			allActive = append(allActive, mat.ID)
 		}
 	}
 
 	seen := map[string]bool{}
 	roles := make([]workshopMaterialRole, 0)
-	for _, c := range layout.Components {
-		role := c.OptionRole
-		if role == "" || seen[role] {
-			continue
-		}
-		seen[role] = true
-
-		entry := workshopMaterialRole{Role: role, Label: role, OptionIDs: allActive}
-		for _, g := range composition.OptionGroups {
-			if g.Code == role && g.Kind == "board" && len(g.OptionIDs) > 0 {
-				entry.Label = g.Name
-				entry.OptionIDs = g.OptionIDs
-				break
+	record := func(instances []domain.ComponentInstance) {
+		for _, inst := range instances {
+			for _, role := range optionRolesOf(composition, inst.ComponentID) {
+				if role == "" || seen[role] {
+					continue
+				}
+				seen[role] = true
+				entry := workshopMaterialRole{Role: role, Label: role, OptionIDs: allActive}
+				for _, g := range composition.OptionGroups {
+					if g.Code == role && g.Kind == "board" && len(g.OptionIDs) > 0 {
+						entry.Label = g.Name
+						entry.OptionIDs = g.OptionIDs
+						break
+					}
+				}
+				roles = append(roles, entry)
 			}
 		}
-		roles = append(roles, entry)
+	}
+
+	findStructure := func(id string) (domain.Structure, bool) {
+		if id == "" {
+			return domain.Structure{}, false
+		}
+		for _, st := range composition.Structures {
+			if st.ID == id {
+				return st, true
+			}
+		}
+		return domain.Structure{}, false
+	}
+	findAgregado := func(id string) (domain.Agregado, bool) {
+		if id == "" {
+			return domain.Agregado{}, false
+		}
+		for _, agr := range composition.Agregados {
+			if agr.ID == id {
+				return agr, true
+			}
+		}
+		return domain.Agregado{}, false
+	}
+
+	record(m.Components)
+	if structure, ok := findStructure(m.StructureID); ok {
+		record(structure.Components)
+		for _, agrInst := range structure.Agregados {
+			if agr, ok := findAgregado(agrInst.AgregadoID); ok {
+				record(agr.Components)
+			}
+		}
+	}
+	for _, agrInst := range m.Agregados {
+		if agr, ok := findAgregado(agrInst.AgregadoID); ok {
+			record(agr.Components)
+		}
 	}
 	return roles
+}
+
+// optionRolesOf returns a component's declared option roles (definition
+// order); unknown components carry none.
+func optionRolesOf(composition domain.Catalog, componentID string) []string {
+	for _, c := range composition.Components {
+		if c.ID == componentID {
+			return c.OptionRoles
+		}
+	}
+	return nil
 }
 
 // buildHardwareRoles derives the definition's hardware option-group roles
