@@ -2158,12 +2158,6 @@
   min-height: 200px;
 }
 
-.fabric__empty-tab {
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
 
 .fabric__list {
   display: flex;
@@ -2997,12 +2991,9 @@
 
 /* Targets táctiles: las filas de pieza/unidad se tocan con guantes (§8 HIG). */
 .fabric-card__item .btn,
-.fabric-card__item button.btn--small {
-  min-height: 2.75rem;
-}
-
+.fabric-card__item button.btn--small,
 .fabric__view-btn {
-  min-height: 2.75rem;
+  min-height: var(--touch-min);
 }
 
 /* Readiness: warning-500 como TEXTO 12px no llega a AA (3.2:1) — usar 700. */

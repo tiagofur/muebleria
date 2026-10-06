@@ -1,6 +1,6 @@
 /** Production board by project for the four manufacturing stations. */
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal } from '../common';
 import { Check, Factory, Play } from 'lucide-react';
 
@@ -229,6 +229,7 @@ function ProjectCard({
   canOverrideQc = false,
   onGeneratePartExecutions,
   onAdvanceFeedback,
+  onModalScanBlockChange,
 }: {
   readonly card: FabricProjectCard;
   readonly station: FabricStation;
@@ -266,6 +267,8 @@ function ProjectCard({
   readonly onGeneratePartExecutions?: (projectId: string) => void;
   /** #1145: feedback de avance por botón — announce + conteo de sesión. */
   readonly onAdvanceFeedback?: (text: string) => void;
+  /** #1145 re-critique: bloquea el scanner del piso mientras el modal vive. */
+  readonly onModalScanBlockChange?: (blocked: boolean) => void;
 }): ReactNode {
   const canAdvance = canAdvanceRequested && !card.executionBlocker;
   // #1145 P1: single-flight de fila — el doble tap del piso no duplica
@@ -313,6 +316,10 @@ function ProjectCard({
     }
     onAdvanceBatch?.(card.projectId, itemIds, target);
   };
+  useEffect(() => {
+    onModalScanBlockChange?.(pendingAction !== null);
+  }, [pendingAction, onModalScanBlockChange]);
+
   const runPending = async (): Promise<void> => {
     const pending = pendingAction;
     setPendingAction(null);
@@ -709,7 +716,6 @@ export function FabricScreen({
   // activa y avanza la pieza con feedback sonoro + announce (reuso F089).
   const [scanStatus, setScanStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [sessionScans, setSessionScans] = useState(0);
-  const busyRowsRef = useRef<ReadonlySet<string>>(new Set());
   const metricsTotals = useMemo(
     () => (metrics ? summarizeFabricMetrics(metrics.sectors) : null),
     [metrics],
@@ -738,7 +744,6 @@ export function FabricScreen({
   // #1145 P0: resolución partCode → pieza de la estación activa. Un código
   // desconocido suena 'miss' con mensaje inline (sin navegación); un
   // unit-row en estación de unidades explica que el escaneo avanza piezas.
-  const scanAnnounceRef = useRef<HTMLParagraphElement>(null);
   const handleScan = useCallback(
     (rawCode: string) => {
       const code = rawCode.trim();
@@ -751,11 +756,11 @@ export function FabricScreen({
         for (const item of card.items) {
           const part = item.part;
           if (part && part.partCode.toUpperCase() === code.toUpperCase()) {
-            playScanFeedback('advance');
             if (!onAdvancePart) {
               playScanFeedback('miss');
               return;
             }
+            playScanFeedback('advance');
             onAdvancePart(card.projectId, part.id);
             setSessionScans((n) => n + 1);
             setScanStatus({
@@ -774,7 +779,12 @@ export function FabricScreen({
     },
     [cards, canAdvance, effectiveTab, onAdvancePart],
   );
-  useHidScanner({ onScan: handleScan });
+  // #1145 re-critique: sin escaneos detrás de un modal de confirmación.
+  const [modalScanBlock, setModalScanBlock] = useState(false);
+  const handleModalScanBlockChange = useCallback((blocked: boolean) => {
+    setModalScanBlock(blocked);
+  }, []);
+  useHidScanner({ onScan: handleScan, enabled: !modalScanBlock });
 
   // #1145 P1: los avances por botón también alimentan announce + conteo.
   const reportAdvance = useCallback((text: string) => {
@@ -846,15 +856,17 @@ export function FabricScreen({
       {/* #1145 P0/P1: resultado del escaneo + conteo de sesión del operario. */}
       <div className="fabric__scan-bar" data-testid="fabric-scan-bar">
         <p
-          ref={scanAnnounceRef}
           aria-live="assertive"
           data-testid="fabric-scan-status"
+          className={`fabric__scan-status ${scanStatus ? (scanStatus.ok ? 'fabric__scan-status--ok' : 'fabric__scan-status--miss') : ''}`}
         >
-          {scanStatus?.text ?? 'Escaneá el código de la pieza para avanzarla.'}
+          {canAdvance
+            ? (scanStatus?.text ?? 'Escaneá el código de la pieza para avanzarla.')
+            : 'Reclamá la estación para avanzar piezas.'}
         </p>
         {canAdvance ? (
           <span className="fabric__scan-count" data-testid="fabric-session-scans">
-            Avanzadas por escaneo (sesión): {sessionScans}
+            Avanzadas en esta sesión: {sessionScans}
           </span>
         ) : null}
       </div>
@@ -963,6 +975,7 @@ export function FabricScreen({
                     canOverrideQc={canOverrideQc}
                     onGeneratePartExecutions={onGeneratePartExecutions}
                     onAdvanceFeedback={reportAdvance}
+                    onModalScanBlockChange={handleModalScanBlockChange}
                   />
                 ))}
               </ul>
