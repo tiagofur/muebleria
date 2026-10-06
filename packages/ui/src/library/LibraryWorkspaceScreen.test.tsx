@@ -5,8 +5,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { LibraryWorkspaceScreen } from './LibraryWorkspaceScreen';
-import type { LibraryReleaseSummary } from '@granete/storage';
+import { LibraryWorkspaceScreen, type LibraryWorkspaceScreenProps } from './LibraryWorkspaceScreen';
+import type {
+  LibraryReleaseSummary,
+  StandardDraftDiffReport,
+  StandardDraftValidationReport,
+} from '@granete/storage';
 
 afterEach(() => cleanup());
 
@@ -27,7 +31,20 @@ const draft: LibraryReleaseSummary = {
   status: 'draft',
 };
 
-function baseProps() {
+function diffAgainstPublished(): StandardDraftDiffReport {
+  return {
+    releaseId: draft.id,
+    version: draft.version,
+    base: { releaseId: published.id, version: published.version },
+    added: [],
+    modified: [],
+    removed: [],
+    unchanged: 4,
+    computedAt: '2026-10-06T00:00:00Z',
+  };
+}
+
+function baseProps(): LibraryWorkspaceScreenProps {
   return {
     onGoHome: vi.fn(),
     currentPublished: published,
@@ -35,7 +52,7 @@ function baseProps() {
     suggestedVersion: '0.3.6',
     loading: false,
     opening: false,
-    error: null as string | null,
+    error: null,
     onOpenDraft: vi.fn(),
     onValidateDraft: vi.fn(),
     publishedReleases: [published],
@@ -46,10 +63,10 @@ function baseProps() {
     onRequestDiff: vi.fn(),
     publishing: false,
     onPublish: vi.fn(async () => true),
-    consumerPin: null as string | null,
+    consumerPin: null,
     consumerProfiles: [],
     consumerLoading: false,
-    consumerError: null as string | null,
+    consumerError: null,
     onPinConsumer: vi.fn(),
   };
 }
@@ -88,14 +105,10 @@ describe('LibraryWorkspaceScreen (#1184)', () => {
   });
 
   it('el publish fallido deja el modal abierto con el error visible', async () => {
-    const failing = baseProps();
-    failing.onPublish = vi.fn(async () => false);
-    failing.currentDiff = {
-      base: published,
-      added: [],
-      modified: [],
-      removed: [],
-      unchanged: 4,
+    const failing: LibraryWorkspaceScreenProps = {
+      ...baseProps(),
+      onPublish: vi.fn(async () => false),
+      currentDiff: diffAgainstPublished(),
     };
     const { rerender } = render(<LibraryWorkspaceScreen {...failing} />);
 
@@ -117,13 +130,9 @@ describe('LibraryWorkspaceScreen (#1184)', () => {
   });
 
   it('el publish exitoso cierra el modal', async () => {
-    const succeeding = baseProps();
-    succeeding.currentDiff = {
-      base: published,
-      added: [],
-      modified: [],
-      removed: [],
-      unchanged: 4,
+    const succeeding: LibraryWorkspaceScreenProps = {
+      ...baseProps(),
+      currentDiff: diffAgainstPublished(),
     };
     render(<LibraryWorkspaceScreen {...succeeding} />);
 
@@ -138,8 +147,7 @@ describe('LibraryWorkspaceScreen (#1184)', () => {
   });
 
   it('sin borrador la acción primaria es abrir el borrador sugerido', () => {
-    const props = baseProps();
-    props.currentDraft = null;
+    const props: LibraryWorkspaceScreenProps = { ...baseProps(), currentDraft: null };
     render(<LibraryWorkspaceScreen {...props} />);
 
     const open = screen.getByTestId('library-draft-open-btn');
