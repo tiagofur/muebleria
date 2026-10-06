@@ -195,7 +195,7 @@ export function ProductionManagerDashboard({
       data-testid={testId}
     >
       <PageHeader
-        title="Dashboard de Producción"
+        title="Dashboard Producción"
         subtitle="Visibilidad completa de todas las áreas, operadores y métricas"
         icon={<BarChart3 size={16} strokeWidth={1.5} />}
         secondaryActions={
@@ -271,8 +271,8 @@ export function ProductionManagerDashboard({
         selectedSector={selectedSector}
         onSelectSector={setSelectedSector}
         showMetrics={showMetrics}
-        todayCompleted={totalMetrics.todayCompleted}
-        todayDamages={totalMetrics.todayDamages}
+        todayCompleted={totalMetrics.todayCompleted ?? 0}
+        todayDamages={totalMetrics.todayDamages ?? 0}
       />
 
       <ProductionManagerActiveJobs jobs={filteredJobs} />
