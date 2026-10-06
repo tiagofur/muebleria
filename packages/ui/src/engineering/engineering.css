@@ -153,23 +153,16 @@
    pending→--open · in_progress→--progress · documented→--done. */
 
 /* ── Acción «Iniciar» — edge derecho integrado a la card ──────────────────
-   Acción superpuesta al borde derecho del área clickeable (hover/focus),
-   con stopPropagation para no abrir el proyecto. El spacer en la meta row
-   reserva el ancho para no tapar el badge. */
+   Acción superpuesta al borde derecho del área clickeable. #1183 P2:
+   siempre visible — la acción principal de una obra pendiente no puede
+   existir sólo bajo hover (desktop). El spacer en la meta row reserva el
+   ancho para no tapar el badge. */
 
 .eng-project-card__start {
   position: absolute;
   top: 50%;
   right: var(--space-3);
   transform: translateY(-50%);
-  opacity: 0;
-  transition: opacity 0.15s;
-  pointer-events: none;
-}
-
-.eng-project-card--startable:hover .eng-project-card__start,
-.eng-project-card__start:focus-visible {
-  opacity: 1;
   pointer-events: auto;
 }
 
@@ -178,20 +171,51 @@
   flex-shrink: 0;
 }
 
-@media (hover: none) {
-  .eng-project-card__start {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .eng-project-card__start { transition: none; }
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
    Workspace tabs — see common/Tabs.tsx + .tabs in common/tabs.css
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/* #1183 P2: header del workspace — layout real (antes: ghost classes con
+   «Volver», título UA y CTA apilados en bloque). Paridad con PageHeader:
+   back + info a la izquierda, CTA alineado a la derecha. */
+.eng-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.eng-workspace__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-card);
+  flex-wrap: wrap;
+}
+
+.eng-workspace__header-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.eng-workspace__title {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  line-height: var(--leading-tight, 1.25);
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.eng-workspace__customer {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
 
 .eng-workspace__panel {
   flex: 1;
@@ -420,7 +444,7 @@
   margin-top: 0.1rem;
 }
 
-.eng-check-row__icon--ok { color: hsl(142 58% 38%); }
+.eng-check-row__icon--ok { color: var(--success-700); }
 .eng-check-row__icon--pending { color: var(--text-muted); }
 
 .eng-check-row__content {
@@ -458,15 +482,15 @@
 }
 
 .eng-resumen__banner--ready {
-  background: hsl(142 60% 90%);
-  color: hsl(142 60% 26%);
-  border: 1px solid hsl(142 60% 78%);
+  background: var(--success-50);
+  color: var(--success-700);
+  border: 1px solid color-mix(in srgb, var(--success-700) 30%, transparent);
 }
 
 .eng-resumen__banner--blocked {
-  background: hsl(45 100% 93%);
-  color: hsl(35 90% 35%);
-  border: 1px solid hsl(45 90% 78%);
+  background: var(--warning-50);
+  color: var(--warning-700);
+  border: 1px solid color-mix(in srgb, var(--warning-700) 30%, transparent);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -749,8 +773,9 @@
 }
 
 .eng-dashboard__workload-lbl {
-  font-size: 0.65rem;
-  color: var(--text-muted);
+  /* #1183 P2: 0.65rem (~10.4px) era marginal para legibilidad. */
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
   text-align: center;
 }
 
@@ -758,6 +783,34 @@
 .eng-dashboard__table-project {
   display: flex;
   flex-direction: column;
+}
+
+/* #1183 P3: alineación de la columna de acción sin estilos inline. */
+.eng-dashboard__th-actions {
+  text-align: right;
+}
+
+.eng-dashboard__td-actions {
+  text-align: right;
+}
+
+/* #1183 P2: filtro de ingeniería estilizado con tokens + target táctil
+   (antes: `select select--small` fantasma — select nativo de 21px en móvil). */
+.eng-dashboard__engineer-select {
+  min-height: var(--touch-min);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.eng-dashboard__filter-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .eng-dashboard__table-name {
@@ -780,4 +833,18 @@
 /* ProcessStrip occupies the full width below the header */
 .eng-workspace .ps {
   width: 100%;
+}
+
+/* #1183 P3: contenedor del «Imprimir A4» del despiece (era ghost). */
+.eng-despiece__print {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}
+
+/* #1183 P2: aviso ⚠ del checklist con token, sin estilos inline. */
+.eng-check-row__warn {
+  color: var(--warning-700);
+  margin-left: 0.35rem;
+  font-size: 0.72rem;
 }

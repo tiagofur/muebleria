@@ -311,9 +311,11 @@ export function navFromPath(pathname: string): AppNavId | null {
  * ProductionRelease context travels as a `release` query param (#738) so a
  * historical view stays pinned to the liberation the user opened — a newer
  * release never retargets it silently and a reload keeps the selection.
+ * The active tab travels as `tab` (#1183) so a reload keeps the workspace tab.
  */
 export interface EngineeringProjectRouteContext {
   readonly releaseId: string | null;
+  readonly tab?: string | null;
 }
 
 export function engineeringProjectPath(
@@ -321,14 +323,17 @@ export function engineeringProjectPath(
   context?: EngineeringProjectRouteContext | null,
 ): string {
   const base = `${NAV_PATHS.engineering}/${encodeURIComponent(projectId)}`;
-  if (!context?.releaseId) return base;
-  return `${base}?release=${encodeURIComponent(context.releaseId)}`;
+  const params = new URLSearchParams();
+  if (context?.releaseId) params.set('release', context.releaseId);
+  if (context?.tab) params.set('tab', context.tab);
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
 }
 
 export function engineeringProjectFromPath(
   pathname: string,
   search = '',
-): { projectId: string; releaseId: string | null } | null {
+): { projectId: string; releaseId: string | null; tab: string | null } | null {
   const base = NAV_PATHS.engineering;
   const normalized = normalizePathname(pathname);
   if (normalized === base) return null;
@@ -344,9 +349,11 @@ export function engineeringProjectFromPath(
   if (decoded.includes('/')) return null;
   const params = new URLSearchParams(search);
   const release = params.get('release');
+  const tab = params.get('tab');
   return {
     projectId: decoded,
     releaseId: release && release.length > 0 ? release : null,
+    tab: tab && tab.length > 0 ? tab : null,
   };
 }
 

@@ -87,7 +87,7 @@ export function useEngineeringDocuments({
       {
         id: 'labels',
         label: 'Etiquetas de pieza (PDF A4)',
-        hint: 'Hojas A4 con QR v2 — generálalas en la pestaña Etiquetas',
+        hint: 'Hojas A4 con QR v2 — generalas en la pestaña Etiquetas',
         available: Boolean(labels?.length) && Boolean(onExportPieceLabels),
         reason: 'Sin piezas de tablero',
         actionLabel: 'Ir a Etiquetas',

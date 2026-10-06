@@ -33,7 +33,7 @@ type ProjectWithCustomer = Project & { readonly customerLabel?: string };
 type PeriodOption = 'all' | 'month' | 'recent';
 
 const PERIOD_CHIP_OPTIONS: readonly StatusChipOption<PeriodOption>[] = [
-  { value: 'all', label: 'Histórico' },
+  { value: 'all', label: 'Todos los períodos' },
   { value: 'month', label: 'Mes actual' },
   { value: 'recent', label: 'Últimos 30 días' },
 ];
@@ -65,7 +65,9 @@ export function EngineeringDashboard({
   const [selectedEngineer, setSelectedEngineer] = useState<string>('all');
   const [search, setSearch] = useState<string>('');
 
-  // Filter projects by period if applicable
+  // #1183 P2: el período filtra por el evento real de ingeniería (inicio del
+  // log) — nunca por createdAt/updatedAt. Sin ese evento la obra queda fuera
+  // del período y se avisa; no se sustituye la fecha en silencio.
   const periodFilteredProjects = useMemo(() => {
     if (period === 'all') return projects;
     const now = Date.now();
@@ -73,10 +75,8 @@ export function EngineeringDashboard({
     const currentYear = new Date().getFullYear();
 
     return projects.filter((p) => {
-      const dateStr =
-        p.engineeringLog?.startedAt || p.createdAt || p.updatedAt;
-      if (!dateStr) return true;
-      const d = new Date(dateStr);
+      if (!p.engineeringLog?.startedAt) return false;
+      const d = new Date(p.engineeringLog.startedAt);
 
       if (period === 'month') {
         return (
@@ -88,6 +88,11 @@ export function EngineeringDashboard({
       }
       return true;
     });
+  }, [projects, period]);
+
+  const withoutEngineeringStart = useMemo(() => {
+    if (period === 'all') return 0;
+    return projects.filter((p) => !p.engineeringLog?.startedAt).length;
   }, [projects, period]);
 
   // Compute domain analytics on the filtered set
@@ -122,6 +127,12 @@ export function EngineeringDashboard({
     );
   };
 
+  const clearFilters = () => {
+    setPeriod('all');
+    setSelectedEngineer('all');
+    setSearch('');
+  };
+
   return (
     <section
       className="eng-dashboard"
@@ -134,11 +145,11 @@ export function EngineeringDashboard({
         secondaryActions={
           <button
             type="button"
-            className="btn btn--secondary btn--small"
+            className="btn btn--small"
             onClick={onOpenQueue}
             data-testid="eng-dash-goto-queue"
           >
-            <ClipboardList size={14} strokeWidth={1.5} />
+            <ClipboardList size={14} strokeWidth={1.5} aria-hidden />
             Ir a Cola de Trabajo
           </button>
         }
@@ -165,7 +176,7 @@ export function EngineeringDashboard({
             />
             {assignableEngineers && assignableEngineers.length > 0 ? (
               <select
-                className="select select--small eng-dashboard__engineer-select"
+                className="eng-dashboard__engineer-select"
                 value={selectedEngineer}
                 onChange={(e) => setSelectedEngineer(e.target.value)}
                 aria-label="Filtrar por ingeniero responsable"
@@ -183,6 +194,20 @@ export function EngineeringDashboard({
         }
       />
 
+      {/* #1183 P2: alcance declarado de los filtros + obras fuera del período. */}
+      {period !== 'all' && withoutEngineeringStart > 0 ? (
+        <p className="eng-dashboard__filter-note" role="status" data-testid="eng-period-note">
+          {withoutEngineeringStart}{' '}
+          {withoutEngineeringStart === 1 ? 'obra' : 'obras'} sin inicio de
+          ingeniería {withoutEngineeringStart === 1 ? 'queda' : 'quedan'} fuera
+          de este período.
+        </p>
+      ) : null}
+      <p className="eng-dashboard__filter-note">
+        La búsqueda y el ingeniero afectan la tabla de trazabilidad; el período
+        afecta todos los paneles.
+      </p>
+
       <EngineeringKpiStatsGrid stats={stats} />
 
       <EngineeringStagnantAlerts
@@ -199,6 +224,7 @@ export function EngineeringDashboard({
         projects={filteredProjectList}
         resolveEngineerName={resolveEngineerName}
         onOpenProject={onOpenProject}
+        onClearFilters={clearFilters}
       />
     </section>
   );

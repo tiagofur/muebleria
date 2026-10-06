@@ -455,6 +455,13 @@ describe('#738 — engineering project route with exact release pin', () => {
     expect(engineeringProjectFromPath(`/engineering/${id}`, `?release=${releaseId}`)).toEqual({
       projectId: id,
       releaseId,
+      tab: null,
+    });
+    // #1183: el tab activo viaja en la URL y sobrevive la recarga.
+    expect(engineeringProjectFromPath(`/engineering/${id}`, `?release=${releaseId}&tab=despiece`)).toEqual({
+      projectId: id,
+      releaseId,
+      tab: 'despiece',
     });
   });
 
@@ -462,11 +469,13 @@ describe('#738 — engineering project route with exact release pin', () => {
     expect(engineeringProjectFromPath(`/engineering/${id}`)).toEqual({
       projectId: id,
       releaseId: null,
+      tab: null,
     });
-    // Empty param normalizes to null too.
-    expect(engineeringProjectFromPath(`/engineering/${id}`, '?release=')).toEqual({
+    // Empty params normalize to null too.
+    expect(engineeringProjectFromPath(`/engineering/${id}`, '?release=&tab=')).toEqual({
       projectId: id,
       releaseId: null,
+      tab: null,
     });
   });
 

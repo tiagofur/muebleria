@@ -470,6 +470,8 @@ export interface ShellViewCtx {
   readonly routeEngineeringProjectId: string | null;
   /** #738: exact ProductionRelease pinned in the URL (`?release=`). */
   readonly routeEngineeringReleaseId: string | null;
+  /** #1183: active workspace tab pinned in the URL (`?tab=`). */
+  readonly routeEngineeringTab: string | null;
   readonly routeEntityId: string | null;
   readonly routeModuleEditId: string | null;
   readonly routeModuleId: string | null;
@@ -769,6 +771,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     routeComponentId,
     routeEngineeringProjectId,
     routeEngineeringReleaseId,
+    routeEngineeringTab,
     routeEntityId,
     routeModuleEditId,
     routeModuleId,
@@ -1558,6 +1561,17 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
             hardwareRows={engHardwareRows}
             hardwareError={engHardwareError}
             customerLabel={resolveCustomerName(engProject.customerId, customers)}
+            initialTab={routeEngineeringTab ?? undefined}
+            onTabChange={(tab) => {
+              // #1183 P3: tab persistido en la URL (replace, sin ruido).
+              const target = engineeringProjectPath(engProject.id, {
+                releaseId: routeEngineeringReleaseId,
+                tab,
+              });
+              if (location.pathname + location.search !== target) {
+                navigate(target, { replace: true });
+              }
+            }}
             defaultCutStrategy={workshopSettings.defaultCutStrategy}
             onBack={() => navigate(pathForNav('engineering'))}
             resolveMediaUrl={resolveMediaUrl}

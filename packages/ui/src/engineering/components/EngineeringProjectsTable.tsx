@@ -23,12 +23,15 @@ export interface EngineeringProjectsTableProps {
   readonly projects: readonly EngineeringDashboardProjectMetrics[];
   readonly resolveEngineerName: (id?: string) => string;
   readonly onOpenProject: (projectId: string) => void;
+  /** #1183 P3: salida honesta cuando los filtros activos no dejan filas. */
+  readonly onClearFilters?: () => void;
 }
 
 export function EngineeringProjectsTable({
   projects,
   resolveEngineerName,
   onOpenProject,
+  onClearFilters,
 }: EngineeringProjectsTableProps): ReactNode {
   return (
     <div className="eng-dashboard__panel">
@@ -46,22 +49,25 @@ export function EngineeringProjectsTable({
       {projects.length === 0 ? (
         <EmptyState
           icon={SearchX}
+          variant="no-results"
           title="Sin obras para mostrar"
           description="No hay proyectos que coincidan con los filtros seleccionados."
+          actionLabel={onClearFilters ? 'Limpiar filtros' : undefined}
+          onAction={onClearFilters}
         />
       ) : (
         <div className="data-table-wrap">
           <table className="data-table" aria-label="Proyectos de ingeniería">
             <thead>
               <tr>
-                <th>Obra / Cliente</th>
-                <th>Estado</th>
-                <th>Responsable</th>
-                <th>Revisión</th>
-                <th>Espera</th>
-                <th>Ciclo</th>
-                <th>Módulos</th>
-                <th style={{ textAlign: 'right' }}>Acción</th>
+                <th scope="col">Obra / Cliente</th>
+                <th scope="col">Estado</th>
+                <th scope="col">Responsable</th>
+                <th scope="col">Revisión</th>
+                <th scope="col">Espera</th>
+                <th scope="col">Ciclo</th>
+                <th scope="col">Módulos</th>
+                <th scope="col" className="eng-dashboard__th-actions">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -101,7 +107,10 @@ export function EngineeringProjectsTable({
                     </span>
                   </td>
                   <td>
-                    <span className="meta-chip">Rev. {p.revision}</span>
+                    {/* #1183 P1: sin log no hay revisión real que mostrar. */}
+                    <span className="meta-chip">
+                      {p.revision !== null ? `Rev. ${p.revision}` : 'Rev. —'}
+                    </span>
                   </td>
                   <td>
                     <span className="eng-dashboard__table-time">
@@ -113,7 +122,7 @@ export function EngineeringProjectsTable({
                   <td>
                     <span className="eng-dashboard__table-time">
                       {p.cycleTimeHours !== undefined
-                        ? `${p.cycleTimeHours}h`
+                        ? `${p.cycleTimeHours}h${p.isSentToProduction ? '' : ' (en curso)'}`
                         : '—'}
                     </span>
                   </td>
@@ -122,10 +131,10 @@ export function EngineeringProjectsTable({
                       {p.moduleCount}
                     </span>
                   </td>
-                  <td style={{ textAlign: 'right' }}>
+                  <td className="eng-dashboard__td-actions">
                     <button
                       type="button"
-                      className="btn btn--secondary btn--small"
+                      className="btn btn--small"
                       onClick={() => onOpenProject(p.projectId)}
                       aria-label={`Abrir workspace de ${p.projectName}`}
                     >

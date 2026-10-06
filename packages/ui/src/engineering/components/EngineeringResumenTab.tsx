@@ -4,6 +4,7 @@
 
 import { useMemo, type ReactNode } from 'react';
 import {
+  AlertTriangle,
   CheckCircle2,
   Circle,
   FileSpreadsheet,
@@ -49,14 +50,9 @@ export function CheckRow({
           className={`eng-check-row__label ${ok ? '' : 'eng-check-row__label--pending'}`}
         >
           {label}
+          {/* #1183 P2: warn con clase+token, sin estilos inline. */}
           {warn ? (
-            <span
-              style={{
-                color: 'hsl(38 80% 40%)',
-                marginLeft: '0.35rem',
-                fontSize: '0.72rem',
-              }}
-            >
+            <span className="eng-check-row__warn" aria-hidden="true">
               ⚠
             </span>
           ) : null}
@@ -73,6 +69,18 @@ export interface EngineeringResumenTabProps {
   readonly readiness: ProductionOrderReadiness;
   readonly cutRows: readonly ProductionCutRow[] | null;
   readonly hardwareRows: readonly HardwarePurchaseRow[] | null;
+}
+
+/** Primer gate que bloquea el corte, con su causa real (no siempre despiece). */
+function firstBlockedGate(readiness: ProductionOrderReadiness): string {
+  if (!readiness.cutListOk) return 'Falta un BOM / cut-list válido antes de cortar.';
+  if (!readiness.materialsResolved) return 'Faltan materiales resueltos antes de cortar.';
+  if (readiness.hasKitchenLayout && !readiness.hasPlacements) {
+    return 'Falta colocar los muebles en el layout antes de cortar.';
+  }
+  if (!readiness.optimizerGenerable) return 'Falta el generador de Optimizer antes de cortar.';
+  if (!readiness.packGenerable) return 'Falta el pack descargable antes de cortar.';
+  return 'Falta resolver el despiece antes de cortar.';
 }
 
 export function EngineeringResumenTab({
@@ -93,7 +101,7 @@ export function EngineeringResumenTab({
       {/* Totals row */}
       <div className="eng-resumen__totals" aria-label="Totales de fábrica">
         <div className="stat-card stat-card--eng">
-          <span className="stat-card__icon">
+          <span className="stat-card__icon" aria-hidden="true">
             <LayoutGrid size={18} strokeWidth={1.5} />
           </span>
           <div className="stat-card__body">
@@ -108,7 +116,7 @@ export function EngineeringResumenTab({
           </div>
         </div>
         <div className="stat-card stat-card--eng">
-          <span className="stat-card__icon">
+          <span className="stat-card__icon" aria-hidden="true">
             <FileSpreadsheet size={18} strokeWidth={1.5} />
           </span>
           <div className="stat-card__body">
@@ -119,23 +127,23 @@ export function EngineeringResumenTab({
           </div>
         </div>
         <div className="stat-card stat-card--eng">
-          <span className="stat-card__icon">
+          <span className="stat-card__icon" aria-hidden="true">
             <Layers size={18} strokeWidth={1.5} />
           </span>
           <div className="stat-card__body">
             <div className="stat-card__value">
-              {totals ? totals.totalAreaM2.toLocaleString('es-MX') : '—'}
+              {totals ? totals.totalAreaM2.toLocaleString('es-AR') : '—'}
             </div>
             <div className="stat-card__label">m² de tablero</div>
           </div>
         </div>
         <div className="stat-card stat-card--eng">
-          <span className="stat-card__icon">
+          <span className="stat-card__icon" aria-hidden="true">
             <Ruler size={18} strokeWidth={1.5} />
           </span>
           <div className="stat-card__body">
             <div className="stat-card__value">
-              {totals ? totals.totalEdgeMl.toLocaleString('es-MX') : '—'}
+              {totals ? totals.totalEdgeMl.toLocaleString('es-AR') : '—'}
             </div>
             <div className="stat-card__label">ml de canto</div>
           </div>
@@ -156,7 +164,7 @@ export function EngineeringResumenTab({
                     </span>
                     <span className="eng-resumen__breakdown-num">
                       {m.pieces} {m.pieces === 1 ? 'pieza' : 'piezas'} ·{' '}
-                      {m.areaM2.toLocaleString('es-MX')} m²
+                      {m.areaM2.toLocaleString('es-AR')} m²
                     </span>
                   </li>
                 ))}
@@ -173,7 +181,7 @@ export function EngineeringResumenTab({
                       {e.name}
                     </span>
                     <span className="eng-resumen__breakdown-num">
-                      {e.ml.toLocaleString('es-MX')} ml
+                      {e.ml.toLocaleString('es-AR')} ml
                     </span>
                   </li>
                 ))}
@@ -258,15 +266,17 @@ export function EngineeringResumenTab({
           />
         </ul>
 
-        {/* Ready banner */}
+        {/* Ready banner — #1183 P3: nombra el primer gate que falta, no
+            siempre el despiece. */}
         {readiness.readyToCut ? (
           <div className="eng-resumen__banner eng-resumen__banner--ready">
-            <CheckCircle2 size={18} strokeWidth={1.5} />
+            <CheckCircle2 size={18} strokeWidth={1.5} aria-hidden="true" />
             Listo para generar pack y mandar a corte.
           </div>
         ) : (
           <div className="eng-resumen__banner eng-resumen__banner--blocked">
-            Falta resolver el despiece antes de cortar.
+            <AlertTriangle size={18} strokeWidth={1.5} aria-hidden="true" />
+            {firstBlockedGate(readiness)}
           </div>
         )}
       </div>
