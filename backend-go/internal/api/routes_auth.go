@@ -11,6 +11,13 @@ func registerAuthRoutes(server *Server, mux *http.ServeMux, authRL, authMW func(
 	// Endpoints públicos (Auth) — with rate limiting
 	mux.Handle("POST /api/auth/login", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleLogin))))
 
+	// Password reset (#1178): public forgot (anti-enumeration — uniform
+	// response, the token never travels in it) and one-time confirmation,
+	// both rate-limited like login. Confirmation is idempotent so a network
+	// retry never leaves the token in an ambiguous state.
+	mux.Handle("POST /api/auth/password-resets", noStoreMiddleware(authRL(http.HandlerFunc(server.HandleRequestPasswordReset))))
+	mux.Handle("POST /api/auth/password-resets:confirm", noStoreMiddleware(authRL(server.RequireIdempotency("auth.confirm-password-reset", http.HandlerFunc(server.HandleConfirmPasswordReset)))))
+
 	// SEC-2 primary path: opaque single-use refresh credential, dispatched per
 	// transport (#460 SEC-4A): JSON body = Mobile; HttpOnly web refresh cookie
 	// (CSRF-gated) = Web; the no-body bearer branch is a finite compatibility

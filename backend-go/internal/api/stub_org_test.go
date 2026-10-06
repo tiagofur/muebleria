@@ -146,7 +146,20 @@ func (s *stubStore) EndSupportSession(context.Context, string, string, string) (
 }
 
 func (s *stubStore) ListOrgTeam(context.Context, string, string) ([]storage.OrgTeamMember, error) {
-	return nil, nil
+	return s.orgTeam, nil
+}
+
+func (s *stubStore) RequestPasswordReset(context.Context, string, string, string) (*storage.PasswordResetIssuance, error) {
+	return s.passwordResetIssuance, nil
+}
+
+func (s *stubStore) IssuePasswordResetToken(_ context.Context, userID, issuedVia string, _ *string, _ time.Duration, _, _ string) (*storage.PasswordResetIssuance, error) {
+	s.issuedResetUserID, s.issuedResetVia = userID, issuedVia
+	return &storage.PasswordResetIssuance{Token: "reset-token-raw", ExpiresAt: time.Now().Add(time.Hour)}, nil
+}
+
+func (s *stubStore) ConfirmPasswordReset(context.Context, storage.ConfirmPasswordResetCommand) (int, error) {
+	return 3, nil
 }
 
 func (s *stubStore) GetOrgTeamSummary(context.Context, string, string) (*storage.OrgTeamSummary, error) {

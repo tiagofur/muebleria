@@ -111,6 +111,11 @@ import type {
   PairingGrantCreated,
   PairingGrantExchange,
   PairingGrantStatus,
+  PasswordResetConfirmRequest,
+  PasswordResetConfirmResponse,
+  PasswordResetIssuanceResponse,
+  PasswordResetRequest,
+  PasswordResetRequestResponse,
   PlatformOrganization,
   PlatformUser,
   PrepareDesignPublishRequest,
@@ -217,6 +222,8 @@ export abstract class GeneratedGraneteApiClient {
   listFactoryOrganizations(token: string, signal?: AbortSignal): Promise<ReadonlyArray<FactoryOrganization>> { return this.request("GET", "/factory/organizations", { arrayOf: "FactoryOrganization", token, signal }); }
   acceptInvitation(body: AcceptInvitationRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<LoginResponse> { return this.request("POST", "/auth/invitations:accept", { schema: "LoginResponse", bodySchema: "AcceptInvitationRequest", body, idempotencyKey: key, signal }); }
   previewInvitation(body: InvitationPreviewRequest, signal?: AbortSignal): Promise<InvitationPreviewResponse> { return this.request("POST", "/auth/invitations:preview", { schema: "InvitationPreviewResponse", bodySchema: "InvitationPreviewRequest", body, signal }); }
+  requestPasswordReset(body: PasswordResetRequest, signal?: AbortSignal): Promise<PasswordResetRequestResponse> { return this.request("POST", "/auth/password-resets", { schema: "PasswordResetRequestResponse", bodySchema: "PasswordResetRequest", body, signal }); }
+  confirmPasswordReset(body: PasswordResetConfirmRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<PasswordResetConfirmResponse> { return this.request("POST", "/auth/password-resets:confirm", { schema: "PasswordResetConfirmResponse", bodySchema: "PasswordResetConfirmRequest", body, idempotencyKey: key, signal }); }
   listMemberships(token: string, signal?: AbortSignal): Promise<TeamDirectory> { return this.request("GET", "/org/memberships", { schema: "TeamDirectory", token, signal }); }
   updateMembershipRoles(token: string, membershipId: string, version: number, body: UpdateMemberRolesRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("PUT", `/org/memberships/${encodeURIComponent(membershipId)}/roles`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "UpdateMemberRolesRequest", body, idempotencyKey: key, signal }); }
   updateMembershipStatus(token: string, membershipId: string, version: number, body: UpdateMembershipStatusRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("PUT", `/org/memberships/${encodeURIComponent(membershipId)}/status`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "UpdateMembershipStatusRequest", body, idempotencyKey: key, signal }); }
@@ -227,6 +234,7 @@ export abstract class GeneratedGraneteApiClient {
   changeMembershipRoles(token: string, membershipId: string, version: number, body: ChangeMembershipRolesRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:change-roles`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "ChangeMembershipRolesRequest", body, idempotencyKey: key, signal }); }
   suspendMembership(token: string, membershipId: string, version: number, body: SuspendMembershipRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:suspend`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "SuspendMembershipRequest", body, idempotencyKey: key, signal }); }
   reactivateMembership(token: string, membershipId: string, version: number, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:reactivate`, { schema: "MembershipMutationResponse", token, ifMatch: version, idempotencyKey: key, signal }); }
+  issuePasswordReset(token: string, membershipId: string, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<PasswordResetIssuanceResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:issue-password-reset`, { schema: "PasswordResetIssuanceResponse", token, idempotencyKey: key, signal }); }
   revokeMembershipSessions(token: string, membershipId: string, version: number, body: RevokeMembershipSessionsRequest, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipMutationResponse> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:revoke-sessions`, { schema: "MembershipMutationResponse", token, ifMatch: version, bodySchema: "RevokeMembershipSessionsRequest", body, idempotencyKey: key, signal }); }
   previewMembershipOffboarding(token: string, membershipId: string, version: number, key = this.createIdempotencyKey(), signal?: AbortSignal): Promise<MembershipOffboardingPreview> { return this.request("POST", `/org/memberships/${encodeURIComponent(membershipId)}:offboarding-preview`, { schema: "MembershipOffboardingPreview", token, ifMatch: version, idempotencyKey: key, signal }); }
   getOrganizationMembership(token: string, membershipId: string, signal?: AbortSignal): Promise<TeamMember> { return this.request("GET", `/org/memberships/${encodeURIComponent(membershipId)}`, { schema: "TeamMember", token, signal }); }

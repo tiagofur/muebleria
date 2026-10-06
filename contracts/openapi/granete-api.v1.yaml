@@ -1014,6 +1014,73 @@
         }
       }
     },
+    "/auth/password-resets": {
+      "post": {
+        "operationId": "requestPasswordReset",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uniform outcome: the request is processed whether or not the email belongs to an account (anti-enumeration). Until an email delivery adapter exists, the one-time link only reaches server-side channels; the workshop admin issues links directly.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetRequestResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/auth/password-resets:confirm": {
+      "post": {
+        "operationId": "confirmPasswordReset",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordResetConfirmRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated, the one-time token consumed and every live session of the identity revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetConfirmResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/org/memberships": {
       "get": {
         "operationId": "listMemberships",
@@ -1414,6 +1481,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MembershipMutationResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
+    "/org/memberships/{membershipId}:issue-password-reset": {
+      "post": {
+        "operationId": "issuePasswordReset",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MembershipId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "One-time reset link minted for the active member; delivered copy/paste like an invitation while no email adapter exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetIssuanceResponse"
                 }
               }
             }
@@ -6866,6 +6961,7 @@
           "ORGANIZATION_OFFBOARDING_BLOCKED",
           "ORGANIZATION_SLUG_CONFLICT",
           "ORGANIZATION_RECOVERY_ONLY",
+          "PASSWORD_RESET_TOKEN_INVALID",
           "SESSION_REVOKED",
           "TOKEN_TYPE_MISMATCH",
           "REFRESH_INVALID",
@@ -7152,6 +7248,86 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PasswordResetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "minLength": 3
+          }
+        }
+      },
+      "PasswordResetRequestResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "accepted"
+          }
+        }
+      },
+      "PasswordResetConfirmRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token",
+          "new_password"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string"
+          }
+        }
+      },
+      "PasswordResetConfirmResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "completed"
+          }
+        }
+      },
+      "PasswordResetIssuanceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token",
+          "reset_url",
+          "expires_at",
+          "email_masked"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "reset_url": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "email_masked": {
             "type": "string"
           }
         }

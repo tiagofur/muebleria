@@ -42,6 +42,7 @@ const (
 	ApiErrorCodeOrganizationOffboardingBlocked ApiErrorCode = "ORGANIZATION_OFFBOARDING_BLOCKED"
 	ApiErrorCodeOrganizationSlugConflict       ApiErrorCode = "ORGANIZATION_SLUG_CONFLICT"
 	ApiErrorCodeOrganizationRecoveryOnly       ApiErrorCode = "ORGANIZATION_RECOVERY_ONLY"
+	ApiErrorCodePasswordResetTokenInvalid      ApiErrorCode = "PASSWORD_RESET_TOKEN_INVALID"
 	ApiErrorCodeSessionRevoked                 ApiErrorCode = "SESSION_REVOKED"
 	ApiErrorCodeTokenTypeMismatch              ApiErrorCode = "TOKEN_TYPE_MISMATCH"
 	ApiErrorCodeRefreshInvalid                 ApiErrorCode = "REFRESH_INVALID"
@@ -134,6 +135,30 @@ type AcceptInvitationRequest struct {
 	Token    string  `json:"token"`
 	Password string  `json:"password"`
 	Name     *string `json:"name,omitempty"`
+}
+
+type PasswordResetRequest struct {
+	Email string `json:"email"`
+}
+
+type PasswordResetRequestResponse struct {
+	Status string `json:"status"`
+}
+
+type PasswordResetConfirmRequest struct {
+	Token       string `json:"token"`
+	NewPassword string `json:"new_password"`
+}
+
+type PasswordResetConfirmResponse struct {
+	Status string `json:"status"`
+}
+
+type PasswordResetIssuanceResponse struct {
+	Token       string `json:"token"`
+	ResetURL    string `json:"reset_url"`
+	ExpiresAt   string `json:"expires_at"`
+	EmailMasked string `json:"email_masked"`
 }
 
 type InvitationPreviewRequest struct {
