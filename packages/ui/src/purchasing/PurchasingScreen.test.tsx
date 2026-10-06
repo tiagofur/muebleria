@@ -230,8 +230,8 @@ describe('PurchasingScreen (Fase 3)', () => {
     );
     // Herrajes: h1 tracked → chip with stock 38 piezas.
     expect(screen.getByTestId('purch-stock-chip-herrajes-h1').textContent).toContain('38');
-    // h3 (p2) untracked → chip "sin stock".
-    expect(screen.getAllByText('sin stock').length).toBeGreaterThan(0);
+    // h3 (p2) untracked → chip "sin registro".
+    expect(screen.getAllByText('sin registro').length).toBeGreaterThan(0);
     // Tableros: planchas block chip by materialId.
     fireEvent.click(screen.getByTestId('purch-tab-tableros'));
     expect(screen.getByTestId('purch-stock-chip-tableros-mdf15').textContent).toContain('4 planchas');
@@ -416,4 +416,41 @@ it('shows canonical planning without presenting mutable picking quantities', () 
     expect(screen.getByTestId('purch-project-frozen')).toBeTruthy();
     expect(screen.queryByText(empty)).toBeNull();
   }
+});
+
+
+describe('Almacén S10 (#1165)', () => {
+  it('P0: «sin registro» distingue material no trackeado de agotado', () => {
+    render(<PurchasingScreen projects={projects} role="almacen" />);
+    // Sin stock prop: los chips muestran «sin registro» (no «sin stock»).
+    expect(screen.getAllByText('sin registro').length).toBeGreaterThan(0);
+    expect(screen.queryByText('sin stock')).toBeNull();
+  });
+
+  it('P1: las cards de picking muestran progreso N/M', () => {
+    render(<PurchasingScreen projects={projects} role="almacen" />);
+    const progress = screen.getAllByTestId(/purch-pick-progress-/);
+    expect(progress.length).toBeGreaterThan(0);
+    expect(progress[0]!.textContent).toMatch(/\d+\/\d+ surtidas/);
+  });
+
+  it('P1: «Material completo» es la primaria de la card (jerarquía invertida)', () => {
+    render(
+      <PurchasingScreen
+        projects={projects}
+        role="almacen"
+        onReleaseMaterials={vi.fn()}
+      />,
+    );
+    const release = screen.getAllByTestId(/purch-release-/)[0]!;
+    expect(release.className).toContain('btn--primary');
+  });
+
+  it('P1: las líneas de picking tienen checkbox accesible', () => {
+    render(<PurchasingScreen projects={projects} role="almacen" />);
+    const lines = screen.getAllByTestId(/purch-pick-line-/);
+    expect(lines.length).toBeGreaterThan(0);
+    const input = lines[0]!.querySelector('input[type="checkbox"]');
+    expect(input).not.toBeNull();
+  });
 });
