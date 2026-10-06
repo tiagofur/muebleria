@@ -744,6 +744,7 @@ export function PurchasingScreen({
               {renderReleaseAction(p.projectId, 'tableros')}
               {renderProjectActions(p.projectId, 'tableros')}
             </div>
+            <PickProgress picked={pickProgress(p.projectId, 'tableros', p.materials.length).picked} total={p.materials.length} />
             <ul className="purch-card__rows">
               {p.materials.map((m) => {
                 const lineKey = `${p.projectId}:tableros:${m.key}`;
@@ -828,6 +829,7 @@ export function PurchasingScreen({
               {renderReleaseAction(p.projectId, 'cintillas')}
               {renderProjectActions(p.projectId, 'cintillas')}
             </div>
+            <PickProgress picked={pickProgress(p.projectId, 'cintillas', p.edges.length).picked} total={p.edges.length} />
             <ul className="purch-card__rows">
               {p.edges.map((e) => {
                 const lineKey = `${p.projectId}:cintillas:${e.key}`;
