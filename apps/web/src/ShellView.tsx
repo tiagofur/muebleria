@@ -452,6 +452,7 @@ export interface ShellViewCtx {
   /** Refresh the workspace read model (server-authoritative) before opening Producción. */
   readonly refreshWorkspace: () => Promise<void>;
   readonly projectsForRole: readonly Project[];
+  readonly workspaceLoading: boolean;
   readonly purchaseOrders: PurchaseOrder[] | null;
   readonly purchasingProjects: ActiveProjectMaterial[];
   readonly releasePlanEditSession: (projectId: string) => void;
@@ -755,6 +756,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     refreshWorkspace,
     projectsCreateKey,
     projectsForRole,
+    workspaceLoading,
     purchaseOrders,
     purchasingProjects,
     releasePlanEditSession,
@@ -1930,6 +1932,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
               : null
           }
           resolveMediaUrl={resolveMediaUrl}
+          loading={workspaceLoading}
           hideHardwareCosts={!showCosts}
           onImportNesting={importNestingResult}
           canImportNesting={canMutateProjects || canMarkProduced}

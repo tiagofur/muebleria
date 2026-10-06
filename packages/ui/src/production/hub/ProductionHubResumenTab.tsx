@@ -265,8 +265,8 @@ export function ProductionHubResumenTab({
                 Falta resolver el despiece antes de cortar.
               </p>
               <p className="prod-hub__ready-sub">
-                Revisá los errores de BOM en Proyectos o cambiá a la pestaña
-                Despiece.
+                Revisá los errores de BOM en Proyectos o descargá el despiece
+                desde la pestaña Documentos.
               </p>
             </div>
             <button
