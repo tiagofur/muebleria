@@ -504,6 +504,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     seedEntityVersions('customers', customers);
     seedEntityVersions('ambient-materials', ambientMaterials);
     seedEntityVersions('ambient-categories', ambientCategories);
+    seedEntityVersions('material-categories', materialCategories);
     // #1084 (#443 slice 1): seed the hardware version cache straight from the
     // validated wire payload (the mapped domain shape carries no version), so
     // every save goes out under If-Match against the loaded server state.
@@ -937,12 +938,17 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     }
 
     // Material categories (F142: subgrupos de tableros, padres primero).
+    // #1149: the server requires If-Match on PUT (same family batch as #1091),
+    // so the unguarded upsert turned every edit of an existing category into
+    // a 428 that failed the whole autosave.
     if (catalog.materialCategories) {
       for (const cat of sortCategoriesForSave(catalog.materialCategories)) {
-        await this.upsert(
+        await this.upsertGuarded(
           `/catalog/material-categories/${cat.id}`,
           '/catalog/material-categories',
           materialCategoryToApi(cat),
+          'material-categories',
+          cat.id,
         );
       }
     }
@@ -950,12 +956,15 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     // Ambient materials (floor/wall/ceiling textures and finishes). Without this loop,
     // create/update in the UI mutates the in-memory catalog but never reaches
     // the DB — the material vanishes on reload (getCatalog fetches []).
+    // #1149: guarded like the rest — the server requires If-Match on PUT.
     if (catalog.ambientMaterials) {
       for (const am of catalog.ambientMaterials) {
-        await this.upsert(
+        await this.upsertGuarded(
           `/catalog/ambient-materials/${am.id}`,
           '/catalog/ambient-materials',
           ambientMaterialToApi(am),
+          'ambient-materials',
+          am.id,
         );
       }
     }

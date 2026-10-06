@@ -63,13 +63,15 @@ export function useRoutableEntitySelection(
 
   const toggleSelectedId = useCallback(
     (id: string) => {
-      setSelectedIdState((prev) => {
-        const next = prev === id ? null : id;
-        onSelectionChange?.(next);
-        return next;
-      });
+      // #1149: compute the next value outside the setState updater — an
+      // updater must stay pure. Notifying the shell (navigate → BrowserRouter
+      // setState) from inside the updater fired a state update during render
+      // ("Cannot update a component while rendering a different component").
+      const next = selectedId === id ? null : id;
+      setSelectedIdState(next);
+      onSelectionChange?.(next);
     },
-    [onSelectionChange],
+    [selectedId, onSelectionChange],
   );
 
   return { selectedId, setSelectedId, toggleSelectedId };
