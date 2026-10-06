@@ -405,4 +405,34 @@ describe('InstallationJobPanel — cierre y conformidad (OC-074)', () => {
     expect(screen.queryByTestId('installation-signoff-p1')).toBeNull();
     expect(screen.queryByTestId('installation-close-p1')).toBeNull();
   });
+
+  it('confirms destructive project close in two steps (#1169)', () => {
+    const handlers = makeHandlers();
+    const job = makeJob({
+      visits: [],
+      closeout: {
+        signedOffBy: 'María González',
+        signedOffAt: '2026-09-05T12:00:00.000Z',
+      },
+    });
+    render(
+      <InstallationJobPanel
+        project={makeProject(job, 1, 1)}
+        canManage
+        canCloseout
+        handlers={handlers}
+      />,
+    );
+
+    // Sin confirmación previa, el cierre no se dispara:
+    expect(screen.queryByTestId('installation-close-confirm-p1')).toBeNull();
+    fireEvent.click(screen.getByTestId('installation-close-p1'));
+    // Primer paso pregunta; "Sí, cerrar" ejecuta el cierre una sola vez:
+    expect(screen.getByTestId('installation-close-confirm-p1')).not.toBeNull();
+    fireEvent.click(screen.getByTestId('installation-close-confirm-yes-p1'));
+    expect(handlers.onCloseProject).toHaveBeenCalledTimes(1);
+    expect(handlers.onCloseProject).toHaveBeenCalledWith('p1');
+    // Tras confirmar (o cancelar), la confirmación desaparece:
+    expect(screen.queryByTestId('installation-close-confirm-p1')).toBeNull();
+  });
 });

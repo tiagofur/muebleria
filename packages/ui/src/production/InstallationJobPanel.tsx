@@ -118,7 +118,9 @@ export function InstallationJobPanel({
   const [punchDueDate, setPunchDueDate] = useState('');
   const [punchSeverity, setPunchSeverity] = useState<PunchSeverity>('major');
   // #1169 P1: confirmación de dos pasos para el cierre destructivo de obra.
-  const [closeConfirm, setCloseConfirm] = useState(false);
+  // Keyed por obra: cambiar de proyecto nunca deja la confirmación abierta.
+  const [closeConfirmFor, setCloseConfirmFor] = useState<string | null>(null);
+  const closeConfirm = closeConfirmFor === projectId;
   const [punchIsBlocker, setPunchIsBlocker] = useState(true);
   const [closingPunchId, setClosingPunchId] = useState<string | null>(null);
   const [closePunchNotes, setClosePunchNotes] = useState('');
@@ -621,16 +623,16 @@ export function InstallationJobPanel({
                     className="btn btn--small btn--danger"
                     onClick={() => {
                       handlers.onCloseProject?.(projectId);
-                      setCloseConfirm(false);
+                      setCloseConfirmFor(null);
                     }}
-                    data-testid={`installation-close-confirm-${projectId}`}
+                    data-testid={`installation-close-confirm-yes-${projectId}`}
                   >
                     Sí, cerrar
                   </button>
                   <button
                     type="button"
                     className="btn btn--small btn--ghost"
-                    onClick={() => setCloseConfirm(false)}
+                    onClick={() => setCloseConfirmFor(null)}
                   >
                     Cancelar
                   </button>
@@ -639,7 +641,7 @@ export function InstallationJobPanel({
                 <button
                   type="button"
                   className="btn btn--small btn--danger"
-                  onClick={() => setCloseConfirm(true)}
+                  onClick={() => setCloseConfirmFor(projectId)}
                   data-testid={`installation-close-${projectId}`}
                 >
                   Cerrar proyecto
