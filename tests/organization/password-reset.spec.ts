@@ -108,6 +108,14 @@ test.describe.serial('Password reset (#1178) admin-issued browser E2E', () => {
         required('ORGANIZATION_GATE_A_OWNER_EMAIL'),
         'tienda-reset-1178',
       ];
+      // FK order: credentials → families → sessions → membership.
+      await pool.query(
+        `DELETE FROM auth_refresh_credentials c
+          USING auth_sessions s, users u, organizations o
+          WHERE c.session_id = s.id AND s.user_id = u.id AND s.active_organization_id = o.id
+            AND u.email = $1 AND o.slug = $2`,
+        ownerChildParams,
+      );
       await pool.query(
         `DELETE FROM auth_refresh_families f
           USING auth_sessions s, users u, organizations o
@@ -129,6 +137,16 @@ test.describe.serial('Password reset (#1178) admin-issued browser E2E', () => {
             AND u.email = $1 AND o.slug = $2`,
         ownerChildParams,
       );
+      const remaining = await pool.query(
+        `SELECT count(*) AS n FROM memberships m
+           JOIN users u ON u.id = m.user_id
+           JOIN organizations o ON o.id = m.organization_id
+          WHERE u.email = $1 AND o.slug = $2`,
+        ownerChildParams,
+      );
+      if (Number(remaining.rows[0]?.n ?? '1') !== 0) {
+        throw new Error('the shared gate owner still holds the dedicated store membership');
+      }
     } finally {
       await pool.end();
     }
