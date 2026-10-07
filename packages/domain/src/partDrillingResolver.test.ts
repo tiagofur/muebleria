@@ -722,6 +722,27 @@ describe('resolvePartDrilling — placements por grupo (#1046)', () => {
     expect(res.holes[0]!.diameterMm).toBe(35);
   });
 
+  it('aceptación #4: el pack por rol es IDÉNTICO al del mismo herraje asignado específico', () => {
+    const byRole = resolvePartDrilling({
+      piece: testDoor,
+      placements: [
+        { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 100, yMm: 100 } },
+      ],
+      hardwareCatalog: [hwBlum],
+      optionChoices: { BISAGRA: 'hw-blum-cl' },
+    });
+    const bySpecific = resolvePartDrilling({
+      piece: testDoor,
+      placements: [
+        { hardwareId: 'hw-blum-cl', anchorFace: 'front', relativePosition: { xMm: 100, yMm: 100 } },
+      ],
+      hardwareCatalog: [hwBlum],
+      optionChoices: {},
+    });
+    expect(byRole.holes).toEqual(bySpecific.holes);
+    expect(byRole.fallbackUsed).toBe(false);
+  });
+
   it('un rol sin elección no perfora ni inventa agujeros (fallback F074 decide aparte)', () => {
     const res = resolvePartDrilling({
       piece: testDoor,

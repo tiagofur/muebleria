@@ -25,18 +25,44 @@ import { filterActiveForPicker, normalizeCode } from '../catalogs/catalogHelpers
  * Collect optionRoles from a module's component instances AND the component
  * instances of its referenced structure (when both catalogs are provided).
  * Modules no longer carry board parts, so roles come from components.
+ * #1046: a placement por grupo (instance override with optionRole and no
+ * concrete hardwareId) consumes the group's choice exactly like the export
+ * validation does — the quote gate and the item picker must see the same
+ * consumption, never less.
  */
 function collectComponentRoles(
-  componentInstances: readonly { componentId: string }[] | undefined,
+  componentInstances:
+    | readonly {
+        componentId: string;
+        overrides?: {
+          readonly hardwarePlacements?: readonly {
+            readonly hardwareId?: string;
+            readonly optionRole?: string;
+          }[];
+        };
+      }[]
+    | undefined,
   catalogComponents: readonly Component[] | undefined,
   out: Set<string>,
 ): void {
-  if (!componentInstances || !catalogComponents) return;
+  if (!componentInstances) return;
   for (const inst of componentInstances) {
-    const comp = catalogComponents.find((c) => c.id === inst.componentId);
-    if (comp) {
-      for (const role of comp.optionRoles) {
-        if (role.trim()) out.add(role.trim());
+    // Static component roles need the catalog; placements por grupo do not —
+    // the gate must see them even when catalogs were omitted (regression
+    // guard: the old early-return hid hardware roles without catalogs).
+    if (catalogComponents) {
+      const comp = catalogComponents.find((c) => c.id === inst.componentId);
+      if (comp) {
+        for (const role of comp.optionRoles) {
+          if (role.trim()) out.add(role.trim());
+        }
+      }
+    }
+    for (const placement of inst.overrides?.hardwarePlacements ?? []) {
+      // Only a role-based placement consumes a group choice; a concrete
+      // hardwareId never does.
+      if (!placement.hardwareId && placement.optionRole?.trim()) {
+        out.add(placement.optionRole.trim());
       }
     }
   }
@@ -174,7 +200,15 @@ export type ModuleLikeForRoles = {
     readonly optionRole: string;
     readonly hardwareId?: string;
   }[];
-  readonly components?: readonly { readonly componentId: string }[];
+  readonly components?: readonly {
+    readonly componentId: string;
+    readonly overrides?: {
+      readonly hardwarePlacements?: readonly {
+        readonly hardwareId?: string;
+        readonly optionRole?: string;
+      }[];
+    };
+  }[];
   readonly structureId?: string;
   readonly agregados?: readonly { readonly agregadoId: string }[];
   readonly baseMode?: ModuleBaseMode;
@@ -239,7 +273,7 @@ function collectUsedOptionRoles(
   }
   collectComponentRoles(module.components, catalogComponents, usedRoles);
   collectAgregadoRoles(module.agregados, catalogAgregados, catalogComponents, usedRoles);
-  if (module.structureId && catalogStructures && catalogComponents) {
+  if (module.structureId && catalogStructures) {
     const structure = catalogStructures.find((s) => s.id === module.structureId);
     collectComponentRoles(structure?.components, catalogComponents, usedRoles);
     collectAgregadoRoles(

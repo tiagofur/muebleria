@@ -42,6 +42,25 @@ const ANCHOR_FACE_OPTIONS: readonly { value: AnchorFace; label: string }[] = [
   { value: 'bottom', label: 'Abajo' },
 ];
 
+/**
+ * Members of a hardware option group with their unit cost — the same hint
+ * everywhere a group is picked (#1046): placements editor and the agregado's
+ * "en cantidad" list. The choice happens later, at quote time; what the
+ * author sees here is what each member costs.
+ */
+export function hardwareGroupMembersHint(
+  group: Pick<OptionGroup, 'optionIds'>,
+  catalogHardware: readonly Hardware[],
+): string {
+  const members = group.optionIds
+    .map((id) => catalogHardware.find((h) => h.id === id))
+    .filter((h): h is Hardware => Boolean(h));
+  if (members.length === 0) return 'Sin miembros activos.';
+  return members
+    .map((h) => `${h.code} — ${h.name} (${formatMoneyDisplay(h.costPerUnit, { showCurrency: false })})`)
+    .join(' · ');
+}
+
 export function HardwarePlacementsEditor({
   placements,
   catalogHardware,
@@ -93,15 +112,8 @@ export function HardwarePlacementsEditor({
     });
   };
 
-  const membersHintFor = (group: OptionGroup): string => {
-    const members = group.optionIds
-      .map((id) => catalogHardware.find((h) => h.id === id))
-      .filter((h): h is Hardware => Boolean(h));
-    if (members.length === 0) return 'Sin miembros activos.';
-    return members
-      .map((h) => `${h.code} — ${h.name} (${formatMoneyDisplay(h.costPerUnit, { showCurrency: false })})`)
-      .join(' · ');
-  };
+  const membersHintFor = (group: OptionGroup): string =>
+    hardwareGroupMembersHint(group, catalogHardware);
 
   return (
     <div

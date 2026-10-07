@@ -94,8 +94,8 @@ export function ModuleEditorHardwarePanel({
                       });
                     }}
                   >
-                    <option value="role">Por rol de opción</option>
-                    <option value="fixed">Herraje fijo</option>
+                    <option value="role">Grupo de opciones</option>
+                    <option value="fixed">Herraje específico</option>
                   </select>
                 </div>
                 <div className="catalog-form__field">
@@ -142,7 +142,7 @@ export function ModuleEditorHardwarePanel({
                 ) : (
                   <CatalogPicker
                     id={`hw-id-${line.id}`}
-                    label="Herraje fijo"
+                    label="Herraje específico"
                     placeholder="Seleccionar herraje…"
                     searchPlaceholder="Buscar herraje…"
                     value={line.hardwareId}

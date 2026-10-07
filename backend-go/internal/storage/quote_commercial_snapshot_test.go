@@ -238,6 +238,116 @@ func TestQuoteCommercialSnapshot_Q1_FreezesExactValues(t *testing.T) {
 	}
 }
 
+// #1046 S1 aceptación #2: elegir Blum vs económica dentro del grupo BISAGRA
+// cambia la demanda y el costo EXACTOS de la cotización, probado contra
+// PostgreSQL real bajo el rol de app. El grupo se consume por optionRole
+// desde la línea en cantidad del módulo; la elección vive a nivel proyecto
+// (project_level_choices, el mismo mapa effective que consumen tableros) y
+// cada Q1 congela los montos de su elección — cambiar el default después no
+// reescribe la historia.
+//
+// Números (sobre el fixture base 192/488): 2 unidades × 2 bisagras —
+// Blum $40 → hardware 160, directa 352, venta 352*1.5+200 = 728;
+// económica $12 → hardware 48, directa 240, venta 240*1.5+200 = 560.
+func TestQuoteCommercialSnapshot_HardwareGroupChoiceChangesExactDemandAndCost(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+
+	const (
+		hingeBlum = "94000000-0000-0000-0000-0000000000c1"
+		hingeEco  = "94000000-0000-0000-0000-0000000000c2"
+		projectB  = "42000000-0000-0000-0000-0000000000c2"
+		lineB     = "62000000-0000-0000-0000-0000000000c2"
+	)
+
+	// Proyecto hermano idéntico (misma línea/módulo): el A elige Blum por
+	// default de proyecto, el B la económica — la única variable del delta.
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO projects (id, name, customer_id, status, currency, margin_factor, labor_fixed_cost, organization_id, sales_organization_id, manufacturing_organization_id)
+		VALUES ('`+projectB+`', 'Obra Económica', '`+csCustomerA+`', 'draft', 'MXN', 1.5, 100, '`+rlsOrgA+`', '`+rlsOrgA+`', '`+rlsOrgA+`');
+		INSERT INTO project_items (id, project_id, module_id, quantity, organization_id)
+		VALUES ('`+lineB+`', '`+projectB+`', '`+csModule+`', 2, '`+rlsOrgA+`');
+		INSERT INTO project_item_choices (project_item_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+lineB+`', 'INTERIOR', '`+csMaterial+`', '`+rlsOrgA+`');
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id) VALUES
+		 ('`+hingeBlum+`', 'CS-BLUM', 'Bisagra Blum CL', 'piece', 40, '`+rlsOrgA+`'),
+		 ('`+hingeEco+`', 'CS-ECO', 'Bisagra económica', 'piece', 12, '`+rlsOrgA+`');
+		INSERT INTO option_groups (id, code, name, kind, required, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000c3', 'BISAGRA', 'Bisagras', 'hardware', TRUE, '`+rlsOrgA+`');
+		INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
+		SELECT og.id, v.entity_id::uuid, '`+rlsOrgA+`'::uuid
+		FROM option_groups og
+		CROSS JOIN (VALUES ('`+hingeBlum+`'), ('`+hingeEco+`')) AS v(entity_id)
+		WHERE og.organization_id='`+rlsOrgA+`' AND og.code='BISAGRA';
+		INSERT INTO hardware_lines (id, module_id, quantity, option_role, organization_id)
+		VALUES ('56000000-0000-0000-0000-0000000000c1', '`+csModule+`', 2, 'BISAGRA', '`+rlsOrgA+`');
+		INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id) VALUES
+		 ('`+csProject+`', 'BISAGRA', '`+hingeBlum+`', '`+rlsOrgA+`'),
+		 ('`+projectB+`', 'BISAGRA', '`+hingeEco+`', '`+rlsOrgA+`');`)
+
+	// Q1 for both projects: each freezes the exact amounts of its choice.
+	createInitialRevision(t, fx)
+	if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, txErr := fx.store.CreateInitialQuoteRevision(ctx, storage.CreateInitialQuoteRevisionCommand{
+			ProjectID:   projectB,
+			ActorUserID: rlsUserA,
+			RequestID:   "quote-lifecycle-test-eco",
+		})
+		return txErr
+	}); err != nil {
+		t.Fatalf("CreateInitialQuoteRevision (eco): %v", err)
+	}
+
+	assertHardwareChoice := func(projectID string, wantHardware float64, wantSale float64, wantChoiceID, wantChoiceLabel string) {
+		t.Helper()
+		var details []domain.QuoteRevisionDetail
+		if err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+			var txErr error
+			details, txErr = fx.store.ListQuoteRevisionsByProject(ctx, projectID)
+			return txErr
+		}); err != nil {
+			t.Fatalf("list revisions: %v", err)
+		}
+		if len(details) != 1 {
+			t.Fatalf("expected exactly Q1 for %s, got %d revisions", projectID, len(details))
+		}
+		snapshot := details[0].CommercialSnapshot
+		if snapshot == nil {
+			t.Fatalf("project %s Q1 has no commercial snapshot", projectID)
+		}
+		if snapshot.Breakdown.HardwareTotal != wantHardware || snapshot.Breakdown.SalePrice != wantSale {
+			t.Fatalf("breakdown hardware/sale = %+v, want hardware %v / sale %v",
+				snapshot.Breakdown, wantHardware, wantSale)
+		}
+		for _, unit := range snapshot.Units {
+			var hinge *domain.QuoteCommercialOption
+			for i := range unit.Options {
+				if unit.Options[i].GroupCode == "BISAGRA" {
+					hinge = &unit.Options[i]
+					break
+				}
+			}
+			if hinge == nil {
+				t.Fatalf("unit %s lost the BISAGRA choice descriptor: %+v", unit.FurnitureInstanceID, unit.Options)
+			}
+			if hinge.ChoiceID != wantChoiceID || hinge.ChoiceLabel != wantChoiceLabel {
+				t.Fatalf("BISAGRA descriptor = %s/%s, want %s/%s",
+					hinge.ChoiceID, hinge.ChoiceLabel, wantChoiceID, wantChoiceLabel)
+			}
+		}
+		_ = snapshot
+	}
+
+	assertHardwareChoice(csProject, 160, 728, hingeBlum, "Bisagra Blum CL")
+	assertHardwareChoice(projectB, 48, 560, hingeEco, "Bisagra económica")
+
+	// The frozen Q1 does not follow later default changes: switching the
+	// project default to the económica hinge leaves Q1 exactly as frozen.
+	multiOrgExec(t, fx.admin, `
+		UPDATE project_level_choices SET choice_entity_id='`+hingeEco+`'
+		WHERE project_id='`+csProject+`' AND option_group_code='BISAGRA';`)
+	assertHardwareChoice(csProject, 160, 728, hingeBlum, "Bisagra Blum CL")
+}
+
 func TestQuoteCommercialSnapshot_VisuallyIdenticalLinesStayDistinct(t *testing.T) {
 	fx := setupCommercialSnapshotFixture(t)
 	secondLine := "62000000-0000-0000-0000-0000000000c2"

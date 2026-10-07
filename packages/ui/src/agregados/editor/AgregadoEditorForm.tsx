@@ -18,7 +18,10 @@ import { WorkspaceTabs, type TabDefinition } from '../../common/Tabs';
 import { ModuleComponentAdderModal } from '../../modules/components/ModuleComponentAdderModal';
 import { COMPONENT_PLACEMENTS } from '../../components';
 import { InstanceOverridesEditor } from '../../modules/components/InstanceOverridesEditor';
-import { HardwarePlacementsEditor } from '../../modules/components/HardwarePlacementsEditor';
+import {
+  HardwarePlacementsEditor,
+  hardwareGroupMembersHint,
+} from '../../modules/components/HardwarePlacementsEditor';
 import { optionGroupsForHardware } from '../../modules/helpers/moduleRolePickers';
 import type { Module3DCatalogInput } from '../../modules/module3dPreview';
 import type { AgregadoDraft } from '../agregadoDraft';
@@ -481,12 +484,9 @@ export function AgregadoEditorForm({
                                 </select>
                                 {selectedGroup ? (
                                   <p className="catalog-form__hint" data-testid={`agregado-hw-${idx}-members`}>
-                                    Se elige al cotizar:{' '}
-                                    {selectedGroup.optionIds
-                                      .map((id) => catalogHardware.find((h) => h.id === id))
-                                      .filter((h): h is NonNullable<typeof h> => Boolean(h))
-                                      .map((h) => `${h.code} — ${h.name}`)
-                                      .join(' · ') || 'Sin miembros activos.'}
+                                    {/* #1046: same members-with-cost hint as the
+                                     * placements editor — one voice per surface. */}
+                                    Se elige al cotizar: {hardwareGroupMembersHint(selectedGroup, catalogHardware)}
                                   </p>
                                 ) : null}
                               </>
