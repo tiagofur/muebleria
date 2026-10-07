@@ -867,3 +867,52 @@ describe('ProjectFurnitureScreen — #499 designs CTA seam', () => {
     expect(onOpenDesigns).toHaveBeenCalledWith({ designId: null, revisionId: null });
   });
 });
+
+describe('#1203 P1 — «Sin diseño» elegido se respeta, el default sólo llena el hueco', () => {
+  it('elige «Sin diseño» y el efecto de default no lo revierte a Trabajo en curso', async () => {
+    stubFetch({ designs: [design], furniture: [instance('fi-1')] });
+    const onContextChange = vi.fn();
+    renderScreen({ onContextChange });
+
+    // El default automático llena el hueco inicial con el diseño disponible.
+    await screen.findByTestId('pf-table');
+    await waitFor(() => {
+      expect(onContextChange).toHaveBeenCalledWith(
+        expect.objectContaining({ designContextKind: 'working' }),
+      );
+    });
+
+    // El usuario elige «Sin diseño»: queda pineado y no vuelve solo.
+    await userEvent.selectOptions(screen.getByTestId('pf-design-select'), '');
+    await waitFor(() => {
+      expect(onContextChange).toHaveBeenCalledWith(
+        expect.objectContaining({ designContextKind: 'none', pinned: true }),
+      );
+    });
+    // ...y sigue así (antes el efecto lo re-aplicaba a working).
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const lastCall = onContextChange.mock.calls.at(-1)?.[0] as ProjectFurnitureContextState;
+    expect(lastCall.designContextKind).toBe('none');
+  });
+
+  it('un deep link pineado en none (rev=none) no es re-targetado', async () => {
+    stubFetch({ designs: [design], furniture: [instance('fi-1')] });
+    const onContextChange = vi.fn();
+    renderScreen({
+      initialContext: {
+        quoteRevisionId: null,
+        designId: null,
+        designContextKind: 'none',
+        designRevisionId: null,
+        pinned: true,
+      },
+      onContextChange,
+    });
+
+    await screen.findByTestId('pf-table');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    for (const [call] of onContextChange.mock.calls) {
+      expect((call as ProjectFurnitureContextState).designContextKind).toBe('none');
+    }
+  });
+});

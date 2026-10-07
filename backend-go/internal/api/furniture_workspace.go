@@ -126,10 +126,26 @@ func (s *Server) HandleProjectFurnitureWorkspace(w http.ResponseWriter, r *http.
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, toProjectFurnitureWorkspaceDTO(workspace))
+	// #1203 P1: cada fila del workspace lleva la identidad del mueble (label
+	// de catálogo + dimensiones) con la MISMA fuente que el endpoint de lista
+	// — sin esto la matriz renderiza N filas idénticas de «Mueble del
+	// proyecto». includeTerminal=true: las retiradas/canceladas son las que
+	// más necesitan identidad. Fallo del enriquecimiento ≠ fallo del
+	// workspace: cae al DTO pelado (fallback actual) con log.
+	summaries, sumErr := s.Store.ListFurnitureInstanceSummariesByProject(r.Context(), projectID, true)
+	if sumErr != nil {
+		respondWithInternalError(w, sumErr, "furniture workspace summaries")
+		return
+	}
+	summaryByID := make(map[string]storage.FurnitureInstanceSummary, len(summaries))
+	for _, summary := range summaries {
+		summaryByID[summary.Instance.ID] = summary
+	}
+
+	respondWithJSON(w, http.StatusOK, toProjectFurnitureWorkspaceDTO(workspace, summaryByID))
 }
 
-func toProjectFurnitureWorkspaceDTO(ws *domain.FurnitureWorkspace) openapi.ProjectFurnitureWorkspace {
+func toProjectFurnitureWorkspaceDTO(ws *domain.FurnitureWorkspace, summaryByID map[string]storage.FurnitureInstanceSummary) openapi.ProjectFurnitureWorkspace {
 	var quoteRev *openapi.FurnitureWorkspaceQuoteRevisionContext
 	if ws.QuoteRevision != nil {
 		quoteRev = &openapi.FurnitureWorkspaceQuoteRevisionContext{
@@ -165,8 +181,14 @@ func toProjectFurnitureWorkspaceDTO(ws *domain.FurnitureWorkspace) openapi.Proje
 
 	units := make([]openapi.FurnitureWorkspaceUnit, 0, len(ws.Units))
 	for _, u := range ws.Units {
+		instanceDTO := toFurnitureInstanceDTO(u.Instance)
+		// #1203 P1: la identidad de presentación (label de catálogo + dims)
+		// viaja con cada unidad; unidad sin summary conocido → DTO pelado.
+		if summary, ok := summaryByID[u.Instance.ID]; ok {
+			instanceDTO = toFurnitureInstanceSummaryDTO(summary)
+		}
 		unitDTO := openapi.FurnitureWorkspaceUnit{
-			FurnitureInstance: toFurnitureInstanceDTO(u.Instance),
+			FurnitureInstance: instanceDTO,
 			Commercial: openapi.FurnitureWorkspaceCommercial{
 				Present: u.Commercial.Present,
 			},

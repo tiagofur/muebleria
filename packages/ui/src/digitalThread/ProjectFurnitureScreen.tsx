@@ -69,6 +69,9 @@ export interface ProjectFurnitureContextState {
   readonly designId: string | null;
   readonly designContextKind: 'none' | 'working' | 'revision';
   readonly designRevisionId: string | null;
+  /** #1203 P1: elegido por el usuario o pineado por URL — el default
+      automático no lo re-targeta (deep link `rev=none` incluido). */
+  readonly pinned?: boolean;
 }
 
 export interface ProjectFurnitureQueryKeys {
@@ -235,7 +238,15 @@ function loadErrorMessage(error: unknown): string {
 
 function quoteRevisionLabel(revision: QuoteRevisionDetail): string {
   const status = QUOTE_REVISION_STATUS_LABELS[revision.status] ?? revision.status;
-  return `Q${revision.revisionNumber} · ${status} · ${formatWhen(revision.createdAt)}`;
+  // #1203 P1: la fecha del evento real del estado — createdAt sólo cuando
+  // no hay evento (borrador), etiquetado para no hacerse pasar por otro.
+  const eventDate =
+    revision.status === 'accepted' && revision.acceptedAt
+      ? formatWhen(revision.acceptedAt)
+      : revision.status === 'published' && revision.publishedAt
+        ? formatWhen(revision.publishedAt)
+        : `creada ${formatWhen(revision.createdAt)}`;
+  return `Q${revision.revisionNumber} · ${status} · ${eventDate}`;
 }
 
 /** Presentation-only: sentence-case a status word for the exact-context header. */
@@ -258,7 +269,29 @@ export function ProjectFurnitureScreen({
   const api = useMemo(() => new GraneteApiClient(baseUrl), [baseUrl]);
   const queryClient = useQueryClient();
 
-  const [filters, setFilters] = useState<MatrixFilters>(EMPTY_MATRIX_FILTERS);
+  // issue 1203 P2: los filtros sobreviven la recarga por obra (sessionStorage;
+  // el contexto exacto ya viaja en la URL, aqui solo el estado del visor).
+  const [filters, setFilters] = useState<MatrixFilters>(() => {
+    try {
+      const raw = sessionStorage.getItem(`pf_filters:${projectId}`);
+      return raw
+        ? { ...EMPTY_MATRIX_FILTERS, ...(JSON.parse(raw) as MatrixFilters) }
+        : EMPTY_MATRIX_FILTERS;
+    } catch {
+      return EMPTY_MATRIX_FILTERS;
+    }
+  });
+  useEffect(() => {
+    try {
+      if (filtersAreActive(filters)) {
+        sessionStorage.setItem(`pf_filters:${projectId}`, JSON.stringify(filters));
+      } else {
+        sessionStorage.removeItem(`pf_filters:${projectId}`);
+      }
+    } catch {
+      /* sin storage los filtros viven solo en memoria */
+    }
+  }, [filters, projectId]);
   const [detailRow, setDetailRow] = useState<FurnitureMatrixRow | null>(null);
 
   // Exact context selection. Initialized from the pinned URL context; the
@@ -272,6 +305,13 @@ export function ProjectFurnitureScreen({
     designId: initialContext?.designId ?? null,
     designRevisionId: initialContext?.designRevisionId ?? null,
   }));
+  // #1203 P1: el default automático sólo llena el hueco inicial — la URL
+  // pineada (params presentes) o la elección del usuario cierran la puerta.
+  const designContextPinned = useRef(initialContext?.pinned ?? false);
+  const pinDesignContext = (next: DesignContextSelection): void => {
+    designContextPinned.current = true;
+    setDesignContext(next);
+  };
 
   const quoteRevisionsQuery = useQuery({
     queryKey: queryKeys.quoteRevisions,
@@ -296,6 +336,7 @@ export function ProjectFurnitureScreen({
   }, [quoteRevisionsQuery.isSuccess, quoteRevisions, quoteRevisionId]);
 
   useEffect(() => {
+    if (designContextPinned.current) return;
     if (designsQuery.isSuccess && designContext.kind === 'none') {
       const defaulted = defaultDesignContext(designs);
       if (defaulted.kind !== 'none') setDesignContext(defaulted);
@@ -321,6 +362,7 @@ export function ProjectFurnitureScreen({
       designId: designContext.designId,
       designContextKind: designContext.kind,
       designRevisionId: designContext.designRevisionId,
+      pinned: designContextPinned.current,
     }),
     [quoteRevisionId, designContext],
   );
@@ -403,7 +445,7 @@ export function ProjectFurnitureScreen({
   };
 
   const selectDesign = (designId: string): void => {
-    setDesignContext(
+    pinDesignContext(
       designId === ''
         ? { kind: 'none', designId: null, designRevisionId: null }
         : { kind: 'working', designId, designRevisionId: null },
@@ -413,16 +455,16 @@ export function ProjectFurnitureScreen({
   const selectDesignContextKind = (value: string): void => {
     if (designContext.designId === null) return;
     if (value === 'working') {
-      setDesignContext({ kind: 'working', designId: designContext.designId, designRevisionId: null });
+      pinDesignContext({ kind: 'working', designId: designContext.designId, designRevisionId: null });
     } else if (value === 'revision') {
       const newest = [...designRevisions].sort((a, b) => b.revision_number - a.revision_number)[0];
-      setDesignContext({
+      pinDesignContext({
         kind: 'revision',
         designId: designContext.designId,
         designRevisionId: newest?.id ?? null,
       });
     } else {
-      setDesignContext({ kind: 'none', designId: designContext.designId, designRevisionId: null });
+      pinDesignContext({ kind: 'none', designId: designContext.designId, designRevisionId: null });
     }
   };
 
@@ -435,7 +477,7 @@ export function ProjectFurnitureScreen({
         subtitle="Unidades físicas del proyecto: origen, contexto comercial y presencia en el diseño"
         icon={<Armchair size={16} strokeWidth={1.5} />}
         secondaryActions={
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="pf-header-actions">
             {onBack ? (
               <button type="button" className="btn" onClick={onBack}>
                 Volver a la obra
@@ -456,17 +498,17 @@ export function ProjectFurnitureScreen({
                 <Layers size={14} aria-hidden /> Diseños y revisiones
               </button>
             )}
+            {/* #1203 P2/P3: Actualizar es secundaria — la única primary de la
+                pantalla es contextual, y en error es Reintentar. */}
+            <button
+              type="button"
+              className="btn"
+              onClick={reloadAll}
+              disabled={workspaceQuery.isFetching || quoteRevisionsQuery.isFetching}
+            >
+              <RefreshCw size={14} aria-hidden /> Actualizar
+            </button>
           </div>
-        }
-        primaryAction={
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={reloadAll}
-            disabled={workspaceQuery.isFetching || quoteRevisionsQuery.isFetching}
-          >
-            <RefreshCw size={14} aria-hidden /> Actualizar
-          </button>
         }
       />
 
@@ -557,7 +599,9 @@ export function ProjectFurnitureScreen({
             </div>
           ) : null}
 
-          {designs.length === 0 && quoteRevisionsQuery.isSuccess && designsQuery.isSuccess ? (
+          {/* #1203 P2: un solo aviso por caso — con unidades, el de arriba
+              adapta copy/CTA; sin unidades ni diseños, este. */}
+          {designs.length === 0 && rows.length === 0 && quoteRevisionsQuery.isSuccess && designsQuery.isSuccess ? (
             <div className="pf-notice" data-testid="pf-no-designs-at-all">
               <CircleAlert size={16} aria-hidden />
               <p>
@@ -655,7 +699,11 @@ export function ProjectFurnitureScreen({
               variant="empty"
               icon={Armchair}
               title="Esta obra todavía no tiene muebles físicos"
-              description="Las unidades físicas nacen cuando se materializan líneas de cotización o cuando el diseño añade muebles al proyecto."
+              description={
+                designs.length === 0
+                  ? 'Nacen cuando se materializan líneas de cotización o cuando el diseño añade muebles. Empezá creando el primer diseño.'
+                  : 'Las unidades físicas nacen cuando se materializan líneas de cotización o cuando el diseño añade muebles al proyecto.'
+              }
             />
           ) : visibleRows.length === 0 ? (
             <EmptyState
@@ -894,7 +942,9 @@ function ProjectFurnitureContextBar({
                 <option key={revision.id} value={revision.id}>
                   R{revision.revision_number} ·{' '}
                   {DESIGN_REVISION_STATUS_LABELS[revision.status] ?? revision.status} ·{' '}
-                  {formatWhen(revision.created_at)}
+                  {revision.approved_at
+                    ? formatWhen(revision.approved_at)
+                    : `creada ${formatWhen(revision.created_at)}`}
                 </option>
               ))}
           </select>
@@ -1073,12 +1123,6 @@ function ProjectFurnitureSummaryCards({
       hint: attention > 0 ? 'acción sugerida' : 'sin acciones pendientes',
       icon: attention > 0 ? TriangleAlert : CheckCircle2,
       tone: attention > 0 ? 'attention' : 'clear',
-    },
-    {
-      id: 'terminal',
-      label: 'Retiradas / canceladas',
-      value: summary.removed + summary.cancelled,
-      hint: 'historial permanente',
     },
   ];
   return (

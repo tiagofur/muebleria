@@ -417,6 +417,12 @@ export interface ProjectFurnitureRouteContext {
   readonly designId: string | null;
   readonly designContextKind: 'none' | 'working' | 'revision';
   readonly designRevisionId: string | null;
+  /**
+   * #1203 P1: la URL pina un estado explícito (algún param presente). Un
+   * deep link `rev=none` es una ELECCIÓN de «Sin diseño» y nunca se
+   * re-targeta; sin params el default automático puede poblar el contexto.
+   */
+  readonly pinned?: boolean;
 }
 
 export function projectFurniturePath(
@@ -432,6 +438,7 @@ export function projectFurniturePath(
   if (context.designContextKind === 'revision' && context.designRevisionId) {
     params.set('rev', context.designRevisionId);
   }
+  if (context.designContextKind === 'none' && context.pinned) params.set('rev', 'none');
   const query = params.toString();
   return query ? `${base}?${query}` : base;
 }
@@ -462,8 +469,16 @@ export function projectFurnitureFromPath(
     quoteRevisionId: qrev && qrev.length > 0 ? qrev : null,
     designId: design && design.length > 0 ? design : null,
     designContextKind:
-      rev === 'work' ? 'working' : rev && rev.length > 0 ? 'revision' : 'none',
-    designRevisionId: rev && rev !== 'work' && rev.length > 0 ? rev : null,
+      rev === 'work'
+        ? 'working'
+        : rev === 'none'
+          ? 'none'
+          : rev && rev.length > 0
+            ? 'revision'
+            : 'none',
+    designRevisionId:
+      rev && rev !== 'work' && rev !== 'none' && rev.length > 0 ? rev : null,
+    pinned: params.toString().length > 0,
   };
   return { projectId, context };
 }
