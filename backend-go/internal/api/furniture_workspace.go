@@ -130,8 +130,8 @@ func (s *Server) HandleProjectFurnitureWorkspace(w http.ResponseWriter, r *http.
 	// de catálogo + dimensiones) con la MISMA fuente que el endpoint de lista
 	// — sin esto la matriz renderiza N filas idénticas de «Mueble del
 	// proyecto». includeTerminal=true: las retiradas/canceladas son las que
-	// más necesitan identidad. Fallo del enriquecimiento ≠ fallo del
-	// workspace: cae al DTO pelado (fallback actual) con log.
+	// más necesitan identidad. Fallo del enriquecimiento = 500 explícito
+	// (fail-closed: la matriz nunca se degrada a filas sin identidad).
 	summaries, sumErr := s.Store.ListFurnitureInstanceSummariesByProject(r.Context(), projectID, true)
 	if sumErr != nil {
 		respondWithInternalError(w, sumErr, "furniture workspace summaries")
