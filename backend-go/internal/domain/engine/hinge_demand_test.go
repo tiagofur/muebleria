@@ -25,7 +25,7 @@ func bandTestCatalog(mod domain.Module, policy *domain.FactoryConstructionPolicy
 		WidthMm: 600, HeightMm: 720, DepthMm: 560, Active: true,
 		Components: []domain.ComponentInstance{{
 			ComponentID: "comp-pue", Quantity: 1,
-			Overrides:   bandPlacements(placements),
+			Overrides: bandPlacements(placements),
 		}},
 	}
 	return domain.Catalog{

@@ -34,11 +34,11 @@ type FactoryJointRule struct {
 // a full policy object (bands + surge + role) that replaces the factory-wide
 // doorHingeDemand family for doors of this catalog component.
 type ComponentConstructionOverride struct {
-	StationsCount *float64            `json:"stationsCount,omitempty"`
-	StartMarginMm *float64            `json:"startMarginMm,omitempty"`
-	EndMarginMm   *float64            `json:"endMarginMm,omitempty"`
-	MaxSpacingMm  *float64            `json:"maxSpacingMm,omitempty"`
-	HingeDemand   *HingeDemandPolicy  `json:"hingeDemand,omitempty"`
+	StationsCount *float64           `json:"stationsCount,omitempty"`
+	StartMarginMm *float64           `json:"startMarginMm,omitempty"`
+	EndMarginMm   *float64           `json:"endMarginMm,omitempty"`
+	MaxSpacingMm  *float64           `json:"maxSpacingMm,omitempty"`
+	HingeDemand   *HingeDemandPolicy `json:"hingeDemand,omitempty"`
 }
 
 // FactoryConstructionPolicy carries the factory override per engine-resolvable

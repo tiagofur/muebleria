@@ -24,9 +24,9 @@ func TestHingeDemandBandsContract(t *testing.T) {
 	var fixture struct {
 		Schema        int `json:"schema"`
 		DefaultPolicy struct {
-			OptionRole       string                `json:"optionRole"`
+			OptionRole       string                   `json:"optionRole"`
 			Bands            []domain.HingeDemandBand `json:"bands"`
-			WidthSurgeOverMm *float64              `json:"widthSurgeOverMm"`
+			WidthSurgeOverMm *float64                 `json:"widthSurgeOverMm"`
 		} `json:"defaultPolicy"`
 		DemandCases []struct {
 			Name           string `json:"name"`
@@ -35,7 +35,7 @@ func TestHingeDemandBandsContract(t *testing.T) {
 			ExpectedHinges int    `json:"expectedHinges"`
 		} `json:"demandCases"`
 		OverrideCases []struct {
-			Name   string `json:"name"`
+			Name   string                   `json:"name"`
 			Policy domain.HingeDemandPolicy `json:"policy"`
 			Cases  []struct {
 				HeightMm       int  `json:"heightMm"`

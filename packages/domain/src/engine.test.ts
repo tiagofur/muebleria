@@ -1913,7 +1913,10 @@ describe('generateHardwareList', () => {
           // #1078: without the BISAGRA choice the band cannot derive an
           // identity — a door module with lines and no choice stays
           // hardwareless (the quote gate owns demanding the group).
-          optionChoices: { ...plantillaChoices, BISAGRA: undefined },
+          optionChoices: (() => {
+            const { BISAGRA: _omitted, ...withoutHinge } = plantillaChoices;
+            return withoutHinge;
+          })(),
         },
       ],
     };
