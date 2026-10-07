@@ -282,3 +282,50 @@ describe('HardwarePlacementsEditor — modo por grupo (#1046)', () => {
     expect(picker.textContent).toContain('HW1');
   });
 });
+
+describe('HardwarePlacementsEditor — fila sin identidad (#1147)', () => {
+  it('flags a placement with neither hardwareId nor optionRole as invalid, visibly', () => {
+    render(
+      <GroupHarness
+        initial={[{ anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } }]}
+      />,
+    );
+
+    const error = screen.getByTestId('instance-hardware-placement-0-identity-error');
+    expect(error.textContent).toContain('Sin identidad');
+    expect(error.textContent).toContain('no resuelve');
+  });
+
+  it('a valid row shows no identity error', () => {
+    render(
+      <GroupHarness
+        initial={[
+          { hardwareId: 'hw-1', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } },
+        ]}
+      />,
+    );
+    expect(
+      screen.queryByTestId('instance-hardware-placement-0-identity-error'),
+    ).toBeNull();
+  });
+
+  it('an identity-less row fixes itself by switching to group mode (auto-picks the first group)', async () => {
+    const user = userEvent.setup();
+    render(
+      <GroupHarness
+        initial={[{ anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } }]}
+      />,
+    );
+    expect(screen.getByTestId('instance-hardware-placement-0-identity-error')).toBeTruthy();
+
+    // The fix path: switch to group mode — the editor auto-picks the first
+    // group, so the row NEVER stays identity-less after a mode change.
+    await user.selectOptions(screen.getByTestId('instance-hardware-placement-0-mode'), 'grupo');
+
+    expect(screen.queryByTestId('instance-hardware-placement-0-identity-error')).toBeNull();
+    const groupSelect = screen.getByTestId(
+      'instance-hardware-placement-0-group',
+    ) as HTMLSelectElement;
+    expect(groupSelect.value).toBe('BISAGRA');
+  });
+});

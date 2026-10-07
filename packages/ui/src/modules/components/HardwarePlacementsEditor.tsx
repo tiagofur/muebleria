@@ -16,6 +16,7 @@
 
 import type { ReactNode } from 'react';
 import type { AnchorFace, Hardware, HardwarePlacement, OptionGroup } from '@granete/domain';
+import { hardwarePlacementIdentityError } from '@granete/domain';
 import { CatalogPicker } from '../../catalogs/CatalogPicker';
 import { formatMoneyDisplay } from '../../common/formatMoneyDisplay';
 
@@ -147,6 +148,7 @@ export function HardwarePlacementsEditor({
           {placements.map((p, idx) => {
             const mode =
               p.optionRole && !p.hardwareId ? 'grupo' : 'especifico';
+            const identityError = hardwarePlacementIdentityError(p);
             const selectedGroup = hardwareGroups.find(
               (g) => g.code === p.optionRole,
             );
@@ -169,6 +171,17 @@ export function HardwarePlacementsEditor({
                   Quitar
                 </button>
               </div>
+              {identityError ? (
+                <p
+                  className="catalog-form__error"
+                  role="alert"
+                  data-testid={`instance-hardware-placement-${idx}${suffix}-identity-error`}
+                >
+                  <span className="badge badge--danger-subtle">Sin identidad</span>{' '}
+                  Elegí un grupo de opciones o un herraje específico: sin uno de
+                  los dos este herraje no resuelve y bloquea el guardado.
+                </p>
+              ) : null}
               <div className="module-editor__grid">
                 {hardwareGroups.length > 0 ? (
                   <div className="catalog-form__field">
@@ -212,7 +225,13 @@ export function HardwarePlacementsEditor({
                     <select
                       id={`hw-placement-group-${idx}${suffix}`}
                       value={p.optionRole ?? ''}
-                      onChange={(e) => update(idx, { optionRole: e.target.value })}
+                      onChange={(e) => {
+                        // #1147: an empty choice must never be WRITTEN — the
+                        // transient "Seleccionar grupo…" state keeps the row
+                        // invalid (visible badge) but never erases identity.
+                        if (!e.target.value) return;
+                        update(idx, { optionRole: e.target.value });
+                      }}
                       data-testid={`instance-hardware-placement-${idx}${suffix}-group`}
                     >
                       {!p.optionRole ? <option value="">Seleccionar grupo…</option> : null}

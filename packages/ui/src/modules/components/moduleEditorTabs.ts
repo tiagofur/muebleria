@@ -32,6 +32,9 @@ export function tabForModuleValidationError(
   message: string,
 ): ModuleEditorTab {
   const m = message.toLocaleLowerCase('es-UY');
+  // #1147: placements sin identidad viven en el tab Componentes — el marker
+  // específico gana antes del genérico 'herraje'.
+  if (m.includes('sin identidad')) return 'components';
   if (m.includes('herraje')) return 'hardware';
   if (m.includes('agregado') || m.includes('sub-conjunto') || m.includes('agregados')) return 'agregados';
   if (m.includes('estructura') || m.includes('medida base')) return 'structure';

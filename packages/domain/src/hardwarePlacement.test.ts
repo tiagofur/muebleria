@@ -4,6 +4,8 @@ import {
   normalizeHardwarePreview,
   resolveHardwarePlacement,
   resolvePlacementHardwareId,
+  findHardwarePlacementsWithoutIdentity,
+  hardwarePlacementIdentityError,
   type ResolvedHardwarePlacement,
 } from './hardwarePlacement';
 import type { Hardware } from './types';
@@ -394,5 +396,51 @@ describe('resolvePlacementHardwareId (#1046)', () => {
   it('neither hardwareId nor role is invalid authoring', () => {
     expect(resolvePlacementHardwareId({})).toEqual({ status: 'invalid' });
     expect(resolvePlacementHardwareId({ hardwareId: '   ' })).toEqual({ status: 'invalid' });
+  });
+});
+
+describe('hardwarePlacementIdentityError / findHardwarePlacementsWithoutIdentity (#1147)', () => {
+  it('flags exactly the placements that can never resolve', () => {
+    expect(hardwarePlacementIdentityError({})).toMatch(/neither hardwareId nor optionRole/);
+    expect(hardwarePlacementIdentityError({ hardwareId: '   ' })).toMatch(/neither/);
+    expect(hardwarePlacementIdentityError({ optionRole: '   ' })).toMatch(/neither/);
+    expect(hardwarePlacementIdentityError({ hardwareId: 'hw-1' })).toBeNull();
+    expect(hardwarePlacementIdentityError({ optionRole: 'BISAGRA' })).toBeNull();
+    // Both fields present is USABLE — the concrete hardwareId wins (#1046).
+    expect(
+      hardwarePlacementIdentityError({ hardwareId: 'hw-1', optionRole: 'BISAGRA' }),
+    ).toBeNull();
+  });
+
+  it('scans component instances and reports component + placement indices', () => {
+    const at = (x: number, y: number) => ({ anchorFace: 'front' as const, relativePosition: { xMm: x, yMm: y } });
+    const components = [
+      { overrides: { hardwarePlacements: [{ hardwareId: 'hw-1', ...at(1, 2) }] } },
+      {},
+      {
+        overrides: {
+          hardwarePlacements: [
+            { optionRole: 'BISAGRA', ...at(3, 4) },
+            { optionRole: '  ', ...at(5, 6) },
+            { hardwareId: 'hw-2', ...at(7, 8) },
+          ],
+        },
+      },
+    ];
+    expect(findHardwarePlacementsWithoutIdentity(components)).toEqual([
+      { componentIndex: 2, placementIndex: 1 },
+    ]);
+    expect(findHardwarePlacementsWithoutIdentity([])).toEqual([]);
+    expect(
+      findHardwarePlacementsWithoutIdentity([
+        {
+          overrides: {
+            hardwarePlacements: [
+              { hardwareId: 'hw-1', optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } },
+            ],
+          },
+        },
+      ]),
+    ).toEqual([]);
   });
 });

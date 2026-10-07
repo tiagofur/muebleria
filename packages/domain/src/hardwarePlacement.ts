@@ -47,6 +47,52 @@ export function resolvePlacementHardwareId(
 }
 
 /**
+ * Authoring identity error for one placement (#1147): a placement with
+ * NEITHER a concrete `hardwareId` NOR an `optionRole` can never resolve —
+ * `null` means usable (a concrete hardwareId wins when both are present).
+ * Editors surface this as an invalid row and must never save it silently:
+ * an identity-less placement stored in the catalog broke every resolve of
+ * the furniture (AGR-PUE-IZQ, 2026-10-06).
+ */
+export function hardwarePlacementIdentityError(
+  placement: Pick<HardwarePlacement, 'hardwareId' | 'optionRole'>,
+): string | null {
+  return resolvePlacementHardwareId(placement).status === 'invalid'
+    ? 'placement has neither hardwareId nor optionRole'
+    : null;
+}
+
+/** One identity-less placement found by {@link findHardwarePlacementsWithoutIdentity}. */
+export interface HardwarePlacementIdentityIssue {
+  readonly componentIndex: number;
+  readonly placementIndex: number;
+}
+
+/**
+ * Scan component instances for placements without authoring identity (#1147).
+ * The save guards of the agregado/module/structure editors block on a
+ * non-empty result with the offending row visible — never a silent store of
+ * an unresolvable placement.
+ */
+export function findHardwarePlacementsWithoutIdentity(
+  components: readonly {
+    readonly overrides?: {
+      readonly hardwarePlacements?: readonly HardwarePlacement[];
+    };
+  }[],
+): HardwarePlacementIdentityIssue[] {
+  const issues: HardwarePlacementIdentityIssue[] = [];
+  components.forEach((component, componentIndex) => {
+    (component.overrides?.hardwarePlacements ?? []).forEach((placement, placementIndex) => {
+      if (hardwarePlacementIdentityError(placement)) {
+        issues.push({ componentIndex, placementIndex });
+      }
+    });
+  });
+  return issues;
+}
+
+/**
  * Default hardware projection (mm) when the hardware has no previewProjectionMm.
  * The renderer positions each hardware's group at `face + projection` so the
  * primitive (authored +Y-outward, body extending toward the face in −Y) sits
