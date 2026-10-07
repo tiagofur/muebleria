@@ -201,6 +201,28 @@ function projectionReferenceStatus(status: NonNullable<CommercialProjection['ref
   return status === 'accepted' ? 'aceptada' : status === 'published' ? 'publicada' : status === 'draft' ? 'borrador' : status;
 }
 
+
+/** #1197 P2: los códigos de issue del backend se muestran en copy humano. */
+const PROJECTION_ISSUE_LABELS: Readonly<Record<string, string>> = {
+  working_item_missing_furniture_definition:
+    'hay muebles sin definición de fabricación',
+  working_item_parameters_not_priceable:
+    'hay muebles con parámetros no cotizables',
+  working_item_pricing_context_missing: 'falta el contexto de precios de la obra',
+  working_copy_empty: 'el borrador de trabajo no tiene muebles',
+  working_copy_incomplete: 'el borrador de trabajo tiene muebles sin precio',
+};
+
+function describeProjectionIssue(code: string): string {
+  // Los códigos con sufijo dinámico (p. ej. pricing_inputs_incomplete:<motivo>)
+  // se parten: el prefijo se traduce y el motivo se conserva como detalle.
+  const prefix = code.split(':')[0] ?? code;
+  const label = PROJECTION_ISSUE_LABELS[prefix];
+  if (!label) return code;
+  const suffix = code.slice(prefix.length + 1);
+  return suffix ? `${label} (${suffix})` : label;
+}
+
 function CommercialProjectionPanel({
   projection,
   isLoading,
@@ -259,7 +281,10 @@ function CommercialProjectionPanel({
         <span className="pd-commercial-projection__meta">{projection.itemCount} {projection.itemCount === 1 ? 'mueble' : 'muebles'} · Calculado por el servidor {formatWhen(projection.calculatedAt)}</span>
       </div>
       {isIncomplete && projection.issues.length > 0 && (
-        <p className="pd-commercial-projection__notice">Faltan datos para completar este estimado: {projection.issues.join(' · ')}</p>
+        <p className="pd-commercial-projection__notice">
+          Faltan datos para completar este estimado:{' '}
+          {projection.issues.map((code) => describeProjectionIssue(code)).join(' · ')}
+        </p>
       )}
       {projection.saleAmountsWithheld && <p className="pd-commercial-projection__notice">El importe de venta no está disponible para tu rol.</p>}
       {projection.costsWithheld && <p className="pd-commercial-projection__notice">Costos no disponibles para tu rol.</p>}

@@ -518,23 +518,6 @@
   border-radius: var(--radius-md, 4px);
 }
 
-.pd-alternatives {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 4px);
-}
-
-.pd-alternatives__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-right: 4px;
-}
 
 
 .pd-working-copy-banner {
@@ -563,6 +546,11 @@
 
 .pd-working-copy-banner__meta {
   color: var(--text-muted);
+}
+
+.pd-working-copy-banner--pending {
+  /* issue 1197 P3: estado de carga del banner — opacidad, sin fingir dato. */
+  opacity: 0.7;
 }
 
 .pd-working-copy-banner__date {
