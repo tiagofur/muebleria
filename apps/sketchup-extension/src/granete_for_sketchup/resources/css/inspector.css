@@ -169,3 +169,141 @@
 .hw-group-option-name { font-size: var(--text-sm); font-weight: var(--weight-medium); }
 .hw-group-option-meta { font-size: var(--text-xs); color: var(--text-secondary); margin-top: var(--space-1); }
 .hw-group-option-notes { font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--space-1); }
+
+/* #1178-inspector empty state & no-selection craft (Apple x Material 3) */
+.empty-state-icon-box {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-card-subtle);
+  border: 1px solid var(--border-default);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-3);
+  color: var(--brand-600);
+}
+
+.empty-state-guide {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  background: var(--surface-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.empty-state-guide-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.empty-state-guide-bullet {
+  color: var(--brand-500);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+/* Design Inspector context strip */
+.design-insp-context-box {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-card-subtle);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Hardware inventory items in project */
+.hw-inventory-category-title {
+  font-size: 0.6875rem;
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.hw-inventory-category-title:first-child {
+  margin-top: var(--space-1);
+}
+
+.hw-inventory-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.hw-inventory-item:hover {
+  background: var(--surface-hover);
+  border-color: var(--brand-500);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.05);
+}
+
+.hw-inventory-item:active {
+  transform: translateY(0);
+}
+
+.hw-inventory-item-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1;
+}
+
+.hw-inventory-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-card-subtle);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.hw-inventory-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.hw-inventory-name {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hw-inventory-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

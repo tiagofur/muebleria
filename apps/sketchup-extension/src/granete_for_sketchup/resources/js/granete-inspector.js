@@ -1788,7 +1788,8 @@
       var row = (bucket[name] = bucket[name] || {
         name: name,
         count: 0,
-        sample: null
+        sample: null,
+        hardwareDefinitionId: item.hardwareDefinitionId
       });
       row.count += Number(item.count) || 0;
       if (!row.sample && item.furnitureInstanceRef && item.hardwarePlacementId) {
@@ -1805,33 +1806,63 @@
 
     Object.keys(byCategory).sort().forEach(function (category) {
       var heading = document.createElement("div");
-      heading.className = "subhead";
-      heading.style.fontSize = "var(--text-xs)";
-      heading.style.margin = "var(--space-2) 0 var(--space-1)";
+      heading.className = "hw-inventory-category-title";
       heading.textContent = hardwareCategoryLabel(category);
       hardwareInventoryList.appendChild(heading);
 
       Object.keys(byCategory[category]).sort().forEach(function (name) {
         var row = byCategory[category][name];
-        var btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "btn btn-sm btn-ghost";
-        btn.style.display = "flex";
-        btn.style.justifyContent = "space-between";
-        btn.style.width = "100%";
-        btn.style.marginBottom = "var(--space-1)";
-        btn.textContent = name;
+        var itemBtn = document.createElement("button");
+        itemBtn.type = "button";
+        itemBtn.className = "hw-inventory-item";
+        itemBtn.title = "Clic para enfocar en el modelo 3D";
+
+        var main = document.createElement("div");
+        main.className = "hw-inventory-item-main";
+
+        var iconBox = document.createElement("div");
+        iconBox.className = "hw-inventory-icon";
+        var hwDef = hardwareDefinitionById(row.hardwareDefinitionId);
+        var rawImg = hwDef ? (hwDef.imageUrl || hwDef.image_url || hwDef.thumbnailUrl) : null;
+        var resolvedImg = (rawImg && window.GraneteUI && window.GraneteUI.media && typeof window.GraneteUI.media.resolveUrl === "function")
+          ? window.GraneteUI.media.resolveUrl(rawImg) : rawImg;
+        if (resolvedImg) {
+          iconBox.style.backgroundImage = "url('" + resolvedImg + "')";
+          iconBox.style.backgroundSize = "contain";
+          iconBox.style.backgroundRepeat = "no-repeat";
+          iconBox.style.backgroundPosition = "center";
+          iconBox.style.backgroundColor = "var(--surface-card)";
+        } else {
+          iconBox.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
+        }
+        main.appendChild(iconBox);
+
+        var info = document.createElement("div");
+        info.className = "hw-inventory-info";
+        var nameSpan = document.createElement("div");
+        nameSpan.className = "hw-inventory-name";
+        nameSpan.textContent = name;
+        info.appendChild(nameSpan);
+        var hint = document.createElement("div");
+        hint.className = "hw-inventory-hint";
+        hint.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg><span>Ver en el modelo 3D</span>';
+        info.appendChild(hint);
+        main.appendChild(info);
+
+        itemBtn.appendChild(main);
+
         var countBadge = document.createElement("span");
         countBadge.className = "status-badge neutral";
         countBadge.textContent = "\u00d7" + row.count;
-        btn.appendChild(countBadge);
-        btn.addEventListener("click", function () {
+        itemBtn.appendChild(countBadge);
+
+        itemBtn.addEventListener("click", function () {
           if (!row.sample) return;
           if (window.sketchup && typeof window.sketchup.select_hardware_instance === "function") {
             window.sketchup.select_hardware_instance(JSON.stringify(row.sample));
           }
         });
-        hardwareInventoryList.appendChild(btn);
+        hardwareInventoryList.appendChild(itemBtn);
       });
     });
 
