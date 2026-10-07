@@ -508,27 +508,42 @@
         <!-- Tab 3: Contextual Inspector (capability-driven, #476) -->
         <section id="pane-inspector" class="tab-pane" role="tabpanel">
           <div id="inspector-empty-state" class="card empty-state">
-            <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg></div>
-            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Nada seleccionado</h2>
-            <p style="margin-bottom: 0; font-size: var(--text-sm);">
+            <div class="empty-state-icon-box">
+              <svg class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+            </div>
+            <h2 style="font-size: var(--text-base); font-weight: var(--weight-bold); margin-bottom: var(--space-1); color: var(--text-primary);">Nada seleccionado</h2>
+            <p style="margin-bottom: 0; font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; max-width: 280px; margin: 0 auto;">
               Hacé clic en un mueble, pieza o herraje de Granete en el modelo para ver sus propiedades y acciones.
             </p>
+            <div class="empty-state-guide">
+              <div class="empty-state-guide-item">
+                <span class="empty-state-guide-bullet">▪</span>
+                <span><strong>Muebles:</strong> medidas, acabados y herrajes</span>
+              </div>
+              <div class="empty-state-guide-item">
+                <span class="empty-state-guide-bullet">▪</span>
+                <span><strong>Piezas:</strong> mecanizados, medidas y pertenencia</span>
+              </div>
+              <div class="empty-state-guide-item">
+                <span class="empty-state-guide-bullet">▪</span>
+                <span><strong>Herrajes:</strong> posición, fijación y perforaciones</span>
+              </div>
+            </div>
           </div>
 
-          <!-- #1046 S2: inventario contextual de herrajes del proyecto. Sólo
-               las categorías y herrajes QUE EXISTEN en el modelo (metadata
-               gestionada); nunca el catálogo completo. Click → selecciona la
-               ocurrencia y abre su card. -->
-          <div id="hardware-inventory-card" class="card" style="display: none;">
-            <h2 style="font-size: var(--text-md); margin: 0 0 var(--space-2);">Herrajes en este proyecto</h2>
-            <div id="hardware-inventory-list"></div>
-          </div>
+          <!-- #1178-inspector: la card "Herrajes en este proyecto" fue retirada
+               por decisión de producto — el inventario del modelo 3D no es
+               contenido del Inspector sin selección. La selección de
+               herrajes individuales sigue siendo posible por clic en el
+               modelo (selection observer). -->
 
           <div id="inspector-unmanaged-view" class="card empty-state" style="display: none;">
-            <div class="empty-state-icon"><svg class="icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></div>
-            <h2 style="font-size: var(--text-md); margin-bottom: var(--space-1);">Geometría no gestionada por Granete</h2>
-            <p id="unmanaged-note" style="margin-bottom: 0; font-size: var(--text-sm);">
-              Esta entidad no pertenece a ningún mueble de Granete, por lo que no tiene propiedades ni acciones de fabricación.
+            <div class="empty-state-icon-box" style="color: var(--text-muted);">
+              <svg class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            </div>
+            <h2 style="font-size: var(--text-base); font-weight: var(--weight-bold); margin-bottom: var(--space-1); color: var(--text-primary);">Geometría no gestionada</h2>
+            <p id="unmanaged-note" style="margin-bottom: 0; font-size: var(--text-xs); color: var(--text-secondary); line-height: 1.5; max-width: 290px; margin: 0 auto;">
+              Esta entidad es geometría nativa de SketchUp y no pertenece a ningún mueble de Granete.
             </p>
           </div>
 
@@ -544,14 +559,16 @@
                 <p id="design-inspector-design-name" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0;"></p>
               </div>
               <div class="badges-column">
-                <span class="status-badge">General</span>
+                <span class="status-badge neutral">Diseño general</span>
               </div>
             </div>
-            <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-2) 0 0;">
-              Proyecto: <span id="design-inspector-project-name"></span>
-            </p>
+            <div class="design-insp-context-box">
+              <span class="subhead" style="font-size: var(--text-xs); margin: 0;">Proyecto: <strong id="design-inspector-project-name" style="color: var(--text-primary);"></strong></span>
+            </div>
             <p class="presets-block-label" style="margin-top: var(--space-3);">Acabados del diseño</p>
             <div id="design-inspector-body"></div>
+            <p class="presets-block-label" id="design-inspector-hardware-label" style="margin-top: var(--space-3); display: none;">Herrajes del diseño</p>
+            <div id="design-inspector-hardware-body" style="display: none;"></div>
             <button id="design-inspector-retry" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
             <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
                  PUT with the client token; items and item modes untouched) -->
@@ -1607,12 +1624,6 @@
             if (window.GraneteUI.inspector && window.GraneteUI.inspector.onAllDoorsClosed) {
               window.GraneteUI.inspector.onAllDoorsClosed();
             }
-          },
-
-          onHardwareInventory: function (payload) {
-            if (window.GraneteUI.inspector && window.GraneteUI.inspector.onHardwareInventory) {
-              window.GraneteUI.inspector.onHardwareInventory(payload);
-            }
           }
         };
 
@@ -1834,6 +1845,32 @@
               }
             }
             return roles;
+          },
+          // #1178-inspector: hardware group codes live in the SAME design
+          // defaults map as material roles — the Design Inspector needs the
+          // kind=hardware slice to render "Herrajes del diseño" separately.
+          getHardwareGroupCodes: function () {
+            var groups = (window.GraneteUI.inspector.getOptionGroups && window.GraneteUI.inspector.getOptionGroups()) || [];
+            var codes = [];
+            for (var i = 0; i < groups.length; i++) {
+              var g = groups[i];
+              if (g && g.kind === "hardware" && g.code && codes.indexOf(g.code) === -1) codes.push(g.code);
+            }
+            return codes;
+          },
+          getHardwareGroup: function (code) {
+            var groups = (window.GraneteUI.inspector.getOptionGroups && window.GraneteUI.inspector.getOptionGroups()) || [];
+            for (var i = 0; i < groups.length; i++) {
+              if (groups[i] && groups[i].code === code) return groups[i];
+            }
+            return null;
+          },
+          hardwareById: function (id) {
+            var list = (window.GraneteUI.inspector.getHardwareCatalog && window.GraneteUI.inspector.getHardwareCatalog()) || [];
+            for (var i = 0; i < list.length; i++) {
+              if (list[i] && list[i].id === id) return list[i];
+            }
+            return null;
           },
           rerenderInspector: function () { window.GraneteUI.inspector.rerender(); },
           // #784 R2: candidate materials for a Design-level role — the union
