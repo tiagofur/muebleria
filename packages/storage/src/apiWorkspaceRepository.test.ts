@@ -1880,7 +1880,12 @@ describe('APIWorkspaceRepository hardware optimistic concurrency (#1084 / #443 s
 
     const repo = new APIWorkspaceRepository();
     await saveCatalogWith(repo, [hwDomain()]);
+    // #1168: a byte-identical re-save is a no-op — no re-learn, no re-PUT.
     await saveCatalogWith(repo, [hwDomain()]);
+    expect(learnGets).toBe(1);
+    expect(ifMatchSeen).toEqual(['"v3"']);
+    // A real change goes out under the version remembered from the write-back.
+    await saveCatalogWith(repo, [{ ...hwDomain(), name: 'Bisagra editada' }]);
     expect(learnGets).toBe(1);
     expect(ifMatchSeen).toEqual(['"v3"', '"v4"']);
   });
@@ -1958,7 +1963,13 @@ describe('APIWorkspaceRepository hardware optimistic concurrency (#1084 / #443 s
     const repo = new APIWorkspaceRepository();
     const ws = await repo.load();
     expect(ws.catalog.hardware).toHaveLength(1);
+    // #1168: getCatalog also seeds the skip-unchanged baseline, so a save
+    // identical to the loaded state is a no-op instead of a rewrite.
     await saveCatalogWith(repo, [hwDomain()]);
+    expect(learnGets).toBe(0);
+    expect(ifMatchSeen).toEqual([]);
+    // A real change goes out under the version seeded by getCatalog.
+    await saveCatalogWith(repo, [{ ...hwDomain(), name: 'Bisagra editada' }]);
     expect(learnGets).toBe(0);
     expect(ifMatchSeen).toEqual(['"v5"']);
   });
@@ -2030,7 +2041,12 @@ describe('APIWorkspaceRepository simple families concurrency (#1091 / #443 slice
     const repo = new APIWorkspaceRepository();
     const ws = await repo.load();
     expect(ws.catalog.materials).toHaveLength(1);
+    // #1168: a save identical to the loaded state is a no-op (seeded baseline).
     await saveCatalogWith(repo, [matDomain()]);
+    expect(learnGets).toBe(0);
+    expect(ifMatchSeen).toEqual([]);
+    // A real change goes out guarded with the version seeded by the load.
+    await saveCatalogWith(repo, [{ ...matDomain(), name: 'Entidad S2 editada' }]);
     expect(learnGets).toBe(0);
     expect(ifMatchSeen).toEqual(['"v5"']);
   });
@@ -2065,6 +2081,71 @@ describe('APIWorkspaceRepository simple families concurrency (#1091 / #443 slice
     // A real change goes out guarded with the remembered version.
     await saveCatalogWith(repo, [{ ...matDomain(), name: 'Entidad S2 editada' }]);
     expect(ifMatchSeen).toEqual(['"v3"', '"v4"']);
+  });
+
+  it('#1168: sesión fresca — guardar un agregado editado emite exactamente un PUT de esa entidad, no N', async () => {
+    const wireAgregado = (id: string, code: string, name: string, version: number) => ({
+      id,
+      code,
+      name,
+      active: true,
+      components: [],
+      hardware_lines: [],
+      version,
+    });
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'GET' && url.includes('/catalog/agregados')) {
+        return {
+          ok: true,
+          json: async () => [
+            wireAgregado('agr-1', 'AGR-1', 'A uno', 3),
+            wireAgregado('agr-2', 'AGR-2', 'A dos', 5),
+          ],
+        } as Response;
+      }
+      if (method === 'PUT' && url.includes('/catalog/agregados/agr-1')) {
+        return { ok: true, json: async () => ({ id: 'agr-1', version: 4 }) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const repo = new APIWorkspaceRepository();
+    const catalog = await repo.getCatalog();
+
+    // Fase de guardado: contar toda escritura no-GET.
+    const writes: { method: string; url: string }[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method !== 'GET') writes.push({ method, url });
+      if (method === 'PUT' && url.includes('/catalog/agregados/agr-1')) {
+        return { ok: true, json: async () => ({ id: 'agr-1', version: 4 }) } as Response;
+      }
+      return { ok: true, json: async () => [] } as Response;
+    });
+
+    const edited: Catalog = {
+      ...catalog,
+      agregados: (catalog.agregados ?? []).map((a) =>
+        a.id === 'agr-1' ? { ...a, name: 'A uno editado' } : a,
+      ),
+    };
+    await repo.saveCatalog(edited);
+
+    // El re-save masivo terminaba en N PUTs (116 escrituras medidas en el
+    // browser real: materiales, cantos, herrajes, componentes, clientes…).
+    // Con el baseline sembrado por getCatalog, sólo la entidad editada
+    // difiere de lo cargado → exactamente un PUT.
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.method).toBe('PUT');
+    expect(writes[0]?.url).toContain('/catalog/agregados/agr-1');
+
+    // Re-guardar lo mismo (sin recargar) sigue siendo 0 escrituras.
+    writes.length = 0;
+    await repo.saveCatalog(edited);
+    expect(writes).toHaveLength(0);
   });
 
   it('materials: un PUT 412 VERSION_CONFLICT rechaza saveCatalog con el error tipado', async () => {
