@@ -400,11 +400,22 @@ export function makeCatalogStoreCtx(
         const staleCatalogWrite =
           (err instanceof GraneteApiError && err.code === 'VERSION_CONFLICT') ||
           err instanceof ModuleVersionUnknownError;
+        // #1215: a business 4xx carries an actionable server message (e.g. a
+        // hardware that cannot be deactivated while referenced) — show it
+        // instead of pretending the connection failed. Transport failures and
+        // 5xx keep the generic connection copy.
+        const businessError =
+          err instanceof GraneteApiError &&
+          err.status >= 400 &&
+          err.status < 500 &&
+          !staleCatalogWrite;
         toast({
           type: staleCatalogWrite ? 'warning' : 'error',
           message: staleCatalogWrite
             ? 'El catálogo cambió en otra sesión. Recargá la pantalla antes de volver a guardar este mueble.'
-            : 'Error de conexión al sincronizar cambios',
+            : businessError && err instanceof GraneteApiError
+              ? err.message
+              : 'Error de conexión al sincronizar cambios',
         });
         throw err;
       }
