@@ -248,6 +248,11 @@ describe('HardwarePlacementsEditor — modo por grupo (#1046)', () => {
     expect(screen.getByTestId('instance-hardware-placement-0-members').textContent).toContain(
       'Se elige al cotizar',
     );
+    // #1046: the member hint carries the unit cost — what the author sees is
+    // what each member costs when the quote picks it.
+    expect(screen.getByTestId('instance-hardware-placement-0-members').textContent).toContain(
+      'HW2 — Bisagra ($5.00)',
+    );
   });
 
   it('keeps a saved role that is no longer in the catalog visible without rewriting it', () => {

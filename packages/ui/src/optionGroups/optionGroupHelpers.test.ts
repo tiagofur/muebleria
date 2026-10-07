@@ -351,6 +351,99 @@ describe('requiredGroupCodesForModule', () => {
   });
 });
 
+describe('consumption por placements de herrajes (#1046)', () => {
+  const moduleWithPlacements = {
+    hardwareLines: [],
+    components: [
+      {
+        componentId: 'comp-any',
+        overrides: {
+          hardwarePlacements: [
+            // The only consumption in this module: a placement por grupo.
+            { optionRole: 'BISAGRA' },
+            // A concrete placement never consumes a group choice.
+            { optionRole: 'BISAGRA', hardwareId: 'h1' },
+          ],
+        },
+      },
+    ],
+  };
+
+  it('a required group consumed only by a placement por grupo blocks the price gate', () => {
+    const codes = requiredGroupCodesForModule(moduleWithPlacements, groups);
+
+    expect(codes).toEqual(['BISAGRA']);
+    const blocked = canShowPricePreview(codes, {});
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) {
+      expect(blocked.missingGroups).toEqual(['BISAGRA']);
+    }
+    const open = canShowPricePreview(codes, { BISAGRA: 'h1' });
+    expect(open).toEqual({ ok: true, missingGroups: [] });
+  });
+
+  it('the item picker offers the group consumed only by a placement por grupo', () => {
+    expect(selectableGroupCodesForModule(moduleWithPlacements, groups)).toEqual([
+      'BISAGRA',
+    ]);
+  });
+
+  it('placement roles inside the referenced structure consume too', () => {
+    const catalogStructures = [
+      {
+        id: 'str-1',
+        code: 'STR-GAB',
+        name: 'Cuerpo gabinete',
+        components: [
+          {
+            id: 'i1',
+            componentId: 'comp-any',
+            quantity: 1,
+            overrides: {
+              hardwarePlacements: [
+                {
+                  optionRole: 'BISAGRA',
+                  anchorFace: 'front' as const,
+                  relativePosition: { xMm: 10, yMm: 20 },
+                },
+              ],
+            },
+          },
+        ],
+        active: true,
+      },
+    ];
+
+    const codes = requiredGroupCodesForModule(
+      { hardwareLines: [], structureId: 'str-1', components: [] },
+      groups,
+      undefined,
+      catalogStructures,
+    );
+
+    expect(codes).toEqual(['BISAGRA']);
+  });
+
+  it('an all-concrete placement set consumes nothing', () => {
+    const codes = requiredGroupCodesForModule(
+      {
+        hardwareLines: [],
+        components: [
+          {
+            componentId: 'comp-any',
+            overrides: {
+              hardwarePlacements: [{ hardwareId: 'h1' }, { optionRole: '', hardwareId: 'h1' }],
+            },
+          },
+        ],
+      },
+      groups,
+    );
+
+    expect(codes).toEqual([]);
+  });
+});
+
 describe('SEED_OPTION_GROUP_CODES (OPT-03)', () => {
   it('lists the four seed group codes required by product', () => {
     expect(SEED_OPTION_GROUP_CODES).toEqual([
