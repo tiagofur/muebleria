@@ -215,7 +215,10 @@
     (issue.actions || []).forEach(function (action) {
       var button = document.createElement("button");
       button.type = "button";
-      button.className = action === "navigate" ? "btn btn-primary" : "btn btn-secondary";
+      // #1178-inspector hierarchy: the loop's advancing action ("Volver a
+      // verificar") is the card's primary above; every in-card action is
+      // quiet navigation — same weight, compact.
+      button.className = "btn btn-secondary btn-sm";
       var label = document.createElement("span");
       label.textContent = ACTION_COPY[action] || action;
       button.appendChild(label);

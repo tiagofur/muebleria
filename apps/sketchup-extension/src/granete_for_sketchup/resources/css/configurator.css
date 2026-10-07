@@ -263,6 +263,19 @@
         text-align: center;
       }
 
+      /* #1178-inspector: server-authoritative quantity (relationship-bound
+         param) — displayed, never edited from the workshop host. */
+      .param-readonly-value {
+        font-size: var(--text-base);
+        font-weight: var(--weight-semibold);
+        color: var(--text-secondary);
+        min-width: 2rem;
+        text-align: center;
+        padding: var(--space-1) var(--space-2);
+        background: var(--surface-card-subtle);
+        border-radius: var(--radius-sm);
+      }
+
       .summary-box {
         background: var(--surface-card-subtle);
         border-radius: var(--radius-md);

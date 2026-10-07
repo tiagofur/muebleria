@@ -15,12 +15,19 @@ module Granete
           @resource_path = resource_path || default_resource_path
           @dialog = nil
           @current_payload = nil
+          @current_kind = nil
           @on_apply = nil
         end
 
+        # rubocop:disable-next Metrics/ParameterLists
         def show_selector(role:, role_name:, current_material_id:, allowed_materials:, categories:, media: nil,
-                          media_refresher: nil, on_apply: nil, context: nil)
+                          media_refresher: nil, on_apply: nil, context: nil, kind: 'material', title: nil)
+          close if @dialog&.visible? && @current_kind != kind
+
+          @current_kind = kind
           @current_payload = {
+            'kind' => kind,
+            'title' => title,
             'role' => role,
             'roleName' => role_name || role,
             'currentMaterialId' => current_material_id,
@@ -40,7 +47,7 @@ module Granete
             return @dialog
           end
 
-          @dialog = build_dialog
+          @dialog = build_dialog(kind: kind, title: title)
           @dialog.show
           @dialog.bring_to_front
           @dialog
@@ -63,10 +70,16 @@ module Granete
           File.expand_path('../resources/material_selector.html', directory)
         end
 
-        def build_dialog
+        def build_dialog(kind: 'material', title: nil)
+          default_title = kind == 'hardware' ? 'Catálogo de Herrajes — Granete' : 'Catálogo de Acabados — Granete'
+          pref_key = if kind == 'hardware'
+                       'com.granete.sketchup_extension.hardware_selector'
+                     else
+                       'com.granete.sketchup_extension.material_selector'
+                     end
           dialog = ::UI::HtmlDialog.new(
-            dialog_title: 'Catálogo de Acabados — Granete',
-            preferences_key: 'com.granete.sketchup_extension.material_selector',
+            dialog_title: title || default_title,
+            preferences_key: pref_key,
             scrollable: false,
             resizable: true,
             width: 960,

@@ -405,7 +405,9 @@
         return;
       }
       pfListView.style.display = "block";
-      pfCountBadge.textContent = (payload.placed || 0) + " puestos · " + (payload.pending || 0) + " pendientes" +
+      pfCountBadge.textContent =
+        (payload.placed || 0) + " " + (payload.placed === 1 ? "puesto" : "puestos") + " · " +
+        (payload.pending || 0) + " " + (payload.pending === 1 ? "pendiente" : "pendientes") +
         ((payload.attention || 0) > 0 ? " · " + payload.attention + " requieren atención" : "");
       pfPendingTitle.textContent = "Pendientes y divergencias (" + (payload.pending || 0) + ")";
       pfPlacedTitle.textContent = "Puestos / Sincronizados (" + (payload.placed || 0) + ")";
@@ -530,29 +532,31 @@
   // confirm is armed, the footer renders the confirm instead of the
   // buttons — one call to action at a time.
   function appendActionFooter(card, row, missing) {
-    var armed = removableRow(row) && removeArmed === row.id && !pfRemoving[row.id];
-    var buttons = [];
-    if (!armed) {
-      if (row.reconciliationState === "pending_confirmation") {
-        buttons.push(retrySyncButton(row), cancelPlacementButton(row));
-      } else if (row.reconciliationState === "unplaced") {
-        buttons.push(placeUnitButton(row));
-      } else if (missing) {
-        // #870 — two same-level recovery intents for the SAME unit: the
-        // recorded-position restore (Restorer) or a manual placement of
-        // the existing unit through the shared #469 preview. Never a unit.
-        var busy = pfRestoring[row.id] || pfPlacing[row.id] || pfRemoving[row.id];
-        buttons.push(restorePositionButton(row, busy), manualPlaceButton(row, busy));
-      } else if (row.reconciliationState === "present_synced") {
-        buttons.push(selectUnitButton(row));
-      }
-      if (removableRow(row)) buttons.push(removeUnitButton(row));
+    if (removableRow(row) && removeArmed === row.id && !pfRemoving[row.id]) {
+      // #1177 — the armed confirm replaces the whole footer with one calm
+      // tonal strip: the card speaks with a single voice at a time.
+      card.appendChild(armedRemoveStrip(row));
+      return;
     }
-    if (!armed && !buttons.length) return;
+    var buttons = [];
+    if (row.reconciliationState === "pending_confirmation") {
+      buttons.push(retrySyncButton(row), cancelPlacementButton(row));
+    } else if (row.reconciliationState === "unplaced") {
+      buttons.push(placeUnitButton(row));
+    } else if (missing) {
+      // #870 — two same-level recovery intents for the SAME unit: the
+      // recorded-position restore (Restorer) or a manual placement of
+      // the existing unit through the shared #469 preview. Never a unit.
+      var busy = pfRestoring[row.id] || pfPlacing[row.id] || pfRemoving[row.id];
+      buttons.push(restorePositionButton(row, busy), manualPlaceButton(row, busy));
+    } else if (row.reconciliationState === "present_synced") {
+      buttons.push(selectUnitButton(row));
+    }
+    if (removableRow(row)) buttons.push(removeUnitButton(row));
+    if (!buttons.length) return;
 
     var footer = document.createElement("div");
     footer.className = "pf-unit-actions";
-    if (armed) footer.appendChild(armedRemoveGroup(row));
     buttons.forEach(function (button) { footer.appendChild(button); });
     card.appendChild(footer);
   }
@@ -655,44 +659,40 @@
     return icon;
   }
 
-  function armedRemoveGroup(row) {
-    var group = document.createElement("div");
-    group.style.display = "flex";
-    group.style.flexDirection = "column";
-    group.style.gap = "6px";
-    group.style.flex = "1 1 100%";
+  // #1177 — the armed confirm: one tonal surface (the app's danger-callout
+  // world), question with real hierarchy, the honest commercial caveat and
+  // exactly two exits: the solid destructive confirmation and a quiet No.
+  function armedRemoveStrip(row) {
+    var strip = document.createElement("div");
+    strip.className = "pf-remove-confirm";
 
-    var question = document.createElement("div");
-    question.className = "pf-unit-meta";
-    question.style.color = "var(--danger-600)";
-    question.textContent = "¿Quitar “" + (row.name || "este mueble") + "” del proyecto?";
-    group.appendChild(question);
+    var head = document.createElement("div");
+    head.className = "pf-remove-confirm-head";
+    head.appendChild(trashIcon());
+    var title = document.createElement("span");
+    title.className = "pf-remove-confirm-title";
+    title.textContent = "¿Quitar “" + (row.name || "este mueble") + "” del proyecto?";
+    head.appendChild(title);
+    strip.appendChild(head);
 
-    var caveat = document.createElement("div");
-    caveat.className = "pf-unit-meta";
-    caveat.textContent = "Si la cotización vigente sigue pidiendo este mueble, puede volver a materializarse desde la web.";
-    group.appendChild(caveat);
+    var note = document.createElement("p");
+    note.className = "pf-remove-confirm-note";
+    note.textContent = "Si la cotización vigente sigue pidiendo este mueble, puede volver a materializarse desde la web.";
+    strip.appendChild(note);
 
     var actions = document.createElement("div");
-    actions.style.display = "flex";
-    actions.style.gap = "6px";
+    actions.className = "pf-remove-confirm-actions";
 
-    var yes = document.createElement("button");
-    yes.className = "btn btn-danger";
-    yes.textContent = "Quitar";
-    yes.disabled = removeActionsBusy(row);
-    yes.addEventListener("click", function () { removeFurnitureInstance(row.id); });
-    actions.appendChild(yes);
-
-    var no = document.createElement("button");
-    no.className = "btn btn-secondary";
-    no.textContent = "No";
-    no.disabled = removeActionsBusy(row);
+    var no = footerButton("btn btn-secondary", "No", removeActionsBusy(row));
     no.addEventListener("click", function () { disarmRemoveFurniture(); });
     actions.appendChild(no);
 
-    group.appendChild(actions);
-    return group;
+    var yes = footerButton("btn btn-danger-solid", "Quitar", removeActionsBusy(row));
+    yes.addEventListener("click", function () { removeFurnitureInstance(row.id); });
+    actions.appendChild(yes);
+
+    strip.appendChild(actions);
+    return strip;
   }
 
   function rerenderPfLists() {

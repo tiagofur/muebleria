@@ -6,7 +6,16 @@
 module Granete
   module SketchUpExtension
     module UserInterface
-      module OptionSelectorBridge
+      module OptionSelectorBridge # rubocop:disable Metrics/ModuleLength
+        HARDWARE_CATEGORY_LABELS = {
+          'hinge' => 'Bisagras',
+          'slide' => 'Correderas',
+          'handle' => 'Jaladeras y Tiradores',
+          'leg' => 'Patas',
+          'fastener' => 'Fijaciones',
+          'other' => 'Otros herrajes'
+        }.freeze
+
         def handle_open_material_selector(dialog, payload_json)
           payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
           params = extract_selector_params(payload)
@@ -37,6 +46,20 @@ module Granete
           )
         rescue StandardError => e
           @logger&.error('open_material_selector_failed', error: e)
+        end
+
+        # #1178-inspector: floating hardware model selector matching the
+        # visual and UX pattern of the finishes selector (same 960×620 window,
+        # search, categories, large preview inspector).
+        def handle_open_hardware_selector(dialog, payload_json)
+          payload = payload_json.is_a?(String) ? JSON.parse(payload_json) : (payload_json || {})
+          params = extract_hardware_params(payload)
+          formatted_hardware, raw_hardware = selector_allowed_hardware(params[:allowed_ids])
+          categories = selector_hardware_categories(formatted_hardware)
+
+          open_hardware_dialog(dialog, params, formatted_hardware, raw_hardware, categories)
+        rescue StandardError => e
+          @logger&.error('open_hardware_selector_failed', error: e)
         end
 
         private
@@ -125,6 +148,93 @@ module Granete
 
         def selector_categories
           @catalog_provider.respond_to?(:all_material_categories) ? @catalog_provider.all_material_categories : []
+        end
+
+        def extract_hardware_params(payload)
+          code = payload['groupCode'] || payload[:groupCode] || payload['code']
+          name = payload['groupName'] || payload[:groupName] || payload['name'] || code
+          current_id = payload['currentHardwareId'] || payload[:currentHardwareId]
+          allowed = payload['optionIds'] || payload[:optionIds] || []
+          {
+            group_code: code,
+            group_name: name,
+            current_id: current_id,
+            allowed_ids: allowed,
+            context: payload['context']
+          }
+        end
+
+        def selector_allowed_hardware(allowed_ids)
+          all_hw = @catalog_provider.respond_to?(:all_hardware) ? @catalog_provider.all_hardware : []
+          raw = if allowed_ids.is_a?(Array) && !allowed_ids.empty?
+                  all_hw.select { |hw| allowed_ids.include?(hw['id']) || allowed_ids.include?(hw['code']) }
+                else
+                  all_hw
+                end
+
+          formatted = raw.map do |hw|
+            {
+              'id' => hw['id'],
+              'materialId' => hw['id'],
+              'code' => hw['code'],
+              'name' => hw['name'] || hw['code'],
+              'category' => hw['category'],
+              'categoryLabel' => hardware_category_label(hw['category']),
+              'unit' => hw['unit'],
+              'unitLabel' => hardware_unit_label(hw['unit']),
+              'notes' => hw['notes'] || hw['description'],
+              'imageUrl' => hw['imageUrl'] || hw['image_url'] || hw['thumbnailUrl'] || hw['previewUrl'],
+              'kind' => 'hardware'
+            }
+          end
+          [formatted, raw]
+        end
+
+        def open_hardware_dialog(dialog, params, formatted_hardware, raw_hardware, categories)
+          option_selector.show_selector(
+            role: params[:group_code],
+            role_name: params[:group_name],
+            current_material_id: params[:current_id],
+            allowed_materials: formatted_hardware,
+            categories: categories,
+            context: params[:context],
+            kind: 'hardware',
+            title: 'Catálogo de Herrajes — Granete',
+            media: media_authorizer.media_payload_for('hardware' => raw_hardware),
+            media_refresher: ->(filename) { media_authorizer.refresh_url(filename) },
+            on_apply: lambda do |selected_group, selected_hw_id, _scope, _context|
+              execute_bridge(dialog, 'onHardwareChoiceApplied', {
+                               'groupCode' => selected_group,
+                               'hardwareId' => selected_hw_id
+                             })
+            end
+          )
+        end
+
+        def hardware_category_label(cat)
+          HARDWARE_CATEGORY_LABELS[cat.to_s.downcase] || (cat ? cat.to_s.capitalize : 'Herraje')
+        end
+
+        def hardware_unit_label(unit)
+          case unit.to_s.downcase
+          when 'piece' then 'por unidad'
+          when 'set' then 'por juego'
+          when 'm' then 'por metro'
+          else unit.to_s
+          end
+        end
+
+        def selector_hardware_categories(hardware_list)
+          groups = hardware_list.group_by { |hw| hw['category'] || 'other' }
+          return [] if groups.keys.length <= 1
+
+          groups.map do |cat_code, _items|
+            {
+              'id' => cat_code,
+              'name' => hardware_category_label(cat_code),
+              'level' => 1
+            }
+          end
         end
       end
 

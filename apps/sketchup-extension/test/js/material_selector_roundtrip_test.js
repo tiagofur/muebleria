@@ -262,9 +262,31 @@ function runTests() {
   assert.strictEqual(batchApplyCall.payload.scope, 'batch', 'scope is batch for batch context');
   assert.strictEqual(batchApplyCall.payload.context, 'batch');
 
+  // 8. #1178-inspector: Verify hardware kind selector configuration
+  initFn({
+    kind: 'hardware',
+    title: 'Catálogo de Herrajes — Granete',
+    role: 'BISAGRAS',
+    roleName: 'Bisagras de Puertas',
+    currentMaterialId: 'hw-blum',
+    allowedMaterials: [
+      { id: 'hw-blum', code: 'BIS-CL110', name: 'Bisagra Blum Clip Top', categoryLabel: 'Bisagras', unitLabel: 'por unidad' },
+      { id: 'hw-eco', code: 'BIS-ECO', name: 'Bisagra Económica', categoryLabel: 'Bisagras', unitLabel: 'por unidad' }
+    ],
+    categories: []
+  });
+  const hwState = sandbox.window.__getState();
+  assert.strictEqual(hwState.kind, 'hardware');
+  assert.strictEqual(hwState.role, 'BISAGRAS');
+  assert.strictEqual(elements['btn-apply'].textContent, '✓ Aplicar Herraje');
+  elements['btn-apply'].click();
+  const hwApplyCall = bridgeCalls.filter(c => c.action === 'apply_selection').pop();
+  assert.strictEqual(hwApplyCall.payload.role, 'BISAGRAS');
+  assert.strictEqual(hwApplyCall.payload.materialId, 'hw-blum');
+
   console.log(JSON.stringify({
     success: true,
-    testsPassed: 7,
+    testsPassed: 8,
     appliedPayload: applyCall.payload
   }));
 }

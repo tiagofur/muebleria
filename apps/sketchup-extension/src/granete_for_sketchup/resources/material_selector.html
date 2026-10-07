@@ -391,6 +391,20 @@
       border-bottom: 1px solid var(--border-default);
     }
 
+    .card-preview--hardware {
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-color: var(--surface-card);
+    }
+
+    .inspector-preview-box--hardware {
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-color: var(--surface-card);
+    }
+
     .card-check {
       background: var(--brand-500);
       color: var(--text-inverse);
@@ -768,23 +782,23 @@
 
         <div class="detail-grid">
           <div class="detail-item">
-            <span class="detail-label">Código</span>
+            <span class="detail-label" id="detail-code-label">Código</span>
             <span id="detail-code" class="detail-value">—</span>
           </div>
           <div class="detail-item">
-            <span class="detail-label">Espesor</span>
+            <span class="detail-label" id="detail-thickness-label">Espesor</span>
             <span id="detail-thickness" class="detail-value">—</span>
           </div>
           <div class="detail-item">
-            <span class="detail-label">Fabricante</span>
+            <span class="detail-label" id="detail-manufacturer-label">Fabricante</span>
             <span id="detail-manufacturer" class="detail-value">—</span>
           </div>
-          <div class="detail-item">
-            <span class="detail-label">Veta</span>
+          <div class="detail-item" id="detail-grain-item">
+            <span class="detail-label" id="detail-grain-label">Veta</span>
             <span id="detail-grain" class="detail-value">—</span>
           </div>
-          <div class="detail-item" style="grid-column: 1 / -1;">
-            <span class="detail-label">Textura 3D</span>
+          <div class="detail-item" id="detail-texture-item" style="grid-column: 1 / -1;">
+            <span class="detail-label" id="detail-texture-label">Textura 3D</span>
             <span id="detail-texture-status" class="detail-value">—</span>
           </div>
         </div>
@@ -939,8 +953,10 @@
 
     // Initialize from Ruby controller
     window.initOptionSelector = function(payload) {
-      state.role = payload.role || 'INTERIOR';
-      state.roleName = payload.roleName || payload.role || 'Acabado';
+      state.kind = payload.kind || 'material';
+      state.title = payload.title || (state.kind === 'hardware' ? 'Catálogo de Herrajes' : 'Catálogo de Acabados');
+      state.role = payload.role || (state.kind === 'hardware' ? 'HERRAJES' : 'INTERIOR');
+      state.roleName = payload.roleName || payload.role || (state.kind === 'hardware' ? 'Herrajes' : 'Acabado');
       state.currentMaterialId = payload.currentMaterialId || null;
       state.selectedMaterialId = payload.currentMaterialId || null;
       state.allowedMaterials = payload.allowedMaterials || [];
@@ -954,16 +970,26 @@
       state.searchQuery = '';
 
       // Update header
+      const headerTitle = document.querySelector('.header-title span');
+      if (headerTitle) headerTitle.textContent = state.title;
+
       const roleBadge = document.getElementById('role-badge');
       if (roleBadge) roleBadge.textContent = state.roleName;
 
+      const searchInput = document.getElementById('search-input');
+      if (searchInput) {
+        searchInput.placeholder = state.kind === 'hardware'
+          ? 'Buscar por nombre, código o categoría...'
+          : 'Buscar por nombre, código o fabricante...';
+      }
+
       // Alcance honesto por contexto: en el configurador todavía no existe
       // el mueble — la elección acompaña a la próxima inserción.
-      // En contexto "design" (defaults generales del proyecto) o "batch" (lote de muebles),
-      // no aplica el selector de alcance individual/proyecto.
+      // En contexto "design" (defaults generales del proyecto), "batch" (lote de muebles),
+      // o en selección de herrajes de un mueble, no aplica el selector de alcance de sesión.
       const scopeBox = document.querySelector('.scope-box');
       if (scopeBox) {
-        scopeBox.style.display = (state.context === 'design' || state.context === 'batch') ? 'none' : 'block';
+        scopeBox.style.display = (state.context === 'design' || state.context === 'batch' || state.kind === 'hardware') ? 'none' : 'block';
       }
 
       const scopeFurnitureLabel = document.getElementById('scope-furniture-label');
@@ -996,7 +1022,6 @@
       updateDetailPane();
 
       // Focus search
-      const searchInput = document.getElementById('search-input');
       if (searchInput) {
         searchInput.value = '';
         searchInput.focus();
@@ -1044,7 +1069,8 @@
       const bar = document.getElementById('breadcrumbs-bar');
       if (!bar) return;
 
-      const crumbs = [{ label: 'Catálogo Completo', l1: null, l2: null, l3: null }];
+      const rootLabel = state.kind === 'hardware' ? 'Catálogo de Herrajes' : 'Catálogo Completo';
+      const crumbs = [{ label: rootLabel, l1: null, l2: null, l3: null }];
 
       if (state.selectedL1Id) {
         const l1 = state.categories.find(c => c.id === state.selectedL1Id);
@@ -1231,7 +1257,8 @@
       const catId = getSelectedCategoryId();
       if (catId) {
         const validIds = getDescendantCategoryIds(catId);
-        list = list.filter(m => m.categoryId && validIds.includes(m.categoryId));
+        list = list.filter(m => (m.categoryId && validIds.includes(m.categoryId)) ||
+                                (m.category && validIds.includes(m.category)));
       }
 
       // Filter by search query
@@ -1240,6 +1267,8 @@
         list = list.filter(m => {
           return (m.name && m.name.toLowerCase().includes(q)) ||
                  (m.code && m.code.toLowerCase().includes(q)) ||
+                 (m.categoryLabel && m.categoryLabel.toLowerCase().includes(q)) ||
+                 (m.category && m.category.toLowerCase().includes(q)) ||
                  (m.manufacturer && m.manufacturer.toLowerCase().includes(q));
         });
       }
@@ -1291,7 +1320,11 @@
       if (!grid) return;
 
       const materials = filterMaterials();
-      if (countEl) countEl.textContent = `${materials.length} materiales disponibles`;
+      const isHw = state.kind === 'hardware';
+      if (countEl) {
+        countEl.textContent = `${materials.length} ` +
+          (materials.length === 1 ? (isHw ? 'herraje disponible' : 'material disponible') : (isHw ? 'herrajes disponibles' : 'materiales disponibles'));
+      }
 
       const catId = getSelectedCategoryId();
       if (labelEl) {
@@ -1308,8 +1341,8 @@
       if (state.allowedMaterials.length === 0) {
         grid.innerHTML = `
           <div class="empty-state">
-            <div class="empty-title">Este rol no tiene materiales asignados</div>
-            <div class="empty-hint">Configurá el grupo de opciones del mueble en Granete y volvé a abrir el selector.</div>
+            <div class="empty-title">${isHw ? 'Este grupo no tiene herrajes asignados' : 'Este rol no tiene materiales asignados'}</div>
+            <div class="empty-hint">${isHw ? 'Configurá los herrajes del grupo en Granete y volvé a abrir el selector.' : 'Configurá el grupo de opciones del mueble en Granete y volvé a abrir el selector.'}</div>
           </div>
         `;
         return;
@@ -1318,7 +1351,7 @@
       if (materials.length === 0) {
         grid.innerHTML = `
           <div class="empty-state">
-            <div class="empty-title">No se encontraron acabados</div>
+            <div class="empty-title">${isHw ? 'No se encontraron herrajes' : 'No se encontraron acabados'}</div>
             <div class="empty-hint">Probá ajustando el término de búsqueda o cambiando de categoría.</div>
             <button id="btn-reset-filters" class="btn-reset-filters" type="button">Limpiar filtros de búsqueda</button>
           </div>
@@ -1345,29 +1378,42 @@
       grid.innerHTML = materials.map(mat => {
         const matId = mat.materialId || mat.id;
         const isSelected = state.selectedMaterialId === matId;
-        const rawMediaUrl = mat.previewTextureUrl || mat.imageUrl;
+        const rawMediaUrl = mat.previewTextureUrl || mat.imageUrl || mat.image_url || mat.thumbnailUrl;
         const mediaName = mediaFilenameFromPath(rawMediaUrl);
         const textureUrl = sanitizeUrl(resolveMediaUrl(rawMediaUrl));
         const color = sanitizeColor(mat.previewColor);
-        const bgFallback = color ? `background-color: ${color};` : 'background-color: var(--surface-card-subtle);';
+        const bgFallback = isHw
+          ? 'background-color: var(--surface-card);'
+          : (color ? `background-color: ${color};` : 'background-color: var(--surface-card-subtle);');
         const dataSrcAttr = textureUrl ? `data-src="${textureUrl}"` : '';
         // Tagged so a re-minted grant (updateMediaUrl) can repaint the swatch.
         const mediaNameAttr = mediaName ? `data-media-name="${mediaName}"` : '';
-        const grainBadge = (mat.grain || mat.grainDefault) ? `<span class="grain-indicator">${GRAIN_ICON} Veta</span>` : '';
-        const mfgBadge = mat.manufacturer ? `<span class="card-manufacturer">${escapeHtml(mat.manufacturer)}</span>` : '';
-        const thickness = mat.thicknessMm ? `${escapeHtml(mat.thicknessMm)} mm` : '—';
+        const grainBadge = (!isHw && (mat.grain || mat.grainDefault)) ? `<span class="grain-indicator">${GRAIN_ICON} Veta</span>` : '';
+        const mfgBadge = (!isHw && mat.manufacturer)
+          ? `<span class="card-manufacturer">${escapeHtml(mat.manufacturer)}</span>`
+          : (isHw && (mat.categoryLabel || mat.category) ? `<span class="card-manufacturer">${escapeHtml(mat.categoryLabel || mat.category)}</span>` : '');
+        const metaDetail = isHw
+          ? (mat.unitLabel ? escapeHtml(mat.unitLabel) : (mat.unit ? escapeHtml(mat.unit) : ''))
+          : (mat.thicknessMm ? `${escapeHtml(mat.thicknessMm)} mm` : '—');
+
+        const fallbackSvg = isHw && !textureUrl
+          ? `<div class="card-preview-fallback-icon" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg></div>`
+          : '';
+
+        const cardPreviewClass = isHw ? 'card-preview card-preview--hardware' : 'card-preview';
 
         return `
           <div class="swatch-card ${isSelected ? 'active' : ''}" role="option" aria-selected="${isSelected ? 'true' : 'false'}" tabindex="0" aria-label="${escapeHtml(mat.name)}" data-id="${escapeHtml(matId)}">
-            <div class="card-preview" ${dataSrcAttr} ${mediaNameAttr} style="${bgFallback}">
+            <div class="${cardPreviewClass}" ${dataSrcAttr} ${mediaNameAttr} style="${bgFallback}">
               <span class="card-check">✓</span>
               ${grainBadge}
+              ${fallbackSvg}
             </div>
             <div class="card-info">
               <div class="card-name" title="${escapeHtml(mat.name)}">${escapeHtml(mat.name)}</div>
               <div class="card-meta">
                 <span class="card-code">${escapeHtml(mat.code || '—')}</span>
-                <span>${thickness}</span>
+                <span>${metaDetail}</span>
               </div>
               <div style="margin-top: 2px;">
                 ${mfgBadge}
@@ -1436,6 +1482,7 @@
 
     function updateDetailPane() {
       const mat = state.allowedMaterials.find(m => (m.materialId || m.id) === state.selectedMaterialId);
+      const isHw = state.kind === 'hardware';
       const preview = document.getElementById('inspector-preview');
       const nameEl = document.getElementById('inspector-name');
       const codeEl = document.getElementById('detail-code');
@@ -1445,6 +1492,28 @@
       const texStatusEl = document.getElementById('detail-texture-status');
       const applyBtn = document.getElementById('btn-apply');
 
+      const thicknessLabel = document.getElementById('detail-thickness-label');
+      const mfgLabel = document.getElementById('detail-manufacturer-label');
+      const grainLabel = document.getElementById('detail-grain-label');
+      const grainItem = document.getElementById('detail-grain-item');
+      const textureItem = document.getElementById('detail-texture-item');
+
+      if (isHw) {
+        if (thicknessLabel) thicknessLabel.textContent = 'Categoría';
+        if (mfgLabel) mfgLabel.textContent = 'Unidad';
+        if (grainLabel) grainLabel.textContent = 'Notas';
+        if (grainItem) grainItem.style.display = mat && (mat.notes || mat.description) ? '' : 'none';
+        if (textureItem) textureItem.style.display = 'none';
+        if (applyBtn) applyBtn.textContent = '✓ Aplicar Herraje';
+      } else {
+        if (thicknessLabel) thicknessLabel.textContent = 'Espesor';
+        if (mfgLabel) mfgLabel.textContent = 'Fabricante';
+        if (grainLabel) grainLabel.textContent = 'Veta';
+        if (grainItem) grainItem.style.display = '';
+        if (textureItem) textureItem.style.display = '';
+        if (applyBtn) applyBtn.textContent = '✓ Aplicar Acabado';
+      }
+
       // Apply is a no-op without a selection: keep the button honest.
       if (applyBtn) applyBtn.disabled = !state.selectedMaterialId;
 
@@ -1452,8 +1521,9 @@
         if (preview) {
           preview.style.backgroundImage = 'none';
           preview.style.backgroundColor = '';
+          preview.innerHTML = '';
         }
-        if (nameEl) nameEl.textContent = 'Selecciona un material';
+        if (nameEl) nameEl.textContent = isHw ? 'Seleccioná un herraje' : 'Seleccioná un material';
         if (codeEl) codeEl.textContent = '—';
         if (thickEl) thickEl.textContent = '—';
         if (mfgEl) mfgEl.textContent = '—';
@@ -1462,7 +1532,7 @@
         return;
       }
 
-      const rawTextureUrl = mat.previewTextureUrl || mat.imageUrl;
+      const rawTextureUrl = mat.previewTextureUrl || mat.imageUrl || mat.image_url || mat.thumbnailUrl;
       const textureUrl = resolveMediaUrl(rawTextureUrl);
       if (preview) {
         const previewMediaName = mediaFilenameFromPath(rawTextureUrl);
@@ -1473,24 +1543,39 @@
         }
         if (textureUrl) {
           preview.style.backgroundImage = `url('${textureUrl}')`;
-          preview.style.backgroundColor = 'transparent';
+          preview.style.backgroundColor = isHw ? 'var(--surface-card)' : 'transparent';
+          preview.style.backgroundSize = isHw ? 'contain' : 'cover';
+          preview.style.backgroundRepeat = 'no-repeat';
+          preview.style.backgroundPosition = 'center';
+          preview.innerHTML = '';
+        } else if (isHw) {
+          preview.style.backgroundImage = 'none';
+          preview.style.backgroundColor = 'var(--surface-card-subtle)';
+          preview.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg></div>';
         } else {
           preview.style.backgroundImage = 'none';
           const fallbackColor = sanitizeColor(mat.previewColor);
           preview.style.backgroundColor = fallbackColor || '';
+          preview.innerHTML = '';
         }
       }
 
-      if (nameEl) nameEl.textContent = mat.name;
+      if (nameEl) nameEl.textContent = mat.name || mat.code;
       if (codeEl) codeEl.textContent = mat.code || '—';
-      // Unknown data is shown as missing ("—"), never invented defaults.
-      if (thickEl) thickEl.textContent = mat.thicknessMm ? `${mat.thicknessMm} mm` : '—';
-      if (mfgEl) mfgEl.textContent = mat.manufacturer || 'Sin fabricante';
-      if (grainEl) grainEl.textContent = (mat.grain || mat.grainDefault) ? 'Sí (con veta)' : 'No / Lisa';
-      if (texStatusEl) {
-        texStatusEl.textContent = mat.previewTextureUrl
-          ? 'Textura fotográfica 3D'
-          : (mat.imageUrl ? 'Foto comercial' : 'Color sólido');
+      if (isHw) {
+        if (thickEl) thickEl.textContent = mat.categoryLabel || mat.category || '—';
+        if (mfgEl) mfgEl.textContent = mat.unitLabel || mat.unit || '—';
+        if (grainEl) grainEl.textContent = mat.notes || mat.description || '—';
+      } else {
+        // Unknown data is shown as missing ("—"), never invented defaults.
+        if (thickEl) thickEl.textContent = mat.thicknessMm ? `${mat.thicknessMm} mm` : '—';
+        if (mfgEl) mfgEl.textContent = mat.manufacturer || 'Sin fabricante';
+        if (grainEl) grainEl.textContent = (mat.grain || mat.grainDefault) ? 'Sí (con veta)' : 'No / Lisa';
+        if (texStatusEl) {
+          texStatusEl.textContent = mat.previewTextureUrl
+            ? 'Textura fotográfica 3D'
+            : (mat.imageUrl ? 'Foto comercial' : 'Color sólido');
+        }
       }
     }
 

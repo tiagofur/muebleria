@@ -538,62 +538,129 @@
       // pick repaints immediately; both are the same map the Apply sends.
       var chosenId = inspectorMaterialChoices[group.code] || group.chosenHardwareId;
       var chosen = chosenId ? hardwareDefinitionById(chosenId) : null;
+      var membersKnown = def && Array.isArray(def.optionIds) && def.optionIds.length > 0;
+      // #1178-inspector: same visual pattern as Materiales del Taller — the
+      // user is always in the same app. Personalizado + restore appear only
+      // while the draft differs from the design's chosen hardware.
+      var overridden = !!inspectorMaterialChoices[group.code] &&
+        inspectorMaterialChoices[group.code] !== group.chosenHardwareId;
 
       var row = document.createElement("div");
       row.className = "material-role-block";
 
       var head = document.createElement("div");
-      head.className = "kv-row";
-      var k = document.createElement("span");
-      k.className = "k";
-      k.textContent = def ? (def.name || group.code) : group.code;
-      var v = document.createElement("span");
-      v.className = "v";
-      v.textContent = chosen ? (chosen.name || chosen.code) : (chosenId || "--");
-      head.appendChild(k);
-      head.appendChild(v);
+      head.className = "material-role-header";
+      var title = document.createElement("span");
+      title.className = "material-role-title";
+      title.textContent = def ? (def.name || group.code) : group.code;
+      head.appendChild(title);
       if (group.count && group.count > 1) {
         var count = document.createElement("span");
         count.className = "status-badge neutral";
         count.textContent = "×" + group.count;
         head.appendChild(count);
       }
+      if (overridden) {
+        var badge = document.createElement("span");
+        badge.className = "material-role-badge material-role-badge--override";
+        badge.textContent = "Personalizado";
+        head.appendChild(badge);
+      }
       row.appendChild(head);
 
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn btn-sm btn-secondary";
-      btn.style.marginTop = "var(--space-1)";
-      btn.style.width = "100%";
-      var membersKnown = def && Array.isArray(def.optionIds) && def.optionIds.length > 0;
-      btn.textContent = membersKnown ? "Cambiar herraje" : "Cambiar herraje (catálogo sin grupos)";
-      btn.disabled = !membersKnown;
-      btn.addEventListener("click", function () {
-        if (!membersKnown || !window.GraneteUI.hardwareGroupSelector) return;
-        var rows = def.optionIds.map(function (hwId) {
-          var entry = hardwareDefinitionById(hwId);
-          return {
-            id: hwId,
-            name: entry ? (entry.name || entry.code) : hwId,
-            code: entry ? entry.code : null,
-            categoryLabel: entry ? hardwareCategoryLabel(entry.category) : null,
-            unitLabel: entry ? hardwareUnitLabel(entry.unit) : null,
-            notes: entry && entry.notes ? entry.notes : null
-          };
+      if (overridden) {
+        var restore = document.createElement("button");
+        restore.type = "button";
+        restore.className = "btn material-role-restore";
+        restore.textContent = "Restaurar valor del diseño";
+        restore.addEventListener("click", function () {
+          inspectorMaterialChoices[group.code] = group.chosenHardwareId;
+          delete draft.modes[group.code];
+          updateInspectorFooter();
+          renderInspectorHardwareGroups();
         });
-        window.GraneteUI.hardwareGroupSelector.open({
-          title: "Elegir " + (def.name || group.code),
-          groupLabel: def.name || group.code,
-          rows: rows,
-          chosenId: chosenId,
-          onPick: function (hwId) {
-            inspectorMaterialChoices[group.code] = hwId;
-            recordHardwareGroupPick(group.code, hwId);
-            renderInspectorHardwareGroups();
-          }
-        });
+        row.appendChild(restore);
+      }
+
+      var preview = document.createElement("button");
+      preview.type = "button";
+      preview.className = "material-selected-preview";
+      preview.title = membersKnown ? "Cambiar herraje" : "Catálogo sin grupos";
+      preview.disabled = !membersKnown;
+
+      var rawImg = chosen ? (chosen.imageUrl || chosen.image_url || chosen.thumbnailUrl || chosen.thumbnail_url || chosen.previewUrl) : null;
+      var resolvedImg = (rawImg && window.GraneteUI && window.GraneteUI.media && typeof window.GraneteUI.media.resolveUrl === "function")
+        ? window.GraneteUI.media.resolveUrl(rawImg)
+        : rawImg;
+
+      var tile = document.createElement("span");
+      tile.className = "material-swatch material-swatch--hardware";
+      if (resolvedImg) {
+        tile.style.backgroundImage = "url('" + resolvedImg + "')";
+        tile.style.backgroundSize = "contain";
+        tile.style.backgroundRepeat = "no-repeat";
+        tile.style.backgroundPosition = "center";
+        tile.style.backgroundColor = "var(--surface-card)";
+      } else {
+        tile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
+      }
+      preview.appendChild(tile);
+      var info = document.createElement("span");
+      info.className = "material-selected-info";
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "material-selected-name";
+      nameSpan.textContent = chosen ? (chosen.name || chosen.code) : (chosenId || "--");
+      info.appendChild(nameSpan);
+      var unitMeta = chosen ? hardwareUnitLabel(chosen.unit) : null;
+      var metaSpan = document.createElement("span");
+      metaSpan.className = "material-selected-meta";
+      metaSpan.textContent = unitMeta || (chosen && chosen.code ? chosen.code : "");
+      info.appendChild(metaSpan);
+      preview.appendChild(info);
+      var chevron = document.createElement("span");
+      chevron.className = "material-chevron";
+      chevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+      preview.appendChild(chevron);
+      preview.addEventListener("click", function () {
+        if (!membersKnown) return;
+        if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
+          window.sketchup.open_hardware_selector(JSON.stringify({
+            groupCode: group.code,
+            groupName: def ? (def.name || group.code) : group.code,
+            currentHardwareId: chosenId,
+            optionIds: def.optionIds,
+            context: {
+              source: "inspector",
+              instanceId: selectedContext ? selectedContext.furnitureInstanceRef : null,
+              definitionId: selectedContext ? selectedContext.furnitureDefinitionId : null
+            }
+          }));
+        } else if (window.GraneteUI.hardwareGroupSelector) {
+          var rows = def.optionIds.map(function (hwId) {
+            var entry = hardwareDefinitionById(hwId);
+            return {
+              id: hwId,
+              name: entry ? (entry.name || entry.code) : hwId,
+              code: entry ? entry.code : null,
+              categoryLabel: entry ? hardwareCategoryLabel(entry.category) : null,
+              unitLabel: entry ? hardwareUnitLabel(entry.unit) : null,
+              notes: entry && entry.notes ? entry.notes : null
+            };
+          });
+          window.GraneteUI.hardwareGroupSelector.open({
+            title: "Elegir " + (def.name || group.code),
+            groupLabel: def.name || group.code,
+            rows: rows,
+            chosenId: chosenId,
+            onPick: function (hwId) {
+              inspectorMaterialChoices[group.code] = hwId;
+              recordHardwareGroupPick(group.code, hwId);
+              renderInspectorHardwareGroups();
+            }
+          });
+        }
       });
-      row.appendChild(btn);
+      row.appendChild(preview);
 
       inspectorHardwareGroupsContainer.appendChild(row);
     });
@@ -1623,6 +1690,19 @@
     }
   }
 
+  function onHardwareChoiceApplied(payload) {
+    requireDeps();
+    if (!payload) return;
+    var groupCode = payload.groupCode || payload.role;
+    var hardwareId = payload.hardwareId || payload.materialId;
+    if (!groupCode || !hardwareId) return;
+
+    if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
+    inspectorMaterialChoices[groupCode] = hardwareId;
+    recordHardwareGroupPick(groupCode, hardwareId);
+    renderInspectorHardwareGroups();
+  }
+
   function onDeleteResult(result) {
     requireDeps();
     result = result || {};
@@ -1765,6 +1845,7 @@
     onBatchUpdateResult: onBatchUpdateResult,
     onDeleteResult: onDeleteResult,
     onMaterialChoiceApplied: onMaterialChoiceApplied,
+    onHardwareChoiceApplied: onHardwareChoiceApplied,
     onBindingStatus: onBindingStatus,
     activateInspectorTab: activateInspectorTab,
     // Read-only accessors consumed by the bootstrap wiring (material

@@ -95,6 +95,16 @@
         position: relative;
       }
 
+      /* #1178-inspector: hardware has no color swatch — the same tile
+         carries the herraje glyph so both cards read as one pattern. */
+      .material-swatch--hardware {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--surface-card-subtle);
+        color: var(--text-secondary);
+      }
+
       .material-selected-info {
         flex: 1;
         min-width: 0;
