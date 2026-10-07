@@ -539,6 +539,12 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión del herraje cambió; recargá y reintentá", nil)
 				return
 			}
+			if errors.Is(err, storage.ErrHardwareInUse) {
+				// #1215: an in-use hardware cannot be deactivated (the PUT
+				// carries the active flag); 409 with the reference counts.
+				respondWithError(w, http.StatusConflict, err.Error())
+				return
+			}
 			if isDuplicateKey(err) {
 				respondWithError(w, http.StatusConflict, "El código ingresado ya está registrado")
 				return
@@ -568,6 +574,12 @@ func (s *Server) HandleHardwareByID(w http.ResponseWriter, r *http.Request) {
 			}
 			if errors.Is(err, storage.ErrVersionConflict) {
 				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión del herraje cambió; recargá y reintentá", nil)
+				return
+			}
+			if errors.Is(err, storage.ErrHardwareInUse) {
+				// #1215: refuse to deactivate a referenced hardware with a
+				// clear 409 instead of a later opaque calculate failure.
+				respondWithError(w, http.StatusConflict, err.Error())
 				return
 			}
 			respondWithInternalError(w, err, "handler")

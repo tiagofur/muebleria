@@ -6224,6 +6224,7 @@
       },
       "delete": {
         "operationId": "deactivateHardware",
+        "description": "Soft-deletes (deactivates) the hardware. Refused with 409 while the item is still referenced by module template hardware lines, quote choices or design-revision hardware assets — the calculation engine fail-closes on inactive hardware, so deactivating a referenced item would break those designs' quotes. Reactivation is a normal PUT with active=true.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -6241,6 +6242,9 @@
             }
           },
           "404": {
+            "$ref": "#/components/responses/ApiError"
+          },
+          "409": {
             "$ref": "#/components/responses/ApiError"
           },
           "412": {

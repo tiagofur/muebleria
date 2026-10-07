@@ -599,12 +599,75 @@ func (s *PostgresStore) CreateHardware(ctx context.Context, h *domain.Hardware) 
 	return nil
 }
 
+// ErrHardwareInUse marks a refused active→false transition (#1215): the
+// hardware is still referenced, and deactivating it would fail-closed every
+// design that uses it at calculate time. Handlers map it to 409 via errors.Is.
+var ErrHardwareInUse = errors.New("herraje en uso")
+
+// countHardwareUsage counts the live references that pin this hardware, so a
+// deactivation cannot silently brick quote calculation (#1215): module
+// template hardware lines, quote choices (item- and project-level) and
+// design-revision hardware assets — the same reference families clean_demo.go
+// protects on physical delete. The engine fail-closes on inactive hardware,
+// so any of these references turns a deactivation into a 400 at calculate.
+func (s *PostgresStore) countHardwareUsage(ctx context.Context, id string) (lines, itemChoices, projectChoices, assets int64, err error) {
+	err = s.db(ctx).QueryRow(ctx, `
+		SELECT
+			(SELECT COUNT(*) FROM hardware_lines hl
+			 JOIN modules m ON m.id = hl.module_id
+			 WHERE hl.hardware_id::text = $1 AND m.organization_id = $2),
+			(SELECT COUNT(*) FROM project_item_choices pic
+			 JOIN project_items pi ON pi.id = pic.project_item_id
+			 JOIN projects p ON p.id = pi.project_id
+			 WHERE pic.choice_entity_id::text = $1 AND p.organization_id = $2),
+			(SELECT COUNT(*) FROM project_level_choices plc
+			 JOIN projects p ON p.id = plc.project_id
+			 WHERE plc.choice_entity_id = $1 AND p.organization_id = $2),
+			(SELECT COUNT(*) FROM design_revision_hardware_assets
+			 WHERE hardware_id::text = $1 AND organization_id = $2)`,
+		id, OrgFromCtx(ctx),
+	).Scan(&lines, &itemChoices, &projectChoices, &assets)
+	return
+}
+
+// ensureHardwareNotInUse rejects an active→false transition when the hardware
+// is still referenced (#1215).
+func (s *PostgresStore) ensureHardwareNotInUse(ctx context.Context, id string) error {
+	lines, itemChoices, projectChoices, assets, err := s.countHardwareUsage(ctx, id)
+	if err != nil {
+		return err
+	}
+	if lines+itemChoices+projectChoices+assets > 0 {
+		return fmt.Errorf(
+			"%w: %d línea(s) de muebles plantilla, %d elección(es) de cotización y %d activo(s) de diseño; quitá o reasigná esas referencias antes de desactivarlo",
+			ErrHardwareInUse, lines, itemChoices+projectChoices, assets,
+		)
+	}
+	return nil
+}
+
 // UpdateHardware is If-Match guarded (#443/#448): version is server-owned and
 // bumped in the same statement that checks the expected version, so a stale
 // writer can never interleave between the check and the write. A missing row
 // and a stale expected version both surface as ErrNoRows here; they are
 // disambiguated so clients get 404 vs ErrVersionConflict instead of guessing.
+// An active→false transition is refused while the hardware is still referenced
+// (#1215) — deactivating an in-use item fails quote calculation fail-closed.
 func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, expectedVersion int64, h *domain.Hardware) error {
+	if !h.Active {
+		var prevActive bool
+		err := s.db(ctx).QueryRow(ctx,
+			`SELECT active FROM hardwares WHERE id = $1 AND organization_id = $2`,
+			id, OrgFromCtx(ctx),
+		).Scan(&prevActive)
+		if err == nil && prevActive {
+			if err := s.ensureHardwareNotInUse(ctx, id); err != nil {
+				return err
+			}
+		} else if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+	}
 	var pkg interface{}
 	if h.PackageSize != nil {
 		pkg = *h.PackageSize
@@ -629,6 +692,10 @@ func (s *PostgresStore) UpdateHardware(ctx context.Context, id string, expectedV
 }
 
 func (s *PostgresStore) DeactivateHardware(ctx context.Context, id string, expectedVersion int64) error {
+	// #1215: soft delete must not brick designs that still reference the item.
+	if err := s.ensureHardwareNotInUse(ctx, id); err != nil {
+		return err
+	}
 	query := `UPDATE hardwares SET active = false, updated_at = CURRENT_TIMESTAMP, version = version + 1 WHERE id = $1 AND organization_id = $2 AND version = $3`
 	tag, err := s.db(ctx).Exec(ctx, query, id, OrgFromCtx(ctx), expectedVersion)
 	if err != nil {
