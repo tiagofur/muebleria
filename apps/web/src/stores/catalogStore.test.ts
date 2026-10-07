@@ -280,6 +280,36 @@ describe('catalogStore — materials', () => {
       errorSpy.mockRestore();
     }
   });
+
+  it('business 4xx surfaces the server message instead of a connection error (#1215)', async () => {
+    const { deps, toasts } = makeDeps({
+      saveCatalog: async () => {
+        throw new GraneteApiError(409, {
+          code: 'CONFLICT',
+          message:
+            'herraje en uso: 1 línea(s) de muebles plantilla; quitá esas referencias antes de desactivarlo',
+          fieldErrors: {},
+          requestId: 'req-guard-test',
+          retryable: false,
+          details: {},
+        });
+      },
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const store = createCatalogStore({ deps });
+      const cat = seedCatalog();
+      store.getState().setCatalog(cat);
+      const hw = cat.hardware[0]!;
+      store.getState().setHardwareActive(hw.id, false).catch(() => {});
+      await flush();
+      const errorToast = toasts.find((t) => t.type === 'error');
+      expect(errorToast?.message).toContain('herraje en uso');
+      expect(errorToast?.message).not.toContain('Error de conexión');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

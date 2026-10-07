@@ -95,6 +95,21 @@ describe('HardwareCatalog — create flow', () => {
   });
 });
 
+describe('HardwareCatalog — desactivar (copy veraz #1215)', () => {
+  it('el diálogo no promete una copia en los muebles y advierte el rechazo en uso', async () => {
+    const user = userEvent.setup();
+    setup();
+
+    await user.click(screen.getByRole('button', { name: /^Desactivar /i }));
+    const dialog = screen.getByTestId('hardware-deactivate-confirm');
+    expect(dialog.textContent).toContain('rechaza la operación');
+    expect(dialog.textContent).toContain('filtro de inactivos');
+    // El copy histórico mentía: los diseños NO conservan una copia del
+    // herraje — las líneas de módulo apuntan al herraje vivo del catálogo.
+    expect(dialog.textContent).not.toContain('conservan su copia');
+  });
+});
+
 describe('HardwareCatalog — Maquinado CNC (F127)', () => {
   const machinedHardware: Hardware = {
     ...sampleHardware,

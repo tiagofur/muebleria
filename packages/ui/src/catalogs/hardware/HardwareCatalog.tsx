@@ -491,7 +491,7 @@ export function HardwareCatalog({
         title="Desactivar herraje"
         message={
           confirmDeactivate
-            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? Los muebles que lo usan conservan su copia; podés reactivarlo cuando quieras.`
+            ? `¿Seguro que querés desactivar "${confirmDeactivate.code} — ${confirmDeactivate.name}"? Deja de ofrecerse para nuevos usos y podés reactivarlo desde el filtro de inactivos. Si algún mueble plantilla u obra lo usa, el servidor rechaza la operación.`
             : ''
         }
         confirmLabel="Desactivar"
