@@ -342,7 +342,9 @@ func (s *PostgresStore) SeedCatalog(ctx context.Context) error {
 			{id: "a00000b0-0001-0000-0000-000000000008", code: "MOD-GAB-01-P08", desc: "Puerta Gabinete", qty: 1, len: 717, wid: 296, role: "FRENTE", l1: true, l2: true, w1: true, w2: true},
 		},
 		[]hwLineSeed{
-			{id: "a00000c0-0001-0000-0000-000000000001", qty: 2, optRole: "BISAGRA"},
+			// #1078: hinge demand is DERIVED per door-height band at resolve
+			// time — no fixed BISAGRA bulk line is seeded anymore. The group
+			// choice (project_item_choices BISAGRA) names the hardware.
 			{id: "a00000c0-0001-0000-0000-000000000002", qty: 1, optRole: "FIXED", hwID: seedHwJaladera},
 			{id: "a00000c0-0001-0000-0000-000000000003", qty: 4, optRole: "FIXED", hwID: seedHwPata},
 			{id: "a00000c0-0001-0000-0000-000000000004", qty: 40, optRole: "FIXED", hwID: seedHwTornillo},
@@ -865,12 +867,6 @@ func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, org string, now time.Ti
 	if _, err := tx.Exec(ctx, `DELETE FROM hardware_lines WHERE module_id = $1`, modZocloID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO hardware_lines (organization_id, module_id, quantity, option_role)
-		VALUES ($2, $1, 2, 'BISAGRA')`, modZocloID, org); err != nil {
-		return fmt.Errorf("seed hw lines zoclo: %w", err)
-	}
-
 	// Perfil (ml) module
 	_, err = tx.Exec(ctx, `
 		INSERT INTO modules (id, organization_id, code, name, base_labor_cost, width_mm, height_mm, depth_mm, notes,
@@ -907,8 +903,7 @@ func seedPlinthModulesTx(ctx context.Context, tx pgx.Tx, org string, now time.Ti
 	}
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO hardware_lines (organization_id, module_id, quantity, option_role, hardware_id, description_override)
-		VALUES ($3, $1, 2, 'BISAGRA', NULL, NULL),
-		       ($3, $1, 1, 'ZOCLO_PERFIL', $2, 'Zoclo perfil (ml frontal)')`,
+		VALUES ($3, $1, 1, 'ZOCLO_PERFIL', $2, 'Zoclo perfil (ml frontal)')`,
 		modPerfilID, hwZocloID, org); err != nil {
 		return fmt.Errorf("seed hw lines perfil: %w", err)
 	}
