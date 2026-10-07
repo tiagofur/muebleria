@@ -665,7 +665,7 @@ export function ProjectReconciliationScreen({
         <TriangleAlert size={28} className="text-danger" />
         <p>{msg}</p>
         {onBack && (
-          <button type="button" className="btn btn-secondary" onClick={onBack}>
+          <button type="button" className="btn" onClick={onBack}>
             Volver al proyecto
           </button>
         )}
@@ -688,7 +688,7 @@ export function ProjectReconciliationScreen({
             {onOpenDesigns && (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn"
                 data-testid="open-designs-btn"
                 onClick={() =>
                   onOpenDesigns({ designId: activeDesignId, revisionId: designRevisionId })
@@ -701,7 +701,7 @@ export function ProjectReconciliationScreen({
             {onOpenFurnitureMatrix && (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn"
                 data-testid="open-furniture-btn"
                 onClick={() =>
                   onOpenFurnitureMatrix({
@@ -716,7 +716,7 @@ export function ProjectReconciliationScreen({
               </button>
             )}
             {onBack && (
-              <button type="button" className="btn btn-secondary" onClick={onBack}>
+              <button type="button" className="btn" onClick={onBack}>
                 Volver
               </button>
             )}
@@ -803,7 +803,7 @@ export function ProjectReconciliationScreen({
               <CommandErrorAlert error={createQuoteError} />
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn--primary"
                 data-testid="create-initial-quote-btn"
                 disabled={createQuoteSubmitting || !canMutateQuote}
                 onClick={() => void handleCreateInitialQuote()}
@@ -998,7 +998,7 @@ export function ProjectReconciliationScreen({
                     </p>
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="btn"
                       onClick={() => void reconciliationQuery.refetch()}
                     >
                       Reintentar
@@ -1045,7 +1045,7 @@ export function ProjectReconciliationScreen({
                             <div style={{ marginTop: '8px' }}>
                               <button
                                 type="button"
-                                className="btn btn-primary"
+                                className="btn btn--primary"
                                 data-testid="next-action-requote-btn"
                                 onClick={handleOpenRequote}
                               >
@@ -1142,7 +1142,7 @@ export function ProjectReconciliationScreen({
                       {canRequote && impactSummary && !impactSummary.requiresResolution && (
                         <button
                           type="button"
-                          className="btn btn-primary"
+                          className="btn btn--primary"
                           data-testid="open-requote-btn"
                           disabled={incorporableItems.length === 0}
                           onClick={handleOpenRequote}
@@ -1202,7 +1202,7 @@ export function ProjectReconciliationScreen({
                   </span>
                   <button
                     type="button"
-                    className="btn btn-sm btn-secondary"
+                    className="btn btn--small"
                     data-testid="compare-new-quote-btn"
                     onClick={() => {
                       setRequoteResult(null);
@@ -1251,7 +1251,7 @@ export function ProjectReconciliationScreen({
                     <div style={{ marginTop: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        className="btn btn-primary"
+                        className="btn btn--primary"
                         data-testid="release-success-open-engineering"
                         onClick={() =>
                           onOpenInEngineering(projectId, releaseResult.release.id)
@@ -1263,7 +1263,7 @@ export function ProjectReconciliationScreen({
                       {onOpenInProduction ? (
                         <button
                           type="button"
-                          className="btn btn-secondary"
+                          className="btn"
                           data-testid="release-success-open-production"
                           onClick={() => onOpenInProduction(projectId)}
                         >
@@ -1276,7 +1276,7 @@ export function ProjectReconciliationScreen({
                     <div style={{ marginTop: '8px' }}>
                       <button
                         type="button"
-                        className="btn btn-primary"
+                        className="btn btn--primary"
                         data-testid="release-success-open-production"
                         onClick={() => onOpenInProduction(projectId)}
                       >

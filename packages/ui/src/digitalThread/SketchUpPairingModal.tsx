@@ -319,7 +319,7 @@ export function SketchUpPairingModal({
               </output>
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn"
                 onClick={() => void handleCopy()}
                 data-testid="pairing-copy-btn"
               >
@@ -342,12 +342,12 @@ export function SketchUpPairingModal({
               </li>
             </ol>
             <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={handleClose}>
+              <button type="button" className="btn" onClick={handleClose}>
                 {terminalStatus ? 'Cerrar' : 'Cerrar y cancelar código'}
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn--primary"
                 disabled={busy}
                 onClick={() => void handleRegenerate()}
                 data-testid="pairing-regenerate-btn"
@@ -359,12 +359,12 @@ export function SketchUpPairingModal({
           </>
         ) : phase === 'create-error' ? (
           <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" onClick={handleClose}>
+            <button type="button" className="btn" onClick={handleClose}>
               Cerrar
             </button>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn--primary"
               onClick={() => void createGrant()}
               data-testid="pairing-retry-create-btn"
             >

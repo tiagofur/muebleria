@@ -183,7 +183,7 @@ export function PreflightPanel({ preflight, loading, error, frozenBaseBlockerMes
         <div className="pd-alert pd-alert--error" role="alert" data-testid="preflight-error">
           {frozenBaseBlockerMessage ?? 'No se pudo evaluar el preflight autoritativo de esta revisión.'}
           {!frozenBaseBlockerMessage && (
-            <button type="button" className="btn btn-sm btn-secondary" onClick={onRetry}>
+            <button type="button" className="btn btn--small" onClick={onRetry}>
               Reintentar
             </button>
           )}
@@ -314,7 +314,7 @@ export function ApprovalPanel({
 
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn--primary"
         data-testid="approve-revision-btn"
         disabled={
           submitting ||
@@ -407,7 +407,7 @@ export function ReleasePanel({
 
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn--primary"
         data-testid="open-release-review-btn"
         disabled={!canOpenReview || preflightReady === false}
         onClick={onOpenReview}
@@ -614,7 +614,7 @@ export function RequoteReviewModal({
         <div className="modal-actions">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn"
             disabled={submitting}
             onClick={onClose}
           >
@@ -622,7 +622,7 @@ export function RequoteReviewModal({
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn--primary"
             disabled={submitting || selectedIds.length === 0}
             onClick={onSubmit}
             data-testid="submit-requote"
@@ -696,7 +696,7 @@ export function ReleaseReviewModal({
         <div className="modal-actions">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn"
             disabled={submitting}
             onClick={onClose}
           >
@@ -704,7 +704,7 @@ export function ReleaseReviewModal({
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn--primary"
             disabled={submitting}
             onClick={onSubmit}
             data-testid="submit-release"
@@ -816,7 +816,7 @@ export function QuoteLifecyclePanel({
       {isDraft && (
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn--primary"
           data-testid="publish-quote-btn"
           disabled={publishing || !canMutateQuote}
           onClick={onPublish}
@@ -829,7 +829,7 @@ export function QuoteLifecyclePanel({
       {isPublished && (
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn--primary"
           data-testid="accept-quote-btn"
           disabled={accepting || !canAcceptQuote}
           onClick={onOpenAccept}
@@ -904,7 +904,7 @@ export function AcceptQuoteModal({
         <div className="modal-actions">
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn"
             data-testid="cancel-accept-quote-btn"
             disabled={submitting}
             onClick={onClose}
@@ -913,7 +913,7 @@ export function AcceptQuoteModal({
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn--primary"
             data-testid="confirm-accept-quote-btn"
             disabled={submitting}
             onClick={onConfirm}

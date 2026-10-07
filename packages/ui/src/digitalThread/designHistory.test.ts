@@ -178,9 +178,9 @@ describe('designHistory pure model', () => {
       expect(formatArtifactSize(1024 * 1024 * 3.5)).toBe('3.5 MB');
     });
 
-    it('handles negative or invalid numbers safely', () => {
-      expect(formatArtifactSize(-1)).toBe('0 B');
-      expect(formatArtifactSize(NaN)).toBe('0 B');
+    it('handles negative or invalid numbers safely (#1197: desconocido ≠ 0)', () => {
+      expect(formatArtifactSize(-1)).toBe('—');
+      expect(formatArtifactSize(NaN)).toBe('—');
     });
   });
 

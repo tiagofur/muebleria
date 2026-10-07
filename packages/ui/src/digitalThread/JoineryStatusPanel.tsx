@@ -93,7 +93,7 @@ export function JoineryStatusPanel({
         <div className="pd-alert pd-alert--error" role="alert" data-testid="joinery-error">
           No se pudo resolver el estado constructivo desde el servidor.
           {onRetry ? (
-            <button type="button" className="btn btn-sm btn-secondary" onClick={onRetry}>
+            <button type="button" className="btn btn--small" onClick={onRetry}>
               Reintentar
             </button>
           ) : null}

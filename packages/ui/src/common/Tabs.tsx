@@ -26,6 +26,13 @@ type TabsProps<TTabId extends string> = {
   readonly ariaLabel: string;
   readonly idPrefix: string;
   readonly testIdPrefix?: string;
+  /**
+   * Región única controlada por todas las tabs (patrón «selector que
+   * actualiza una vista compartida»). Por defecto cada tab apunta a
+   * `${idPrefix}-panel-${tab.id}`; usar cuando la pantalla no renderiza
+   * un panel por tab (los IDs fantasma confunden a la AT). #1197
+   */
+  readonly ariaControlsPanelId?: string;
 };
 
 function Tabs<TTabId extends string>({
@@ -35,6 +42,7 @@ function Tabs<TTabId extends string>({
   ariaLabel,
   idPrefix,
   testIdPrefix,
+  ariaControlsPanelId,
   variant,
 }: TabsProps<TTabId> & { readonly variant: 'workspace' | 'workflow' }): ReactNode {
   const tabIds = tabs.filter((tab) => !tab.disabled).map((tab) => tab.id);
@@ -64,7 +72,7 @@ function Tabs<TTabId extends string>({
               {...(enabledIndex >= 0 ? rovingTabs.tabPropsAt(enabledIndex) : { tabIndex: -1 })}
               id={`${idPrefix}-tab-${tab.id}`}
               aria-selected={selected}
-              aria-controls={`${idPrefix}-panel-${tab.id}`}
+              aria-controls={ariaControlsPanelId ?? `${idPrefix}-panel-${tab.id}`}
               disabled={tab.disabled}
               title={tab.title}
               className={`tabs__tab ${selected ? 'tabs__tab--active' : ''}`}
