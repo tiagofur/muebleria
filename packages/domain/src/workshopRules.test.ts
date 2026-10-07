@@ -18,23 +18,29 @@ describe('suggestHingeCount', () => {
     expect(suggestHingeCount(-100)).toBe(0);
   });
 
-  it('returns 2 for doors ≤ 800mm', () => {
+  // #1078 bands: ≤900→2, 901–1600→3, 1601–2000→4, >2000→5 (clamp).
+  it('returns 2 for doors ≤ 900mm', () => {
     expect(suggestHingeCount(500)).toBe(2);
     expect(suggestHingeCount(800)).toBe(2);
+    expect(suggestHingeCount(900)).toBe(2);
   });
 
-  it('returns 3 for doors 801-1400mm', () => {
-    expect(suggestHingeCount(801)).toBe(3);
+  it('returns 3 for doors 901-1600mm', () => {
+    expect(suggestHingeCount(901)).toBe(3);
     expect(suggestHingeCount(1400)).toBe(3);
+    expect(suggestHingeCount(1600)).toBe(3);
   });
 
-  it('returns 4 for doors 1401-2000mm', () => {
-    expect(suggestHingeCount(1401)).toBe(4);
+  it('returns 4 for doors 1601-2000mm', () => {
+    expect(suggestHingeCount(1601)).toBe(4);
     expect(suggestHingeCount(2000)).toBe(4);
   });
 
-  it('returns 5 for doors > 2000mm', () => {
+  it('returns 5 for doors over 2000mm and clamps at the last band', () => {
+    expect(suggestHingeCount(2001)).toBe(5);
     expect(suggestHingeCount(2100)).toBe(5);
+    expect(suggestHingeCount(2400)).toBe(5);
+    expect(suggestHingeCount(2600)).toBe(5);
   });
 });
 

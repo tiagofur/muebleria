@@ -19,7 +19,8 @@
 
 import { snapValue } from './hardwarePlacement';
 import { DEFAULT_BOARD_THICKNESS_MM } from './partDrilling';
-import { suggestHingeCount } from './workshopRules';
+import { hingesForDoor } from './hingeDemand';
+import type { HingeDemandPolicy } from './hingeDemand';
 import type {
   ComponentPlacement,
   Hardware,
@@ -75,6 +76,12 @@ export interface DeriveJointPlacementsParams {
   readonly hardware: readonly Hardware[];
   /** Structure/module override; omitted = taller defaults. */
   readonly rules?: JointDrillingRules;
+  /**
+   * #1078: factory/component hinge demand policy — the cup count rides the
+   * SAME bands the commercial demand resolves, so drilling never disagrees
+   * with the quote. Omitted = library default ladder.
+   */
+  readonly hingeDemandPolicy?: HingeDemandPolicy;
 }
 
 const LATERAL_PLACEMENTS: ReadonlySet<string> = new Set([
@@ -145,13 +152,21 @@ export function jointFastenerPositions(
   return positions;
 }
 
-/** Hinge positions along the door height: ends + evenly spaced middles (snapped). */
+/**
+ * Hinge positions along the door height: ends + evenly spaced middles
+ * (snapped). #1078: the count comes from the demand policy — the SAME source
+ * the commercial demand uses — with the door width feeding the Blum surge;
+ * cups drilled always equal hinges bought. Omitting width/policy keeps the
+ * height-only default ladder.
+ */
 export function hingePositions(
   doorHeightMm: number,
   endMarginMm: number,
   gridMm: number,
+  doorWidthMm?: number,
+  policy?: HingeDemandPolicy,
 ): number[] {
-  const count = suggestHingeCount(doorHeightMm);
+  const count = hingesForDoor(doorHeightMm, doorWidthMm, policy);
   if (count === 0 || !(doorHeightMm > 0)) return [];
   const first = Math.min(endMarginMm, doorHeightMm / 2);
   const last = doorHeightMm - first;
@@ -327,6 +342,7 @@ function doorHingePlacements(
   rules: JointDrillingRules,
   grid: number,
   out: DerivedJointPlacement[],
+  hingeDemandPolicy?: HingeDemandPolicy,
 ): void {
   if (doors.length === 0 || laterals.length === 0) return;
   const rule = rules.doorHinge;
@@ -339,7 +355,15 @@ function doorHingePlacements(
   const endMargin = rule.endMarginMm ?? 100;
 
   for (const door of doors) {
-    const positions = hingePositions(door.lengthMm, endMargin, grid);
+    // #1078: cups follow the DEMAND count (same policy the quote buys with),
+    // width included — the surge hinge is drilled too.
+    const positions = hingePositions(
+      door.lengthMm,
+      endMargin,
+      grid,
+      door.widthMm,
+      hingeDemandPolicy,
+    );
     for (const y of positions) {
       if (hingeId) {
         out.push({
@@ -398,7 +422,15 @@ export function deriveJointHardwarePlacements(
   panelJointPlacements('side-to-floor', laterals, floors, params.hardware, rules, grid, out);
   panelJointPlacements('side-to-top', laterals, tops, params.hardware, rules, grid, out);
   backPanelPlacements(backs, params.hardware, rules, grid, out);
-  doorHingePlacements(doors, laterals, params.hardware, rules, grid, out);
+  doorHingePlacements(
+    doors,
+    laterals,
+    params.hardware,
+    rules,
+    grid,
+    out,
+    params.hingeDemandPolicy,
+  );
 
   return out;
 }
