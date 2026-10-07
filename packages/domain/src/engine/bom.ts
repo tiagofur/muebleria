@@ -358,7 +358,7 @@ function resolveBoardPartsAndHardware(
  * would store unresolvable authoring again. Component-instance quantity
  * multiplies the count.
  */
-function collectPlacementHardwareCounts(
+export function collectPlacementHardwareCounts(
   componentInstances: readonly ModuleComponentInstance[],
   optionChoices: OptionChoices,
   moduleCode: string,
@@ -387,7 +387,7 @@ function collectPlacementHardwareCounts(
 }
 
 /** Module bulk lines the positions replace (same resolved hardware), kept verbatim otherwise. */
-function moduleHardwareLinesWithoutPositioned(
+export function moduleHardwareLinesWithoutPositioned(
   moduleHardwareLines: readonly HardwareLine[],
   placementCounts: Map<string, number>,
   optionChoices: OptionChoices,
