@@ -1459,3 +1459,37 @@ describe('workspaceStore — session replacement/scope-change con purge autorita
     expect(store.getState().activeOrg?.id).toBe('org-b');
   });
 });
+
+// ---------------------------------------------------------------------------
+// getRepository — instancia estable por sesión/org (#1168)
+// ---------------------------------------------------------------------------
+
+describe('workspaceStore — getRepository (#1168)', () => {
+  it('memoiza la instancia por modo+organización: los cachés de sesión (If-Match, skip-unchanged) sobreviven entre llamadas', () => {
+    const constructed: WorkspaceRepository[] = [];
+    const factory: RepositoryFactory = () => {
+      const repo = makeStubRepo(createSeedWorkspace());
+      constructed.push(repo);
+      return repo;
+    };
+    const store = createWorkspaceStore({ deps: { repositoryFactory: factory } });
+
+    store.getState().enterAsGuest();
+    const guestRepo = store.getState().getRepository();
+    expect(store.getState().getRepository()).toBe(guestRepo);
+
+    seedAuthSession(store);
+    const authRepo = store.getState().getRepository();
+    expect(authRepo).not.toBe(guestRepo);
+    expect(store.getState().getRepository()).toBe(authRepo);
+    expect(constructed).toHaveLength(2);
+
+    // Cambio de organización: instancia nueva — los cachés de la org que
+    // muere no cruzan al tenant nuevo.
+    store.setState({
+      activeOrg: { ...ACTIVE_MEMBERSHIP.organization, id: 'org-b' },
+    });
+    expect(store.getState().getRepository()).not.toBe(authRepo);
+    expect(constructed).toHaveLength(3);
+  });
+});

@@ -270,6 +270,11 @@ export function createWorkspaceStore(options?: InternalOptions) {
   const safeFetch: typeof fetch = (...args) =>
     (injectedFetch ?? globalThis.fetch)(...args);
   const baseUrl = options?.deps?.baseUrl ?? DEFAULT_API_BASE;
+  // #1168: memoized repository per (session mode, organization) — see the
+  // getRepository selector below for why the per-call factory broke every
+  // session cache the API repository keeps.
+  let cachedRepository: WorkspaceRepository | null = null;
+  let cachedRepositoryKey: string | null = null;
   // SEC-4B: el boundary de fetch autenticado comparte exactamente el fetch y
   // la base del store (tests incluidos).
   configureWebAuthClient({ baseUrl, fetchImpl: safeFetch });
@@ -1042,12 +1047,29 @@ export function createWorkspaceStore(options?: InternalOptions) {
         getAuthToken: () => (get().session === 'auth' ? getAccessToken() : null),
         getAuthUser: () => (get().session === 'auth' ? get().authUser : null),
         getAuthUserSeq: () => get().authUserSeq,
-        getRepository: () =>
-          deps.repositoryFactory(get().session ?? 'guest', {
+        // #1168: the repository holds the session's If-Match version caches
+        // and the skip-unchanged body baseline seeded by getCatalog. Building
+        // a fresh instance on EVERY call made those caches dead weight — the
+        // instance that saved was never the instance that loaded — so every
+        // catalog save re-wrote the whole workspace (116 writes measured in
+        // the real browser, even with #1170's skip already in place). One
+        // instance per session mode + organization keeps the caches alive;
+        // SEC-4B stays intact: credentials still flow through closures that
+        // read live store state, never repository-held state.
+        getRepository: () => {
+          const mode = get().session ?? 'guest';
+          const repoKey = `${mode}|${get().activeOrg?.id ?? 'none'}`;
+          if (cachedRepository && cachedRepositoryKey === repoKey) {
+            return cachedRepository;
+          }
+          cachedRepository = deps.repositoryFactory(mode, {
             baseUrl: deps.baseUrl,
             getAccessToken: () => get().getAuthToken(),
             fetchImpl: deps.fetchImpl,
-          }),
+          });
+          cachedRepositoryKey = repoKey;
+          return cachedRepository;
+        },
       }),
   );
 
@@ -1066,6 +1088,12 @@ export function createWorkspaceStore(options?: InternalOptions) {
     // 1) S1 muere primero: credential, media grants y TODO el tenant state.
     clearCredential();
     invalidateAuthorizedMedia();
+    // #1168: el repo memoizado carga consigo los cachés de sesión (versiones
+    // If-Match, baseline skip-unchanged, versiones de módulos/herrajes). La
+    // transición de sesión es la purga S1: el repo de la sesión que muere no
+    // puede sobrevivir al cambio de credential/tenant.
+    cachedRepository = null;
+    cachedRepositoryKey = null;
     store.setState({
       workspace: null,
       workspaceSeq: store.getState().workspaceSeq + 1,
