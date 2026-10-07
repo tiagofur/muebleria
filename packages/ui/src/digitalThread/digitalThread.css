@@ -35,6 +35,8 @@
 }
 
 .pf-field select {
+  /* issue 1203 P2: target táctil de la pantalla hermana (D2). */
+  min-height: var(--touch-min);
   padding: 6px 8px;
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
@@ -332,8 +334,15 @@
   background: var(--danger-50);
 }
 
+/* issue 1203 P2: retirada/cancelada se distingue por tinte del fondo, no por
+   opacity sobre el texto (la opacity dejaba texto a 3.86:1 y dims a 2.21:1). */
 .pf-row--inactive {
-  opacity: 0.55;
+  background: color-mix(in srgb, var(--text-muted) 6%, transparent);
+}
+
+.pf-row--inactive .pf-dims,
+.pf-row--inactive td {
+  color: var(--text-muted);
 }
 
 .pf-row-action {
@@ -1830,4 +1839,12 @@
   color: var(--text-muted);
   font-size: 13px;
   text-align: center;
+}
+
+/* issue 1203 P3: acciones del header sin estilo inline. */
+.pf-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }

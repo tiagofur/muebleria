@@ -9,6 +9,7 @@ import (
 
 	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func TestHandleProjectFurnitureWorkspace_RoleGuard(t *testing.T) {
@@ -289,4 +290,90 @@ func TestHandleProjectFurnitureWorkspace_SuccessDTO_WithReconciliationImpact(t *
 
 func ptr[T any](v T) *T {
 	return &v
+}
+
+// #1203 P1: cada fila del workspace emite la identidad de presentación
+// (label de catálogo + dimensiones) con la misma fuente que el endpoint de
+// lista — la matriz nunca más renderiza N filas idénticas de «Mueble del
+// proyecto». Unidad sin summary conocido cae al DTO pelado.
+func TestHandleProjectFurnitureWorkspace_EmitsDisplayIdentity(t *testing.T) {
+	projectID := "00000000-0000-4000-8000-000000000010"
+	fiKnown := domain.FurnitureInstance{
+		ID: "fi-1", ProjectID: projectID,
+		Origin:          domain.FurnitureInstanceOriginManual,
+		LifecycleStatus: domain.FurnitureInstanceLifecycleActive, Version: 1,
+	}
+	store := &stubStore{
+		furnitureWorkspaceResult: &domain.FurnitureWorkspace{
+			ProjectID: projectID,
+			DesignContext: domain.FurnitureWorkspaceDesignHeader{
+				Kind: domain.FurnitureWorkspaceContextWorking,
+			},
+			Summary: domain.FurnitureWorkspaceSummary{},
+			Units: []domain.FurnitureWorkspaceUnit{
+				{Instance: fiKnown},
+				{Instance: domain.FurnitureInstance{
+					ID: "fi-desconocido", ProjectID: projectID,
+					Origin:          domain.FurnitureInstanceOriginManual,
+					LifecycleStatus: domain.FurnitureInstanceLifecycleActive, Version: 1,
+				}},
+			},
+		},
+		listFurnitureInstanceSummaries: []storage.FurnitureInstanceSummary{
+			{
+				Instance:    fiKnown,
+				DisplayName: "Bajo mesada 3 puertas",
+				DisplayDims: &domain.ItemCustomDims{WidthMm: 900, HeightMm: 820, DepthMm: 580},
+			},
+		},
+	}
+	srv := &Server{Store: store}
+	req := httptest.NewRequest(http.MethodPost, "/api/projects/"+projectID+"/furniture-workspace", bytes.NewReader([]byte("{}")))
+	req = withClaims(req, "user-1", string(domain.RoleAdmin))
+	req.SetPathValue("projectId", projectID)
+	rec := httptest.NewRecorder()
+
+	srv.HandleProjectFurnitureWorkspace(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body=%s)", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Units []struct {
+			FurnitureInstance struct {
+				ID      string `json:"id"`
+				Display *struct {
+					Name         *string `json:"name"`
+					DimensionsMm *struct {
+						Width  *int64 `json:"width"`
+						Height *int64 `json:"height"`
+						Depth  *int64 `json:"depth"`
+					} `json:"dimensions_mm"`
+				} `json:"display"`
+			} `json:"furnitureInstance"`
+		} `json:"units"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("payload inválido: %v (body=%s)", err, rec.Body.String())
+	}
+	if len(payload.Units) != 2 {
+		t.Fatalf("units = %d, want 2", len(payload.Units))
+	}
+
+	known := payload.Units[0].FurnitureInstance
+	if known.ID != "fi-1" || known.Display == nil || known.Display.Name == nil {
+		t.Fatalf("unidad conocida sin display: %+v", known)
+	}
+	if *known.Display.Name != "Bajo mesada 3 puertas" {
+		t.Fatalf("display.name = %q, want %q", *known.Display.Name, "Bajo mesada 3 puertas")
+	}
+	if known.Display.DimensionsMm == nil || known.Display.DimensionsMm.Width == nil || *known.Display.DimensionsMm.Width != 900 {
+		t.Fatalf("display.dimensionsMm incompleto: %+v", known.Display.DimensionsMm)
+	}
+
+	unknown := payload.Units[1].FurnitureInstance
+	if unknown.ID != "fi-desconocido" || unknown.Display != nil {
+		t.Fatalf("unidad sin summary no debe inventar display: %+v", unknown)
+	}
 }

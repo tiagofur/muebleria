@@ -240,6 +240,7 @@ describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
         designId: null,
         designContextKind: 'none',
         designRevisionId: null,
+        pinned: false,
       },
     });
 
@@ -253,6 +254,7 @@ describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
       designId: 'd-1',
       designContextKind: 'revision',
       designRevisionId: 'dr-9',
+      pinned: true,
     });
 
     const working = projectFurnitureFromPath(
@@ -290,6 +292,23 @@ describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
         designRevisionId: null,
       }),
     ).toBe(`/quotes/${id}/muebles?design=d-1&rev=work`);
+    // issue 1203 P1: «Sin diseño» ELEGIDO viaja como sentinel — un deep link
+    // rev=none es una elección y el default automático no lo re-targeta.
+    expect(
+      projectFurniturePath(id, {
+        quoteRevisionId: null,
+        designId: 'd-1',
+        designContextKind: 'none',
+        designRevisionId: null,
+        pinned: true,
+      }),
+    ).toBe(`/quotes/${id}/muebles?design=d-1&rev=none`);
+    const noneParsed = projectFurnitureFromPath(
+      `/quotes/${id}/muebles`,
+      `?design=d-1&rev=none`,
+    );
+    expect(noneParsed?.context.designContextKind).toBe('none');
+    expect(noneParsed?.context.pinned).toBe(true);
     // Round-trip stability keeps historical views pinned.
     const built = projectFurniturePath(id, {
       quoteRevisionId: 'qr-2',
@@ -306,6 +325,9 @@ describe('project furniture matrix route (WEB-DT-1 / #500)', () => {
       designId: 'd-1',
       designContextKind: 'working',
       designRevisionId: null,
+      // Con params en la URL el estado queda pineado (#1203): un refresco
+      // nunca re-targeta lo que el usuario estaba viendo.
+      pinned: true,
     });
   });
 
