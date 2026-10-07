@@ -3052,3 +3052,98 @@ describe('calcProjectBreakdownWithProfileDemand (#986/#989)', () => {
     ).toThrow();
   });
 });
+
+describe('resolveBom — placements por grupo como demanda (#1210)', () => {
+  const withPlacements = (
+    hardwarePlacements: readonly {
+      hardwareId?: string;
+      optionRole?: string;
+      anchorFace: 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
+      relativePosition: { xMm: number; yMm: number };
+    }[],
+    quantity = 1,
+  ) => {
+    const { module, catalog } = miniModuleWithPart({});
+    return {
+      module: {
+        ...module,
+        components: [
+          {
+            componentId: 'comp-custom',
+            quantity,
+            overrides: { hardwarePlacements },
+          },
+        ],
+      },
+      catalog,
+    };
+  };
+
+  it('un placement concreto posiciona demanda sin línea en cantidad', () => {
+    const { module, catalog } = withPlacements([
+      { hardwareId: 'hw-fixed', anchorFace: 'front', relativePosition: { xMm: 10, yMm: 10 } },
+    ]);
+    const bom = resolveBom(module, { INTERIOR: 'mat-a' }, catalog);
+
+    const line = bom.hardwareLines.find((l) => l.hardwareId === 'hw-fixed');
+    expect(line?.optionRole).toBe('POSITIONED');
+    expect(line?.quantity).toBe(1);
+  });
+
+  it('un placement por grupo resuelve con las choices efectivas', () => {
+    const { module, catalog } = withPlacements([
+      { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 10, yMm: 10 } },
+    ]);
+    const bom = resolveBom(module, { INTERIOR: 'mat-a', BISAGRA: 'hw-a' }, catalog);
+
+    const line = bom.hardwareLines.find((l) => l.hardwareId === 'hw-a');
+    expect(line?.optionRole).toBe('POSITIONED');
+    expect(line?.quantity).toBe(1);
+  });
+
+  it('las posiciones ganan sobre la línea en cantidad del mismo hardware', () => {
+    const { module: base, catalog } = miniModuleWithPart({
+      hardwareLines: [{ id: 'h-bulk', quantity: 4, optionRole: 'BISAGRA' }],
+    });
+    const { module } = withPlacements([
+      { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 10, yMm: 10 } },
+    ]);
+    const bom = resolveBom({ ...base, components: module.components }, { INTERIOR: 'mat-a', BISAGRA: 'hw-a' }, catalog);
+
+    const linesForHwA = bom.hardwareLines.filter((l) => l.hardwareId === 'hw-a');
+    expect(linesForHwA).toHaveLength(1);
+    expect(linesForHwA[0]?.optionRole).toBe('POSITIONED');
+    expect(linesForHwA[0]?.quantity).toBe(1);
+    expect(bom.hardwareLines.find((l) => l.id === 'h-bulk')).toBeUndefined();
+  });
+
+  it('un rol sin elección no fabrica demanda (el gate de precio bloquea aparte)', () => {
+    const { module, catalog } = withPlacements([
+      { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 10, yMm: 10 } },
+    ]);
+    const bom = resolveBom(module, { INTERIOR: 'mat-a' }, catalog);
+
+    expect(bom.hardwareLines.find((l) => l.hardwareId === 'hw-a')).toBeUndefined();
+  });
+
+  it('la cantidad de la instancia multiplica la demanda', () => {
+    const { module, catalog } = withPlacements(
+      [
+        { hardwareId: 'hw-fixed', anchorFace: 'front', relativePosition: { xMm: 10, yMm: 10 } },
+        { hardwareId: 'hw-fixed', anchorFace: 'front', relativePosition: { xMm: 20, yMm: 20 } },
+      ],
+      3,
+    );
+    const bom = resolveBom(module, { INTERIOR: 'mat-a' }, catalog);
+
+    const line = bom.hardwareLines.find((l) => l.hardwareId === 'hw-fixed');
+    expect(line?.quantity).toBe(6);
+  });
+
+  it('un placement sin identidad lanza ResolutionError (#1147)', () => {
+    const { module, catalog } = withPlacements([
+      { anchorFace: 'front', relativePosition: { xMm: 1, yMm: 2 } },
+    ]);
+    expect(() => resolveBom(module, { INTERIOR: 'mat-a' }, catalog)).toThrow(ResolutionError);
+  });
+});

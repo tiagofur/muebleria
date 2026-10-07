@@ -238,6 +238,58 @@ func TestQuoteCommercialSnapshot_Q1_FreezesExactValues(t *testing.T) {
 	}
 }
 
+// #1210: placements son DEMANDA. Un módulo cuyas únicas bisagras son
+// placements de componente (sin línea en cantidad) cotiza exactamente
+// positions × costo contra PostgreSQL real bajo el rol de app — antes de
+// este fix cotizaba $0 herrajes. La demanda entra por structure_components
+// overrides (el camino que el plugin publica): 2 unidades × 1 bisagra
+// × $40 = 80.
+
+func TestQuoteCommercialSnapshot_PlacementDemandPricesExactHardware(t *testing.T) {
+	fx := setupCommercialSnapshotFixture(t)
+	seedPresetPricingContext(t, fx)
+
+	const hinge = "94000000-0000-0000-0000-0000000000c5"
+	multiOrgExec(t, fx.admin, `
+		INSERT INTO hardwares (id, code, name, unit, cost_per_unit, organization_id)
+		VALUES ('`+hinge+`', 'CS-BLUM-P', 'Bisagra Blum CL', 'piece', 40, '`+rlsOrgA+`');
+		INSERT INTO option_groups (id, code, name, kind, required, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000c5', 'BISAGRA-P', 'Bisagras', 'hardware', TRUE, '`+rlsOrgA+`');
+		INSERT INTO option_group_members (option_group_id, entity_id, organization_id)
+		VALUES ('93000000-0000-0000-0000-0000000000c5', '`+hinge+`', '`+rlsOrgA+`');
+		INSERT INTO project_level_choices (project_id, option_group_code, choice_entity_id, organization_id)
+		VALUES ('`+csProject+`', 'BISAGRA-P', '`+hinge+`', '`+rlsOrgA+`');
+		UPDATE structure_components
+		SET overrides='{"hardwarePlacements":[{"optionRole":"BISAGRA-P","anchorFace":"front","relativePosition":{"xMm":100,"yMm":100}}]}'::jsonb
+		WHERE structure_id='`+csStructure+`' AND component_id='`+csComponent+`';`)
+
+	createInitialRevision(t, fx)
+	details := listRevisions(t, fx)
+	if len(details) != 1 {
+		t.Fatalf("expected exactly Q1, got %d revisions", len(details))
+	}
+	snapshot := details[0].CommercialSnapshot
+	if snapshot == nil {
+		t.Fatal("Q1 has no commercial snapshot")
+	}
+	// Line qty 2 × 1 bisagra posicionada × $40 = 80 — el ÚNICO hardware de
+	// esta cotización (no hay línea en cantidad): pura demanda de positions.
+	if snapshot.Breakdown.HardwareTotal != 80 {
+		t.Fatalf("placement demand hardware = %v, want 80 (2 unidades × 1 bisagra × $40)", snapshot.Breakdown.HardwareTotal)
+	}
+	for _, unit := range snapshot.Units {
+		found := false
+		for _, option := range unit.Options {
+			if option.GroupCode == "BISAGRA-P" && option.ChoiceID == hinge {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("unit %s lost the BISAGRA-P choice descriptor: %+v", unit.FurnitureInstanceID, unit.Options)
+		}
+	}
+}
+
 // #1046 S1 aceptación #2: elegir Blum vs económica dentro del grupo BISAGRA
 // cambia la demanda y el costo EXACTOS de la cotización, probado contra
 // PostgreSQL real bajo el rol de app. El grupo se consume por optionRole
