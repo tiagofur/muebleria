@@ -238,6 +238,7 @@ module Granete
           register_authoring_callbacks(dialog)
           register_inspection_callbacks(dialog)
           dialog.add_action_callback('open_material_selector') { |_c, p| handle_open_material_selector(dialog, p) }
+          dialog.add_action_callback('open_hardware_selector') { |_c, p| handle_open_hardware_selector(dialog, p) }
           dialog.add_action_callback('prepare_hardware_mount') { |_c, p| handle_prepare_hardware_mount(dialog, p) }
           dialog.add_action_callback('select_furniture') { |_c, p| handle_select_furniture(dialog, p) }
           register_hardware_inventory_callbacks(dialog)

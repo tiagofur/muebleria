@@ -587,9 +587,23 @@
       preview.className = "material-selected-preview";
       preview.title = membersKnown ? "Cambiar herraje" : "Catálogo sin grupos";
       preview.disabled = !membersKnown;
+
+      var rawImg = chosen ? (chosen.imageUrl || chosen.image_url || chosen.thumbnailUrl || chosen.thumbnail_url || chosen.previewUrl) : null;
+      var resolvedImg = (rawImg && window.GraneteUI && window.GraneteUI.media && typeof window.GraneteUI.media.resolveUrl === "function")
+        ? window.GraneteUI.media.resolveUrl(rawImg)
+        : rawImg;
+
       var tile = document.createElement("span");
       tile.className = "material-swatch material-swatch--hardware";
-      tile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
+      if (resolvedImg) {
+        tile.style.backgroundImage = "url('" + resolvedImg + "')";
+        tile.style.backgroundSize = "contain";
+        tile.style.backgroundRepeat = "no-repeat";
+        tile.style.backgroundPosition = "center";
+        tile.style.backgroundColor = "var(--surface-card)";
+      } else {
+        tile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
+      }
       preview.appendChild(tile);
       var info = document.createElement("span");
       info.className = "material-selected-info";
@@ -608,29 +622,43 @@
       chevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
       preview.appendChild(chevron);
       preview.addEventListener("click", function () {
-        if (!membersKnown || !window.GraneteUI.hardwareGroupSelector) return;
-        var rows = def.optionIds.map(function (hwId) {
-          var entry = hardwareDefinitionById(hwId);
-          return {
-            id: hwId,
-            name: entry ? (entry.name || entry.code) : hwId,
-            code: entry ? entry.code : null,
-            categoryLabel: entry ? hardwareCategoryLabel(entry.category) : null,
-            unitLabel: entry ? hardwareUnitLabel(entry.unit) : null,
-            notes: entry && entry.notes ? entry.notes : null
-          };
-        });
-        window.GraneteUI.hardwareGroupSelector.open({
-          title: "Elegir " + (def.name || group.code),
-          groupLabel: def.name || group.code,
-          rows: rows,
-          chosenId: chosenId,
-          onPick: function (hwId) {
-            inspectorMaterialChoices[group.code] = hwId;
-            recordHardwareGroupPick(group.code, hwId);
-            renderInspectorHardwareGroups();
-          }
-        });
+        if (!membersKnown) return;
+        if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
+          window.sketchup.open_hardware_selector(JSON.stringify({
+            groupCode: group.code,
+            groupName: def ? (def.name || group.code) : group.code,
+            currentHardwareId: chosenId,
+            optionIds: def.optionIds,
+            context: {
+              source: "inspector",
+              instanceId: selectedContext ? selectedContext.furnitureInstanceRef : null,
+              definitionId: selectedContext ? selectedContext.furnitureDefinitionId : null
+            }
+          }));
+        } else if (window.GraneteUI.hardwareGroupSelector) {
+          var rows = def.optionIds.map(function (hwId) {
+            var entry = hardwareDefinitionById(hwId);
+            return {
+              id: hwId,
+              name: entry ? (entry.name || entry.code) : hwId,
+              code: entry ? entry.code : null,
+              categoryLabel: entry ? hardwareCategoryLabel(entry.category) : null,
+              unitLabel: entry ? hardwareUnitLabel(entry.unit) : null,
+              notes: entry && entry.notes ? entry.notes : null
+            };
+          });
+          window.GraneteUI.hardwareGroupSelector.open({
+            title: "Elegir " + (def.name || group.code),
+            groupLabel: def.name || group.code,
+            rows: rows,
+            chosenId: chosenId,
+            onPick: function (hwId) {
+              inspectorMaterialChoices[group.code] = hwId;
+              recordHardwareGroupPick(group.code, hwId);
+              renderInspectorHardwareGroups();
+            }
+          });
+        }
       });
       row.appendChild(preview);
 
@@ -1662,6 +1690,19 @@
     }
   }
 
+  function onHardwareChoiceApplied(payload) {
+    requireDeps();
+    if (!payload) return;
+    var groupCode = payload.groupCode || payload.role;
+    var hardwareId = payload.hardwareId || payload.materialId;
+    if (!groupCode || !hardwareId) return;
+
+    if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
+    inspectorMaterialChoices[groupCode] = hardwareId;
+    recordHardwareGroupPick(groupCode, hardwareId);
+    renderInspectorHardwareGroups();
+  }
+
   function onDeleteResult(result) {
     requireDeps();
     result = result || {};
@@ -1804,6 +1845,7 @@
     onBatchUpdateResult: onBatchUpdateResult,
     onDeleteResult: onDeleteResult,
     onMaterialChoiceApplied: onMaterialChoiceApplied,
+    onHardwareChoiceApplied: onHardwareChoiceApplied,
     onBindingStatus: onBindingStatus,
     activateInspectorTab: activateInspectorTab,
     // Read-only accessors consumed by the bootstrap wiring (material

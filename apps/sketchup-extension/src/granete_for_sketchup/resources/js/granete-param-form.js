@@ -63,11 +63,31 @@
     return p;
   }
 
+  // #1178-inspector: drilling and perforation parameters are server-authoritative
+  // manufacturing rules owned by React and Go — they are completely omitted
+  // from SketchUp authoring to avoid confusing workshop operators.
+  function isDrillingParameter(p) {
+    if (!p) return false;
+    if (p.binding && (p.binding.kind === "structureRelationship" || p.binding.kind === "relationship")) return true;
+    if (p.category === "hardware" || p.category === "drilling" || p.category === "perforation" || p.category === "joinery") return true;
+    var name = String(p.name || "").toLowerCase();
+    var label = String(p.label || "").toLowerCase();
+    if (name.indexOf("tornillo") !== -1 || label.indexOf("tornillo") !== -1) return true;
+    if (name.indexOf("perforac") !== -1 || label.indexOf("perforac") !== -1) return true;
+    if (name.indexOf("screw") !== -1 || label.indexOf("screw") !== -1) return true;
+    if (name.indexOf("minifix") !== -1 || label.indexOf("minifix") !== -1) return true;
+    if (name.indexOf("taquete") !== -1 || label.indexOf("taquete") !== -1) return true;
+    if (name.indexOf("tarugo") !== -1 || label.indexOf("tarugo") !== -1) return true;
+    return false;
+  }
+
   function renderParamForm(container, def, currentValues, onChange) {
     container.innerHTML = "";
     if (!def) return;
 
     (def.parameters || []).forEach(function (p) {
+      if (isDrillingParameter(p)) return;
+
       var val = currentValues[p.name] !== undefined ? currentValues[p.name] : p.defaultValue;
       var group = document.createElement("div");
       group.className = "param-group";
@@ -115,19 +135,6 @@
 
         control.appendChild(dimInput);
         control.appendChild(dimUnit);
-      } else if (p.type === "number" && p.min !== undefined && p.max !== undefined &&
-                 p.binding && p.binding.kind === "relationship") {
-        // #1178-inspector: params bound to a construction/drilling
-        // relationship are SERVER-AUTHORITATIVE quantities (demand,
-        // estaciones, separaciones) — the workshop reads them, the backend
-        // and the web editor own them. No steppers, no editing.
-        group.appendChild(label);
-
-        var readOnly = document.createElement("span");
-        readOnly.className = "param-readonly-value";
-        readOnly.textContent = val;
-        readOnly.setAttribute("aria-label", p.label);
-        control.appendChild(readOnly);
       } else if (p.type === "number" && p.min !== undefined && p.max !== undefined) {
         group.appendChild(label);
 

@@ -1591,6 +1591,12 @@
             window.GraneteUI.inspector.onMaterialChoiceApplied(payload);
           },
 
+          onHardwareChoiceApplied: function (payload) {
+            if (window.GraneteUI && window.GraneteUI.inspector && window.GraneteUI.inspector.onHardwareChoiceApplied) {
+              window.GraneteUI.inspector.onHardwareChoiceApplied(payload);
+            }
+          },
+
           onDoorMotionToggled: function (payload) {
             if (window.GraneteUI.inspector && window.GraneteUI.inspector.onDoorMotionToggled) {
               window.GraneteUI.inspector.onDoorMotionToggled(payload);

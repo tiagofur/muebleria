@@ -266,6 +266,24 @@ test('bounded number without mm renders a stepper with step and boundary clampin
   assert.ok(stepper, 'the stepper wrapper class is preserved');
 });
 
+test('drilling and perforation parameters are completely omitted from rendering', () => {
+  const { sandbox, run } = buildSandbox();
+  run(MODULE_SOURCE);
+  const pf = sandbox.window.GraneteUI.paramForm;
+  const container = createMockElement('div');
+  const def = { parameters: [
+    { name: 'widthMm', type: 'number', label: 'Ancho', defaultValue: 600, unit: 'mm' },
+    { name: 'tornillosPiso', type: 'number', label: 'Tornillos por contacto (piso)', defaultValue: 4, min: 2, max: 8 },
+    { name: 'perforacionesTaquetes', type: 'number', label: 'Perforaciones', defaultValue: 2, min: 0, max: 4 },
+    { name: 'screwHoles', type: 'number', label: 'Screw Holes', defaultValue: 2, min: 0, max: 4, binding: { kind: 'structureRelationship' } }
+  ] };
+  pf.renderParamForm(container, def, {}, () => {});
+  const groups = find(container, (n) => n.className === 'param-group');
+  assert.strictEqual(groups.length, 1, 'only non-drilling parameters are rendered');
+  const label = find(container, (n) => n.className === 'param-label')[0];
+  assert.strictEqual(label.textContent, 'Ancho');
+});
+
 test('enum param renders a select with one option per value and change wiring', () => {
   const { sandbox, run } = buildSandbox();
   run(MODULE_SOURCE);

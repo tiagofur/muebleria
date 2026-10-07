@@ -77,4 +77,47 @@ class MaterialSelectorJsRoundtripTest < Minitest::Test
     assert_equal 'inst-kitchen-base-01', received_apply.dig(:context, 'instanceId')
     refute controller.open?, 'Dialog must close after apply'
   end
+
+  def test_hardware_selector_ruby_to_js_roundtrip_coordination
+    logger = Granete::SketchUpExtension::SafeLogger.new(sink: StringIO.new)
+    controller = Granete::SketchUpExtension::UserInterface::OptionSelectorController.new(
+      logger: logger
+    )
+
+    received_apply = nil
+    dialog = controller.show_selector(
+      role: 'BISAGRA',
+      role_name: 'Bisagras de Puertas',
+      current_material_id: 'hw-blum',
+      allowed_materials: [
+        { 'materialId' => 'hw-blum', 'name' => 'Bisagra Blum Clip Top' },
+        { 'materialId' => 'hw-eco', 'name' => 'Bisagra Económica' }
+      ],
+      categories: [],
+      kind: 'hardware',
+      title: 'Catálogo de Herrajes — Granete',
+      on_apply: lambda do |group, hw_id, scope, context|
+        received_apply = { group: group, hardware_id: hw_id, scope: scope, context: context }
+      end
+    )
+
+    dialog.callbacks.fetch('selector_ready').call(dialog)
+    init_script = dialog.executed_scripts.find { |s| s.include?('initOptionSelector') }
+    refute_nil init_script, 'Ruby must inject initOptionSelector for hardware'
+    assert_includes init_script, 'Catálogo de Herrajes'
+    assert_includes init_script, '"kind":"hardware"'
+
+    js_payload = {
+      'role' => 'BISAGRA',
+      'materialId' => 'hw-eco',
+      'scope' => 'furniture',
+      'context' => { 'source' => 'inspector' }
+    }
+    dialog.callbacks.fetch('apply_selection').call(dialog, JSON.generate(js_payload))
+
+    refute_nil received_apply
+    assert_equal 'BISAGRA', received_apply[:group]
+    assert_equal 'hw-eco', received_apply[:hardware_id]
+    refute controller.open?, 'Dialog must close after hardware apply'
+  end
 end
