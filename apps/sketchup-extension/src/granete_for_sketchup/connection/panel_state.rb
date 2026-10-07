@@ -10,12 +10,12 @@ module Granete
         module PanelState
           module_function
 
-          def build_panel_payload(reconciliation:, catalog_provider:)
+          def build_panel_payload(reconciliation:, catalog_provider:, position_journal: nil, model: nil)
             projection = reconciliation.projection
             return projection unless projection['state'] == 'connected'
 
             names = definition_names(catalog_provider)
-            items = decorate_rows(projection['items'], names)
+            items = decorate_rows(projection['items'], names, position_journal, model)
             projection.merge(
               'items' => items,
               'placed' => items.count { |row| row['reconciliationState'] == 'present_synced' },
@@ -30,7 +30,7 @@ module Granete
             )
           end
 
-          def decorate_rows(items, definition_names)
+          def decorate_rows(items, definition_names, position_journal = nil, model = nil)
             counters = Hash.new(0)
             totals = items.each_with_object(Hash.new(0)) do |item, counts|
               counts[group_key(item)] += 1 if item['id']
@@ -39,15 +39,26 @@ module Granete
             items.map do |item|
               group = group_key(item)
               counters[group] += 1 if item['id']
-              row(item, definition_names, counters[group], totals[group])
+              row(item, definition_names, counters[group], totals[group],
+                  recorded: recorded_position?(item, position_journal, model))
             end
+          end
+
+          # #1189: the journal is consulted ONLY for unplaced rows — a live
+          # working item owns the position and the journal never competes
+          # with it (recovery metadata, never a second authority).
+          def recorded_position?(item, position_journal, model)
+            return false unless position_journal && model
+            return false unless item['reconciliationState'] == 'unplaced' && item['id']
+
+            position_journal.recorded?(model, item['id'])
           end
 
           def group_key(item)
             item['definitionId'] || "origin:#{item['origin']}"
           end
 
-          def row(item, definition_names, unit_index, unit_total)
+          def row(item, definition_names, unit_index, unit_total, recorded: false)
             dims = item['displayDimensions']
             state = item['reconciliationState']
             {
@@ -61,6 +72,7 @@ module Granete
               'placed' => state == 'present_synced',
               'pendingConfirm' => state == 'pending_confirmation',
               'authoringDirty' => item['authoringDirty'] == true,
+              'hasRecordedPosition' => recorded,
               'reconciliationState' => state,
               'blocking' => item['blocking'],
               'reason' => item['reason'],

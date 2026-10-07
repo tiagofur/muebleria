@@ -10,6 +10,7 @@ require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/panel_state'
+require_relative '../../src/granete_for_sketchup/connection/position_journal'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/connection/design_sync'
 require_relative '../../src/granete_for_sketchup/host/command_contract'
@@ -195,6 +196,38 @@ class PositionSyncCoordinatorTest < Minitest::Test
     assert panel['clean']
     row = panel['items'].find { |i| i['id'] == FI_1 }
     assert_equal 'present_synced', row['reconciliationState']
+  end
+
+  # #1189: every readback-confirmed transform advances the durable per-file
+  # position journal next to the in-memory known state — that record is what
+  # lets "↶ Restaurar posición" survive a later design-sync drop.
+  def test_confirmed_syncs_record_the_position_journal
+    entity = create_managed_root(FI_1)
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(100.0 / 25.4, 0, 0))
+    binding = MB::Store.new(@model).read
+    journal = CONNECTION::PositionJournal::Store.new
+
+    result = @coordinator.converge_inserted_unit(@model, binding, FI_1)
+    assert result['ok'], result.inspect
+
+    entry = journal.entry(@model, FI_1)
+    refute_nil entry, 'the confirmed insert must leave a recovery record'
+    assert_equal [100.0, 0.0, 0.0], entry['translation_mm']
+
+    # Move + transaction commit: the journal advances with the confirmed
+    # readback, exactly like @known_transforms.
+    stub_working_copy([
+                        { 'furniture_instance_id' => FI_1,
+                          'furniture_definition_id' => DEFINITION_ID,
+                          'parameters' => {}, 'material_choices' => {},
+                          'transform' => { 'translation_mm' => [100.0, 0.0, 0.0],
+                                           'rotation_deg' => [0.0, 0.0, 0.0] } }
+                      ])
+    entity.transformation = Geom::Transformation.translation(Geom::Vector3d.new(500.0 / 25.4, 0, 0))
+    @coordinator.on_transaction_commit(@model)
+
+    moved = journal.entry(@model, FI_1)
+    assert_equal [500.0, 0.0, 0.0], moved['translation_mm']
   end
 
   def test_converge_inserted_unit_handles_network_failure_without_rollback

@@ -16,7 +16,9 @@
 // recovery pair #870 (Restaurar
 // posición — the Restorer at the recorded WorkingCopy transform — and
 // Colocar manualmente — the SAME existing unit driven through the shared
-// #469 placement preview; neither ever creates a new unit), the shared #469
+// #469 placement preview; neither ever creates a new unit), the #1189
+// recorded-position restore for unplaced cards (durable per-file position
+// journal — the same restore button and bridge command), the shared #469
 // placement-preview result
 // handlers for the Project lane (the catalog lane's repeat state + re-arm
 // live in js/granete-configurator.js and are consumed call-time), the
@@ -542,6 +544,14 @@
     if (row.reconciliationState === "pending_confirmation") {
       buttons.push(retrySyncButton(row), cancelPlacementButton(row));
     } else if (row.reconciliationState === "unplaced") {
+      // #1189: a position recorded in THIS file offers the same restore the
+      // #870 missing lane has. The journal is local recovery data — never a
+      // second authority: a live working copy always wins (hasRecordedPosition
+      // is only derived for unplaced rows).
+      if (row.hasRecordedPosition) {
+        var unplacedBusy = pfRestoring[row.id] || pfPlacing[row.id] || pfRemoving[row.id];
+        buttons.push(restorePositionButton(row, unplacedBusy));
+      }
       buttons.push(placeUnitButton(row));
     } else if (missing) {
       // #870 — two same-level recovery intents for the SAME unit: the
@@ -982,6 +992,7 @@
       case "binding_changed":
       case "context_changed": return result.reason || "El modelo o el diseño cambió; actualizá y reintentá.";
       case "invalid_transform": return result.reason || "La posición guardada no es válida.";
+      case "no_recorded_position": return result.reason || "Este archivo no tiene una posición grabada para este mueble; usá Colocar.";
       case "recovery_blocked": return result.reason || "La restauración está bloqueada.";
       case "host_readback_failed": return result.reason || "No se pudo verificar la restauración.";
       case "sync_failed": return result.reason || "El diseño no se pudo actualizar.";

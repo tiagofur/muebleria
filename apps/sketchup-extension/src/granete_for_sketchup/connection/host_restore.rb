@@ -10,6 +10,14 @@ module Granete
         # active SketchUp document. This is host repair, not placement: it
         # never creates business identity, never writes the WorkingCopy and
         # never hands control to the Move tool.
+        #
+        # #1189: recovery survives the design sync that dropped the unit's
+        # working item. A LIVE working item stays the authority (precedence:
+        # WC > journal); only when the Working Copy no longer contains the
+        # unit does the durable position journal own the restore — the
+        # recorded transform plus the #977 authoring inputs the placement
+        # lane already uses. The restored unit lands pending_confirmation:
+        # "Reintentar sincronización" converges the design afterwards.
         class Restorer # rubocop:disable Metrics/ClassLength
           class RestoreFailure < StandardError
             attr_reader :code
@@ -22,7 +30,7 @@ module Granete
 
           def initialize(model_provider:, binding_store_factory:, model_binding_service:, service:,
                          metadata_store_factory:, catalog_provider:, furniture_builder_factory:,
-                         host_reconciliation:, logger: SafeLogger.new)
+                         host_reconciliation:, position_journal: nil, logger: SafeLogger.new)
             @model_provider = model_provider
             @binding_store_factory = binding_store_factory
             @model_binding_service = model_binding_service
@@ -31,6 +39,7 @@ module Granete
             @catalog_provider = catalog_provider
             @furniture_builder_factory = furniture_builder_factory
             @host_reconciliation = host_reconciliation
+            @position_journal = position_journal || PositionJournal::Store.new
             @logger = logger
             @guard = Mutex.new
             @in_flight = {}
@@ -75,67 +84,133 @@ module Granete
 
           private
 
-          # rubocop:disable-next Metrics/AbcSize
           def restore_guarded(model, binding, furniture_instance_id)
             initial = authority(model, binding, furniture_instance_id)
-            if initial[:local].length == 1
-              assert_exact_root!(model, initial[:local].first[:entity], initial, binding)
-              return success(furniture_instance_id, restored: false)
-            end
+            return already_restored_success(model, initial, binding, furniture_instance_id) if
+              initial[:local].length == 1
             raise RestoreFailure.new('duplicate_detected', DUPLICATE_MESSAGE) if initial[:local].length > 1
 
-            definition = @catalog_provider.find_definition(initial[:item].furniture_definition_id)
-            unless definition && definition['furniture_definition_id'] == initial[:item].furniture_definition_id
-              raise RestoreFailure.new('recovery_blocked',
-                                       'el catálogo del taller no incluye la definición exacta de este mueble')
-            end
+            source = restore_source(model, initial)
             layout = WorkingCopyMerger.resolve_layout(
-              @catalog_provider, definition, initial[:item].parameters, initial[:item].material_choices
+              @catalog_provider, source[:definition], source[:item].parameters, source[:item].material_choices
             )
-            transform = exact_transform!(initial[:item].transform)
 
             fresh = authority(model, binding, furniture_instance_id)
             assert_same_authority!(initial, fresh)
             raise RestoreFailure.new('duplicate_detected', DUPLICATE_MESSAGE) unless fresh[:local].empty?
 
+            insert_restored_root(model, binding, furniture_instance_id, initial, source, layout)
+          end
+
+          # Legacy no-op: a live working item verifies catalog-free, exactly
+          # as before #1189. A journal-restored root re-derives its full
+          # expectations (the journal lane is new, so its no-op may consult
+          # the catalog fail-closed).
+          def already_restored_success(model, initial, binding, furniture_instance_id)
+            if initial[:item]
+              assert_exact_root!(model, initial[:local].first[:entity], initial, binding,
+                                 expected: initial[:item])
+              return success(furniture_instance_id, restored: false)
+            end
+
+            source = restore_source(model, initial)
+            assert_exact_root!(model, initial[:local].first[:entity], initial, binding,
+                               expected: source[:item])
+            success(furniture_instance_id, restored: false, code: source[:expected_state])
+          end
+
+          def insert_restored_root(model, binding, furniture_instance_id, initial, source, layout)
             builder = @furniture_builder_factory.call(model)
             operation_open = false
-            model.start_operation("Restaurar Mueble del Proyecto #{definition['name']}", true)
+            model.start_operation("Restaurar Mueble del Proyecto #{source[:definition]['name']}", true)
             operation_open = true
             inserted = builder.place_existing_furniture(
-              model, furniture_instance_id: furniture_instance_id, definition: definition,
-                     parameters: initial[:item].parameters, material_choices: initial[:item].material_choices,
+              model, furniture_instance_id: furniture_instance_id, definition: source[:definition],
+                     parameters: source[:item].parameters, material_choices: source[:item].material_choices,
                      resolved_layout: layout, project_id: binding.project_id, design_id: binding.design_id,
-                     transformation: transform, prepare: false, preserve_parameters: true, transaction: false
+                     transformation: source[:transform], prepare: false, preserve_parameters: true, transaction: false
             )
             raise RestoreFailure.new('placement_failed', inserted['error']) unless inserted['success']
 
             entity = inserted['entity']
-            verify_inserted!(model, binding, furniture_instance_id, initial, entity)
+            verify_inserted!(model, binding, furniture_instance_id, initial, entity,
+                             expected_item: source[:item], expected_state: source[:expected_state])
             model.commit_operation
             operation_open = false
             @logger.info('project_furniture_restored', furniture_instance_id: furniture_instance_id,
                                                        project_id: binding.project_id,
-                                                       design_id: binding.design_id)
-            success(furniture_instance_id, restored: true)
+                                                       design_id: binding.design_id,
+                                                       source: initial[:item] ? 'working_copy' : 'position_journal')
+            success(furniture_instance_id, restored: true, code: source[:expected_state])
           rescue RestoreFailure, Service::Error, PlacementResolutionError, Contract::ContractError, StandardError
             model.abort_operation if operation_open
             raise
           end
 
-          def verify_inserted!(model, binding, furniture_instance_id, initial, entity)
+          # The recovery source for one unit, resolved BEFORE any host
+          # mutation. A live working item is the authority: its definition,
+          # inputs and transform drive the restore and the readback expects
+          # present_synced. Without it, the position journal owns recovery:
+          # the recorded transform plus the #977 snapshot inputs the
+          # placement lane falls back to — and the honest readback state is
+          # pending_confirmation, because the working copy stays untouched.
+          def restore_source(model, initial)
+            if initial[:item]
+              working_copy_source(initial)
+            else
+              position_journal_source(model, initial)
+            end
+          end
+
+          def working_copy_source(initial)
+            item = initial[:item]
+            definition = find_exact_definition!(item.furniture_definition_id)
+            { item: item, definition: definition, transform: exact_transform!(item.transform),
+              expected_state: 'present_synced' }
+          end
+
+          def position_journal_source(model, initial)
+            unit = initial[:unit]
+            recorded = @position_journal.entry(model, unit.id)
+            unless recorded
+              raise RestoreFailure.new('no_recorded_position',
+                                       'no hay una posición grabada de este mueble en este archivo')
+            end
+
+            definition = find_exact_definition!(unit.furniture_definition_id)
+            parameters = WorkingCopyMerger.recovery_placement_parameters(unit, definition)
+            material_choices = PlacementGuards.compose_effective_choices(unit, unit.authoring_material_choices)
+            item = Contract::WorkingItem.new(
+              furniture_instance_id: unit.id, furniture_definition_id: unit.furniture_definition_id,
+              parameters: parameters, material_choices: material_choices, transform: recorded
+            )
+            { item: item, definition: definition, transform: exact_transform!(recorded),
+              expected_state: 'pending_confirmation' }
+          end
+
+          def find_exact_definition!(definition_id)
+            definition = @catalog_provider.find_definition(definition_id)
+            unless definition && definition['furniture_definition_id'] == definition_id
+              raise RestoreFailure.new('recovery_blocked',
+                                       'el catálogo del taller no incluye la definición exacta de este mueble')
+            end
+            definition
+          end
+
+          def verify_inserted!(model, binding, furniture_instance_id, initial, entity,
+                               expected_item:, expected_state:)
             fresh = authority(model, binding, furniture_instance_id)
             assert_same_authority!(initial, fresh, ignore_local: true)
             unless fresh[:local].length == 1 && fresh[:local].first[:entity].equal?(entity)
               raise RestoreFailure.new('host_readback_failed',
                                        'la restauración no produjo una única entidad raíz verificable')
             end
-            assert_exact_root!(model, entity, fresh, binding)
+            assert_exact_root!(model, entity, fresh, binding, expected: expected_item)
 
             projection = @host_reconciliation.projection(model: model, binding: binding)
             row = projection['items']&.find { |candidate| candidate['id'] == furniture_instance_id }
             unless projection['state'] == 'connected' && row &&
-                   row['reconciliationState'] == 'present_synced' && row['localMatchCount'] == 1
+                   row['reconciliationState'] == expected_state && row['localMatchCount'] == 1
               raise RestoreFailure.new('host_readback_failed',
                                        'el archivo no confirmó la restauración contra Granete')
             end
@@ -157,16 +232,19 @@ module Granete
             working = @service.get_working_copy(binding.design_id)
             assert_working_context!(working, binding)
             items = working.items.select { |candidate| candidate.furniture_instance_id == furniture_instance_id }
-            unless items.length == 1
-              raise RestoreFailure.new('working_copy_changed',
-                                       'el Working Copy ya no contiene exactamente este mueble')
+            # #1189: exactly one item is the live-authority lane; ZERO items
+            # is the post-sync drop the journal lane recovers from; more than
+            # one stays incompatible. Absence is no longer an error here —
+            # restore_source owns which lane runs.
+            unless items.length <= 1
+              raise RestoreFailure.new('incompatible',
+                                       'el Working Copy contiene la identidad más de una vez')
             end
             item = items.first
-            if item.furniture_definition_id != matches.first.furniture_definition_id
+            if item && item.furniture_definition_id != matches.first.furniture_definition_id
               raise RestoreFailure.new('incompatible',
-                                       'la definición del Working Copy no coincide con el mueble del proyecto')
+                                       'la definición del Working Copy no coincide con la instancia')
             end
-            exact_transform!(item.transform)
             local = ManagedFurniture.index(model, @metadata_store_factory.call(model))[:by_id][furniture_instance_id]
             assert_context!(model, binding)
             { unit: matches.first, working: working, item: item, local: local,
@@ -206,12 +284,12 @@ module Granete
           end
 
           # rubocop:disable-next Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
-          def assert_exact_root!(model, entity, authority, binding)
+          def assert_exact_root!(model, entity, _authority, binding, expected:)
             assert_context!(model, binding)
             metadata = @metadata_store_factory.call(model).read(entity)
             identity = metadata.is_a?(Hash) ? metadata['identity'] : nil
             intent = metadata.is_a?(Hash) ? metadata['intent'] : nil
-            item = authority[:item]
+            item = expected
             exact = metadata&.dig('kind') == 'furnitureInstance' &&
                     identity&.dig('furnitureInstanceId') == item.furniture_instance_id &&
                     identity&.dig('projectId') == binding.project_id &&
@@ -277,8 +355,8 @@ module Granete
             @guard.synchronize { @in_flight.delete(key) }
           end
 
-          def success(furniture_instance_id, restored:)
-            { 'ok' => true, 'code' => 'present_synced', 'instanceId' => furniture_instance_id,
+          def success(furniture_instance_id, restored:, code: 'present_synced')
+            { 'ok' => true, 'code' => code, 'instanceId' => furniture_instance_id,
               'restored' => restored }
           end
 

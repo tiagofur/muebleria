@@ -447,7 +447,8 @@ module Granete
           def initialize(model_provider:, binding_store_factory:, model_binding_service:,
                          service:, metadata_store_factory:, catalog_provider:,
                          furniture_builder_factory:, intent_store: IntentStore.new,
-                         host_reconciliation: nil, restorer: nil, logger: SafeLogger.new)
+                         host_reconciliation: nil, restorer: nil, position_journal: nil,
+                         logger: SafeLogger.new)
             @model_provider = model_provider
             @binding_store_factory = binding_store_factory
             @model_binding_service = model_binding_service
@@ -457,6 +458,10 @@ module Granete
             @furniture_builder_factory = furniture_builder_factory
             @intent_store = intent_store
             @logger = logger
+            # #1189: one shared per-file position journal — the placer writes
+            # it at every confirmed placement sync and the restorer reads it
+            # when the working copy no longer contains the unit.
+            @position_journal = position_journal || PositionJournal::Store.new
             @host_reconciliation = host_reconciliation || HostReconciliation.new(
               model_provider: model_provider, binding_store_factory: binding_store_factory,
               service: service, metadata_store_factory: metadata_store_factory, logger: logger
@@ -466,7 +471,8 @@ module Granete
               model_binding_service: model_binding_service, service: service,
               metadata_store_factory: metadata_store_factory, catalog_provider: catalog_provider,
               furniture_builder_factory: furniture_builder_factory,
-              host_reconciliation: @host_reconciliation, logger: logger
+              host_reconciliation: @host_reconciliation, position_journal: @position_journal,
+              logger: logger
             )
           end
 
@@ -734,7 +740,9 @@ module Granete
           def panel
             PanelState.build_panel_payload(
               reconciliation: @host_reconciliation,
-              catalog_provider: @catalog_provider
+              catalog_provider: @catalog_provider,
+              position_journal: @position_journal,
+              model: @model_provider.call
             )
           end
 
@@ -774,6 +782,9 @@ module Granete
 
             @service.remove_furniture_instance(furniture_instance_id, expected_version: instance.version)
             @intent_store.clear(furniture_instance_id)
+            # #1189: a terminal unit never offers position recovery — drop
+            # its journal entry so the file carries no dead promises.
+            @position_journal.forget(model, furniture_instance_id)
             @logger.info('project_furniture_removed', furniture_instance_id: furniture_instance_id,
                                                       project_id: binding.project_id)
 
@@ -1019,6 +1030,11 @@ module Granete
             @service.update_working_copy(binding.design_id, items: merged,
                                                             base_revision_id: binding.base_revision_id,
                                                             expected_working_version: working.updated_at)
+            # #1189: the placement is authoritatively confirmed — record the
+            # final transform in the durable per-file position journal so a
+            # later design-sync drop can still offer "↶ Restaurar posición".
+            @position_journal.record(model, furniture_instance_id,
+                                     TransformContract.from_host(entity.transformation))
             @intent_store.clear(furniture_instance_id)
             @logger.info('project_furniture_placed',
                          furniture_instance_id: furniture_instance_id,
