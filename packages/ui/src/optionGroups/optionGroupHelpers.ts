@@ -15,6 +15,7 @@ import type {
   Structure,
 } from '@granete/domain';
 import {
+  HINGE_DEMAND_ROLE,
   PATAS_ROLE,
   ZOCLO_BOARD_ROLE,
   ZOCLO_STRIP_ROLE,
@@ -202,6 +203,8 @@ export type ModuleLikeForRoles = {
   }[];
   readonly components?: readonly {
     readonly componentId: string;
+    /** #1078: authored placement drives the door presence check. */
+    readonly placementOverride?: string;
     readonly overrides?: {
       readonly hardwarePlacements?: readonly {
         readonly hardwareId?: string;
@@ -288,7 +291,35 @@ function collectUsedOptionRoles(
   if (module.baseMode === 'plinth_board') usedRoles.add(ZOCLO_BOARD_ROLE);
   if (module.baseMode === 'plinth_strip') usedRoles.add(ZOCLO_STRIP_ROLE);
   if (module.baseMode === 'legs') usedRoles.add(PATAS_ROLE);
+  // #1078 — a module with a placed door buys hinges by height band even when
+  // no bulk line authors them anymore: the band consumes the group's choice
+  // at quote time exactly like a placement does, so the gate (and the item
+  // picker) must see the group. Authored placement data — no catalog needed
+  // (same regression guard as the placement roles above).
+  if (moduleHasPlacedDoor(module, catalogStructures)) {
+    usedRoles.add(HINGE_DEMAND_ROLE);
+  }
   return usedRoles;
+}
+
+/**
+ * #1078: does any component instance (module or its referenced structure)
+ // place a door? Authored placement only — no catalog roundtrip.
+ */
+function moduleHasPlacedDoor(
+  module: ModuleLikeForRoles,
+  catalogStructures?: readonly Structure[],
+): boolean {
+  if (module.components?.some((c) => c.placementOverride === 'puerta')) {
+    return true;
+  }
+  if (module.structureId && catalogStructures) {
+    const structure = catalogStructures.find((s) => s.id === module.structureId);
+    if (structure?.components?.some((c) => c.placementOverride === 'puerta')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

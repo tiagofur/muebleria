@@ -351,6 +351,74 @@ describe('requiredGroupCodesForModule', () => {
   });
 });
 
+describe('consumption por banda de bisagras (#1078)', () => {
+  const moduleWithDoor = {
+    hardwareLines: [],
+    components: [
+      {
+        componentId: 'comp-pue',
+        // The ONLY signal: the authored door placement. No bulk line, no
+        // catalog needed — the band consumes the group choice at quote time.
+        placementOverride: 'puerta' as const,
+      },
+    ],
+  };
+
+  it('a door module without authored lines still demands the hinge group', () => {
+    const codes = requiredGroupCodesForModule(moduleWithDoor, groups);
+    expect(codes).toEqual(['BISAGRA']);
+    const blocked = canShowPricePreview(codes, {});
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) {
+      expect(blocked.missingGroups).toEqual(['BISAGRA']);
+    }
+    const open = canShowPricePreview(codes, { BISAGRA: 'h1' });
+    expect(open).toEqual({ ok: true, missingGroups: [] });
+  });
+
+  it('the item picker offers the hinge group for a door module', () => {
+    expect(selectableGroupCodesForModule(moduleWithDoor, groups)).toEqual([
+      'BISAGRA',
+    ]);
+  });
+
+  it('a door placed only inside the referenced structure demands too', () => {
+    const catalogStructures = [
+      {
+        id: 'str-1',
+        code: 'STR-GAB',
+        name: 'Cuerpo gabinete',
+        components: [
+          {
+            id: 'i1',
+            componentId: 'comp-pue',
+            quantity: 1,
+            placementOverride: 'puerta' as const,
+          },
+        ],
+        active: true,
+      },
+    ];
+    const codes = requiredGroupCodesForModule(
+      { hardwareLines: [], structureId: 'str-1', components: [] },
+      groups,
+      undefined,
+      catalogStructures,
+    );
+    expect(codes).toEqual(['BISAGRA']);
+  });
+
+  it('a doorless module does not invent hinge demand', () => {
+    const doorless = {
+      hardwareLines: [],
+      components: [
+        { componentId: 'comp-ent', placementOverride: 'interno' as const },
+      ],
+    };
+    expect(requiredGroupCodesForModule(doorless, groups)).toEqual([]);
+  });
+});
+
 describe('consumption por placements de herrajes (#1046)', () => {
   const moduleWithPlacements = {
     hardwareLines: [],
