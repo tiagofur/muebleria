@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -164,32 +165,23 @@ func (s *PostgresStore) DeactivateAgregado(ctx context.Context, id string, expec
 	return nil
 }
 
-// DeleteAgregado hard-deletes the row (F116 C4): the previous deactivate-only
-// endpoint made every FE delete reappear on refresh, because saveCatalog is
-// upsert-only and never issues DELETEs. Agregados are referenced by id inside
-// modules.agregados / structures.agregados JSONB arrays — refuse while any
-// instance still points at the row so BOM resolution stays sound.
+// DeleteAgregado hard-deletes the row and its historical revisions through
+// delete_catalog_agregado (#1168). Deleting an agregado with revisions
+// previously failed with fk_agregado_revisions_agregado (ON DELETE RESTRICT)
+// or composite FK nullification failures; the SECURITY DEFINER function
+// safely cascades when the agregado is not in use by modules, structures, or
+// published assembly snapshots.
 func (s *PostgresStore) DeleteAgregado(ctx context.Context, id string, expectedVersion int64) error {
-	probe := fmt.Sprintf(`[{"agregado_id":%q}]`, id)
-	const inUseQuery = `
-		SELECT
-			(SELECT count(*) FROM modules WHERE agregados @> $1::jsonb)
-			+ (SELECT count(*) FROM structures WHERE agregados @> $1::jsonb);
-	`
-	var inUse int
-	if err := s.db(ctx).QueryRow(ctx, inUseQuery, probe).Scan(&inUse); err != nil {
-		return err
-	}
-	if inUse > 0 {
-		return fmt.Errorf("agregado in use by %d módulo(s)/estructura(s)", inUse)
-	}
-
-	tag, err := s.db(ctx).Exec(ctx, `DELETE FROM agregados WHERE id = $1 AND organization_id = $2 AND version = $3;`, id, OrgFromCtx(ctx), expectedVersion)
+	_, err := s.db(ctx).Exec(ctx, `SELECT delete_catalog_agregado($1, $2);`, id, expectedVersion)
 	if err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "agregado not found") {
+			return fmt.Errorf("agregado not found")
+		}
+		if strings.Contains(msg, "agregado version conflict") {
+			return ErrVersionConflict
+		}
 		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return s.disambiguateRowNotFound(ctx, "agregados", id, fmt.Errorf("agregado not found"))
 	}
 	return nil
 }

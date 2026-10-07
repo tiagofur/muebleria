@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -115,8 +116,64 @@ func TestStructureAndModule_AgregadosRoundTrip(t *testing.T) {
 	}
 	modIn.Agregados[0].Quantity = 4
 	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error { return store.UpdateModule(txCtx, modID, modIn.Version, modIn) })
-	modUpd := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Module, error) { return store.GetModuleByID(txCtx, modID) })
-	if len(modUpd.Agregados) != 1 || modUpd.Agregados[0].Quantity != 4 {
-		t.Fatalf("mismatch after module update: %+v", modUpd.Agregados)
+		modUpd := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Module, error) { return store.GetModuleByID(txCtx, modID) })
+		if len(modUpd.Agregados) != 1 || modUpd.Agregados[0].Quantity != 4 {
+			t.Fatalf("mismatch after module update: %+v", modUpd.Agregados)
+		}
+	}
+
+// #1168: deleting an agregado with historical revisions must safely cascade
+// through delete_catalog_agregado, removing both the parent row and its
+// revision records while refusing deletion when referenced by in-use structures
+// or modules.
+func TestAgregados_CascadeDeleteWithRevisions(t *testing.T) {
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
+	id, code := uniqueID("agr-del-rev"), uniqueID("AGR-DEL-REV")
+
+	in := &domain.Agregado{
+		ID: id, Code: code, Name: "Agregado Para Borrar", Active: true,
+	}
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.CreateAgregado(txCtx, in)
+	})
+
+	// Create revision via UpdateAgregadoWithRevision
+	upd := *in
+	upd.Name = "Agregado Para Borrar v2"
+	userID := actor.UserID
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.UpdateAgregadoWithRevision(txCtx, id, 1, &upd, &userID)
+	})
+
+	stored := withinConnectStoreTenantValue(t, store, actor, func(txCtx context.Context) (*domain.Agregado, error) {
+		return store.GetAgregadoByID(txCtx, id)
+	})
+	if stored.CurrentRevisionID == nil {
+		t.Fatal("expected current_revision_id to be set after update with revision")
+	}
+	r1ID := *stored.CurrentRevisionID
+
+	// Delete with expectedVersion == 2 should succeed and cascade
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		return store.DeleteAgregado(txCtx, id, 2)
+	})
+
+	// Agregado is gone
+	err := withinTenantTxErr(t, store, actor, func(txCtx context.Context) error {
+		_, err := store.GetAgregadoByID(txCtx, id)
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected agregado to be not found, got err: %v", err)
+	}
+
+	// Revision is also gone
+	err = withinTenantTxErr(t, store, actor, func(txCtx context.Context) error {
+		_, err := store.GetAgregadoRevisionByID(txCtx, r1ID)
+		return err
+	})
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected revision to be deleted with parent, got err: %v", err)
 	}
 }
