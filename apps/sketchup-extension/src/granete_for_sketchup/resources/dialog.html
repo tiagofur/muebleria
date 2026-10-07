@@ -531,19 +531,11 @@
             </div>
           </div>
 
-          <!-- #1046 S2: inventario contextual de herrajes del proyecto. Sólo
-               las categorías y herrajes QUE EXISTEN en el modelo (metadata
-               gestionada); nunca el catálogo completo. Click → selecciona la
-               ocurrencia y abre su card. -->
-          <div id="hardware-inventory-card" class="card" style="display: none;">
-            <div class="card-header-row" style="margin-bottom: var(--space-2);">
-              <div>
-                <h2 style="font-size: var(--text-md); margin: 0;">Herrajes en este proyecto</h2>
-                <p class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0;">Inventario en el modelo 3D</p>
-              </div>
-            </div>
-            <div id="hardware-inventory-list"></div>
-          </div>
+          <!-- #1178-inspector: la card "Herrajes en este proyecto" fue retirada
+               por decisión de producto — el inventario del modelo 3D no es
+               contenido del Inspector sin selección. La selección de
+               herrajes individuales sigue siendo posible por clic en el
+               modelo (selection observer). -->
 
           <div id="inspector-unmanaged-view" class="card empty-state" style="display: none;">
             <div class="empty-state-icon-box" style="color: var(--text-muted);">
@@ -575,6 +567,8 @@
             </div>
             <p class="presets-block-label" style="margin-top: var(--space-3);">Acabados del diseño</p>
             <div id="design-inspector-body"></div>
+            <p class="presets-block-label" id="design-inspector-hardware-label" style="margin-top: var(--space-3); display: none;">Herrajes del diseño</p>
+            <div id="design-inspector-hardware-body" style="display: none;"></div>
             <button id="design-inspector-retry" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
             <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
                  PUT with the client token; items and item modes untouched) -->
@@ -1630,12 +1624,6 @@
             if (window.GraneteUI.inspector && window.GraneteUI.inspector.onAllDoorsClosed) {
               window.GraneteUI.inspector.onAllDoorsClosed();
             }
-          },
-
-          onHardwareInventory: function (payload) {
-            if (window.GraneteUI.inspector && window.GraneteUI.inspector.onHardwareInventory) {
-              window.GraneteUI.inspector.onHardwareInventory(payload);
-            }
           }
         };
 
@@ -1857,6 +1845,32 @@
               }
             }
             return roles;
+          },
+          // #1178-inspector: hardware group codes live in the SAME design
+          // defaults map as material roles — the Design Inspector needs the
+          // kind=hardware slice to render "Herrajes del diseño" separately.
+          getHardwareGroupCodes: function () {
+            var groups = (window.GraneteUI.inspector.getOptionGroups && window.GraneteUI.inspector.getOptionGroups()) || [];
+            var codes = [];
+            for (var i = 0; i < groups.length; i++) {
+              var g = groups[i];
+              if (g && g.kind === "hardware" && g.code && codes.indexOf(g.code) === -1) codes.push(g.code);
+            }
+            return codes;
+          },
+          getHardwareGroup: function (code) {
+            var groups = (window.GraneteUI.inspector.getOptionGroups && window.GraneteUI.inspector.getOptionGroups()) || [];
+            for (var i = 0; i < groups.length; i++) {
+              if (groups[i] && groups[i].code === code) return groups[i];
+            }
+            return null;
+          },
+          hardwareById: function (id) {
+            var list = (window.GraneteUI.inspector.getHardwareCatalog && window.GraneteUI.inspector.getHardwareCatalog()) || [];
+            for (var i = 0; i < list.length; i++) {
+              if (list[i] && list[i].id === id) return list[i];
+            }
+            return null;
           },
           rerenderInspector: function () { window.GraneteUI.inspector.rerender(); },
           // #784 R2: candidate materials for a Design-level role — the union

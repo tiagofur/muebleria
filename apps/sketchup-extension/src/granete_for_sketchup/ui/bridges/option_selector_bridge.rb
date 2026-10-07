@@ -202,10 +202,11 @@ module Granete
             title: 'Catálogo de Herrajes — Granete',
             media: media_authorizer.media_payload_for('hardware' => raw_hardware),
             media_refresher: ->(filename) { media_authorizer.refresh_url(filename) },
-            on_apply: lambda do |selected_group, selected_hw_id, _scope, _context|
+            on_apply: lambda do |selected_group, selected_hw_id, _scope, selected_context|
               execute_bridge(dialog, 'onHardwareChoiceApplied', {
                                'groupCode' => selected_group,
-                               'hardwareId' => selected_hw_id
+                               'hardwareId' => selected_hw_id,
+                               'context' => selected_context || params[:context]
                              })
             end
           )

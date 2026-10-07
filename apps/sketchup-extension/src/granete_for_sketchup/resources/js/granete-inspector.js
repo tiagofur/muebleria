@@ -113,8 +113,6 @@
   // Inspector elements
   var inspectorEmpty = document.getElementById("inspector-empty-state");
   // #1046 S2: inventario contextual de herrajes del proyecto (sin selección).
-  var hardwareInventoryCard = document.getElementById("hardware-inventory-card");
-  var hardwareInventoryList = document.getElementById("hardware-inventory-list");
   var inspectorActive = document.getElementById("inspector-active-view");
   var inspectorUnmanaged = document.getElementById("inspector-unmanaged-view");
   var inspectorMultiNote = document.getElementById("inspector-multi-note");
@@ -765,8 +763,6 @@
 
   function hideInspectorViews() {
     inspectorEmpty.style.display = "none";
-    // #1046 S2: el inventario de herrajes es un lane de no-selección.
-    if (hardwareInventoryCard) hardwareInventoryCard.style.display = "none";
     // #784 R1: the Design Inspector leaves the lane with every non-null
     // selection, exactly like the other views.
     if (window.GraneteUI.designInspector) window.GraneteUI.designInspector.hide();
@@ -785,10 +781,9 @@
     hideInspectorViews();
 
     if (!context) {
-      // #1046 S2: inventario de herrajes del proyecto — sólo lo que REALMENTE
-      // existe en el modelo (metadata gestionada), agrupado por categoría.
-      // Sin herrajes la card ni aparece (no llenar la pantalla).
-      requestHardwareInventory();
+      // #1178-inspector: the hardware inventory card was removed by product
+      // decision — the no-selection lane belongs to the Design Inspector
+      // (bound) or the empty state (unbound).
       // #784 R1: no selection + bound Design → the Design Inspector owns
       // the lane (durable authoring defaults, read-only). Unbound keeps
       // the legacy empty state.
@@ -1697,6 +1692,14 @@
     var hardwareId = payload.hardwareId || payload.materialId;
     if (!groupCode || !hardwareId) return;
 
+    // #1198-inspector: picks with context "design" belong to the Design
+    // Inspector's draft (design defaults), never to the furniture lane.
+    if (payload.context === "design" && window.GraneteUI.designInspector &&
+        typeof window.GraneteUI.designInspector.applyHardwarePick === "function") {
+      window.GraneteUI.designInspector.applyHardwarePick(groupCode, hardwareId);
+      return;
+    }
+
     if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
     inspectorMaterialChoices[groupCode] = hardwareId;
     recordHardwareGroupPick(groupCode, hardwareId);
@@ -1753,122 +1756,6 @@
     return null;
   }
 
-  function requestHardwareInventory() {
-    if (window.sketchup && typeof window.sketchup.request_hardware_inventory === "function") {
-      window.sketchup.request_hardware_inventory("{}");
-    }
-  }
-
-  function onHardwareInventory(payload) {
-    var p = typeof payload === "string" ? JSON.parse(payload) : (payload || {});
-    var items = Array.isArray(p.items) ? p.items : [];
-    renderHardwareInventory(items);
-  }
-
-  function renderHardwareInventory(items) {
-    if (!hardwareInventoryCard || !hardwareInventoryList) return;
-    // Only render in the no-selection lane; a selection made meanwhile wins.
-    if (selectedContext) {
-      hardwareInventoryCard.style.display = "none";
-      return;
-    }
-    if (items.length === 0) {
-      hardwareInventoryCard.style.display = "none";
-      return;
-    }
-
-    // Group by catalog category, THEN by definition. Entries without a
-    // catalog definition still surface (count is real), under "Otros".
-    var byCategory = {};
-    items.forEach(function (item) {
-      var def = hardwareDefinitionById(item.hardwareDefinitionId);
-      var category = (def && def.category) || "other";
-      var name = def ? def.name : (item.hardwareDefinitionId || "Herraje");
-      var bucket = (byCategory[category] = byCategory[category] || {});
-      var row = (bucket[name] = bucket[name] || {
-        name: name,
-        count: 0,
-        sample: null,
-        hardwareDefinitionId: item.hardwareDefinitionId
-      });
-      row.count += Number(item.count) || 0;
-      if (!row.sample && item.furnitureInstanceRef && item.hardwarePlacementId) {
-        row.sample = {
-          furnitureInstanceRef: item.furnitureInstanceRef,
-          hardwarePlacementId: item.hardwarePlacementId
-        };
-      }
-    });
-
-    while (hardwareInventoryList.firstChild) {
-      hardwareInventoryList.removeChild(hardwareInventoryList.firstChild);
-    }
-
-    Object.keys(byCategory).sort().forEach(function (category) {
-      var heading = document.createElement("div");
-      heading.className = "hw-inventory-category-title";
-      heading.textContent = hardwareCategoryLabel(category);
-      hardwareInventoryList.appendChild(heading);
-
-      Object.keys(byCategory[category]).sort().forEach(function (name) {
-        var row = byCategory[category][name];
-        var itemBtn = document.createElement("button");
-        itemBtn.type = "button";
-        itemBtn.className = "hw-inventory-item";
-        itemBtn.title = "Clic para enfocar en el modelo 3D";
-
-        var main = document.createElement("div");
-        main.className = "hw-inventory-item-main";
-
-        var iconBox = document.createElement("div");
-        iconBox.className = "hw-inventory-icon";
-        var hwDef = hardwareDefinitionById(row.hardwareDefinitionId);
-        var rawImg = hwDef ? (hwDef.imageUrl || hwDef.image_url || hwDef.thumbnailUrl) : null;
-        var resolvedImg = (rawImg && window.GraneteUI && window.GraneteUI.media && typeof window.GraneteUI.media.resolveUrl === "function")
-          ? window.GraneteUI.media.resolveUrl(rawImg) : rawImg;
-        if (resolvedImg) {
-          iconBox.style.backgroundImage = "url('" + resolvedImg + "')";
-          iconBox.style.backgroundSize = "contain";
-          iconBox.style.backgroundRepeat = "no-repeat";
-          iconBox.style.backgroundPosition = "center";
-          iconBox.style.backgroundColor = "var(--surface-card)";
-        } else {
-          iconBox.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
-        }
-        main.appendChild(iconBox);
-
-        var info = document.createElement("div");
-        info.className = "hw-inventory-info";
-        var nameSpan = document.createElement("div");
-        nameSpan.className = "hw-inventory-name";
-        nameSpan.textContent = name;
-        info.appendChild(nameSpan);
-        var hint = document.createElement("div");
-        hint.className = "hw-inventory-hint";
-        hint.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg><span>Ver en el modelo 3D</span>';
-        info.appendChild(hint);
-        main.appendChild(info);
-
-        itemBtn.appendChild(main);
-
-        var countBadge = document.createElement("span");
-        countBadge.className = "status-badge neutral";
-        countBadge.textContent = "\u00d7" + row.count;
-        itemBtn.appendChild(countBadge);
-
-        itemBtn.addEventListener("click", function () {
-          if (!row.sample) return;
-          if (window.sketchup && typeof window.sketchup.select_hardware_instance === "function") {
-            window.sketchup.select_hardware_instance(JSON.stringify(row.sample));
-          }
-        });
-        hardwareInventoryList.appendChild(itemBtn);
-      });
-    });
-
-    hardwareInventoryCard.style.display = "block";
-  }
-
   window.GraneteUI.inspector = {
     init: function (injected) { deps = injected || {}; },
     onSelectionChange: onSelectionChange,
@@ -1911,7 +1798,6 @@
       }
     },
     // #1046 S2: inventario de herrajes del proyecto (respuesta del escaneo).
-    onHardwareInventory: onHardwareInventory,
     getDefinition: function () { return inspectorDef; },
     getMaterialsCard: function () { return inspectorMaterialsCard; },
     setHardwareCatalog: setHardwareCatalog,

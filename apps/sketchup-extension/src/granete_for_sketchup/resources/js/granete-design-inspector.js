@@ -86,6 +86,8 @@
 
   var view = null;
   var bodyEl = null;
+  var hardwareLabelEl = null;
+  var hardwareBodyEl = null;
   var designNameEl = null;
   var projectNameEl = null;
   var retryEl = null;
@@ -98,6 +100,8 @@
     if (!view) {
       view = document.getElementById("inspector-design-view");
       bodyEl = document.getElementById("design-inspector-body");
+      hardwareLabelEl = document.getElementById("design-inspector-hardware-label");
+      hardwareBodyEl = document.getElementById("design-inspector-hardware-body");
       designNameEl = document.getElementById("design-inspector-design-name");
       projectNameEl = document.getElementById("design-inspector-project-name");
       retryEl = document.getElementById("design-inspector-retry");
@@ -136,6 +140,24 @@
 
   function hasDeps(names) {
     return names.every(function (name) { return typeof deps[name] === "function"; });
+  }
+
+  // #1198-inspector: hardware group codes ride the SAME design defaults map
+  // as material roles (kind=hardware option groups, #1046/#1153). This
+  // discriminator splits "Acabados del diseño" from "Herrajes del diseño".
+  function isHardwareRole(role) {
+    if (!hasDeps(["getHardwareGroupCodes"])) return false;
+    var codes = deps.getHardwareGroupCodes() || [];
+    for (var i = 0; i < codes.length; i++) {
+      if (matchRole(codes[i], role)) return true;
+    }
+    return false;
+  }
+
+  function hardwareName(id) {
+    if (!hasDeps(["hardwareById"])) return null;
+    var hw = deps.hardwareById(id);
+    return hw && (hw.name || hw.code) ? (hw.name || hw.code) : null;
   }
 
   function matchRole(r1, r2) {
@@ -217,7 +239,7 @@
     render();
   }
 
-  function renderRow(role, materialId) {
+  function renderRow(role, materialId, isHw) {
     var label = deps.getRoleLabel(role);
     var row = document.createElement("div");
     row.id = "design-inspector-row-" + role;
@@ -237,7 +259,34 @@
     var baseVal = findRoleInObject(baseChoices, role);
 
     var changeBtn = null;
-    if (hasDeps(["getRoleCandidates", "openMaterialPicker"])) {
+    if (isHw && hasDeps(["getHardwareGroup"])) {
+      // #1198-inspector: hardware group defaults change through the
+      // floating hardware catalog (open_hardware_selector, context
+      // "design") — never through the finishes catalog.
+      var hwGroup = deps.getHardwareGroup(role);
+      var hwOptionIds = (hwGroup && hwGroup.optionIds) || [];
+      changeBtn = document.createElement("button");
+      changeBtn.id = "design-inspector-change-" + role;
+      changeBtn.className = "btn btn-secondary btn-sm design-insp-change";
+      changeBtn.style.width = "auto";
+      changeBtn.style.padding = "2px 10px";
+      changeBtn.style.fontSize = "var(--text-xs)";
+      changeBtn.style.lineHeight = "1.4";
+      changeBtn.textContent = defaultId || drafted ? "Cambiar" : "Asignar";
+      changeBtn.addEventListener("click", function (evt) {
+        if (evt && evt.stopPropagation) evt.stopPropagation();
+        if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
+          window.sketchup.open_hardware_selector(JSON.stringify({
+            groupCode: role,
+            groupName: label || role,
+            currentHardwareId: drafted || materialId || null,
+            optionIds: hwOptionIds,
+            context: "design"
+          }));
+        }
+      });
+      header.appendChild(changeBtn);
+    } else if (hasDeps(["getRoleCandidates", "openMaterialPicker"])) {
       changeBtn = document.createElement("button");
       changeBtn.id = "design-inspector-change-" + role;
       changeBtn.className = "btn btn-secondary btn-sm design-insp-change";
@@ -276,25 +325,44 @@
     // Selected Preview card (interactive)
     var preview = document.createElement("div");
     preview.className = "material-selected-preview";
-    preview.title = "Clic para abrir el catálogo de acabados";
+    preview.title = isHw ? "Clic para abrir el catálogo de herrajes" : "Clic para abrir el catálogo de acabados";
     preview.setAttribute("role", "button");
     preview.setAttribute("tabindex", "0");
-    preview.setAttribute("aria-label", (materialId || drafted ? "Cambiar" : "Asignar") + " acabado de " + label);
+    preview.setAttribute("aria-label", (materialId || drafted ? "Cambiar" : "Asignar") + " " + (isHw ? "herraje" : "acabado") + " de " + label);
 
     var currentMatId = drafted || defaultId;
     var currentMat = currentMatId ? deps.materialById(currentMatId) : null;
+    var currentHw = isHw && currentMatId && hasDeps(["hardwareById"]) ? deps.hardwareById(currentMatId) : null;
 
     var swatch = document.createElement("div");
-    swatch.className = "material-swatch";
-    if (typeof deps.updateMaterialSwatch === "function") {
-      deps.updateMaterialSwatch(swatch, currentMat);
-    } else if (currentMat) {
-      if (currentMat.previewColor) swatch.style.backgroundColor = currentMat.previewColor;
-      var textureUrl = currentMat.previewTextureUrl || currentMat.imageUrl;
-      if (textureUrl) swatch.style.backgroundImage = "url('" + textureUrl + "')";
+    if (isHw) {
+      swatch.className = "material-swatch material-swatch--hardware";
+      var rawHwImg = currentHw ? (currentHw.imageUrl || currentHw.image_url || currentHw.thumbnailUrl) : null;
+      if (rawHwImg) {
+        swatch.style.backgroundImage = "url('" + rawHwImg + "')";
+        swatch.style.backgroundSize = "contain";
+        swatch.style.backgroundRepeat = "no-repeat";
+        swatch.style.backgroundPosition = "center";
+        swatch.style.backgroundColor = "var(--surface-card)";
+      } else {
+        swatch.style.display = "inline-flex";
+        swatch.style.alignItems = "center";
+        swatch.style.justifyContent = "center";
+        swatch.style.backgroundColor = "#f1f5f9";
+        swatch.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--text-secondary);"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
+      }
     } else {
-      swatch.style.backgroundColor = "#f1f5f9";
-      swatch.style.border = "1px dashed var(--border-default, #cbd5e1)";
+      swatch.className = "material-swatch";
+      if (typeof deps.updateMaterialSwatch === "function") {
+        deps.updateMaterialSwatch(swatch, currentMat);
+      } else if (currentMat) {
+        if (currentMat.previewColor) swatch.style.backgroundColor = currentMat.previewColor;
+        var textureUrl = currentMat.previewTextureUrl || currentMat.imageUrl;
+        if (textureUrl) swatch.style.backgroundImage = "url('" + textureUrl + "')";
+      } else {
+        swatch.style.backgroundColor = "#f1f5f9";
+        swatch.style.border = "1px dashed var(--border-default, #cbd5e1)";
+      }
     }
     preview.appendChild(swatch);
 
@@ -304,7 +372,29 @@
     var valueEl = document.createElement("div");
     valueEl.className = "material-selected-name design-insp-value";
 
-    if (drafted && drafted !== baseVal) {
+    if (isHw) {
+      if (drafted && drafted !== baseVal) {
+        var hwFrom = (baseVal && (hardwareName(baseVal) || baseVal)) || "Sin asignar";
+        var hwTo = hardwareName(drafted) || drafted;
+        valueEl.textContent = hwFrom + " → " + hwTo;
+        valueEl.title = drafted;
+        valueEl.className += " design-insp-draft";
+      } else if (defaultId) {
+        var hwValue = hardwareName(defaultId);
+        if (hwValue) {
+          valueEl.textContent = hwValue;
+        } else {
+          valueEl.textContent = "Herraje no disponible en el catálogo actual";
+          valueEl.title = defaultId;
+          valueEl.className += " design-insp-unavailable";
+        }
+      } else {
+        valueEl.textContent = "Sin herraje asignado";
+        valueEl.className += " design-insp-unassigned";
+        valueEl.style.color = "var(--text-muted)";
+        valueEl.style.fontWeight = "normal";
+      }
+    } else if (drafted && drafted !== baseVal) {
       var from = (baseVal && (materialName(baseVal) || baseVal)) || "Sin asignar";
       var to = materialName(drafted) || drafted;
       valueEl.textContent = from + " → " + to;
@@ -329,7 +419,9 @@
 
     var metaEl = document.createElement("div");
     metaEl.className = "material-selected-meta";
-    if (currentMat) {
+    if (isHw) {
+      metaEl.textContent = "Clic para elegir un herraje del catálogo";
+    } else if (currentMat) {
       var parts = [];
       if (currentMat.code) parts.push(currentMat.code);
       if (currentMat.thicknessMm) parts.push(currentMat.thicknessMm + " mm");
@@ -675,20 +767,38 @@
     }
 
     var roles = discoveredRoles();
-    if (roles.length === 0) {
+    var materialRoles = [];
+    var hardwareRoles = [];
+    for (var r = 0; r < roles.length; r++) {
+      if (isHardwareRole(roles[r])) hardwareRoles.push(roles[r]);
+      else materialRoles.push(roles[r]);
+    }
+
+    if (materialRoles.length === 0) {
       var empty = document.createElement("p");
       empty.className = "design-insp-state";
       empty.textContent = "Sin defaults configurados todavía";
       bodyEl.appendChild(empty);
     } else {
-      for (var i = 0; i < roles.length; i++) {
-        bodyEl.appendChild(renderRow(roles[i], state.defaults[roles[i]]));
+      for (var i = 0; i < materialRoles.length; i++) {
+        bodyEl.appendChild(renderRow(materialRoles[i], state.defaults[materialRoles[i]], false));
       }
     }
     var note = document.createElement("p");
     note.className = "design-insp-note";
     note.textContent = "Estos valores se usarán como defaults del Diseño.";
     bodyEl.appendChild(note);
+
+    // #1198-inspector: "Herrajes del diseño" — its own card section, only
+    // when hardware group defaults exist in the design.
+    if (hardwareLabelEl) hardwareLabelEl.style.display = hardwareRoles.length > 0 ? "block" : "none";
+    if (hardwareBodyEl) {
+      hardwareBodyEl.innerHTML = "";
+      hardwareBodyEl.style.display = hardwareRoles.length > 0 ? "block" : "none";
+      for (var h = 0; h < hardwareRoles.length; h++) {
+        hardwareBodyEl.appendChild(renderRow(hardwareRoles[h], state.defaults[hardwareRoles[h]], true));
+      }
+    }
   }
 
   function render() {
@@ -1066,6 +1176,9 @@
     },
 
     applyMaterialPick: applyMaterialPick,
+    // #1198-inspector: hardware group picks from the floating catalog land
+    // in the SAME draft (keyed by group code) — one Aplicar for everything.
+    applyHardwarePick: applyMaterialPick,
     hide: hide,
     render: render
   };
