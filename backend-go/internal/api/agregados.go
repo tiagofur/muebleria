@@ -103,27 +103,35 @@ func (s *Server) HandleAgregadoByID(w http.ResponseWriter, r *http.Request) {
 		}
 		respondWithJSON(w, http.StatusOK, a)
 
-	case http.MethodDelete:
-		if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
-			return
-		}
-		expectedVersion, ok := RequireIfMatch(w, r)
-		if !ok {
-			return
-		}
-		if err := s.Store.DeleteAgregado(r.Context(), id, expectedVersion); err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				respondWithError(w, http.StatusNotFound, err.Error())
+		case http.MethodDelete:
+			if !requirePermission(w, domain.AnyRole(actorRoles(claimsFromRequest(r)), domain.RoleCanMutateCatalog), "no tenés permiso para modificar el catálogo") {
 				return
 			}
-			if strings.Contains(err.Error(), "in use") {
-				respondWithError(w, http.StatusConflict, err.Error())
+			var expectedVersion int64
+			if r.Header.Get("If-Match") != "" {
+				v, ok := RequireIfMatch(w, r)
+				if !ok {
+					return
+				}
+				expectedVersion = v
+			}
+			if err := s.Store.DeleteAgregado(r.Context(), id, expectedVersion); err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					respondWithError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				if strings.Contains(err.Error(), "in use") {
+					respondWithError(w, http.StatusConflict, err.Error())
+					return
+				}
+				if errors.Is(err, storage.ErrVersionConflict) {
+					respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión del agregado cambió; recargá y reintentá", nil)
+					return
+				}
+				respondWithInternalError(w, err, "agregado delete")
 				return
 			}
-			respondWithInternalError(w, err, "agregado delete")
-			return
-		}
-		respondWithJSON(w, http.StatusOK, map[string]string{"message": "agregado deleted"})
+			respondWithJSON(w, http.StatusOK, map[string]string{"message": "agregado deleted"})
 
 	default:
 		respondWithError(w, http.StatusMethodNotAllowed, "method not allowed")

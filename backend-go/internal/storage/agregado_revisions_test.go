@@ -400,11 +400,23 @@ func TestAgregadoRevisions_LegacyAgregadoCompatibility(t *testing.T) {
 	if fetchedR1.ID != r1.ID {
 		t.Fatal("fetched revision ID mismatch after deactivation")
 	}
-	err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error { return store.DeleteAgregado(txCtx, agregadoID, 1) })
-	if err == nil {
-		t.Fatal("physical DeleteAgregado must fail while historical revisions exist (ON DELETE RESTRICT)")
+		// #1168: DeleteAgregado safely cascades to revisions when not in use by
+		// modules, structures, or published assembly snapshots.
+		err := store.WithinTenantTx(storage.WithOrgCtx(context.Background(), actor.OrganizationID), actor, func(txCtx context.Context) error {
+			return store.DeleteAgregado(txCtx, agregadoID, 2)
+		})
+		if err != nil {
+			t.Fatalf("physical DeleteAgregado must succeed when not referenced by snapshots/modules: %v", err)
+		}
+		_, err = store.GetAgregadoByID(storage.WithOrgCtx(context.Background(), actor.OrganizationID), agregadoID)
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected agregado to be deleted, got err: %v", err)
+		}
+		_, err = store.GetAgregadoRevisionByID(storage.WithOrgCtx(context.Background(), actor.OrganizationID), r1.ID)
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected agregado revision to be deleted with parent, got err: %v", err)
+		}
 	}
-}
 
 // 6. Tests G, I, J, K, L, M, O: Published Assembly Snapshots, Zero-Scaling, Historical Freezing
 func TestPublishedAssemblySnapshots_FreezeRoundtripAndZeroScaling(t *testing.T) {

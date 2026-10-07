@@ -324,8 +324,16 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   // accepted write response.
   private readonly entityVersions = new Map<string, number>();
   // #1168: JSON body of the last successful write per entity — byte-identical
-  // re-saves are skipped instead of rewritten catalog-wide.
+  // re-saves are skipped instead of rewritten catalog-wide. getCatalog seeds
+  // it with the bodies a save WOULD send for the loaded server state (see
+  // collectSentBodies), so the first save after a reload PUTs only entities
+  // whose serialized body actually differs, never the whole catalog.
   private readonly lastSentBody = new Map<string, string>();
+  // #1168: while set, upsert* only RECORDS the body it would send instead of
+  // writing — the collection pass that seeds lastSentBody. Running the real
+  // saveCatalog iteration keeps the recorded baseline from drifting from what
+  // a real save serializes (same families, same builders, one code path).
+  private dryRunBodies: Map<string, string> | null = null;
 
   /**
    * #460 SEC-4B: el repository NO conoce storage de credenciales. El access
@@ -518,7 +526,35 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         this.hardwareVersions.set(id, version);
       }
     }
+    await this.collectSentBodies(catalog);
     return catalog;
+  }
+
+  /**
+   * #1168: a fresh session used to turn the first catalog edit after a load
+   * into a full-workspace rewrite (observed: one duplicated agregado emitted
+   * 116 writes — every material, edge, hardware, option group, component,
+   * agregado, structure, category, module, customer and material category in
+   * the catalog). The skip-unchanged cache only knew bodies this session had
+   * SENT, and a reload forgets them. The fix records the baseline by running
+   * saveCatalog itself in dry-run mode: the same iteration, families and
+   * builders as a real save, so the recorded "would-send" bodies can never
+   * drift from what a real save serializes. The next save then writes only
+   * entities whose body actually differs from loaded server state — exactly
+   * the entity the user edited.
+   */
+  private async collectSentBodies(catalog: Catalog): Promise<void> {
+    this.dryRunBodies = new Map();
+    try {
+      await this.saveCatalog(catalog);
+      for (const [key, body] of this.dryRunBodies) {
+        if (!this.lastSentBody.has(key)) {
+          this.lastSentBody.set(key, body);
+        }
+      }
+    } finally {
+      this.dryRunBodies = null;
+    }
   }
 
   /**
@@ -547,6 +583,19 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   private async upsertModule(mod: Module): Promise<void> {
     const token = this.getAccessToken?.() ?? '';
     const body = moduleToApi(mod) as never;
+    const bodyKey = this.versionKey('modules', mod.id);
+    const bodyJson = JSON.stringify(body);
+    if (this.dryRunBodies) {
+      this.dryRunBodies.set(bodyKey, bodyJson);
+      return;
+    }
+    // #1168: same skip-unchanged contract as upsertGuarded.
+    if (
+      this.moduleVersions.get(mod.id) !== undefined &&
+      this.lastSentBody.get(bodyKey) === bodyJson
+    ) {
+      return;
+    }
 
     let expected = this.moduleVersions.get(mod.id);
     if (expected === undefined) {
@@ -570,10 +619,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     try {
       const saved = await this.generatedClient.updateCatalogModule(token, mod.id, expected, body);
       this.rememberModuleVersion(mod.id, moduleFromApi(saved as unknown as Record<string, unknown>));
+      this.lastSentBody.set(bodyKey, bodyJson);
     } catch (err) {
       if (err instanceof GraneteApiError && err.status === 404) {
         // Deleted mid-session: recreate instead of failing the whole save.
         await this.createModuleThroughContract(token, body, mod.id);
+        this.lastSentBody.set(bodyKey, bodyJson);
         return;
       }
       throw err;
@@ -618,6 +669,21 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
   private async upsertHardware(h: Hardware): Promise<void> {
     const token = this.getAccessToken?.() ?? '';
     const body = hardwareToApi(h) as never;
+    const bodyKey = this.versionKey('hardware', h.id);
+    const bodyJson = JSON.stringify(body);
+    if (this.dryRunBodies) {
+      this.dryRunBodies.set(bodyKey, bodyJson);
+      return;
+    }
+    // #1168: same skip-unchanged contract as upsertGuarded — a hardware the
+    // session already stored byte-identically is not re-PUT (and If-Match is
+    // only meaningful for a real change anyway).
+    if (
+      this.hardwareVersions.get(h.id) !== undefined &&
+      this.lastSentBody.get(bodyKey) === bodyJson
+    ) {
+      return;
+    }
 
     let expected = this.hardwareVersions.get(h.id);
     if (expected === undefined) {
@@ -642,10 +708,12 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     try {
       const saved = await this.generatedClient.updateHardware(token, h.id, expected, body);
       this.rememberHardwareVersion(h.id, saved as unknown as Record<string, unknown>);
+      this.lastSentBody.set(bodyKey, bodyJson);
     } catch (err) {
       if (err instanceof GraneteApiError && err.status === 404) {
         // Deleted mid-session: recreate instead of failing the whole save.
         await this.createHardwareThroughContract(token, body, h.id);
+        this.lastSentBody.set(bodyKey, bodyJson);
         return;
       }
       throw err;
@@ -702,8 +770,14 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
     // byte-identical bodies turned any client-side mapping loss into
     // catalog-wide data damage (and spammed server-side versions). Skip
     // writes this session already stored unchanged — only when the version
-    // is known, so a fresh session still learns before deciding.
+    // is known, so a fresh session still learns before deciding. getCatalog
+    // seeds the baseline (collectSentBodies), so the skip also holds for the
+    // first save after a reload.
     const bodyJson = JSON.stringify(body);
+    if (this.dryRunBodies) {
+      this.dryRunBodies.set(key, bodyJson);
+      return;
+    }
     if (
       this.entityVersions.get(key) !== undefined &&
       this.lastSentBody.get(key) === bodyJson
