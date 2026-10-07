@@ -47,6 +47,14 @@ services:
       MEDIA_DIR: /data/media
       RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-0.5}
       RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-10}
+      # SEC-8 (#1191, review #1195): Caddy fronts the backend on the internal
+      # compose network and sets X-Forwarded-For/X-Real-IP (header_up REPLACES,
+      # never appends), and the backend publishes no ports — the only speaker
+      # on this subnet is Caddy itself. Without this, every visitor shares ONE
+      # rate-limit bucket (site-wide login lockout) and audit rows record
+      # Caddy's container IP. 172.16.0.0/12 covers Docker's default bridge
+      # address pools; override when the network is pinned to another subnet.
+      GRANETE_TRUSTED_PROXIES: ${GRANETE_TRUSTED_PROXIES:-172.16.0.0/12}
     volumes:
       - media_data:/data/media
     depends_on:

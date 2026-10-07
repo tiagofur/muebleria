@@ -63,11 +63,13 @@ const (
 )
 
 // SkippedReleaseResource is one authoring-catalog entity that could not enter
-// the immutable release because its identity is not a UUID (#1185). Only the
-// agregados table carries TEXT ids today (the UI mints agr-<timestamp>
-// identities by design); everything else is UUID-typed at the column, so a
-// skip there is defensive. Skips are NEVER silent: the gather returns them and
-// validate/publish surface the exact list to the bibliotecario.
+// the immutable release because its identity is not a UUID (#1185). Two
+// tables carry TEXT ids today: agregados (the UI mints agr-<timestamp>
+// identities by design — the common case) and material_categories (TEXT
+// primary key accepting client-supplied ids). Everything else is UUID-typed
+// at the column, so a skip there is defensive. Skips are NEVER silent: the
+// gather returns them and validate/publish surface the exact list to the
+// bibliotecario.
 type SkippedReleaseResource struct {
 	Kind  string `json:"kind"`
 	ID    string `json:"id"`

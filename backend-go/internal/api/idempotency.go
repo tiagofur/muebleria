@@ -23,6 +23,10 @@ var validIdempotencyKey = regexp.MustCompile(`^[A-Za-z0-9._:-]{16,128}$`)
 
 var sensitiveIdempotencyOperations = map[string]bool{
 	"org.create-invitation": true, "org.resend-invitation": true, "auth.accept-invitation": true,
+	// Review #1195: the issuance response embeds the raw one-time reset token
+	// — the same credential class as an invitation link, so its replayed
+	// receipt must be sealed too, never stored in cleartext.
+	"org.issue-password-reset": true,
 }
 
 func idempotencyReceiptCipher(secret string) (func([]byte) ([]byte, error), func([]byte) ([]byte, error), error) {

@@ -278,9 +278,16 @@ is `UUID NOT NULL`). The agregados table legitimately carries TEXT identities �
 the UI mints `agr-<timestamp>` ids by design — so **UI-created agregados are
 live-catalog-only**: they do not enter published releases, and validate/publish
 report every exclusion explicitly (#1185/#1186). The root fix is widening the
-refs to TEXT (future work); until then, a pinned resolve answering
-`CATALOG_REFERENCE_MISSING` for one of these entities is the documented
-contract, not a bug.
+refs to TEXT (future work). The verified runtime behavior until then:
+
+- a pinned resolve answers `CATALOG_REFERENCE_MISSING` only when the
+  requested **furniture definition id** itself is absent from the pinned
+  release — never for one of these excluded entities;
+- a definition whose structure/module references an excluded agregado
+  resolves **without it**: the engine silently omits the missing agregado
+  (and its hardware lines) instead of failing. That silent omission is a
+  **known live-vs-pinned divergence**, not an error contract — the explicit
+  skip reports at validate/publish are the surface that names it.
 
 ---
 
