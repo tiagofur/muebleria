@@ -64,6 +64,10 @@ module Granete
             org.to_s.strip.empty? ? nil : library_store.current_release_id(org)
           end
         end
+        # #1189: one per-file position journal shared by the placer (writes at
+        # confirmed placement syncs, forget on terminal remove) and the
+        # position sync coordinator (writes at every confirmed readback).
+        @position_journal = Connection::PositionJournal::Store.new
         @project_furniture_placer = project_furniture_placer || build_project_furniture_placer(
           resolved_catalog_provider
         )
@@ -131,6 +135,7 @@ module Granete
           host_reconciliation: @host_reconciliation,
           intent_store: @project_furniture_placer.intent_store,
           mutation_coordinator: mutation_coordinator,
+          position_journal: @position_journal,
           logger: logger
         )
         @dialog = UserInterface::DialogController.new(
@@ -314,6 +319,7 @@ module Granete
               texture_cache: texture_cache
             )
           },
+          position_journal: @position_journal,
           logger: @logger
         )
       end

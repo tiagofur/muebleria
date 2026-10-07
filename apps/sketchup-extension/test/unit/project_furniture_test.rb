@@ -12,6 +12,7 @@ require_relative '../../src/granete_for_sketchup/connection/managed_furniture'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture_contract'
 require_relative '../../src/granete_for_sketchup/connection/host_reconciliation'
 require_relative '../../src/granete_for_sketchup/connection/host_restore'
+require_relative '../../src/granete_for_sketchup/connection/position_journal'
 require_relative '../../src/granete_for_sketchup/connection/design_sync'
 require_relative '../../src/granete_for_sketchup/connection/panel_state'
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
@@ -22,6 +23,7 @@ require_relative '../../src/granete_for_sketchup/model/furniture_builder'
 # Namespaced shorthands for readability.
 MB = Granete::SketchUpExtension::Connection::ModelBinding
 PF = Granete::SketchUpExtension::Connection::ProjectFurniture
+PJ = Granete::SketchUpExtension::Connection::PositionJournal
 MS = Granete::SketchUpExtension::Metadata::Store
 LIB = Granete::SketchUpExtension::Library
 FBUILDER = Granete::SketchUpExtension::Model::FurnitureBuilder
@@ -1954,6 +1956,179 @@ class ProjectFurnitureTest < Minitest::Test
     states = panel['items'].to_h { |row| [row['id'], row['reconciliationState']] }
     assert_equal 'present_synced', states[FI_1]
     assert_equal 'missing_local', states[FI_2]
+  end
+
+  # ---------------------------------------------------------------------
+  # #1189 — Diario de posiciones durable: "↶ Restaurar posición" survives
+  # the design-sync drop. The journal is recovery metadata ONLY: a live
+  # working item always wins (WC > journal), the restore never writes the
+  # Working Copy, never creates identity, and a restored unit lands
+  # pending_confirmation for the existing "Reintentar sincronización" flow.
+  # ---------------------------------------------------------------------
+
+  def stub_unplaced_unit(authoring: {})
+    instance = instance_body(FI_1, 'design')
+    instance['authoring_snapshot'] = authoring unless authoring.empty?
+    stub_project_furniture([instance])
+    stub_working_copy(working_copy_body([]))
+  end
+
+  def test_unplaced_unit_with_journal_entry_restores_exact_recorded_transform
+    item = restore_item(parameters: { 'widthMm' => 777, 'shelfCount' => 3 },
+                        choices: { 'FRENTE' => 'mat-roble' },
+                        translation: [1250.0, -250.0, 80.0], rotation: [0.0, 0.0, 90.0])
+    stub_unplaced_unit(authoring: { 'parameters' => item['parameters'],
+                                    'material_choices' => item['material_choices'] })
+    PJ::Store.new.record(@model, FI_1, item['transform'])
+    operations_before = @model.operations.length
+
+    result = @placer.restore(FI_1)
+
+    assert result['ok'], result.inspect
+    assert_equal 'pending_confirmation', result['code']
+    assert_equal true, result['restored']
+    assert_equal 1, top_level_furniture(@model).length
+    root = top_level_furniture(@model).first
+    metadata = MS.new(@model).read(root)
+    assert_equal FI_1, metadata.dig('identity', 'furnitureInstanceId')
+    assert_equal PROJECT_ID, metadata.dig('identity', 'projectId')
+    assert_equal DESIGN_ID, metadata.dig('identity', 'designId')
+    assert_equal item['parameters'], metadata.dig('intent', 'parameters')
+    assert_equal item['material_choices'], metadata.dig('intent', 'materialChoices')
+    assert_equal item['transform'], PF::TransformContract.from_host(root.transformation)
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances}),
+                 'the journal restore never creates identity'
+    assert_empty @transport.requests_for('PUT', %r{/working-copy}),
+                 'the journal restore never writes the working copy'
+    assert_equal [[:start, 'Restaurar Mueble del Proyecto Gabinete Base 600', true], :commit],
+                 @model.operations.drop(operations_before)
+  end
+
+  def test_journal_restored_unit_lands_pending_confirmation_and_converges_by_retry
+    item = restore_item(translation: [1250.0, -250.0, 80.0], rotation: [0.0, 0.0, 90.0])
+    stub_unplaced_unit(authoring: { 'parameters' => item['parameters'],
+                                    'material_choices' => item['material_choices'] })
+    PJ::Store.new.record(@model, FI_1, item['transform'])
+
+    restored = @placer.restore(FI_1)
+    assert restored['ok'], restored.inspect
+
+    row = @placer.panel['items'].find { |candidate| candidate['id'] == FI_1 }
+    assert_equal 'pending_confirmation', row['reconciliationState'],
+                 'the restored unit awaits the existing retry flow, never a silent sync'
+
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    refute_nil put
+    synced = put['body']['items'].find { |candidate| candidate['furniture_instance_id'] == FI_1 }
+    assert_equal item['transform'], synced['transform'],
+                 'the converging PUT carries exactly the recorded transform'
+  end
+
+  def test_unplaced_unit_without_journal_entry_fails_closed_before_insertion
+    stub_unplaced_unit
+
+    result = @placer.restore(FI_1)
+
+    refute result['ok']
+    assert_equal 'no_recorded_position', result['code']
+    assert_equal FI_1, result['instanceId']
+    assert_empty top_level_furniture(@model)
+    assert_empty @transport.requests_for('POST', %r{/furniture-instances})
+    assert_empty @transport.requests_for('PUT', %r{/working-copy})
+  end
+
+  def test_journal_restore_fails_closed_on_corrupt_entry
+    stub_unplaced_unit
+    @model.set_attribute(PJ::DICTIONARY, PJ::JOURNAL_KEY,
+                         JSON.generate('schemaVersion' => 1,
+                                       'entries' => { FI_1 => { 'translation_mm' => 'garbage' } }))
+
+    result = @placer.restore(FI_1)
+
+    assert_equal 'no_recorded_position', result['code'],
+                 'a guessed placement must never come from a corrupt entry'
+    assert_empty top_level_furniture(@model)
+  end
+
+  def test_restore_prefers_the_live_working_copy_item_over_the_journal
+    wc_transform = { 'translation_mm' => [100.0, 200.0, 0.0], 'rotation_deg' => [0.0, 0.0, 0.0] }
+    stub_working_copy(working_copy_body([restore_item(translation: wc_transform['translation_mm'])]))
+    PJ::Store.new.record(@model, FI_1,
+                         'translation_mm' => [1250.0, -250.0, 80.0], 'rotation_deg' => [0.0, 0.0, 90.0])
+
+    result = @placer.restore(FI_1)
+
+    assert result['ok'], result.inspect
+    assert_equal 'present_synced', result['code']
+    root = top_level_furniture(@model).first
+    assert_equal wc_transform, PF::TransformContract.from_host(root.transformation),
+                 'a live working item is the authority; the journal never competes with it'
+  end
+
+  def test_terminal_unit_never_offers_journal_restore
+    stub_project_furniture([instance_body(FI_1, 'design', lifecycle: 'removed')])
+    stub_working_copy(working_copy_body([]))
+    PJ::Store.new.record(@model, FI_1, restore_item['transform'])
+
+    result = @placer.restore(FI_1)
+
+    assert_equal 'terminal', result['code']
+    assert_empty top_level_furniture(@model)
+  end
+
+  def test_confirm_placement_records_the_journal_entry
+    result = @placer.place(FI_1)
+    assert result['ok'], result.inspect
+    confirmed = @placer.confirm_placement(FI_1)
+    assert confirmed['ok'], confirmed.inspect
+
+    put = @transport.requests_for('PUT', %r{/working-copy}).first
+    synced = put['body']['items'].find { |candidate| candidate['furniture_instance_id'] == FI_1 }
+    entry = PJ::Store.new.entry(@model, FI_1)
+    refute_nil entry, 'a confirmed placement must leave a durable recovery record'
+    assert_equal synced['transform'], entry.slice('translation_mm', 'rotation_deg')
+  end
+
+  def test_remove_forgets_the_journal_entry
+    PJ::Store.new.record(@model, FI_1, restore_item['transform'])
+    stub_remove_success
+
+    result = @placer.remove(FI_1)
+
+    assert result['ok'], result.inspect
+    refute PJ::Store.new.recorded?(@model, FI_1),
+           'a terminal unit must leave no dead recovery promise in the file'
+  end
+
+  def test_panel_exposes_has_recorded_position_only_for_unplaced_rows_with_entry
+    item = restore_item
+    stub_project_furniture([instance_body(FI_1, 'design'), instance_body(FI_2, 'design')])
+    stub_working_copy(working_copy_body([item]))
+    PJ::Store.new.record(@model, FI_1, item['transform'])
+    PJ::Store.new.record(@model, FI_2, item['transform'])
+
+    rows = @placer.panel['items'].to_h { |row| [row['id'], row] }
+
+    # FI_1 is missing_local with a live working item: the WC owns the
+    # position and the journal is not consulted, entry notwithstanding.
+    assert_equal 'missing_local', rows[FI_1]['reconciliationState']
+    assert_equal false, rows[FI_1]['hasRecordedPosition']
+    # FI_2 is unplaced with a journal entry: the honest recovery offer.
+    assert_equal 'unplaced', rows[FI_2]['reconciliationState']
+    assert_equal true, rows[FI_2]['hasRecordedPosition']
+
+    # After the sync drop, FI_1's entry surfaces exactly for the unplaced row.
+    stub_working_copy(working_copy_body([]))
+    rows = @placer.panel['items'].to_h { |row| [row['id'], row] }
+    assert_equal 'unplaced', rows[FI_1]['reconciliationState']
+    assert_equal true, rows[FI_1]['hasRecordedPosition']
+
+    # A forgotten entry (terminal remove) degrades to "Colocar" only.
+    PJ::Store.new.forget(@model, FI_2)
+    rows = @placer.panel['items'].to_h { |row| [row['id'], row] }
+    assert_equal false, rows[FI_2]['hasRecordedPosition']
   end
 
   def test_restore_fails_closed_before_insertion_for_terminal_missing_definition_and_bad_transform

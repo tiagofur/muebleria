@@ -26,7 +26,7 @@ module Granete
                        metadata_store_factory:, host_reconciliation:,
                        intent_store: nil, mutation_coordinator: nil,
                        preflight_session: nil, on_sync_complete: nil,
-                       on_sync_outcome: nil,
+                       on_sync_outcome: nil, position_journal: nil,
                        logger: SafeLogger.new)
           @model_provider = model_provider
           @binding_store_factory = binding_store_factory
@@ -38,6 +38,9 @@ module Granete
           @preflight_session = preflight_session
           @on_sync_complete = on_sync_complete
           @on_sync_outcome = on_sync_outcome
+          # #1189: every readback-confirmed transform advances the durable
+          # per-file position journal next to the in-memory known state.
+          @position_journal = position_journal || PositionJournal::Store.new
           @logger = logger
           @suppressed = false
           @known_transforms = {}
@@ -179,6 +182,7 @@ module Granete
 
           @known_transforms[captured_model] ||= {}
           @known_transforms[captured_model][furniture_instance_id] = returned_item.transform
+          @position_journal.record(captured_model, furniture_instance_id, returned_item.transform)
           @intent_store&.clear(furniture_instance_id) if @intent_store.respond_to?(:clear)
           @intent_store&.delete(furniture_instance_id) if @intent_store.respond_to?(:delete)
 
@@ -278,6 +282,7 @@ module Granete
                ProjectFurniture::TransformContract.equivalent_to_host?(returned.transform, host_transform)
               @known_transforms[captured_model] ||= {}
               @known_transforms[captured_model][item[:id]] = returned.transform
+              @position_journal.record(captured_model, item[:id], returned.transform)
               synced_ids << item[:id]
             else
               failed_ids << item[:id]
@@ -431,6 +436,7 @@ module Granete
                ProjectFurniture::TransformContract.equivalent_to_host?(returned.transform, host_transform)
               @known_transforms[model] ||= {}
               @known_transforms[model][entry[:id]] = returned.transform
+              @position_journal.record(model, entry[:id], returned.transform)
               synced << entry[:id]
             else
               failed[entry[:id]] = 'readback_mismatch'

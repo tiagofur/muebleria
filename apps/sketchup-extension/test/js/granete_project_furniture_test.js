@@ -533,6 +533,74 @@ test('Colocar manualmente begins the shared #469 preview with the exact existing
     'manual placement of an existing unit never calls the create-unit flow');
 });
 
+// ---------------------------------------------------------------------
+// #1189 — unplaced cards with a position recorded in THIS file offer the
+// same restore the #870 missing lane has. The journal is local recovery
+// data: without an entry the card honestly offers only "Colocar".
+// ---------------------------------------------------------------------
+
+function renderUnplacedCard(sandbox, pf, hasRecordedPosition) {
+  const panel = connectedPanel();
+  panel.items[0].reconciliationState = 'unplaced';
+  panel.items[0].hasRecordedPosition = hasRecordedPosition === true;
+  panel.items = [panel.items[0]];
+  pf.renderProjectFurniture(panel);
+  return el(sandbox, 'pf-pending-list').children[0];
+}
+
+test('unplaced card with a recorded position: restore precedes Colocar and dispatches the exact restore bridge', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const card = renderUnplacedCard(sandbox, pf, true);
+  const actions = card.children[1];
+
+  assert.equal(actions.children.length, 3, 'restore + Colocar + the #1177 danger remove exit');
+  assert.equal(actions.children[0].textContent, '↶ Restaurar posición');
+  assert.equal(actions.children[1].textContent, 'Colocar');
+
+  actions.children[0].click();
+  const call = sandbox.__bridge.find((c) => c.action === 'restore_furniture_instance');
+  assert.ok(call, 'the same restore bridge serves the journal lane');
+  assert.deepStrictEqual(call.payload, { furnitureInstanceId: FI_1 });
+  assert.equal(actions.children[0].textContent, 'Restaurando…');
+  assert.equal(actions.children[0].disabled, true);
+
+  actions.children[1].click();
+  assert.ok(!sandbox.__bridge.find((c) => c.action === 'begin_placement_preview'),
+    'no preview may start while the same unit is restoring');
+});
+
+test('unplaced card without a recorded position: only Colocar — no false promises', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const card = renderUnplacedCard(sandbox, pf, false);
+  const actions = card.children[1];
+
+  assert.equal(actions.children.length, 2, 'Colocar + the #1177 danger remove exit');
+  assert.equal(actions.children[0].textContent, 'Colocar');
+  assert.equal(actions.children[1].className, 'btn btn-danger');
+
+  actions.children[0].click();
+  assert.ok(sandbox.__bridge.find((c) => c.action === 'begin_placement_preview'),
+    'Colocar keeps the shared #469 preview entry');
+  assert.ok(!sandbox.__bridge.find((c) => c.action === 'restore_furniture_instance'),
+    'no restore without a journal entry');
+});
+
+test('journal restore failure without an entry writes the honest copy and re-arms', () => {
+  const sandbox = buildSandbox();
+  const pf = runModule(sandbox);
+  const actions = renderUnplacedCard(sandbox, pf, true).children[1];
+
+  actions.children[0].click();
+  pf.handleRestoreFurnitureResult({ ok: false, code: 'no_recorded_position', instanceId: FI_1 });
+  assert.equal(actions.children[0].textContent, '↶ Restaurar posición');
+  assert.equal(actions.children[0].disabled, false);
+  assert.equal(sandbox.__toasts[sandbox.__toasts.length - 1].type, 'error');
+  assert.ok(sandbox.__toasts[sandbox.__toasts.length - 1].message.includes('posición grabada'),
+    'the failure copy names the honest limit (no recorded position in this file)');
+});
+
 test('manual placement cancelled: manual label re-arm, missing-state copy, no panel mutation', () => {
   const sandbox = buildSandbox();
   const pf = runModule(sandbox);

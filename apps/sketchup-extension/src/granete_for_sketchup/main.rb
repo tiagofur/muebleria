@@ -20,6 +20,7 @@ module Granete
         metadata/store
         connection/model_binding
         connection/transform_contract
+        connection/position_journal
         connection/managed_furniture
         connection/project_furniture_contract
         connection/host_reconciliation
