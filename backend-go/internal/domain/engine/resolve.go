@@ -177,6 +177,26 @@ func resolveBomCommon(
 		}
 	}
 
+	// #1210: component-instance placements (module + structure) are hardware
+	// DEMAND. Positions win over module bulk lines of the same resolved
+	// hardware (single source of truth, mirroring the TS agregado rule) and
+	// the positions become POSITIONED resolved lines appended after the bulk
+	// resolution. Agregado instances keep their own TS-side dedupe.
+	placementCounts, placementLines, err := collectPlacementHardwareDemand(module, catalog, optionChoices)
+	if err != nil {
+		return domain.ResolvedBom{}, err
+	}
+	if len(placementCounts) > 0 {
+		kept := make([]domain.HardwareLine, 0, len(module.HardwareLines))
+		for _, line := range module.HardwareLines {
+			if _, positioned := placementCounts[resolvedBulkHardwareID(line, optionChoices)]; positioned {
+				continue
+			}
+			kept = append(kept, line)
+		}
+		module.HardwareLines = kept
+	}
+
 	hardware := collectAllHardwareLines(module, catalog)
 	var sides *PlinthSides
 	if baseContext != nil {
@@ -193,7 +213,7 @@ func resolveBomCommon(
 		sides,
 		optionChoices,
 	)
-	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware)
+	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware, placementLines)
 }
 
 // resolveBomFromParts resolves material/edge/hardware IDs for already-expanded
@@ -205,6 +225,9 @@ func resolveBomFromParts(
 	catalog domain.Catalog,
 	rawParts []domain.BoardPart,
 	hardwareLines []domain.HardwareLine,
+	// #1210: POSITIONED demand lines from component-instance placements,
+	// computed by the caller together with the positions-win bulk dedupe.
+	positionedLines []domain.ResolvedHardwareLine,
 ) (domain.ResolvedBom, error) {
 	boardParts := make([]domain.ResolvedBoardPart, 0, len(rawParts))
 	for _, part := range rawParts {
@@ -261,6 +284,10 @@ func resolveBomFromParts(
 			HardwareID:          hw.ID,
 		})
 	}
+
+	// #1210: the positioned demand rides the resolved BOM with the same
+	// shape and pricing path as bulk lines.
+	hardwareResolved = append(hardwareResolved, positionedLines...)
 
 	return domain.ResolvedBom{
 		BoardParts:    boardParts,

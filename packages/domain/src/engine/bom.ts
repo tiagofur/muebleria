@@ -27,6 +27,7 @@ import {
 import { defaultPoseForPlacement } from '../spatialPlacement';
 import { materialBindingRole } from '../materialRole';
 import { resolveStructureForPin } from '../structures/versioning';
+import { resolvePlacementHardwareId } from '../hardwarePlacement';
 import type {
   BoardPart,
   Catalog,
@@ -342,6 +343,72 @@ function resolveBoardPartsAndHardware(
   );
 
   return { boardParts: resolvedBoardParts, hardwareLines: resolvedHardwareLines };
+}
+
+/**
+ * #1210 — placement-derived hardware demand for module/structure component
+ * instances. Positions WIN over module bulk lines of the same resolved
+ * hardware (single source of truth, mirroring the agregado rule in
+ * agregados.ts); the counts become POSITIONED resolved lines that price
+ * through the same validation and unit price as manual lines.
+ *
+ * A role without an effective choice contributes nothing (the quote gate
+ * blocks required groups and the release gate fails closed); a placement
+ * with NEITHER field throws — the editors guard it (#1147) and silencing it
+ * would store unresolvable authoring again. Component-instance quantity
+ * multiplies the count.
+ */
+function collectPlacementHardwareCounts(
+  componentInstances: readonly ModuleComponentInstance[],
+  optionChoices: OptionChoices,
+  moduleCode: string,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const inst of componentInstances) {
+    const placements = inst.overrides?.hardwarePlacements ?? [];
+    if (placements.length === 0) continue;
+    const quantity = inst.quantity > 0 ? inst.quantity : 1;
+    for (const placement of placements) {
+      const resolution = resolvePlacementHardwareId(placement, optionChoices);
+      if (resolution.status === 'invalid') {
+        throw new ResolutionError(
+          `Hardware placement on component "${inst.componentId}" has neither hardwareId nor optionRole`,
+          { moduleCode, componentId: inst.componentId, field: 'hardwarePlacements' },
+        );
+      }
+      if (resolution.status === 'unresolved') continue;
+      counts.set(
+        resolution.hardwareId,
+        (counts.get(resolution.hardwareId) ?? 0) + quantity,
+      );
+    }
+  }
+  return counts;
+}
+
+/** Module bulk lines the positions replace (same resolved hardware), kept verbatim otherwise. */
+function moduleHardwareLinesWithoutPositioned(
+  moduleHardwareLines: readonly HardwareLine[],
+  placementCounts: Map<string, number>,
+  optionChoices: OptionChoices,
+): HardwareLine[] {
+  return moduleHardwareLines.filter((line) => {
+    const resolution = resolvePlacementHardwareId(line, optionChoices);
+    if (resolution.status === 'invalid' || resolution.status === 'unresolved') return true;
+    return !placementCounts.has(resolution.hardwareId);
+  });
+}
+
+/** Append the POSITIONED demand lines to an already-resolved BOM. */
+function withPlacementHardwareDemand(bom: ResolvedBom, counts: Map<string, number>): ResolvedBom {
+  if (counts.size === 0) return bom;
+  const positioned: ResolvedHardwareLine[] = [...counts].map(([hardwareId, quantity]) => ({
+    id: `placement-mod-${hardwareId}`,
+    quantity,
+    optionRole: 'POSITIONED',
+    hardwareId,
+  }));
+  return { ...bom, hardwareLines: [...bom.hardwareLines, ...positioned] };
 }
 
 /**
@@ -840,12 +907,27 @@ export function resolveBom(
     allParts = [...composed.boardParts];
     composedHardware = [...composed.hardwareLines];
 
+    // #1210: module/structure component-instance placements are hardware
+    // demand — positions win over module bulk lines of the same resolved
+    // hardware (agregado instances keep their own dedupe inside
+    // resolveAgregadoInstance).
+    const placementCounts = collectPlacementHardwareCounts(
+      [...(structure.components ?? []), ...(module.components ?? [])],
+      optionChoices,
+      module.code,
+    );
+    const moduleHardware = moduleHardwareLinesWithoutPositioned(
+      module.hardwareLines ?? [],
+      placementCounts,
+      optionChoices,
+    );
+
     // Synthesize the base parts the mode needs, then apply mode rules
     // (zoclo strip ml, legs qty) over composed + module hardware.
     const treatment = applyBaseTreatment(
       module.code,
       allParts,
-      [...composedHardware, ...(module.hardwareLines ?? [])],
+      [...composedHardware, ...moduleHardware],
       resolveBaseModeWithContext(module, baseContext),
       resolveBaseClearanceWithContext(module, baseContext),
       dims.width,
@@ -860,12 +942,15 @@ export function resolveBom(
     for (const part of allParts) validateBoardPart(part, module.code);
     for (const line of composedHardware) validateHardwareLine(line, module.code);
 
-    return resolveBoardPartsAndHardware(
-      allParts,
-      composedHardware,
-      optionChoices,
-      catalog,
-      module.code,
+    return withPlacementHardwareDemand(
+      resolveBoardPartsAndHardware(
+        allParts,
+        composedHardware,
+        optionChoices,
+        catalog,
+        module.code,
+      ),
+      placementCounts,
     );
   }
 
@@ -908,10 +993,23 @@ export function resolveBom(
     composedHardware = [...composed.hardwareLines];
   }
 
+  // #1210: module component-instance placements are hardware demand here too
+  // (usually empty on non-composed modules — the guard is structural).
+  const placementCounts = collectPlacementHardwareCounts(
+    module.components ?? [],
+    optionChoices,
+    module.code,
+  );
+  const moduleHardware = moduleHardwareLinesWithoutPositioned(
+    module.hardwareLines ?? [],
+    placementCounts,
+    optionChoices,
+  );
+
   const treatment = applyBaseTreatment(
     module.code,
     allParts,
-    [...composedHardware, ...(module.hardwareLines ?? [])],
+    [...composedHardware, ...moduleHardware],
     resolveBaseModeWithContext(module, baseContext),
     resolveBaseClearanceWithContext(module, baseContext),
     dimsFallback.width,
@@ -926,12 +1024,15 @@ export function resolveBom(
   for (const part of allParts) validateBoardPart(part, module.code);
   for (const line of allHardware) validateHardwareLine(line, module.code);
 
-  return resolveBoardPartsAndHardware(
-    allParts,
-    allHardware,
-    optionChoices,
-    catalog,
-    module.code,
+  return withPlacementHardwareDemand(
+    resolveBoardPartsAndHardware(
+      allParts,
+      allHardware,
+      optionChoices,
+      catalog,
+      module.code,
+    ),
+    placementCounts,
   );
 }
 
