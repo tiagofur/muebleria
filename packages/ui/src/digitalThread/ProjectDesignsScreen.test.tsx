@@ -17,6 +17,8 @@ import type {
 } from '@granete/storage';
 import {
   ProjectDesignsScreen,
+  PROJECTION_ISSUE_LABELS,
+  describeProjectionIssue,
   projectDesignsQueryKeys,
   type ProjectDesignsContextState,
 } from './ProjectDesignsScreen';
@@ -2131,5 +2133,37 @@ describe('#1197 P0 — el linaje no fabrica «0 publicaciones» durante la carga
     const count = screen.getByTestId('design-lineage-timeline').querySelector('.pd-lineage-count');
     expect(count).not.toBeNull();
     expect(count!.textContent).not.toContain('0 publicaciones');
+  });
+});
+
+describe('#1197 P2 — paridad de códigos de issue de la proyección (TS<->Go)', () => {
+  // Los 7 códigos que emite backend-go/internal/storage/commercial_projection.go
+  const GO_ISSUE_CODES = [
+    'working_item_missing_furniture_definition',
+    'working_item_parameters_not_priceable',
+    'working_item_pricing_context_missing',
+    'working_copy_empty',
+    'working_copy_incomplete',
+    'commercial_amounts_withheld_for_organization',
+    'pricing_inputs_incomplete:algún motivo técnico',
+  ];
+
+  it('traduce cada código del backend a copy humano (sin crudo)', () => {
+    for (const code of GO_ISSUE_CODES) {
+      const text = describeProjectionIssue(code);
+      expect(text).not.toBe(code);
+      expect(text).not.toMatch(/^[a-z_]+:/);
+    }
+    // El dinámico traduce el prefijo y conserva el motivo como detalle.
+    expect(describeProjectionIssue('pricing_inputs_incomplete:algún motivo técnico')).toBe(
+      'faltan insumos de precios (algún motivo técnico)',
+    );
+  });
+
+  it('cubre los códigos fijos del mapa con etiquetas no vacías', () => {
+    const fixedCodes = GO_ISSUE_CODES.filter((c) => !c.includes(':'));
+    for (const code of fixedCodes) {
+      expect(PROJECTION_ISSUE_LABELS[code]).toBeTruthy();
+    }
   });
 });

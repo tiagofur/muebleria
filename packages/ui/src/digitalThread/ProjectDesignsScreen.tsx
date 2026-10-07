@@ -202,8 +202,16 @@ function projectionReferenceStatus(status: NonNullable<CommercialProjection['ref
 }
 
 
+/**
+ * Códigos que ya tienen notice dedicado en la pantalla (p. ej. importes
+ * ocultos por rol/org) — no se repiten en la lista de «faltan datos». #1197
+ */
+const PROJECTION_ISSUES_WITH_DEDICATED_NOTICE: ReadonlySet<string> = new Set([
+  'commercial_amounts_withheld_for_organization',
+]);
+
 /** #1197 P2: los códigos de issue del backend se muestran en copy humano. */
-const PROJECTION_ISSUE_LABELS: Readonly<Record<string, string>> = {
+export const PROJECTION_ISSUE_LABELS: Readonly<Record<string, string>> = {
   working_item_missing_furniture_definition:
     'hay muebles sin definición de fabricación',
   working_item_parameters_not_priceable:
@@ -211,9 +219,14 @@ const PROJECTION_ISSUE_LABELS: Readonly<Record<string, string>> = {
   working_item_pricing_context_missing: 'falta el contexto de precios de la obra',
   working_copy_empty: 'el borrador de trabajo no tiene muebles',
   working_copy_incomplete: 'el borrador de trabajo tiene muebles sin precio',
+  // Paridad con backend-go/internal/storage/commercial_projection.go
+  // (7 códigos emitidos; los dinámicos van con sufijo `:<motivo>`).
+  pricing_inputs_incomplete: 'faltan insumos de precios',
+  commercial_amounts_withheld_for_organization:
+    'la organización oculta los importes de venta',
 };
 
-function describeProjectionIssue(code: string): string {
+export function describeProjectionIssue(code: string): string {
   // Los códigos con sufijo dinámico (p. ej. pricing_inputs_incomplete:<motivo>)
   // se parten: el prefijo se traduce y el motivo se conserva como detalle.
   const prefix = code.split(':')[0] ?? code;
@@ -280,10 +293,13 @@ function CommercialProjectionPanel({
         <strong className="pd-commercial-projection__amount">{formatProjectionMoney(saleTotal, projection.currency)}</strong>
         <span className="pd-commercial-projection__meta">{projection.itemCount} {projection.itemCount === 1 ? 'mueble' : 'muebles'} · Calculado por el servidor {formatWhen(projection.calculatedAt)}</span>
       </div>
-      {isIncomplete && projection.issues.length > 0 && (
+      {isIncomplete && projection.issues.filter((code) => !PROJECTION_ISSUES_WITH_DEDICATED_NOTICE.has(code)).length > 0 && (
         <p className="pd-commercial-projection__notice">
           Faltan datos para completar este estimado:{' '}
-          {projection.issues.map((code) => describeProjectionIssue(code)).join(' · ')}
+          {projection.issues
+            .filter((code) => !PROJECTION_ISSUES_WITH_DEDICATED_NOTICE.has(code))
+            .map((code) => describeProjectionIssue(code))
+            .join(' · ')}
         </p>
       )}
       {projection.saleAmountsWithheld && <p className="pd-commercial-projection__notice">El importe de venta no está disponible para tu rol.</p>}
