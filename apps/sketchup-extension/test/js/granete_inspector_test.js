@@ -1714,18 +1714,23 @@ test('hardware groups: card renders consumed groups and a pick rides the draft t
   assert(visible(el(sandbox, 'inspector-hardware-groups-card')), 'the groups card appears for consumed groups');
   const groupRow = el(sandbox, 'inspector-hardware-groups-container').children[0];
   assert(el(sandbox, 'inspector-hardware-groups-container').children.length === 1, 'one row per group');
-  // row → head(kv-row) → [k, v, count]; the mock DOM keeps textContent per
-  // node, so the leaf values are asserted directly.
+  // row → header(title, count) + preview(button); the mock DOM keeps
+  // textContent per node, so the leaf values are asserted directly.
   const head = groupRow.children[0];
+  assert.strictEqual(head.className, 'material-role-header',
+    '#1178-inspector: herrajes use the Materiales block pattern');
   assert.strictEqual(head.children[0].textContent, 'Bisagras', 'group name header');
-  assert.strictEqual(head.children[1].textContent, 'Bisagra Blum', 'the chosen member is shown');
-  assert.strictEqual(head.children[2].textContent, '×2', 'the real occurrence count is shown');
+  assert.strictEqual(head.children[1].textContent, '×2', 'the real occurrence count is shown');
+
+  // The selected member lives in the preview row (Materiales pattern).
+  const preview = groupRow.children[1];
+  assert.strictEqual(preview.className, 'material-selected-preview');
+  assert.strictEqual(preview.children[1].children[0].textContent, 'Bisagra Blum',
+    'the chosen member is shown');
 
   // Cambiar opens the modal with the group's members (catalog authority).
-  const changeBtn = Array.from(groupRow.children)
-    .filter((n) => String(n.tagName).toLowerCase() === 'button')[0];
-  assert.strictEqual(changeBtn.textContent, 'Cambiar herraje');
-  changeBtn.click();
+  assert.strictEqual(preview.title, 'Cambiar herraje');
+  preview.click();
   assert.strictEqual(modalCalls.length, 1);
   assert.strictEqual(modalCalls[0].groupLabel, 'Bisagras');
   assert.strictEqual(modalCalls[0].chosenId, 'hw-blum');
@@ -1738,7 +1743,12 @@ test('hardware groups: card renders consumed groups and a pick rides the draft t
   assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0);
   assert(visible(el(sandbox, 'inspector-footer')), 'the hardware pick is pending in the draft');
   assert.strictEqual(el(sandbox, 'inspector-pending').textContent, '1 cambio pendiente');
-  assert.strictEqual(el(sandbox, 'inspector-hardware-groups-container').children[0].children[0].children[1].textContent,
+  const draftedRow = el(sandbox, 'inspector-hardware-groups-container').children[0];
+  assert.strictEqual(draftedRow.children[1].className, 'btn material-role-restore',
+    'a drafted override exposes Restaurar valor del diseño');
+  assert.strictEqual(draftedRow.children[0].children[2].textContent, 'Personalizado',
+    'the override badge appears only while the draft differs');
+  assert.strictEqual(draftedRow.children[2].children[1].children[0].textContent,
     'Bisagra económica', 'the row repaints the drafted member');
 
   el(sandbox, 'btn-apply').click();
@@ -1766,10 +1776,10 @@ test('hardware groups: no consumed groups means no card, and groups catalog abse
   api.setOptionGroups([]); // offline/local catalog: no groups slice
   api.onSelectionChange(furnitureContext({ hardwareGroups: [{ code: 'BISAGRA', chosenHardwareId: 'hw-blum', count: 1 }] }));
   assert(visible(el(sandbox, 'inspector-hardware-groups-card')), 'the scanned group still surfaces');
-  const changeBtn = Array.from(el(sandbox, 'inspector-hardware-groups-container').children[0].children)
-    .filter((n) => String(n.tagName).toLowerCase() === 'button')[0];
-  assert.strictEqual(changeBtn.disabled, true, 'sin grupos de catálogo el Cambiar queda deshabilitado');
-  assert.strictEqual(changeBtn.textContent, 'Cambiar herraje (catálogo sin grupos)');
+  const previewBtn = Array.from(el(sandbox, 'inspector-hardware-groups-container').children[0].children)
+    .filter((n) => String(n.className) === 'material-selected-preview')[0];
+  assert.strictEqual(previewBtn.disabled, true, 'sin grupos de catálogo el Cambiar queda deshabilitado');
+  assert.strictEqual(previewBtn.title, 'Catálogo sin grupos');
 });
 
 console.log(JSON.stringify({ success: true, testsPassed: testsPassed, module: 'granete-inspector.js' }));

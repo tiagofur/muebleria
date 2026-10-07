@@ -115,6 +115,19 @@
 
         control.appendChild(dimInput);
         control.appendChild(dimUnit);
+      } else if (p.type === "number" && p.min !== undefined && p.max !== undefined &&
+                 p.binding && p.binding.kind === "relationship") {
+        // #1178-inspector: params bound to a construction/drilling
+        // relationship are SERVER-AUTHORITATIVE quantities (demand,
+        // estaciones, separaciones) — the workshop reads them, the backend
+        // and the web editor own them. No steppers, no editing.
+        group.appendChild(label);
+
+        var readOnly = document.createElement("span");
+        readOnly.className = "param-readonly-value";
+        readOnly.textContent = val;
+        readOnly.setAttribute("aria-label", p.label);
+        control.appendChild(readOnly);
       } else if (p.type === "number" && p.min !== undefined && p.max !== undefined) {
         group.appendChild(label);
 

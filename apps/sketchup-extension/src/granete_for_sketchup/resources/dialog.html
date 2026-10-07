@@ -655,12 +655,16 @@
               </div>
 
               <!-- Dock dentro del fieldset: la mutación sigue sometida al
-                   switch fail-closed nativo de #476. -->
+                   switch fail-closed nativo de #476. #1178-inspector: el
+                   Aplicar vive en el dock (sticky, siempre alcanzable en
+                   formularios largos); el footer fijo conserva el conteo
+                   honesto y el Descartar. -->
               <div id="inspector-actionbar" class="action-dock">
                 <div class="actionbar-summary">
                   <span id="inspector-summary-dims" class="actionbar-dims">-- × -- × --</span>
                   <span id="inspector-summary-parts" class="actionbar-parts">--</span>
                 </div>
+                <button id="btn-apply" class="btn btn-primary">Aplicar</button>
               </div>
 
               <!-- #784 R3b: footer del draft — sólo con ediciones pendientes.
@@ -668,10 +672,7 @@
                    SketchUp = un undo coherente; [Descartar] es read-only. -->
               <div id="inspector-footer" style="display: none; margin-top: var(--space-3);">
                 <p id="inspector-pending" class="subhead" style="font-size: var(--text-xs); margin: 0 0 var(--space-2);"></p>
-                <div style="display: flex; gap: var(--space-2);">
-                  <button id="btn-discard" class="btn btn-secondary" style="flex: 1;">Descartar</button>
-                  <button id="btn-apply" class="btn btn-primary" style="flex: 1;">Aplicar</button>
-                </div>
+                <button id="btn-discard" class="btn btn-secondary" style="width: 100%;">Descartar</button>
               </div>
             </fieldset>
 
@@ -834,9 +835,12 @@
           <style>
             .preflight-issue { border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: var(--space-2); margin-top: var(--space-2); font-size: var(--text-xs); }
             .preflight-issue-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-            .preflight-issue-source { margin: var(--space-1) 0 0 0; color: var(--text-secondary); }
-            .preflight-issue-detail { margin: var(--space-1) 0; color: var(--text-primary); }
-            .preflight-issue-remediation { margin: 0 0 var(--space-2) 0; color: var(--text-secondary); font-style: italic; }
+            /* #1178-inspector: source + detail are diagnostics (ids, geometry)
+               — muted mono data, never the loudest line. The remediation is
+               the recovery the user needs — primary copy, not italic gray. */
+            .preflight-issue-source { margin: var(--space-1) 0 0 0; color: var(--text-secondary); font-family: var(--font-mono, monospace); font-size: var(--text-xs); word-break: break-all; }
+            .preflight-issue-detail { margin: var(--space-1) 0; color: var(--text-secondary); font-family: var(--font-mono, monospace); word-break: break-all; }
+            .preflight-issue-remediation { margin: 0 0 var(--space-2) 0; color: var(--text-primary); font-weight: var(--weight-semibold); }
             .preflight-issue-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
           </style>
           <div id="preflight-review-card" class="card" style="display: none; margin-bottom: var(--space-3);">
@@ -844,7 +848,7 @@
               <div class="card-title" style="margin: 0;">Revisión de fabricación</div>
               <span id="preflight-review-badge" class="status-badge pending">Pendiente</span>
             </div>
-            <button id="btn-preflight-run" type="button" class="btn btn-secondary" style="margin-top: var(--space-2); width: 100%;">
+            <button id="btn-preflight-run" type="button" class="btn btn-primary" style="margin-top: var(--space-2); width: 100%;">
               <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               <span>Verificar fabricación</span>
             </button>
