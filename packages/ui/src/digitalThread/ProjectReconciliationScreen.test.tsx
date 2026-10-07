@@ -1119,7 +1119,7 @@ describe('ProjectReconciliationScreen (#502 / WEB-DT-3)', () => {
     });
     const engineeringBtn = screen.getByTestId('release-success-open-engineering');
     // One primary action per context: preparing the release in Engineering.
-    expect(engineeringBtn.className).toContain('btn-primary');
+    expect(engineeringBtn.className).toContain('btn--primary');
     await userEvent.click(engineeringBtn);
     // The exact release returned by the command pins the navigation.
     expect(onOpenInEngineering).toHaveBeenCalledWith(PROJECT_ID, expect.any(String));

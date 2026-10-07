@@ -17,6 +17,8 @@ import type {
 } from '@granete/storage';
 import {
   ProjectDesignsScreen,
+  PROJECTION_ISSUE_LABELS,
+  describeProjectionIssue,
   projectDesignsQueryKeys,
   type ProjectDesignsContextState,
 } from './ProjectDesignsScreen';
@@ -266,6 +268,7 @@ interface FetchMockOptions {
   revisionDetailOverride?: Record<string, Record<string, DesignRevision>>; // designId → revisionId → revision
   revisionDetailFail?: boolean | ((designId: string, revId: string) => boolean);
   revisionDetailPending?: boolean;
+  revisionsPending?: boolean;
   workingCopyByDesign?: Record<string, DesignWorkingCopy | null>;
   workingCopyFail?: boolean | (() => boolean); // #641: non-404 working-copy failure
   workingCopyFailStatus?: number;
@@ -353,6 +356,9 @@ function setupFetchMock(options: FetchMockOptions = {}) {
     // 3. List revisions: GET /designs/:id/revisions
     for (const dId of Object.keys(revisionsByDesign)) {
       if (path === `/designs/${dId}/revisions` && method === 'GET') {
+        if (options.revisionsPending) {
+          return new Promise(() => {}); // hangs/pending (#1197 P0)
+        }
         if (options.revisionsFail === true || (typeof options.revisionsFail === 'function' && options.revisionsFail())) {
           return new Response(JSON.stringify({ code: 'INTERNAL', message: 'revisions list failed' }), {
             status: 500,
@@ -1431,13 +1437,13 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     }
     expect(
       screen.getByTestId('download-artifact-model'),
-    ).toHaveAccessibleName('Descargar modelo SKP');
+    ).toHaveAccessibleName('Acceder — Descargar modelo SKP');
     expect(
       screen.getByTestId('download-artifact-manifest'),
-    ).toHaveAccessibleName('Descargar manifest JSON');
+    ).toHaveAccessibleName('Acceder — Descargar manifest JSON');
     expect(
       screen.getByTestId('download-artifact-preview'),
-    ).toHaveAccessibleName('Abrir vista previa PNG');
+    ).toHaveAccessibleName('Acceder — Abrir vista previa PNG');
     // Healthy revision: no recovery alert.
     expect(screen.queryByTestId('artifact-health-recovery')).not.toBeInTheDocument();
   });
@@ -2072,10 +2078,11 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(REV_3_ID));
 
     // The full ID is selectable text inside the technical path only; primary
-    // product copy (working copy banner) keeps the truncated form.
+    // product copy (working copy banner) shows the human name R{n} (#1197),
+    // never the raw UUID, and the full ID stays out of the banner.
     const panel = screen.getByTestId('technical-audit-details');
     expect(within(panel).getAllByText(REV_3_ID).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByTestId('working-copy-banner')).toHaveTextContent('33333333…');
+    expect(screen.getByTestId('working-copy-banner')).toHaveTextContent('Base: R3');
     expect(screen.getByTestId('working-copy-banner')).not.toHaveTextContent(REV_3_ID);
   });
 
@@ -2112,5 +2119,51 @@ describe('ProjectDesignsScreen — #640 authoritative artifact health', () => {
     const modal = screen.getByTestId('pending-materials-modal');
     expect(within(modal).getByTestId(`pending-unit-${INSTANCE_1_ID}`)).toBeVisible();
     expect(within(modal).getByTestId(`repair-unit-${INSTANCE_1_ID}`)).toBeVisible();
+  });
+});
+
+describe('#1197 P0 — el linaje no fabrica «0 publicaciones» durante la carga', () => {
+  it('muestra el total como desconocido mientras la consulta de revisiones está en vuelo', async () => {
+    setupFetchMock({ revisionsPending: true });
+    renderScreen({ initialContext: { designId: DESIGN_1_ID, revisionId: REV_1_ID } });
+
+    // El estado de carga explícito existe…
+    await screen.findByTestId('revisions-loading');
+    // …y el contador JAMÁS presenta un 0 como dato.
+    const count = screen.getByTestId('design-lineage-timeline').querySelector('.pd-lineage-count');
+    expect(count).not.toBeNull();
+    expect(count!.textContent).not.toContain('0 publicaciones');
+  });
+});
+
+describe('#1197 P2 — paridad de códigos de issue de la proyección (TS<->Go)', () => {
+  // Los 7 códigos que emite backend-go/internal/storage/commercial_projection.go
+  const GO_ISSUE_CODES = [
+    'working_item_missing_furniture_definition',
+    'working_item_parameters_not_priceable',
+    'working_item_pricing_context_missing',
+    'working_copy_empty',
+    'working_copy_incomplete',
+    'commercial_amounts_withheld_for_organization',
+    'pricing_inputs_incomplete:algún motivo técnico',
+  ];
+
+  it('traduce cada código del backend a copy humano (sin crudo)', () => {
+    for (const code of GO_ISSUE_CODES) {
+      const text = describeProjectionIssue(code);
+      expect(text).not.toBe(code);
+      expect(text).not.toMatch(/^[a-z_]+:/);
+    }
+    // El dinámico traduce el prefijo y conserva el motivo como detalle.
+    expect(describeProjectionIssue('pricing_inputs_incomplete:algún motivo técnico')).toBe(
+      'faltan insumos de precios (algún motivo técnico)',
+    );
+  });
+
+  it('cubre los códigos fijos del mapa con etiquetas no vacías', () => {
+    const fixedCodes = GO_ISSUE_CODES.filter((c) => !c.includes(':'));
+    for (const code of fixedCodes) {
+      expect(PROJECTION_ISSUE_LABELS[code]).toBeTruthy();
+    }
   });
 });

@@ -150,9 +150,10 @@ export function getArtifactAvailability(
 
 /**
  * Formats byte size into human-readable representation (B, KB, MB).
+ * Datos inválidos o ausentes → «—»: el tamaño desconocido no es «0 B» (#1197).
  */
 export function formatArtifactSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
   if (bytes < 1024) return `${Math.round(bytes)} B`;
   if (bytes < 1024 * 1024) {
     const kb = bytes / 1024;

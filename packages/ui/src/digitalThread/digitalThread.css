@@ -467,7 +467,7 @@
   font-size: 13px;
   color: var(--text-primary);
   background: var(--surface-hover);
-  border-left: 3px solid var(--brand-500, var(--border-subtle));
+  /* issue 1197: 2px — acento sutil, no side-tab */ border-left: 2px solid var(--brand-500, var(--border-subtle));
   padding: 6px 10px;
   margin: 8px 0;
 }
@@ -500,6 +500,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* issue 1197 P2: en 390px las acciones se envuelven en vez de recortarse. */
+  flex-wrap: wrap;
 }
 
 .pd-error-container {
@@ -516,57 +518,7 @@
   border-radius: var(--radius-md, 4px);
 }
 
-.pd-alternatives {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--surface-hover);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md, 4px);
-}
 
-.pd-alternatives__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  margin-right: 4px;
-}
-
-.pd-alternative-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm, 3px);
-  cursor: pointer;
-  transition: all 0.15s ease-in-out;
-}
-
-.pd-alternative-tab:hover {
-  border-color: var(--brand-400);
-}
-
-.pd-alternative-tab--active {
-  background: var(--brand-50, var(--surface-hover));
-  border-color: var(--brand-500);
-  color: var(--brand-700, var(--text-primary));
-  font-weight: 600;
-}
-
-.pd-alternative-tab__hint {
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--surface-hover);
-  padding: 2px 6px;
-  border-radius: 2px;
-}
 
 .pd-working-copy-banner {
   display: flex;
@@ -577,7 +529,6 @@
   padding: 10px 14px;
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
-  border-left: 3px solid var(--accent-500, var(--brand-500));
   border-radius: var(--radius-sm, 3px);
   font-size: 13px;
 }
@@ -595,6 +546,11 @@
 
 .pd-working-copy-banner__meta {
   color: var(--text-muted);
+}
+
+.pd-working-copy-banner--pending {
+  /* issue 1197 P3: estado de carga del banner — opacidad, sin fingir dato. */
+  opacity: 0.7;
 }
 
 .pd-working-copy-banner__date {
@@ -685,7 +641,7 @@
 }
 
 .pd-lineage-node--approved {
-  border-left: 3px solid var(--color-success, var(--brand-500));
+  /* issue 1197: 2px — acento sutil, no side-tab */ border-left: 2px solid var(--color-success, var(--brand-500));
 }
 
 .pd-lineage-node__top {
@@ -832,6 +788,9 @@
 .pd-items-table,
 .pd-artifacts-table {
   width: 100%;
+  /* issue 1197 P2: el contenedor ya scrollea en X; el ancho mínimo evita que la
+     columna «Acción» se recorte dentro del sidebar. */
+  min-width: 460px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -859,13 +818,6 @@
   border-bottom: none;
 }
 
-.pd-param-cell {
-  font-size: 12px;
-  color: var(--text-muted);
-  max-width: 220px;
-  white-space: normal;
-  word-break: break-word;
-}
 
 .pd-code-pill {
   font-family: var(--font-mono, monospace);
@@ -947,7 +899,8 @@
   gap: 6px;
   background: none;
   border: none;
-  padding: 4px 0;
+  min-height: var(--touch-min);
+  padding: var(--space-1) 0;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
@@ -1011,6 +964,47 @@
   color: var(--text-muted);
 }
 
+/* issue 1197 P2: el modal «Nueva alternativa» tenía inputs UA sin estilar
+   (form-group/form-control/modal-actions eran fantasmas). */
+.pd-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pd-form-group label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.pd-form-input {
+  min-height: var(--touch-min);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.pd-form-input:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+  border-color: var(--border-brand);
+}
+
+.pd-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* issue 1197 P2: utilities de intención con definición real (eran fantasmas). */
+.text-danger { color: var(--danger-700, var(--danger)); }
+.text-success { color: var(--success-700); }
+.text-muted { color: var(--text-muted); }
+
 .pd-alert {
   padding: 8px 12px;
   border-radius: var(--radius-sm, 3px);
@@ -1019,7 +1013,7 @@
 
 .pd-alert--error {
   background: var(--surface-hover);
-  border-left: 3px solid var(--danger);
+  /* issue 1197: 2px — acento sutil, no side-tab */ border-left: 2px solid var(--danger);
   color: var(--text-primary);
 }
 
@@ -1293,13 +1287,13 @@
 
 .pd-alert--success {
   background: var(--success-50);
-  border-left: 3px solid var(--success-700);
+  /* issue 1197: 2px — acento sutil, no side-tab */ border-left: 2px solid var(--success-700);
   color: var(--text-primary);
 }
 
 .pd-alert--warning {
   background: var(--warning-50);
-  border-left: 3px solid var(--warning-700);
+  /* issue 1197: 2px — acento sutil, no side-tab */ border-left: 2px solid var(--warning-700);
   color: var(--text-primary);
 }
 
@@ -1599,14 +1593,13 @@
   padding: 10px 16px;
   background: var(--warning-50);
   border: 1px solid var(--border-default);
-  border-left: 3px solid var(--warning-500);
   border-radius: var(--radius-sm, 3px);
   font-size: var(--text-base);
 }
 
 .pd-materials-strip--error {
   background: var(--surface-card);
-  border-left: 3px solid var(--danger);
+  /* issue 1197: 2px — acento sutil, no side-tab */ border-left: 2px solid var(--danger);
 }
 
 .pd-materials-strip__info {
@@ -1804,4 +1797,37 @@
 @media (max-width: 600px) {
   .pd-commercial-projection { grid-template-columns: 1fr; }
   .pd-commercial-projection__summary { align-items: flex-start; text-align: left; }
+}
+
+/* issue 1197 P3: clases usadas por D2 que no tenían definición. */
+.pd-alternatives-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pd-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.pd-preview-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.pd-preview-empty {
+  padding: var(--space-4);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
 }

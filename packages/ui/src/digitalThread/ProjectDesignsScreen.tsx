@@ -201,6 +201,41 @@ function projectionReferenceStatus(status: NonNullable<CommercialProjection['ref
   return status === 'accepted' ? 'aceptada' : status === 'published' ? 'publicada' : status === 'draft' ? 'borrador' : status;
 }
 
+
+/**
+ * Códigos que ya tienen notice dedicado en la pantalla (p. ej. importes
+ * ocultos por rol/org) — no se repiten en la lista de «faltan datos». #1197
+ */
+const PROJECTION_ISSUES_WITH_DEDICATED_NOTICE: ReadonlySet<string> = new Set([
+  'commercial_amounts_withheld_for_organization',
+]);
+
+/** #1197 P2: los códigos de issue del backend se muestran en copy humano. */
+export const PROJECTION_ISSUE_LABELS: Readonly<Record<string, string>> = {
+  working_item_missing_furniture_definition:
+    'hay muebles sin definición de fabricación',
+  working_item_parameters_not_priceable:
+    'hay muebles con parámetros no cotizables',
+  working_item_pricing_context_missing: 'falta el contexto de precios de la obra',
+  working_copy_empty: 'el borrador de trabajo no tiene muebles',
+  working_copy_incomplete: 'el borrador de trabajo tiene muebles sin precio',
+  // Paridad con backend-go/internal/storage/commercial_projection.go
+  // (7 códigos emitidos; los dinámicos van con sufijo `:<motivo>`).
+  pricing_inputs_incomplete: 'faltan insumos de precios',
+  commercial_amounts_withheld_for_organization:
+    'la organización oculta los importes de venta',
+};
+
+export function describeProjectionIssue(code: string): string {
+  // Los códigos con sufijo dinámico (p. ej. pricing_inputs_incomplete:<motivo>)
+  // se parten: el prefijo se traduce y el motivo se conserva como detalle.
+  const prefix = code.split(':')[0] ?? code;
+  const label = PROJECTION_ISSUE_LABELS[prefix];
+  if (!label) return code;
+  const suffix = code.slice(prefix.length + 1);
+  return suffix ? `${label} (${suffix})` : label;
+}
+
 function CommercialProjectionPanel({
   projection,
   isLoading,
@@ -232,7 +267,7 @@ function CommercialProjectionPanel({
           <h3 id="commercial-projection-title">No se pudo consultar la proyección comercial</h3>
         </div>
         <p>{error ? describeRequestFailure(error) : 'La proyección comercial no está disponible.'}</p>
-        <button type="button" className="btn btn-sm btn-secondary" data-testid="retry-commercial-projection-btn" onClick={onRetry}>
+        <button type="button" className="btn btn--small" data-testid="retry-commercial-projection-btn" onClick={onRetry}>
           Reintentar
         </button>
       </section>
@@ -258,8 +293,14 @@ function CommercialProjectionPanel({
         <strong className="pd-commercial-projection__amount">{formatProjectionMoney(saleTotal, projection.currency)}</strong>
         <span className="pd-commercial-projection__meta">{projection.itemCount} {projection.itemCount === 1 ? 'mueble' : 'muebles'} · Calculado por el servidor {formatWhen(projection.calculatedAt)}</span>
       </div>
-      {isIncomplete && projection.issues.length > 0 && (
-        <p className="pd-commercial-projection__notice">Faltan datos para completar este estimado: {projection.issues.join(' · ')}</p>
+      {isIncomplete && projection.issues.filter((code) => !PROJECTION_ISSUES_WITH_DEDICATED_NOTICE.has(code)).length > 0 && (
+        <p className="pd-commercial-projection__notice">
+          Faltan datos para completar este estimado:{' '}
+          {projection.issues
+            .filter((code) => !PROJECTION_ISSUES_WITH_DEDICATED_NOTICE.has(code))
+            .map((code) => describeProjectionIssue(code))
+            .join(' · ')}
+        </p>
       )}
       {projection.saleAmountsWithheld && <p className="pd-commercial-projection__notice">El importe de venta no está disponible para tu rol.</p>}
       {projection.costsWithheld && <p className="pd-commercial-projection__notice">Costos no disponibles para tu rol.</p>}
@@ -356,7 +397,7 @@ function TechnicalCopyButton({
   return (
     <button
       type="button"
-      className="btn btn-sm btn-secondary"
+      className="btn btn--small"
       data-testid={testId}
       aria-label={label}
       disabled={!value}
@@ -839,14 +880,14 @@ export function ProjectDesignsScreen({
         <p>{msg}</p>
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn--primary"
           data-testid="retry-designs-btn"
           onClick={() => void designsQuery.refetch()}
         >
           Reintentar
         </button>
         {onBack && (
-          <button type="button" className="btn btn-secondary" onClick={onBack}>
+          <button type="button" className="btn" onClick={onBack}>
             Volver al proyecto
           </button>
         )}
@@ -865,7 +906,7 @@ export function ProjectDesignsScreen({
           selectedDesign ? (
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn--primary"
               data-testid="open-in-sketchup-btn"
               onClick={() => void handleOpenInSketchUp()}
               disabled={isPreparingDraftUnits}
@@ -873,10 +914,12 @@ export function ProjectDesignsScreen({
               <ExternalLink size={16} />
               <span>Abrir en SketchUp</span>
             </button>
-          ) : canMutate ? (
+          ) : canMutate && designs.length > 0 ? (
+            // #1197 P2: con la obra vacía la única CTA es «Crear primer
+            // diseño» del EmptyState — no duplicar la acción en el header.
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn--primary"
               data-testid="create-design-btn"
               onClick={() => {
                 setNewDesignName('');
@@ -894,7 +937,7 @@ export function ProjectDesignsScreen({
             {selectedDesign && canMutate ? (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn"
                 data-testid="create-design-btn"
                 onClick={() => {
                   setNewDesignName('');
@@ -909,7 +952,7 @@ export function ProjectDesignsScreen({
             {onOpenFurnitureMatrix && (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn"
                 data-testid="open-furniture-matrix-btn"
                 onClick={() =>
                   onOpenFurnitureMatrix({
@@ -927,7 +970,7 @@ export function ProjectDesignsScreen({
             {onOpenReconciliation && designs.length > 0 && (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn"
                 data-testid="open-reconciliation-btn"
                 onClick={() =>
                   onOpenReconciliation({
@@ -941,7 +984,7 @@ export function ProjectDesignsScreen({
               </button>
             )}
             {onBack && (
-              <button type="button" className="btn btn-secondary" onClick={onBack}>
+              <button type="button" className="btn" onClick={onBack}>
                 Volver
               </button>
             )}
@@ -982,6 +1025,7 @@ export function ProjectDesignsScreen({
               ariaLabel="Alternativas de diseño"
               idPrefix="design-alt"
               testIdPrefix="design"
+              ariaControlsPanelId="design-alternatives-panel"
               activeTab={activeDesignId ?? ''}
               onTabChange={(id) => handleSelectDesign(id)}
               tabs={designs.map((d) => ({
@@ -1000,7 +1044,7 @@ export function ProjectDesignsScreen({
                 </p>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn"
                   data-testid="view-available-designs-btn"
                   onClick={() => {
                     if (designs.length > 0) {
@@ -1049,7 +1093,7 @@ export function ProjectDesignsScreen({
                   </div>
                   <button
                     type="button"
-                    className="btn btn-sm btn-secondary"
+                    className="btn btn--small"
                     data-testid="retry-working-copy-btn"
                     onClick={() => void workingCopyQuery.refetch()}
                   >
@@ -1077,7 +1121,16 @@ export function ProjectDesignsScreen({
                             title={workingCopy.base_revision_id}
                           >
                             {' '}
-                            · Base: {workingCopy.base_revision_id.slice(0, 8)}…
+                            {/* #1197 P2: nombre humano (R{n}) cuando la base
+                                es una revisión conocida del linaje. */}
+                            {(() => {
+                              const baseRev = revisions.find(
+                                (r) => r.id === workingCopy.base_revision_id,
+                              );
+                              return baseRev
+                                ? `· Base: R${baseRev.revision_number}`
+                                : `· Base: ${workingCopy.base_revision_id.slice(0, 8)}…`;
+                            })()}
                           </span>
                         ) : (
                           <span className="pd-working-copy-banner__meta">
@@ -1106,7 +1159,7 @@ export function ProjectDesignsScreen({
                       </span>
                       <button
                         type="button"
-                        className="btn btn-sm btn-secondary"
+                        className="btn btn--small"
                         data-testid="retry-working-copy-btn"
                         onClick={() => void workingCopyQuery.refetch()}
                       >
@@ -1180,7 +1233,16 @@ export function ProjectDesignsScreen({
                     <h3>Linaje de revisiones inmutables</h3>
                   </div>
                   <span className="pd-lineage-count">
-                    {lineage.length} {lineage.length === 1 ? 'publicación' : 'publicaciones'}{' '}
+                    {/* #1197 P0: durante carga/fallo el total es desconocido —
+                        nunca «0 publicaciones» fabricado. */}
+                    {revisionsQuery.isLoading || revisionsRequestFailed ? (
+                      '—'
+                    ) : (
+                      <>
+                        {lineage.length}{' '}
+                        {lineage.length === 1 ? 'publicación' : 'publicaciones'}{' '}
+                      </>
+                    )}
                     {revisionsBackgroundRefresh && <RefreshingMark testId="revisions-refreshing" />}
                   </span>
                 </div>
@@ -1201,7 +1263,7 @@ export function ProjectDesignsScreen({
                     </div>
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="btn"
                       data-testid="retry-revisions-btn"
                       onClick={() => void revisionsQuery.refetch()}
                     >
@@ -1218,13 +1280,13 @@ export function ProjectDesignsScreen({
                     <div>
                       <strong>No se pudo actualizar el linaje de revisiones.</strong>
                       <p>
-                        La última respuesta conocida estaba vacía; intenta nuevamente antes de
+                        La última respuesta conocida estaba vacía; probá de nuevo antes de
                         asumir que no hay publicaciones.
                       </p>
                     </div>
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="btn"
                       data-testid="retry-revisions-btn"
                       onClick={() => void revisionsQuery.refetch()}
                     >
@@ -1239,7 +1301,7 @@ export function ProjectDesignsScreen({
                     </p>
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="btn"
                       data-testid="no-revisions-open-sketchup-btn"
                       onClick={() => void handleOpenInSketchUp()}
                       disabled={isPreparingDraftUnits}
@@ -1262,7 +1324,7 @@ export function ProjectDesignsScreen({
                         </span>
                         <button
                           type="button"
-                          className="btn btn-sm btn-secondary"
+                          className="btn btn--small"
                           data-testid="retry-revisions-btn"
                           onClick={() => void revisionsQuery.refetch()}
                         >
@@ -1295,7 +1357,7 @@ export function ProjectDesignsScreen({
                               aria-current={isSelected ? 'step' : undefined}
                               data-testid={`revision-node-R${node.revisionNumber}`}
                             >
-                              <div className="pd-lineage-node__top">
+                              <span className="pd-lineage-node__top">
                                 <span className="pd-lineage-node__badge">R{node.revisionNumber}</span>
                                 <span
                                   className={`status-badge ${
@@ -1308,15 +1370,15 @@ export function ProjectDesignsScreen({
                                 >
                                   {statusLabel}
                                 </span>
-                              </div>
-                              <div className="pd-lineage-node__source">{sourceLabel}</div>
-                              <div className="pd-lineage-node__date">
+                              </span>
+                              <span className="pd-lineage-node__source">{sourceLabel}</span>
+                              <span className="pd-lineage-node__date">
                                 {formatWhen(node.revision.created_at)}
-                              </div>
+                              </span>
                               {node.revision.created_by_display_name && (
-                                <div className="pd-lineage-node__author">
+                                <span className="pd-lineage-node__author">
                                   {node.revision.created_by_display_name}
-                                </div>
+                                </span>
                               )}
                             </button>
                             {index < lineage.length - 1 && (
@@ -1367,7 +1429,7 @@ export function ProjectDesignsScreen({
                 </p>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="btn"
                   data-testid="retry-revision-detail-btn"
                   onClick={() => void revisionDetailQuery.refetch()}
                 >
@@ -1376,7 +1438,7 @@ export function ProjectDesignsScreen({
               </div>
             </div>
           ) : selectedRevisionDetail ? (
-            <div className="pd-inspector" data-testid="revision-inspector">
+            <div className="pd-inspector" id="design-alternatives-panel" data-testid="revision-inspector">
 
               <div className="pd-inspector__header">
                 <div>
@@ -1442,7 +1504,7 @@ export function ProjectDesignsScreen({
                       <span>Estado de liberación no disponible</span>
                       <button
                         type="button"
-                        className="btn btn-sm btn-secondary"
+                        className="btn btn--small"
                         data-testid="retry-releases-btn"
                         onClick={() => void releasesQuery.refetch()}
                       >
@@ -1470,7 +1532,7 @@ export function ProjectDesignsScreen({
                       </span>
                       <button
                         type="button"
-                        className="btn btn-sm btn-secondary"
+                        className="btn btn--small"
                         data-testid="retry-revision-detail-btn"
                         onClick={() => void revisionDetailQuery.refetch()}
                       >
@@ -1544,7 +1606,7 @@ export function ProjectDesignsScreen({
                           {canMutate && previewHealth !== null && (
                             <button
                               type="button"
-                              className="btn btn-secondary"
+                              className="btn"
                               onClick={() => void handleOpenInSketchUp()}
                               disabled={isPreparingDraftUnits}
                               data-testid="preview-recovery-open-sketchup-btn"
@@ -1573,7 +1635,7 @@ export function ProjectDesignsScreen({
                           <span>No se pudo autorizar la vista previa.</span>
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn"
                             onClick={() => void previewGrantQuery.refetch()}
                           >
                             Reintentar acceso
@@ -1589,7 +1651,7 @@ export function ProjectDesignsScreen({
                           <span>El servidor devolvió un enlace no válido para la vista previa.</span>
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn"
                             onClick={() => void previewGrantQuery.refetch()}
                           >
                             Solicitar nuevo acceso
@@ -1605,7 +1667,7 @@ export function ProjectDesignsScreen({
                           <span>No se pudo cargar la imagen de vista previa.</span>
                           <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn"
                             onClick={() => {
                               setPreviewLoadError(false);
                               void previewGrantQuery.refetch();
@@ -1641,7 +1703,11 @@ export function ProjectDesignsScreen({
                     <div className="pd-card__header">
                       <div className="pd-card__title">
                         <FileText size={18} />
-                        <h3>Artefactos publicados ({artifacts.length})</h3>
+                        {/* #1197 P0: durante la carga el total es desconocido. */}
+                        <h3>
+                          Artefactos publicados
+                          {artifactsQuery.isLoading ? '' : ` (${artifacts.length})`}
+                        </h3>
                         {artifactsBackgroundRefresh && <RefreshingMark testId="artifacts-refreshing" />}
                       </div>
                     </div>
@@ -1675,7 +1741,7 @@ export function ProjectDesignsScreen({
                           {canMutate && (
                             <button
                               type="button"
-                              className="btn btn-secondary"
+                              className="btn"
                               onClick={() => void handleOpenInSketchUp()}
                               disabled={isPreparingDraftUnits}
                               data-testid="artifact-recovery-open-sketchup-btn"
@@ -1699,7 +1765,7 @@ export function ProjectDesignsScreen({
                         </p>
                         <button
                           type="button"
-                          className="btn btn-sm btn-secondary"
+                          className="btn btn--small"
                           data-testid="retry-artifacts-btn"
                           onClick={() => void artifactsQuery.refetch()}
                         >
@@ -1725,7 +1791,7 @@ export function ProjectDesignsScreen({
                         <p>No se pudo verificar el estado de los artefactos de la revisión.</p>
                         <button
                           type="button"
-                          className="btn btn-secondary"
+                          className="btn"
                           data-testid="retry-artifacts-btn"
                           onClick={() => void artifactsQuery.refetch()}
                         >
@@ -1744,10 +1810,10 @@ export function ProjectDesignsScreen({
                         >
                           <thead>
                             <tr>
-                              <th>Artefacto</th>
-                              <th>Tamaño</th>
-                              <th>Integridad</th>
-                              <th>Acción</th>
+                              <th scope="col">Artefacto</th>
+                              <th scope="col">Tamaño</th>
+                              <th scope="col">Integridad</th>
+                              <th scope="col">Acción</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1807,11 +1873,11 @@ export function ProjectDesignsScreen({
                                   <td>
                                     <button
                                       type="button"
-                                      className="btn btn-sm btn-secondary"
+                                      className="btn btn--small"
                                       disabled={isAuthorizing || !isHealthy}
                                       onClick={() => handleAuthorizeAndOpen(art.kind)}
                                       data-testid={`download-artifact-${art.kind}`}
-                                      aria-label={actionLabel}
+                                      aria-label={`${isAuthorizing ? 'Autorizando' : 'Acceder'} — ${actionLabel}`}
                                     >
                                       {isAuthorizing ? (
                                         <RefreshCw size={14} className="spin" />
@@ -1998,12 +2064,12 @@ export function ProjectDesignsScreen({
               </div>
             )}
 
-            <div className="form-group">
+            <div className="pd-form-group">
               <label htmlFor="new-design-name">Nombre de la alternativa</label>
               <input
                 id="new-design-name"
                 type="text"
-                className="form-control"
+                className="pd-form-input"
                 placeholder="Ej. Cocina lineal sin alacenas"
                 value={newDesignName}
                 onChange={(e) => setNewDesignName(e.target.value)}
@@ -2013,10 +2079,10 @@ export function ProjectDesignsScreen({
               />
             </div>
 
-            <div className="modal-actions">
+            <div className="pd-modal-actions">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn"
                 disabled={isSubmittingDesign}
                 onClick={() => setIsCreatingDesign(false)}
               >
@@ -2024,7 +2090,7 @@ export function ProjectDesignsScreen({
               </button>
               <button
                 type="submit"
-                className="btn btn-primary"
+                className="btn btn--primary"
                 disabled={isSubmittingDesign}
                 data-testid="submit-create-design"
               >

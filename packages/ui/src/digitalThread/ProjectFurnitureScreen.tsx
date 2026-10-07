@@ -437,14 +437,14 @@ export function ProjectFurnitureScreen({
         secondaryActions={
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {onBack ? (
-              <button type="button" className="btn btn--secondary" onClick={onBack}>
+              <button type="button" className="btn" onClick={onBack}>
                 Volver a la obra
               </button>
             ) : null}
             {onOpenDesigns && (
               <button
                 type="button"
-                className="btn btn--secondary"
+                className="btn"
                 data-testid="open-designs-btn"
                 onClick={() =>
                   onOpenDesigns({
@@ -547,7 +547,7 @@ export function ProjectFurnitureScreen({
               {onOpenDesigns ? (
                 <button
                   type="button"
-                  className="btn btn--secondary btn--sm"
+                  className="btn btn--small"
                   data-testid="pf-goto-designs-btn"
                   onClick={() => onOpenDesigns({ designId: null, revisionId: null })}
                 >
@@ -567,7 +567,7 @@ export function ProjectFurnitureScreen({
               {onOpenDesigns ? (
                 <button
                   type="button"
-                  className="btn btn--secondary btn--sm"
+                  className="btn btn--small"
                   data-testid="pf-create-design-btn"
                   onClick={() => onOpenDesigns({ designId: null, revisionId: null })}
                 >
@@ -754,7 +754,7 @@ export function ProjectFurnitureScreen({
                         <td>
                           <button
                             type="button"
-                            className="btn btn--secondary btn--sm"
+                            className="btn btn--small"
                             aria-label={
                               row.unitProvenanceLabel
                                 ? `Ver detalle de ${row.label} (${row.unitProvenanceLabel.toLowerCase()})`
