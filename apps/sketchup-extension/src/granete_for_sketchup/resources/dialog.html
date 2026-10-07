@@ -552,24 +552,36 @@
                Design shows the durable authoring defaults from the working
                copy (never the session projectDefaultMaterials). Rendering
                lives in js/granete-design-inspector.js. -->
-          <div id="inspector-design-view" class="card" style="display: none;">
-            <div class="card-header-row">
-              <div>
-                <h2 style="font-size: var(--text-md); margin: 0;">Diseño</h2>
-                <p id="design-inspector-design-name" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0;"></p>
+          <div id="inspector-design-view" style="display: none;">
+            <!-- #1198-inspector: three sibling cards — identidad del diseño,
+                 Acabados del diseño, Herrajes del diseño — el mismo ritmo
+                 visual del Inspector con mueble seleccionado. -->
+            <div class="card" style="margin-bottom: var(--space-3);">
+              <div class="card-header-row">
+                <div>
+                  <h2 style="font-size: var(--text-md); margin: 0;">Diseño</h2>
+                  <p id="design-inspector-design-name" class="subhead" style="font-size: var(--text-xs); margin: var(--space-1) 0 0;"></p>
+                </div>
+                <div class="badges-column">
+                  <span class="status-badge neutral">Diseño general</span>
+                </div>
               </div>
-              <div class="badges-column">
-                <span class="status-badge neutral">Diseño general</span>
+              <div class="design-insp-context-box">
+                <span class="subhead" style="font-size: var(--text-xs); margin: 0;">Proyecto: <strong id="design-inspector-project-name" style="color: var(--text-primary);"></strong></span>
               </div>
             </div>
-            <div class="design-insp-context-box">
-              <span class="subhead" style="font-size: var(--text-xs); margin: 0;">Proyecto: <strong id="design-inspector-project-name" style="color: var(--text-primary);"></strong></span>
+
+            <div class="card" style="margin-bottom: var(--space-3);">
+              <div class="card-title">Acabados del diseño</div>
+              <div id="design-inspector-body" style="margin-top: var(--space-2);"></div>
+              <button id="design-inspector-retry" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
             </div>
-            <p class="presets-block-label" style="margin-top: var(--space-3);">Acabados del diseño</p>
-            <div id="design-inspector-body"></div>
-            <p class="presets-block-label" id="design-inspector-hardware-label" style="margin-top: var(--space-3); display: none;">Herrajes del diseño</p>
-            <div id="design-inspector-hardware-body" style="display: none;"></div>
-            <button id="design-inspector-retry" class="btn btn-secondary" style="display: none; width: 100%; margin-top: var(--space-2);">Reintentar</button>
+
+            <div class="card" id="design-inspector-hardware-card" style="display: none; margin-bottom: var(--space-3);">
+              <div class="card-title">Herrajes del diseño</div>
+              <div id="design-inspector-hardware-body" style="margin-top: var(--space-2);"></div>
+            </div>
+
             <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
                  PUT with the client token; items and item modes untouched) -->
             <div id="design-inspector-footer" style="display: none; margin-top: var(--space-3);">

@@ -86,7 +86,7 @@
 
   var view = null;
   var bodyEl = null;
-  var hardwareLabelEl = null;
+  var hardwareCardEl = null;
   var hardwareBodyEl = null;
   var designNameEl = null;
   var projectNameEl = null;
@@ -100,7 +100,7 @@
     if (!view) {
       view = document.getElementById("inspector-design-view");
       bodyEl = document.getElementById("design-inspector-body");
-      hardwareLabelEl = document.getElementById("design-inspector-hardware-label");
+      hardwareCardEl = document.getElementById("design-inspector-hardware-card");
       hardwareBodyEl = document.getElementById("design-inspector-hardware-body");
       designNameEl = document.getElementById("design-inspector-design-name");
       projectNameEl = document.getElementById("design-inspector-project-name");
@@ -789,12 +789,11 @@
     note.textContent = "Estos valores se usarán como defaults del Diseño.";
     bodyEl.appendChild(note);
 
-    // #1198-inspector: "Herrajes del diseño" — its own card section, only
-    // when hardware group defaults exist in the design.
-    if (hardwareLabelEl) hardwareLabelEl.style.display = hardwareRoles.length > 0 ? "block" : "none";
+    // #1198-inspector: "Herrajes del diseño" — its own card, only when
+    // hardware group defaults exist in the design.
+    if (hardwareCardEl) hardwareCardEl.style.display = hardwareRoles.length > 0 ? "block" : "none";
     if (hardwareBodyEl) {
       hardwareBodyEl.innerHTML = "";
-      hardwareBodyEl.style.display = hardwareRoles.length > 0 ? "block" : "none";
       for (var h = 0; h < hardwareRoles.length; h++) {
         hardwareBodyEl.appendChild(renderRow(hardwareRoles[h], state.defaults[hardwareRoles[h]], true));
       }
