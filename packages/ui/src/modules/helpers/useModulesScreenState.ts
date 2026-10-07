@@ -23,6 +23,7 @@ import type {
   OptionGroup,
   Structure,
 } from '@granete/domain';
+import { findHardwarePlacementsWithoutIdentity } from '@granete/domain';
 import {
   UNCATEGORIZED_FILTER,
   canPlaceCategory,
@@ -590,6 +591,17 @@ export function useModulesScreenState({
       } else if (!line.hardwareId.trim()) {
         return 'Cada herraje fijo necesita un herraje del catálogo.';
       }
+    }
+
+    // #1147: un placement de componentes sin identidad (ni grupo ni herraje)
+    // nunca resuelve — el guardado lo bloquea y el tab Componentes lo muestra.
+    const identityIssues = findHardwarePlacementsWithoutIdentity(draft.components);
+    if (identityIssues.length > 0) {
+      return (
+        `Hay un herraje posicionado sin identidad en componentes ` +
+        `(pieza ${identityIssues[0]!.componentIndex + 1}, herraje ` +
+        `${identityIssues[0]!.placementIndex + 1}): elegí grupo de opciones o herraje específico.`
+      );
     }
 
     return null;

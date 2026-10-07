@@ -80,6 +80,82 @@ describe('AgregadosScreen — delete confirmation (S1 #1009)', () => {
   });
 });
 
+describe('AgregadosScreen — guardado con placement sin identidad (#1147)', () => {
+  afterEach(cleanDraftStorage);
+
+  const brokenAgregado: Agregado = {
+    id: 'agr-broken',
+    code: 'AGR-BROKEN',
+    name: 'Puerta Rota',
+    externalDims: { width: 600, height: 2000, depth: 18 },
+    components: [
+      {
+        componentId: 'comp-1',
+        quantity: 1,
+        overrides: {
+          hardwarePlacements: [
+            { anchorFace: 'front', relativePosition: { xMm: 10, yMm: 20 } },
+          ],
+        },
+      },
+    ],
+    hardwareLines: [],
+  };
+
+  it('blocks the save, names the piece and jumps to the Herrajes tab', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn(() => Promise.resolve());
+    renderScreen({ agregados: [brokenAgregado], openAgregadoId: 'agr-broken', onUpdate, catalogComponents: [
+      { id: 'comp-1', code: 'AGR-PUERTA', name: 'Puerta', placement: 'interno', geometry: { kind: 'rectangular_board', lengthMm: 100, widthMm: 100, thicknessMm: 18 }, defaultEdges: [], optionRoles: [], active: true },
+    ] });
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    await screen.findByTestId('agregado-editor-page');
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    // Blocked BEFORE any backend call, with the offending piece named and
+    // the Herrajes tab surfaced (the invalid row is visible in its editor).
+    expect(onUpdate).not.toHaveBeenCalled();
+    const error = screen.getByTestId('form-error');
+    expect(error.textContent).toContain('AGR-PUERTA — Puerta');
+    expect(error.textContent).toContain('sin identidad');
+    expect(screen.getByTestId('agregado-hardware-placements')).toBeTruthy();
+    expect(screen.getByTestId('instance-hardware-placement-0-hw-pc-0-identity-error')).toBeTruthy();
+
+    // The editor stays open: nothing was stored.
+    expect(screen.getByTestId('agregado-editor-page')).toBeTruthy();
+  });
+
+  it('saves normally once every placement carries an identity', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn(() => Promise.resolve());
+    const fixed: Agregado = {
+      ...brokenAgregado,
+      components: [
+        {
+          componentId: 'comp-1',
+          quantity: 1,
+          overrides: {
+            hardwarePlacements: [
+              { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 10, yMm: 20 } },
+            ],
+          },
+        },
+      ],
+    };
+    renderScreen({ agregados: [fixed], openAgregadoId: 'agr-broken', onUpdate, catalogComponents: [
+      { id: 'comp-1', code: 'AGR-PUERTA', name: 'Puerta', placement: 'interno', geometry: { kind: 'rectangular_board', lengthMm: 100, widthMm: 100, thicknessMm: 18 }, defaultEdges: [], optionRoles: [], active: true },
+    ] });
+
+    await user.click(screen.getByTestId('agregado-detail-edit'));
+    await screen.findByTestId('agregado-editor-page');
+    await user.click(screen.getByTestId('agregado-save-btn'));
+
+    await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('agregado-editor-page')).toBeNull();
+  });
+});
+
 describe('AgregadosScreen — editor header identity (S2 #1009)', () => {
   afterEach(cleanDraftStorage);
 

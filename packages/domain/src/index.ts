@@ -289,6 +289,8 @@ export {
 export {
   resolveHardwarePlacement,
   resolvePlacementHardwareId,
+  hardwarePlacementIdentityError,
+  findHardwarePlacementsWithoutIdentity,
   normalizeHardwarePreview,
   snapValue,
   convertWorldDeltaToFaceMm,
@@ -297,6 +299,7 @@ export {
   type NormalizedHardwarePreview,
   type PlacementChoiceMap,
   type PlacementHardwareResolution,
+  type HardwarePlacementIdentityIssue,
 } from './hardwarePlacement';
 export {
   HARDWARE_FINISHES,

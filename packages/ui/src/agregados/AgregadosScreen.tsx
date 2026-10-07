@@ -21,6 +21,7 @@ import type {
   MaterialBoard,
   OptionGroup,
 } from '@granete/domain';
+import { findHardwarePlacementsWithoutIdentity } from '@granete/domain';
 import {
   EntityEditorLayout,
   ConfirmDialog,
@@ -203,6 +204,21 @@ export function AgregadosScreen({
     if (codeConflict) {
       setError(`El código "${draft.code}" ya está en uso.`);
       setEditorTab('general');
+      return;
+    }
+
+    // #1147: a placement without identity (ni hardwareId ni optionRole) nunca
+    // resuelve — guardarla en silencio fue cómo AGR-PUE-IZQ quedó rota. El
+    // guardado bloquea con la pieza señalada y el tab Herrajes a la vista.
+    const identityIssues = findHardwarePlacementsWithoutIdentity(draft.components);
+    if (identityIssues.length > 0) {
+      const first = draft.components[identityIssues[0]!.componentIndex];
+      const info = catalogComponents.find((c) => c.id === first?.componentId);
+      const piece = info ? `${info.code} — ${info.name}` : `pieza ${identityIssues[0]!.componentIndex + 1}`;
+      setError(
+        `Herrajes posicionados sin identidad en ${piece}: elegí grupo de opciones o herraje específico.`,
+      );
+      setEditorTab('hardware');
       return;
     }
 
