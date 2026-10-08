@@ -21,18 +21,22 @@ import (
 func runMigrateOpeningGrips(args []string) {
 	fs := flag.NewFlagSet("migrate-opening-grips", flag.ExitOnError)
 	orgID := fs.String("org", "", "organization id (required)")
-	mappingPath := fs.String("mapping", "", "declared conversion mapping JSON file (required)")
+	mappingPath := fs.String("mapping", "", "declared conversion mapping JSON file (optional: sin registros de la familia no hay nada que decidir)")
 	apply := fs.Bool("apply", false, "write the conversions (default: dry-run report)")
 	reportPath := fs.String("report", "", "optional path for the JSON report artifact")
 	_ = fs.Parse(args)
 
-	if *orgID == "" || *mappingPath == "" {
-		fatal(fmt.Errorf("--org and --mapping are required"))
+	if *orgID == "" {
+		fatal(fmt.Errorf("--org is required"))
 	}
 
-	entries, err := loadOpeningGripMapping(*mappingPath)
-	if err != nil {
-		fatal(err)
+	var entries []application.OpeningGripMappingEntry
+	if *mappingPath != "" {
+		loaded, err := loadOpeningGripMapping(*mappingPath)
+		if err != nil {
+			fatal(err)
+		}
+		entries = loaded
 	}
 
 	store, closeStore, err := openStore()

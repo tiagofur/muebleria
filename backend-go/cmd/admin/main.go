@@ -87,7 +87,7 @@ func usage() {
   admin seed [--org <slug>]
   admin clean-media [--apply]
   admin clean-demo-data [--apply] [--org <slug>]   (borra el catálogo demo del seed)
-  admin migrate-opening-grips --org <uuid> --mapping <archivo> [--apply] [--report <archivo>]
+  admin migrate-opening-grips --org <uuid> [--mapping <archivo>] [--apply] [--report <archivo>]
                    (migra jaladera-gola-* al modelo de grip; dry-run por defecto)
 
 Environment:
