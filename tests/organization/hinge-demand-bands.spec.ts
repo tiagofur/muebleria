@@ -150,6 +150,9 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
       ],
     });
 
+    // La parte FRENTE de la puerta exige la elección de material del rol —
+    // sin ella el estado comercial no produce revisión (fail-closed correcto).
+    const frenteMaterial = catalog.materials.find((m) => m.active) ?? catalog.materials[0];
     const now = new Date().toISOString();
     await repository.saveProject({
       id: HWG_PROJECT,
@@ -162,7 +165,12 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
       createdAt: now,
       updatedAt: now,
       items: [
-        { id: HWG_TALL_LINE, moduleId: HWG_TALL_MODULE, quantity: 1, optionChoices: {} },
+        {
+          id: HWG_TALL_LINE,
+          moduleId: HWG_TALL_MODULE,
+          quantity: 1,
+          optionChoices: { FRENTE: frenteMaterial.id },
+        },
         { id: HWG_FLAT_LINE, moduleId: HWG_FLAT_MODULE, quantity: 1, optionChoices: {} },
       ],
     });
