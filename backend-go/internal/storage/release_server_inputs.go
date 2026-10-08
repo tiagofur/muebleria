@@ -48,6 +48,30 @@ type ReleaseServerInputsReader interface {
 // ReleaseServerResolveInputs delegates to the shared orchestration over the
 // store itself: inputs pinned to the CURRENT published release (the implicit
 // contract pre-#1102, kept for callers that do not declare a pin).
+// GetFactoryConstructionPolicy parses the organization's active standard-library
+// overlay into the engine policy (#1078): nil = no active overlay and the
+// library ladder governs. The ONE load+parse contract behind the live catalog,
+// the release freeze and the catalog API read — a broken overlay fails closed
+// everywhere the same way.
+func (s *PostgresStore) GetFactoryConstructionPolicy(ctx context.Context) (*engine.FactoryConstructionPolicy, error) {
+	orgUUID, err := uuid.Parse(OrgFromCtx(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("factory construction policy org: %w", err)
+	}
+	overlay, err := s.GetActiveOverlayByLibrary(ctx, orgUUID, uuid.MustParse(domain.GraneteStandardLibraryID))
+	if err != nil {
+		if errors.Is(err, ErrOverlayNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("factory construction policy overlay: %w", err)
+	}
+	policy, err := engine.ParseFactoryConstructionPolicy(overlay.Overrides)
+	if err != nil {
+		return nil, fmt.Errorf("factory construction policy: %w", err)
+	}
+	return policy, nil
+}
+
 func (s *PostgresStore) ReleaseServerResolveInputs(ctx context.Context, orgID string) (*engine.ReleaseServerInputs, error) {
 	return ReleaseServerInputsFromStore(ctx, s, orgID)
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/tiagofur/muebles-backend/internal/auth"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
@@ -476,6 +477,9 @@ type stubStore struct {
 	mfaRevokeFn        func(context.Context, storage.RevokeMFAFactorCommand) (*domain.MFAFactor, error)
 	mfaRegenFn         func(context.Context, storage.RegenerateMFARecoveryCommand) ([]string, error)
 	mfaStepUpFn        func(context.Context, storage.MFAStepUpCommand) (*storage.MFAStepUpResult, error)
+	// #1218: factory construction policy read (nil = library ladder).
+	constructionPolicy    *engine.FactoryConstructionPolicy
+	constructionPolicyErr error
 }
 
 func (s *stubStore) stubNotUsed(name string) {

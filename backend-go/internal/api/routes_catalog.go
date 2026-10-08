@@ -16,6 +16,10 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	mux.Handle("PUT /api/customers/{id}", authMW(http.HandlerFunc(server.HandleCustomerByID)))
 	mux.Handle("DELETE /api/customers/{id}", authMW(http.HandlerFunc(server.HandleCustomerByID)))
 
+	// Catálogo: Política de construcción de fábrica (#1078/#1218) — lectura
+	// del overlay parseado; nil = escalera de librería.
+	mux.Handle("GET /api/catalog/construction-policy", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleConstructionPolicy))))
+
 	// Catálogo: Tableros
 	mux.Handle("GET /api/catalog/materials", authMW(http.HandlerFunc(server.HandleMaterials)))
 	mux.Handle("POST /api/catalog/materials", authMW(http.HandlerFunc(server.HandleMaterials)))

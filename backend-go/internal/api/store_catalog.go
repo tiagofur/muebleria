@@ -2,12 +2,18 @@ package api
 
 import (
 	"context"
+
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 // Contrato: catálogo comercial — tableros, ambientes, categorías, cANTON,
 // edge bands, herrajes, perfiles HW (#913) y side assignments (#915).
 type CatalogStore interface {
+	// Catalog: the factory construction policy (#1078/#1218) — the parsed
+	// standard-library overlay; nil when no active overlay governs.
+	GetFactoryConstructionPolicy(ctx context.Context) (*engine.FactoryConstructionPolicy, error)
+
 	// Catalog: materials
 	ListMaterialBoards(ctx context.Context) ([]domain.MaterialBoard, error)
 	GetMaterialBoardByID(ctx context.Context, id string) (*domain.MaterialBoard, error)

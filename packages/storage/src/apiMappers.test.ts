@@ -1308,6 +1308,59 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
   });
 
   it('catalogFromApi composes ambientMaterials from the part payload', () => {
+
+describe('catalogFromApi — construcción policy (#1218)', () => {
+  it('mapea la política de fábrica con surge tri-estado y filtrado de excepciones vacías', () => {
+    const cat = catalogFromApi({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      construction_policy: {
+        doorHingeDemand: {
+          optionRole: 'BISAGRA',
+          bands: [
+            { upToHeightMm: 900, hinges: 2 },
+            { upToHeightMm: 2400, hinges: 5 },
+          ],
+          widthSurgeOverMm: null,
+        },
+        componentOverrides: {
+          'comp-puerta': { hingeDemand: { bands: [{ upToHeightMm: 2400, hinges: 3 }] } },
+          'comp-vacio': {},
+        },
+      },
+    });
+    expect(cat.constructionPolicy?.doorHingeDemand?.bands).toEqual([
+      { upToHeightMm: 900, hinges: 2 },
+      { upToHeightMm: 2400, hinges: 5 },
+    ]);
+    // null = desactivado (no hereda el surge de librería).
+    expect(cat.constructionPolicy?.doorHingeDemand?.widthSurgeOverMm).toBeNull();
+    expect(cat.constructionPolicy?.componentOverrides?.['comp-puerta']?.hingeDemand?.bands).toEqual([
+      { upToHeightMm: 2400, hinges: 3 },
+    ]);
+    // Una excepción sin política útil se descarta, no se inventa.
+    expect(cat.constructionPolicy?.componentOverrides?.['comp-vacio']).toBeUndefined();
+  });
+
+  it('sin política en el payload el catálogo no la inventa', () => {
+    const cat = catalogFromApi({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+    });
+    expect(cat.constructionPolicy).toBeUndefined();
+  });
+});
+
     const cat = catalogFromApi({
       materials: [],
       edges: [],

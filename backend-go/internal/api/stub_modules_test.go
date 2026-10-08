@@ -70,6 +70,13 @@ func (s *stubStore) ListModules(context.Context) ([]domain.Module, error) {
 	return s.listModules, s.listModulesErr
 }
 
+func (s *stubStore) GetFactoryConstructionPolicy(context.Context) (*engine.FactoryConstructionPolicy, error) {
+	if s.constructionPolicyErr != nil {
+		return nil, s.constructionPolicyErr
+	}
+	return s.constructionPolicy, nil
+}
+
 func (s *stubStore) GetFullCatalog(context.Context) (domain.Catalog, error) {
 	if s.catalogError != nil {
 		return domain.Catalog{}, s.catalogError

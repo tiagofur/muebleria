@@ -454,6 +454,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       ambientMaterials,
       ambientCategories,
       materialCategories,
+      constructionPolicy,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -471,6 +472,10 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       fetchJson('/catalog/ambient-categories').catch(() => []),
       // F142: subgrupos de tableros. `.catch(() => [])` = backend viejo.
       fetchJson('/catalog/material-categories').catch(() => []),
+      // #1218: política de construcción de fábrica (overlay parseado).
+      // `.catch(() => null)` = backend viejo — previews con la escalera de
+      // librería, jamás un fallo de catálogo por la familia nueva.
+      fetchJson('/catalog/construction-policy').catch(() => null),
     ]);
 
     const catalog = catalogFromApi({
@@ -487,6 +492,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       ambientMaterials,
       ambientCategories,
       materialCategories,
+      constructionPolicy,
     });
     for (const mod of catalog.modules) {
       if (typeof mod.version === 'number' && mod.version > 0) {
