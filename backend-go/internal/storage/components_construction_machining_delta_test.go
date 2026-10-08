@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 	"fmt"
-	"time"
 	"testing"
+	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 	"github.com/tiagofur/muebles-backend/internal/domain/engine"
@@ -45,21 +45,25 @@ func TestComponentConstructionGovernsMachiningDelta(t *testing.T) {
 			}
 			return store.CreateComponent(txCtx, &side)
 		})
-		loaded, err := store.ListComponents(context.Background())
-		if err != nil {
-			t.Fatalf("list components: %v", err)
-		}
-		byCode := map[string]domain.Component{}
-		for _, comp := range loaded {
-			if comp.Code == shelfCode || comp.Code == shelfCode+"-LAT" {
-				byCode[comp.Code] = comp
+		var shelfLoaded, sideLoaded domain.Component
+		withinInitialOrganization(t, store, func(txCtx context.Context) error {
+			loaded, err := store.ListComponents(txCtx)
+			if err != nil {
+				return err
 			}
+			for _, comp := range loaded {
+				if comp.Code == shelfCode {
+					shelfLoaded = comp
+				}
+				if comp.Code == shelfCode+"-LAT" {
+					sideLoaded = comp
+				}
+			}
+			return nil
+		})
+		if shelfLoaded.ID == "" || sideLoaded.ID == "" {
+			t.Fatalf("persisted components not loaded (shelf=%q side=%q)", shelfLoaded.ID, sideLoaded.ID)
 		}
-		shelfLoaded, ok := byCode[shelfCode]
-		if !ok {
-			t.Fatalf("persisted shelf %s not loaded", shelfCode)
-		}
-		sideLoaded := byCode[shelfCode+"-LAT"]
 		if withConstruction && (shelfLoaded.Construction == nil || shelfLoaded.Construction.JoinerySystemID != "screw-only") {
 			t.Fatalf("persisted construction block did not round-trip: %+v", shelfLoaded.Construction)
 		}
@@ -73,7 +77,7 @@ func TestComponentConstructionGovernsMachiningDelta(t *testing.T) {
 	}
 
 	type resolvedPack struct {
-		camHoles  int
+		camHoles   int
 		dowelHoles int
 	}
 	resolve := func(catalog domain.Catalog) resolvedPack {
