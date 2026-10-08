@@ -241,7 +241,11 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
     const revisions = await client.listProjectQuoteRevisions(owner.token, HWG_PROJECT);
     const frozen = revisions.find((r) => r.id === q1.id);
     expect(frozen?.status).toBe('draft');
-    const tallItem = frozen?.items.find((i) => i.furnitureInstanceId === HWG_TALL_LINE);
+    // La instancia congelada lleva su propio furnitureInstanceId; el ítem
+    // alto se reconoce por su choice FRENTE (única en la obra).
+    const tallItem = frozen?.items.find(
+      (i) => i.materialChoices['FRENTE'] === frenteMaterialId,
+    );
     expect(tallItem?.materialChoices['BISAGRA']).toBe(HWG_BLUM);
   });
 });
