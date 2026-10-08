@@ -242,3 +242,36 @@ func TestMigrateOpeningGripsIdempotentRerun(t *testing.T) {
 		t.Fatalf("an inactive record must not deactivate again: %v", report.Deactivated)
 	}
 }
+
+func TestMigrateOpeningGripsZeroRecordsReportsZeros(t *testing.T) {
+	// An organization WITHOUT the legacy family has nothing to map: the run
+	// succeeds with zero categories and the mapping stays informational —
+	// this is the real first-run scenario for a clean database.
+	store := &openingGripStubStore{
+		hardwares: []domain.Hardware{
+			{ID: "hw-9", Code: "HER-JAL-INOX", Active: true, Version: 1},
+		},
+	}
+	entries := []OpeningGripMappingEntry{
+		{LegacyCode: "jaladera-gola-256", ProfileCode: "GOLA-256"},
+	}
+
+	report, err := MigrateOpeningGrips(context.Background(), store, openingGripOrg(), entries, false)
+	if err != nil {
+		t.Fatalf("zero-record run must not fail on unmatched mappings: %v", err)
+	}
+	if len(report.Records) != 0 {
+		t.Fatalf("records = %+v, want none", report.Records)
+	}
+	for _, category := range []string{OpeningGripMigrated, OpeningGripAlreadyCanonical, OpeningGripUnsupported, OpeningGripAmbiguous} {
+		if report.Categories[category] != 0 {
+			t.Fatalf("category %s = %d, want 0", category, report.Categories[category])
+		}
+	}
+	if len(report.UnmatchedMappings) != 1 {
+		t.Fatalf("the unused mapping entry must stay informational: %v", report.UnmatchedMappings)
+	}
+	if len(store.createdProfiles) != 0 || len(store.deactivated) != 0 {
+		t.Fatal("a zero-record run must not write anything")
+	}
+}

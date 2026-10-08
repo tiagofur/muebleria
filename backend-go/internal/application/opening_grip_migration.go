@@ -33,10 +33,12 @@ import (
 //
 // Fail-closed: a mapping entry pointing at a nonexistent profile code fails
 // the WHOLE run before any write (a stale mapping is a configuration error,
-// never a silent skip); an invalid mapping entry fails at load. The default
-// mode is a dry-run report; only apply writes, and it NEVER touches modules
-// — dimensions and BOM stay exactly as they are, changed only by the
-// canonical resolve when designs adopt the grip model.
+// never a silent skip) — but an organization WITHOUT family records has
+// nothing to map, so its run reports zero categories instead of failing; an
+// invalid mapping entry fails at load. The default mode is a dry-run
+// report; only apply writes, and it NEVER touches modules — dimensions and
+// BOM stay exactly as they are, changed only by the canonical resolve when
+// designs adopt the grip model.
 //
 // Deactivation ("authoring stops depending on jaladera-gola-*"): a legacy
 // option classified migrated/already_canonical with NO design override
@@ -241,7 +243,10 @@ func MigrateOpeningGrips(
 			report.UnmatchedMappings = append(report.UnmatchedMappings, entry.LegacyCode)
 		}
 	}
-	if len(report.UnmatchedMappings) > 0 {
+	// A stale mapping is a configuration error ONLY when the family exists:
+	// an organization without jaladera-gola-* records has nothing to map —
+	// the run reports zero categories and the entries stay informational.
+	if len(legacyRecords) > 0 && len(report.UnmatchedMappings) > 0 {
 		sort.Strings(report.UnmatchedMappings)
 		return OpeningGripMigrationReport{}, fmt.Errorf("el mapeo declara registros inexistentes en esta organización: %v — corregí el mapeo antes de migrar", report.UnmatchedMappings)
 	}
