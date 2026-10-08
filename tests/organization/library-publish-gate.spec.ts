@@ -164,18 +164,27 @@ test.describe.serial('Library publish gate (#1102 Slice C)', () => {
     const draft = await client.createStandardLibraryRelease(token, { version: v3 });
 
     // Romper la condición de compilación: sin perfiles activos no hay nada
-    // que congelar — el validate lo reporta y el publish rechaza. Se
-    // desactivan TODOS los activos: el stack puede compartir org con otros
-    // specs (y el compile es global, no por perfil del spec).
-    const activeProfiles = (await client.listHardwareProfiles(token)).filter((p) => p.active);
-    expect(activeProfiles.length).toBeGreaterThan(0);
-    for (const profile of activeProfiles) {
-      await client.deactivateHardwareProfile(token, profile.id, profile.version);
+    // que congelar — el validate lo reporta y el publish rechaza. La org es
+    // COMPARTIDA con specs de otros shards que corren en paralelo y pueden
+    // activar perfiles dentro de la ventana (p.ej. el auto-sanado de
+    // demanda por perfil): el par desactivar-TODOS + validar se reintenta
+    // acotadamente hasta observar el estado real de cero perfiles activos.
+    // El 422 sigue siendo la prueba — nunca un pass por cansancio.
+    let everSawActive = false;
+    let validation: Awaited<ReturnType<typeof client.validateStandardLibraryDraft>> | null = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const activeProfiles = (await client.listHardwareProfiles(token)).filter((p) => p.active);
+      everSawActive = everSawActive || activeProfiles.length > 0;
+      for (const profile of activeProfiles) {
+        await client.deactivateHardwareProfile(token, profile.id, profile.version);
+      }
+      validation = await client.validateStandardLibraryDraft(token, draft.id);
+      if (!validation.ok && !validation.compile.ok) break;
+      await new Promise((resolve) => setTimeout(resolve, 400));
     }
-
-    const validation = await client.validateStandardLibraryDraft(token, draft.id);
-    expect(validation.ok).toBe(false);
-    expect(validation.compile.ok).toBe(false);
+    expect(everSawActive).toBe(true);
+    expect(validation?.ok).toBe(false);
+    expect(validation?.compile.ok).toBe(false);
 
     await expectApiError(
       () => client.publishStandardLibraryRelease(token, draft.id),
