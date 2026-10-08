@@ -209,12 +209,18 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
 
     // Q1 congela la verdad comercial: 5 bisagras derivadas × $40 (banda de
     // la puerta 2100) + 1 × $12 (línea bulk del módulo sin puerta).
-    const q1 = await client.createInitialProjectQuoteRevision(
+    let q1;
+    try {
+      q1 = await client.createInitialProjectQuoteRevision(
       owner.token,
       HWG_PROJECT,
       { notes: '1078 — revisión inicial con banda' },
       'e2e1078-q1-create-20261007',
     );
+    } catch (err) {
+      const payload = (err as { payload?: unknown }).payload ?? err;
+      throw new Error(`Q1 rechazada: ${JSON.stringify(payload)}`);
+    }
     expect(q1.revisionNumber).toBe(1);
 
     await page.reload();
