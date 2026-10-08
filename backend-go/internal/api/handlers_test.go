@@ -480,6 +480,10 @@ type stubStore struct {
 	// #1218: factory construction policy read (nil = library ladder).
 	constructionPolicy    *engine.FactoryConstructionPolicy
 	constructionPolicyErr error
+	// #1130: opening profile catalog.
+	openingProfiles      []domain.OpeningProfile
+	openingProfileErr    error
+	createdOpeningProfile *domain.OpeningProfile
 }
 
 func (s *stubStore) stubNotUsed(name string) {

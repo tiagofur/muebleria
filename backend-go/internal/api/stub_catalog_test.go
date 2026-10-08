@@ -5,6 +5,7 @@ package api
 // las firmas son las de la sub-interface en store_catalog.go
 import (
 	"context"
+	"fmt"
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
 
@@ -199,5 +200,45 @@ func (s *stubStore) DeactivateHardware(_ context.Context, _ string, expectedVers
 	}
 	s.deactivateHardwareCalled = true
 	s.deactivateHardwareExpectedVer = expectedVersion
+	return nil
+}
+
+// #1130 — opening profile catalog stub.
+func (s *stubStore) ListOpeningProfiles(context.Context) ([]domain.OpeningProfile, error) {
+	if s.openingProfileErr != nil {
+		return nil, s.openingProfileErr
+	}
+	if s.openingProfiles != nil {
+		return s.openingProfiles, nil
+	}
+	return []domain.OpeningProfile{}, nil
+}
+
+func (s *stubStore) GetOpeningProfileByID(_ context.Context, id string) (*domain.OpeningProfile, error) {
+	for i := range s.openingProfiles {
+		if s.openingProfiles[i].ID == id {
+			return &s.openingProfiles[i], nil
+		}
+	}
+	return nil, fmt.Errorf("opening profile not found")
+}
+
+func (s *stubStore) CreateOpeningProfile(_ context.Context, profile *domain.OpeningProfile) error {
+	if s.openingProfileErr != nil {
+		return s.openingProfileErr
+	}
+	// El store real valida en el write boundary — el stub respeta el contrato.
+	if err := domain.ValidateOpeningProfile(*profile); err != nil {
+		return err
+	}
+	s.createdOpeningProfile = profile
+	return nil
+}
+
+func (s *stubStore) UpdateOpeningProfile(_ context.Context, _ string, _ int64, profile *domain.OpeningProfile) error {
+	return domain.ValidateOpeningProfile(*profile)
+}
+
+func (s *stubStore) DeactivateOpeningProfile(context.Context, string, int64) error {
 	return nil
 }
