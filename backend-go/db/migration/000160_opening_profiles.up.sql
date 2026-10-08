@@ -42,3 +42,26 @@ CREATE TABLE IF NOT EXISTS opening_profiles (
 );
 
 CREATE INDEX IF NOT EXISTS idx_opening_profiles_organization ON opening_profiles(organization_id, active, code);
+
+-- RLS: tenant-owned like every catalog family (000143 pattern) — the
+-- readiness proof fails closed on any protected table missing this armor.
+ALTER TABLE opening_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE opening_profiles FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY opening_profiles_read ON opening_profiles
+    FOR SELECT TO granete_app
+    USING (organization_id = app_current_organization_id());
+
+CREATE POLICY opening_profiles_write ON opening_profiles
+    FOR ALL TO granete_app
+    USING (organization_id = app_current_organization_id())
+    WITH CHECK (organization_id = app_current_organization_id());
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON opening_profiles TO granete_app;
+
+INSERT INTO rls_policy_inventory (table_name, classification, read_scope, write_scope, rationale)
+VALUES ('opening_profiles',
+    'tenant-owned',
+    'current-organization',
+    'current-organization',
+    'Opening profiles are the grip profile catalog (gola L/C, REACH…) with datasheet-backed geometry; strictly isolated by owning organization (#1130 / OPEN-FRONT)');
