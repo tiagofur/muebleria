@@ -275,3 +275,29 @@ func TestMigrateOpeningGripsZeroRecordsReportsZeros(t *testing.T) {
 		t.Fatal("a zero-record run must not write anything")
 	}
 }
+
+func TestMigrateOpeningGripsPrevalidatesTargetProfilesBeforeWriting(t *testing.T) {
+	// B1 (independent review): a nonexistent target ProfileCode must abort
+	// BEFORE any write even when an earlier record would have created a
+	// profile first — the old code aborted mid-loop leaving a partial run
+	// and the error return discarded the report.
+	store := &openingGripStubStore{
+		hardwares: []domain.Hardware{
+			{ID: "hw-a", Code: "jaladera-gola-a", Active: true, Version: 1},
+			{ID: "hw-b", Code: "jaladera-gola-b", Active: true, Version: 1},
+		},
+	}
+	entries := []OpeningGripMappingEntry{
+		{LegacyCode: "jaladera-gola-a", NewProfile: &OpeningGripNewProfile{Code: "GOLA-A", Name: "Gola A", Placements: []string{"top"}}},
+		{LegacyCode: "jaladera-gola-b", ProfileCode: "NO-EXISTE"},
+	}
+
+	_, err := MigrateOpeningGrips(context.Background(), store, openingGripOrg(), entries, true)
+	if err == nil || !strings.Contains(err.Error(), "no existe en la organización") {
+		t.Fatalf("the stale target must abort the run: %v", err)
+	}
+	if len(store.createdProfiles) != 0 || len(store.deactivated) != 0 {
+		t.Fatalf("the abort must happen BEFORE any write: created=%d deactivated=%d",
+			len(store.createdProfiles), len(store.deactivated))
+	}
+}
