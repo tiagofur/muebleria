@@ -250,6 +250,21 @@ func MigrateOpeningGrips(
 		sort.Strings(report.UnmatchedMappings)
 		return OpeningGripMigrationReport{}, fmt.Errorf("el mapeo declara registros inexistentes en esta organización: %v — corregí el mapeo antes de migrar", report.UnmatchedMappings)
 	}
+	// B1 (independent review): every DECLARED target profile must also exist
+	// BEFORE the write loop — a mid-list nonexistent ProfileCode used to
+	// abort AFTER earlier records had already written (and the error return
+	// discarded the report, leaving a partial run with no trace). Gated like
+	// the check above: an organization without the family has nothing to map.
+	if len(legacyRecords) > 0 {
+		for _, entry := range mappingByCode {
+			if strings.TrimSpace(entry.ProfileCode) == "" {
+				continue
+			}
+			if _, exists := profileByCode[strings.ToUpper(strings.TrimSpace(entry.ProfileCode))]; !exists {
+				return OpeningGripMigrationReport{}, fmt.Errorf("el mapeo de %q apunta al perfil %q que no existe en la organización", entry.LegacyCode, entry.ProfileCode)
+			}
+		}
+	}
 
 	sort.Slice(legacyRecords, func(i, j int) bool { return legacyRecords[i].Code < legacyRecords[j].Code })
 	for _, hw := range legacyRecords {
