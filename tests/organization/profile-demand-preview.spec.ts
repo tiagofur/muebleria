@@ -263,16 +263,8 @@ test.describe.serial('#989 — verdad comercial con demanda gobernada y preview 
     const { profileId: provisionedProfileId } = (await seeded.json()) as { profileId: string };
     expect(provisionedProfileId).toBeTruthy();
 
-    // 3. Governed cabinet + assignments (cara front del lateral izq, back del
-    // derecho — los mismos contactos que gobierna el perfil provisto).
+    // 3. Governed cabinet (las asignaciones van después del sanado de perfil).
     await seedGovernedCatalog(owner.token);
-    for (const [componentId, side] of [[PD_SIDE_L, 'front'], [PD_SIDE_R, 'back']] as const) {
-      const put = await authedFetch(owner.token, `/catalog/components/${componentId}/side-assignments`, {
-        method: 'PUT',
-        body: JSON.stringify({ side, profileId: provisionedProfileId }),
-      });
-      expect(put.ok, `assignment ${side}: ${put.status}`).toBe(true);
-    }
 
     // 4. Los costos del seed (números a mano, resueltos por código estable).
     const hardwareList = await (await authedFetch(owner.token, '/catalog/hardware', {})).json() as Array<{ id: string; code: string; cost_per_unit: number }>;
@@ -281,6 +273,32 @@ test.describe.serial('#989 — verdad comercial con demanda gobernada y preview 
     tarugoCost = byCode.get('HER-TAQ-8X30')?.cost_per_unit ?? 0;
     expect(minifixCost).toBeGreaterThan(0);
     expect(tarugoCost).toBeGreaterThan(0);
+
+    // Auto-sanado: specs previos del mismo shard comparten la org y pueden
+    // dejar TODOS los perfiles inactivos (library-publish-gate los desactiva
+    // y puede fallar antes de su recuperación; la desactivación es one-way —
+    // el PUT preserva el flag activo). La asignación exige un perfil activo:
+    // si el provisto no lo está, se crea uno mínimo. La prueba de no-invención
+    // no depende de la receta: sin dims colocadas no hay derivación que correr.
+    let assignmentProfileId = provisionedProfileId;
+    const provisionedProfile = await client.getHardwareProfile(owner.token, provisionedProfileId);
+    if (!provisionedProfile.active) {
+      const healed = await client.createHardwareProfile(owner.token, {
+        code: `PD-HEAL-${crypto.randomUUID().slice(0, 8)}`,
+        name: 'Perfil sanado para asignación',
+        revision: 'r1',
+        items: [{ hardwareId: byCode.get('HER-MIN-15')!.id, quantity: 1, applicationRole: 'cam' }],
+      });
+      assignmentProfileId = healed.id;
+    }
+
+    for (const [componentId, side] of [[PD_SIDE_L, 'front'], [PD_SIDE_R, 'back']] as const) {
+      const put = await authedFetch(owner.token, `/catalog/components/${componentId}/side-assignments`, {
+        method: 'PUT',
+        body: JSON.stringify({ side, profileId: assignmentProfileId }),
+      });
+      expect(put.ok, `assignment ${side}: ${put.status}`).toBe(true);
+    }
 
     // 5. Proyecto con demanda (dims explícitas: el contrato de skip del
     // resolve las exige) + proyecto de regresión sin joinery.
