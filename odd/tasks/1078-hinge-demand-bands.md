@@ -116,7 +116,14 @@ cantidad que la línea fija; cambia el origen/ID (`hingeband-*`), no el total.
       Catalog.constructionPolicy tipado), gate ui (puerta ⇒ grupo exigible,
       picker, estructura), 4 aserciones de engine.test a la realidad derivada,
       spec E2E navegador hinge-demand-bands.spec.ts (typecheck 0).
-- [x] T5 verificación: pnpm typecheck 0 errores; pnpm test workspace 0 (2
+- [x] T5 verificación: pnpm typecheck 0 errores; PR #1217 CI 22/22 VERDE.
+      Browser E2E en 5 iteraciones: la org gate NO trae materiales ni grupo
+      FRENTE (el spec los siembra — fail-closed correcto del snapshot sobre
+      label comercial de grupo consumido), y el ítem congelado se reconoce
+      por su choice FRENTE (furnitureInstanceId es nuevo por instancia).
+      Lección: `comando | tail` ENMASCARA el exit — el gate local "verde"
+      inicial era un falso positivo del pipe; veredictos siempre con
+      GATE-EXIT:$? sin tubería.; pnpm test workspace 0 (2
       pasadas); backend PG real VERDE (backend-test.sh 713s: storage 491s,
       api 22s, pilotreadiness 186s — el seed sin línea fija sobrevive toda
       la suite); browser gate hinge-demand-bands.spec.ts exit 0 (playwright
