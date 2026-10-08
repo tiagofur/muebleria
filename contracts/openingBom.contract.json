@@ -1,0 +1,693 @@
+{
+  "schema": 1,
+  "contract": "granete.opening-front.v1",
+  "description": "#1133 — BOM de perfiles y accesorios desde el resultado resuelto: por cada frontera del layout de apertura (#1131) el perfil montado produce sus líneas según las reglas DECLARADAS en sus bom_members (#1130), sin segundo motor geométrico. Consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). Reglas canónicas: la regla 'interior_width' produce la corrida con longitud EXACTA = interior del gabinete (input del cuerpo, nunca derivado aquí) presentada en metros (unidad definida v1: 'meter', con CutLengthMm exacto en mm); 'per_length' deriva soportes con la MISMA convención de estaciones del sistema (#1219): cantidad = ceil(longitud/spacing)+1 — el spacing SIEMPRE viene de la ficha (per_length sin spacing falla cerrado, no se inventa); 'per_exposed_end' produce tapas según la condición de extremo RESUELTA declarada por el llamador (left/right ∈ exposed|closed; una tapa por extremo expuesto). Claves de miembro válidas: profile|supports|endCaps — una clave desconocida falla cerrado (la corrupción de datos no se descarta en silencio); la regla debe corresponder a su miembro; hardwareId vacío o version ≤ 0 (referencia sin revisión) fallan cerrado. Cada línea lleva identidad determinista 'boundary|memberKey', proveniencia completa (perfil + version + frontera + regla) y salida en orden de fronteras del ledger con miembros en orden canónico profile→supports→endCaps: re-resolver produce EXACTAMENTE la misma lista (idempotente, sin acumulación). Los SKUs y parámetros del fixture son placeholders declarados que fijan la matemática, no datos de proveedor (OQ-2).",
+  "resolutionCases": [
+    {
+      "name": "A — gola L en top: corrida en metros, soportes por ficha, tapas por extremos expuestos",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.160", "rule": "interior_width", "unit": "meter" },
+            "supports": { "hardwareId": "328.109", "rule": "per_length", "spacingMm": 300 },
+            "endCaps": { "hardwareId": "328.163", "rule": "per_exposed_end" }
+          }
+        }
+      ],
+      "expectedLines": [
+        {
+          "lineId": "top|profile",
+          "memberKey": "profile",
+          "hardwareId": "328.160",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "interior_width",
+          "quantity": 0.564,
+          "unit": "meter",
+          "cutLengthMm": 564
+        },
+        {
+          "lineId": "top|supports",
+          "memberKey": "supports",
+          "hardwareId": "328.109",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "per_length",
+          "quantity": 3,
+          "unit": "piece"
+        },
+        {
+          "lineId": "top|endCaps",
+          "memberKey": "endCaps",
+          "hardwareId": "328.163",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "per_exposed_end",
+          "quantity": 2,
+          "unit": "piece"
+        }
+      ]
+    },
+    {
+      "name": "B — L en top + C entre z2/z3: cada frontera produce sus propias líneas",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 611,
+          "zones": [
+            { "id": "z1", "heightMm": 152, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 153, "offsetFromStartMm": 152 },
+            { "id": "z3", "heightMm": 306, "offsetFromStartMm": 305 }
+          ],
+          "boundaries": [
+            { "boundary": "top", "consumedMm": 70 },
+            { "boundary": "between:z2:z3", "consumedMm": 39 }
+          ],
+          "remainderZoneId": "z3"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 152,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 4, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 153,
+            "offsetMm": 152,
+            "grips": [ { "boundary": "between:z2:z3", "side": "below", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 4, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z3",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 306,
+            "offsetMm": 305,
+            "grips": [ { "boundary": "between:z2:z3", "side": "above", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 2, "ratioSum": 4, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.160", "rule": "interior_width", "unit": "meter" },
+            "supports": { "hardwareId": "328.109", "rule": "per_length", "spacingMm": 300 },
+            "endCaps": { "hardwareId": "328.163", "rule": "per_exposed_end" }
+          }
+        },
+        {
+          "profileId": "profile.gola-c.alu",
+          "version": 2,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.170", "rule": "interior_width", "unit": "meter" },
+            "supports": { "hardwareId": "328.109", "rule": "per_length", "spacingMm": 250 },
+            "endCaps": { "hardwareId": "328.164", "rule": "per_exposed_end" }
+          }
+        }
+      ],
+      "expectedLines": [
+        {
+          "lineId": "top|profile",
+          "memberKey": "profile",
+          "hardwareId": "328.160",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "interior_width",
+          "quantity": 0.564,
+          "unit": "meter",
+          "cutLengthMm": 564
+        },
+        {
+          "lineId": "top|supports",
+          "memberKey": "supports",
+          "hardwareId": "328.109",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "per_length",
+          "quantity": 3,
+          "unit": "piece"
+        },
+        {
+          "lineId": "top|endCaps",
+          "memberKey": "endCaps",
+          "hardwareId": "328.163",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "per_exposed_end",
+          "quantity": 2,
+          "unit": "piece"
+        },
+        {
+          "lineId": "between:z2:z3|profile",
+          "memberKey": "profile",
+          "hardwareId": "328.170",
+          "profileId": "profile.gola-c.alu",
+          "profileVersion": 2,
+          "boundary": "between:z2:z3",
+          "rule": "interior_width",
+          "quantity": 0.564,
+          "unit": "meter",
+          "cutLengthMm": 564
+        },
+        {
+          "lineId": "between:z2:z3|supports",
+          "memberKey": "supports",
+          "hardwareId": "328.109",
+          "profileId": "profile.gola-c.alu",
+          "profileVersion": 2,
+          "boundary": "between:z2:z3",
+          "rule": "per_length",
+          "quantity": 4,
+          "unit": "piece"
+        },
+        {
+          "lineId": "between:z2:z3|endCaps",
+          "memberKey": "endCaps",
+          "hardwareId": "328.164",
+          "profileId": "profile.gola-c.alu",
+          "profileVersion": 2,
+          "boundary": "between:z2:z3",
+          "rule": "per_exposed_end",
+          "quantity": 2,
+          "unit": "piece"
+        }
+      ],
+      "note": "soportes C con spacing de ficha 250: ceil(564/250)+1 = 4 — la convención de estaciones del sistema, el spacing nunca se inventa"
+    },
+    {
+      "name": "Baseline — sin grips: ninguna línea",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 720,
+          "zones": [
+            { "id": "z1", "heightMm": 360, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 360, "offsetFromStartMm": 360 }
+          ],
+          "boundaries": [],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 360,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 360,
+            "heightMm": 720,
+            "offsetMm": 360,
+            "grips": [],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [],
+      "expectedLines": []
+    },
+    {
+      "name": "Extremos mixtos — expuesto a la izquierda, cerrado a la derecha: una sola tapa",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "closed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.160", "rule": "interior_width", "unit": "meter" },
+            "endCaps": { "hardwareId": "328.163", "rule": "per_exposed_end" }
+          }
+        }
+      ],
+      "expectedLines": [
+        {
+          "lineId": "top|profile",
+          "memberKey": "profile",
+          "hardwareId": "328.160",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "interior_width",
+          "quantity": 0.564,
+          "unit": "meter",
+          "cutLengthMm": 564
+        },
+        {
+          "lineId": "top|endCaps",
+          "memberKey": "endCaps",
+          "hardwareId": "328.163",
+          "profileId": "profile.gola-l.alu",
+          "profileVersion": 3,
+          "boundary": "top",
+          "rule": "per_exposed_end",
+          "quantity": 1,
+          "unit": "piece"
+        }
+      ]
+    },
+    {
+      "name": "Dos fronteras con el mismo perfil: dos corridas físicas, líneas separadas",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 611,
+          "zones": [
+            { "id": "z1", "heightMm": 203, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 204, "offsetFromStartMm": 203 },
+            { "id": "z3", "heightMm": 204, "offsetFromStartMm": 407 }
+          ],
+          "boundaries": [
+            { "boundary": "between:z1:z2", "consumedMm": 39 },
+            { "boundary": "between:z2:z3", "consumedMm": 39 }
+          ],
+          "remainderZoneId": "z3"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 203,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "between:z1:z2", "side": "below", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 3, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 204,
+            "offsetMm": 203,
+            "grips": [
+              { "boundary": "between:z1:z2", "side": "above", "profileId": "profile.gola-c.alu", "consumedMm": 39 },
+              { "boundary": "between:z2:z3", "side": "below", "profileId": "profile.gola-c.alu", "consumedMm": 39 }
+            ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 3, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z3",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 204,
+            "offsetMm": 407,
+            "grips": [ { "boundary": "between:z2:z3", "side": "above", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 3, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-c.alu",
+          "version": 2,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.170", "rule": "interior_width", "unit": "meter" },
+            "supports": { "hardwareId": "328.109", "rule": "per_length", "spacingMm": 300 }
+          }
+        }
+      ],
+      "expectedLines": [
+        {
+          "lineId": "between:z1:z2|profile",
+          "memberKey": "profile",
+          "hardwareId": "328.170",
+          "profileId": "profile.gola-c.alu",
+          "profileVersion": 2,
+          "boundary": "between:z1:z2",
+          "rule": "interior_width",
+          "quantity": 0.564,
+          "unit": "meter",
+          "cutLengthMm": 564
+        },
+        {
+          "lineId": "between:z1:z2|supports",
+          "memberKey": "supports",
+          "hardwareId": "328.109",
+          "profileId": "profile.gola-c.alu",
+          "profileVersion": 2,
+          "boundary": "between:z1:z2",
+          "rule": "per_length",
+          "quantity": 3,
+          "unit": "piece"
+        },
+        {
+          "lineId": "between:z2:z3|profile",
+          "memberKey": "profile",
+          "hardwareId": "328.170",
+          "profileId": "profile.gola-c.alu",
+          "profileVersion": 2,
+          "boundary": "between:z2:z3",
+          "rule": "interior_width",
+          "quantity": 0.564,
+          "unit": "meter",
+          "cutLengthMm": 564
+        },
+        {
+          "lineId": "between:z2:z3|supports",
+          "memberKey": "supports",
+          "hardwareId": "328.109",
+          "profileId": "profile.gola-c.alu",
+          "profileVersion": 2,
+          "boundary": "between:z2:z3",
+          "rule": "per_length",
+          "quantity": 3,
+          "unit": "piece"
+        }
+      ],
+      "note": "cada frontera es una corrida física independiente: las líneas NO se agregan entre fronteras (la fusión comercial aditiva es del consumidor, no del resolver)"
+    }
+  ],
+  "blockedCases": [],
+  "invalidCases": [
+    {
+      "name": "regla de longitud desconocida falla cerrado",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [ { "id": "z1", "heightMm": 650, "offsetFromStartMm": 0 } ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.160", "rule": "exterior_width", "unit": "meter" }
+          }
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOM_INVALID"
+    },
+    {
+      "name": "per_length sin spacing: no se inventa separación",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [ { "id": "z1", "heightMm": 650, "offsetFromStartMm": 0 } ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "supports": { "hardwareId": "328.109", "rule": "per_length" }
+          }
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOM_INVALID"
+    },
+    {
+      "name": "corrida sin unidad declarada: la presentación queda indefinida y falla cerrado",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [ { "id": "z1", "heightMm": 650, "offsetFromStartMm": 0 } ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.160", "rule": "interior_width" }
+          }
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOM_INVALID"
+    },
+    {
+      "name": "condición de extremo desconocida falla cerrado",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "wall", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [ { "id": "z1", "heightMm": 650, "offsetFromStartMm": 0 } ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "endCaps": { "hardwareId": "328.163", "rule": "per_exposed_end" }
+          }
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOM_INVALID"
+    },
+    {
+      "name": "clave de miembro desconocida: la corrupción de datos no se descarta en silencio",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [ { "id": "z1", "heightMm": 650, "offsetFromStartMm": 0 } ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "screws": { "hardwareId": "328.109", "rule": "per_length", "spacingMm": 300 }
+          }
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOM_INVALID"
+    },
+    {
+      "name": "línea sin SKU no existe: hardwareId vacío falla cerrado",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [ { "id": "z1", "heightMm": 650, "offsetFromStartMm": 0 } ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 3,
+          "bomMembers": {
+            "profile": { "hardwareId": "", "rule": "interior_width", "unit": "meter" }
+          }
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOM_INVALID"
+    },
+    {
+      "name": "referencia sin revisión (version 0) falla cerrado",
+      "cabinetInteriorWidthMm": 564,
+      "ends": { "leftEnd": "exposed", "rightEnd": "exposed" },
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [ { "id": "z1", "heightMm": 650, "offsetFromStartMm": 0 } ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "version": 0,
+          "bomMembers": {
+            "profile": { "hardwareId": "328.160", "rule": "interior_width", "unit": "meter" }
+          }
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOM_INVALID"
+    }
+  ]
+}
