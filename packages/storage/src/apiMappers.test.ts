@@ -58,6 +58,8 @@ import {
   workshopSettingsFromApi,
   agregadoToApi,
   agregadoFromApi,
+  openingProfileFromApi,
+  openingProfileToApi,
 } from './apiMappers';
 import { MATERIAL_MANUFACTURER_UNSET } from '@granete/domain';
 import type {
@@ -1308,6 +1310,46 @@ describe('ambient material + kitchen space refs mappers (#4150)', () => {
   });
 
   it('catalogFromApi composes ambientMaterials from the part payload', () => {
+
+describe('openingProfileFromApi/ToApi (#1130)', () => {
+  it('mapea la familia con geometría ausente = bloqueada, nunca default', () => {
+    const cat = catalogFromApi({
+      materials: [],
+      edges: [],
+      hardware: [],
+      optionGroups: [],
+      modules: [],
+      categories: [],
+      customers: [],
+      opening_profiles: [
+        {
+          id: 'op-1',
+          code: 'GOLA-L-ALU',
+          name: 'Gola L aluminio',
+          grip_type: 'gola',
+          cross_section_shape: 'L',
+          compatible_placements: ['top'],
+          datasheet_status: 'pending',
+          body_modifiers: [{ role: 'top', depth_reduction_mm: 18 }],
+          bom_members: { profile: { hardware_id: '', rule: 'interior_width', unit: 'meter' } },
+          active: true,
+          version: 3,
+        },
+      ],
+    });
+    const profile = cat.openingProfiles?.[0];
+    expect(profile?.gripType).toBe('gola');
+    expect(profile?.datasheetStatus).toBe('pending');
+    expect(profile?.frontReductionMm).toBeUndefined();
+    expect(profile?.bodyModifiers?.[0]?.depthReductionMm).toBe(18);
+    expect(profile?.bomMembers?.profile?.rule).toBe('interior_width');
+
+    const wire = openingProfileToApi(profile!) as Record<string, unknown>;
+    expect(wire.grip_type).toBe('gola');
+    expect(wire.front_reduction_mm).toBeNull();
+    expect((wire.body_modifiers as unknown[]).length).toBe(1);
+  });
+});
 
 describe('catalogFromApi — construcción policy (#1218)', () => {
   it('mapea la política de fábrica con surge tri-estado y filtrado de excepciones vacías', () => {

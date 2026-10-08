@@ -84,6 +84,7 @@ import {
   agregadoToApi,
   ambientCategoryToApi,
   ambientMaterialToApi,
+  openingProfileToApi,
   catalogFromApi,
   moduleFromApi,
   moduleUnitFromApi,
@@ -455,6 +456,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       ambientCategories,
       materialCategories,
       constructionPolicy,
+      openingProfiles,
     ] = await Promise.all([
       fetchJson('/catalog/materials'),
       fetchJson('/catalog/edges'),
@@ -476,6 +478,8 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       // `.catch(() => null)` = backend viejo — previews con la escalera de
       // librería, jamás un fallo de catálogo por la familia nueva.
       fetchJson('/catalog/construction-policy').catch(() => null),
+      // #1130: perfiles de apertura (gola L/C…) para el sistema de apertura.
+      fetchJson('/catalog/opening-profiles').catch(() => []),
     ]);
 
     const catalog = catalogFromApi({
@@ -493,6 +497,7 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
       ambientCategories,
       materialCategories,
       constructionPolicy,
+      openingProfiles,
     });
     for (const mod of catalog.modules) {
       if (typeof mod.version === 'number' && mod.version > 0) {
@@ -989,6 +994,17 @@ export class APIWorkspaceRepository implements WorkspaceRepository {
         structureToApi(st),
         'structures',
         st.id,
+      );
+    }
+
+    // #1130: opening profiles (grip profile catalog).
+    for (const profile of catalog.openingProfiles ?? []) {
+      await this.upsertGuarded(
+        `/catalog/opening-profiles/${profile.id}`,
+        '/catalog/opening-profiles',
+        openingProfileToApi(profile),
+        'opening-profiles',
+        profile.id,
       );
     }
 

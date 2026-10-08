@@ -20,6 +20,14 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// del overlay parseado; nil = escalera de librería.
 	mux.Handle("GET /api/catalog/construction-policy", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleConstructionPolicy))))
 
+	// Catálogo: Perfiles de apertura (#1130) — gola L/C, REACH… con ficha
+	// técnica respaldada; escrituras If-Match.
+	mux.Handle("GET /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
+	mux.Handle("POST /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
+	mux.Handle("GET /api/catalog/opening-profiles/{id}", authMW(http.HandlerFunc(server.HandleOpeningProfileByID)))
+	mux.Handle("PUT /api/catalog/opening-profiles/{id}", authMW(http.HandlerFunc(server.HandleOpeningProfileByID)))
+	mux.Handle("DELETE /api/catalog/opening-profiles/{id}", authMW(http.HandlerFunc(server.HandleOpeningProfileByID)))
+
 	// Catálogo: Tableros
 	mux.Handle("GET /api/catalog/materials", authMW(http.HandlerFunc(server.HandleMaterials)))
 	mux.Handle("POST /api/catalog/materials", authMW(http.HandlerFunc(server.HandleMaterials)))
