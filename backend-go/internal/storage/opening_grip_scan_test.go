@@ -1,4 +1,4 @@
-package storage
+package storage_test
 
 import (
 	"context"
@@ -6,21 +6,38 @@ import (
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #1136 — PG real: the grip migration's override scan finds exactly the
 // module agregado option overrides selecting a legacy gola handle, is
 // org-scoped, and tolerates modules without agregados. Read-only by
 // contract: the migration reports these, it never rewrites them.
+//
+// The test shares the initial organization with org-wide golden
+// projections, so every fixture row registers a cleanup and never leaks
+// into later tests.
 func TestScanModuleAgregadoOverrides(t *testing.T) {
-	store := newMigratedRuntimeStore(t)
+	store, _ := migratedConnectStore(t)
+	actor := connectStoreInitialActor
 	suffix := time.Now().Format("150405.000000")
 
-	withinInitialOrganization(t, store, func(txCtx context.Context) error {
+	moduleIDs := []string{
+		"11111336-0000-0000-0000-000000000001",
+		"11111336-0000-0000-0000-000000000002",
+		"11111336-0000-0000-0000-000000000003",
+	}
+	structureID := "11111336-0000-0000-0000-000000000009"
+	t.Cleanup(func() {
+		cleanupConnectStoreFixture(t, `DELETE FROM modules WHERE id = ANY($1)`, moduleIDs)
+		cleanupConnectStoreFixture(t, `DELETE FROM structures WHERE id = $1`, structureID)
+	})
+
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
 		// Foreign keys need a real structure row for the modules (UUID PK).
 		structure := domain.Structure{
-			ID:      "11111336-0000-0000-0000-000000000009",
-			Code:    uniqueStructureCode("ST-1136"),
+			ID:      structureID,
+			Code:    "ST-1136-" + suffix,
 			Name:    "Estructura scan 1136",
 			WidthMm: 600, HeightMm: 720, DepthMm: 560,
 		}
@@ -29,7 +46,7 @@ func TestScanModuleAgregadoOverrides(t *testing.T) {
 		}
 
 		withGola := &domain.Module{
-			ID:          "11111336-0000-0000-0000-000000000001",
+			ID:          moduleIDs[0],
 			Code:        "MOD-1136-GOLA-" + suffix,
 			Name:        "Módulo con gola legada",
 			StructureID: structure.ID,
@@ -44,7 +61,7 @@ func TestScanModuleAgregadoOverrides(t *testing.T) {
 			return err
 		}
 		withoutAgregados := &domain.Module{
-			ID:          "11111336-0000-0000-0000-000000000002",
+			ID:          moduleIDs[1],
 			Code:        "MOD-1136-VACIO-" + suffix,
 			Name:        "Módulo sin agregados",
 			StructureID: structure.ID,
@@ -53,7 +70,7 @@ func TestScanModuleAgregadoOverrides(t *testing.T) {
 			return err
 		}
 		otherValue := &domain.Module{
-			ID:          "11111336-0000-0000-0000-000000000003",
+			ID:          moduleIDs[2],
 			Code:        "MOD-1136-OTRO-" + suffix,
 			Name:        "Módulo con jaladera común",
 			StructureID: structure.ID,
@@ -67,10 +84,10 @@ func TestScanModuleAgregadoOverrides(t *testing.T) {
 		return store.CreateModule(txCtx, otherValue)
 	})
 
-	var hits []OpeningGripOverrideHit
+	var hits []storage.OpeningGripOverrideHit
 	var scanErr error
-	withinInitialOrganization(t, store, func(txCtx context.Context) error {
-		hits, scanErr = store.ScanModuleAgregadoOverrides(txCtx, legacyScanTestPrefix())
+	withinConnectStoreTenant(t, store, actor, func(txCtx context.Context) error {
+		hits, scanErr = store.ScanModuleAgregadoOverrides(txCtx, "jaladera-gola%")
 		return scanErr
 	})
 	if scanErr != nil {
@@ -78,7 +95,7 @@ func TestScanModuleAgregadoOverrides(t *testing.T) {
 	}
 	found := 0
 	for _, hit := range hits {
-		if hit.ModuleID != "11111336-0000-0000-0000-000000000001" {
+		if hit.ModuleID != moduleIDs[0] {
 			continue
 		}
 		found++
@@ -93,5 +110,3 @@ func TestScanModuleAgregadoOverrides(t *testing.T) {
 		t.Fatalf("hits for the gola module = %d, want 1 (all: %+v)", found, hits)
 	}
 }
-
-func legacyScanTestPrefix() string { return "jaladera-gola%" }
