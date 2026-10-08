@@ -33,7 +33,7 @@ func TestComponentConstructionGovernsMachiningDelta(t *testing.T) {
 				OptionRoles: []string{"INTERIOR"}, Active: true,
 			}
 			if withConstruction {
-				shelf.Construction = &domain.ComponentConstruction{JoinerySystemID: "screw-only"}
+				shelf.Construction = &domain.ComponentConstruction{JoinerySystemID: "dowel-only"}
 			}
 			if err := store.CreateComponent(txCtx, &shelf); err != nil {
 				return err
@@ -64,11 +64,17 @@ func TestComponentConstructionGovernsMachiningDelta(t *testing.T) {
 		if shelfLoaded.ID == "" || sideLoaded.ID == "" {
 			t.Fatalf("persisted components not loaded (shelf=%q side=%q)", shelfLoaded.ID, sideLoaded.ID)
 		}
-		if withConstruction && (shelfLoaded.Construction == nil || shelfLoaded.Construction.JoinerySystemID != "screw-only") {
+		if withConstruction && (shelfLoaded.Construction == nil || shelfLoaded.Construction.JoinerySystemID != "dowel-only") {
 			t.Fatalf("persisted construction block did not round-trip: %+v", shelfLoaded.Construction)
 		}
 		return domain.Catalog{
 			Components: []domain.Component{shelfLoaded, sideLoaded},
+			// El cuerpo (en memoria) lleva el lateral: la persistencia bajo
+			// prueba es el BLOQUE de construcción del entrepaño.
+			Structures: []domain.Structure{{
+				ID: "st-delta", Code: "EST-DELTA-" + shelfCode, Name: "Cuerpo delta", Active: true,
+				Components: []domain.ComponentInstance{{ComponentID: sideLoaded.ID, Quantity: 1}},
+			}},
 			Hardware: []domain.Hardware{
 				{ID: "hw-minifix", Code: "HER-MIN-15", Name: "Minifix 15", Unit: domain.UnitPiece, Active: true},
 				{ID: "hw-dowel", Code: "HER-TAQ-8X30", Name: "Tarugo 8x30", Unit: domain.UnitPiece, Active: true},
@@ -84,10 +90,9 @@ func TestComponentConstructionGovernsMachiningDelta(t *testing.T) {
 		t.Helper()
 		module := domain.Module{
 			ID: "mod-delta", Code: "AUTH-DELTA", Name: "Gabinete delta",
-			WidthMm: 600, HeightMm: 720, DepthMm: 560,
+			WidthMm: 600, HeightMm: 720, DepthMm: 560, StructureID: "st-delta",
 			Components: []domain.ComponentInstance{
 				{ComponentID: catalog.Components[0].ID, Quantity: 1},
-				{ComponentID: catalog.Components[1].ID, Quantity: 1},
 			},
 			ParameterDefinitions: []domain.FurnitureParameterDefinition{{
 				Name: "shelfCount", Label: "Shelf count", Type: domain.FurnitureParameterTypeNumber,
@@ -102,12 +107,12 @@ func TestComponentConstructionGovernsMachiningDelta(t *testing.T) {
 		result, err := engine.ResolveAuthoringLayout(engine.AuthoringResolveInput{
 			Module: module, Catalog: catalog, PrecisionMm: 0.01,
 			EvaluatedParameters: map[string]any{"shelfCount": float64(1)},
+			// El snapshot enumera los componentes del módulo con las
+			// identidades materializadas por el resolve ("mod-"+ComponentID);
+			// shelfCount=1 exige exactamente 1 occurrence del entrepaño.
 			Occurrences: []engine.AuthoringOccurrence{
-				{
-					ComponentInstanceID:   "mod-delta-1",
-					ComponentDefinitionID: "mod-delta",
-					Transform:             &engine.AuthoringOccurrenceTransform{Frame: "assembly", TranslationMm: [3]float64{0, 0, 0}},
-				},
+				{ComponentInstanceID: "side-01", ComponentDefinitionID: "st-" + catalog.Components[1].ID},
+				{ComponentInstanceID: "shelf-01", ComponentDefinitionID: "mod-" + catalog.Components[0].ID},
 			},
 		})
 		if err != nil {
