@@ -30,6 +30,10 @@ import (
 type designOpeningPayload struct {
 	Opening    *domain.DesignOpeningSelection  `json:"opening"`
 	Resolution *engine.DesignOpeningResolution `json:"resolution"`
+	// WorkingVersion is the working copy's optimistic-concurrency token:
+	// the next PUT carries it back so a concurrent authoring write is a
+	// conflict, never a silent clobber.
+	WorkingVersion string `json:"workingVersion"`
 	// DimsKnown reports whether the design's furniture carries explicit
 	// dimensions: without them the resolution cannot run (nothing is
 	// invented — the caller sees the truthful absence).
@@ -37,7 +41,10 @@ type designOpeningPayload struct {
 }
 
 func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request, wc *domain.DesignWorkingCopy) {
-	state := designOpeningPayload{Opening: wc.AuthoringDefaults.Opening}
+	state := designOpeningPayload{
+		Opening:        wc.AuthoringDefaults.Opening,
+		WorkingVersion: wc.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	}
 	dims := designOpeningDims(wc)
 	if dims != nil {
 		state.DimsKnown = true

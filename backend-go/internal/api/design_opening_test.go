@@ -100,6 +100,17 @@ func TestHandleDesignOpeningPutPersistsValidSelection(t *testing.T) {
 	if !got.DimsKnown || got.Resolution == nil || got.Resolution.State != "resolved" || len(got.Resolution.Fronts) != 1 {
 		t.Fatalf("expected the resolved front, got %s", rr.Body.String())
 	}
+	// The concurrency token rides the answer: the card's next PUT carries it
+	// back so a concurrent authoring write is a visible conflict.
+	var full struct {
+		WorkingVersion string `json:"workingVersion"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &full); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if full.WorkingVersion == "" {
+		t.Fatal("the answer must carry the working copy's version token")
+	}
 	// 720 − 70 = 650: the read-only front the Inspector renders.
 	if got.Resolution.Fronts[0].HeightMm != 650 {
 		t.Fatalf("front height = %d, want 650", got.Resolution.Fronts[0].HeightMm)

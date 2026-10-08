@@ -49,12 +49,13 @@ module Granete
         # design working copy (GET + merge-PUT). Typed errors only.
         class Service
           class Error < StandardError
-            attr_reader :kind, :status, :api_code
+            attr_reader :kind, :status, :api_code, :details
 
-            def initialize(kind, message = nil, status: nil, api_code: nil)
+            def initialize(kind, message = nil, status: nil, api_code: nil, details: nil)
               @kind = kind
               @status = status
               @api_code = api_code
+              @details = details || {}
               super(message || kind.to_s)
             end
           end
@@ -182,6 +183,33 @@ module Granete
             Contract::WorkingCopyContract.parse_working_copy!(body)
           end
 
+          # #1137 — the design opening lane: the semantic INTENT write (the
+          # server validates against factory capabilities and answers 422
+          # :invalid_configuration with the reason) and the read-only
+          # RESOLVED result (fronts from the server resolve — never
+          # computed here). The catalog reads feed the card's options.
+          def get_design_opening(design_id)
+            request(:get, "/designs/#{design_id}/opening")
+          end
+
+          def put_design_opening(design_id, selection, expected_working_version: nil)
+            payload = { 'system' => selection['system'].to_s }
+            payload['profileId'] = selection['profileId'].to_s unless selection['profileId'].to_s.empty?
+            return unless selection['placements'].is_a?(Array)
+
+            payload['placements'] = selection['placements']
+            payload['expectedWorkingVersion'] = expected_working_version if expected_working_version
+            request(:put, "/designs/#{design_id}/opening", payload)
+          end
+
+          def fetch_opening_capabilities
+            request(:get, '/catalog/opening-capabilities')
+          end
+
+          def fetch_opening_profiles
+            request(:get, '/catalog/opening-profiles')
+          end
+
           private
 
           def request(method, path, body = nil, extra_headers: nil)
@@ -215,6 +243,10 @@ module Granete
             when 404 then raise Error.new(:not_found, 'proyecto, diseño o mueble inexistente', status: status,
                                                                                                api_code: api_code)
             when 409 then raise Error.new(:conflict, conflict_message(response), status: status, api_code: api_code)
+            when 422
+              raise Error.new(:invalid_configuration, error_message(response), status: status,
+                                                                               api_code: api_code,
+                                                                               details: error_details(response))
             when 428 then raise Error.new(:precondition_required, error_message(response), status: status,
                                                                                            api_code: api_code)
             else raise Error.new(:bad_response, "respuesta inesperada del servidor (#{status})", status: status,
@@ -224,6 +256,11 @@ module Granete
 
           def conflict_message(response)
             response.dig('body', 'error', 'message') || 'el diseño cambió en el servidor'
+          end
+
+          def error_details(response)
+            body = response['body']
+            body.is_a?(Hash) && body['details'].is_a?(Hash) ? body['details'] : {}
           end
 
           def error_message(response)

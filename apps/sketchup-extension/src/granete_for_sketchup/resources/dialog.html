@@ -582,6 +582,16 @@
               <div id="design-inspector-hardware-body" style="margin-top: var(--space-2);"></div>
             </div>
 
+            <!-- #1137 / OPEN-FRONT: «Apertura» del diseño — selección
+                 semántica (sistema/perfil/posición) filtrada por las
+                 capacidades de fábrica; los frentes son SALIDA read-only del
+                 resolve del servidor. Rendering lives in
+                 js/granete-opening.js. -->
+            <div class="card" id="design-inspector-opening-card" style="display: none; margin-bottom: var(--space-3);">
+              <div class="card-title">Apertura del diseño</div>
+              <div id="design-inspector-opening-body" style="margin-top: var(--space-2);"></div>
+            </div>
+
             <!-- #784 R2: pending defaults footer (Aplicar = ONE working-copy
                  PUT with the client token; items and item modes untouched) -->
             <div id="design-inspector-footer" style="display: none; margin-top: var(--space-3);">
@@ -1237,6 +1247,9 @@
          defaults lane). Loads BEFORE granete-inspector.js, whose
          no-selection routing delegates here. -->
     <script src="js/granete-design-inspector.js"></script>
+    <!-- #1137: the Apertura card module — loads AFTER the design inspector
+         (its lane lifecycle drives the card) and BEFORE granete-inspector.js. -->
+    <script src="js/granete-opening.js"></script>
     <script src="js/granete-inspector.js"></script>
 
     <!-- #848 Phase B C4.8: model binding module under window.GraneteUI.
