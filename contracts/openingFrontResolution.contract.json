@@ -1,0 +1,392 @@
+{
+  "schema": 1,
+  "contract": "granete.opening-front.v1",
+  "description": "#1129 — contrato canónico de opening/front: intención declarativa (layout + grips + posicionamiento) vs resultado resuelto (dimensiones y posiciones de frentes). Un solo fixture para A/B/C/Baseline consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). Matemática canónica: available = front − Σ(reducción+holgura de cada grip); height_i = floor(available×ratio_i/Σratios) en milímetros enteros; el resto se reparte 1 mm por zona desde la ÚLTIMA zona hacia arriba (política v1 remainderZonePolicy=last_zone_first, fija). Los offsets de zona miden DENTRO de la región disponible (los grips consumen fuera y van listados en boundaries). Los valores de ficha pendientes de OQ-2 en este fixture son ENTRADAS declaradas para fijar la matemática: ningún authoring real resuelve con datasheet pending (caso 'datasheet pendiente falla cerrado'). El caso C queda bloqueado por OQ-3 (valor de rebase sin evidencia): intención válida, resolución BLOCKED, nunca inventada.",
+  "profiles": [
+    {
+      "profileId": "profile.gola-l.alu",
+      "datasheetStatus": "pending_oq2",
+      "frontReductionMm": 66,
+      "gripClearanceMm": 4
+    },
+    {
+      "profileId": "profile.gola-c.alu",
+      "datasheetStatus": "pending_oq2",
+      "frontReductionMm": 34,
+      "gripClearanceMm": 5
+    }
+  ],
+  "resolutionCases": [
+    {
+      "name": "A — inferior, 2 puertas batientes, gola L superior",
+      "cabinetFrontHeightMm": 720,
+      "positioning": "overlay",
+      "layout": {
+        "direction": "horizontal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "top",
+          "profileId": "profile.gola-l.alu"
+        }
+      ],
+      "expected": {
+        "availableFrontHeightMm": 650,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 325,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 325,
+            "offsetFromStartMm": 325
+          }
+        ],
+        "boundaries": [
+          {
+            "boundary": "top",
+            "consumedMm": 70
+          }
+        ],
+        "remainderZoneId": "z2"
+      },
+      "profilesOverride": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 66,
+          "gripClearanceMm": 4
+        },
+        {
+          "profileId": "profile.gola-c.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 34,
+          "gripClearanceMm": 5
+        }
+      ],
+      "note": "los números de reducción/holgura son placeholders declarados pendientes de la ficha (OQ-2); fijan la matemática, no datos de proveedor"
+    },
+    {
+      "name": "B — inferior, cajones 1x/1x/2x, gola L superior + gola C entre z2 y z3",
+      "cabinetFrontHeightMm": 720,
+      "positioning": "overlay",
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "drawer",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "drawer",
+            "ratio": 1
+          },
+          {
+            "id": "z3",
+            "access": "drawer",
+            "ratio": 2
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "top",
+          "profileId": "profile.gola-l.alu"
+        },
+        {
+          "boundary": "between",
+          "aboveZone": "z2",
+          "belowZone": "z3",
+          "profileId": "profile.gola-c.alu"
+        }
+      ],
+      "expected": {
+        "availableFrontHeightMm": 611,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 152,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 153,
+            "offsetFromStartMm": 152
+          },
+          {
+            "id": "z3",
+            "heightMm": 306,
+            "offsetFromStartMm": 305
+          }
+        ],
+        "boundaries": [
+          {
+            "boundary": "top",
+            "consumedMm": 70
+          },
+          {
+            "boundary": "between:z2:z3",
+            "consumedMm": 39
+          }
+        ],
+        "remainderZoneId": "z3"
+      },
+      "profilesOverride": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 66,
+          "gripClearanceMm": 4
+        },
+        {
+          "profileId": "profile.gola-c.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 34,
+          "gripClearanceMm": 5
+        }
+      ]
+    },
+    {
+      "name": "Baseline — inferior, 2 puertas con jaladera, sin grips",
+      "cabinetFrontHeightMm": 720,
+      "positioning": "overlay",
+      "layout": {
+        "direction": "horizontal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expected": {
+        "availableFrontHeightMm": 720,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 360,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 360,
+            "offsetFromStartMm": 360
+          }
+        ],
+        "boundaries": [],
+        "remainderZoneId": "z2"
+      }
+    }
+  ],
+  "blockedCases": [
+    {
+      "name": "C — alacena con bottom_overhang: intención válida, resolución bloqueada por OQ-3",
+      "cabinetFrontHeightMm": 720,
+      "positioning": "bottom_overhang",
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expectedErrorCode": "OPENING_OVERHANG_EVIDENCE_PENDING"
+    },
+    {
+      "name": "datasheet pendiente de OQ-2: el authoring no resuelve, nunca se inventa",
+      "cabinetFrontHeightMm": 720,
+      "positioning": "overlay",
+      "layout": {
+        "direction": "horizontal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "top",
+          "profileId": "profile.gola-l.pending"
+        }
+      ],
+      "profilesOverride": [
+        {
+          "profileId": "profile.gola-l.pending",
+          "datasheetStatus": "pending_oq2",
+          "frontReductionMm": 0,
+          "gripClearanceMm": 0
+        }
+      ],
+      "expectedErrorCode": "OPENING_PROFILE_DATASHEET_PENDING"
+    }
+  ],
+  "invalidCases": [
+    {
+      "name": "ratio 0 no participa en un reparto",
+      "cabinetFrontHeightMm": 720,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "drawer",
+            "ratio": 0
+          },
+          {
+            "id": "z2",
+            "access": "drawer",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expectedErrorCode": "OPENING_LAYOUT_INVALID"
+    },
+    {
+      "name": "boundary between entre zonas no adyacentes",
+      "cabinetFrontHeightMm": 720,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "drawer",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "drawer",
+            "ratio": 1
+          },
+          {
+            "id": "z3",
+            "access": "drawer",
+            "ratio": 2
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "between",
+          "aboveZone": "z1",
+          "belowZone": "z3",
+          "profileId": "profile.gola-c.alu"
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOUNDARY_INVALID"
+    },
+    {
+      "name": "boundary que referencia una zona desconocida",
+      "cabinetFrontHeightMm": 720,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "drawer",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "between",
+          "aboveZone": "z1",
+          "belowZone": "zx",
+          "profileId": "profile.gola-c.alu"
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOUNDARY_UNKNOWN_ZONE"
+    },
+    {
+      "name": "grip duplicado en la misma frontera",
+      "cabinetFrontHeightMm": 720,
+      "layout": {
+        "direction": "horizontal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "top",
+          "profileId": "profile.gola-l.alu"
+        },
+        {
+          "boundary": "top",
+          "profileId": "profile.gola-c.alu"
+        }
+      ],
+      "expectedErrorCode": "OPENING_BOUNDARY_DUPLICATE",
+      "profilesOverride": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 66,
+          "gripClearanceMm": 4
+        },
+        {
+          "profileId": "profile.gola-c.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 34,
+          "gripClearanceMm": 5
+        }
+      ],
+      "positioning": "overlay"
+    },
+    {
+      "name": "front sin zonas no reparte nada",
+      "cabinetFrontHeightMm": 720,
+      "layout": {
+        "direction": "vertical",
+        "zones": []
+      },
+      "grips": [],
+      "expectedErrorCode": "OPENING_LAYOUT_INVALID"
+    }
+  ]
+}
