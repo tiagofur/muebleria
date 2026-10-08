@@ -925,6 +925,26 @@ export type {
 } from './openingBom';
 export { resolveOpeningBOM, OPENING_BOM_INVALID } from './openingBom';
 
+// --- Opening capabilities overlay (#1134) ---
+export type {
+  OpeningGripSystem,
+  FurnitureTypeKey,
+  OpeningPlacementKey,
+  OpeningGripCapability,
+  OpeningFurnitureTypeGrip,
+  OpeningFurnitureTypeCapabilities,
+  OpeningCapabilities,
+  OpeningCapabilitiesParseResult,
+} from './openingCapabilities';
+export {
+  parseOpeningCapabilities,
+  availableOpeningSystems,
+  DEFAULT_OPENING_CAPABILITIES,
+  OPENING_CAPABILITIES_BLOB_KEY,
+  isOpeningCapabilitiesOwnedKey,
+  openingCapabilitiesToOverlayOverrides,
+} from './openingCapabilities';
+
 // --- Joinery system ladder (#1052 slice 2 / #1219) ---
 export {
   effectiveJoinerySystem,
