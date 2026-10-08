@@ -874,6 +874,12 @@ export type {
 } from './openingFront';
 export { resolveOpeningFront } from './openingFront';
 
+// --- Joinery system ladder (#1052 slice 2 / #1219) ---
+export {
+  effectiveJoinerySystem,
+  connectionFaceViolatesCapacity,
+} from './joinerySystem';
+
 // --- Hinge demand by door height band (#1078) ---
 export {
   HINGE_DEMAND_ROLE,

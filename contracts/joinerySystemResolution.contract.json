@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "description": "#1052 slice 2 / #1219 — una sola autoridad para la escalera del sistema de unión efectivo (relación explícita > componente > fábrica > default por kind; blancos no gobiernan) y para el gate de caras de conexión declaradas (capacidad física fail-closed, declaración vacía = compatible con todo). Consumido por packages/domain (vitest) y backend-go/internal/domain/engine (go test).",
+  "ladderCases": [
+    {
+      "name": "la relación explícita gana sobre todo",
+      "relationshipSystemId": "dowel-only",
+      "componentSystemId": "minifix-dowel",
+      "factorySystemId": "screw-only",
+      "kindDefault": "minifix-dowel",
+      "expected": "dowel-only"
+    },
+    {
+      "name": "el componente pisa a la fábrica y a la librería",
+      "relationshipSystemId": "",
+      "componentSystemId": "minifix-dowel",
+      "factorySystemId": "screw-only",
+      "kindDefault": "dowel-only",
+      "expected": "minifix-dowel"
+    },
+    {
+      "name": "la familia de fábrica pisa el default del kind",
+      "relationshipSystemId": "",
+      "componentSystemId": "",
+      "factorySystemId": "screw-only",
+      "kindDefault": "minifix-dowel",
+      "expected": "screw-only"
+    },
+    {
+      "name": "todo vacío cae al default del kind",
+      "relationshipSystemId": "",
+      "componentSystemId": "",
+      "factorySystemId": "",
+      "kindDefault": "minifix-dowel",
+      "expected": "minifix-dowel"
+    },
+    {
+      "name": "blancos no gobiernan pero sí se recortan",
+      "relationshipSystemId": "   ",
+      "componentSystemId": " minifix-dowel ",
+      "factorySystemId": "",
+      "kindDefault": "dowel-only",
+      "expected": "minifix-dowel"
+    }
+  ],
+  "faceGateCases": [
+    {
+      "name": "cara no declarada viola la capacidad",
+      "declaredFaces": ["left", "right"],
+      "anchorFace": "top",
+      "expectedViolation": true
+    },
+    {
+      "name": "cara declarada pasa",
+      "declaredFaces": ["left", "right"],
+      "anchorFace": "right",
+      "expectedViolation": false
+    },
+    {
+      "name": "declaración vacía es compatible con todo",
+      "declaredFaces": [],
+      "anchorFace": "top",
+      "expectedViolation": false
+    },
+    {
+      "name": "ancla sin cara no puede violar",
+      "declaredFaces": ["left"],
+      "anchorFace": "",
+      "expectedViolation": false
+    }
+  ]
+}

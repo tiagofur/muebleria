@@ -330,6 +330,9 @@ func deriveAuthoringMachining(
 	placements []effectivePlacementForMachining,
 	catalog domain.Catalog,
 	familyProfiles FamilyProfileResolver,
+	// #1219: the factory construction policy — the system ladder's factory
+	// rung. nil = every family inherits.
+	policy *FactoryConstructionPolicy,
 ) (AuthoringMachining, []domain.ContractIssue) {
 	issues := []domain.ContractIssue{}
 	operations := []ResolvedMachiningOperation{}
@@ -340,8 +343,42 @@ func deriveAuthoringMachining(
 	for i := range boards {
 		boardIndex[boards[i].id] = &boards[i]
 	}
+	componentsByID := make(map[string]*domain.Component, len(catalog.Components))
+	for i := range catalog.Components {
+		componentsByID[catalog.Components[i].ID] = &catalog.Components[i]
+	}
+	ladder := joinerySystemLadderInput{
+		boardIndex:     boardIndex,
+		componentsByID: componentsByID,
+		policy:         policy,
+		kindDefaults:   authoringRelationshipKindDefaults,
+	}
 
 	for _, relationship := range relationships {
+		// #1219: a declared connection capacity gates the relationship's
+		// anchors BEFORE any derivation — the component's construction block
+		// is a physical statement about where it can be joined.
+		if anchorRole, face, violated := connectionFaceViolation(relationship, ladder); violated {
+			issues = append(issues, domain.ContractIssue{
+				Code: "CONNECTION_FACE_INVALID",
+				Message: fmt.Sprintf("el ancla %q declara la cara %q fuera de las caras de unión declaradas por su componente",
+					anchorRole, face),
+				Severity:  domain.IssueSeverityError,
+				EntityID:  relationship.RelationshipID,
+				Path:      fmt.Sprintf("furniture.relationships[relationshipId=%s]", relationship.RelationshipID),
+				Remediation: "Declara la cara en el componente o ancla la relación en una cara que el componente admita.",
+				Details:   map[string]any{"anchorRole": anchorRole, "face": face},
+			})
+			joineryStatuses = append(joineryStatuses, JoineryRelationshipStatus{
+				RelationshipID: relationship.RelationshipID, Kind: relationship.Kind,
+				Stage:    JoineryRelationshipUnsupported,
+				Contacts: []JoineryContactStatus{},
+				Stations: JoineryStationPlanStatus{Status: "NOT_PLANNED", IssueCodes: []string{},
+					StationCounts: []JoineryStationPlanCount{}, StationDistances: []JoineryStationDistances{}},
+				Blockers: []string{"CONNECTION_FACE_INVALID"},
+			})
+			continue
+		}
 		if relationship.Kind == "floor-side" {
 			joineryStatuses = append(joineryStatuses, deriveFloorSideJoinery(relationship, boardIndex, &issues, familyProfiles, &operations))
 			continue
@@ -355,7 +392,7 @@ func deriveAuthoringMachining(
 			joineryStatuses = append(joineryStatuses, deriveFixedShelfJoinery(relationship, boardIndex, &issues, &operations))
 			continue
 		}
-		deriveRelationshipOperations(relationship, boardIndex, catalog, &derived, &operations, &issues, &joineryStatuses)
+		deriveRelationshipOperations(relationship, boardIndex, catalog, ladder, &derived, &operations, &issues, &joineryStatuses)
 	}
 	for _, placement := range placements {
 		deriveManualPlacementMachining(placement, catalog, &operations, &issues)
@@ -375,6 +412,7 @@ func deriveRelationshipOperations(
 	relationship AuthoringRelationship,
 	boardIndex map[string]*layoutBoard,
 	catalog domain.Catalog,
+	ladder joinerySystemLadderInput,
 	derived *[]DerivedHardwarePlacement,
 	operations *[]ResolvedMachiningOperation,
 	issues *[]domain.ContractIssue,
@@ -403,10 +441,9 @@ func deriveRelationshipOperations(
 		return
 	}
 
-	systemID := relationship.JoinerySystemID
-	if systemID == "" {
-		systemID = authoringRelationshipKindDefaults[relationship.Kind]
-	}
+	// #1219: the four-rung system ladder — authored relationship > source
+	// component > factory family > kind default.
+	systemID := resolveJoinerySystem(relationship, ladder)
 	if systemID == "" {
 		addIssue("JOINERY_SYSTEM_UNSUPPORTED",
 			fmt.Sprintf("no joinery system for kind %s", relationship.Kind),
