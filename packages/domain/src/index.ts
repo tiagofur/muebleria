@@ -896,6 +896,21 @@ export type {
 } from './openingFrontLayout';
 export { resolveOpeningFrontLayout } from './openingFrontLayout';
 
+// --- Opening body modifiers resolver (#1132) ---
+export type {
+  OpeningModifierEffect,
+  OpeningNotchAt,
+  OpeningContractBodyModifier,
+  OpeningProfileBodyData,
+  ResolvedOpeningBodyModifier,
+  OpeningBodyModifierErrorCode,
+  OpeningBodyModifierResolutionResult,
+} from './openingBodyModifiers';
+export {
+  resolveOpeningBodyModifiers,
+  OPENING_BODY_MODIFIERS_CONTRACT,
+} from './openingBodyModifiers';
+
 // --- Joinery system ladder (#1052 slice 2 / #1219) ---
 export {
   effectiveJoinerySystem,
