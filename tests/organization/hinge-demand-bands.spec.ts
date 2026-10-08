@@ -153,6 +153,7 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
     // La parte FRENTE de la puerta exige la elección de material del rol —
     // sin ella el estado comercial no produce revisión (fail-closed correcto).
     const frenteMaterial = catalog.materials.find((m) => m.active) ?? catalog.materials[0];
+    if (!frenteMaterial) throw new Error('el catálogo sembrado no trae materiales de tablero');
     const now = new Date().toISOString();
     await repository.saveProject({
       id: HWG_PROJECT,
