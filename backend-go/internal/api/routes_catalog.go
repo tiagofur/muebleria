@@ -26,6 +26,11 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// diseños existentes.
 	mux.Handle("GET /api/catalog/opening-capabilities", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleOpeningCapabilities))))
 
+	// Catálogo: validación autoritativa de configuraciones de apertura
+	// (#1135) — ocultar en UI jamás sustituye esta validación; inválida
+	// responde 422 INVALID_OPENING_CONFIGURATION con details.reason.
+	mux.Handle("POST /api/catalog/opening-configuration/validate", authMW(http.HandlerFunc(server.HandleOpeningConfigurationValidate)))
+
 	// Catálogo: Perfiles de apertura (#1130) — gola L/C, REACH… con ficha
 	// técnica respaldada; escrituras If-Match.
 	mux.Handle("GET /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))
