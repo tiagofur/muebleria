@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "contract": "granete.opening-front.v1",
+  "description": "#1135 — validación autoritativa de configuraciones de apertura para AUTORÍA NUEVA. Consumido IDÉNTICAMENTE por Go (engine ValidateOpeningConfiguration) y TS (packages/domain validateOpeningConfiguration). Tres estados: 'valid' (la selección procede), 'blocked' (disponible pero la resolución espera evidencia — el rebase inferior con OQ-3; estado veraz, nunca error ni invención) e 'invalid' (razón estable; la API la envuelve como INVALID_OPENING_CONFIGURATION con details.reason — ocultar en UI jamás sustituye esta validación). Reglas: sistema fuera de vocabulario ⇒ OPENING_SYSTEM_UNKNOWN; sistema deshabilitado en capacidades ⇒ OPENING_SYSTEM_UNAVAILABLE (bloquea SÓLO autoría nueva — los diseños persistidos resuelven contra su release fijado, jamás se reescriben); gola exige perfil exacto (OPENING_PROFILE_REQUIRED), dentro de la curaduría si existe (OPENING_PROFILE_NOT_CURATED), presente en catálogo (OPENING_PROFILE_UNKNOWN) y con ficha verificada (OPENING_PROFILE_DATASHEET_PENDING); sólo gola consume perfil (OPENING_PROFILE_NOT_APPLICABLE); placement fuera de la restricción del tipo ⇒ OPENING_PLACEMENT_RESTRICTED y fuera de las placements compatibles del perfil ⇒ OPENING_PLACEMENT_INCOMPATIBLE; tipo de mueble desconocido ⇒ OPENING_FURNITURE_TYPE_UNKNOWN. Capabilities null = defaults de biblioteca (los tres sistemas ofrecidos). La resolución HISTÓRICA no es asunto de este validador: consume los datos del release pineado del diseño y no tiene fallback a latest por construcción.",
+  "cases": [
+    {
+      "name": "jaladera disponible sin decisión de fábrica: válida",
+      "selection": { "system": "handle" },
+      "capabilities": null,
+      "profiles": [],
+      "expected": { "state": "valid" }
+    },
+    {
+      "name": "gola con perfil curado y verificado: válida",
+      "selection": {
+        "system": "gola",
+        "profileId": "profile.gola-l.alu",
+        "furnitureType": "inferior",
+        "placements": ["top"]
+      },
+      "capabilities": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "gola": { "enabled": true, "default": false, "profiles": ["profile.gola-l.alu", "profile.gola-c.alu"] }
+        }
+      },
+      "profiles": [
+        { "profileId": "profile.gola-l.alu", "compatiblePlacements": ["top"], "datasheetStatus": "verified" },
+        { "profileId": "profile.gola-c.alu", "compatiblePlacements": ["between"], "datasheetStatus": "verified" }
+      ],
+      "expected": { "state": "valid" }
+    },
+    {
+      "name": "sistema deshabilitado bloquea la autoría nueva (los diseños existentes no se tocan)",
+      "selection": { "system": "gola", "profileId": "profile.gola-l.alu" },
+      "capabilities": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "gola": { "enabled": false, "default": false }
+        }
+      },
+      "profiles": [
+        { "profileId": "profile.gola-l.alu", "compatiblePlacements": ["top"], "datasheetStatus": "verified" }
+      ],
+      "expected": { "state": "invalid", "reason": "OPENING_SYSTEM_UNAVAILABLE" }
+    },
+    {
+      "name": "perfil fuera de la curaduría de la fábrica",
+      "selection": { "system": "gola", "profileId": "profile.gola-c.alu" },
+      "capabilities": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "gola": { "enabled": true, "default": false, "profiles": ["profile.gola-l.alu"] }
+        }
+      },
+      "profiles": [
+        { "profileId": "profile.gola-c.alu", "compatiblePlacements": ["between"], "datasheetStatus": "verified" }
+      ],
+      "expected": { "state": "invalid", "reason": "OPENING_PROFILE_NOT_CURATED" }
+    },
+    {
+      "name": "ficha pendiente: no seleccionable para autoría nueva",
+      "selection": { "system": "gola", "profileId": "profile.gola-l.alu" },
+      "capabilities": null,
+      "profiles": [
+        { "profileId": "profile.gola-l.alu", "compatiblePlacements": ["top"], "datasheetStatus": "pending" }
+      ],
+      "expected": { "state": "invalid", "reason": "OPENING_PROFILE_DATASHEET_PENDING" }
+    },
+    {
+      "name": "rebase disponible queda BLOQUEADO por evidencia: estado veraz, no error",
+      "selection": { "system": "bottom_overhang" },
+      "capabilities": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "bottom_overhang": { "enabled": true, "default": false }
+        }
+      },
+      "profiles": [],
+      "expected": { "state": "blocked", "reason": "OPENING_OVERHANG_EVIDENCE_PENDING" }
+    },
+    {
+      "name": "placement fuera de la restricción del tipo de mueble",
+      "selection": {
+        "system": "gola",
+        "profileId": "profile.gola-c.alu",
+        "furnitureType": "superior",
+        "placements": ["between"]
+      },
+      "capabilities": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "gola": { "enabled": true, "default": false }
+        },
+        "byFurnitureType": {
+          "superior": { "grips": { "gola": { "placements": ["top"] } } }
+        }
+      },
+      "profiles": [
+        { "profileId": "profile.gola-c.alu", "compatiblePlacements": ["between"], "datasheetStatus": "verified" }
+      ],
+      "expected": { "state": "invalid", "reason": "OPENING_PLACEMENT_RESTRICTED" }
+    },
+    {
+      "name": "placement incompatible con las placements del perfil",
+      "selection": {
+        "system": "gola",
+        "profileId": "profile.gola-l.alu",
+        "placements": ["between"]
+      },
+      "capabilities": null,
+      "profiles": [
+        { "profileId": "profile.gola-l.alu", "compatiblePlacements": ["top"], "datasheetStatus": "verified" }
+      ],
+      "expected": { "state": "invalid", "reason": "OPENING_PLACEMENT_INCOMPATIBLE" }
+    },
+    {
+      "name": "perfil desconocido en el catálogo",
+      "selection": { "system": "gola", "profileId": "profile.fantasma" },
+      "capabilities": null,
+      "profiles": [],
+      "expected": { "state": "invalid", "reason": "OPENING_PROFILE_UNKNOWN" }
+    },
+    {
+      "name": "gola sin perfil exacto",
+      "selection": { "system": "gola" },
+      "capabilities": null,
+      "profiles": [],
+      "expected": { "state": "invalid", "reason": "OPENING_PROFILE_REQUIRED" }
+    },
+    {
+      "name": "sólo gola consume perfil",
+      "selection": { "system": "handle", "profileId": "profile.gola-l.alu" },
+      "capabilities": null,
+      "profiles": [],
+      "expected": { "state": "invalid", "reason": "OPENING_PROFILE_NOT_APPLICABLE" }
+    },
+    {
+      "name": "tipo de mueble desconocido",
+      "selection": { "system": "handle", "furnitureType": "medio" },
+      "capabilities": null,
+      "profiles": [],
+      "expected": { "state": "invalid", "reason": "OPENING_FURNITURE_TYPE_UNKNOWN" }
+    },
+    {
+      "name": "sistema desconocido",
+      "selection": { "system": "tirador_magico" },
+      "capabilities": null,
+      "profiles": [],
+      "expected": { "state": "invalid", "reason": "OPENING_SYSTEM_UNKNOWN" }
+    }
+  ]
+}

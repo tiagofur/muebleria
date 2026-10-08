@@ -945,6 +945,18 @@ export {
   openingCapabilitiesToOverlayOverrides,
 } from './openingCapabilities';
 
+// --- Opening configuration validator (#1135) ---
+export type {
+  OpeningConfigurationSelection,
+  OpeningProfileSelectionData,
+  OpeningConfigurationValidation,
+} from './openingConfigurationValidation';
+export {
+  validateOpeningConfiguration,
+  openingSelectionReasonMessage,
+  OPENING_REASON,
+} from './openingConfigurationValidation';
+
 // --- Joinery system ladder (#1052 slice 2 / #1219) ---
 export {
   effectiveJoinerySystem,
