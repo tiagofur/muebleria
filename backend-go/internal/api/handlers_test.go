@@ -484,6 +484,8 @@ type stubStore struct {
 	openingProfiles      []domain.OpeningProfile
 	openingProfileErr    error
 	createdOpeningProfile *domain.OpeningProfile
+	// #1134: opening capabilities catalog.
+	openingCapabilities *domain.OpeningCapabilities
 }
 
 func (s *stubStore) stubNotUsed(name string) {

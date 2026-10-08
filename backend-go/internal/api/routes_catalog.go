@@ -20,6 +20,12 @@ func registerCatalogRoutes(server *Server, mux *http.ServeMux, authMW func(http.
 	// del overlay parseado; nil = escalera de librería.
 	mux.Handle("GET /api/catalog/construction-policy", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleConstructionPolicy))))
 
+	// Catálogo: Capacidades de apertura de fábrica (#1134) — lectura del
+	// blob 'opening.capabilities' parseado; nil = escalera de librería.
+	// Available ≠ valid: gobierna la oferta para nueva autoría, jamás los
+	// diseños existentes.
+	mux.Handle("GET /api/catalog/opening-capabilities", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleOpeningCapabilities))))
+
 	// Catálogo: Perfiles de apertura (#1130) — gola L/C, REACH… con ficha
 	// técnica respaldada; escrituras If-Match.
 	mux.Handle("GET /api/catalog/opening-profiles", authMW(http.HandlerFunc(server.HandleOpeningProfiles)))

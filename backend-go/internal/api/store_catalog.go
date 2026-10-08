@@ -14,6 +14,11 @@ type CatalogStore interface {
 	// standard-library overlay; nil when no active overlay governs.
 	GetFactoryConstructionPolicy(ctx context.Context) (*engine.FactoryConstructionPolicy, error)
 
+	// Catalog: opening capabilities (#1134) — the parsed 'opening.capabilities'
+	// overlay blob; nil when no active overlay governs. Available governs
+	// new-authoring offering only, never existing designs.
+	GetOpeningCapabilities(ctx context.Context) (*domain.OpeningCapabilities, error)
+
 	// Catalog: opening profiles (#1130) — the grip profile catalog.
 	ListOpeningProfiles(ctx context.Context) ([]domain.OpeningProfile, error)
 	GetOpeningProfileByID(ctx context.Context, id string) (*domain.OpeningProfile, error)

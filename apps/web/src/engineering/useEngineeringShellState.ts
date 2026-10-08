@@ -35,6 +35,7 @@ import {
 } from '../engineeringState';
 import { useComponentSideAssignments } from '../useComponentSideAssignments';
 import { useFactoryConstructionPolicy } from '../useFactoryConstructionPolicy';
+import { useOpeningCapabilities } from '../useOpeningCapabilities';
 import { useHardwareProfiles } from '../useHardwareProfiles';
 import {
   useProjectWorkshopOccurrences,
@@ -239,6 +240,14 @@ export function useEngineeringShellState({
     enabled: navId === 'settings' || navId === 'components',
   });
 
+  // #1134: factory opening capabilities — what NEW authoring may select;
+  // disabling never mutates existing designs.
+  const openingCapabilities = useOpeningCapabilities({
+    baseUrl: DEFAULT_API_BASE,
+    token: session === 'auth' ? authToken : null,
+    enabled: navId === 'settings',
+  });
+
   // #875 slice 3: a component's station exception lives in the factory overlay
   // (never in the component entity) — merge the entry into the policy and save
   // through the same governed overlay path as Config.
@@ -422,6 +431,7 @@ export function useEngineeringShellState({
     engineeringReleaseContext,
     engineeringStateContext,
     factoryConstructionPolicy,
+    openingCapabilities,
     hardwareProfiles,
     hardwareProfilesForPicker,
     openInEngineeringGuarded,

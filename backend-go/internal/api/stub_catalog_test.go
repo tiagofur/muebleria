@@ -214,6 +214,11 @@ func (s *stubStore) ListOpeningProfiles(context.Context) ([]domain.OpeningProfil
 	return []domain.OpeningProfile{}, nil
 }
 
+// #1134 — opening capabilities stub: nil unless a test injects a blob.
+func (s *stubStore) GetOpeningCapabilities(context.Context) (*domain.OpeningCapabilities, error) {
+	return s.openingCapabilities, nil
+}
+
 func (s *stubStore) GetOpeningProfileByID(_ context.Context, id string) (*domain.OpeningProfile, error) {
 	for i := range s.openingProfiles {
 		if s.openingProfiles[i].ID == id {

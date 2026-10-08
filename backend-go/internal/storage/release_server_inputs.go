@@ -72,6 +72,30 @@ func (s *PostgresStore) GetFactoryConstructionPolicy(ctx context.Context) (*engi
 	return policy, nil
 }
 
+// GetOpeningCapabilities parses the organization's active standard-library
+// overlay into the opening capabilities (#1134): nil = no active overlay and
+// the library ladder governs new authoring. Same ONE load+parse contract and
+// fail-closed broken-overlay behavior as the construction policy — available
+// governs offering, never the validity of existing designs.
+func (s *PostgresStore) GetOpeningCapabilities(ctx context.Context) (*domain.OpeningCapabilities, error) {
+	orgUUID, err := uuid.Parse(OrgFromCtx(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("opening capabilities org: %w", err)
+	}
+	overlay, err := s.GetActiveOverlayByLibrary(ctx, orgUUID, uuid.MustParse(domain.GraneteStandardLibraryID))
+	if err != nil {
+		if errors.Is(err, ErrOverlayNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("opening capabilities overlay: %w", err)
+	}
+	capabilities, err := engine.ParseOpeningCapabilities(overlay.Overrides)
+	if err != nil {
+		return nil, fmt.Errorf("opening capabilities: %w", err)
+	}
+	return capabilities, nil
+}
+
 func (s *PostgresStore) ReleaseServerResolveInputs(ctx context.Context, orgID string) (*engine.ReleaseServerInputs, error) {
 	return ReleaseServerInputsFromStore(ctx, s, orgID)
 }

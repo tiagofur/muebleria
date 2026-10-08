@@ -11,6 +11,9 @@ import {
   type FactoryConstructionPolicy,
   isConstructionPolicyOwnedKey,
   policyToOverlayOverrides,
+  type OpeningCapabilities,
+  isOpeningCapabilitiesOwnedKey,
+  openingCapabilitiesToOverlayOverrides,
 } from '@granete/domain';
 import {
   parseGenerated,
@@ -295,6 +298,42 @@ export class GraneteApiClient extends GeneratedGraneteApiClient {
     return await this.createLibraryOverlay(token, {
       baseReleaseId: currentRel.id,
       overrides: policyOverrides,
+    }, signal);
+  }
+
+  /**
+   * #1134: save the factory opening capabilities into the organization's
+   * overlay overrides — same owned-key merge as the construction policy: the
+   * upsert touches ONLY `opening.capabilities`; every other overlay key
+   * (including the construction policy and foreign `joint.*` exceptions)
+   * survives untouched. With no active overlay, the current Standard release
+   * seeds a new one.
+   */
+  async saveOpeningCapabilities(
+    token: string,
+    capabilities: OpeningCapabilities,
+    activeOverlay: LibraryOverlayDetail | null,
+    signal?: AbortSignal,
+  ): Promise<LibraryOverlayDetail> {
+    const capabilityOverrides = openingCapabilitiesToOverlayOverrides(capabilities);
+    if (activeOverlay) {
+      const existingOverrides = (activeOverlay.overrides ?? {}) as Record<string, unknown>;
+      const nextOverrides: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(existingOverrides)) {
+        if (!isOpeningCapabilitiesOwnedKey(k)) {
+          nextOverrides[k] = v;
+        }
+      }
+      Object.assign(nextOverrides, capabilityOverrides);
+      return await this.updateLibraryOverlay(token, activeOverlay.id, activeOverlay.version, {
+        overrides: nextOverrides,
+      }, signal);
+    }
+
+    const currentRel = await this.getStandardCurrentRelease(token, signal);
+    return await this.createLibraryOverlay(token, {
+      baseReleaseId: currentRel.id,
+      overrides: capabilityOverrides,
     }, signal);
   }
 

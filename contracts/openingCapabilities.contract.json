@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "contract": "granete.opening-front.v1",
+  "description": "#1134 — capacidades de apertura de fábrica: el blob 'opening.capabilities' dentro de library_overlays.overrides (un literal plano con el objeto estructurado, mismo patrón que 'joint.constructionPolicy'), leído IDÉNTICAMENTE por Go (backend-go engine ParseOpeningCapabilities) y TS (packages/domain parseOpeningCapabilities) — parsers jamás incompatibles (ADR-0009 §7). Available ≠ valid: una capability dice que la fábrica OFRECE un sistema para nueva autoría; que una combinación mueble/perfil/layout sea resoluble lo decide el resolver contra la revisión pineada del perfil (#1130/#1131) — deshabilitar una capability oculta/bloquea NUEVA selección y jamás reescribe o invalida diseños existentes. Forma: version=1 (versión futura = error, no hay fallback); grips con vocabulario handle|gola|bottom_overhang (enabled obligatorio; a lo sumo UN sistema con default; profiles = curaduría de ids exactos, sólo gola); byFurnitureType con vocabulario inferior|superior|alto y por sistema placements (top|between|bottom) + default puntual. CLAVE DESCONOCIDA EN CUALQUIER NIVEL = error: el overlay no contiene dimensiones — cada milímetro pertenece a la ficha del OpeningProfile. Blob ausente = nil (sin decisión de fábrica, gobierna la escalera de librería). Los casos de error de forma viven en los tests unitarios de cada lado; este fixture fija las lecturas exitosas y la ausencia.",
+  "cases": [
+    {
+      "name": "overlay completo del piloto: tres sistemas, gola curada, restricciones por tipo",
+      "overrides": {
+        "opening.capabilities": {
+          "version": 1,
+          "grips": {
+            "handle": { "enabled": true, "default": true },
+            "gola": { "enabled": true, "default": false, "profiles": ["profile.gola-l.alu", "profile.gola-c.alu"] },
+            "bottom_overhang": { "enabled": true, "default": false }
+          },
+          "byFurnitureType": {
+            "superior": {
+              "grips": {
+                "gola": { "placements": ["top"] },
+                "bottom_overhang": { "default": true }
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "gola": { "enabled": true, "default": false, "profiles": ["profile.gola-l.alu", "profile.gola-c.alu"] },
+          "bottom_overhang": { "enabled": true, "default": false }
+        },
+        "byFurnitureType": {
+          "superior": {
+            "grips": {
+              "gola": { "placements": ["top"] },
+              "bottom_overhang": { "default": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "overlay sin el blob: nil, sin decisión de fábrica",
+      "overrides": {
+        "joint.constructionPolicy": { "version": 1, "floorToSide": { "provenance": "factory", "systemId": "screw-only", "stationsCount": 4 } }
+      },
+      "expected": null
+    },
+    {
+      "name": "gola ofrecida sin curaduría de perfiles: la oferta existe, los ids exactos quedan pendientes",
+      "overrides": {
+        "opening.capabilities": {
+          "version": 1,
+          "grips": {
+            "handle": { "enabled": true, "default": true },
+            "gola": { "enabled": true, "default": false }
+          }
+        }
+      },
+      "expected": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "gola": { "enabled": true, "default": false }
+        }
+      }
+    },
+    {
+      "name": "fábrica que sólo ofrece jaladera: un sistema, sin restricciones por tipo",
+      "overrides": {
+        "opening.capabilities": {
+          "version": 1,
+          "grips": {
+            "handle": { "enabled": true, "default": true }
+          }
+        }
+      },
+      "expected": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true }
+        }
+      }
+    },
+    {
+      "name": "sistema deshabilitado: disponible para nuevos diseños = no; los existentes no se tocan",
+      "overrides": {
+        "opening.capabilities": {
+          "version": 1,
+          "grips": {
+            "handle": { "enabled": true, "default": true },
+            "gola": { "enabled": false, "default": false },
+            "bottom_overhang": { "enabled": false, "default": false }
+          }
+        }
+      },
+      "expected": {
+        "version": 1,
+        "grips": {
+          "handle": { "enabled": true, "default": true },
+          "gola": { "enabled": false, "default": false },
+          "bottom_overhang": { "enabled": false, "default": false }
+        }
+      }
+    }
+  ]
+}
