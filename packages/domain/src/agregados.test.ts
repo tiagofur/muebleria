@@ -11,6 +11,98 @@ import { ResolutionError } from './errors';
 import type { Agregado, Catalog, Module, ModuleAgregadoInstance, Structure } from './types';
 
 describe('agregados domain helpers', () => {
+  describe('banda de bisagras en agregados-puerta (item 2 del resto)', () => {
+    const agrPuerta: Agregado = {
+      id: 'agr-pue-test',
+      code: 'AGR-PUE-TEST',
+      name: 'Puerta despensa',
+      externalDims: { width: 600, height: 2100, depth: 40 },
+      components: [
+        {
+          componentId: 'comp-puerta-panel',
+          quantity: 1,
+          placementOverride: 'puerta',
+        },
+      ],
+      hardwareLines: [
+        { id: 'h-bisagra', quantity: 2, optionRole: 'BISAGRA' },
+      ],
+    };
+
+    const instance: ModuleAgregadoInstance = {
+      id: 'agr-inst-1',
+      agregadoId: 'agr-pue-test',
+      quantity: 1,
+      optionOverrides: { BISAGRA: 'hw-bisagra' },
+    };
+
+    it('puerta de 2100 compra 5 por banda y REEMPLAZA la línea bulk', () => {
+      const res = resolveAgregadoInstance(instance, [agrPuerta]);
+      const band = res.hardwareLines.filter((l) => l.id.startsWith('hingeband-agr-'));
+      expect(band).toHaveLength(1);
+      expect(band[0]!.hardwareId).toBe('hw-bisagra');
+      expect(band[0]!.quantity).toBe(5);
+      expect(band[0]!.optionRole).toBe('BISAGRA');
+      expect(band[0]!.descriptionOverride).toBe('Banda por altura de puerta');
+      // La línea bulk fija 2×BISAGRA dejó de gobernar.
+      expect(res.hardwareLines.some((l) => l.id.startsWith('h-bisagra-'))).toBe(false);
+    });
+
+    it('las posiciones ganan: con placement la banda no aparece', () => {
+      // Los placements viven en el AGREGADO de definición (autoría de
+      // catálogo), no en la instancia colocada — igual que el flujo real.
+      const agrConPlacements: Agregado = {
+        ...agrPuerta,
+        components: [
+          {
+            componentId: 'comp-puerta-panel',
+            quantity: 1,
+            placementOverride: 'puerta',
+            overrides: {
+              hardwarePlacements: [
+                { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 100, yMm: 100 } },
+                { optionRole: 'BISAGRA', anchorFace: 'front', relativePosition: { xMm: 100, yMm: 2000 } },
+              ],
+            },
+          },
+        ],
+      };
+      const res = resolveAgregadoInstance(instance, [agrConPlacements]);
+      expect(res.hardwareLines.some((l) => l.id.startsWith('hingeband-agr-'))).toBe(false);
+      expect(res.hardwareLines.filter((l) => l.optionRole === 'POSITIONED')).toHaveLength(1);
+    });
+
+    it('sin elección para el grupo no hay banda y la bulk sobrevive', () => {
+      const res = resolveAgregadoInstance(
+        { ...instance, optionOverrides: {} },
+        [agrPuerta],
+      );
+      expect(res.hardwareLines.some((l) => l.id.startsWith('hingeband-agr-'))).toBe(false);
+      expect(res.hardwareLines.some((l) => l.id.startsWith('h-bisagra-agr-'))).toBe(true);
+    });
+
+    it('la política de fábrica gobierna el conteo', () => {
+      const res = resolveAgregadoInstance(
+        instance,
+        [agrPuerta],
+        undefined,
+        { bands: [{ upToHeightMm: 2400, hinges: 3 }] },
+      );
+      const band = res.hardwareLines.find((l) => l.id.startsWith('hingeband-agr-'));
+      expect(band?.quantity).toBe(3);
+    });
+
+    it('recargo Blum: ancho 700 sobre la puerta de 2100 compra 6', () => {
+      const wide: Agregado = {
+        ...agrPuerta,
+        externalDims: { width: 700, height: 2100, depth: 40 },
+      };
+      const res = resolveAgregadoInstance(instance, [wide]);
+      const band = res.hardwareLines.find((l) => l.id.startsWith('hingeband-agr-'));
+      expect(band?.quantity).toBe(6);
+    });
+  });
+
   describe('mirrorComponentPlacement', () => {
     it('flips lateral_izquierdo <-> lateral_derecho', () => {
       expect(mirrorComponentPlacement('lateral_izquierdo')).toBe('lateral_derecho');

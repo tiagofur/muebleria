@@ -125,6 +125,7 @@ import type {
   ConnectionFace,
   ConstructiveRole,
   JoinerySystemId,
+  HingeDemandPolicy,
 } from '@granete/domain';
 import {
   TIME_ENTRY_CATEGORIES,
@@ -3470,6 +3471,8 @@ export function catalogFromApi(parts: {
   ambient_categories?: unknown;
   materialCategories?: unknown;
   material_categories?: unknown;
+  constructionPolicy?: unknown;
+  construction_policy?: unknown;
 }): Catalog {
   const asRows = (v: unknown): Record<string, unknown>[] =>
     Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
@@ -3494,6 +3497,69 @@ export function catalogFromApi(parts: {
     materialCategories: asRows(
       parts.material_categories ?? parts.materialCategories,
     ).map(materialCategoryFromApi),
+    // #1218: the factory hinge demand policy, catalog-carried (nil when the
+    // organization runs the library ladder).
+    constructionPolicy: constructionPolicyFromApi(
+      parts.construction_policy ?? parts.constructionPolicy,
+    ),
+  };
+}
+
+/**
+ * #1218 — the catalog-carried factory policy (Go parsed overlay). The inner
+ * policy is camelCase on the wire (domain tags); only the wrapper is
+ * snake_case. `widthSurgeOverMm` is tri-state: number = threshold, null =
+ * disabled, absent = inherit the library surge.
+ */
+function constructionPolicyFromApi(raw: unknown): Catalog['constructionPolicy'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const doorHingeDemand = hingeDemandPolicyFromApi(r.doorHingeDemand);
+  const overridesRaw = r.componentOverrides as
+    | Record<string, { hingeDemand?: unknown }>
+    | undefined;
+  const componentOverrides = overridesRaw
+    ? Object.fromEntries(
+        Object.entries(overridesRaw)
+          .map(
+            (
+              [id, entry]: [string, { hingeDemand?: unknown } | undefined],
+            ): [string, { hingeDemand: HingeDemandPolicy }] => [
+              id,
+              {
+                hingeDemand: hingeDemandPolicyFromApi(entry?.hingeDemand),
+              } as { hingeDemand: HingeDemandPolicy },
+            ],
+          )
+          .filter(([, entry]) => entry.hingeDemand !== undefined),
+      )
+    : undefined;
+  if (doorHingeDemand === undefined && !componentOverrides) return undefined;
+  return {
+    doorHingeDemand,
+    componentOverrides,
+  };
+}
+
+function hingeDemandPolicyFromApi(raw: unknown): HingeDemandPolicy | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.bands) || r.bands.length === 0) return undefined;
+  const bands = r.bands
+    .map((b) => b as Record<string, unknown>)
+    .filter((b) => typeof b.upToHeightMm === 'number' && typeof b.hinges === 'number')
+    .map((b) => ({ upToHeightMm: b.upToHeightMm as number, hinges: b.hinges as number }));
+  if (bands.length === 0) return undefined;
+  const surge = r.widthSurgeOverMm;
+  return {
+    optionRole: typeof r.optionRole === 'string' && r.optionRole.trim() ? r.optionRole : undefined,
+    bands,
+    widthSurgeOverMm:
+      typeof surge === 'number'
+        ? surge
+        : surge === null
+          ? null
+          : undefined,
   };
 }
 

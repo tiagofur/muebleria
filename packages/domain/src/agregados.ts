@@ -7,6 +7,13 @@
  * left-opening door into a right-opening door).
  */
 
+import {
+  HINGE_DEMAND_DESCRIPTION,
+  HINGE_DEMAND_LINE_PREFIX,
+  hingeDemandRole,
+  hingesForDoor,
+  type HingeDemandPolicy,
+} from './hingeDemand';
 import type {
   Agregado,
   ComponentPlacement,
@@ -64,6 +71,10 @@ export function resolveAgregadoInstance(
   instance: ModuleAgregadoInstance,
   agregadosCatalog: readonly Agregado[],
   unitIndex?: number,
+  // Item 2 de la issue del resto: la política de fábrica (traída por
+  // catálogo). La banda de la puerta-agregado usa la MISMA política que
+  // cotiza el servidor; omitida = escalera de librería.
+  hingeDemandPolicy?: HingeDemandPolicy,
 ): {
   readonly components: readonly ModuleComponentInstance[];
   readonly hardwareLines: readonly HardwareLine[];
@@ -111,9 +122,39 @@ export function resolveAgregadoInstance(
     }
   }
 
+  // Item 2 — los agregados-puerta compran bisagras por banda de altura, la
+  // MISMA escalera que las puertas de módulo: posiciones > banda > línea
+  // bulk autorizada. El agregado ES la puerta (patrón AGR-PUE): sus
+  // externalDims son la caja de la puerta. Sin dims, sin componente puerta
+  // o sin elección para el grupo → la banda no aparece (nunca se inventa).
+  // Un agregado mixto (mueble con puerta interna) queda fuera del alcance de
+  // la banda (su caja no es la de la puerta) — nombrado en la issue.
+  const bandCounts = new Map<string, number>();
+  const bandRoles = new Map<string, string>();
+  const isDoorAggregate = (agregado.components ?? []).some(
+    (c) => c.placementOverride === 'puerta',
+  );
+  const doorBox = agregado.externalDims;
+  if (isDoorAggregate && doorBox && doorBox.height > 0) {
+    const role = hingeDemandRole(hingeDemandPolicy);
+    const chosenId = instance.optionOverrides?.[role]?.trim();
+    if (chosenId && !placementCounts.has(chosenId)) {
+      const perUnit = hingesForDoor(
+        doorBox.height,
+        doorBox.width,
+        hingeDemandPolicy,
+      );
+      if (perUnit > 0) {
+        bandCounts.set(chosenId, perUnit * mult);
+        bandRoles.set(chosenId, role);
+      }
+    }
+  }
+
   const rawHardware = agregado.hardwareLines ?? [];
   // Bulk hardware lines, EXCLUDING any whose resolved hardwareId is also
-  // positioned (positions win → single source of truth, no double count).
+  // positioned (positions win) or band-covered (the derived band replaces
+  // the fixed authored line of the same hardware).
   const bulkHardwareLines = rawHardware
     .map((h) => {
       const overrideHardwareId =
@@ -127,7 +168,13 @@ export function resolveAgregadoInstance(
         quantity: h.quantity * mult,
       };
     })
-    .filter((h) => !(h.hardwareId && placementCounts.has(h.hardwareId)));
+    .filter(
+      (h) =>
+        !(
+          h.hardwareId &&
+          (placementCounts.has(h.hardwareId) || bandCounts.has(h.hardwareId))
+        ),
+    );
 
   // Position-derived hardware lines (one per positioned hardwareId).
   const placementHardwareLines: HardwareLine[] = [...placementCounts].map(
@@ -139,7 +186,23 @@ export function resolveAgregadoInstance(
     }),
   );
 
-  const hardwareLines = [...bulkHardwareLines, ...placementHardwareLines];
+  // Band-derived demand lines (después de posiciones — mismo orden que el
+  // resolve de módulo).
+  const bandHardwareLines: HardwareLine[] = [...bandCounts].map(
+    ([hwId, qty]) => ({
+      id: `${HINGE_DEMAND_LINE_PREFIX}agr-${instanceKey}${unitSuffix}-${hwId}`,
+      quantity: qty,
+      optionRole: bandRoles.get(hwId) ?? hingeDemandRole(hingeDemandPolicy),
+      hardwareId: hwId,
+      descriptionOverride: HINGE_DEMAND_DESCRIPTION,
+    }),
+  );
+
+  const hardwareLines = [
+    ...bulkHardwareLines,
+    ...placementHardwareLines,
+    ...bandHardwareLines,
+  ];
 
   return { components, hardwareLines };
 }

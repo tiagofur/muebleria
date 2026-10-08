@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/tiagofur/muebles-backend/internal/domain"
-	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 	"strings"
 )
 
@@ -215,21 +213,12 @@ func (s *PostgresStore) publishResolutionCatalog(ctx context.Context) (domain.Ca
 	cat.Materials = materials
 	// #1078: the frozen release catalog carries the factory policy baked at
 	// publish time — a released snapshot resolves immutably even if the org
-	// overlay changes later. Same load + parse contract as the live catalog.
-	orgUUID, parseErr := uuid.Parse(OrgFromCtx(ctx))
-	if parseErr != nil {
-		return cat, fmt.Errorf("overlay factory policy org: %w", parseErr)
+	// overlay changes later. Same shared load+parse as the live catalog.
+	policy, perr := s.GetFactoryConstructionPolicy(ctx)
+	if perr != nil {
+		return cat, fmt.Errorf("release freeze factory policy: %w", perr)
 	}
-	overlay, err := s.GetActiveOverlayByLibrary(ctx, orgUUID, uuid.MustParse(domain.GraneteStandardLibraryID))
-	if err == nil {
-		policy, perr := engine.ParseFactoryConstructionPolicy(overlay.Overrides)
-		if perr != nil {
-			return cat, fmt.Errorf("overlay factory policy (freeze): %w", perr)
-		}
-		cat.ConstructionPolicy = policy
-	} else if !errors.Is(err, ErrOverlayNotFound) {
-		return cat, fmt.Errorf("overlay for factory policy (freeze): %w", err)
-	}
+	cat.ConstructionPolicy = policy
 	return cat, nil
 }
 

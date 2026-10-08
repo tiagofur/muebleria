@@ -176,6 +176,9 @@ export function resolveProjectDrilling(
           jointRules ??
           catalog.structures?.find((s) => s.id === module.structureId)
             ?.jointDrillingRules,
+        // #1218: the cup count rides the SAME demand policy the server
+        // quotes with — factory overrides govern previews too.
+        hingeDemandPolicy: catalog.constructionPolicy?.doorHingeDemand,
       }),
     );
   }

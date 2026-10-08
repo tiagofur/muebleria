@@ -57,6 +57,35 @@ describe('hingePositions', () => {
 });
 
 describe('deriveJointHardwarePlacements — unidades', () => {
+  it('#1218: las bandas de fábrica gobiernan la cantidad de cazoletas', () => {
+    // Puerta de 1000mm: escalera de librería 901–1600 → 3 cazoletas…
+    const library = deriveJointHardwarePlacements({
+      parts: [
+        part({ id: 'pue-1', componentPlacement: 'puerta', optionRole: 'FRENTE', lengthMm: 1000, widthMm: 400 }),
+        part({ id: 'lat-izq', componentPlacement: 'lateral_izquierdo' }),
+        part({ id: 'lat-der', componentPlacement: 'lateral_derecho' }),
+      ],
+      hardware: hardwareCatalog,
+      rules: DEFAULT_JOINT_DRILLING_RULES,
+    });
+    const libraryCups = library.filter((p) => p.partId === 'pue-1' && p.partRole === 'cup');
+    expect(libraryCups).toHaveLength(3);
+
+    // …pero la fábrica manda: banda ≤1200 → 2 cazoletas en el MISMO door.
+    const factory = deriveJointHardwarePlacements({
+      parts: [
+        part({ id: 'pue-1', componentPlacement: 'puerta', optionRole: 'FRENTE', lengthMm: 1000, widthMm: 400 }),
+        part({ id: 'lat-izq', componentPlacement: 'lateral_izquierdo' }),
+        part({ id: 'lat-der', componentPlacement: 'lateral_derecho' }),
+      ],
+      hardware: hardwareCatalog,
+      rules: DEFAULT_JOINT_DRILLING_RULES,
+      hingeDemandPolicy: { bands: [{ upToHeightMm: 1200, hinges: 2 }] },
+    });
+    const factoryCups = factory.filter((p) => p.partId === 'pue-1' && p.partRole === 'cup');
+    expect(factoryCups).toHaveLength(2);
+  });
+
   it('sin herraje con ese código, la unión no aporta placements', () => {
     const out = deriveJointHardwarePlacements({
       parts: [
