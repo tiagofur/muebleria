@@ -118,7 +118,9 @@ interface OpeningProfileLookup {
   readonly profiles: readonly OpeningProfileData[];
 }
 
-const boundaryKey = (grip: OpeningGrip): string => {
+/** The one boundary key format of the contract ("between:<above>:<below>"),
+ * shared with the #1131 semantic layer so the format never drifts. */
+export const boundaryKey = (grip: OpeningGrip): string => {
   if (grip.boundary === 'between') {
     return `between:${grip.aboveZone ?? ''}:${grip.belowZone ?? ''}`;
   }

@@ -885,6 +885,17 @@ export type {
 } from './openingFront';
 export { resolveOpeningFront } from './openingFront';
 
+// --- Opening front layout resolver (#1131) ---
+export type {
+  OpeningGripSide,
+  OpeningResolvedFrontGrip,
+  OpeningResolvedFrontRules,
+  OpeningResolvedFront,
+  OpeningFrontLayout,
+  OpeningFrontLayoutResult,
+} from './openingFrontLayout';
+export { resolveOpeningFrontLayout } from './openingFrontLayout';
+
 // --- Joinery system ladder (#1052 slice 2 / #1219) ---
 export {
   effectiveJoinerySystem,
