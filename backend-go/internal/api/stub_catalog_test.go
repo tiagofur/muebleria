@@ -5,8 +5,9 @@ package api
 // las firmas son las de la sub-interface en store_catalog.go
 import (
 	"context"
-	"fmt"
+
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 func (s *stubStore) CreateMaterialBoard(ctx context.Context, m *domain.MaterialBoard) error {
@@ -225,7 +226,8 @@ func (s *stubStore) GetOpeningProfileByID(_ context.Context, id string) (*domain
 			return &s.openingProfiles[i], nil
 		}
 	}
-	return nil, fmt.Errorf("opening profile not found")
+	// The real store returns the typed sentinel — the 404 mapping depends on it.
+	return nil, storage.ErrOpeningProfileNotFound
 }
 
 func (s *stubStore) CreateOpeningProfile(_ context.Context, profile *domain.OpeningProfile) error {
@@ -241,9 +243,12 @@ func (s *stubStore) CreateOpeningProfile(_ context.Context, profile *domain.Open
 }
 
 func (s *stubStore) UpdateOpeningProfile(_ context.Context, _ string, _ int64, profile *domain.OpeningProfile) error {
+	if s.openingProfileErr != nil {
+		return s.openingProfileErr
+	}
 	return domain.ValidateOpeningProfile(*profile)
 }
 
-func (s *stubStore) DeactivateOpeningProfile(context.Context, string, int64) error {
-	return nil
+func (s *stubStore) DeactivateOpeningProfile(_ context.Context, _ string, _ int64) error {
+	return s.openingProfileErr
 }

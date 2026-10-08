@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #1130 — the opening profile catalog: reads are any member, writes require
@@ -60,5 +61,49 @@ func TestOpeningProfilesVerifiedRequiresCompleteGeometry(t *testing.T) {
 	srv.HandleOpeningProfiles(rr, req)
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("verified-incomplete status = %d, want 500 (domain validation rejects)", rr.Code)
+	}
+}
+
+// B4 (review #1130): version conflicts answer 412 VERSION_CONFLICT and
+// missing rows 404 — like the rest of the If-Match catalog family — so the
+// web client's "recargá y reintentá" path works instead of a 500 that
+// strands a concurrent editor.
+func TestHandleOpeningProfileByIDConflictMaps412(t *testing.T) {
+	srv := &Server{Store: &stubStore{openingProfileErr: storage.ErrVersionConflict}}
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/opening-profiles/op-1", strings.NewReader(`{}`)), "eng", string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-Match", `"v1"`)
+	req.SetPathValue("id", "op-1")
+	rr := httptest.NewRecorder()
+	srv.HandleOpeningProfileByID(rr, req)
+
+	if rr.Code != http.StatusPreconditionFailed {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusPreconditionFailed, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "VERSION_CONFLICT") {
+		t.Fatalf("expected the version-conflict code, got %s", rr.Body.String())
+	}
+}
+
+func TestHandleOpeningProfileByIDMissingMaps404(t *testing.T) {
+	srv := &Server{Store: &stubStore{openingProfileErr: storage.ErrOpeningProfileNotFound}}
+	req := withClaims(httptest.NewRequest(http.MethodPut, "/api/catalog/opening-profiles/op-x", strings.NewReader(`{}`)), "eng", string(domain.RoleAdmin))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-Match", `"v1"`)
+	req.SetPathValue("id", "op-x")
+	rr := httptest.NewRecorder()
+	srv.HandleOpeningProfileByID(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
+	}
+
+	// GET on a missing profile is a 404 too, not a 500.
+	getReq := withClaims(httptest.NewRequest(http.MethodGet, "/api/catalog/opening-profiles/op-x", nil), "eng", string(domain.RoleIngeniero))
+	getReq.SetPathValue("id", "op-x")
+	getRR := httptest.NewRecorder()
+	srv.HandleOpeningProfileByID(getRR, getReq)
+	if getRR.Code != http.StatusNotFound {
+		t.Fatalf("GET status = %d, want %d", getRR.Code, http.StatusNotFound)
 	}
 }
