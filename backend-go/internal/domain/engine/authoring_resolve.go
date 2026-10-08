@@ -350,7 +350,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 	// verified technical profiles family-bearing relationships stay at
 	// TECHNICAL_PROFILE_REQUIRED with zero operations. Test contexts inject
 	// synthetic profiles explicitly.
-	machining, machiningIssues := deriveAuthoringMachining(boards, input.Relationships, machiningForPlacements, input.Catalog, nil)
+	machining, machiningIssues := deriveAuthoringMachining(boards, input.Relationships, machiningForPlacements, input.Catalog, nil, input.FactoryConstructionPolicy)
 	manufacturing = append(manufacturing, machiningIssues...)
 	machining.ManufacturingFingerprint = authoringManufacturingFingerprint(
 		layout, boards, machiningForPlacements, machining.DerivedHardwarePlacements, machining.Operations, machining.JoineryStatuses)

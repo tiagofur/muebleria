@@ -119,7 +119,7 @@ func TestJ2FixedShelfMutationsIsolateFloorSide(t *testing.T) {
 	floorRelationship.Families = floorSideFamilies()
 	shelfRelationship := func() AuthoringRelationship { return j2ShelfRelationship() }
 	resolve := func(boards map[string]*layoutBoard, relationships []AuthoringRelationship) AuthoringMachining {
-		machining, _ := deriveAuthoringMachining(boardMapValues(boards), relationships, nil, domain.Catalog{}, syntheticProfiles())
+		machining, _ := deriveAuthoringMachining(boardMapValues(boards), relationships, nil, domain.Catalog{}, syntheticProfiles(), nil)
 		return machining
 	}
 	floorOps := func(machining AuthoringMachining) []ResolvedMachiningOperation {

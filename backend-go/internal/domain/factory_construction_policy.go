@@ -21,6 +21,11 @@ type FactoryJointRule struct {
 	StartMarginMm float64  `json:"startMarginMm"`
 	EndMarginMm   float64  `json:"endMarginMm"`
 	MaxSpacingMm  *float64 `json:"maxSpacingMm,omitempty"`
+	// SystemId (#1052 slice 2 / #1219): the factory's joinery system for the
+	// family — the rung between the component's authored override and the
+	// kind default. Empty = inherit; the machining layer fails closed on a
+	// system the active catalog does not know.
+	SystemId string `json:"systemId,omitempty"`
 }
 
 // ComponentConstructionOverride is one catalog component's stored exception
