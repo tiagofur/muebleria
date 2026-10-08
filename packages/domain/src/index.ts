@@ -854,6 +854,26 @@ export {
   type WorkshopSuggestion,
 } from './workshopRules';
 
+// --- Opening / Front contract v1 (#1129) ---
+export { OPENING_FRONT_CONTRACT } from './openingFront';
+export type {
+  OpeningLayoutDirection,
+  OpeningZoneAccess,
+  OpeningZone,
+  OpeningLayout,
+  OpeningGripBoundaryKind,
+  OpeningGrip,
+  OpeningPositioning,
+  OpeningIntent,
+  OpeningProfileData,
+  OpeningResolvedZone,
+  OpeningResolvedBoundary,
+  OpeningResolution,
+  OpeningResolutionErrorCode,
+  OpeningResolutionResult,
+} from './openingFront';
+export { resolveOpeningFront } from './openingFront';
+
 // --- Hinge demand by door height band (#1078) ---
 export {
   HINGE_DEMAND_ROLE,
