@@ -642,9 +642,15 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 			defaults := domain.DesignAuthoringDefaults{
 				MaterialChoices: body.AuthoringDefaults.MaterialChoices,
 			}
-			if wc, wcErr := s.Store.GetDesignWorkingCopy(r.Context(), designID); wcErr == nil && wc != nil {
-				defaults.Opening = wc.AuthoringDefaults.Opening
+			wc, wcErr := s.Store.GetDesignWorkingCopy(r.Context(), designID)
+			if wcErr != nil {
+				// The opening preservation needs the current defaults; a
+				// failing read must fail the save instead of silently
+				// erasing the design's persisted opening.
+				respondWithDesignError(w, wcErr)
+				return
 			}
+			defaults.Opening = wc.AuthoringDefaults.Opening
 			authoringDefaults = &defaults
 		}
 
