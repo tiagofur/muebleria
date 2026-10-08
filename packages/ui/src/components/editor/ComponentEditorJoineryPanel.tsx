@@ -118,6 +118,22 @@ export function ComponentEditorJoineryPanel({
     ? 'component'
     : factoryFamilyRule.provenance ?? 'library';
 
+  // #1219: the EFFECTIVE joinery system with its own provenance rung — the
+  // component's authored system wins, then the factory family's, then the
+  // library default. What the machining ladder resolves is what this shows.
+  const effectiveJoinerySystemId: string =
+    override?.joinerySystemId ??
+    factoryFamilyRule.systemId ??
+    DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide.systemId;
+  const systemProvenance: JoineryProvenance = override?.joinerySystemId
+    ? 'component'
+    : factoryFamilyRule.systemId
+      ? 'factory'
+      : 'library';
+  const effectiveSystemLabel =
+    SYSTEM_OPTIONS.find((opt) => opt.value === effectiveJoinerySystemId)?.label ??
+    effectiveJoinerySystemId;
+
   const updateOverride = (partial: Partial<NonNullable<typeof override>>) => {
     setDraft((prev) => {
       const nextOverride = {
@@ -326,6 +342,19 @@ export function ComponentEditorJoineryPanel({
                 </option>
               ))}
             </select>
+            <span
+              className="catalog-form__hint"
+              data-testid="component-joinery-effective-system"
+              data-provenance={systemProvenance}
+            >
+              Sistema efectivo: {effectiveSystemLabel}
+              {' — '}
+              {systemProvenance === 'component'
+                ? 'definido en el componente'
+                : systemProvenance === 'factory'
+                  ? 'definido por la fábrica'
+                  : 'heredado de la biblioteca'}
+            </span>
           </div>
 
           <div className="catalog-form__field">

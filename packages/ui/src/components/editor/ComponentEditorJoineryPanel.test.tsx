@@ -34,6 +34,71 @@ describe('ComponentEditorJoineryPanel (#875)', () => {
     expect(screen.queryByTestId('component-restore-inheritance-btn')).toBeNull();
   });
 
+  it('#1219: el sistema efectivo con provenance — componente gana a fábrica', () => {
+    const draft: ComponentDraft = {
+      ...emptyComponentDraft(),
+      code: 'PIEZA-PISO',
+      placement: 'base',
+      constructionOverride: {
+        componentId: 'PIEZA-PISO',
+        joinerySystemId: 'screw-only',
+        provenance: 'component',
+      },
+    };
+    const customFactoryPolicy: FactoryConstructionPolicy = {
+      ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+      floorToSide: {
+        ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide,
+        provenance: 'factory',
+        systemId: 'dowel-only' as FactoryConstructionPolicy['floorToSide']['systemId'],
+      },
+    };
+
+    render(
+      <ComponentEditorJoineryPanel
+        draft={draft}
+        setDraft={vi.fn()}
+        hidden={false}
+        factoryPolicy={customFactoryPolicy}
+      />,
+    );
+
+    // El peldaño componente gana: la fábrica definió tarugos, el componente
+    // tornillo directo — el readout nombra al ganador y su origen.
+    const readout = screen.getByTestId('component-joinery-effective-system');
+    expect(readout.textContent).toContain('Tornillo directo');
+    expect(readout.getAttribute('data-provenance')).toBe('component');
+  });
+
+  it('#1219: sin sistema propio muestra el de la fábrica con provenance fábrica', () => {
+    const draft: ComponentDraft = {
+      ...emptyComponentDraft(),
+      code: 'PIEZA-PISO',
+      placement: 'base',
+    };
+    const customFactoryPolicy: FactoryConstructionPolicy = {
+      ...DEFAULT_FACTORY_CONSTRUCTION_POLICY,
+      floorToSide: {
+        ...DEFAULT_FACTORY_CONSTRUCTION_POLICY.floorToSide,
+        provenance: 'factory',
+        systemId: 'dowel-only' as FactoryConstructionPolicy['floorToSide']['systemId'],
+      },
+    };
+
+    render(
+      <ComponentEditorJoineryPanel
+        draft={draft}
+        setDraft={vi.fn()}
+        hidden={false}
+        factoryPolicy={customFactoryPolicy}
+      />,
+    );
+
+    const readout = screen.getByTestId('component-joinery-effective-system');
+    expect(readout.textContent).toContain('Tarugo solo');
+    expect(readout.getAttribute('data-provenance')).toBe('factory');
+  });
+
   it('renders with factory provenance badge when factory policy is customized but component is inherited', () => {
     const draft: ComponentDraft = {
       ...emptyComponentDraft(),

@@ -277,7 +277,18 @@ func factoryRuleFromStructured(structured map[string]any, family string) (*Facto
 		spacing := value
 		maxSpacing = &spacing
 	}
-	return usableFactoryRule(count, start, end, "joint.constructionPolicy."+family, maxSpacing)
+	// #1219: the family's joinery system rides ALONGSIDE the station pattern
+	// (the system decides the per-station recipe; count/spacing decide the
+	// stations). Empty = inherit.
+	systemId := ""
+	if raw := entry["systemId"]; raw != nil {
+		value, ok := raw.(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("joint.constructionPolicy.%s.systemId must be a non-empty string", family)
+		}
+		systemId = strings.TrimSpace(value)
+	}
+	return usableFactoryRule(count, start, end, "joint.constructionPolicy."+family, maxSpacing, systemId)
 }
 
 // factoryRuleFromGranular reads one family from the flat editor keys
@@ -302,6 +313,17 @@ func factoryRuleFromGranular(flat map[string]any, family string) (*FactoryJointR
 	if err != nil {
 		return nil, err
 	}
+	// #1219: the granular surface carries the family system too (the flat
+	// editor keys). Present-but-malformed fails closed exactly like the
+	// structured blob.
+	systemId := ""
+	if raw, ok := flat["joint."+family+".systemId"]; ok && raw != nil {
+		value, isString := raw.(string)
+		if !isString || strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("joint.%s.systemId must be a non-empty string", family)
+		}
+		systemId = strings.TrimSpace(value)
+	}
 	var maxSpacing *float64
 	if raw := flat["joint."+family+".maxSpacingMm"]; raw != nil && !hasCount {
 		// The flat keys are a MULTI-WRITER merge surface (provisioned org
@@ -320,7 +342,7 @@ func factoryRuleFromGranular(flat map[string]any, family string) (*FactoryJointR
 		spacing := value
 		maxSpacing = &spacing
 	}
-	return usableFactoryRule(count, start, end, "joint."+family, maxSpacing)
+	return usableFactoryRule(count, start, end, "joint."+family, maxSpacing, systemId)
 }
 
 // factoryScalarOr resolves one overlay scalar: absent falls back to the
@@ -453,7 +475,7 @@ func validateFactoryMaxSpacing(value float64, path string) error {
 // engine-usable rule, reusing the component-exception count bound: a policy
 // value can never smuggle a pattern the authored path would reject. A
 // non-nil maxSpacing owns the pattern and zeroes the count (#1065).
-func usableFactoryRule(count, start, end float64, path string, maxSpacing *float64) (*FactoryJointRule, error) {
+func usableFactoryRule(count, start, end float64, path string, maxSpacing *float64, systemId string) (*FactoryJointRule, error) {
 	if maxSpacing == nil {
 		if err := validateFactoryStationsCount(count, path+".stationsCount"); err != nil {
 			return nil, err
@@ -467,7 +489,7 @@ func usableFactoryRule(count, start, end float64, path string, maxSpacing *float
 			return nil, fmt.Errorf("%s.%s must be a finite nonnegative number", path, margin.name)
 		}
 	}
-	resolved := &FactoryJointRule{StationsCount: int(count), StartMarginMm: start, EndMarginMm: end, MaxSpacingMm: maxSpacing}
+	resolved := &FactoryJointRule{StationsCount: int(count), StartMarginMm: start, EndMarginMm: end, MaxSpacingMm: maxSpacing, SystemId: systemId}
 	if maxSpacing != nil {
 		resolved.StationsCount = 0
 	}
