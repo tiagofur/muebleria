@@ -1,10 +1,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
+	openapi "github.com/tiagofur/muebles-backend/internal/api/openapi/generated"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // --- OPENING PROFILES (#1130, épica #1128 / ADR-0009) ---
@@ -57,6 +60,10 @@ func (s *Server) HandleOpeningProfileByID(w http.ResponseWriter, r *http.Request
 	case http.MethodGet:
 		profile, err := s.Store.GetOpeningProfileByID(r.Context(), id)
 		if err != nil {
+			if errors.Is(err, storage.ErrOpeningProfileNotFound) {
+				respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "perfil de apertura inexistente", nil)
+				return
+			}
 			respondWithInternalError(w, err, "opening profile read")
 			return
 		}
@@ -75,6 +82,14 @@ func (s *Server) HandleOpeningProfileByID(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if err := s.Store.UpdateOpeningProfile(r.Context(), id, expectedVersion, &profile); err != nil {
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
+			if errors.Is(err, storage.ErrOpeningProfileNotFound) {
+				respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "perfil de apertura inexistente", nil)
+				return
+			}
 			respondWithInternalError(w, err, "opening profile update")
 			return
 		}
@@ -89,6 +104,14 @@ func (s *Server) HandleOpeningProfileByID(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if err := s.Store.DeactivateOpeningProfile(r.Context(), id, expectedVersion); err != nil {
+			if errors.Is(err, storage.ErrVersionConflict) {
+				respondWithAPIError(w, http.StatusPreconditionFailed, openapi.ApiErrorCodeVersionConflict, "la versión cambió; recargá y reintentá", nil)
+				return
+			}
+			if errors.Is(err, storage.ErrOpeningProfileNotFound) {
+				respondWithAPIError(w, http.StatusNotFound, openapi.ApiErrorCodeNotFound, "perfil de apertura inexistente", nil)
+				return
+			}
 			respondWithInternalError(w, err, "opening profile deactivate")
 			return
 		}

@@ -130,7 +130,7 @@ func (s *PostgresStore) UpdateOpeningProfile(ctx context.Context, id string, exp
 	)
 	updated, err := scanOpeningProfile(row)
 	if err != nil {
-		return translateOpeningProfileWriteError(err)
+		return s.openingProfileWriteError(ctx, id)
 	}
 	*profile = *updated
 	return nil
@@ -148,14 +148,34 @@ func (s *PostgresStore) DeactivateOpeningProfile(ctx context.Context, id string,
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("opening profile not found or version conflict")
+		return s.openingProfileWriteError(ctx, id)
 	}
 	return nil
 }
 
+// ErrOpeningProfileNotFound separates a missing row from a version
+// conflict: the API maps it to 404 (the client's recreate path) while the
+// conflict maps to 412 like the rest of the If-Match catalog family.
+var ErrOpeningProfileNotFound = errors.New("opening profile not found")
+
+// openingProfileWriteError distinguishes not-found from version conflict
+// with one existence probe inside the caller's transaction context.
+func (s *PostgresStore) openingProfileWriteError(ctx context.Context, id string) error {
+	var exists bool
+	if err := s.db(ctx).QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM opening_profiles WHERE id = $1 AND organization_id = $2)`,
+		id, OrgFromCtx(ctx)).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return ErrOpeningProfileNotFound
+	}
+	return ErrVersionConflict
+}
+
 func translateOpeningProfileWriteError(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("opening profile not found or version conflict")
+		return ErrOpeningProfileNotFound
 	}
 	return err
 }
