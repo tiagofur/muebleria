@@ -875,6 +875,7 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
     engineeringReleaseContext,
     engineeringStateContext,
     factoryConstructionPolicy,
+    openingCapabilities,
     hardwareProfiles,
     hardwareProfilesForPicker,
     openInEngineeringGuarded,
@@ -2153,6 +2154,18 @@ export function ShellView({ ctx }: { readonly ctx: ShellViewCtx }): ReactNode {
                     factoryConstructionPolicy.savePolicyDraft(nextPolicy),
                   onActivateDraft: () =>
                     factoryConstructionPolicy.activatePolicyDraft(),
+                }
+              : null
+          }
+          openingCapabilitiesConfig={
+            session === 'auth' && authToken
+              ? {
+                  capabilities: openingCapabilities.capabilities,
+                  decided: openingCapabilities.decided,
+                  onChange: openingCapabilities.setCapabilities,
+                  onSave: () => openingCapabilities.saveCapabilities(openingCapabilities.capabilities),
+                  saving: openingCapabilities.saving,
+                  error: openingCapabilities.error,
                 }
               : null
           }

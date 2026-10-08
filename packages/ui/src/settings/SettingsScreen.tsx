@@ -19,6 +19,10 @@ import {
   ConstructionSettingsSection,
   type ConstructionSettingsSectionProps,
 } from './ConstructionSettingsSection';
+import {
+  OpeningSettingsSection,
+  type OpeningSettingsSectionProps,
+} from './OpeningSettingsSection';
 
 export type SettingsScreenProps = {
   readonly settings: WorkshopSettings;
@@ -39,6 +43,11 @@ export type SettingsScreenProps = {
    * Factory construction policy overlay configuration (#875).
    */
   readonly constructionPolicyConfig?: ConstructionSettingsSectionProps | null;
+  /**
+   * Factory opening capabilities configuration (#1134) — what the factory
+   * offers for NEW authoring; disabling never mutates existing designs.
+   */
+  readonly openingCapabilitiesConfig?: OpeningSettingsSectionProps | null;
 };
 
 type SettingsTabId = 'general' | 'ingenieria' | 'red';
@@ -69,6 +78,7 @@ export function SettingsScreen({
   salesNetwork = null,
   machineOutput = null,
   constructionPolicyConfig = null,
+  openingCapabilitiesConfig = null,
 }: SettingsScreenProps): ReactNode {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
 
@@ -545,6 +555,10 @@ export function SettingsScreen({
 
             {constructionPolicyConfig ? (
               <ConstructionSettingsSection {...constructionPolicyConfig} />
+            ) : null}
+
+            {openingCapabilitiesConfig ? (
+              <OpeningSettingsSection {...openingCapabilitiesConfig} />
             ) : null}
           </>
         ) : null}
