@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "contract": "granete.opening-front.v1",
-  "description": "#1129 — contrato canónico de opening/front: intención declarativa (layout + grips + posicionamiento) vs resultado resuelto (dimensiones y posiciones de frentes). Un solo fixture para A/B/C/Baseline consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). Matemática canónica: available = front − Σ(reducción+holgura de cada grip); height_i = floor(available×ratio_i/Σratios) en milímetros enteros; el resto se reparte 1 mm por zona desde la ÚLTIMA zona hacia arriba (política v1 remainderZonePolicy=last_zone_first, fija). Los offsets de zona miden DENTRO de la región disponible (los grips consumen fuera y van listados en boundaries). Los valores de ficha pendientes de OQ-2 en este fixture son ENTRADAS declaradas para fijar la matemática: ningún authoring real resuelve con datasheet pending (caso 'datasheet pendiente falla cerrado'). El caso C queda bloqueado por OQ-3 (valor de rebase sin evidencia): intención válida, resolución BLOCKED, nunca inventada.",
+  "description": "#1129 — contrato canónico de opening/front: intención declarativa (layout + grips + posicionamiento) vs resultado resuelto (dimensiones y posiciones de frentes). Un solo fixture para A/B/C/Baseline consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). Matemática canónica: available = front − Σ(reducción+holgura de cada grip); height_i = floor(available×ratio_i/Σratios) en milímetros enteros; el resto se reparte 1 mm por zona desde la ÚLTIMA zona hacia arriba (política v1 remainderZonePolicy=last_zone_first, fija). Los offsets de zona miden DENTRO de la región disponible (los grips consumen fuera y van listados en boundaries). Los valores de ficha pendientes de OQ-2 en este fixture son ENTRADAS declaradas para fijar la matemática: ningún authoring real resuelve con datasheet pending (caso 'datasheet pendiente falla cerrado'). El caso C queda bloqueado por OQ-3 (valor de rebase sin evidencia): intención válida, resolución BLOCKED, nunca inventada. #1131 extiende este fixture con la capa semántica (resolveOpeningFrontLayout / ResolveOpeningFrontLayout): fronts por zona con identidad estable (el zoneId declarado, nunca inferido de nombres de componentes), caja con ejes mapeados (layout vertical divide la ALTURA del frente, zonas top→bottom; horizontal divide el ANCHO, zonas left→right; el eje cruzado pasa intacto y lo comparten todas las zonas), grips como datos resueltos (top agarra desde ARRIBA a las zonas que tocan: TODAS en horizontal, sólo la primera en vertical; bottom desde ABAJO: TODAS en horizontal, sólo la última en vertical; between(a,b) agarra a desde ABAJO y b desde ARRIBA — OQ-1) y reglas aplicadas por frente (direction, positioning, ratio, ratioSum, remainderTarget). Los cabinetFrontWidthMm son placeholders declarados igual que las alturas: fijan la matemática y el mapeo de ejes, no datos de proveedor. Los errores de forma (dirección o access desconocidos, dimensiones no positivas, zona sin id) fallan cerrado ANTES de la matemática v1 y los errores v1 se propagan verbatim (sección layoutInvalidCases, consumida sólo por los tests de la capa semántica).",
   "profiles": [
     {
       "profileId": "profile.gola-l.alu",
@@ -20,6 +20,7 @@
     {
       "name": "A — inferior, 2 puertas batientes, gola L superior",
       "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
       "positioning": "overlay",
       "layout": {
         "direction": "horizontal",
@@ -62,7 +63,53 @@
             "consumedMm": 70
           }
         ],
-        "remainderZoneId": "z2"
+        "remainderZoneId": "z2",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [
+              {
+                "boundary": "top",
+                "side": "above",
+                "profileId": "profile.gola-l.alu",
+                "consumedMm": 70
+              }
+            ],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [
+              {
+                "boundary": "top",
+                "side": "above",
+                "profileId": "profile.gola-l.alu",
+                "consumedMm": 70
+              }
+            ],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": true
+            }
+          }
+        ]
       },
       "profilesOverride": [
         {
@@ -78,11 +125,12 @@
           "gripClearanceMm": 5
         }
       ],
-      "note": "los números de reducción/holgura son placeholders declarados pendientes de la ficha (OQ-2); fijan la matemática, no datos de proveedor"
+      "note": "los números de reducción/holgura son placeholders declarados pendientes de la ficha (OQ-2); fijan la matemática, no datos de proveedor. Fronts: layout horizontal — todas las zonas tocan el borde top y la gola L las agarra desde arriba"
     },
     {
       "name": "B — inferior, cajones 1x/1x/2x, gola L superior + gola C entre z2 y z3",
       "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
       "positioning": "overlay",
       "layout": {
         "direction": "vertical",
@@ -145,7 +193,75 @@
             "consumedMm": 39
           }
         ],
-        "remainderZoneId": "z3"
+        "remainderZoneId": "z3",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 152,
+            "offsetMm": 0,
+            "grips": [
+              {
+                "boundary": "top",
+                "side": "above",
+                "profileId": "profile.gola-l.alu",
+                "consumedMm": 70
+              }
+            ],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 4,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 153,
+            "offsetMm": 152,
+            "grips": [
+              {
+                "boundary": "between:z2:z3",
+                "side": "below",
+                "profileId": "profile.gola-c.alu",
+                "consumedMm": 39
+              }
+            ],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 4,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z3",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 306,
+            "offsetMm": 305,
+            "grips": [
+              {
+                "boundary": "between:z2:z3",
+                "side": "above",
+                "profileId": "profile.gola-c.alu",
+                "consumedMm": 39
+              }
+            ],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "overlay",
+              "ratio": 2,
+              "ratioSum": 4,
+              "remainderTarget": true
+            }
+          }
+        ]
       },
       "profilesOverride": [
         {
@@ -160,11 +276,13 @@
           "frontReductionMm": 34,
           "gripClearanceMm": 5
         }
-      ]
+      ],
+      "note": "OQ-1 resuelto por datos: cajón 2 agarrado desde abajo (cavidad superior de la C), cajón 3 desde arriba (cavidad inferior de la C); el layout vertical hace que el borde top sólo toque z1"
     },
     {
       "name": "Baseline — inferior, 2 puertas con jaladera, sin grips",
       "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
       "positioning": "overlay",
       "layout": {
         "direction": "horizontal",
@@ -197,14 +315,310 @@
           }
         ],
         "boundaries": [],
-        "remainderZoneId": "z2"
+        "remainderZoneId": "z2",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 360,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 360,
+            "heightMm": 720,
+            "offsetMm": 360,
+            "grips": [],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": true
+            }
+          }
+        ]
       }
+    },
+    {
+      "name": "D — inferior, 2 cajones 1x/1x, gola C en bottom",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
+      "positioning": "overlay",
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "drawer",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "drawer",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "bottom",
+          "profileId": "profile.gola-c.alu"
+        }
+      ],
+      "expected": {
+        "availableFrontHeightMm": 681,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 340,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 341,
+            "offsetFromStartMm": 340
+          }
+        ],
+        "boundaries": [
+          {
+            "boundary": "bottom",
+            "consumedMm": 39
+          }
+        ],
+        "remainderZoneId": "z2",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 340,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 341,
+            "offsetMm": 340,
+            "grips": [
+              {
+                "boundary": "bottom",
+                "side": "below",
+                "profileId": "profile.gola-c.alu",
+                "consumedMm": 39
+              }
+            ],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": true
+            }
+          }
+        ]
+      },
+      "profilesOverride": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 66,
+          "gripClearanceMm": 4
+        },
+        {
+          "profileId": "profile.gola-c.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 34,
+          "gripClearanceMm": 5
+        }
+      ],
+      "note": "frontera bottom: el layout vertical hace que sólo la ÚLTIMA zona toque el borde inferior y se agarre desde abajo"
+    },
+    {
+      "name": "E — frente horizontal, 3 zonas 1x/1x/1x, grips between(z1,z2) y between(z2,z3)",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
+      "positioning": "overlay",
+      "layout": {
+        "direction": "horizontal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z3",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [
+        {
+          "boundary": "between",
+          "aboveZone": "z1",
+          "belowZone": "z2",
+          "profileId": "profile.gola-c.alu"
+        },
+        {
+          "boundary": "between",
+          "aboveZone": "z2",
+          "belowZone": "z3",
+          "profileId": "profile.gola-c.alu"
+        }
+      ],
+      "expected": {
+        "availableFrontHeightMm": 642,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 214,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 214,
+            "offsetFromStartMm": 214
+          },
+          {
+            "id": "z3",
+            "heightMm": 214,
+            "offsetFromStartMm": 428
+          }
+        ],
+        "boundaries": [
+          {
+            "boundary": "between:z1:z2",
+            "consumedMm": 39
+          },
+          {
+            "boundary": "between:z2:z3",
+            "consumedMm": 39
+          }
+        ],
+        "remainderZoneId": "z3",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 214,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [
+              {
+                "boundary": "between:z1:z2",
+                "side": "below",
+                "profileId": "profile.gola-c.alu",
+                "consumedMm": 39
+              }
+            ],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 3,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 214,
+            "heightMm": 720,
+            "offsetMm": 214,
+            "grips": [
+              {
+                "boundary": "between:z1:z2",
+                "side": "above",
+                "profileId": "profile.gola-c.alu",
+                "consumedMm": 39
+              },
+              {
+                "boundary": "between:z2:z3",
+                "side": "below",
+                "profileId": "profile.gola-c.alu",
+                "consumedMm": 39
+              }
+            ],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 3,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z3",
+            "access": "hinged",
+            "widthMm": 214,
+            "heightMm": 720,
+            "offsetMm": 428,
+            "grips": [
+              {
+                "boundary": "between:z2:z3",
+                "side": "above",
+                "profileId": "profile.gola-c.alu",
+                "consumedMm": 39
+              }
+            ],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "overlay",
+              "ratio": 1,
+              "ratioSum": 3,
+              "remainderTarget": true
+            }
+          }
+        ]
+      },
+      "profilesOverride": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 66,
+          "gripClearanceMm": 4
+        },
+        {
+          "profileId": "profile.gola-c.alu",
+          "datasheetStatus": "verified",
+          "frontReductionMm": 34,
+          "gripClearanceMm": 5
+        }
+      ],
+      "note": "grips between en layout horizontal (perfil vertical entre puertas laterales): una zona puede quedar agarrada desde arriba Y desde abajo; el reparto cae exacto (resto 0) y remainderTarget nombra la zona de política (la última) sin sumar nada"
     }
   ],
   "blockedCases": [
     {
       "name": "C — alacena con bottom_overhang: intención válida, resolución bloqueada por OQ-3",
       "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
       "positioning": "bottom_overhang",
       "layout": {
         "direction": "vertical",
@@ -222,6 +636,7 @@
     {
       "name": "datasheet pendiente de OQ-2: el authoring no resuelve, nunca se inventa",
       "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
       "positioning": "overlay",
       "layout": {
         "direction": "horizontal",
@@ -384,6 +799,76 @@
       "layout": {
         "direction": "vertical",
         "zones": []
+      },
+      "grips": [],
+      "expectedErrorCode": "OPENING_LAYOUT_INVALID"
+    }
+  ],
+  "layoutInvalidCases": [
+    {
+      "name": "dirección desconocida no mapea ejes",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
+      "layout": {
+        "direction": "diagonal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "drawer",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expectedErrorCode": "OPENING_LAYOUT_INVALID"
+    },
+    {
+      "name": "access desconocido no declara semántica",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "sliding",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expectedErrorCode": "OPENING_LAYOUT_INVALID"
+    },
+    {
+      "name": "frente sin dimensiones positivas no produce cajas",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 0,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "drawer",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expectedErrorCode": "OPENING_LAYOUT_INVALID"
+    },
+    {
+      "name": "zona sin id no tiene identidad estable",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 720,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "",
+            "access": "drawer",
+            "ratio": 1
+          }
+        ]
       },
       "grips": [],
       "expectedErrorCode": "OPENING_LAYOUT_INVALID"
