@@ -854,6 +854,17 @@ export {
   type WorkshopSuggestion,
 } from './workshopRules';
 
+// --- Opening Profile entity (#1130) ---
+export type {
+  OpeningProfile,
+  OpeningProfileGripType,
+  OpeningProfileCrossSection,
+  OpeningProfilePlacement,
+  OpeningProfileDatasheetStatus,
+  OpeningBodyModifier,
+  OpeningBOMMember,
+} from './types';
+
 // --- Opening / Front contract v1 (#1129) ---
 export { OPENING_FRONT_CONTRACT } from './openingFront';
 export type {

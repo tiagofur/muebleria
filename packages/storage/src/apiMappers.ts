@@ -126,6 +126,13 @@ import type {
   ConstructiveRole,
   JoinerySystemId,
   HingeDemandPolicy,
+  OpeningProfile,
+  OpeningProfileGripType,
+  OpeningProfileCrossSection,
+  OpeningProfilePlacement,
+  OpeningProfileDatasheetStatus,
+  OpeningBodyModifier,
+  OpeningBOMMember,
 } from '@granete/domain';
 import {
   TIME_ENTRY_CATEGORIES,
@@ -579,6 +586,96 @@ export function optionGroupFromApi(raw: Record<string, unknown>): OptionGroup {
     kind: (str(raw.kind, 'board') as OptionGroup['kind']),
     required: bool(raw.required, true),
     optionIds: Array.isArray(ids) ? ids.map(String) : [],
+  };
+}
+
+// --- Opening profiles (#1130): datasheet-backed, fail-closed. Geometry
+// values ride the optionalNum contract: absent = not provided yet (blocked
+// authoring), never a default. ---
+
+function openingProfilePlacementList(raw: unknown): OpeningProfilePlacement[] {
+  if (!Array.isArray(raw)) return [];
+  const valid: OpeningProfilePlacement[] = ['top', 'between', 'bottom'];
+  return raw
+    .map((v) => String(v))
+    .filter((v): v is OpeningProfilePlacement => (valid as string[]).includes(v));
+}
+
+function openingProfileInt(raw: unknown): number | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+export function openingProfileFromApi(raw: Record<string, unknown>): OpeningProfile {
+  const gripTypeRaw = str(raw.grip_type ?? raw.gripType, 'none');
+  const gripType: OpeningProfileGripType = (['gola', 'handle', 'bottom_reveal', 'none'] as const).includes(
+    gripTypeRaw as OpeningProfileGripType,
+  )
+    ? (gripTypeRaw as OpeningProfileGripType)
+    : 'none';
+  const statusRaw = str(raw.datasheet_status ?? raw.datasheetStatus, 'pending');
+  const modifiersRaw = Array.isArray(raw.body_modifiers ?? raw.bodyModifiers)
+    ? (raw.body_modifiers ?? raw.bodyModifiers)
+    : [];
+  const bomRaw = (raw.bom_members ?? raw.bomMembers ?? {}) as Record<string, Record<string, unknown>>;
+  const bomMembers: Record<string, OpeningBOMMember> = {};
+  for (const [key, member] of Object.entries(bomRaw)) {
+    if (!member || typeof member !== 'object') continue;
+    bomMembers[key] = {
+      hardwareId: str(member.hardware_id ?? member.hardwareId),
+      rule: str(member.rule),
+      unit: str(member.unit ?? member.Unit) || undefined,
+      spacingMm: openingProfileInt(member.spacing_mm ?? member.spacingMm),
+    };
+  }
+  return {
+    id: str(raw.id),
+    code: str(raw.code),
+    name: str(raw.name),
+    gripType,
+    crossSectionShape: (raw.cross_section_shape ?? raw.crossSectionShape) as
+      | OpeningProfileCrossSection
+      | undefined,
+    compatiblePlacements: openingProfilePlacementList(
+      raw.compatible_placements ?? raw.compatiblePlacements,
+    ),
+    datasheetStatus: statusRaw === 'verified' ? 'verified' : 'pending',
+    geometryOrigin: str(raw.geometry_origin ?? raw.geometryOrigin) || undefined,
+    frontReductionMm: openingProfileInt(raw.front_reduction_mm ?? raw.frontReductionMm),
+    gripClearanceMm: openingProfileInt(raw.grip_clearance_mm ?? raw.gripClearanceMm),
+    profileHeightMm: openingProfileInt(raw.profile_height_mm ?? raw.profileHeightMm),
+    profileDepthMm: openingProfileInt(raw.profile_depth_mm ?? raw.profileDepthMm),
+    bodyModifiers: (modifiersRaw as Record<string, unknown>[]).map((m) => ({
+      role: str(m.role),
+      depthReductionMm: openingProfileInt(m.depth_reduction_mm ?? m.depthReductionMm),
+      notchHeightMm: openingProfileInt(m.notch_height_mm ?? m.notchHeightMm),
+      notchDepthMm: openingProfileInt(m.notch_depth_mm ?? m.notchDepthMm),
+      notchAt: str(m.notch_at ?? m.notchAt) || undefined,
+    })),
+    bomMembers,
+    active: bool(raw.active, true),
+    version: typeof raw.version === 'number' ? raw.version : 1,
+  };
+}
+
+export function openingProfileToApi(profile: OpeningProfile): Record<string, unknown> {
+  return {
+    id: profile.id,
+    code: profile.code,
+    name: profile.name,
+    grip_type: profile.gripType,
+    cross_section_shape: profile.crossSectionShape ?? null,
+    compatible_placements: [...profile.compatiblePlacements],
+    datasheet_status: profile.datasheetStatus,
+    geometry_origin: profile.geometryOrigin ?? null,
+    front_reduction_mm: profile.frontReductionMm ?? null,
+    grip_clearance_mm: profile.gripClearanceMm ?? null,
+    profile_height_mm: profile.profileHeightMm ?? null,
+    profile_depth_mm: profile.profileDepthMm ?? null,
+    body_modifiers: profile.bodyModifiers ? [...profile.bodyModifiers] : [],
+    bom_members: profile.bomMembers ? { ...profile.bomMembers } : {},
+    active: profile.active,
   };
 }
 
@@ -3473,6 +3570,8 @@ export function catalogFromApi(parts: {
   material_categories?: unknown;
   constructionPolicy?: unknown;
   construction_policy?: unknown;
+  openingProfiles?: unknown;
+  opening_profiles?: unknown;
 }): Catalog {
   const asRows = (v: unknown): Record<string, unknown>[] =>
     Array.isArray(v) ? (v as Record<string, unknown>[]) : [];
@@ -3502,6 +3601,7 @@ export function catalogFromApi(parts: {
     constructionPolicy: constructionPolicyFromApi(
       parts.construction_policy ?? parts.constructionPolicy,
     ),
+    openingProfiles: asRows(parts.opening_profiles).map(openingProfileFromApi),
   };
 }
 

@@ -125,6 +125,53 @@ export interface AmbientMaterial {
   readonly previewClearcoat?: number;
 }
 
+/**
+ * Opening / Front contract v1 (#1130, épica #1128 / ADR-0009): the physical
+ * grip profile as a catalog entity — datasheet-backed, fail-closed. Geometry
+ * values are optional because their absence is a BLOCKED authoring state
+ * (OQ-2), never a default.
+ */
+export type OpeningProfileGripType = 'gola' | 'handle' | 'bottom_reveal' | 'none';
+export type OpeningProfileCrossSection = 'L' | 'C' | 'J' | 'flat';
+export type OpeningProfilePlacement = 'top' | 'between' | 'bottom';
+export type OpeningProfileDatasheetStatus = 'pending' | 'verified';
+
+export type OpeningBodyModifier = {
+  /** Constructive role, never a name (#1052). */
+  readonly role: string;
+  readonly depthReductionMm?: number;
+  readonly notchHeightMm?: number;
+  readonly notchDepthMm?: number;
+  readonly notchAt?: string;
+};
+
+export type OpeningBOMMember = {
+  readonly hardwareId: string;
+  readonly rule: string;
+  readonly unit?: string;
+  readonly spacingMm?: number;
+};
+
+export interface OpeningProfile {
+  readonly id: string;
+  readonly code: string;
+  readonly name: string;
+  readonly gripType: OpeningProfileGripType;
+  readonly crossSectionShape?: OpeningProfileCrossSection;
+  readonly compatiblePlacements: readonly OpeningProfilePlacement[];
+  readonly datasheetStatus: OpeningProfileDatasheetStatus;
+  /** Auditable supplier origin; required when datasheetStatus is verified. */
+  readonly geometryOrigin?: string;
+  readonly frontReductionMm?: number;
+  readonly gripClearanceMm?: number;
+  readonly profileHeightMm?: number;
+  readonly profileDepthMm?: number;
+  readonly bodyModifiers?: readonly OpeningBodyModifier[];
+  readonly bomMembers?: Readonly<Record<string, OpeningBOMMember>>;
+  readonly active: boolean;
+  readonly version: number;
+}
+
 export interface EdgeBand {
   readonly id: string;
   readonly code: string;
@@ -1651,6 +1698,11 @@ export interface Catalog {
       Record<string, { readonly hingeDemand?: HingeDemandPolicy }>
     >;
   };
+  /**
+   * #1130: the grip profile catalog (gola L/C, REACH…) — datasheet-backed,
+   * fail-closed. Omitted/undefined for older workspaces.
+   */
+  readonly openingProfiles?: readonly OpeningProfile[];
   /**
    * Ambient materials catalog (presentation-only, #4148). Omitted/undefined
    * treated as [] for older workspaces. Codes are unique within this collection
