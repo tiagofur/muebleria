@@ -911,6 +911,20 @@ export {
   OPENING_BODY_MODIFIERS_CONTRACT,
 } from './openingBodyModifiers';
 
+// --- Opening BOM resolver (#1133) ---
+export type {
+  OpeningBOMErrorCode,
+  OpeningBOMMemberKey,
+  OpeningBOMUnit,
+  OpeningEndCondition,
+  OpeningContractBOMMember,
+  OpeningProfileBOMData,
+  OpeningBOMEndConditions,
+  OpeningResolvedBOMLine,
+  OpeningBOMResolutionResult,
+} from './openingBom';
+export { resolveOpeningBOM, OPENING_BOM_INVALID } from './openingBom';
+
 // --- Joinery system ladder (#1052 slice 2 / #1219) ---
 export {
   effectiveJoinerySystem,
