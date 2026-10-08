@@ -49,9 +49,20 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 	if dims != nil {
 		state.DimsKnown = true
 		if state.Opening != nil {
-			profiles, err := s.Store.ListOpeningProfiles(r.Context())
-			if err == nil {
-				profileData := make([]engine.OpeningProfileData, 0, len(profiles))
+			// B2 (review of the review): the PINNED datasheet slice resolves
+			// the historical design — the live catalog is only a fallback for
+			// rows authored before the pin existed. A datasheet update never
+			// silently changes a persisted design's fronts.
+			var profileData []engine.OpeningProfileData
+			if pin := state.Opening.ProfilePin; pin != nil {
+				profileData = []engine.OpeningProfileData{{
+					ProfileID:        state.Opening.ProfileID,
+					DatasheetStatus:  pin.DatasheetStatus,
+					FrontReductionMm: pin.FrontReductionMm,
+					GripClearanceMm:  pin.GripClearanceMm,
+				}}
+			} else if profiles, err := s.Store.ListOpeningProfiles(r.Context()); err == nil {
+				profileData = make([]engine.OpeningProfileData, 0, len(profiles))
 				for _, profile := range profiles {
 					profileData = append(profileData, engine.OpeningProfileData{
 						ProfileID:        profile.ID,
@@ -60,6 +71,8 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 						GripClearanceMm:  derefInt(profile.GripClearanceMm),
 					})
 				}
+			}
+			if profileData != nil {
 				resolution, resErr := engine.ResolveDesignOpening(dims.widthMm, dims.heightMm, state.Opening, profileData)
 				if resErr != nil {
 					state.Resolution = &engine.DesignOpeningResolution{
@@ -178,6 +191,22 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 		ProfileID:  selection.ProfileID,
 		Placements: selection.Placements,
 	}, capabilities, profileSelection)
+	if validation.State == engine.OpeningSelectionValid && selection.System == domain.OpeningGripSystemGola {
+		// B2: capture the datasheet slice the selection was validated
+		// against — the historical resolution consumes the pin, never the
+		// live catalog.
+		for _, profile := range profileList {
+			if profile.ID == selection.ProfileID {
+				selection.ProfilePin = &domain.DesignOpeningProfilePin{
+					ProfileCode:      profile.Code,
+					FrontReductionMm: derefInt(profile.FrontReductionMm),
+					GripClearanceMm:  derefInt(profile.GripClearanceMm),
+					DatasheetStatus:  profile.DatasheetStatus,
+				}
+				break
+			}
+		}
+	}
 	if validation.State != engine.OpeningSelectionValid {
 		respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 			"code":    "INVALID_OPENING_CONFIGURATION",

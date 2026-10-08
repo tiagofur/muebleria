@@ -26,7 +26,7 @@ func openingDesignStub() *stubStore {
 			},
 		},
 		openingProfiles: []domain.OpeningProfile{{
-			ID: "profile.gola-l.alu", CompatiblePlacements: []string{"top"},
+			ID: "profile.gola-l.alu", Code: "GOLA-L-ALU", CompatiblePlacements: []string{"top"},
 			DatasheetStatus: "verified", FrontReductionMm: openingTestIntPtr(66), GripClearanceMm: openingTestIntPtr(4),
 		}},
 	}
@@ -228,3 +228,56 @@ func TestHandleDesignOpeningRejectsNonDesignMethods(t *testing.T) {
 }
 
 func openingTestIntPtr(v int) *int { return &v }
+
+// B2 (review): a persisted selection resolves against its PIN, not the live
+// catalog — a datasheet update never silently changes a design's fronts.
+func TestHandleDesignOpeningPinSurvivesCatalogChange(t *testing.T) {
+	store := openingDesignStub()
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{
+		"d1137000-0000-0000-0000-000000000001": *designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0}),
+	}
+	srv := &Server{Store: store}
+
+	rr := openingRequest(t, srv, http.MethodPut, `{"system":"gola","profileId":"profile.gola-l.alu","placements":["top"]}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"profilePin"`) || !strings.Contains(rr.Body.String(), `"profileCode"`) {
+		t.Fatalf("the PUT answer must carry the captured pin: %s", rr.Body.String())
+	}
+
+	// The org updates the datasheet AFTER the selection was saved.
+	for i := range store.openingProfiles {
+		if store.openingProfiles[i].ID == "profile.gola-l.alu" {
+			store.openingProfiles[i].FrontReductionMm = openingTestIntPtr(80)
+			store.openingProfiles[i].GripClearanceMm = openingTestIntPtr(10)
+		}
+	}
+
+	rr2 := openingRequest(t, srv, http.MethodGet, "")
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("GET status = %d", rr2.Code)
+	}
+	// 720 − (66+4) = 650 from the PIN; the live 80+10 must NOT leak in.
+	if !strings.Contains(rr2.Body.String(), `"heightMm":650`) {
+		t.Fatalf("the historical resolution must consume the pin, not the live catalog: %s", rr2.Body.String())
+	}
+	if strings.Contains(rr2.Body.String(), `"heightMm":630`) {
+		t.Fatal("the updated datasheet leaked into the persisted design")
+	}
+}
+
+// B3 (review): `between` is geometrically meaningless in v1's single-zone
+// layout — rejected at the write boundary, blocked (never reinterpreted)
+// if a pre-fix row carries it.
+func TestHandleDesignOpeningRejectsBetweenPlacement(t *testing.T) {
+	srv := &Server{Store: openingDesignStub()}
+
+	rr := openingRequest(t, srv, http.MethodPut, `{"system":"gola","profileId":"profile.gola-l.alu","placements":["between"]}`)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d (body=%s)", rr.Code, http.StatusUnprocessableEntity, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "Entre frentes") {
+		t.Fatalf("the rejection must name the v1 limitation: %s", rr.Body.String())
+	}
+}

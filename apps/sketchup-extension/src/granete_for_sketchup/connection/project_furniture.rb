@@ -195,9 +195,7 @@ module Granete
           def put_design_opening(design_id, selection, expected_working_version: nil)
             payload = { 'system' => selection['system'].to_s }
             payload['profileId'] = selection['profileId'].to_s unless selection['profileId'].to_s.empty?
-            return unless selection['placements'].is_a?(Array)
-
-            payload['placements'] = selection['placements']
+            payload['placements'] = selection['placements'] if selection['placements'].is_a?(Array)
             payload['expectedWorkingVersion'] = expected_working_version if expected_working_version
             request(:put, "/designs/#{design_id}/opening", payload)
           end

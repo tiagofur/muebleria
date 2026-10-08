@@ -24,9 +24,24 @@ type DesignOpeningSelection struct {
 	// opening-profile catalog id.
 	ProfileID string `json:"profileId,omitempty"`
 	// Placements is the declared mounting of the gola profile (top |
-	// between | bottom); optional v1 — the profile's own compatible
-	// placements govern when absent.
+	// bottom in v1's single-zone layout); optional — the profile's own
+	// compatible placements govern when absent.
 	Placements []string `json:"placements,omitempty"`
+	// ProfilePin freezes the datasheet slice the selection was VALIDATED
+	// against at authoring time (review follow-up B2): the historical
+	// resolution consumes these values, never the live catalog — a datasheet
+	// update changes fronts only through an explicit new selection. Absent
+	// only in rows authored before the pin existed (they resolve against
+	// the live catalog until re-saved).
+	ProfilePin *DesignOpeningProfilePin `json:"profilePin,omitempty"`
+}
+
+// DesignOpeningProfilePin is the pinned datasheet slice of one selection.
+type DesignOpeningProfilePin struct {
+	ProfileCode      string `json:"profileCode"`
+	FrontReductionMm int    `json:"frontReductionMm"`
+	GripClearanceMm  int    `json:"gripClearanceMm"`
+	DatasheetStatus  string `json:"datasheetStatus"`
 }
 
 // ValidateDesignOpeningSelection enforces the shape at the persistence
@@ -49,13 +64,26 @@ func ValidateDesignOpeningSelection(selection DesignOpeningSelection) error {
 	seen := map[string]bool{}
 	for _, placement := range selection.Placements {
 		switch placement {
-		case "top", "between", "bottom":
+		case "between":
+			// B3 (review of the review): v1 resolves ONE front region per
+			// furniture — a between grip is geometrically meaningless and
+			// used to be silently reinterpreted as top. Reject at the
+			// persistence boundary; the multi-zone editor lifts this later.
+			return fmt.Errorf("la posición «Entre frentes» no aplica al layout v1 de una zona: elegí Superior o Inferior")
+		case "top", "bottom":
 			if seen[placement] {
 				return fmt.Errorf("placement repetida %q", placement)
 			}
 			seen[placement] = true
 		default:
 			return fmt.Errorf("placement de apertura desconocida %q", placement)
+		}
+	}
+	if selection.ProfilePin != nil {
+		pin := selection.ProfilePin
+		if strings.TrimSpace(pin.ProfileCode) == "" || pin.DatasheetStatus != "verified" ||
+			pin.FrontReductionMm <= 0 || pin.GripClearanceMm < 0 {
+			return fmt.Errorf("el pin de perfil exige código, estado verificado y geometría positiva")
 		}
 	}
 	return nil

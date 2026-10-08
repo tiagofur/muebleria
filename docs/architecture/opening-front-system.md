@@ -1,6 +1,11 @@
 # Opening / Front System
 
-- Status: **Proposed** (target architecture — nothing here is implemented yet)
+- Status: **Implemented (pilot)** — contract, profile entity, layout/body/BOM
+  resolvers, capability overlay, validation, migration tool, design carrier
+  and the SketchUp Inspector card are merged (#1129–#1137). OQ-2 (datasheet
+  values) and OQ-3 (overhang evidence) still gate the verified-pilot path;
+  multi-zone layouts and release-pinned profile blobs remain explicit
+  follow-up scope.
 - Decision record: [ADR-0009](../adr/0009-opening-front-system.md)
 - Epic: [#1128](https://github.com/tiagofur/muebleria/issues/1128)
 - Related: [`manufacturing-library-platform.md`](manufacturing-library-platform.md) (ADR-0008),

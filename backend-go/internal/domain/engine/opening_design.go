@@ -63,6 +63,17 @@ func ResolveDesignOpening(
 	}
 	switch selection.System {
 	case domain.OpeningGripSystemGola:
+		// B3 (review of the review): v1 resolves ONE front region — a
+		// persisted `between` (only possible in pre-fix rows) is a truthful
+		// blocked state, never a silent reinterpretation as top.
+		for _, placement := range selection.Placements {
+			if placement == "between" {
+				return &DesignOpeningResolution{
+					State:  DesignOpeningStateBlocked,
+					Reason: OpeningReasonPlacementIncompatible,
+				}, nil
+			}
+		}
 		intent.Grips = []OpeningGrip{{Boundary: "top", ProfileID: selection.ProfileID}}
 		for _, placement := range selection.Placements {
 			if placement == "bottom" {
