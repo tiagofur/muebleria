@@ -634,10 +634,16 @@ func (s *Server) HandleDesignWorkingCopy(w http.ResponseWriter, r *http.Request)
 
 		// #784: omitted authoring_defaults preserve the stored Design
 		// defaults (nil-keeps frontier); provided replaces them wholesale.
+		// #1137: the generated DTO cannot carry the opening selection, so a
+		// defaults write carries the stored one forward — a generic working
+		// copy save never silently erases the design's opening intent.
 		var authoringDefaults *domain.DesignAuthoringDefaults
 		if body.AuthoringDefaults != nil {
 			defaults := domain.DesignAuthoringDefaults{
 				MaterialChoices: body.AuthoringDefaults.MaterialChoices,
+			}
+			if wc, wcErr := s.Store.GetDesignWorkingCopy(r.Context(), designID); wcErr == nil && wc != nil {
+				defaults.Opening = wc.AuthoringDefaults.Opening
 			}
 			authoringDefaults = &defaults
 		}

@@ -121,6 +121,9 @@ type stubStore struct {
 	modelBindingContextErr     error
 	getDesignWorkingCopyErr    error
 	updateDesignWorkingCopyCmd *storage.UpdateDesignWorkingCopyCommand
+	// #1137: opening selection write.
+	setOpeningCmd *storage.SetDesignWorkingCopyOpeningCommand
+	setOpeningErr error
 	// Web-to-SketchUp pairing grants (#499 / DT-SU-1)
 	createPairingGrantCmd      *storage.CreateDesignPairingGrantCommand
 	createPairingGrantErr      error

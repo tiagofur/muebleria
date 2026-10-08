@@ -24,6 +24,13 @@ func registerDesignRoutes(server *Server, mux *http.ServeMux, authRL, authMW fun
 	mux.Handle("GET /api/designs/{designId}/working-copy/material-provenance", authMW(http.HandlerFunc(server.HandleDesignWorkingCopyMaterialProvenance)))
 	mux.Handle("POST /api/designs/{designId}/effective-materials", authMW(http.HandlerFunc(server.HandleDesignEffectiveMaterials)))
 	mux.Handle("POST /api/designs/{designId}/working-copy/material-choices:reconcile", noStoreMiddleware(authMW(server.RequireIdempotency("design.reconcile-working-materials", http.HandlerFunc(server.HandleDesignWorkingCopyMaterialsReconcile)))))
+	// #1137 / OPEN-FRONT: the design's opening intent — the authoring
+	// surface sends the semantic selection (PUT, validated against factory
+	// capabilities with INVALID_OPENING_CONFIGURATION) and reads the
+	// resolved fronts (GET, read-only resolve output). no-store: the
+	// resolution is revision-scoped.
+	mux.Handle("GET /api/designs/{designId}/opening", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleDesignOpening))))
+	mux.Handle("PUT /api/designs/{designId}/opening", noStoreMiddleware(authMW(http.HandlerFunc(server.HandleDesignOpening))))
 	mux.Handle("GET /api/designs/{designId}/revisions", authMW(http.HandlerFunc(server.HandleDesignRevisions)))
 	mux.Handle("POST /api/designs/{designId}/revisions", authMW(server.RequireIdempotency("design.publish-revision", http.HandlerFunc(server.HandleDesignRevisions))))
 	mux.Handle("GET /api/designs/{designId}/revisions/{revisionId}", authMW(http.HandlerFunc(server.HandleDesignRevision)))
