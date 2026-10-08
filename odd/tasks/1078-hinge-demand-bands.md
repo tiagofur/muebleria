@@ -116,8 +116,13 @@ cantidad que la línea fija; cambia el origen/ID (`hingeband-*`), no el total.
       Catalog.constructionPolicy tipado), gate ui (puerta ⇒ grupo exigible,
       picker, estructura), 4 aserciones de engine.test a la realidad derivada,
       spec E2E navegador hinge-demand-bands.spec.ts (typecheck 0).
-- [ ] T5 verificación: pnpm test (0 ✓ primera pasada; re-run final), backend
-      PG real (en curso), browser gate, verify_affected.
+- [x] T5 verificación: pnpm typecheck 0 errores; pnpm test workspace 0 (2
+      pasadas); backend PG real VERDE (backend-test.sh 713s: storage 491s,
+      api 22s, pilotreadiness 186s — el seed sin línea fija sobrevive toda
+      la suite); browser gate hinge-demand-bands.spec.ts exit 0 (playwright
+      propagate; script imprime PASS en stderr); gofmt limpio en archivos
+      del slice; rake sketchup NOT_RUN (0 diffs Ruby — superficie intacta,
+      la demanda vive en Go/TS ya probados).
 
 ## Hallazgos de implementación (para el revisor)
 
