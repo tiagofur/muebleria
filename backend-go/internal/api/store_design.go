@@ -17,6 +17,10 @@ type DesignStore interface {
 	GetDesignWorkingCopy(ctx context.Context, designID string) (*domain.DesignWorkingCopy, error)
 	GetDesignCommercialProjection(ctx context.Context, projectID, designID string) (*domain.CommercialProjection, error)
 	UpdateDesignWorkingCopy(ctx context.Context, cmd storage.UpdateDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
+	// SetDesignWorkingCopyOpening persists the design's opening intent
+	// surgically (#1137): only the authoring defaults' opening selection
+	// changes — never the working items.
+	SetDesignWorkingCopyOpening(ctx context.Context, cmd storage.SetDesignWorkingCopyOpeningCommand) (*domain.DesignAuthoringDefaults, error)
 	ResetDesignWorkingCopy(ctx context.Context, cmd storage.ResetDesignWorkingCopyCommand) (*domain.DesignWorkingCopy, error)
 	// #637 / DT-MAT: quoted-material provenance detection (read-only) and
 	// the explicit fill-only reconciliation into the mutable working copy.

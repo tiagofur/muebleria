@@ -98,11 +98,15 @@ func IsValidDesignMaterialChoiceMode(mode DesignMaterialChoiceMode) bool {
 
 // DesignAuthoringDefaults is the durable Design-scoped authoring defaults
 // block (#784). The wrapper is deliberately extensible: hardwareChoices and
-// parameters may join later through their own capability contracts, but this
-// delivery only implements materialChoices. Canonical empty state is
-// {"materialChoices":{}} — never a bare {} nor null.
+// parameters may join later through their own capability contracts. The
+// opening intent (#1137) joined through its own contract
+// (DesignOpeningSelection): the semantic selection the authoring surfaces
+// send, validated at the write boundary with INVALID_OPENING_CONFIGURATION
+// and resolved server-side (never computed by clients). Canonical empty
+// state is {"materialChoices":{}} — never a bare {} nor null.
 type DesignAuthoringDefaults struct {
-	MaterialChoices map[string]string `json:"materialChoices"`
+	MaterialChoices map[string]string       `json:"materialChoices"`
+	Opening         *DesignOpeningSelection `json:"opening,omitempty"`
 }
 
 // NormalizeDesignAuthoringDefaults returns the canonical form: a non-nil
@@ -119,6 +123,9 @@ func (d DesignAuthoringDefaults) Normalize() DesignAuthoringDefaults {
 // fail-closed: role keys and material ids must be non-empty strings. Role
 // names stay free-form option group codes (consistent with material_choices);
 // unknown top-level fields are rejected at the API decode boundary, not here.
+// The opening selection validates its own shape (system/profile/placements
+// vocabulary); capability compatibility against live catalog data stays at
+// the opening write endpoint, which needs the store.
 func ValidateDesignAuthoringDefaults(defaults DesignAuthoringDefaults) error {
 	for role, materialID := range defaults.MaterialChoices {
 		if strings.TrimSpace(role) == "" {
@@ -126,6 +133,11 @@ func ValidateDesignAuthoringDefaults(defaults DesignAuthoringDefaults) error {
 		}
 		if strings.TrimSpace(materialID) == "" {
 			return fmt.Errorf("%w: authoring default for role %s carries an empty material id", ErrInvalidDesignCommand, role)
+		}
+	}
+	if defaults.Opening != nil {
+		if err := ValidateDesignOpeningSelection(*defaults.Opening); err != nil {
+			return fmt.Errorf("%w: %s", ErrInvalidDesignCommand, err.Error())
 		}
 	}
 	return nil

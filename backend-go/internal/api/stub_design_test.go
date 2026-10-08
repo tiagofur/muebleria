@@ -157,6 +157,36 @@ func (s *stubStore) GetDesignWorkingCopy(_ context.Context, designID string) (*d
 	}, nil
 }
 
+// #1137 — the surgical opening write: records the command and mutates the
+// stubbed working copy's defaults so the readback observes the write.
+func (s *stubStore) SetDesignWorkingCopyOpening(_ context.Context, cmd storage.SetDesignWorkingCopyOpeningCommand) (*domain.DesignAuthoringDefaults, error) {
+	s.setOpeningCmd = &cmd
+	if s.setOpeningErr != nil {
+		return nil, s.setOpeningErr
+	}
+	wc, ok := s.designWorkingCopiesByID[cmd.DesignID]
+	if !ok {
+		wc = domain.DesignWorkingCopy{
+			DesignID:   cmd.DesignID,
+			ProjectID:  "proj-1",
+			SourceType: domain.DesignRevisionSourceManual,
+			Items:      []domain.DesignWorkingItem{},
+			UpdatedAt:  time.Now(),
+		}
+	}
+	defaults := wc.AuthoringDefaults.Normalize()
+	defaults.Opening = cmd.Opening
+	if err := domain.ValidateDesignAuthoringDefaults(defaults); err != nil {
+		return nil, err
+	}
+	wc.AuthoringDefaults = defaults
+	if s.designWorkingCopiesByID == nil {
+		s.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{}
+	}
+	s.designWorkingCopiesByID[cmd.DesignID] = wc
+	return &defaults, nil
+}
+
 func (s *stubStore) GetDesignCommercialProjection(_ context.Context, _, _ string) (*domain.CommercialProjection, error) {
 	if s.commercialProjectionErr != nil {
 		return nil, s.commercialProjectionErr

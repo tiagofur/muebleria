@@ -717,3 +717,82 @@ type ModelBindingContext struct {
 // ErrDesignRevisionNotFound. Mismatches between the client base and the
 // authoritative working-copy base are NOT resolved here: the response carries
 // the authoritative base and the client derives the stale state (#388).
+
+// SetDesignWorkingCopyOpeningCommand is the #1137 surgical opening write: it
+// touches ONLY the authoring defaults' opening selection — never the items
+// (UpdateDesignWorkingCopy's item frontier deletes-and-reinserts, which a
+// semantic selection write must never trigger).
+type SetDesignWorkingCopyOpeningCommand struct {
+	DesignID string
+	// ExpectedWorkingVersion is the optimistic-concurrency token (the
+	// working copy's updated_at). nil means no precondition.
+	ExpectedWorkingVersion *time.Time
+	Opening                *domain.DesignOpeningSelection
+	ActorUserID            string
+}
+
+// SetDesignWorkingCopyOpening persists the design's opening intent with a
+// read-modify-write of the authoring defaults block under the row lock,
+// preserving every other field of the block (materialChoices included).
+func (s *PostgresStore) SetDesignWorkingCopyOpening(ctx context.Context, cmd SetDesignWorkingCopyOpeningCommand) (*domain.DesignAuthoringDefaults, error) {
+	if !isValidUUID(cmd.DesignID) {
+		return nil, domain.ErrDesignNotFound
+	}
+	if transactionFromContext(ctx) == nil {
+		var res *domain.DesignAuthoringDefaults
+		actor, _ := TenantActorFromCtx(ctx)
+		if actor.OrganizationID == "" {
+			actor.OrganizationID = OrgFromCtx(ctx)
+		}
+		err := s.WithinTenantTx(ctx, actor, func(txCtx context.Context) error {
+			r, err := s.SetDesignWorkingCopyOpening(txCtx, cmd)
+			if err != nil {
+				return err
+			}
+			res = r
+			return nil
+		})
+		return res, err
+	}
+
+	var defaultsJSON []byte
+	var storedUpdatedAt time.Time
+	err := s.db(ctx).QueryRow(ctx, `
+		SELECT authoring_defaults, updated_at
+		FROM design_working_copies
+		WHERE design_id = $1 AND organization_id = $2
+		FOR UPDATE
+	`, cmd.DesignID, OrgFromCtx(ctx)).Scan(&defaultsJSON, &storedUpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, domain.ErrDesignNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if cmd.ExpectedWorkingVersion != nil &&
+		(cmd.ExpectedWorkingVersion.IsZero() || !cmd.ExpectedWorkingVersion.UTC().Equal(storedUpdatedAt.UTC())) {
+		return nil, ErrWorkingCopyVersionConflict
+	}
+
+	var defaults domain.DesignAuthoringDefaults
+	if err := json.Unmarshal(defaultsJSON, &defaults); err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrSerializationFailed, err)
+	}
+	defaults = defaults.Normalize()
+	defaults.Opening = cmd.Opening
+	if err := domain.ValidateDesignAuthoringDefaults(defaults); err != nil {
+		return nil, err
+	}
+	updatedJSON, err := json.Marshal(defaults.Normalize())
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", domain.ErrSerializationFailed, err)
+	}
+	if _, err := s.db(ctx).Exec(ctx, `
+		UPDATE design_working_copies
+		SET authoring_defaults = $1, updated_at = NOW(), updated_by = $2
+		WHERE design_id = $3 AND organization_id = $4
+	`, updatedJSON, cmd.ActorUserID, cmd.DesignID, OrgFromCtx(ctx)); err != nil {
+		return nil, err
+	}
+	return &defaults, nil
+}
