@@ -67,8 +67,29 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
       getAccessToken: () => owner.token,
     });
     const catalog = await repository.getCatalog();
+    // La org gate viene sin materiales de tablero: el spec siembra el suyo
+    // (igual que siembra hardware/grupo/componente) y la parte FRENTE lo
+    // elige — sin esa choice el estado comercial no produce revisión.
+    const frenteMaterialId = '77777777-0000-4777-8777-000000000001';
+    const materials = [
+      ...(catalog.materials ?? []).filter((m) => m.id !== frenteMaterialId),
+      {
+        id: frenteMaterialId,
+        code: 'MEL-BL-18',
+        name: 'Melamina blanca 18',
+        widthMm: 2750,
+        lengthMm: 1850,
+        thicknessMm: 18,
+        grainDefault: false,
+        boardPrice: 480,
+        wastePercent: 10,
+        costPerM2: 132,
+        active: true,
+      },
+    ];
     await repository.saveCatalog({
       ...catalog,
+      materials,
       hardware: [
         ...(catalog.hardware ?? []).filter((h) => h.id !== HWG_BLUM && h.id !== HWG_ECO),
         { id: HWG_BLUM, code: 'HWG-BLUM-1078', name: 'Bisagra Blum CL', unit: 'piece' as const, costPerUnit: 40, active: true },
@@ -152,8 +173,6 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
 
     // La parte FRENTE de la puerta exige la elección de material del rol —
     // sin ella el estado comercial no produce revisión (fail-closed correcto).
-    const frenteMaterial = catalog.materials.find((m) => m.active) ?? catalog.materials[0];
-    if (!frenteMaterial) throw new Error('el catálogo sembrado no trae materiales de tablero');
     const now = new Date().toISOString();
     await repository.saveProject({
       id: HWG_PROJECT,
@@ -170,7 +189,7 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
           id: HWG_TALL_LINE,
           moduleId: HWG_TALL_MODULE,
           quantity: 1,
-          optionChoices: { FRENTE: frenteMaterial.id },
+          optionChoices: { FRENTE: frenteMaterialId },
         },
         { id: HWG_FLAT_LINE, moduleId: HWG_FLAT_MODULE, quantity: 1, optionChoices: {} },
       ],
