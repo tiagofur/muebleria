@@ -760,7 +760,14 @@ export function resolveComposedModule(
 
     for (const unit of units) {
       const unitInst = { ...agrInst, quantity: 1 };
-      const res = resolveAgregadoInstance(unitInst, catalogAgregados, unit.unitIndex);
+      const res = resolveAgregadoInstance(
+        unitInst,
+        catalogAgregados,
+        unit.unitIndex,
+        // Item 2: las puertas-agregado compran con la MISMA banda de
+        // fábrica que el servidor cotiza.
+        catalog.constructionPolicy?.doorHingeDemand,
+      );
       agregadosHardware.push(...res.hardwareLines);
 
       const filteredComponents = filterComponentInstancesForBaseMode(
