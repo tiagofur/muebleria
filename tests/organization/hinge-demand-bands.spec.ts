@@ -96,7 +96,17 @@ test.describe.serial('#1078 — bisagras por banda de altura: demanda derivada y
         { id: HWG_ECO, code: 'HWG-ECO-1078', name: 'Bisagra económica', unit: 'piece' as const, costPerUnit: 12, active: true },
       ],
       optionGroups: [
-        ...catalog.optionGroups.filter((g) => g.id !== HWG_GROUP),
+        // El grupo FRENTE también lo siembra el spec: la parte de la puerta
+        // consume la choice y el snapshot exige el label comercial del grupo.
+        {
+          id: '77777777-0000-4777-8777-000000000002',
+          code: 'FRENTE',
+          name: 'Frente',
+          kind: 'board' as const,
+          required: true,
+          optionIds: [frenteMaterialId],
+        },
+        ...catalog.optionGroups.filter((g) => g.id !== HWG_GROUP && g.code !== 'FRENTE'),
         {
           id: HWG_GROUP,
           code: 'BISAGRA',
