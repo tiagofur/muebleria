@@ -3,8 +3,11 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/domain/engine"
 )
 
 // Contrato: catálogo completo resuelto (GetFullCatalog) y detalles de
@@ -192,6 +195,27 @@ func (s *PostgresStore) GetFullCatalog(ctx context.Context) (domain.Catalog, err
 		return cat, fmt.Errorf("error loading agregados: %w", err)
 	}
 	cat.Agregados = agrs
+
+	// #1078: the org's factory construction overlay rides the full catalog —
+	// quote, estimate and export resolves all see the SAME bands, and the
+	// release freeze bakes its own copy so released snapshots resolve
+	// immutably. An overlay READ failure is infra-level: fail loud, never
+	// silently quote with library-default bands while the factory overrode
+	// them. Overlay absence is the normal state (nil = library ladder).
+	orgUUID, parseErr := uuid.Parse(OrgFromCtx(ctx))
+	if parseErr != nil {
+		return cat, fmt.Errorf("overlay factory policy org: %w", parseErr)
+	}
+	overlay, err := s.GetActiveOverlayByLibrary(ctx, orgUUID, uuid.MustParse(domain.GraneteStandardLibraryID))
+	if err == nil {
+		policy, perr := engine.ParseFactoryConstructionPolicy(overlay.Overrides)
+		if perr != nil {
+			return cat, fmt.Errorf("overlay factory policy: %w", perr)
+		}
+		cat.ConstructionPolicy = policy
+	} else if !errors.Is(err, ErrOverlayNotFound) {
+		return cat, fmt.Errorf("overlay for factory policy: %w", err)
+	}
 
 	// Cargar módulos y su despiece. version rides along (#497 T2 contract):
 	// the catalog list must serve the real optimistic-concurrency token so

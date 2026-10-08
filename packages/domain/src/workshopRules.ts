@@ -9,21 +9,21 @@
  * Pure domain logic — no React, no IO. 100% testable.
  */
 
+import { hingesForDoor } from './hingeDemand';
+
 /**
- * Suggested hinge count for a door based on its height.
+ * Suggested hinge count for a door based on its height (#1078 bands):
+ * - ≤ 900mm: 2 hinges
+ * - 901-1600mm: 3 hinges
+ * - 1601-2000mm: 4 hinges
+ * - > 2000mm: 5 hinges (clamped at the last library band)
  *
- * Common rule of thumb:
- * - ≤ 800mm: 2 hinges
- * - 801-1400mm: 3 hinges
- * - 1401-2000mm: 4 hinges
- * - > 2000mm: 5 hinges
+ * Height-only view of hingesForDoor (hingeDemand.ts) — the DEMAND engine
+ * adds the Blum width surge on top; drilling layouts positions from this
+ * count so the cups drilled always match the hinges bought.
  */
 export function suggestHingeCount(doorHeightMm: number): number {
-  if (doorHeightMm <= 0) return 0;
-  if (doorHeightMm <= 800) return 2;
-  if (doorHeightMm <= 1400) return 3;
-  if (doorHeightMm <= 2000) return 4;
-  return 5;
+  return hingesForDoor(doorHeightMm, undefined, undefined);
 }
 
 /**

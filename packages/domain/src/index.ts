@@ -854,6 +854,18 @@ export {
   type WorkshopSuggestion,
 } from './workshopRules';
 
+// --- Hinge demand by door height band (#1078) ---
+export {
+  HINGE_DEMAND_ROLE,
+  HINGE_DEMAND_DESCRIPTION,
+  HINGE_DEMAND_LINE_PREFIX,
+  DEFAULT_HINGE_DEMAND_POLICY,
+  hingesForDoor,
+  hingeDemandRole,
+  type HingeDemandBand,
+  type HingeDemandPolicy,
+} from './hingeDemand';
+
 // --- Tiered pricing / volume discounts (#202) ---
 export type { DiscountTier } from './types';
 export {

@@ -197,6 +197,26 @@ func resolveBomCommon(
 		module.HardwareLines = kept
 	}
 
+	// #1078: door height bands are the middle rung of the demand ladder —
+	// placements (#1210) win over the band, the band replaces bulk BISAGRA
+	// lines of the same resolved hardware (the fixed seed line stops
+	// governing), and an unresolved choice contributes nothing (the quote
+	// gate owns that failure).
+	bandCounts, bandLines, err := collectHingeBandDemand(module, rawParts, catalog, optionChoices, placementCounts)
+	if err != nil {
+		return domain.ResolvedBom{}, err
+	}
+	if len(bandCounts) > 0 {
+		kept := make([]domain.HardwareLine, 0, len(module.HardwareLines))
+		for _, line := range module.HardwareLines {
+			if _, banded := bandCounts[resolvedBulkHardwareID(line, optionChoices)]; banded {
+				continue
+			}
+			kept = append(kept, line)
+		}
+		module.HardwareLines = kept
+	}
+
 	hardware := collectAllHardwareLines(module, catalog)
 	var sides *PlinthSides
 	if baseContext != nil {
@@ -213,7 +233,9 @@ func resolveBomCommon(
 		sides,
 		optionChoices,
 	)
-	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware, placementLines)
+	// #1078: band demand rides the same appended channel as positioned
+	// lines (after them — origin-visible, priced identically).
+	return resolveBomFromParts(module, optionChoices, catalog, treatedParts, treatedHardware, append(placementLines, bandLines...))
 }
 
 // resolveBomFromParts resolves material/edge/hardware IDs for already-expanded
@@ -642,6 +664,10 @@ func expandComponentInstances(
 				WidthMm:     widthMm,
 				Edges:       edges,
 				OptionRole:  optionRole,
+				// #1078: keeps the catalog component on the expanded part so
+				// the per-component hinge demand exception (C3) can key on
+				// it downstream.
+				CatalogComponentID: comp.ID,
 			})
 		}
 	}

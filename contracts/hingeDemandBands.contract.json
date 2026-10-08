@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "description": "#1078 — TS y Go derivan la MISMA demanda de bisagras por banda de altura de puerta: escalera ≤900→2, 901–1600→3, 1601–2000→4, 2001–2400→5 (clamp sobre la última banda), recargo Blum +1 si ancho>650, bandas custom de fábrica reemplazan la escalera. Una sola autoridad para ambas implementaciones (packages/domain vitest + backend-go/internal/domain/engine go test).",
+  "defaultPolicy": {
+    "optionRole": "BISAGRA",
+    "bands": [
+      { "upToHeightMm": 900, "hinges": 2 },
+      { "upToHeightMm": 1600, "hinges": 3 },
+      { "upToHeightMm": 2000, "hinges": 4 },
+      { "upToHeightMm": 2400, "hinges": 5 }
+    ],
+    "widthSurgeOverMm": 650
+  },
+  "demandCases": [
+    { "name": "alacena 720 compra 2 (aceptación #1078)", "heightMm": 720, "widthMm": 296, "expectedHinges": 2 },
+    { "name": "borde de banda 900 sigue en 2", "heightMm": 900, "widthMm": 400, "expectedHinges": 2 },
+    { "name": "901 ya compra 3", "heightMm": 901, "widthMm": 400, "expectedHinges": 3 },
+    { "name": "borde de banda 1600", "heightMm": 1600, "widthMm": 400, "expectedHinges": 3 },
+    { "name": "1601 compra 4 (aceptación #1078)", "heightMm": 1601, "widthMm": 400, "expectedHinges": 4 },
+    { "name": "borde de banda 2000", "heightMm": 2000, "widthMm": 600, "expectedHinges": 4 },
+    { "name": "2001 compra 5", "heightMm": 2001, "widthMm": 600, "expectedHinges": 5 },
+    { "name": "despensa 2100 compra 5 (aceptación #1078)", "heightMm": 2100, "widthMm": 600, "expectedHinges": 5 },
+    { "name": "clamp sobre la última banda", "heightMm": 2600, "widthMm": 600, "expectedHinges": 5 },
+    { "name": "recargo Blum ancho 651", "heightMm": 720, "widthMm": 651, "expectedHinges": 3 },
+    { "name": "borde Blum 650 no recarga", "heightMm": 720, "widthMm": 650, "expectedHinges": 2 },
+    { "name": "ancho desconocido no recarga (nunca se inventa)", "heightMm": 720, "expectedHinges": 2 },
+    { "name": "altura no positiva no demanda", "heightMm": 0, "widthMm": 600, "expectedHinges": 0 },
+    { "name": "altura negativa no demanda", "heightMm": -120, "widthMm": 600, "expectedHinges": 0 }
+  ],
+  "overrideCases": [
+    {
+      "name": "bandas de fábrica reemplazan la escalera completa (escalera C3)",
+      "policy": {
+        "optionRole": "BISAGRA",
+        "bands": [
+          { "upToHeightMm": 1200, "hinges": 2 },
+          { "upToHeightMm": 2400, "hinges": 6 }
+        ],
+        "widthSurgeOverMm": 0
+      },
+      "cases": [
+        { "heightMm": 1000, "widthMm": 900, "expectedHinges": 2 },
+        { "heightMm": 1500, "widthMm": 900, "expectedHinges": 6 },
+        { "heightMm": 2600, "widthMm": 900, "expectedHinges": 6 },
+        { "heightMm": 720, "widthMm": 651, "expectedHinges": 2 }
+      ]
+    },
+    {
+      "name": "política de fábrica con otro rol de grupo",
+      "policy": {
+        "optionRole": "BISAGRA_PREMIUM",
+        "bands": [
+          { "upToHeightMm": 900, "hinges": 2 },
+          { "upToHeightMm": 2400, "hinges": 5 }
+        ],
+        "widthSurgeOverMm": 600
+      },
+      "cases": [
+        { "heightMm": 800, "widthMm": 600, "expectedHinges": 2 },
+        { "heightMm": 800, "widthMm": 601, "expectedHinges": 3 },
+        { "heightMm": 1800, "widthMm": 600, "expectedHinges": 5 }
+      ]
+    }
+  ]
+}

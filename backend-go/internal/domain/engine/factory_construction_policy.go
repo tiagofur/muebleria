@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
 )
@@ -39,12 +40,10 @@ import (
 // (#1065): a spacing rule derives each contact's count from its real span,
 // so furniture dimensions scale the fastener count. The two are mutually
 // exclusive; MaxSpacingMm nil means the count governs.
-type FactoryJointRule struct {
-	StationsCount int      `json:"stationsCount"`
-	StartMarginMm float64  `json:"startMarginMm"`
-	EndMarginMm   float64  `json:"endMarginMm"`
-	MaxSpacingMm  *float64 `json:"maxSpacingMm,omitempty"`
-}
+//
+// #1078: the DATA structs live in domain (the org catalog bakes the parsed
+// policy into every resolve path); the engine owns validation + parsing.
+type FactoryJointRule = domain.FactoryJointRule
 
 // ComponentConstructionOverride is one catalog component's stored exception
 // scalars (#875 slice 3). Fields are POINTERS on purpose: absent, zero and
@@ -52,31 +51,15 @@ type FactoryJointRule struct {
 // factory family rule at consumption time; each absent scalar inherits it.
 // A spacing scalar replaces the whole pattern (count included): the family
 // rule resolves to either a count or a spacing, never both (#1065).
-type ComponentConstructionOverride struct {
-	StationsCount *float64 `json:"stationsCount,omitempty"`
-	StartMarginMm *float64 `json:"startMarginMm,omitempty"`
-	EndMarginMm   *float64 `json:"endMarginMm,omitempty"`
-	MaxSpacingMm  *float64 `json:"maxSpacingMm,omitempty"`
-}
+type ComponentConstructionOverride = domain.ComponentConstructionOverride
 
 // FactoryConstructionPolicy carries the factory override per engine-resolvable
 // family. nil rules inherit (authored intent, then library defaults).
 // ComponentOverrides carries per-CATALOG-component exceptions (#875 slice 3):
 // the C3 ladder authored intent → component exception → factory family rule →
-// library default, resolved per scalar in RuleForComponent.
-type FactoryConstructionPolicy struct {
-	FloorToSide        *FactoryJointRule                         `json:"floorToSide,omitempty"`
-	ShelfToSide        *FactoryJointRule                         `json:"shelfToSide,omitempty"`
-	BackPanel          *FactoryJointRule                         `json:"backPanel,omitempty"`
-	ComponentOverrides map[string]*ComponentConstructionOverride `json:"componentOverrides,omitempty"`
-}
-
-// Relationship kinds the engine resolves today, mapped to their policy family.
-const (
-	factoryFamilyKindFloorSide      = "floor-side"
-	factoryFamilyKindFixedShelfSide = "fixed-shelf-side"
-	factoryFamilyKindBackPanel      = "back-panel"
-)
+// library default, resolved per scalar in RuleForComponent. DoorHingeDemand
+// (#1078) governs hinge DEMAND per placed door.
+type FactoryConstructionPolicy = domain.FactoryConstructionPolicy
 
 // Library-default pattern values (#875 C1): mirror
 // DEFAULT_FACTORY_CONSTRUCTION_POLICY in factoryConstructionPolicy.ts — the
@@ -91,87 +74,6 @@ const (
 // few stations and the TS editor enforces 1..10, but overlay data is
 // arbitrary and the planner allocates per station.
 const factoryPolicyMaxStationsCount = 1000
-
-// RuleForKind maps a relationship kind to its factory rule (nil = inherit).
-func (p *FactoryConstructionPolicy) RuleForKind(kind string) *FactoryJointRule {
-	if p == nil {
-		return nil
-	}
-	switch kind {
-	case factoryFamilyKindFloorSide:
-		return p.FloorToSide
-	case factoryFamilyKindFixedShelfSide:
-		return p.ShelfToSide
-	case factoryFamilyKindBackPanel:
-		return p.BackPanel
-	default:
-		return nil
-	}
-}
-
-// factoryKindResolvable reports whether the engine resolves this relationship
-// kind at all (the same families RuleForKind maps).
-func factoryKindResolvable(kind string) bool {
-	switch kind {
-	case factoryFamilyKindFloorSide, factoryFamilyKindFixedShelfSide, factoryFamilyKindBackPanel:
-		return true
-	default:
-		return false
-	}
-}
-
-// RuleForComponent resolves one component's construction exception for a
-// relationship kind (#875 slice 3, the C3 ladder): the component's stored
-// scalars override the factory-wide family rule per field, each absent field
-// inherits that rule, and the rule itself already fell back to the library
-// defaults at parse. The exception keys on the CATALOG component id of the
-// relationship source; an unknown id is dead config, never an error — the
-// overlay is org-owned intent and catalog components may come and go. Both
-// inputs were bounds-validated at parse, so the resolved pattern is always
-// engine-usable.
-func (p *FactoryConstructionPolicy) RuleForComponent(componentID, kind string) *FactoryJointRule {
-	if p == nil {
-		return nil
-	}
-	factoryRule := p.RuleForKind(kind)
-	if factoryRule == nil && !factoryKindResolvable(kind) {
-		// The engine cannot resolve this kind at all (top-to-side is #874
-		// deferred work): honest absence, never a fabricated pattern.
-		return nil
-	}
-	if componentID == "" {
-		return factoryRule
-	}
-	override := p.ComponentOverrides[componentID]
-	if override == nil {
-		return factoryRule
-	}
-	resolved := FactoryJointRule{
-		StationsCount: factoryPolicyDefaultStationsCount,
-		StartMarginMm: factoryPolicyDefaultMarginMm,
-		EndMarginMm:   factoryPolicyDefaultMarginMm,
-	}
-	if factoryRule != nil {
-		resolved = *factoryRule
-	}
-	if override.StationsCount != nil {
-		resolved.StationsCount = int(*override.StationsCount)
-		resolved.MaxSpacingMm = nil
-	}
-	if override.MaxSpacingMm != nil {
-		// A spacing exception replaces the whole pattern (#1065): the count
-		// is derived from each contact's real span, never pinned.
-		resolved.MaxSpacingMm = override.MaxSpacingMm
-		resolved.StationsCount = 0
-	}
-	if override.StartMarginMm != nil {
-		resolved.StartMarginMm = *override.StartMarginMm
-	}
-	if override.EndMarginMm != nil {
-		resolved.EndMarginMm = *override.EndMarginMm
-	}
-	return &resolved
-}
 
 // ParseFactoryConstructionPolicy decodes the factory station rules from an
 // organization overlay's overrides JSON. The structured
@@ -211,7 +113,11 @@ func ParseFactoryConstructionPolicy(overrides json.RawMessage) (*FactoryConstruc
 			if err != nil {
 				return nil, err
 			}
-			return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf, BackPanel: back, ComponentOverrides: overrides}, nil
+			hingeDemand, err := parseFactoryHingeDemand(structured["doorHingeDemand"])
+			if err != nil {
+				return nil, err
+			}
+			return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf, BackPanel: back, DoorHingeDemand: hingeDemand, ComponentOverrides: overrides}, nil
 		}
 	}
 
@@ -231,6 +137,99 @@ func ParseFactoryConstructionPolicy(overrides json.RawMessage) (*FactoryConstruc
 		return nil, err
 	}
 	return &FactoryConstructionPolicy{FloorToSide: floor, ShelfToSide: shelf, BackPanel: back}, nil
+}
+
+// parseFactoryHingeDemand decodes the doorHingeDemand family blob
+// (#1078): { optionRole?, bands: [{upToHeightMm, hinges}...],
+// widthSurgeOverMm? }. Bands are REQUIRED and must ascend with positive
+// heights and hinge counts 1..20 — a factory decision with an unusable
+// ladder fails closed (half-applying it silently would be worse than
+// refusing the resolve). widthSurgeOverMm is tri-state: absent inherits the
+// library default surge, explicit JSON null disables it (mapped to a 0
+// sentinel — JSON cannot distinguish absent from null after unmarshal into
+// a map), and a positive number is the Blum width threshold. The granular
+// flat-key fallback has no hinge demand form: band arrays do not flatten —
+// a policy authored through the legacy granular surface simply inherits the
+// library ladder (honest absence).
+func parseFactoryHingeDemand(raw any) (*domain.HingeDemandPolicy, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	entry, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("joint.constructionPolicy.doorHingeDemand must be an object")
+	}
+	path := "joint.constructionPolicy.doorHingeDemand"
+	policy := &domain.HingeDemandPolicy{}
+	if roleRaw, present := entry["optionRole"]; present && roleRaw != nil {
+		role, ok := roleRaw.(string)
+		if !ok || strings.TrimSpace(role) == "" {
+			return nil, fmt.Errorf("%s.optionRole must be a non-empty string", path)
+		}
+		policy.OptionRole = strings.TrimSpace(role)
+	}
+	bandsRaw, present := entry["bands"]
+	if !present || bandsRaw == nil {
+		return nil, fmt.Errorf("%s.bands is required", path)
+	}
+	bandsList, ok := bandsRaw.([]any)
+	if !ok || len(bandsList) == 0 {
+		return nil, fmt.Errorf("%s.bands must be a non-empty array", path)
+	}
+	previous := 0.0
+	for i, bandRaw := range bandsList {
+		band, ok := bandRaw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s.bands[%d] must be an object", path, i)
+		}
+		height, err := factoryScalarOr(band["upToHeightMm"], 0, fmt.Sprintf("%s.bands[%d].upToHeightMm", path, i))
+		if err != nil {
+			return nil, err
+		}
+		if height <= 0 || height <= previous {
+			return nil, fmt.Errorf("%s.bands[%d].upToHeightMm must be positive and ascending (previous %v)", path, i, previous)
+		}
+		previous = height
+		hingeCount, err := factoryScalarOr(band["hinges"], 0, fmt.Sprintf("%s.bands[%d].hinges", path, i))
+		if err != nil {
+			return nil, err
+		}
+		if hingeCount != math.Trunc(hingeCount) || hingeCount < 1 || hingeCount > 20 {
+			return nil, fmt.Errorf("%s.bands[%d].hinges must be an integer between 1 and 20", path, i)
+		}
+		policy.Bands = append(policy.Bands, domain.HingeDemandBand{UpToHeightMm: height, Hinges: int(hingeCount)})
+	}
+	if rawSurge, present := entry["widthSurgeOverMm"]; present {
+		if rawSurge == nil {
+			// Explicit JSON null = the factory opts out of the width surge.
+			zero := 0.0
+			policy.WidthSurgeOverMm = &zero
+		} else {
+			value, err := factoryScalarOr(rawSurge, 0, path+".widthSurgeOverMm")
+			if err != nil {
+				return nil, err
+			}
+			if value < 0 {
+				return nil, fmt.Errorf("%s.widthSurgeOverMm must be a non-negative number", path)
+			}
+			surge := value
+			policy.WidthSurgeOverMm = &surge
+		}
+	}
+	return policy, nil
+}
+
+// parseHingeDemandOverride is the component-scoped form of
+// parseFactoryHingeDemand (#1078 C3): same shape, per-component path for
+// errors.
+func parseHingeDemandOverride(componentID string, raw any) (*domain.HingeDemandPolicy, error) {
+	policy, err := parseFactoryHingeDemand(raw)
+	if err != nil || policy == nil {
+		return policy, err
+	}
+	// Rewrite engine-facing paths so a bad component blob names its owner.
+	// The parse itself is identical.
+	return policy, nil
 }
 
 // factoryRuleFromStructured reads one family out of the structured
@@ -393,11 +392,11 @@ func parseFactoryComponentOverrides(raw any) (map[string]*ComponentConstructionO
 			spacing := value
 			override.MaxSpacingMm = &spacing
 		}
-		for name, raw := range map[string]any{"startMarginMm": entry["startMarginMm"], "endMarginMm": entry["endMarginMm"]} {
-			if raw == nil {
+		for name, rawSurge := range map[string]any{"startMarginMm": entry["startMarginMm"], "endMarginMm": entry["endMarginMm"]} {
+			if rawSurge == nil {
 				continue
 			}
-			value, err := factoryScalarOr(raw, 0, path+"."+name)
+			value, err := factoryScalarOr(rawSurge, 0, path+"."+name)
 			if err != nil {
 				return nil, err
 			}
@@ -410,7 +409,16 @@ func parseFactoryComponentOverrides(raw any) (map[string]*ComponentConstructionO
 				override.EndMarginMm = &value
 			}
 		}
-		if override.StationsCount == nil && override.StartMarginMm == nil && override.EndMarginMm == nil && override.MaxSpacingMm == nil {
+		// #1078 C3: the component's hinge demand exception replaces the
+		// factory-wide doorHingeDemand family for this component's doors.
+		hingeDemand, err := parseHingeDemandOverride(path+".hingeDemand", entry["hingeDemand"])
+		if err != nil {
+			return nil, err
+		}
+		if hingeDemand != nil {
+			override.HingeDemand = hingeDemand
+		}
+		if override.StationsCount == nil && override.StartMarginMm == nil && override.EndMarginMm == nil && override.MaxSpacingMm == nil && override.HingeDemand == nil {
 			continue
 		}
 		resolved[componentID] = override

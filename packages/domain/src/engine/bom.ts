@@ -59,6 +59,11 @@ import {
   validateHardwareLine,
   validateModule,
 } from './validate';
+import {
+  collectHingeBandDemand,
+  moduleHardwareWithoutHingeBand,
+  withHingeBandDemand,
+} from './hingeBandDemand';
 
 /**
  * Edge band resolution (PRD §13.5):
@@ -922,12 +927,32 @@ export function resolveBom(
       optionChoices,
     );
 
+    // #1078: door height bands are the MIDDLE rung of the demand ladder —
+    // placements (#1210) win over the band, the band replaces bulk BISAGRA
+    // lines of the same resolved hardware (the fixed seed line stops
+    // governing), and a role without a choice contributes nothing (the
+    // quote gate owns that failure). Band demand rides pre-treatment parts
+    // (doors are never base parts) — same order as the Go resolve.
+    const hingeBand = collectHingeBandDemand({
+      parts: allParts,
+      catalogHardware: catalog.hardware,
+      policySource: catalog.constructionPolicy,
+      optionChoices,
+      placementCounts,
+      moduleCode: module.code,
+    });
+    const bandedHardware = moduleHardwareWithoutHingeBand(
+      moduleHardware,
+      hingeBand.counts,
+      optionChoices,
+    );
+
     // Synthesize the base parts the mode needs, then apply mode rules
     // (zoclo strip ml, legs qty) over composed + module hardware.
     const treatment = applyBaseTreatment(
       module.code,
       allParts,
-      [...composedHardware, ...moduleHardware],
+      [...composedHardware, ...bandedHardware],
       resolveBaseModeWithContext(module, baseContext),
       resolveBaseClearanceWithContext(module, baseContext),
       dims.width,
@@ -942,15 +967,18 @@ export function resolveBom(
     for (const part of allParts) validateBoardPart(part, module.code);
     for (const line of composedHardware) validateHardwareLine(line, module.code);
 
-    return withPlacementHardwareDemand(
-      resolveBoardPartsAndHardware(
-        allParts,
-        composedHardware,
-        optionChoices,
-        catalog,
-        module.code,
+    return withHingeBandDemand(
+      withPlacementHardwareDemand(
+        resolveBoardPartsAndHardware(
+          allParts,
+          composedHardware,
+          optionChoices,
+          catalog,
+          module.code,
+        ),
+        placementCounts,
       ),
-      placementCounts,
+      hingeBand.lines,
     );
   }
 
@@ -1006,10 +1034,26 @@ export function resolveBom(
     optionChoices,
   );
 
+  // #1078: band demand on the non-composed arm too (synthetic-agregado parts
+  // or none — doorless modules contribute nothing, mirrors the Go resolve).
+  const hingeBand = collectHingeBandDemand({
+    parts: allParts,
+    catalogHardware: catalog.hardware,
+    policySource: catalog.constructionPolicy,
+    optionChoices,
+    placementCounts,
+    moduleCode: module.code,
+  });
+  const bandedHardware = moduleHardwareWithoutHingeBand(
+    moduleHardware,
+    hingeBand.counts,
+    optionChoices,
+  );
+
   const treatment = applyBaseTreatment(
     module.code,
     allParts,
-    [...composedHardware, ...moduleHardware],
+    [...composedHardware, ...bandedHardware],
     resolveBaseModeWithContext(module, baseContext),
     resolveBaseClearanceWithContext(module, baseContext),
     dimsFallback.width,
@@ -1024,15 +1068,18 @@ export function resolveBom(
   for (const part of allParts) validateBoardPart(part, module.code);
   for (const line of allHardware) validateHardwareLine(line, module.code);
 
-  return withPlacementHardwareDemand(
-    resolveBoardPartsAndHardware(
-      allParts,
-      allHardware,
-      optionChoices,
-      catalog,
-      module.code,
+  return withHingeBandDemand(
+    withPlacementHardwareDemand(
+      resolveBoardPartsAndHardware(
+        allParts,
+        allHardware,
+        optionChoices,
+        catalog,
+        module.code,
+      ),
+      placementCounts,
     ),
-    placementCounts,
+    hingeBand.lines,
   );
 }
 

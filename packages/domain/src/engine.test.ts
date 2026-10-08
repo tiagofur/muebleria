@@ -1322,13 +1322,17 @@ describe('golden: Plantilla_Muebles.xlsx', () => {
     // Pieces come from expanded components; find by description (component name).
     const puerta = bom.boardParts.find((p) => p.description === 'Puerta Gabinete');
     const costado = bom.boardParts.find((p) => p.description === 'Costado Gabinete');
-    const bisagra = bom.hardwareLines.find((h) => h.id === 'gab-h01');
+    // #1078: hinge demand is DERIVED — the fixed gab-h01 line is replaced by
+    // the height-band line for the 717mm door (2 hinges), same hardware.
+    const bisagra = bom.hardwareLines.find((h) => h.id.startsWith('hingeband-'));
 
     expect(costado?.materialId).toBe(IDS.matArauco);
     expect(costado?.edgeBandId).toBe(IDS.edgeArauco);
     expect(puerta?.materialId).toBe(IDS.matMaderado);
     expect(puerta?.edgeBandId).toBe(IDS.edgeMaderado);
     expect(bisagra?.hardwareId).toBe(IDS.hwBisagra);
+    expect(bisagra?.quantity).toBe(2);
+    expect(bisagra?.optionRole).toBe('BISAGRA');
   });
 });
 
@@ -1906,7 +1910,13 @@ describe('generateHardwareList', () => {
           id: 'item-gab',
           moduleId: IDS.modGab,
           quantity: 1,
-          optionChoices: plantillaChoices,
+          // #1078: without the BISAGRA choice the band cannot derive an
+          // identity — a door module with lines and no choice stays
+          // hardwareless (the quote gate owns demanding the group).
+          optionChoices: (() => {
+            const { BISAGRA: _omitted, ...withoutHinge } = plantillaChoices;
+            return withoutHinge;
+          })(),
         },
       ],
     };
@@ -2356,13 +2366,15 @@ describe('resolveBom composed module dispatch', () => {
     // Pieces come from expanded components; find by description (component name).
     const puerta = bom.boardParts.find((p) => p.description === 'Puerta Gabinete');
     const costado = bom.boardParts.find((p) => p.description === 'Costado Gabinete');
-    const bisagra = bom.hardwareLines.find((h) => h.id === 'gab-h01');
+    // #1078: derived band demand replaces the fixed line (717mm door → 2).
+    const bisagra = bom.hardwareLines.find((h) => h.id.startsWith('hingeband-'));
 
     expect(costado?.materialId).toBe(IDS.matArauco);
     expect(costado?.edgeBandId).toBe(IDS.edgeArauco);
     expect(puerta?.materialId).toBe(IDS.matMaderado);
     expect(puerta?.edgeBandId).toBe(IDS.edgeMaderado);
     expect(bisagra?.hardwareId).toBe(IDS.hwBisagra);
+    expect(bisagra?.quantity).toBe(2);
   });
 
   it('throws ResolutionError for unknown structureId', () => {
@@ -2555,8 +2567,13 @@ describe('golden: composed module cost (F049 / H07)', () => {
     // Total: 6 board parts
     expect(composedBom.boardParts).toHaveLength(6);
 
-    // Composed module has no hardware lines (deferred from MVP)
-    expect(composedBom.hardwareLines).toHaveLength(0);
+    // #1078: the composed door module carries DERIVED hinge demand — one
+    // band line, 2 hinges for the 717mm door, group choice consumed.
+    expect(composedBom.hardwareLines).toHaveLength(1);
+    expect(composedBom.hardwareLines[0]!.id).toBe(
+      `hingeband-${'hw-bisagra-cierre-lento'}`,
+    );
+    expect(composedBom.hardwareLines[0]!.quantity).toBe(2);
 
     // Both composed modules resolve without error
     expect(gabBom.boardParts.length).toBe(8);

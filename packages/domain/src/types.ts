@@ -3,6 +3,7 @@
  */
 
 import type { HardwareFinishId } from './hardwareFinishes';
+import type { HingeDemandPolicy } from './hingeDemand';
 import type { FurnitureParameter } from './smartFurnitureDomain';
 import type {
   AgregadoRigidMember,
@@ -1638,6 +1639,18 @@ export interface Catalog {
   readonly structures?: readonly Structure[];
   /** Hierarchical module categories (MOD-09). Empty/omitted = no taxonomy. */
   readonly categories?: readonly ModuleCategory[];
+  /**
+   * #1078: the org factory overlay's engine shape, catalog-carried (the Go
+   * catalog bakes the FULL parsed policy; TS consumes only the hinge demand
+   * family). The release freeze bakes its own copy, so released snapshots
+   * resolve immutably. Omitted = library ladder (DEFAULT_HINGE_DEMAND_POLICY).
+   */
+  readonly constructionPolicy?: {
+    readonly doorHingeDemand?: HingeDemandPolicy;
+    readonly componentOverrides?: Readonly<
+      Record<string, { readonly hingeDemand?: HingeDemandPolicy }>
+    >;
+  };
   /**
    * Ambient materials catalog (presentation-only, #4148). Omitted/undefined
    * treated as [] for older workspaces. Codes are unique within this collection

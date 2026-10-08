@@ -191,10 +191,15 @@ type BoardPart struct {
 	WidthMm     int    `json:"width_mm"`
 	// Grain (veta) is inherited from the resolved material's GrainDefault —
 	// never set per piece. Mirrors how edge band is resolved from material.
-	Edges         []EdgeAssignment `json:"edges"`
-	OptionRole    string           `json:"option_role"`
-	LengthFormula string           `json:"length_formula,omitempty"`
-	WidthFormula  string           `json:"width_formula,omitempty"`
+	Edges      []EdgeAssignment `json:"edges"`
+	OptionRole string           `json:"option_role"`
+	// CatalogComponentID (#1078): the catalog component a composed part was
+	// expanded from (empty on legacy flat template parts) — the per-component
+	// hinge demand exception keys on it. Additive, never persisted by the
+	// flat module editor.
+	CatalogComponentID string `json:"catalog_component_id,omitempty"`
+	LengthFormula      string `json:"length_formula,omitempty"`
+	WidthFormula       string `json:"width_formula,omitempty"`
 }
 
 type HardwareLine struct {
@@ -219,6 +224,10 @@ type Catalog struct {
 	Categories   []ModuleCategory `json:"categories,omitempty"`
 	Components   []Component      `json:"components,omitempty"`
 	Agregados    []Agregado       `json:"agregados,omitempty"`
+	// ConstructionPolicy (#1078): the org factory overlay parsed and baked
+	// into every resolve path — live catalog reads attach it; the release
+	// freeze bakes it so a released snapshot resolves immutably.
+	ConstructionPolicy *FactoryConstructionPolicy `json:"construction_policy,omitempty"`
 }
 
 // WorkshopSettings is taller-wide defaults (F031 + F044 COST-02).
