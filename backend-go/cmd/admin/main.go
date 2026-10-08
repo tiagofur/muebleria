@@ -58,6 +58,8 @@ func main() {
 		runGrantMembership(os.Args[2:])
 	case "create-org":
 		runCreateOrg(os.Args[2:])
+	case "migrate-opening-grips":
+		runMigrateOpeningGrips(os.Args[2:])
 	case "seed":
 		runSeed(os.Args[2:])
 	case "clean-media":
@@ -85,6 +87,8 @@ func usage() {
   admin seed [--org <slug>]
   admin clean-media [--apply]
   admin clean-demo-data [--apply] [--org <slug>]   (borra el catálogo demo del seed)
+  admin migrate-opening-grips --org <uuid> --mapping <archivo> [--apply] [--report <archivo>]
+                   (migra jaladera-gola-* al modelo de grip; dry-run por defecto)
 
 Environment:
   MIGRATION_DATABASE_URL  Required explicit Postgres URL for every admin command.

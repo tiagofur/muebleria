@@ -1,0 +1,18 @@
+[
+  {
+    "legacyCode": "jaladera-gola-256",
+    "newProfile": {
+      "code": "GOLA-256",
+      "name": "Gola 256 (migrada)",
+      "placements": ["top"]
+    }
+  },
+  {
+    "legacyCode": "jaladera-gola-l-alu",
+    "profileCode": "GOLA-L-ALU"
+  },
+  {
+    "legacyCode": "jaladera-gola-vertical",
+    "unsupported": true
+  }
+]
