@@ -1,0 +1,601 @@
+{
+  "schema": 1,
+  "contract": "granete.opening-front.v1",
+  "description": "#1132 — resolución de body modifiers por rol constructivo: los modifiers declarados por los Opening Profiles (datos, no lógica) se aplican sobre la resolución de layout de #1131 para producir los efectos exactos por rol (reducción de profundidad del panel horizontal en la frontera del perfil; saques/notches en laterales con posición resuelta). Consumido IDÉNTICAMENTE por TS (packages/domain vitest) y Go (backend-go engine go test). El input 'layout' es la salida del resolver de apertura (#1131, fixture openingFrontResolution.contract.json) y 'profiles' trae CompatiblePlacements + BodyModifiers de la entidad de catálogo. Reglas: el rol objetivo es vocabulario ConstructiveRole real (horizontal|lateral|shelf|back|door|divider|custom) — un rol desconocido falla cerrado (prohibido inferir de nombres); depth_reduction sólo en fronteras top/bottom (el panel horizontal de ese borde se acorta EXACTAMENTE lo declarado); notch exige height+depth+NotchAt completos, con NotchAt compatible con la frontera (top_front⇒top con offset 0; bottom_front⇒bottom con offset = alto disponible; front_boundary⇒between con offset = fin de la zona debajo de la frontera) y el perfil debe declarar compatible la frontera donde está montado. El mismo efecto sobre el mismo rol+frontera se aplica UNA vez (valores idénticos duplicados en un perfil se deduplican; valores distintos son OPENING_BODY_MODIFIER_CONFLICT — L superior + C intermedia nunca duplican la reducción). Baseline sin grips ⇒ cero modifiers. Los saques son features de maquinado con geometría board-local y proveniencia (perfil+frontera): identidad estable 'effect|role|boundary', listos para el pipeline de fabricación. Los valores son placeholders declarados que fijan la matemática, no datos de proveedor (OQ-2).",
+  "resolutionCases": [
+    {
+      "name": "A — gola L en top: reducción de profundidad + saque superior en laterales",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "horizontal", "depthReductionMm": 20 },
+            { "role": "lateral", "notchHeightMm": 66, "notchDepthMm": 12, "notchAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedModifiers": [
+        {
+          "effect": "depth_reduction",
+          "role": "horizontal",
+          "profileId": "profile.gola-l.alu",
+          "boundary": "top",
+          "depthReductionMm": 20
+        },
+        {
+          "effect": "notch",
+          "role": "lateral",
+          "profileId": "profile.gola-l.alu",
+          "boundary": "top",
+          "notchHeightMm": 66,
+          "notchDepthMm": 12,
+          "notchOffsetMm": 0
+        }
+      ]
+    },
+    {
+      "name": "B — L en top + C entre z2/z3: la reducción se aplica UNA vez y cada saque en su frontera",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 611,
+          "zones": [
+            { "id": "z1", "heightMm": 152, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 153, "offsetFromStartMm": 152 },
+            { "id": "z3", "heightMm": 306, "offsetFromStartMm": 305 }
+          ],
+          "boundaries": [
+            { "boundary": "top", "consumedMm": 70 },
+            { "boundary": "between:z2:z3", "consumedMm": 39 }
+          ],
+          "remainderZoneId": "z3"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 152,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 4, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 153,
+            "offsetMm": 152,
+            "grips": [ { "boundary": "between:z2:z3", "side": "below", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 4, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z3",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 306,
+            "offsetMm": 305,
+            "grips": [ { "boundary": "between:z2:z3", "side": "above", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 2, "ratioSum": 4, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "horizontal", "depthReductionMm": 20 },
+            { "role": "lateral", "notchHeightMm": 66, "notchDepthMm": 12, "notchAt": "top_front" }
+          ]
+        },
+        {
+          "profileId": "profile.gola-c.alu",
+          "compatiblePlacements": [ "between" ],
+          "bodyModifiers": [
+            { "role": "lateral", "notchHeightMm": 39, "notchDepthMm": 12, "notchAt": "front_boundary" }
+          ]
+        }
+      ],
+      "expectedModifiers": [
+        {
+          "effect": "depth_reduction",
+          "role": "horizontal",
+          "profileId": "profile.gola-l.alu",
+          "boundary": "top",
+          "depthReductionMm": 20
+        },
+        {
+          "effect": "notch",
+          "role": "lateral",
+          "profileId": "profile.gola-l.alu",
+          "boundary": "top",
+          "notchHeightMm": 66,
+          "notchDepthMm": 12,
+          "notchOffsetMm": 0
+        },
+        {
+          "effect": "notch",
+          "role": "lateral",
+          "profileId": "profile.gola-c.alu",
+          "boundary": "between:z2:z3",
+          "notchHeightMm": 39,
+          "notchDepthMm": 12,
+          "notchOffsetMm": 305
+        }
+      ],
+      "note": "combinación L + C: la C declara sólo saque en su frontera (offset 305 = fin de z2); la reducción de profundidad del panel horizontal aparece exactamente una vez"
+    },
+    {
+      "name": "Baseline — sin grips: ningún modifier",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 720,
+          "zones": [
+            { "id": "z1", "heightMm": 360, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 360, "offsetFromStartMm": 360 }
+          ],
+          "boundaries": [],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 360,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 360,
+            "heightMm": 720,
+            "offsetMm": 360,
+            "grips": [],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [],
+      "expectedModifiers": []
+    },
+    {
+      "name": "F — gola C en bottom: saque inferior en laterales al final de la región",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 681,
+          "zones": [
+            { "id": "z1", "heightMm": 340, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 341, "offsetFromStartMm": 340 }
+          ],
+          "boundaries": [ { "boundary": "bottom", "consumedMm": 39 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 340,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 341,
+            "offsetMm": 340,
+            "grips": [ { "boundary": "bottom", "side": "below", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-c.alu",
+          "compatiblePlacements": [ "bottom" ],
+          "bodyModifiers": [
+            { "role": "lateral", "notchHeightMm": 39, "notchDepthMm": 12, "notchAt": "bottom_front" }
+          ]
+        }
+      ],
+      "expectedModifiers": [
+        {
+          "effect": "notch",
+          "role": "lateral",
+          "profileId": "profile.gola-c.alu",
+          "boundary": "bottom",
+          "notchHeightMm": 39,
+          "notchDepthMm": 12,
+          "notchOffsetMm": 681
+        }
+      ]
+    },
+    {
+      "name": "Dedupe — modifier duplicado dentro del mismo perfil se aplica una vez",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "lateral", "notchHeightMm": 66, "notchDepthMm": 12, "notchAt": "top_front" },
+            { "role": "lateral", "notchHeightMm": 66, "notchDepthMm": 12, "notchAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedModifiers": [
+        {
+          "effect": "notch",
+          "role": "lateral",
+          "profileId": "profile.gola-l.alu",
+          "boundary": "top",
+          "notchHeightMm": 66,
+          "notchDepthMm": 12,
+          "notchOffsetMm": 0
+        }
+      ]
+    }
+  ],
+  "blockedCases": [
+    {
+      "name": "dos reducciones distintas para el mismo rol y frontera: conflicto, nunca doble aplicación",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 325, "offsetFromStartMm": 325 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-x.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 325,
+            "heightMm": 720,
+            "offsetMm": 325,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-x.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-x.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "horizontal", "depthReductionMm": 20 },
+            { "role": "horizontal", "depthReductionMm": 30 }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_CONFLICT"
+    }
+  ],
+  "invalidCases": [
+    {
+      "name": "rol por nombre («techo») falla cerrado: el vocabulario es ConstructiveRole",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-nombre.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-nombre.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "techo", "depthReductionMm": 20 }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+    {
+      "name": "saque incompleto (alto sin profundidad) no se inventa",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-mitad.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-mitad.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "lateral", "notchHeightMm": 66, "notchAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+    {
+      "name": "NotchAt top_front en un perfil montado between: posición incompatible",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 611,
+          "zones": [
+            { "id": "z1", "heightMm": 305, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 306, "offsetFromStartMm": 305 }
+          ],
+          "boundaries": [ { "boundary": "between:z1:z2", "consumedMm": 39 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 305,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "between:z1:z2", "side": "below", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 306,
+            "offsetMm": 305,
+            "grips": [ { "boundary": "between:z1:z2", "side": "above", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-c.alu",
+          "compatiblePlacements": [ "between" ],
+          "bodyModifiers": [
+            { "role": "lateral", "notchHeightMm": 39, "notchDepthMm": 12, "notchAt": "top_front" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+    {
+      "name": "depth_reduction en frontera between: efecto incompatible",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 611,
+          "zones": [
+            { "id": "z1", "heightMm": 305, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 306, "offsetFromStartMm": 305 }
+          ],
+          "boundaries": [ { "boundary": "between:z1:z2", "consumedMm": 39 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 305,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "between:z1:z2", "side": "below", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 306,
+            "offsetMm": 305,
+            "grips": [ { "boundary": "between:z1:z2", "side": "above", "profileId": "profile.gola-c.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-c.alu",
+          "compatiblePlacements": [ "between" ],
+          "bodyModifiers": [
+            { "role": "horizontal", "depthReductionMm": 20 }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    },
+    {
+      "name": "perfil declarado sólo para top montado en between: placement incompatible",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 611,
+          "zones": [
+            { "id": "z1", "heightMm": 305, "offsetFromStartMm": 0 },
+            { "id": "z2", "heightMm": 306, "offsetFromStartMm": 305 }
+          ],
+          "boundaries": [ { "boundary": "between:z1:z2", "consumedMm": 39 } ],
+          "remainderZoneId": "z2"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 305,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "between:z1:z2", "side": "below", "profileId": "profile.gola-l.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": false }
+          },
+          {
+            "zoneId": "z2",
+            "access": "drawer",
+            "widthMm": 720,
+            "heightMm": 306,
+            "offsetMm": 305,
+            "grips": [ { "boundary": "between:z1:z2", "side": "above", "profileId": "profile.gola-l.alu", "consumedMm": 39 } ],
+            "rules": { "direction": "vertical", "positioning": "overlay", "ratio": 1, "ratioSum": 2, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-l.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "lateral", "notchHeightMm": 39, "notchDepthMm": 12, "notchAt": "front_boundary" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_PLACEMENT_INVALID"
+    },
+    {
+      "name": "NotchAt desconocido («left_front») falla cerrado",
+      "layout": {
+        "contract": "granete.opening-front.v1",
+        "resolution": {
+          "availableFrontHeightMm": 650,
+          "zones": [
+            { "id": "z1", "heightMm": 325, "offsetFromStartMm": 0 }
+          ],
+          "boundaries": [ { "boundary": "top", "consumedMm": 70 } ],
+          "remainderZoneId": "z1"
+        },
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 650,
+            "heightMm": 720,
+            "offsetMm": 0,
+            "grips": [ { "boundary": "top", "side": "above", "profileId": "profile.gola-lado.alu", "consumedMm": 70 } ],
+            "rules": { "direction": "horizontal", "positioning": "overlay", "ratio": 1, "ratioSum": 1, "remainderTarget": true }
+          }
+        ]
+      },
+      "profiles": [
+        {
+          "profileId": "profile.gola-lado.alu",
+          "compatiblePlacements": [ "top" ],
+          "bodyModifiers": [
+            { "role": "lateral", "notchHeightMm": 66, "notchDepthMm": 12, "notchAt": "left_front" }
+          ]
+        }
+      ],
+      "expectedErrorCode": "OPENING_BODY_MODIFIER_INVALID"
+    }
+  ]
+}
