@@ -28,7 +28,7 @@ func TestGetDesignConsumedHardwareOptionGroups_Integration(t *testing.T) {
 	hwHinge1 := "72000000-0000-0000-0000-000000000001"
 	hwHinge2 := "72000000-0000-0000-0000-000000000002"
 	multiOrgExec(t, fx.admin, `
-		INSERT INTO hardware (id, code, name, category, unit, organization_id) VALUES
+		INSERT INTO hardwares (id, code, name, category, unit, organization_id) VALUES
 		('`+hwHinge1+`', 'BIS-CL110', 'Bisagra Cierre Lento', 'hinge', 'piece', '`+rlsOrgA+`'),
 		('`+hwHinge2+`', 'BIS-ECO', 'Bisagra Economica', 'hinge', 'piece', '`+rlsOrgA+`')
 		ON CONFLICT (id) DO NOTHING;
