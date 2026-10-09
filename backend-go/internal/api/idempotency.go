@@ -27,6 +27,10 @@ var sensitiveIdempotencyOperations = map[string]bool{
 	// — the same credential class as an invitation link, so its replayed
 	// receipt must be sealed too, never stored in cleartext.
 	"org.issue-password-reset": true,
+	// #1241: regeneration returns the raw one-time MFA recovery codes — the
+	// same credential class as a reset token, so its replayed receipt must be
+	// sealed like every other live credential body.
+	"auth.regenerate-mfa-recovery": true,
 }
 
 func idempotencyReceiptCipher(secret string) (func([]byte) ([]byte, error), func([]byte) ([]byte, error), error) {
