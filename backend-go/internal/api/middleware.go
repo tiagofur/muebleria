@@ -672,6 +672,8 @@ var extensionClientGetPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^/api/designs/[^/]+/working-copy$`),
 	// #784 R1/R3: read-only material provenance and inheritance read model for the SketchUp Inspector.
 	regexp.MustCompile(`^/api/designs/[^/]+/working-copy/material-provenance$`),
+	// #1252: read-only consumed hardware option groups for the Inspector card.
+	regexp.MustCompile(`^/api/designs/[^/]+/hardware-option-groups$`),
 	// #668: read hardware asset details and revision list for visual mount-frame preparation.
 	regexp.MustCompile(`^/api/hardware-assets/[^/]+$`),
 }

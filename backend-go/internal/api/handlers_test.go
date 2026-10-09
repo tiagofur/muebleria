@@ -144,6 +144,9 @@ type stubStore struct {
 	reconcileMaterialsCmd    *storage.ReconcileDesignWorkingMaterialsCommand
 	reconcileMaterialsErr    error
 	reconcileMaterialsResult *storage.DesignWorkingMaterialsReconciliation
+	// #1252 consumed hardware option groups (Inspector card)
+	hardwareOptionGroups    *storage.DesignConsumedHardwareOptionGroups
+	hardwareOptionGroupsErr error
 	// #392 / DT-8 staged publish flow
 	prepareDesignPublishCmd             *storage.PrepareDesignPublishCommand
 	prepareDesignPublishErr             error
