@@ -420,7 +420,7 @@ func TransportSessionTTL(transport string) time.Duration {
 // clock behind minting, never from client-side JWT decoding). A zero
 // authStartedAt means "now", matching issueToken; a non-zero
 // absoluteExpiresAt caps the result exactly like IssueTransportTokenUntil.
-// Web and SketchUp bearers roll from `now` (short access); every other
+// Web, SketchUp and mobile bearers roll from `now` (short access); every other
 // transport stays origin-derived. Support tokens have no registry cap: their
 // live session row is the authority (GetOpenSupportSession).
 func AccessTokenExpiry(now, authStartedAt time.Time, transport string, absoluteExpiresAt time.Time) (time.Time, error) {
@@ -438,14 +438,16 @@ func AccessTokenExpiry(now, authStartedAt time.Time, transport string, absoluteE
 }
 
 // transportTokenExpiry is the single expiry computation shared by minting and
-// the reported metadata so the two can never drift. Web and SketchUp access
-// bearers roll from the MINT instant (SEC-4B / SEC-6 short access): computing
-// them from the session origin would mint already-expired tokens after minute
-// 15. Every other transport keeps the origin-derived semantics. A known
-// absolute session bound always caps the result.
+// the reported metadata so the two can never drift. Web, SketchUp and mobile
+// access bearers roll from the MINT instant (SEC-4B / SEC-6 short access):
+// computing them from the session origin would mint already-expired tokens
+// after minute 15 — for mobile the refresh rotation passes the session's
+// CreatedAt as the origin, so origin-derived expiry made the whole 18h mobile
+// session unreachable (#1240). Every other transport keeps the origin-derived
+// semantics. A known absolute session bound always caps the result.
 func transportTokenExpiry(now, authStartedAt time.Time, transport string, ttl time.Duration, absoluteExpiresAt time.Time) time.Time {
 	base := authStartedAt
-	if transport == "web" || transport == "sketchup" {
+	if transport == "web" || transport == "sketchup" || transport == "mobile" {
 		base = now
 	}
 	if base.IsZero() {
