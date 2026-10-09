@@ -945,6 +945,16 @@ export {
   openingCapabilitiesToOverlayOverrides,
 } from './openingCapabilities';
 
+// --- Opening overhang rule (#1138, caso C) ---
+export type {
+  OpeningOverhangRule,
+  OpeningOverhangRuleParseResult,
+} from './openingOverhangRule';
+export {
+  parseOpeningOverhangRule,
+  OPENING_OVERHANG_RULE_BLOB_KEY,
+} from './openingOverhangRule';
+
 // --- Opening configuration validator (#1135) ---
 export type {
   OpeningConfigurationSelection,
