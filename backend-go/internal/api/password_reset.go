@@ -11,7 +11,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -41,27 +40,20 @@ func (s *Server) HandleRequestPasswordReset(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if issuance != nil {
-		deliverPasswordResetLink(email, issuance, ip)
+		deliverPasswordResetLink(s.DevLogPasswordResetLink, email, issuance, ip)
 	}
 	respondWithJSON(w, http.StatusOK, openapi.PasswordResetRequestResponse{Status: "accepted"})
 }
 
-// isProductionEnv answers GRANETE_ENV with the exact semantics config applies
-// (parseWebRefreshCookieSecurity): normalized to lower/trim, with "prod" as a
-// production spelling. Review #1195: the raw compare here previously missed
-// "prod", running production with development log behavior.
-func isProductionEnv() bool {
-	env := strings.ToLower(strings.TrimSpace(os.Getenv("GRANETE_ENV")))
-	return env == "production" || env == "prod"
-}
-
 // deliverPasswordResetLink is the delivery adapter slot (#1178): until an
-// email provider exists the only channel is the server log, and only outside
-// production — production drops the link rather than leaking a credential
-// into logs. The requester never receives it over this endpoint.
-func deliverPasswordResetLink(email string, issuance *storage.PasswordResetIssuance, ip string) {
+// email provider exists the only channel is the server log — behind the
+// explicit development opt-in from Config (#1242). Withholding is the
+// default: an unset GRANETE_ENV used to classify the deployment as
+// development and drop the raw one-time credential into stdout. The
+// requester never receives the link over this endpoint either way.
+func deliverPasswordResetLink(logLink bool, email string, issuance *storage.PasswordResetIssuance, ip string) {
 	expiresAt := issuance.ExpiresAt.UTC().Format(time.RFC3339)
-	if isProductionEnv() {
+	if !logLink {
 		slog.Info("password reset requested: email delivery not configured; link withheld",
 			"expires_at", expiresAt, "ip", ip)
 		return

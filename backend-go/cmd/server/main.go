@@ -110,6 +110,10 @@ func main() {
 	// refused to boot for GRANETE_ENV=production with an insecure resolution,
 	// so the flag reaching here can only be a local dev/gate opt-out.
 	serverAPI.WebRefreshCookieInsecureLocalDev = cfg.WebRefreshCookieInsecureLocalDev
+	// #1242: the email-less reset-link delivery only logs the raw one-time
+	// credential behind this explicit dev opt-in; config already refused the
+	// production combination, so the flag reaching here can only be dev.
+	serverAPI.DevLogPasswordResetLink = cfg.DevLogPasswordResetLink
 	handler := api.RegisterRoutes(serverAPI)
 	if os.Getenv("ORGANIZATION_TEST_ISOLATED") == "1" {
 		handler = browserGateDatabaseIdentityHandler(handler,

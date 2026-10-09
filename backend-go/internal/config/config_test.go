@@ -309,6 +309,56 @@ func TestWebRefreshCookieSecurityResolution(t *testing.T) {
 	}
 }
 
+// #1242: the raw password-reset link reaches logs ONLY behind the explicit
+// GRANETE_DEV_LOG_PASSWORD_RESET_LINK opt-in — never by default, and the
+// production combination refuses the boot.
+func TestDevLogPasswordResetLinkResolution(t *testing.T) {
+	cases := []struct {
+		name        string
+		env         string
+		flag        string
+		wantErr     bool
+		wantEnabled bool
+	}{
+		{name: "default withholds", env: "", flag: "", wantEnabled: false},
+		{name: "dev explicit opt-out", env: "development", flag: "false", wantEnabled: false},
+		{name: "dev opt-in", env: "development", flag: "true", wantEnabled: true},
+		{name: "dev spelling opt-in", env: "dev", flag: "1", wantEnabled: true},
+		{name: "production default withholds", env: "production", flag: "", wantEnabled: false},
+		{name: "production opt-in refused", env: "production", flag: "true", wantErr: true},
+		{name: "prod spelling opt-in refused", env: "prod", flag: "yes", wantErr: true},
+		{name: "invalid flag", env: "development", flag: "maybe", wantErr: true},
+		{name: "invalid env", env: "staging", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("JWT_SECRET", strings.Repeat("j", 40))
+			t.Setenv("REFRESH_TOKEN_PEPPER", strings.Repeat("r", 40))
+			t.Setenv("MEDIA_SIGNING_KEY", strings.Repeat("m", 40))
+			t.Setenv("MFA_ENCRYPTION_KEY", testMFAEncryptionKey)
+			t.Setenv("GRANETE_ENV", tc.env)
+			t.Setenv("GRANETE_DEV_LOG_PASSWORD_RESET_LINK", tc.flag)
+			// Keep the cookie resolution out of the way so only the link flag
+			// can fail the production cases.
+			t.Setenv("WEB_REFRESH_COOKIE_SECURE", "true")
+			t.Setenv("CORS_ALLOWED_ORIGINS", "https://granete.example")
+			cfg, err := LoadConfig()
+			if tc.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "password-reset link") && !strings.Contains(err.Error(), "GRANETE_DEV_LOG_PASSWORD_RESET_LINK") && !strings.Contains(err.Error(), "GRANETE_ENV") {
+					t.Fatalf("expected fail-closed error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.DevLogPasswordResetLink != tc.wantEnabled {
+				t.Fatalf("dev-log-reset-link=%v, want %v", cfg.DevLogPasswordResetLink, tc.wantEnabled)
+			}
+		})
+	}
+}
+
 // SEC-8 (#1191): GRANETE_TRUSTED_PROXIES parsing is fail-closed — empty
 // trusts nothing, bare IPs widen to /32|/128, and any unparseable entry
 // refuses the boot instead of half-trusting forwarded headers.
