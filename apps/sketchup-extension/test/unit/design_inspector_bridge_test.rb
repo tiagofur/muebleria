@@ -7,6 +7,7 @@ require_relative '../../src/granete_for_sketchup/connection/project_furniture_co
 require_relative '../../src/granete_for_sketchup/connection/project_furniture'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_inspector_bridge'
 require_relative '../../src/granete_for_sketchup/ui/bridges/design_inheritance_bridge'
+require_relative '../../src/granete_for_sketchup/ui/bridges/design_hardware_groups_bridge'
 
 # #784 R1 — Design Inspector read bridge: the ONLY backend surface this
 # slice touches is GET working-copy. The bridge reads the model binding,
