@@ -164,19 +164,31 @@ test.describe.serial('Library publish gate (#1102 Slice C)', () => {
     const draft = await client.createStandardLibraryRelease(token, { version: v3 });
 
     // Romper la condición de compilación: sin perfiles activos no hay nada
-    // que congelar — el validate lo reporta y el publish rechaza. La org es
-    // COMPARTIDA con specs de otros shards que corren en paralelo y pueden
-    // activar perfiles dentro de la ventana (p.ej. el auto-sanado de
-    // demanda por perfil): el par desactivar-TODOS + validar se reintenta
-    // acotadamente hasta observar el estado real de cero perfiles activos.
-    // El 422 sigue siendo la prueba — nunca un pass por cansancio.
+    // que congelar — el validate lo reporta y el publish rechaza. El compile
+    // del draft estándar es GLOBAL (#1237): ve los perfiles activos de TODAS
+    // las orgs del gate, y specs cohabitantes provisionan perfiles en B
+    // (factory-construction-policy-resolve hace /seed como B antes que este
+    // spec en el shard). El barrido cubre A y B, y el par desactivar+validar
+    // se reintenta acotadamente hasta observar el estado real de cero
+    // perfiles activos. El 422 sigue siendo la prueba — nunca un pass por
+    // cansancio.
+    const orgB = await new GraneteApiClient(apiBase).login({
+      email: required('ORGANIZATION_GATE_B_OWNER_EMAIL'),
+      password: required('ORGANIZATION_GATE_PASSWORD'),
+      transport: 'web',
+      org: required('ORGANIZATION_GATE_ORG_B_SLUG'),
+    });
     let everSawActive = false;
     let validation: Awaited<ReturnType<typeof client.validateStandardLibraryDraft>> | null = null;
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const activeProfiles = (await client.listHardwareProfiles(token)).filter((p) => p.active);
-      everSawActive = everSawActive || activeProfiles.length > 0;
-      for (const profile of activeProfiles) {
+      const activeA = (await client.listHardwareProfiles(token)).filter((p) => p.active);
+      const activeB = (await client.listHardwareProfiles(orgB.token)).filter((p) => p.active);
+      everSawActive = everSawActive || activeA.length + activeB.length > 0;
+      for (const profile of activeA) {
         await client.deactivateHardwareProfile(token, profile.id, profile.version);
+      }
+      for (const profile of activeB) {
+        await client.deactivateHardwareProfile(orgB.token, profile.id, profile.version);
       }
       validation = await client.validateStandardLibraryDraft(token, draft.id);
       if (!validation.ok && !validation.compile.ok) break;
@@ -195,12 +207,27 @@ test.describe.serial('Library publish gate (#1102 Slice C)', () => {
     const current = await client.getStandardCurrentRelease(token);
     expect(current.version).toBe(v1);
 
-    // Recuperación: un perfil activo nuevo y el MISMO draft publica.
+    // Recuperación: un perfil activo nuevo EN CADA ORG (la desactivación es
+    // one-way — el PUT preserva el flag activo — así ambos cohabitantes
+    // quedan con oferta viva) y el MISMO draft publica. El herraje de B es
+    // de B: las referencias de catálogo no cruzan orgs.
     await client.createHardwareProfile(token, {
       code: `PERF-GATE2-${suffix}`,
       name: 'Perfil gate recuperación',
       revision: 'r1',
       items: [{ hardwareId, quantity: 1, applicationRole: 'screw' }],
+    });
+    const hardwareB = (await postCatalog(orgB.token, '/catalog/hardware', {
+      code: `GATEHW-B-${suffix}`,
+      name: 'Herraje gate publicación B',
+      unit: 'piece',
+      cost_per_unit: 1,
+    })) as { id: string };
+    await client.createHardwareProfile(orgB.token, {
+      code: `PERF-GATE2-B-${suffix}`,
+      name: 'Perfil gate recuperación B',
+      revision: 'r1',
+      items: [{ hardwareId: hardwareB.id, quantity: 1, applicationRole: 'screw' }],
     });
     const recovered = await client.publishStandardLibraryRelease(token, draft.id);
     expect(recovered.manifestHash).toMatch(/^sha256:/);
