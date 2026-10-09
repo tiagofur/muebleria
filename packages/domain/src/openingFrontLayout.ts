@@ -92,6 +92,10 @@ export type OpeningFrontLayoutResult =
 
 interface OpeningProfileLookup {
   readonly profiles: readonly OpeningProfileData[];
+  /** #1138 case C: the factory's BACKED overhang rule (the versioned
+   * `opening.bottom-overhang` blob, parsed fail-closed). Absent = no backed
+   * rule: `bottom_overhang` stays BLOCKED (OQ-3 evidence pending, verbatim). */
+  readonly overhangMm?: number;
 }
 
 const OPENING_ZONE_ACCESS_VALUES: readonly OpeningZoneAccess[] = [
@@ -160,11 +164,22 @@ export function resolveOpeningFrontLayout(
   const fronts = step.resolution.zones.map((resolvedZone, i) => {
     const zone = intent.layout.zones[i]!;
     const horizontal = intent.layout.direction === 'horizontal';
+    const dividedAxisMm = horizontal ? resolvedZone.heightMm : crossMm;
+    const crossSpanMm = horizontal ? crossMm : resolvedZone.heightMm;
+    // #1138 case C: a backed rule extends exactly the fronts that touch the
+    // bottom edge (same incidence as the grips: the last zone of a vertical
+    // layout, every zone of a horizontal one) below the untouched body. The
+    // v1 math divided the BODY height — the extension is declared on the
+    // front, never borrowed from the body.
+    const extendsBottom =
+      intent.positioning === 'bottom_overhang' &&
+      lookup.overhangMm !== undefined &&
+      openingEdgeTouchesZone(intent, 'bottom', resolvedZone.id);
     const front: OpeningResolvedFront = {
       zoneId: resolvedZone.id,
       access: zone.access,
-      widthMm: horizontal ? resolvedZone.heightMm : crossMm,
-      heightMm: horizontal ? crossMm : resolvedZone.heightMm,
+      widthMm: dividedAxisMm,
+      heightMm: crossSpanMm + (extendsBottom ? lookup.overhangMm! : 0),
       offsetMm: resolvedZone.offsetFromStartMm,
       grips: openingFrontGrips(intent, resolvedZone.id, consumedByBoundary),
       rules: {
@@ -174,20 +189,8 @@ export function resolveOpeningFrontLayout(
         ratioSum,
         remainderTarget: resolvedZone.id === step.resolution.remainderZoneId,
       },
+      ...(extendsBottom ? { overhangMm: lookup.overhangMm! } : {}),
     };
-    // #1138 case C: a backed rule extends exactly the fronts that touch the
-    // bottom edge (same incidence as the grips: the last zone of a vertical
-    // layout, every zone of a horizontal one) below the untouched body. The
-    // v1 math divided the BODY height — the extension is declared on the
-    // front, never borrowed from the body.
-    if (
-      intent.positioning === 'bottom_overhang' &&
-      lookup.overhangMm !== undefined &&
-      openingEdgeTouchesZone(intent, 'bottom', resolvedZone.id)
-    ) {
-      front.heightMm += lookup.overhangMm;
-      front.overhangMm = lookup.overhangMm;
-    }
     return front;
   });
 
