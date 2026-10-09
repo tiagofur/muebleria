@@ -64,6 +64,12 @@ type Config struct {
 	// production: LoadConfig refuses an insecure Web refresh cookie whenever
 	// GRANETE_ENV=production, whatever the input combination.
 	WebRefreshCookieInsecureLocalDev bool
+	// DevLogPasswordResetLink opts the email-less password-reset delivery
+	// adapter into printing the one-time link into the server log (#1242).
+	// Default false (link withheld): an unset GRANETE_ENV must never turn
+	// into "log the raw credential". Enabling it together with
+	// GRANETE_ENV=production refuses the boot.
+	DevLogPasswordResetLink bool
 }
 
 const minJWTSecretBytes = 32
@@ -167,6 +173,11 @@ func LoadConfig() (Config, error) {
 
 	hardwareAssetLimits := parseHardwareAssetLimitsEnv()
 
+	devLogResetLink, err := parseDevLogPasswordResetLink()
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Port:                 port,
 		DatabaseURL:          dbURL,
@@ -185,7 +196,46 @@ func LoadConfig() (Config, error) {
 		HardwareAssetLimits:  hardwareAssetLimits,
 
 		WebRefreshCookieInsecureLocalDev: cookieInsecure,
+		DevLogPasswordResetLink:          devLogResetLink,
 	}, nil
+}
+
+// normalizeGraneteEnv resolves the deployment signal shared by every
+// production-sensitive option: "" and the development spellings normalize to
+// "development", "prod" to "production", anything else refuses the boot.
+func normalizeGraneteEnv() (string, error) {
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("GRANETE_ENV")))
+	switch env {
+	case "", "development", "dev":
+		return "development", nil
+	case "production", "prod":
+		return "production", nil
+	default:
+		return "", fmt.Errorf("GRANETE_ENV must be \"production\" or \"development\", got %q", env)
+	}
+}
+
+// parseDevLogPasswordResetLink resolves GRANETE_DEV_LOG_PASSWORD_RESET_LINK
+// (#1242). Withholding the raw one-time reset credential is the DEFAULT —
+// only an explicit boolean opt-in logs it, and never under production.
+func parseDevLogPasswordResetLink() (bool, error) {
+	env, err := normalizeGraneteEnv()
+	if err != nil {
+		return false, err
+	}
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv("GRANETE_DEV_LOG_PASSWORD_RESET_LINK")))
+	enabled := false
+	switch raw {
+	case "", "0", "false", "no":
+	case "1", "true", "yes":
+		enabled = true
+	default:
+		return false, fmt.Errorf("GRANETE_DEV_LOG_PASSWORD_RESET_LINK must be a boolean, got %q", raw)
+	}
+	if enabled && env == "production" {
+		return false, errors.New("production (GRANETE_ENV=production) must never log the raw password-reset link: GRANETE_DEV_LOG_PASSWORD_RESET_LINK cannot be enabled")
+	}
+	return enabled, nil
 }
 
 // parseHardwareAssetLimitsEnv reads the optional HARDWARE_ASSET_MAX_*_BYTES
@@ -244,14 +294,9 @@ func parseMFAKeyringEnv() (*auth.MFAKeyring, error) {
 // GRANETE_ENV is an explicit deployment signal, not a Host-header guess;
 // docker-compose.prod.yml pins it to "production".
 func parseWebRefreshCookieSecurity(allowedOrigins []string) (bool, error) {
-	env := strings.ToLower(strings.TrimSpace(os.Getenv("GRANETE_ENV")))
-	switch env {
-	case "", "development", "dev":
-		env = "development"
-	case "production", "prod":
-		env = "production"
-	default:
-		return false, fmt.Errorf("GRANETE_ENV must be \"production\" or \"development\", got %q", env)
+	env, err := normalizeGraneteEnv()
+	if err != nil {
+		return false, err
 	}
 
 	raw := strings.ToLower(strings.TrimSpace(os.Getenv("WEB_REFRESH_COOKIE_SECURE")))

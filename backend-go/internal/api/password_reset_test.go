@@ -8,6 +8,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -141,18 +142,28 @@ func TestIssuePasswordResetAuthorityAndTarget(t *testing.T) {
 	})
 }
 
-// Review #1195: config accepts "prod"/case variants as production — the link
-// withholding gate must agree, or a prod deployment logs the raw credential.
-func TestIsProductionEnvMatchesConfigSemantics(t *testing.T) {
-	cases := map[string]bool{
-		"production": true, "PRODUCTION": true, " prod ": true, "Prod": true,
-		"development": false, "dev": false, "": false, "  ": false,
+// #1242: withholding the raw one-time credential is the DEFAULT — the link
+// only reaches the server log behind the explicit Config dev opt-in, so an
+// unset GRANETE_ENV can no longer classify a deployment as "development log".
+func TestDeliverPasswordResetLinkWithholdsTokenByDefault(t *testing.T) {
+	issuance := &storage.PasswordResetIssuance{Token: "reset-secret-token-1242", ExpiresAt: time.Now().Add(time.Hour).UTC()}
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(previous)
+
+	deliverPasswordResetLink(false, "user@example.com", issuance, "127.0.0.1")
+	if logged := buf.String(); strings.Contains(logged, issuance.Token) || strings.Contains(logged, "link=") {
+		t.Fatalf("default must withhold the raw reset credential from logs, got: %s", logged)
 	}
-	for env, want := range cases {
-		t.Setenv("GRANETE_ENV", env)
-		if got := isProductionEnv(); got != want {
-			t.Fatalf("GRANETE_ENV=%q: isProductionEnv()=%v, want %v", env, got, want)
-		}
+	if !strings.Contains(buf.String(), "link withheld") {
+		t.Fatalf("withholding must be observable in the log, got: %s", buf.String())
+	}
+
+	buf.Reset()
+	deliverPasswordResetLink(true, "user@example.com", issuance, "127.0.0.1")
+	if !strings.Contains(buf.String(), issuance.Token) {
+		t.Fatalf("the explicit dev opt-in must log the link for copy/paste delivery, got: %s", buf.String())
 	}
 }
 

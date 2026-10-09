@@ -51,6 +51,12 @@ type Server struct {
 	// refresh cookie (#460 SEC-4A). Zero value = Secure (fail-closed default);
 	// only config may opt local dev/gates out, and production can never.
 	WebRefreshCookieInsecureLocalDev bool
+	// DevLogPasswordResetLink lets the (email-less) password-reset delivery
+	// adapter print the one-time link into the server log (#1242). Zero value
+	// = withheld (fail-closed default): the raw credential only reaches logs
+	// behind GRANETE_DEV_LOG_PASSWORD_RESET_LINK, which config refuses to
+	// combine with GRANETE_ENV=production.
+	DevLogPasswordResetLink bool
 	// MediaTokens signs/validates resource-scoped media read grants under the
 	// dedicated MEDIA_SIGNING_KEY (#460 SEC-3). Nil fails closed: a server
 	// built without one neither mints nor accepts media grants.
