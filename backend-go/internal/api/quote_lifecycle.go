@@ -99,7 +99,16 @@ func (s *Server) HandleCreateInitialQuoteRevision(w http.ResponseWriter, r *http
 		return
 	}
 
-	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(result.Revision))
+	// #642/#1239: cost-blind actors get the same redacted snapshot policy as
+	// the design-first create and the revision list — sale price (commercial
+	// truth) stays, the workshop cost stack does not.
+	revision := result.Revision
+	if !s.actorCanViewCosts(r) {
+		redacted := *revision
+		redacted.CommercialSnapshot = domain.RedactQuoteCommercialSnapshot(revision.CommercialSnapshot)
+		revision = &redacted
+	}
+	respondWithJSON(w, http.StatusCreated, toQuoteRevisionDTO(revision))
 }
 
 // HandleCreateInitialDesignQuoteRevision serves the design-first Q1 command.
