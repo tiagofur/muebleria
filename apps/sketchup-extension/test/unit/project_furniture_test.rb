@@ -2270,7 +2270,6 @@ class ProjectFurnitureTest < Minitest::Test
     assert_empty top_level_furniture(@model)
   end
 
-
   # #1252: the consumed hardware option groups projection is the ONLY
   # authority of the "Herrajes del diseño" card. The parser keeps the
   # fields the card renders and rejects unknown scopes / empty codes
@@ -2281,10 +2280,10 @@ class ProjectFurnitureTest < Minitest::Test
       'scope' => 'design',
       'groups' => [
         { 'code' => 'BISAGRA', 'name' => 'Bisagras',
-          'option_ids' => ['hw-bisagra-cl', 'hw-bisagra-eco'],
+          'option_ids' => %w[hw-bisagra-cl hw-bisagra-eco],
           'chosen_hardware_id' => 'hw-bisagra-cl', 'consumed_by' => 2 },
         { 'code' => 'PATAS', 'name' => 'Patas',
-          'option_ids' => ['hw-pata-cil'], 'consumed_by' => 1 }
+          'option_ids' => %w[hw-pata-cil], 'consumed_by' => 1 }
       ]
     }
     parsed = PF::DesignHardwareOptionGroupsContract.parse!(body)
@@ -2294,7 +2293,7 @@ class ProjectFurnitureTest < Minitest::Test
 
     bisagra = parsed.groups.first
     assert_equal 'BISAGRA', bisagra.code
-    assert_equal ['hw-bisagra-cl', 'hw-bisagra-eco'], bisagra.option_ids
+    assert_equal %w[hw-bisagra-cl hw-bisagra-eco], bisagra.option_ids
     assert_equal 'hw-bisagra-cl', bisagra.chosen_hardware_id
     assert_equal 2, bisagra.consumed_by
     assert_nil parsed.groups.last.chosen_hardware_id
@@ -2671,5 +2670,4 @@ class ProjectFurnitureTest < Minitest::Test
 
     def error(_event, _context = {}); end
   end
-
 end

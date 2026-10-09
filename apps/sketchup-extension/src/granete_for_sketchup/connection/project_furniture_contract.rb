@@ -462,25 +462,36 @@ module Granete
             code = entry['code']
             raise Contract::ContractError, 'código de grupo vacío' unless code.is_a?(String) && !code.strip.empty?
             raise Contract::ContractError, "nombre de grupo inválido para #{code}" unless entry['name'].is_a?(String)
-            raise Contract::ContractError, "option_ids inválido para #{code}" unless entry['option_ids'].is_a?(Array)
-            entry['option_ids'].each do |member|
-              raise Contract::ContractError, "miembro inválido en option_ids para #{code}" unless member.is_a?(String) && !member.empty?
-            end
+
+            validate_group_members!(code, entry['option_ids'])
             unless entry['consumed_by'].is_a?(Integer) && entry['consumed_by'] >= 0
               raise Contract::ContractError, "consumed_by inválido para #{code}"
-            end
-
-            chosen = entry['chosen_hardware_id']
-            if chosen && (!chosen.is_a?(String) || chosen.strip.empty?)
-              raise Contract::ContractError, "chosen_hardware_id inválido para #{code}"
             end
 
             Contract::HardwareOptionGroup.new(
               code: code, name: entry['name'],
               option_ids: entry['option_ids'].dup.freeze,
-              chosen_hardware_id: chosen,
+              chosen_hardware_id: validate_chosen_hardware!(code, entry['chosen_hardware_id']),
               consumed_by: entry['consumed_by']
             )
+          end
+
+          def self.validate_group_members!(code, option_ids)
+            raise Contract::ContractError, "option_ids inválido para #{code}" unless option_ids.is_a?(Array)
+
+            option_ids.each do |member|
+              unless member.is_a?(String) && !member.empty?
+                raise Contract::ContractError, "miembro inválido en option_ids para #{code}"
+              end
+            end
+          end
+
+          def self.validate_chosen_hardware!(code, chosen)
+            if chosen && (!chosen.is_a?(String) || chosen.strip.empty?)
+              raise Contract::ContractError, "chosen_hardware_id inválido para #{code}"
+            end
+
+            chosen
           end
         end
 
