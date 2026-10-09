@@ -46,6 +46,11 @@ module Granete
                                        keyword_init: true)
           DesignInheritance = Struct.new(:design_id, :project_id, :items, :inheritance_summary, keyword_init: true)
 
+          # #1252: consumed hardware option groups for the Inspector card
+          HardwareOptionGroup = Struct.new(:code, :name, :option_ids, :chosen_hardware_id,
+                                           :consumed_by, keyword_init: true)
+          DesignHardwareOptionGroups = Struct.new(:design_id, :project_id, :scope, :groups, keyword_init: true)
+
           # #784 R4: server-resolved definition-aware effective materials and modes
           EffectiveMaterials = Struct.new(:furniture_definition_id, :material_choices, :material_choice_modes,
                                           keyword_init: true)
@@ -425,6 +430,56 @@ module Granete
               applied_material_id: entry['applied_material_id'],
               design_default_material_id: default_id,
               needs_rollout: entry['needs_rollout'] == true
+            )
+          end
+        end
+
+        # #1252: fail-closed parser for GET /api/designs/:design_id/hardware-option-groups
+        # (consumed hardware option groups for the Inspector card).
+        module DesignHardwareOptionGroupsContract
+          SCOPES = %w[design project].freeze
+
+          def self.parse!(body)
+            raise Contract::ContractError, 'los grupos de herraje deben ser un objeto' unless body.is_a?(Hash)
+            unless ProjectFurniture.uuid?(body['design_id']) && ProjectFurniture.uuid?(body['project_id'])
+              raise Contract::ContractError, 'payload sin design_id/project_id válidos'
+            end
+            unless SCOPES.include?(body['scope'])
+              raise Contract::ContractError, "scope desconocido: #{body['scope'].inspect}"
+            end
+            raise Contract::ContractError, 'groups debe ser un array' unless body['groups'].is_a?(Array)
+
+            Contract::DesignHardwareOptionGroups.new(
+              design_id: body['design_id'], project_id: body['project_id'],
+              scope: body['scope'],
+              groups: body['groups'].map { |entry| parse_group!(entry) }
+            )
+          end
+
+          def self.parse_group!(entry)
+            raise Contract::ContractError, 'grupo de herraje inválido' unless entry.is_a?(Hash)
+
+            code = entry['code']
+            raise Contract::ContractError, 'código de grupo vacío' unless code.is_a?(String) && !code.strip.empty?
+            raise Contract::ContractError, "nombre de grupo inválido para #{code}" unless entry['name'].is_a?(String)
+            raise Contract::ContractError, "option_ids inválido para #{code}" unless entry['option_ids'].is_a?(Array)
+            entry['option_ids'].each do |member|
+              raise Contract::ContractError, "miembro inválido en option_ids para #{code}" unless member.is_a?(String) && !member.empty?
+            end
+            unless entry['consumed_by'].is_a?(Integer) && entry['consumed_by'] >= 0
+              raise Contract::ContractError, "consumed_by inválido para #{code}"
+            end
+
+            chosen = entry['chosen_hardware_id']
+            if chosen && (!chosen.is_a?(String) || chosen.strip.empty?)
+              raise Contract::ContractError, "chosen_hardware_id inválido para #{code}"
+            end
+
+            Contract::HardwareOptionGroup.new(
+              code: code, name: entry['name'],
+              option_ids: entry['option_ids'].dup.freeze,
+              chosen_hardware_id: chosen,
+              consumed_by: entry['consumed_by']
             )
           end
         end

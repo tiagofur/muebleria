@@ -78,6 +78,11 @@
     inheritanceSummary: {},
     inheritanceItems: [],
     totalDesignItems: 0,
+    // #1252: the server projection of consumed hardware option groups
+    // {scope: "design"|"project", groups: [{code, name, optionIds,
+    // chosenHardwareId, consumedBy}]} — the ONLY source of the
+    // "Herrajes del diseño" card. Null = no ready payload (card hidden).
+    hardwareGroups: null,
     // #784 R2 final review: one user Apply = exactly one apply request.
     // True from applyDraft() until its correlated answer (or the no-bridge
     // fallback) lands; a binding switch invalidates the in-flight request.
@@ -206,6 +211,18 @@
     var inheritancePayload = { requestId: state.requestId, designId: state.designId };
     if (window.sketchup && typeof window.sketchup.get_design_inheritance === "function") {
       window.sketchup.get_design_inheritance(JSON.stringify(inheritancePayload));
+    }
+  }
+
+  // #1252: correlated read of the consumed hardware option groups. Rides
+  // the SAME requestId generation as the defaults read — one authoritative
+  // design read refreshes defaults, inheritance AND hardware groups; a late
+  // answer of an older generation is discarded by correlation.
+  function requestHardwareGroups() {
+    if (!state.connected || !state.designId) return;
+    var payload = { requestId: state.requestId, designId: state.designId };
+    if (window.sketchup && typeof window.sketchup.get_hardware_groups === "function") {
+      window.sketchup.get_hardware_groups(JSON.stringify(payload));
     }
   }
 
@@ -768,10 +785,10 @@
 
     var roles = discoveredRoles();
     var materialRoles = [];
-    var hardwareRoles = [];
     for (var r = 0; r < roles.length; r++) {
-      if (isHardwareRole(roles[r])) hardwareRoles.push(roles[r]);
-      else materialRoles.push(roles[r]);
+      // #1198/#1252: hardware group keys ride the same defaults map — they
+      // render in "Herrajes del diseño" (endpoint-driven), never here.
+      if (!isHardwareRole(roles[r])) materialRoles.push(roles[r]);
     }
 
     if (materialRoles.length === 0) {
@@ -789,13 +806,26 @@
     note.textContent = "Estos valores se usarán como defaults del Diseño.";
     bodyEl.appendChild(note);
 
-    // #1198-inspector: "Herrajes del diseño" — its own card, only when
-    // hardware group defaults exist in the design.
-    if (hardwareCardEl) hardwareCardEl.style.display = hardwareRoles.length > 0 ? "block" : "none";
+    // #1252: "Herrajes del diseño" renders from the SERVER projection of
+    // consumed por-grupo demand (design scope, project fallback) — never
+    // from locally-derived roles: the server is the only authority for what
+    // the furniture consumes. Fail-closed: no ready payload, no card.
+    var hardwareGroups = state.hardwareGroups;
+    var hwGroupRows = (hardwareGroups && hardwareGroups.groups) || [];
+    if (hardwareCardEl) hardwareCardEl.style.display = hwGroupRows.length > 0 ? "block" : "none";
     if (hardwareBodyEl) {
       hardwareBodyEl.innerHTML = "";
-      for (var h = 0; h < hardwareRoles.length; h++) {
-        hardwareBodyEl.appendChild(renderRow(hardwareRoles[h], state.defaults[hardwareRoles[h]], true));
+      if (hwGroupRows.length > 0) {
+        if (hardwareGroups.scope === "project") {
+          var scopeNote = document.createElement("p");
+          scopeNote.className = "design-insp-note";
+          scopeNote.textContent = "Este mueble no consume grupos de herrajes todavía — grupos usados por los modelos del proyecto:";
+          hardwareBodyEl.appendChild(scopeNote);
+        }
+        for (var h = 0; h < hwGroupRows.length; h++) {
+          var hwCode = hwGroupRows[h].code;
+          hardwareBodyEl.appendChild(renderRow(hwCode, state.defaults[hwCode], true));
+        }
       }
     }
   }
@@ -928,6 +958,7 @@
         state.inheritanceSummary = {};
         state.inheritanceItems = [];
         state.totalDesignItems = 0;
+        state.hardwareGroups = null;
         hideRolloutModal();
         // The authority is gone: every in-flight request is dead.
         invalidateBindingRequests();
@@ -949,6 +980,7 @@
           state.inheritanceSummary = {};
           state.inheritanceItems = [];
           state.totalDesignItems = 0;
+          state.hardwareGroups = null;
           hideRolloutModal();
           // A design switch kills every in-flight request of the old one.
           invalidateBindingRequests();
@@ -1006,6 +1038,9 @@
         state.rebaseVersion = null;
         state.conflict = null;
         requestInheritance();
+        // #1252: same authoritative read refreshes the hardware groups —
+        // the server projection is the card's only source.
+        requestHardwareGroups();
         render();
         // #1137: the «Apertura» card rides the same lane — one refresh per
         // authoritative design read; it renders and saves through its own
@@ -1136,6 +1171,32 @@
 
       if (!state.laneActive && typeof deps.rerenderInspector === "function") {
         deps.rerenderInspector();
+      }
+      if (state.laneActive) render();
+    },
+
+    // #1252: consumed hardware option groups answer. Correlated like every
+    // read — a late/foreign answer never touches the current design. Ready
+    // stores the projection; ANY failure (unbound/stale/error) drops the
+    // cached payload so the card fails closed (hidden) instead of showing
+    // groups the server no longer asserts.
+    onHardwareGroups: function (payload) {
+      if (!payload || payload.requestId !== state.requestId) return;
+      if (payload.status === "ready" && state.connected && payload.designId === state.designId) {
+        state.hardwareGroups = {
+          scope: payload.scope === "project" ? "project" : "design",
+          groups: (payload.groups || []).map(function (group) {
+            return {
+              code: group.code,
+              name: group.name,
+              optionIds: group.optionIds || [],
+              chosenHardwareId: group.chosenHardwareId || null,
+              consumedBy: group.consumedBy || 0
+            };
+          })
+        };
+      } else {
+        state.hardwareGroups = null;
       }
       if (state.laneActive) render();
     },
