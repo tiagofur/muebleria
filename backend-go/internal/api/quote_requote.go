@@ -73,8 +73,17 @@ func (s *Server) HandleProjectQuoteRequote(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// #1239: the requote response carries the same CommercialSnapshot DTO as
+	// the list/design-first surfaces — cost-blind actors get the redacted
+	// policy (sale price stays, workshop cost stack does not).
+	revision := result.Revision
+	if !s.actorCanViewCosts(r) {
+		redacted := *revision
+		redacted.CommercialSnapshot = domain.RedactQuoteCommercialSnapshot(revision.CommercialSnapshot)
+		revision = &redacted
+	}
 	respondWithJSON(w, http.StatusCreated, openapi.ProjectQuoteRequoteResult{
-		QuoteRevision: toQuoteRevisionDTO(result.Revision),
+		QuoteRevision: toQuoteRevisionDTO(revision),
 		Impact:        toImpactSummaryDTO(result.Classification.Summary),
 	})
 }

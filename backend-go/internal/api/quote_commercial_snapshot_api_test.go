@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
+	"github.com/tiagofur/muebles-backend/internal/storage"
 )
 
 // #642 / QUOTE-AUTH Slice 1: commercial snapshot DTO surface — frozen truth
@@ -156,6 +157,113 @@ func TestHandleProjectQuoteRevisions_CommercialSnapshotCostRedaction(t *testing.
 	if inferred := breakdown["salePrice"].(float64) - lineSaleSum; inferred == 100 {
 		t.Fatalf("cost-blind arithmetic reconstructed fixed labor: %v", inferred)
 	}
+}
+
+// #1239: the two remaining POST surfaces that return a QuoteRevision — the
+// initial Q1 create and the explicit requote — must apply the exact same
+// COST-01/02 redaction as the list and the design-first create.
+func commercialSnapshotTestRevision() *domain.QuoteRevision {
+	rev := commercialSnapshotTestDetail().QuoteRevision
+	return &rev
+}
+
+func assertRevisionBreakdownRedacted(t *testing.T, body []byte) {
+	t.Helper()
+	breakdown := revisionBreakdownFromResponse(t, body)
+	for _, field := range []string{"materialsCost", "edgeTotal", "hardwareTotal", "directCost", "laborModular", "laborFixedCost", "marginFactor"} {
+		if breakdown[field].(float64) != 0 {
+			t.Fatalf("cost field %s must be redacted, got %v", field, breakdown[field])
+		}
+	}
+	if breakdown["salePrice"].(float64) != 498.5 {
+		t.Fatalf("salePrice is commercial and must stay, got %v", breakdown["salePrice"])
+	}
+}
+
+func assertRevisionBreakdownCostVisible(t *testing.T, body []byte) {
+	t.Helper()
+	breakdown := revisionBreakdownFromResponse(t, body)
+	if breakdown["materialsCost"].(float64) != 192 || breakdown["salePrice"].(float64) != 498.5 {
+		t.Fatalf("cost-visible breakdown = %v", breakdown)
+	}
+}
+
+// revisionBreakdownFromResponse navigates the revision JSON whether it is the
+// response root (Q1 create) or nested under "quoteRevision" (requote result).
+func revisionBreakdownFromResponse(t *testing.T, body []byte) map[string]any {
+	t.Helper()
+	var root map[string]any
+	if err := json.Unmarshal(body, &root); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	revision := root
+	if nested, ok := root["quoteRevision"].(map[string]any); ok {
+		revision = nested
+	}
+	snapshot, ok := revision["commercialSnapshot"].(map[string]any)
+	if !ok {
+		t.Fatalf("commercialSnapshot must be an object in the revision response: %s", body)
+	}
+	breakdown, _ := snapshot["breakdown"].(map[string]any)
+	if breakdown == nil {
+		t.Fatalf("breakdown must be an object: %s", body)
+	}
+	return breakdown
+}
+
+func TestHandleCreateInitialQuoteRevision_CommercialSnapshotCostRedaction(t *testing.T) {
+	// Vendedor with the workshop cost flag OFF: the 201 body must not leak the
+	// workshop cost stack (the front-end redaction is not a control).
+	server := &Server{Store: &stubStore{createInitialQuoteRevisionResult: &storage.CreateInitialQuoteRevisionResult{
+		Revision: commercialSnapshotTestRevision(),
+	}}}
+	req := newCreateQuoteRevisionRequest("user-2", []domain.UserRole{domain.RoleVendedor}, `{}`)
+	w := httptest.NewRecorder()
+	server.HandleCreateInitialQuoteRevision(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	assertRevisionBreakdownRedacted(t, w.Body.Bytes())
+
+	// Cost-visible actor: full snapshot intact on the same surface.
+	server = &Server{Store: &stubStore{createInitialQuoteRevisionResult: &storage.CreateInitialQuoteRevisionResult{
+		Revision: commercialSnapshotTestRevision(),
+	}}}
+	req = newCreateQuoteRevisionRequest("user-1", []domain.UserRole{domain.RoleAdmin}, `{}`)
+	w = httptest.NewRecorder()
+	server.HandleCreateInitialQuoteRevision(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	assertRevisionBreakdownCostVisible(t, w.Body.Bytes())
+}
+
+func TestHandleProjectQuoteRequote_CommercialSnapshotCostRedaction(t *testing.T) {
+	requoteResult := &storage.RequoteProjectQuoteResult{
+		Revision: commercialSnapshotTestRevision(),
+		Classification: &domain.ImpactClassificationResult{
+			Summary: domain.ImpactClassificationSummary{RequiresRequote: true, CanRequote: true},
+		},
+	}
+	body := `{"baseQuoteRevisionId":"` + requoteTestBaseRevID + `","designRevisionId":"` + requoteTestDesignID + `"}`
+
+	server := &Server{Store: &stubStore{requoteProjectQuoteResult: requoteResult}}
+	req := newRequoteRequest("user-2", []domain.UserRole{domain.RoleVendedor}, body)
+	w := httptest.NewRecorder()
+	server.HandleProjectQuoteRequote(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	assertRevisionBreakdownRedacted(t, w.Body.Bytes())
+
+	server = &Server{Store: &stubStore{requoteProjectQuoteResult: requoteResult}}
+	req = newRequoteRequest("user-1", []domain.UserRole{domain.RoleAdmin}, body)
+	w = httptest.NewRecorder()
+	server.HandleProjectQuoteRequote(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	assertRevisionBreakdownCostVisible(t, w.Body.Bytes())
 }
 
 func TestHandleProjectQuoteRevisions_LegacyRevisionWithoutSnapshot(t *testing.T) {
