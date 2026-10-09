@@ -64,6 +64,11 @@ type OpeningResolvedFront struct {
 	OffsetMm int                        `json:"offsetMm"`
 	Grips    []OpeningResolvedFrontGrip `json:"grips"`
 	Rules    OpeningResolvedFrontRules  `json:"rules"`
+	// OverhangMm (#1138, caso C): the backed `opening.bottom-overhang` value
+	// this front extends below the body bottom. nil = no overhang (the body
+	// region is the whole front). HeightMm already includes it — the field
+	// declares the extension so the cut is auditable against the rule.
+	OverhangMm *int `json:"overhangMm,omitempty"`
 }
 
 // OpeningFrontLayout is the #1131 semantic result: the v1 resolution verbatim
@@ -85,11 +90,14 @@ func openingZoneAccessKnown(access string) bool {
 // ResolveOpeningFrontLayout resolves an opening intent into semantic fronts.
 // Pure, deterministic, integer millimetres; identical to the TS domain
 // through the shared fixture. Shape errors fail closed before the v1 math;
-// v1 errors propagate verbatim.
+// v1 errors propagate verbatim. overhangMm (#1138) is the factory's BACKED
+// case C rule parsed from the versioned `opening.bottom-overhang` blob;
+// nil = no backed rule, which keeps bottom_overhang BLOCKED verbatim.
 func ResolveOpeningFrontLayout(
 	intent OpeningIntent,
 	cabinetFrontWidthMm, cabinetFrontHeightMm int,
 	profiles []OpeningProfileData,
+	overhangMm *int,
 ) (*OpeningFrontLayout, *OpeningResolutionError) {
 	if intent.Layout.Direction != "vertical" && intent.Layout.Direction != "horizontal" {
 		return nil, openingFail(OpeningErrLayoutInvalid,
@@ -115,7 +123,7 @@ func ResolveOpeningFrontLayout(
 	if intent.Layout.Direction == "horizontal" {
 		dividedAxisMm = cabinetFrontWidthMm
 	}
-	resolution, resErr := ResolveOpeningFront(intent, dividedAxisMm, profiles)
+	resolution, resErr := ResolveOpeningFront(intent, dividedAxisMm, profiles, overhangMm)
 	if resErr != nil {
 		return nil, resErr
 	}
@@ -142,7 +150,7 @@ func ResolveOpeningFrontLayout(
 			widthMm = resolvedZone.HeightMm
 			heightMm = crossMm
 		}
-		fronts = append(fronts, OpeningResolvedFront{
+		front := OpeningResolvedFront{
 			ZoneID:   resolvedZone.ID,
 			Access:   zone.Access,
 			WidthMm:  widthMm,
@@ -156,7 +164,19 @@ func ResolveOpeningFrontLayout(
 				RatioSum:        ratioSum,
 				RemainderTarget: resolvedZone.ID == resolution.RemainderZoneID,
 			},
-		})
+		}
+		// #1138 case C: a backed rule extends exactly the fronts that touch
+		// the bottom edge (same incidence as the grips: the last zone of a
+		// vertical layout, every zone of a horizontal one) below the
+		// untouched body. The v1 math divided the BODY height — the
+		// extension is declared on the front, never borrowed from the body.
+		if overhangMm != nil && intent.Positioning == "bottom_overhang" &&
+			openingEdgeTouchesZone(intent, "bottom", resolvedZone.ID) {
+			front.HeightMm += *overhangMm
+			declared := *overhangMm
+			front.OverhangMm = &declared
+		}
+		fronts = append(fronts, front)
 	}
 
 	return &OpeningFrontLayout{

@@ -88,6 +88,11 @@ func ValidateOpeningConfiguration(
 	selection OpeningConfigurationSelection,
 	capabilities *domain.OpeningCapabilities,
 	profiles []OpeningProfileSelectionData,
+	// overhangRule (#1138): the factory's BACKED case C rule parsed from the
+	// versioned `opening.bottom-overhang` blob. nil = case C stays a truthful
+	// BLOCKED state; present = the selection is gateable like any other
+	// system.
+	overhangRule *domain.OpeningOverhangRule,
 ) OpeningConfigurationValidation {
 	if !openingGripSystemVocabulary[selection.System] {
 		return invalid(OpeningReasonSystemUnknown)
@@ -104,9 +109,13 @@ func ValidateOpeningConfiguration(
 
 	switch selection.System {
 	case domain.OpeningGripSystemBottomOverhang:
-		// Available, but the physical behaviour waits for OQ-3 field
-		// evidence: blocked is a truthful state, not an error.
-		return OpeningConfigurationValidation{State: OpeningSelectionBlocked, Reason: OpeningReasonOverhangEvidencePend}
+		// Available, and resolvable only against the backed rule (#1138):
+		// without it the physical behaviour waits for OQ-3 field evidence —
+		// blocked is a truthful state, not an error. With it, the gate keeps
+		// applying the furniture-type/placement checks below.
+		if overhangRule == nil {
+			return OpeningConfigurationValidation{State: OpeningSelectionBlocked, Reason: OpeningReasonOverhangEvidencePend}
+		}
 	case domain.OpeningGripSystemHandle:
 		if selection.ProfileID != "" {
 			// Only gola consumes a profile; extra ids are incompatible input.

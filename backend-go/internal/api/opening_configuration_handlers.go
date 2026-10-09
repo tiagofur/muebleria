@@ -34,6 +34,12 @@ func (s *Server) HandleOpeningConfigurationValidate(w http.ResponseWriter, r *ht
 		respondWithInternalError(w, err, "opening capabilities read")
 		return
 	}
+	overhangRule, err := s.Store.GetOpeningOverhangRule(r.Context())
+	if err != nil {
+		// A broken overlay fails closed — never a silent library default.
+		respondWithInternalError(w, err, "opening overhang rule read")
+		return
+	}
 	profileList, err := s.Store.ListOpeningProfiles(r.Context())
 	if err != nil {
 		respondWithInternalError(w, err, "opening profiles list")
@@ -48,14 +54,14 @@ func (s *Server) HandleOpeningConfigurationValidate(w http.ResponseWriter, r *ht
 		})
 	}
 
-	validation := engine.ValidateOpeningConfiguration(selection, capabilities, profiles)
+	validation := engine.ValidateOpeningConfiguration(selection, capabilities, profiles, overhangRule)
 	if validation.State == engine.OpeningSelectionInvalid {
 		respondWithJSON(w, http.StatusUnprocessableEntity, map[string]any{
 			"code":    "INVALID_OPENING_CONFIGURATION",
 			"message": openingSelectionMessage(validation.Reason),
 			"details": map[string]any{
-				"reason":   validation.Reason,
-				"system":   selection.System,
+				"reason":    validation.Reason,
+				"system":    selection.System,
 				"profileId": selection.ProfileID,
 			},
 		})

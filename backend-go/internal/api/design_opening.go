@@ -73,13 +73,18 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 				}
 			}
 			if profileData != nil {
-				resolution, resErr := engine.ResolveDesignOpening(dims.widthMm, dims.heightMm, state.Opening, profileData)
-				if resErr != nil {
-					state.Resolution = &engine.DesignOpeningResolution{
-						State: engine.DesignOpeningStateBlocked, Reason: resErr.Code,
+				// #1138: the backed case C rule rides with the overlay. A
+				// broken overlay fails closed like the profile catalog: no
+				// resolution rendered instead of a stale or invented one.
+				if rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context()); ruleErr == nil {
+					resolution, resErr := engine.ResolveDesignOpening(dims.widthMm, dims.heightMm, state.Opening, profileData, engine.OpeningOverhangRuleMm(rule))
+					if resErr != nil {
+						state.Resolution = &engine.DesignOpeningResolution{
+							State: engine.DesignOpeningStateBlocked, Reason: resErr.Code,
+						}
+					} else {
+						state.Resolution = resolution
 					}
-				} else {
-					state.Resolution = resolution
 				}
 			}
 			// A broken profile catalog fails closed: no resolution rendered
@@ -173,6 +178,11 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 		respondWithInternalError(w, err, "opening capabilities read")
 		return
 	}
+	overhangRule, err := s.Store.GetOpeningOverhangRule(r.Context())
+	if err != nil {
+		respondWithInternalError(w, err, "opening overhang rule read")
+		return
+	}
 	profileList, err := s.Store.ListOpeningProfiles(r.Context())
 	if err != nil {
 		respondWithInternalError(w, err, "opening profiles list")
@@ -190,7 +200,7 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 		System:     selection.System,
 		ProfileID:  selection.ProfileID,
 		Placements: selection.Placements,
-	}, capabilities, profileSelection)
+	}, capabilities, profileSelection, overhangRule)
 	if validation.State == engine.OpeningSelectionValid && selection.System == domain.OpeningGripSystemGola {
 		// B2: capture the datasheet slice the selection was validated
 		// against — the historical resolution consumes the pin, never the

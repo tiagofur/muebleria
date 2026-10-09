@@ -1,0 +1,38 @@
+{
+ "schema": 1,
+ "contract": "granete.opening-front.v1",
+ "description": "#1138 — regla respaldada del rebase inferior (caso C): el blob 'opening.bottom-overhang' dentro de library_overlays.overrides (un literal plano con el objeto estructurado, mismo patrón que 'opening.capabilities' #1134), leído IDÉNTICAMENTE por Go (backend-go domain ParseOpeningOverhangRule) y TS (packages/domain parseOpeningOverhangRule) — parsers jamás incompatibles (ADR-0009 §7). Ausente = sin regla respaldada: la resolución permanece BLOCKED (OPENING_OVERHANG_EVIDENCE_PENDING, estado veraz #1135) — jamás un default. Presente = el caso C resuelve exactamente por la matriz §6 (la puerta extiende por debajo del cuerpo; cuerpo intacto; sin hardware de grip). El overlay compone en el resolve pineado: una regla que llega después jamás reescribe diseños pinneados. Forma: version=1 (versión futura = error, no se interpreta), overhangMm entero positivo, claves desconocidas = error. Los errores de forma viven en los tests de cada runtime (los mensajes son de cada lenguaje); este fixture pinea las lecturas válidas y la ausencia.",
+ "cases": [
+  {
+   "name": "regla respaldada del piloto: el voladizo declarado por la fábrica",
+   "overrides": {
+    "opening.bottom-overhang": { "version": 1, "overhangMm": 40 }
+   },
+   "expected": { "version": 1, "overhangMm": 40 }
+  },
+  {
+   "name": "overlay sin el blob: nil, sin regla respaldada — el caso C sigue BLOCKED",
+   "overrides": {
+    "opening.capabilities": {
+     "version": 1,
+     "grips": {
+      "handle": { "enabled": true, "default": true }
+     }
+    }
+   },
+   "expected": null
+  },
+  {
+   "name": "overrides enteros ausentes: nil",
+   "overrides": null,
+   "expected": null
+  },
+  {
+   "name": "regla de un dígito: el voladizo mínimo declarado (1 mm es legal)",
+   "overrides": {
+    "opening.bottom-overhang": { "version": 1, "overhangMm": 1 }
+   },
+   "expected": { "version": 1, "overhangMm": 1 }
+  }
+ ]
+}

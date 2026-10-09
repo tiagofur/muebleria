@@ -612,6 +612,204 @@
         }
       ],
       "note": "grips between en layout horizontal (perfil vertical entre puertas laterales): una zona puede quedar agarrada desde arriba Y desde abajo; el reparto cae exacto (resto 0) y remainderTarget nombra la zona de política (la última) sin sumar nada"
+    },
+    {
+      "name": "C resuelta (#1138) — alacena superior, 1 puerta, voladizo respaldado 40mm",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 600,
+      "positioning": "bottom_overhang",
+      "overhangMm": 40,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expected": {
+        "availableFrontHeightMm": 720,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 720,
+            "offsetFromStartMm": 0
+          }
+        ],
+        "boundaries": [],
+        "remainderZoneId": "z1",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 600,
+            "heightMm": 760,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "bottom_overhang",
+              "ratio": 1,
+              "ratioSum": 1,
+              "remainderTarget": true
+            },
+            "overhangMm": 40
+          }
+        ]
+      },
+      "note": "el cuerpo no cambia: availableFrontHeightMm 720 y la zona divida intacta — el voladizo es extensión declarada del frente por debajo del cuerpo (altura de corte 760 = 720 + regla 40). Sin grips: sin BOM de jaladera/gola."
+    },
+    {
+      "name": "C resuelta (#1138) — 2 puertas batientes horizontales: ambas tocan el borde inferior y extienden",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 600,
+      "positioning": "bottom_overhang",
+      "overhangMm": 40,
+      "layout": {
+        "direction": "horizontal",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expected": {
+        "availableFrontHeightMm": 720,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 360,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 360,
+            "offsetFromStartMm": 360
+          }
+        ],
+        "boundaries": [],
+        "remainderZoneId": "z2",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 300,
+            "heightMm": 760,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "bottom_overhang",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": false
+            },
+            "overhangMm": 40
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 300,
+            "heightMm": 760,
+            "offsetMm": 300,
+            "grips": [],
+            "rules": {
+              "direction": "horizontal",
+              "positioning": "bottom_overhang",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": true
+            },
+            "overhangMm": 40
+          }
+        ]
+      },
+      "note": "misma incidencia que los grips (OQ-1): en layout horizontal TODAS las zonas tocan el borde inferior — las dos puertas extienden el voladizo."
+    },
+    {
+      "name": "C resuelta (#1138) — 2 zonas verticales: sólo la última zona toca el borde inferior y extiende",
+      "cabinetFrontHeightMm": 720,
+      "cabinetFrontWidthMm": 600,
+      "positioning": "bottom_overhang",
+      "overhangMm": 40,
+      "layout": {
+        "direction": "vertical",
+        "zones": [
+          {
+            "id": "z1",
+            "access": "hinged",
+            "ratio": 1
+          },
+          {
+            "id": "z2",
+            "access": "hinged",
+            "ratio": 1
+          }
+        ]
+      },
+      "grips": [],
+      "expected": {
+        "availableFrontHeightMm": 720,
+        "zones": [
+          {
+            "id": "z1",
+            "heightMm": 360,
+            "offsetFromStartMm": 0
+          },
+          {
+            "id": "z2",
+            "heightMm": 360,
+            "offsetFromStartMm": 360
+          }
+        ],
+        "boundaries": [],
+        "remainderZoneId": "z2",
+        "fronts": [
+          {
+            "zoneId": "z1",
+            "access": "hinged",
+            "widthMm": 600,
+            "heightMm": 360,
+            "offsetMm": 0,
+            "grips": [],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "bottom_overhang",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": false
+            }
+          },
+          {
+            "zoneId": "z2",
+            "access": "hinged",
+            "widthMm": 600,
+            "heightMm": 400,
+            "offsetMm": 360,
+            "grips": [],
+            "rules": {
+              "direction": "vertical",
+              "positioning": "bottom_overhang",
+              "ratio": 1,
+              "ratioSum": 2,
+              "remainderTarget": true
+            },
+            "overhangMm": 40
+          }
+        ]
+      },
+      "note": "incidencia vertical: la zona z1 queda intacta (sin la clave overhangMm) — la extensión nunca se toma de la altura del cuerpo."
     }
   ],
   "blockedCases": [

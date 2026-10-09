@@ -71,6 +71,11 @@ export type OpeningResolvedFront = {
   readonly offsetMm: number;
   readonly grips: readonly OpeningResolvedFrontGrip[];
   readonly rules: OpeningResolvedFrontRules;
+  /** #1138 case C only: the backed `opening.bottom-overhang` value this
+   * front extends below the body bottom. Absent = no overhang (the body
+   * region is the whole front). `heightMm` already includes it — the field
+   * declares the extension so the cut is auditable against the rule. */
+  readonly overhangMm?: number;
 };
 
 /** The #1131 semantic result: the v1 resolution verbatim plus one front per
@@ -87,6 +92,10 @@ export type OpeningFrontLayoutResult =
 
 interface OpeningProfileLookup {
   readonly profiles: readonly OpeningProfileData[];
+  /** #1138 case C: the factory's BACKED overhang rule (the versioned
+   * `opening.bottom-overhang` blob, parsed fail-closed). Absent = no backed
+   * rule: `bottom_overhang` stays BLOCKED (OQ-3 evidence pending, verbatim). */
+  readonly overhangMm?: number;
 }
 
 const OPENING_ZONE_ACCESS_VALUES: readonly OpeningZoneAccess[] = [
@@ -155,11 +164,22 @@ export function resolveOpeningFrontLayout(
   const fronts = step.resolution.zones.map((resolvedZone, i) => {
     const zone = intent.layout.zones[i]!;
     const horizontal = intent.layout.direction === 'horizontal';
-    return {
+    const dividedAxisMm = horizontal ? resolvedZone.heightMm : crossMm;
+    const crossSpanMm = horizontal ? crossMm : resolvedZone.heightMm;
+    // #1138 case C: a backed rule extends exactly the fronts that touch the
+    // bottom edge (same incidence as the grips: the last zone of a vertical
+    // layout, every zone of a horizontal one) below the untouched body. The
+    // v1 math divided the BODY height — the extension is declared on the
+    // front, never borrowed from the body.
+    const extendsBottom =
+      intent.positioning === 'bottom_overhang' &&
+      lookup.overhangMm !== undefined &&
+      openingEdgeTouchesZone(intent, 'bottom', resolvedZone.id);
+    const front: OpeningResolvedFront = {
       zoneId: resolvedZone.id,
       access: zone.access,
-      widthMm: horizontal ? resolvedZone.heightMm : crossMm,
-      heightMm: horizontal ? crossMm : resolvedZone.heightMm,
+      widthMm: dividedAxisMm,
+      heightMm: crossSpanMm + (extendsBottom ? lookup.overhangMm! : 0),
       offsetMm: resolvedZone.offsetFromStartMm,
       grips: openingFrontGrips(intent, resolvedZone.id, consumedByBoundary),
       rules: {
@@ -169,7 +189,9 @@ export function resolveOpeningFrontLayout(
         ratioSum,
         remainderTarget: resolvedZone.id === step.resolution.remainderZoneId,
       },
+      ...(extendsBottom ? { overhangMm: lookup.overhangMm! } : {}),
     };
+    return front;
   });
 
   return {

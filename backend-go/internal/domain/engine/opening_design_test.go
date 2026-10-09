@@ -19,7 +19,7 @@ func TestResolveDesignOpening(t *testing.T) {
 
 	// Resolved: the front carries the grip consumption and the read-only
 	// dims the Inspector renders.
-	resolution, resErr := ResolveDesignOpening(600, 720, gola, verified)
+	resolution, resErr := ResolveDesignOpening(600, 720, gola, verified, nil)
 	if resErr != nil {
 		t.Fatalf("resolve rejected: %s (%s)", resErr.Code, resErr.Message)
 	}
@@ -36,7 +36,7 @@ func TestResolveDesignOpening(t *testing.T) {
 		ProfileID: "profile.gola-l.alu", DatasheetStatus: "pending",
 		FrontReductionMm: 66, GripClearanceMm: 4,
 	}}
-	resolution, resErr = ResolveDesignOpening(600, 720, gola, pending)
+	resolution, resErr = ResolveDesignOpening(600, 720, gola, pending, nil)
 	if resErr != nil || resolution == nil {
 		t.Fatalf("pending must be a state, not an error: %v / %+v", resErr, resolution)
 	}
@@ -46,7 +46,7 @@ func TestResolveDesignOpening(t *testing.T) {
 
 	// OQ-3: bottom overhang stays blocked until field evidence.
 	overhang := &domain.DesignOpeningSelection{System: "bottom_overhang"}
-	resolution, resErr = ResolveDesignOpening(600, 720, overhang, nil)
+	resolution, resErr = ResolveDesignOpening(600, 720, overhang, nil, nil)
 	if resErr != nil || resolution == nil || resolution.State != DesignOpeningStateBlocked ||
 		resolution.Reason != OpeningErrOverhangEvidencePend {
 		t.Fatalf("overhang must block on evidence: %v / %+v", resErr, resolution)
@@ -54,19 +54,19 @@ func TestResolveDesignOpening(t *testing.T) {
 
 	// Handle: baseline — the front consumes nothing.
 	handle := &domain.DesignOpeningSelection{System: "handle"}
-	resolution, resErr = ResolveDesignOpening(600, 720, handle, nil)
+	resolution, resErr = ResolveDesignOpening(600, 720, handle, nil, nil)
 	if resErr != nil || resolution.State != DesignOpeningStateResolved || resolution.Fronts[0].HeightMm != 720 {
 		t.Fatalf("handle resolution drifted: %v / %+v", resErr, resolution)
 	}
 
 	// No selection: no resolution.
-	if resolution, _ := ResolveDesignOpening(600, 720, nil, verified); resolution != nil {
+	if resolution, _ := ResolveDesignOpening(600, 720, nil, verified, nil); resolution != nil {
 		t.Fatal("a design without intent must not resolve anything")
 	}
 
 	// Non-positive dims: the caller passed garbage — explicit failure.
-	if _, resErr := ResolveDesignOpening(0, 720, gola, verified); resErr == nil {
-		t.Fatal("non-positive dims must fail closed")
+	if _, resErr := ResolveDesignOpening(0, 720, gola, verified, nil); resErr == nil {
+		t.Fatal("non-positive dims must fail closed", nil)
 	}
 }
 
@@ -80,11 +80,11 @@ func TestResolveDesignOpeningIgnoresCapabilities(t *testing.T) {
 		FrontReductionMm: 66, GripClearanceMm: 4,
 	}}
 	gola := &domain.DesignOpeningSelection{System: "gola", ProfileID: "profile.gola-l.alu"}
-	first, resErr := ResolveDesignOpening(600, 720, gola, verified)
+	first, resErr := ResolveDesignOpening(600, 720, gola, verified, nil)
 	if resErr != nil {
 		t.Fatalf("resolve rejected: %v", resErr)
 	}
-	second, resErr := ResolveDesignOpening(600, 720, gola, verified)
+	second, resErr := ResolveDesignOpening(600, 720, gola, verified, nil)
 	if resErr != nil {
 		t.Fatalf("repeat rejected: %v", resErr)
 	}

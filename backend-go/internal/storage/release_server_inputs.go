@@ -96,6 +96,29 @@ func (s *PostgresStore) GetOpeningCapabilities(ctx context.Context) (*domain.Ope
 	return capabilities, nil
 }
 
+// GetOpeningOverhangRule (#1138) reads the factory's BACKED case C rule from
+// the organization's active standard-library overlay — the same ONE
+// load+parse contract the capabilities read uses. nil = no backed rule: the
+// case C resolution and gate stay BLOCKED (never a default).
+func (s *PostgresStore) GetOpeningOverhangRule(ctx context.Context) (*domain.OpeningOverhangRule, error) {
+	orgUUID, err := uuid.Parse(OrgFromCtx(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("opening overhang rule org: %w", err)
+	}
+	overlay, err := s.GetActiveOverlayByLibrary(ctx, orgUUID, uuid.MustParse(domain.GraneteStandardLibraryID))
+	if err != nil {
+		if errors.Is(err, ErrOverlayNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("opening overhang rule overlay: %w", err)
+	}
+	rule, err := engine.ParseOpeningOverhangRule(overlay.Overrides)
+	if err != nil {
+		return nil, fmt.Errorf("opening overhang rule: %w", err)
+	}
+	return rule, nil
+}
+
 func (s *PostgresStore) ReleaseServerResolveInputs(ctx context.Context, orgID string) (*engine.ReleaseServerInputs, error) {
 	return ReleaseServerInputsFromStore(ctx, s, orgID)
 }

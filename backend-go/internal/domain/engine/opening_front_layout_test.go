@@ -17,7 +17,7 @@ func TestOpeningFrontLayoutEdgeIncidence(t *testing.T) {
 		Positioning: "overlay",
 	}
 	profiles := []OpeningProfileData{{ProfileID: "p", DatasheetStatus: "verified", FrontReductionMm: 10, GripClearanceMm: 5}}
-	layout, resErr := ResolveOpeningFrontLayout(intent, 600, 720, profiles)
+	layout, resErr := ResolveOpeningFrontLayout(intent, 600, 720, profiles, nil)
 	if resErr != nil {
 		t.Fatalf("resolve rejected: %s (%s)", resErr.Code, resErr.Message)
 	}
@@ -45,7 +45,7 @@ func TestOpeningFrontLayoutShapeValidationBeforeEvidence(t *testing.T) {
 		}},
 		Positioning: "bottom_overhang",
 	}
-	_, resErr := ResolveOpeningFrontLayout(intent, 600, 720, nil)
+	_, resErr := ResolveOpeningFrontLayout(intent, 600, 720, nil, nil)
 	if resErr == nil || resErr.Code != OpeningErrLayoutInvalid {
 		t.Fatalf("code = %v, want %s", resErr, OpeningErrLayoutInvalid)
 	}
@@ -60,7 +60,7 @@ func TestOpeningFrontLayoutPropagatesV1ErrorsVerbatim(t *testing.T) {
 		}},
 		Positioning: "bottom_overhang",
 	}
-	_, resErr := ResolveOpeningFrontLayout(intent, 600, 720, nil)
+	_, resErr := ResolveOpeningFrontLayout(intent, 600, 720, nil, nil)
 	if resErr == nil || resErr.Code != OpeningErrOverhangEvidencePend {
 		t.Fatalf("code = %v, want %s", resErr, OpeningErrOverhangEvidencePend)
 	}
@@ -73,7 +73,7 @@ func TestOpeningFrontLayoutRejectsNonPositiveFronts(t *testing.T) {
 		}},
 	}
 	for _, dims := range [][2]int{{0, 720}, {600, 0}, {-1, 720}, {600, -1}} {
-		_, resErr := ResolveOpeningFrontLayout(intent, dims[0], dims[1], nil)
+		_, resErr := ResolveOpeningFrontLayout(intent, dims[0], dims[1], nil, nil)
 		if resErr == nil || resErr.Code != OpeningErrLayoutInvalid {
 			t.Fatalf("dims %v: code = %v, want %s", dims, resErr, OpeningErrLayoutInvalid)
 		}
@@ -89,7 +89,7 @@ func TestOpeningFrontLayoutFrontsFollowZoneOrder(t *testing.T) {
 			{ID: "puerta-abajo", Access: "hinged", Ratio: 1},
 		}},
 	}
-	layout, resErr := ResolveOpeningFrontLayout(intent, 600, 900, nil)
+	layout, resErr := ResolveOpeningFrontLayout(intent, 600, 900, nil, nil)
 	if resErr != nil {
 		t.Fatalf("resolve rejected: %s (%s)", resErr.Code, resErr.Message)
 	}

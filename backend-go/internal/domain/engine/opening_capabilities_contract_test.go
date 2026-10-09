@@ -174,7 +174,7 @@ func TestOpeningCapabilitiesAvailableIsNotValid(t *testing.T) {
 		ProfileID: "profile.gola-l.alu", DatasheetStatus: "verified",
 		FrontReductionMm: 66, GripClearanceMm: 4,
 	}}
-	resolution, resErr := ResolveOpeningFront(intent, 720, verifiedProfiles)
+	resolution, resErr := ResolveOpeningFront(intent, 720, verifiedProfiles, nil)
 	if resErr != nil || resolution == nil {
 		t.Fatalf("disabled capability must not invalidate an existing design: %v", resErr)
 	}
@@ -187,7 +187,7 @@ func TestOpeningCapabilitiesAvailableIsNotValid(t *testing.T) {
 		ProfileID: "profile.gola-l.alu", DatasheetStatus: "pending_oq2",
 		FrontReductionMm: 66, GripClearanceMm: 4,
 	}}
-	_, resErr = ResolveOpeningFront(intent, 720, pendingProfiles)
+	_, resErr = ResolveOpeningFront(intent, 720, pendingProfiles, nil)
 	if resErr == nil || resErr.Code != OpeningErrDatasheetPending {
 		t.Fatalf("enabled capability must not launder a pending datasheet: %v", resErr)
 	}

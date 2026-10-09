@@ -42,11 +42,14 @@ type DesignOpeningResolution struct {
 // ResolveDesignOpening resolves the persisted selection over the design's
 // front dimensions. widthMm/heightMm must be positive — the caller passes
 // the furniture dims it resolved (nil selection returns nil: no intent, no
-// resolution).
+// resolution). overhangMm (#1138) is the factory's BACKED case C rule parsed
+// from the versioned `opening.bottom-overhang` blob; nil = no backed rule,
+// which keeps bottom_overhang BLOCKED verbatim.
 func ResolveDesignOpening(
 	widthMm, heightMm int,
 	selection *domain.DesignOpeningSelection,
 	profiles []OpeningProfileData,
+	overhangMm *int,
 ) (*DesignOpeningResolution, *OpeningResolutionError) {
 	if selection == nil {
 		return nil, nil
@@ -86,7 +89,7 @@ func ResolveDesignOpening(
 		// A handled front consumes nothing: the baseline resolution.
 	}
 
-	layout, resErr := ResolveOpeningFrontLayout(intent, widthMm, heightMm, profiles)
+	layout, resErr := ResolveOpeningFrontLayout(intent, widthMm, heightMm, profiles, overhangMm)
 	if resErr != nil {
 		// Pending evidence (OQ-3) and pending datasheets are truthful
 		// blocked states; anything else is a shape the write path should
