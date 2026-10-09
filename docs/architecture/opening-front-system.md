@@ -11,7 +11,9 @@
 - Related: [`manufacturing-library-platform.md`](manufacturing-library-platform.md) (ADR-0008),
   [`factory-construction-and-joinery.md`](factory-construction-and-joinery.md) (#875/#1052),
   [`catalog-option-selector.md`](catalog-option-selector.md),
-  [`hardware-3d-assets-and-assemblies.md`](hardware-3d-assets-and-assemblies.md)
+  [`hardware-3d-assets-and-assemblies.md`](hardware-3d-assets-and-assemblies.md),
+  [`construction-variants.md`](construction-variants.md) (ADR-0010 — la otra
+  mitad de la separación: el cuerpo opcionable, fronteras documentadas)
 
 ## 1. Problem
 
