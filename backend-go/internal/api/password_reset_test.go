@@ -163,3 +163,12 @@ func TestIssuePasswordResetReceiptIsSealed(t *testing.T) {
 		t.Fatal("org.issue-password-reset must be a sensitive idempotency operation (raw token in the 201 body)")
 	}
 }
+
+// #1241: regeneration returns the raw one-time MFA recovery codes — a live
+// credential class — so its replayed idempotency receipt must be sealed the
+// same way, never stored in cleartext in api_idempotency_receipts.
+func TestRegenerateMFARecoveryReceiptIsSealed(t *testing.T) {
+	if !sensitiveIdempotencyOperations["auth.regenerate-mfa-recovery"] {
+		t.Fatal("auth.regenerate-mfa-recovery must be a sensitive idempotency operation (raw recovery codes in the 200 body)")
+	}
+}
