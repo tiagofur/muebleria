@@ -220,6 +220,12 @@ func (s *stubStore) GetOpeningCapabilities(context.Context) (*domain.OpeningCapa
 	return s.openingCapabilities, nil
 }
 
+// #1138 — case C overhang rule stub: nil (no backed rule) unless a test
+// injects one.
+func (s *stubStore) GetOpeningOverhangRule(context.Context) (*domain.OpeningOverhangRule, error) {
+	return nil, nil
+}
+
 func (s *stubStore) GetOpeningProfileByID(_ context.Context, id string) (*domain.OpeningProfile, error) {
 	for i := range s.openingProfiles {
 		if s.openingProfiles[i].ID == id {

@@ -71,6 +71,11 @@ export type OpeningResolvedFront = {
   readonly offsetMm: number;
   readonly grips: readonly OpeningResolvedFrontGrip[];
   readonly rules: OpeningResolvedFrontRules;
+  /** #1138 case C only: the backed `opening.bottom-overhang` value this
+   * front extends below the body bottom. Absent = no overhang (the body
+   * region is the whole front). `heightMm` already includes it — the field
+   * declares the extension so the cut is auditable against the rule. */
+  readonly overhangMm?: number;
 };
 
 /** The #1131 semantic result: the v1 resolution verbatim plus one front per
@@ -155,7 +160,7 @@ export function resolveOpeningFrontLayout(
   const fronts = step.resolution.zones.map((resolvedZone, i) => {
     const zone = intent.layout.zones[i]!;
     const horizontal = intent.layout.direction === 'horizontal';
-    return {
+    const front: OpeningResolvedFront = {
       zoneId: resolvedZone.id,
       access: zone.access,
       widthMm: horizontal ? resolvedZone.heightMm : crossMm,
@@ -170,6 +175,20 @@ export function resolveOpeningFrontLayout(
         remainderTarget: resolvedZone.id === step.resolution.remainderZoneId,
       },
     };
+    // #1138 case C: a backed rule extends exactly the fronts that touch the
+    // bottom edge (same incidence as the grips: the last zone of a vertical
+    // layout, every zone of a horizontal one) below the untouched body. The
+    // v1 math divided the BODY height — the extension is declared on the
+    // front, never borrowed from the body.
+    if (
+      intent.positioning === 'bottom_overhang' &&
+      lookup.overhangMm !== undefined &&
+      openingEdgeTouchesZone(intent, 'bottom', resolvedZone.id)
+    ) {
+      front.heightMm += lookup.overhangMm;
+      front.overhangMm = lookup.overhangMm;
+    }
+    return front;
   });
 
   return {

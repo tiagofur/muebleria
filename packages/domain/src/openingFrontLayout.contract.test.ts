@@ -48,6 +48,7 @@ interface ExpectedFront {
     readonly ratioSum: number;
     readonly remainderTarget: boolean;
   };
+  readonly overhangMm?: number;
 }
 
 interface ResolutionCase {
@@ -55,6 +56,9 @@ interface ResolutionCase {
   readonly cabinetFrontHeightMm: number;
   readonly cabinetFrontWidthMm: number;
   readonly positioning: 'overlay' | 'inset' | 'partial_overlay' | 'bottom_overhang';
+  /** #1138: the backed `opening.bottom-overhang` rule value for this case
+   * (absent = no rule: bottom_overhang stays BLOCKED). */
+  readonly overhangMm?: number;
   readonly layout: { readonly direction: 'vertical' | 'horizontal'; readonly zones: readonly ZoneCase[] };
   readonly grips: readonly GripCase[];
   readonly profilesOverride?: readonly OpeningProfileData[];
@@ -98,8 +102,13 @@ const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as Fixture;
 
 const profilesFor = (testCase: {
   readonly profilesOverride?: readonly OpeningProfileData[];
-}): { readonly profiles: readonly OpeningProfileData[] } => ({
+  readonly overhangMm?: number;
+}): {
+  readonly profiles: readonly OpeningProfileData[];
+  readonly overhangMm?: number;
+} => ({
   profiles: testCase.profilesOverride ?? fixture.profiles,
+  ...(testCase.overhangMm !== undefined ? { overhangMm: testCase.overhangMm } : {}),
 });
 
 const intentOf = (testCase: {

@@ -116,6 +116,11 @@ export type OpeningResolutionResult =
 
 interface OpeningProfileLookup {
   readonly profiles: readonly OpeningProfileData[];
+  /** #1138 case C: the factory's BACKED overhang rule (the versioned
+   * `opening.bottom-overhang` blob, parsed fail-closed). Absent = no backed
+   * rule: `bottom_overhang` stays BLOCKED (OQ-3 evidence pending, verbatim).
+   * Present = the front extends below the body by exactly this value. */
+  readonly overhangMm?: number;
 }
 
 /** The one boundary key format of the contract ("between:<above>:<below>"),
@@ -153,12 +158,23 @@ export function resolveOpeningFront(
   }
 
   if (intent.positioning === 'bottom_overhang') {
-    // OQ-3: overhang value and body interaction lack field evidence — the
-    // intent is valid, the resolution is blocked, nothing is invented.
-    return fail(
-      'OPENING_OVERHANG_EVIDENCE_PENDING',
-      'el rebase inferior espera evidencia de campo (OQ-3)',
-    );
+    // #1138 case C: the behaviour resolves ONLY against a backed rule (the
+    // versioned `opening.bottom-overhang` blob). Without one, OQ-3 field
+    // evidence is still pending — the intent is valid, the resolution is
+    // blocked, nothing is invented. A malformed rule value is an incompatible
+    // input, not a silent default.
+    if (lookup.overhangMm === undefined) {
+      return fail(
+        'OPENING_OVERHANG_EVIDENCE_PENDING',
+        'el rebase inferior espera evidencia de campo (OQ-3)',
+      );
+    }
+    if (!Number.isInteger(lookup.overhangMm) || lookup.overhangMm <= 0) {
+      return fail(
+        'OPENING_LAYOUT_INVALID',
+        'la regla de voladizo debe ser un entero positivo',
+      );
+    }
   }
 
   const zoneIndex = new Map(zones.map((z, i) => [z.id, i] as const));

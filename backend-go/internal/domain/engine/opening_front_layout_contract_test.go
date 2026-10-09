@@ -28,6 +28,7 @@ func TestOpeningFrontLayoutContract(t *testing.T) {
 			CabinetFrontHeightMm int                  `json:"cabinetFrontHeightMm"`
 			CabinetFrontWidthMm  int                  `json:"cabinetFrontWidthMm"`
 			Positioning          string               `json:"positioning"`
+			OverhangMm           *int                 `json:"overhangMm"`
 			Layout               OpeningLayout        `json:"layout"`
 			Grips                []OpeningGrip        `json:"grips"`
 			ProfilesOverride     []OpeningProfileData `json:"profilesOverride"`
@@ -75,6 +76,7 @@ func TestOpeningFrontLayoutContract(t *testing.T) {
 				tc.CabinetFrontWidthMm,
 				tc.CabinetFrontHeightMm,
 				profilesFor(tc.ProfilesOverride),
+				tc.OverhangMm,
 			)
 			if resErr != nil {
 				t.Fatalf("resolve rejected: %s (%s)", resErr.Code, resErr.Message)
@@ -100,6 +102,7 @@ func TestOpeningFrontLayoutContract(t *testing.T) {
 				tc.CabinetFrontWidthMm,
 				tc.CabinetFrontHeightMm,
 				profilesFor(tc.ProfilesOverride),
+				nil,
 			)
 			if resErr == nil {
 				t.Fatalf("expected blocked resolution with %s", tc.ExpectedErrorCode)
@@ -117,6 +120,7 @@ func TestOpeningFrontLayoutContract(t *testing.T) {
 				tc.CabinetFrontWidthMm,
 				tc.CabinetFrontHeightMm,
 				profilesFor(nil),
+				nil,
 			)
 			if resErr == nil {
 				t.Fatalf("expected fail-closed with %s", tc.ExpectedErrorCode)

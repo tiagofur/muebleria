@@ -19,6 +19,7 @@
  */
 
 import type { OpeningCapabilities } from './openingCapabilities';
+import type { OpeningOverhangRule } from './openingOverhangRule';
 
 export type OpeningConfigurationSelection = {
   readonly system: string;
@@ -66,6 +67,10 @@ export function validateOpeningConfiguration(
   selection: OpeningConfigurationSelection,
   capabilities: OpeningCapabilities | null,
   profiles: readonly OpeningProfileSelectionData[],
+  // #1138: the factory's BACKED overhang rule (parsed `opening.bottom-overhang`
+  // blob). Absent = case C stays a truthful BLOCKED state; present = the
+  // selection is gateable like any other system.
+  overhangRule: OpeningOverhangRule | null = null,
 ): OpeningConfigurationValidation {
   if (!GRIP_SYSTEMS.includes(selection.system)) {
     return invalid(OPENING_REASON.systemUnknown);
@@ -81,9 +86,13 @@ export function validateOpeningConfiguration(
   }
 
   if (selection.system === 'bottom_overhang') {
-    // Available, but the physical behaviour waits for OQ-3 field evidence:
-    // blocked is a truthful state, not an error.
-    return { state: 'blocked', reason: OPENING_REASON.overhangEvidencePending };
+    // Available, and resolvable only against the backed rule (#1138): without
+    // it the physical behaviour waits for OQ-3 field evidence — blocked is a
+    // truthful state, not an error. With it, the gate keeps applying the
+    // furniture-type/placement checks below.
+    if (!overhangRule) {
+      return { state: 'blocked', reason: OPENING_REASON.overhangEvidencePending };
+    }
   }
   if (selection.system === 'handle') {
     if (selection.profileId) {

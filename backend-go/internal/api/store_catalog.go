@@ -19,6 +19,11 @@ type CatalogStore interface {
 	// new-authoring offering only, never existing designs.
 	GetOpeningCapabilities(ctx context.Context) (*domain.OpeningCapabilities, error)
 
+	// Catalog: the backed case C overhang rule (#1138) — the parsed
+	// 'opening.bottom-overhang' overlay blob; nil = no backed rule and the
+	// case C resolution/gate stay BLOCKED (never a default).
+	GetOpeningOverhangRule(ctx context.Context) (*domain.OpeningOverhangRule, error)
+
 	// Catalog: opening profiles (#1130) — the grip profile catalog.
 	ListOpeningProfiles(ctx context.Context) ([]domain.OpeningProfile, error)
 	GetOpeningProfileByID(ctx context.Context, id string) (*domain.OpeningProfile, error)

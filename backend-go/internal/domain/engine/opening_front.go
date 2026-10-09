@@ -107,11 +107,14 @@ func openingGripBoundaryKey(grip OpeningGrip) string {
 // ResolveOpeningFront resolves the front heights of an opening intent. Pure,
 // deterministic, integer millimetres; identical to the TS domain through the
 // shared fixture. Never mutates, never invents: blocked evidence → blocked
-// result.
+// result. overhangMm (#1138) is the factory's BACKED case C rule parsed from
+// the versioned `opening.bottom-overhang` blob; nil = no backed rule, which
+// keeps bottom_overhang BLOCKED verbatim.
 func ResolveOpeningFront(
 	intent OpeningIntent,
 	cabinetFrontHeightMm int,
 	profiles []OpeningProfileData,
+	overhangMm *int,
 ) (*OpeningResolution, *OpeningResolutionError) {
 	zones := intent.Layout.Zones
 	if len(zones) == 0 {
@@ -131,10 +134,19 @@ func ResolveOpeningFront(
 	}
 
 	if intent.Positioning == "bottom_overhang" {
-		// OQ-3: overhang value and body interaction lack field evidence — the
-		// intent is valid, the resolution is blocked, nothing is invented.
-		return nil, openingFail(OpeningErrOverhangEvidencePend,
-			"el rebase inferior espera evidencia de campo (OQ-3)")
+		// #1138 case C: the behaviour resolves ONLY against a backed rule
+		// (the versioned `opening.bottom-overhang` blob). Without one, OQ-3
+		// field evidence is still pending — the intent is valid, the
+		// resolution is blocked, nothing is invented. A malformed rule value
+		// is an incompatible input, not a silent default.
+		if overhangMm == nil {
+			return nil, openingFail(OpeningErrOverhangEvidencePend,
+				"el rebase inferior espera evidencia de campo (OQ-3)")
+		}
+		if *overhangMm <= 0 {
+			return nil, openingFail(OpeningErrLayoutInvalid,
+				"la regla de voladizo debe ser un entero positivo")
+		}
 	}
 
 	boundaryKeys := map[string]bool{}

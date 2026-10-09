@@ -38,7 +38,7 @@ func TestOpeningConfigurationValidationContract(t *testing.T) {
 	}
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			got := ValidateOpeningConfiguration(tc.Selection, tc.Capabilities, tc.Profiles)
+			got := ValidateOpeningConfiguration(tc.Selection, tc.Capabilities, tc.Profiles, nil)
 			if !reflect.DeepEqual(got, tc.Expected) {
 				t.Fatalf("validation = %+v, want %+v", got, tc.Expected)
 			}
@@ -65,7 +65,7 @@ func TestOpeningConfigurationHistoricalSemantics(t *testing.T) {
 		ProfileID: "profile.gola-l.alu", DatasheetStatus: "verified",
 		FrontReductionMm: 66, GripClearanceMm: 4,
 	}}
-	pinnedResolution, resErr := ResolveOpeningFront(intent, 720, pinnedRevision)
+	pinnedResolution, resErr := ResolveOpeningFront(intent, 720, pinnedRevision, nil)
 	if resErr != nil {
 		t.Fatalf("historical resolution rejected: %s (%s)", resErr.Code, resErr.Message)
 	}
@@ -79,7 +79,7 @@ func TestOpeningConfigurationHistoricalSemantics(t *testing.T) {
 	if disabledCapabilities.Grips[domain.OpeningGripSystemGola].Enabled {
 		t.Fatal("test setup: gola must be disabled today")
 	}
-	repeat, resErr := ResolveOpeningFront(intent, 720, pinnedRevision)
+	repeat, resErr := ResolveOpeningFront(intent, 720, pinnedRevision, nil)
 	if resErr != nil {
 		t.Fatalf("repeat historical resolution rejected: %s (%s)", resErr.Code, resErr.Message)
 	}
@@ -93,7 +93,7 @@ func TestOpeningConfigurationHistoricalSemantics(t *testing.T) {
 		ProfileID: "profile.gola-l.alu", DatasheetStatus: "verified",
 		FrontReductionMm: 80, GripClearanceMm: 10,
 	}}
-	withNewer, resErr := ResolveOpeningFront(intent, 720, newerRevision)
+	withNewer, resErr := ResolveOpeningFront(intent, 720, newerRevision, nil)
 	if resErr != nil {
 		t.Fatalf("newer revision resolution rejected: %s (%s)", resErr.Code, resErr.Message)
 	}
@@ -103,7 +103,7 @@ func TestOpeningConfigurationHistoricalSemantics(t *testing.T) {
 
 	// The pinned release missing the profile fails explicitly — never a
 	// fallback to the current catalog.
-	_, resErr = ResolveOpeningFront(intent, 720, nil)
+	_, resErr = ResolveOpeningFront(intent, 720, nil, nil)
 	if resErr == nil || resErr.Code != OpeningErrProfileUnknown {
 		t.Fatalf("missing pinned profile: code = %v, want %s", resErr, OpeningErrProfileUnknown)
 	}
