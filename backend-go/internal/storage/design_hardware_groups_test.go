@@ -37,9 +37,9 @@ func TestGetDesignConsumedHardwareOptionGroups_Integration(t *testing.T) {
 		('93000000-0000-0000-0000-0000000000c1', 'BISAGRA', 'Bisagras', 'hardware', true, '`+rlsOrgA+`')
 		ON CONFLICT (id) DO NOTHING;
 
-		INSERT INTO option_group_members (option_group_id, entity_id) VALUES
-		('93000000-0000-0000-0000-0000000000c1', '`+hwHinge1+`'),
-		('93000000-0000-0000-0000-0000000000c1', '`+hwHinge2+`')
+		INSERT INTO option_group_members (option_group_id, entity_id, organization_id) VALUES
+		('93000000-0000-0000-0000-0000000000c1', '`+hwHinge1+`', '`+rlsOrgA+`'),
+		('93000000-0000-0000-0000-0000000000c1', '`+hwHinge2+`', '`+rlsOrgA+`')
 		ON CONFLICT DO NOTHING;
 	`)
 
