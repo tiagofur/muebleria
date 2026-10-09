@@ -633,15 +633,19 @@ func TestIssueTransportToken_SketchUpCapBeatsRollingTTL(t *testing.T) {
 }
 
 // TestIssueTransportToken_MobileKeepsShortAccessPolicy locks the SEC-5 boundary:
-// mobile uses the short 15m credential.
+// mobile uses the short 15m credential — and the window rolls from the MINT
+// (#1240): a token issued minutes after the session started carries a full
+// fresh TTL, never the drained origin-derived remainder.
 func TestIssueTransportToken_MobileKeepsShortAccessPolicy(t *testing.T) {
 	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
 	started := time.Now().UTC().Add(-5 * time.Minute).Truncate(time.Second)
+	before := time.Now().UTC()
 	token, err := authority.IssueTransportToken("user-1", "user@example.com", TokenContext{
 		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "membership-1",
 		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
 		AuthStartedAt: started, SessionID: "sess-1",
 	}, "mobile")
+	after := time.Now().UTC()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -649,8 +653,47 @@ func TestIssueTransportToken_MobileKeepsShortAccessPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := started.Add(MobileAccessTokenTTL); !claims.ExpiresAt.Time.Equal(want) {
-		t.Fatalf("mobile expiry = %s, want %s (origin + MobileAccessTokenTTL)", claims.ExpiresAt.Time, want)
+	// Mint-derived: a full fresh TTL from the issue instant (JWT numeric dates
+	// carry second precision, so allow a small clock-slack window).
+	if claims.ExpiresAt.Time.Before(before.Add(MobileAccessTokenTTL).Add(-2 * time.Second)) {
+		t.Fatalf("mobile expiry = %s, want a full TTL near %s (mint + MobileAccessTokenTTL)", claims.ExpiresAt.Time, before.Add(MobileAccessTokenTTL))
+	}
+	if claims.ExpiresAt.Time.After(after.Add(MobileAccessTokenTTL).Add(2 * time.Second)) {
+		t.Fatalf("mobile expiry = %s, want no more than mint + MobileAccessTokenTTL (+clock slack): %s", claims.ExpiresAt.Time, after.Add(MobileAccessTokenTTL))
+	}
+	// …and strictly later than the drained origin-derived instant.
+	if !claims.ExpiresAt.Time.After(started.Add(MobileAccessTokenTTL)) {
+		t.Fatalf("mobile expiry = %s must roll from the mint, not the origin (%s)", claims.ExpiresAt.Time, started.Add(MobileAccessTokenTTL))
+	}
+}
+
+// TestIssueTransportToken_MobileLateRefreshMintsFullTTL is the #1240
+// regression: the refresh rotation passes the session's CreatedAt as the
+// origin, so a refresh after the 15-minute TTL must still mint a valid token
+// (origin-derived semantics minted an ALREADY-EXPIRED one), capped by the
+// session's absolute bound.
+func TestIssueTransportToken_MobileLateRefreshMintsFullTTL(t *testing.T) {
+	authority := mustTestAuthority(t, "test-secret-key-1234567890abcdef")
+	sessionStart := time.Now().UTC().Add(-20 * time.Minute)
+	absolute := sessionStart.Add(MobileSessionAbsoluteTTL)
+	before := time.Now().UTC()
+	token, err := authority.IssueTransportTokenUntil("user-1", "user@example.com", TokenContext{
+		Roles: []string{"admin"}, OrgID: "org-1", MembershipID: "membership-1",
+		MembershipCredentialVersion: 1, OrganizationCredentialVersion: 1,
+		AuthStartedAt: sessionStart, SessionID: "sess-late-1",
+	}, "mobile", absolute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := authority.Validate(token)
+	if err != nil {
+		t.Fatalf("a token minted 20 minutes into the session must validate: %v", err)
+	}
+	if claims.ExpiresAt.Time.Before(before.Add(MobileAccessTokenTTL - time.Minute)) {
+		t.Fatalf("late-refresh expiry = %s, want a near-full fresh TTL after %s", claims.ExpiresAt.Time, before.Add(MobileAccessTokenTTL))
+	}
+	if claims.ExpiresAt.Time.After(absolute) {
+		t.Fatalf("absolute session bound must still cap the expiry: got %s, cap %s", claims.ExpiresAt.Time, absolute)
 	}
 }
 
