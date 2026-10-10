@@ -112,7 +112,7 @@ class PlacementPreviewFlowTest < Minitest::Test
       @definitions.find { |d| d['furniture_definition_id'] == id }
     end
 
-    def resolved_native_layout(_definition_id, _params = {}, choices = {})
+    def resolved_native_layout(_definition_id, _params = {}, choices = {}, _design_id = nil)
       @layout_resolves << choices.dup
       LIB::LayoutContract.parse!(layout_body)
     end

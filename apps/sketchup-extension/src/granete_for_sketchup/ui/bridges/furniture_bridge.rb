@@ -107,19 +107,6 @@ module Granete
           @logger.info(event, ctx)
         end
 
-        # Fetches the server-resolved composition for a definition at the
-        # dialog's current parameters and board choices (role → material id),
-        # parsed through the authoritative #414 transform contract. Granete
-        # resolves the real furniture (boards + hardware); nil falls back to
-        # the generic authoring path (offline/static catalogs). A server body
-        # the contract parser rejects fails loudly — never a local AABB guess.
-        def resolve_layout_for(definition, parameters, material_choices = nil)
-          return nil unless @catalog_provider.respond_to?(:resolved_native_layout)
-
-          @catalog_provider.resolved_native_layout(definition['furniture_definition_id'],
-                                                   parameters || {}, material_choices || {})
-        end
-
         def mock_result(name, params, instance_id = 'mock-inst-01')
           { 'success' => true, 'instance_id' => instance_id, 'name' => name,
             'parameters' => params }

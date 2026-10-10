@@ -92,7 +92,8 @@ module Granete
 
             source = restore_source(model, initial)
             layout = WorkingCopyMerger.resolve_layout(
-              @catalog_provider, source[:definition], source[:item].parameters, source[:item].material_choices
+              @catalog_provider, source[:definition], source[:item].parameters, source[:item].material_choices,
+              binding.design_id
             )
 
             fresh = authority(model, binding, furniture_instance_id)

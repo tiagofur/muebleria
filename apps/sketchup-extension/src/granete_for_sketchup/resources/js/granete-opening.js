@@ -155,6 +155,30 @@
     return option;
   }
 
+  function normalizeGeometryOutcome(geometry) {
+    if (!geometry || typeof geometry !== "object") return null;
+    var status = geometry.status;
+    if (status !== "converged" && status !== "failed") return null;
+    return { status: status, units: geometry.units || 0, reason: geometry.reason || "" };
+  }
+
+  function renderGeometryOutcome(body) {
+    var outcome = state.geometryOutcome;
+    if (!outcome) return;
+    var row = document.createElement("p");
+    row.className = "subhead";
+    row.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
+    row.setAttribute("data-testid", "opening-geometry-outcome");
+    if (outcome.status === "converged") {
+      var unitCount = outcome.units > 0 ? " (" + outcome.units + ")" : "";
+      row.textContent = "Geometría actualizada" + unitCount + ".";
+    } else {
+      row.textContent = "La geometría no se pudo actualizar (" + (outcome.reason || "sin razón") +
+        "); convergerá en la próxima edición o sincronización.";
+    }
+    body.appendChild(row);
+  }
+
   function renderReadOnlyResolution(body) {
     var resolution = state.persisted && state.persisted.resolution;
     if (!state.persisted || !state.persisted.dimsKnown) {
@@ -290,6 +314,7 @@
     body.appendChild(persistedNote);
 
     renderReadOnlyResolution(body);
+    renderGeometryOutcome(body);
 
     if (state.draft) {
       var actions = document.createElement("div");
@@ -432,6 +457,9 @@
       if (answer.state && answer.state.workingVersion) {
         state.workingVersion = answer.state.workingVersion;
       }
+      // #1264: the model convergence rides the answer — honest feedback,
+      // never a local guess (a failure converges on the next edit/sync).
+      state.geometryOutcome = normalizeGeometryOutcome(answer.geometry);
       render();
       return;
     }
@@ -439,6 +467,7 @@
       // Keep the editable draft AND the persisted selection visible; the
       // server's message is the actionable text.
       state.draftError = { reason: answer.reason || "", message: answer.message || "la configuración de apertura no es válida" };
+      state.geometryOutcome = null;
       render();
       return;
     }

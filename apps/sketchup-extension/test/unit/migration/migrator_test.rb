@@ -30,7 +30,7 @@ class MigrationMigratorTest < Minitest::Test
       @definitions.find { |d| d['furniture_definition_id'] == definition_id }
     end
 
-    def resolved_native_layout(definition_id, _parameters = {}, _choices = {})
+    def resolved_native_layout(definition_id, _parameters = {}, _choices = {}, _design_id = nil)
       layout = @layouts_by_id[definition_id]
       raise layout if layout.is_a?(StandardError)
 

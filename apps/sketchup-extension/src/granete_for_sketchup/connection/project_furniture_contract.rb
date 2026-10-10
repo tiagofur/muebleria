@@ -696,11 +696,11 @@ module Granete
             parameters
           end
 
-          def resolve_layout(catalog_provider, definition, parameters, material_choices = {})
+          def resolve_layout(catalog_provider, definition, parameters, material_choices = {}, design_id = nil)
             return nil unless catalog_provider.respond_to?(:resolved_native_layout)
 
             catalog_provider.resolved_native_layout(
-              definition['furniture_definition_id'], parameters, material_choices || {}
+              definition['furniture_definition_id'], parameters, material_choices || {}, design_id
             )
           rescue Library::LayoutResolutionError => e
             raise PlacementResolutionError,

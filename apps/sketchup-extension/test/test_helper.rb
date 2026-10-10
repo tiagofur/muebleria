@@ -28,6 +28,8 @@ require_relative '../src/granete_for_sketchup/ui/bridges/placement_preview_bridg
 require_relative '../src/granete_for_sketchup/ui/bridges/design_workflow_bridge'
 require_relative '../src/granete_for_sketchup/ui/bridges/design_inspector_bridge'
 require_relative '../src/granete_for_sketchup/ui/bridges/design_opening_bridge'
+require_relative '../src/granete_for_sketchup/ui/bridges/design_opening_geometry_bridge'
+require_relative '../src/granete_for_sketchup/ui/bridges/layout_resolve_bridge'
 require_relative '../src/granete_for_sketchup/ui/bridges/design_inheritance_bridge'
 require_relative '../src/granete_for_sketchup/ui/bridges/design_hardware_groups_bridge'
 require_relative '../src/granete_for_sketchup/ui/bridges/project_furniture_bridge'

@@ -16,9 +16,11 @@ module Granete
         include PlacementPreviewBridge
         include DesignInspectorBridge
         include DesignOpeningBridge
+        include DesignOpeningGeometryBridge
         include DesignInheritanceBridge
         include DesignHardwareGroupsBridge
         include DesignWorkflowBridge
+        include LayoutResolveBridge
         include FurnitureBridge
         include HostMutationBridge
         include ComponentAuthoringBridge

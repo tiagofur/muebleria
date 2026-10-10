@@ -105,7 +105,7 @@ module OverlayFixture
       DEFINITION if definition_id == DEFINITION_ID
     end
 
-    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
+    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {}, _design_id = nil)
       @resolved_layout_calls += 1
       layout = OverlayFixture.native_layout
       layout.hardware.concat(@extra_hardware.map { |entry| build_placement(entry) }) unless @extra_hardware.empty?

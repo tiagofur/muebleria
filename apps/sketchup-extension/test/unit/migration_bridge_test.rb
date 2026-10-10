@@ -178,7 +178,7 @@ class MigrationBridgeTest < Minitest::Test
       { 'furniture_definition_id' => definition_id, 'name' => 'Bajo', 'revisionId' => 'rev-1' }
     end
 
-    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
+    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {}, _design_id = nil)
       @layout
     end
   end

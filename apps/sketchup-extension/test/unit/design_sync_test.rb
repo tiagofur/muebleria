@@ -146,7 +146,7 @@ class DesignSyncTest < Minitest::Test
       definition_id == DEFINITION_ID ? definition : nil
     end
 
-    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {})
+    def resolved_native_layout(_definition_id, _parameters = {}, _choices = {}, _design_id = nil)
       nil
     end
 
