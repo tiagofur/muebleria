@@ -49,6 +49,12 @@ var (
 // units already sold are always carried over, never silently dropped.
 type RequotePlan struct {
 	Include map[string]bool
+	// OpeningCommercialChange (#1263): the caller verified the design's
+	// opening truth differs from the base quote's frozen one — an
+	// opening-only change is commercial state even when no item changed, so
+	// Q2 is legitimate (its items carry over verbatim; only the opening
+	// section and amounts move).
+	OpeningCommercialChange bool
 }
 
 // RequoteDraft is the computed next commercial snapshot plus the provenance
@@ -218,10 +224,12 @@ func BuildRequoteDraft(quote QuoteRevisionSnapshot, design DesignRevisionSnapsho
 		}
 	}
 
-	if len(incorporated) == 0 {
+	if len(incorporated) == 0 && !plan.OpeningCommercialChange {
 		// Either nothing commercial changed at all, or the user's selection
 		// incorporated no design truth: a new commercial revision identical
-		// to its base would be misleading. Fail closed (#394 §34/§35).
+		// to its base would be misleading. Fail closed (#394 §34/§35) — the
+		// opening-only change (#1263) is the one item-less commercial truth
+		// that legitimately mints Q2 with items carried verbatim.
 		if !classification.Summary.RequiresRequote {
 			return nil, ErrRequoteNoCommercialChange
 		}

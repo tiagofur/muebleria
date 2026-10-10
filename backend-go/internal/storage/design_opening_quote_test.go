@@ -194,6 +194,96 @@ func TestCreateInitialDesignQuoteRevisionFreezesOpeningBOM(t *testing.T) {
 
 // #1263 — fail-closed: a gola selection whose BOM cannot resolve fails the
 // quote verbatim (a design that DECLARES a gola never quotes without it).
+
+// seedVerifiedGolaProfile creates the Cymisa-8006 verified profile and
+// returns its catalog revision (the version the pin freezes).
+func seedVerifiedGolaProfile(t *testing.T, fx *designQuoteFixture) int64 {
+	t.Helper()
+	spacing := 400
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		return fx.store.CreateOpeningProfile(ctx, &domain.OpeningProfile{
+			ID: openingProfileID, Code: "GOLA-L-8006", Name: "Gola L Cymisa 8006",
+			GripType: "gola", CrossSectionShape: "L", CompatiblePlacements: []string{"top"},
+			FrontReductionMm: intPtr(38), GripClearanceMm: intPtr(2),
+			ProfileHeightMm: intPtr(27), ProfileDepthMm: intPtr(56),
+			GeometryOrigin:  "docs/fichas/perfil_gola_l_ficha_tecnica.pdf (Cymisa 8006)",
+			DatasheetStatus: "verified", Active: true, BodyModifiers: []domain.OpeningBodyModifier{},
+			BOMMembers: map[string]domain.OpeningBOMMember{
+				"profile":  {HardwareID: openingHWProfile, Rule: "interior_width", Unit: "meter"},
+				"supports": {HardwareID: openingHWSupport, Rule: "per_length", SpacingMm: &spacing},
+				"endCaps":  {HardwareID: openingHWCap, Rule: "per_exposed_end"},
+			},
+		})
+	})
+	if err != nil {
+		t.Fatalf("seed opening profile: %v", err)
+	}
+	var version int64
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		profiles, err := fx.store.ListOpeningProfiles(ctx)
+		if err != nil {
+			return err
+		}
+		for _, profile := range profiles {
+			if profile.ID == openingProfileID {
+				version = profile.Version
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("read opening profile: %v", err)
+	}
+	return version
+}
+
+// pinnedGolaSelection builds the persisted selection the way the endpoint
+// writes it: intent + the frozen datasheet/BOM slice.
+func pinnedGolaSelection(version int64) *domain.DesignOpeningSelection {
+	spacing := 400
+	return &domain.DesignOpeningSelection{
+		System: "gola", ProfileID: openingProfileID, Placements: []string{"top"},
+		ProfilePin: &domain.DesignOpeningProfilePin{
+			ProfileCode: "GOLA-L-8006", FrontReductionMm: 38, GripClearanceMm: 2, DatasheetStatus: "verified",
+			BOM: &domain.DesignOpeningProfilePinBOM{ProfileVersion: version, Members: map[string]domain.OpeningBOMMember{
+				"profile":  {HardwareID: openingHWProfile, Rule: "interior_width", Unit: "meter"},
+				"supports": {HardwareID: openingHWSupport, Rule: "per_length", SpacingMm: &spacing},
+				"endCaps":  {HardwareID: openingHWCap, Rule: "per_exposed_end"},
+			}},
+		},
+	}
+}
+
+// rewriteDesignItemsWithDims gives the fixture's working items explicit
+// dimensions (the pilot's one-module scope) and refreshes the quote tokens.
+func rewriteDesignItemsWithDims(t *testing.T, fx *designQuoteFixture) {
+	t.Helper()
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		if _, err := UpdateWorkingCopyCurrent(ctx, fx.store, storage.UpdateDesignWorkingCopyCommand{
+			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
+			Items: []storage.UpdateDesignWorkingCopyItemCommand{
+				{FurnitureInstanceID: fx.instances[0], FurnitureDefinitionID: csModule, Parameters: map[string]any{"widthMm": 800.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"INTERIOR": csMaterial}},
+				{FurnitureInstanceID: fx.instances[1], FurnitureDefinitionID: csModule, Parameters: map[string]any{"widthMm": 800.0, "heightMm": 720.0, "depthMm": 560.0}, MaterialChoices: map[string]string{"INTERIOR": csMaterial2}},
+			},
+		}); err != nil {
+			return err
+		}
+		return refreshDesignQuoteTokens(ctx, fx)
+	})
+	if err != nil {
+		t.Fatalf("rewrite items: %v", err)
+	}
+}
+
+func refreshDesignQuoteTokens(ctx context.Context, fx *designQuoteFixture) error {
+	projection, err := fx.store.GetDesignCommercialProjection(ctx, csProject, fx.designID)
+	if err != nil {
+		return err
+	}
+	fx.version, fx.fingerprint = projection.WorkingVersion, projection.WorkingFingerprint
+	return nil
+}
+
 func TestCreateInitialDesignQuoteRevisionFailsWhenOpeningBOMUnderivable(t *testing.T) {
 	fx := setupDesignQuoteFixture(t)
 	seedOpeningQuoteContext(t, fx)
@@ -246,4 +336,104 @@ func TestCreateInitialDesignQuoteRevisionFailsWhenOpeningBOMUnderivable(t *testi
 	if got := err.Error(); !strings.Contains(got, "OPENING_BOM_PIN_SLICE_MISSING") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+// #1263 — the requote reflects the published design's opening: removing the
+// selection retires EVERY opening line and its hardware from Q2 (no residue
+// of a previous resolution ever survives).
+func TestRequoteRetiresRemovedOpeningBOM(t *testing.T) {
+	fx := setupDesignQuoteFixture(t)
+	seedOpeningQuoteContext(t, fx)
+	version := seedVerifiedGolaProfile(t, fx)
+
+	rewriteDesignItemsWithDims(t, fx)
+	err := fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		_, err := fx.store.SetDesignWorkingCopyOpening(ctx, storage.SetDesignWorkingCopyOpeningCommand{
+			DesignID: fx.designID, Opening: pinnedGolaSelection(version), ActorUserID: rlsUserA,
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatalf("persist opening: %v", err)
+	}
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		return refreshDesignQuoteTokens(ctx, fx)
+	})
+	if err != nil {
+		t.Fatalf("reproject: %v", err)
+	}
+	var q1 *storage.CreateInitialQuoteRevisionResult
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		q1, err = createDesignQuote(ctx, fx)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("Q1 with opening: %v", err)
+	}
+	if len(q1.Revision.CommercialSnapshot.OpeningBOM) != 1 || q1.Revision.CommercialSnapshot.Breakdown.HardwareTotal <= 0 {
+		t.Fatalf("Q1 must freeze the opening BOM and price it: %+v", q1.Revision.CommercialSnapshot.OpeningBOM)
+	}
+
+	// Remove the opening, publish the design revision (the requote's frozen
+	// defaults source) and requote from the accepted Q1.
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		if _, err := fx.store.SetDesignWorkingCopyOpening(ctx, storage.SetDesignWorkingCopyOpeningCommand{
+			DesignID: fx.designID, Opening: nil, ActorUserID: rlsUserA,
+		}); err != nil {
+			return err
+		}
+		if _, err := fx.store.PublishDesignRevision(ctx, storage.PublishDesignRevisionCommand{
+			DesignID: fx.designID, SourceType: domain.DesignRevisionSourceSketchup, ActorUserID: rlsUserA,
+		}); err != nil {
+			return err
+		}
+		if _, err := fx.store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{
+			QuoteRevisionID: q1.Revision.ID, Status: "published",
+		}); err != nil {
+			return err
+		}
+		if _, err := fx.store.UpdateQuoteRevisionStatus(ctx, storage.UpdateQuoteRevisionStatusCommand{
+			QuoteRevisionID: q1.Revision.ID, Status: "accepted",
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("remove+publish+accept: %v", err)
+	}
+	var q2 *storage.RequoteProjectQuoteResult
+	err = fiTx(t, fx.store, fiActorA(), func(ctx context.Context) error {
+		result, rqErr := fx.store.RequoteProjectQuote(ctx, storage.RequoteProjectQuoteCommand{
+			ProjectID: csProject, BaseQuoteRevisionID: q1.Revision.ID, DesignRevisionID: latestDesignRevisionID(t, fx),
+			ActorUserID: rlsUserA,
+		})
+		if rqErr != nil {
+			return rqErr
+		}
+		q2 = result
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("requote: %v", err)
+	}
+	snapshot := q2.Revision.CommercialSnapshot
+	if len(snapshot.OpeningBOM) != 0 {
+		t.Fatalf("Q2 must retire every opening line, got %+v", snapshot.OpeningBOM)
+	}
+	if snapshot.Breakdown.HardwareTotal != 0 {
+		t.Fatalf("Q2 hardware must return to the fixture baseline, got %v", snapshot.Breakdown.HardwareTotal)
+	}
+}
+
+// latestDesignRevisionID reads the design's newest published revision id.
+func latestDesignRevisionID(t *testing.T, fx *designQuoteFixture) string {
+	t.Helper()
+	var id string
+	if err := fx.admin.QueryRow(context.Background(),
+		`SELECT id::text FROM design_revisions WHERE design_id=$1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+		fx.designID).Scan(&id); err != nil {
+		t.Fatalf("latest design revision: %v", err)
+	}
+	return id
 }

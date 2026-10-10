@@ -223,3 +223,41 @@ func derefOpeningInt(value *int) int {
 	}
 	return *value
 }
+
+// sameOpeningCommercialLines reports whether the base quote's frozen opening
+// section and the design revision's freshly derived one are the SAME
+// commercial truth (identity-to-identity: hardware, quantity and cut). An
+// opening-only change — add, remove or profile swap — differs here even when
+// no design item changed.
+func sameOpeningCommercialLines(frozen *domain.QuoteCommercialSnapshot, opening *designOpeningCommercial) bool {
+	var frozenLines []domain.QuoteCommercialOpeningBOMLine
+	if frozen != nil {
+		for _, entry := range frozen.OpeningBOM {
+			frozenLines = append(frozenLines, entry.Lines...)
+		}
+	}
+	var derivedLines []domain.QuoteCommercialOpeningBOMLine
+	if opening != nil {
+		for _, entry := range opening.Snapshot {
+			derivedLines = append(derivedLines, entry.Lines...)
+		}
+	}
+	if len(frozenLines) != len(derivedLines) {
+		return false
+	}
+	key := func(line domain.QuoteCommercialOpeningBOMLine) string {
+		return fmt.Sprintf("%s|%s|%d|%g", line.HardwareID, line.LineID, line.CutLengthMm, line.Quantity)
+	}
+	seen := make(map[string]int, len(frozenLines))
+	for _, line := range frozenLines {
+		seen[key(line)]++
+	}
+	for _, line := range derivedLines {
+		k := key(line)
+		if seen[k] == 0 {
+			return false
+		}
+		seen[k]--
+	}
+	return true
+}
