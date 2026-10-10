@@ -14,6 +14,7 @@ const HW_PROFILE_8006 = '71810000-0000-4000-8000-000000000003';
 const HW_SUPPORT_SU116 = '71810000-0000-4000-8000-000000000004';
 const HW_CAPS_CF8006TP = '71810000-0000-4000-8000-000000000005';
 const OPENING_PROFILE_ID = '71810000-0000-4000-8000-000000000006';
+const OPENING_MODULE_ID = '71810000-0000-4000-8000-000000000009';
 const LATERAL_MATERIAL_ID = '71810000-0000-4000-8000-000000000007';
 const LATERAL_GROUP_CODE = 'LATERAL_MAT';
 
@@ -127,14 +128,17 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
       { id: HW_SUPPORT_SU116, code: 'SU116', name: 'Soporte GOLA atornillar', unit: 'piece' as const, costPerUnit: 10, active: true },
       { id: HW_CAPS_CF8006TP, code: 'CF8006TP', name: 'Juego tapas terminales', unit: 'piece' as const, costPerUnit: 5, active: true },
     ],
-    // Preserve every other module: the gate org's catalog is SHARED by the
-    // specs that run after this one in the same shard (a clobbered list
-    // breaks their journeys with "module not found").
+    // Shard-isolation contract (same as production-release-continuity): the
+    // shared seed module stays UNTOUCHED — later residents quote it with
+    // empty choices. This spec quotes its OWN module wired to the gola
+    // structure whose lateral consumes a material choice.
     modules: [
-      ...catalog.modules.filter((module) => module.id !== GATE_MODULE_A_ID),
+      ...catalog.modules,
       {
         ...template,
-        id: GATE_MODULE_A_ID,
+        id: OPENING_MODULE_ID,
+        code: '1263-GOLA',
+        name: 'Gabinete gola 1263',
         structureId: STRUCTURE_ID,
         components: [],
         hardwareLines: [],
@@ -182,13 +186,13 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
   const furniture = await client.createProjectFurnitureInstance(
     token,
     projectId,
-    { furniture_definition_id: GATE_MODULE_A_ID },
+    { furniture_definition_id: OPENING_MODULE_ID },
     'gate-1263-furniture',
   );
   await putWorkingCopyCurrent(client, token, designId, {
     items: [{
       furniture_instance_id: furniture.id,
-      furniture_definition_id: GATE_MODULE_A_ID,
+      furniture_definition_id: OPENING_MODULE_ID,
       parameters: { widthMm: 600, heightMm: 720, depthMm },
       material_choices: { [LATERAL_GROUP_CODE]: LATERAL_MATERIAL_ID },
     }],
