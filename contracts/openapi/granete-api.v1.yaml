@@ -13188,6 +13188,109 @@
           },
           "designSource": {
             "$ref": "#/components/schemas/QuoteCommercialDesignSource"
+          },
+          "openingBom": {
+            "type": "array",
+            "description": "Frozen resolved opening BOM behind the breakdown (#1263): the gola profile run, supports and end caps the design's persisted selection resolved to — pinned datasheet slice, exact lengths, full provenance. Optional and additive: existing frozen revisions never grow one.",
+            "items": {
+              "$ref": "#/components/schemas/QuoteCommercialOpeningBom"
+            }
+          }
+        }
+      },
+      "QuoteCommercialOpeningBom": {
+        "type": "object",
+        "description": "Per-unit frozen opening BOM of one quote line (#1263).",
+        "additionalProperties": false,
+        "required": [
+          "quoteLineId",
+          "unitQuantity",
+          "lines"
+        ],
+        "properties": {
+          "quoteLineId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "unitQuantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "lines": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/QuoteCommercialOpeningBomLine"
+            }
+          }
+        }
+      },
+      "QuoteCommercialOpeningBomLine": {
+        "type": "object",
+        "description": "One engine-resolved opening BOM line, frozen verbatim (#1133 resolver output).",
+        "additionalProperties": false,
+        "required": [
+          "lineId",
+          "memberKey",
+          "hardwareId",
+          "profileId",
+          "profileVersion",
+          "boundary",
+          "rule",
+          "quantity",
+          "unit"
+        ],
+        "properties": {
+          "lineId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "memberKey": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "supports",
+              "endCaps"
+            ]
+          },
+          "hardwareId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "profileId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "profileVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "boundary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rule": {
+            "type": "string",
+            "enum": [
+              "interior_width",
+              "per_length",
+              "per_exposed_end"
+            ]
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "meter",
+              "piece"
+            ]
+          },
+          "cutLengthMm": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       },

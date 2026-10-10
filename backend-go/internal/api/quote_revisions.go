@@ -222,6 +222,31 @@ func toQuoteCommercialSnapshotDTO(snapshot *domain.QuoteCommercialSnapshot) *ope
 			WorkingFingerprint: snapshot.DesignSource.WorkingFingerprint,
 		}
 	}
+	// #1263: the frozen opening BOM rides the DTO — additive, absent on
+	// revisions that never had one.
+	if len(snapshot.OpeningBOM) > 0 {
+		opening := make([]openapi.QuoteCommercialOpeningBom, 0, len(snapshot.OpeningBOM))
+		for _, entry := range snapshot.OpeningBOM {
+			lines := make([]openapi.QuoteCommercialOpeningBomLine, 0, len(entry.Lines))
+			for _, line := range entry.Lines {
+				mapped := openapi.QuoteCommercialOpeningBomLine{
+					LineId: line.LineID, MemberKey: line.MemberKey, HardwareId: line.HardwareID,
+					ProfileId: line.ProfileID, ProfileVersion: line.ProfileVersion,
+					Boundary: line.Boundary, Rule: line.Rule, Quantity: line.Quantity,
+					Unit: line.Unit,
+				}
+				if line.CutLengthMm > 0 {
+					cut := int64(line.CutLengthMm)
+					mapped.CutLengthMm = &cut
+				}
+				lines = append(lines, mapped)
+			}
+			opening = append(opening, openapi.QuoteCommercialOpeningBom{
+				QuoteLineId: entry.QuoteLineID, UnitQuantity: int64(entry.UnitQuantity), Lines: lines,
+			})
+		}
+		dto.OpeningBom = opening
+	}
 	return dto
 }
 

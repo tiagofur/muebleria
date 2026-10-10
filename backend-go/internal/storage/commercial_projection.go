@@ -62,10 +62,15 @@ func (s *PostgresStore) GetDesignCommercialProjection(ctx context.Context, proje
 		}
 		return nil, err
 	}
+	// #1263: authoring_defaults join the fingerprint — the twin in
+	// design_quote_lifecycle.go hashes the exact same struct (the opening
+	// selection prices the quote; identical items with a different opening
+	// are not the same commercial truth).
 	workingFingerprint, err := hashJSON(struct {
-		BaseRevisionID *string                    `json:"baseRevisionId"`
-		Items          []domain.DesignWorkingItem `json:"items"`
-	}{wc.BaseRevisionID, wc.Items})
+		BaseRevisionID    *string                        `json:"baseRevisionId"`
+		Items             []domain.DesignWorkingItem     `json:"items"`
+		AuthoringDefaults domain.DesignAuthoringDefaults `json:"authoringDefaults"`
+	}{wc.BaseRevisionID, wc.Items, wc.AuthoringDefaults.Normalize()})
 	if err != nil {
 		return nil, err
 	}

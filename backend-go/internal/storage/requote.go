@@ -149,7 +149,27 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 
 	// 3b. Freeze the immutable commercial snapshot (#642) for the exact draft
 	// configuration, computed once server-side in this same transaction.
-	commercialSnapshot, err := s.buildRequoteCommercialSnapshot(ctx, cmd.ProjectID, items)
+	// #1263: the published design revision's frozen opening defaults resolve
+	// the same commercial truth Q1 froze — the requote reflects opening
+	// changes and removals through the one shared derivation.
+	revisionDefaults, err := s.loadDesignRevisionAuthoringDefaults(ctx, cmd.DesignRevisionID)
+	if err != nil {
+		return nil, err
+	}
+	openingUnits := make([]designOpeningUnit, 0, len(items))
+	for _, item := range items {
+		openingUnits = append(openingUnits, designOpeningUnit{
+			FurnitureInstanceID:   item.FurnitureInstanceID,
+			FurnitureDefinitionID: item.FurnitureDefinitionID,
+			QuoteLineID:           item.QuoteLineID,
+			Parameters:            item.Parameters,
+		})
+	}
+	opening, err := s.deriveDesignOpeningCommercial(ctx, revisionDefaults, openingUnits)
+	if err != nil {
+		return nil, err
+	}
+	commercialSnapshot, err := s.buildRequoteCommercialSnapshot(ctx, cmd.ProjectID, items, opening)
 	if err != nil {
 		return nil, err
 	}
