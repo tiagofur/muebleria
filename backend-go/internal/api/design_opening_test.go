@@ -17,6 +17,7 @@ import (
 // selection never touches the persisted one.
 
 func openingDesignStub() *stubStore {
+	spacing := 400
 	return &stubStore{
 		openingCapabilities: &domain.OpeningCapabilities{
 			Version: 1,
@@ -28,6 +29,12 @@ func openingDesignStub() *stubStore {
 		openingProfiles: []domain.OpeningProfile{{
 			ID: "profile.gola-l.alu", Code: "GOLA-L-ALU", CompatiblePlacements: []string{"top"},
 			DatasheetStatus: "verified", FrontReductionMm: openingTestIntPtr(66), GripClearanceMm: openingTestIntPtr(4),
+			Version: 7,
+			BOMMembers: map[string]domain.OpeningBOMMember{
+				"profile":  {HardwareID: "HW-8006", Rule: "interior_width", Unit: "meter"},
+				"supports": {HardwareID: "HW-SU116", Rule: "per_length", SpacingMm: &spacing},
+				"endCaps":  {HardwareID: "HW-CF8006TP", Rule: "per_exposed_end"},
+			},
 		}},
 	}
 }
@@ -78,6 +85,13 @@ func TestHandleDesignOpeningPutPersistsValidSelection(t *testing.T) {
 	if store.setOpeningCmd == nil || store.setOpeningCmd.Opening == nil ||
 		store.setOpeningCmd.Opening.System != "gola" || store.setOpeningCmd.Opening.ProfileID != "profile.gola-l.alu" {
 		t.Fatalf("the surgical write never received the selection: %+v", store.setOpeningCmd)
+	}
+	// #1263: the pin freezes the BOM slice too — revision + declared members —
+	// so the historical quote resolves the same physical truth.
+	if pin := store.setOpeningCmd.Opening.ProfilePin; pin == nil || pin.BOM == nil ||
+		pin.BOM.ProfileVersion != 7 || len(pin.BOM.Members) != 3 ||
+		pin.BOM.Members["supports"].HardwareID != "HW-SU116" || pin.BOM.Members["supports"].SpacingMm == nil {
+		t.Fatalf("the pin must freeze the BOM slice: %+v", pin)
 	}
 	var got struct {
 		Opening *struct {
@@ -279,5 +293,112 @@ func TestHandleDesignOpeningRejectsBetweenPlacement(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "Entre frentes") {
 		t.Fatalf("the rejection must name the v1 limitation: %s", rr.Body.String())
+	}
+}
+
+// #1263 — the resolution payload carries the BOM lines when the body context
+// derives (structure lateral panels), and reports the truthful absence when
+// it cannot — the endpoint never invents a run length.
+func TestHandleDesignOpeningResolvesBOM(t *testing.T) {
+	spacing := 400
+	newSelection := func() *domain.DesignOpeningSelection {
+		return &domain.DesignOpeningSelection{
+			System: "gola", ProfileID: "profile.gola-l.alu",
+			ProfilePin: &domain.DesignOpeningProfilePin{
+				ProfileCode: "GOLA-L-ALU", FrontReductionMm: 66, GripClearanceMm: 4, DatasheetStatus: "verified",
+				BOM: &domain.DesignOpeningProfilePinBOM{ProfileVersion: 7, Members: map[string]domain.OpeningBOMMember{
+					"profile":  {HardwareID: "HW-8006", Rule: "interior_width", Unit: "meter"},
+					"supports": {HardwareID: "HW-SU116", Rule: "per_length", SpacingMm: &spacing},
+					"endCaps":  {HardwareID: "HW-CF8006TP", Rule: "per_exposed_end"},
+				}},
+			},
+		}
+	}
+
+	// Body context: module → structure with 18mm lateral panels ⇒ interior
+	// 600 − 2×18 = 564.
+	store := openingDesignStub()
+	store.catalogOverride = &domain.Catalog{
+		Modules:    []domain.Module{{ID: "mod-base", StructureID: "struct-base"}},
+		Structures: []domain.Structure{{ID: "struct-base", Components: []domain.ComponentInstance{{ComponentID: "comp-side", Quantity: 2}}}},
+		Components: []domain.Component{{ID: "comp-side", ThicknessMm: 18, Construction: &domain.ComponentConstruction{ConstructiveRole: "lateral"}}},
+	}
+	wc := designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0})
+	wc.Items[0].FurnitureDefinitionID = "mod-base"
+	wc.AuthoringDefaults.Opening = newSelection()
+	store.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{"d1137000-0000-0000-0-000000000001": *wc}
+	_ = store.designWorkingCopiesByID
+	delete(store.designWorkingCopiesByID, "d1137000-0000-0000-0-000000000001")
+	store.designWorkingCopiesByID["d1137000-0000-0000-0000-000000000001"] = *wc
+	srv := &Server{Store: store}
+
+	rr := openingRequest(t, srv, http.MethodGet, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		Resolution *struct {
+			State string `json:"state"`
+			BOM   []struct {
+				MemberKey   string  `json:"memberKey"`
+				Quantity    float64 `json:"quantity"`
+				Unit        string  `json:"unit"`
+				CutLengthMm int     `json:"cutLengthMm"`
+			} `json:"bom"`
+			BOMReason string `json:"bomReason"`
+			BOMEnds   *struct {
+				LeftEnd  string `json:"leftEnd"`
+				RightEnd string `json:"rightEnd"`
+			} `json:"bomEnds"`
+		} `json:"resolution"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rr.Body.String())
+	}
+	if got.Resolution == nil || got.Resolution.State != "resolved" || len(got.Resolution.BOM) != 3 || got.Resolution.BOMReason != "" {
+		t.Fatalf("expected the three BOM lines, got %s", rr.Body.String())
+	}
+	byMember := map[string]struct {
+		MemberKey   string  `json:"memberKey"`
+		Quantity    float64 `json:"quantity"`
+		Unit        string  `json:"unit"`
+		CutLengthMm int     `json:"cutLengthMm"`
+	}{}
+	for _, line := range got.Resolution.BOM {
+		byMember[line.MemberKey] = line
+	}
+	if line := byMember["profile"]; line.Quantity != 0.564 || line.CutLengthMm != 564 || line.Unit != "meter" {
+		t.Fatalf("profile run drifted: %+v", line)
+	}
+	if line := byMember["supports"]; line.Quantity != 3 || line.Unit != "piece" {
+		t.Fatalf("supports drifted: %+v", line)
+	}
+	if line := byMember["endCaps"]; line.Quantity != 2 {
+		t.Fatalf("end caps drifted: %+v", line)
+	}
+	if got.Resolution.BOMEnds == nil || got.Resolution.BOMEnds.LeftEnd != "exposed" || got.Resolution.BOMEnds.RightEnd != "exposed" {
+		t.Fatalf("ends must ride visibly: %s", rr.Body.String())
+	}
+
+	// No structure context: the truthful absence, never a guessed run.
+	bare := openingDesignStub()
+	bareWC := designWCWithDims(map[string]any{"widthMm": 600.0, "heightMm": 720.0, "depthMm": 560.0})
+	bareWC.AuthoringDefaults.Opening = newSelection()
+	bare.designWorkingCopiesByID = map[string]domain.DesignWorkingCopy{"d1137000-0000-0000-0000-000000000001": *bareWC}
+	rr = openingRequest(t, &Server{Store: bare}, http.MethodGet, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d (body=%s)", rr.Code, rr.Body.String())
+	}
+	var bareGot struct {
+		Resolution *struct {
+			BOM       []json.RawMessage `json:"bom"`
+			BOMReason string            `json:"bomReason"`
+		} `json:"resolution"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &bareGot); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if bareGot.Resolution == nil || bareGot.Resolution.BOM != nil || bareGot.Resolution.BOMReason != "OPENING_BOM_BODY_CONTEXT_MISSING" {
+		t.Fatalf("expected the truthful absence, got %s", rr.Body.String())
 	}
 }
