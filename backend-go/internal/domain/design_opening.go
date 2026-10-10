@@ -42,6 +42,18 @@ type DesignOpeningProfilePin struct {
 	FrontReductionMm int    `json:"frontReductionMm"`
 	GripClearanceMm  int    `json:"gripClearanceMm"`
 	DatasheetStatus  string `json:"datasheetStatus"`
+	// BOM freezes the #1130 BOM slice the selection was validated against
+	// (#1263): the profile revision plus its declared members the historical
+	// BOM and quote resolve from — never the live catalog row. Empty members
+	// mean "the datasheet declares none"; nil only in pins authored before
+	// #1263 existed (those report the truthful absence, no fallback).
+	BOM *DesignOpeningProfilePinBOM `json:"bom,omitempty"`
+}
+
+// DesignOpeningProfilePinBOM is the frozen BOM slice of the pin.
+type DesignOpeningProfilePinBOM struct {
+	ProfileVersion int64                       `json:"profileVersion"`
+	Members        map[string]OpeningBOMMember `json:"members"`
 }
 
 // ValidateDesignOpeningSelection enforces the shape at the persistence
@@ -84,6 +96,11 @@ func ValidateDesignOpeningSelection(selection DesignOpeningSelection) error {
 		if strings.TrimSpace(pin.ProfileCode) == "" || pin.DatasheetStatus != "verified" ||
 			pin.FrontReductionMm <= 0 || pin.GripClearanceMm < 0 {
 			return fmt.Errorf("el pin de perfil exige código, estado verificado y geometría positiva")
+		}
+		if pin.BOM != nil {
+			if pin.BOM.ProfileVersion <= 0 || pin.BOM.Members == nil {
+				return fmt.Errorf("el slice BOM del pin exige revisión de perfil y miembros declarados")
+			}
 		}
 	}
 	return nil

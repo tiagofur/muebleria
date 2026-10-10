@@ -93,10 +93,15 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 		}
 		return nil, err
 	}
+	// #1263: authoring_defaults join the fingerprint — the opening selection
+	// prices the quote, so two working copies with identical items but a
+	// different opening are NOT the same commercial truth. The twin in
+	// commercial_projection.go hashes the exact same struct.
 	workingFingerprint, err := hashJSON(struct {
-		BaseRevisionID *string                    `json:"baseRevisionId"`
-		Items          []domain.DesignWorkingItem `json:"items"`
-	}{wc.BaseRevisionID, wc.Items})
+		BaseRevisionID    *string                        `json:"baseRevisionId"`
+		Items             []domain.DesignWorkingItem     `json:"items"`
+		AuthoringDefaults domain.DesignAuthoringDefaults `json:"authoringDefaults"`
+	}{wc.BaseRevisionID, wc.Items, wc.AuthoringDefaults.Normalize()})
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +214,25 @@ func (s *PostgresStore) CreateInitialDesignQuoteRevision(ctx context.Context, cm
 		return nil, fmt.Errorf("%w: existen líneas comerciales ajenas al working copy exacto", domain.ErrInvalidRevisionSnapshot)
 	}
 
-	snapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items, true)
+	// #1263: the design's opening resolves ONCE here — the same engine
+	// resolution the design opening endpoint serves — and its lines join the
+	// snapshot (frozen section + pricing demand through the profile-demand
+	// channel). A gola that cannot produce its BOM fails the quote.
+	openingUnits := make([]designOpeningUnit, 0, len(items))
+	for _, item := range items {
+		openingUnits = append(openingUnits, designOpeningUnit{
+			FurnitureInstanceID:   item.FurnitureInstanceID,
+			FurnitureDefinitionID: item.FurnitureDefinitionID,
+			QuoteLineID:           item.QuoteLineID,
+			Parameters:            item.Parameters,
+		})
+	}
+	opening, err := s.deriveDesignOpeningCommercial(ctx, &wc.AuthoringDefaults, openingUnits)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := s.buildInitialQuoteCommercialSnapshot(ctx, cmd.ProjectID, items, true, opening)
 	if err != nil {
 		return nil, err
 	}

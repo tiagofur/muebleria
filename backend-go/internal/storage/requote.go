@@ -98,14 +98,39 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 			plan.Include[id] = true
 		}
 	}
+	// #1263: the design revision's frozen opening resolves BEFORE the draft —
+	// an opening-only change is commercial state the draft's no-change gate
+	// must let through (its items carry verbatim; only the section and the
+	// amounts move). Preview units come from the design revision items with
+	// the source snapshot's stable line identities.
+	revisionDefaults, err := s.loadDesignRevisionAuthoringDefaults(ctx, cmd.DesignRevisionID)
+	if err != nil {
+		return nil, err
+	}
+	sourceLineByInstance := map[string]string{}
+	if inputs.Quote.CommercialSnapshot != nil {
+		for _, unit := range inputs.Quote.CommercialSnapshot.Units {
+			sourceLineByInstance[unit.FurnitureInstanceID] = unit.QuoteLineID
+		}
+	}
+	previewUnits := make([]designOpeningUnit, 0, len(inputs.Design.Items))
+	for _, designItem := range inputs.Design.Items {
+		previewUnits = append(previewUnits, designOpeningUnit{
+			FurnitureInstanceID:   designItem.FurnitureInstanceID,
+			FurnitureDefinitionID: designItem.FurnitureDefinitionID,
+			QuoteLineID:           sourceLineByInstance[designItem.FurnitureInstanceID],
+			Parameters:            designItem.Parameters,
+		})
+	}
+	opening, err := s.deriveDesignOpeningCommercial(ctx, revisionDefaults, previewUnits)
+	if err != nil {
+		return nil, err
+	}
+	plan.OpeningCommercialChange = !sameOpeningCommercialLines(inputs.Quote.CommercialSnapshot, opening)
 	draft, err := domain.BuildRequoteDraft(inputs.Quote, inputs.Design, recon, plan)
 	if err != nil {
 		return nil, err
 	}
-
-	// 3. Create the immutable draft revision through the single #393 writer:
-	// atomic items, race-safe numbering and fail-closed base revision
-	// concurrency all come from CreateQuoteRevision.
 	items := make([]CreateQuoteRevisionItemCommand, len(draft.Items))
 	if inputs.Quote.CommercialSnapshot == nil {
 		return nil, domain.ErrQuoteCommercialSnapshotMissing
@@ -149,7 +174,26 @@ func (s *PostgresStore) RequoteProjectQuote(ctx context.Context, cmd RequoteProj
 
 	// 3b. Freeze the immutable commercial snapshot (#642) for the exact draft
 	// configuration, computed once server-side in this same transaction.
-	commercialSnapshot, err := s.buildRequoteCommercialSnapshot(ctx, cmd.ProjectID, items)
+	// #1263: the opening derived above IS the requote's opening truth; a
+	// design-only unit's stable line id (minted above) backfills the preview
+	// entry so the frozen section cites the line it prices.
+	if opening != nil {
+		lineByInstance := make(map[string]string, len(items))
+		for _, item := range items {
+			lineByInstance[item.FurnitureInstanceID] = item.QuoteLineID
+		}
+		for i := range opening.Snapshot {
+			if opening.Snapshot[i].QuoteLineID == "" {
+				// Preview units only lack the id when the unit is design-only.
+				for instanceID := range opening.DemandByInstance {
+					if line := lineByInstance[instanceID]; line != "" {
+						opening.Snapshot[i].QuoteLineID = line
+					}
+				}
+			}
+		}
+	}
+	commercialSnapshot, err := s.buildRequoteCommercialSnapshot(ctx, cmd.ProjectID, items, opening)
 	if err != nil {
 		return nil, err
 	}

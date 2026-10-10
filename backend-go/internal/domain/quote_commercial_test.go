@@ -22,7 +22,7 @@ func TestBuildQuoteCommercialSnapshot_DeterministicOptionBytesWithoutMutatingInp
 			time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC), "MXN",
 			QuoteCommercialIdentity{ID: "customer", Name: "Customer"},
 			QuoteCommercialIdentity{ID: "project", Name: "Project"}, breakdown, lines,
-			[]QuoteCommercialUnit{{FurnitureInstanceID: unitID, QuoteLineID: lineID, ModuleCode: "M", ModuleName: "Module", LifecycleStatus: "active", Options: options}}, nil,
+			[]QuoteCommercialUnit{{FurnitureInstanceID: unitID, QuoteLineID: lineID, ModuleCode: "M", ModuleName: "Module", LifecycleStatus: "active", Options: options}}, nil, nil,
 		)
 		if err != nil {
 			t.Fatal(err)

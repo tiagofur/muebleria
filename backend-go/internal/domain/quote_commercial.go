@@ -163,6 +163,37 @@ type QuoteCommercialSnapshot struct {
 	Units         []QuoteCommercialUnit          `json:"units"`
 	DesignSource  *QuoteCommercialDesignSource   `json:"designSource,omitempty"`
 	ProfileDemand []QuoteCommercialProfileDemand `json:"profileDemand,omitempty"`
+	// OpeningBOM freezes the resolved opening BOM behind the breakdown
+	// (#1263): the gola profile run, supports and end caps the design's
+	// persisted selection resolved to — pinned datasheet slice, exact
+	// lengths, full provenance. Additive optional section under schema v1:
+	// existing frozen revisions never grow one.
+	OpeningBOM []QuoteCommercialOpeningBOM `json:"openingBom,omitempty"`
+}
+
+// QuoteCommercialOpeningBOM freezes the opening BOM one quote line contributed
+// to its frozen breakdown. Lines are per physical unit (the breakdown applies
+// the line's own quantity multiplier).
+type QuoteCommercialOpeningBOM struct {
+	QuoteLineID  string                          `json:"quoteLineId"`
+	UnitQuantity int                             `json:"unitQuantity"`
+	Lines        []QuoteCommercialOpeningBOMLine `json:"lines"`
+}
+
+// QuoteCommercialOpeningBOMLine mirrors one engine-resolved opening BOM line
+// (#1133 resolver output, frozen verbatim).
+type QuoteCommercialOpeningBOMLine struct {
+	LineID         string  `json:"lineId"`
+	MemberKey      string  `json:"memberKey"`
+	HardwareID     string  `json:"hardwareId"`
+	ProfileID      string  `json:"profileId"`
+	ProfileVersion int64   `json:"profileVersion"`
+	Boundary       string  `json:"boundary"`
+	Rule           string  `json:"rule"`
+	Quantity       float64 `json:"quantity"`
+	Unit           string  `json:"unit"`
+	// CutLengthMm rides on profile-run lines: the exact millimetre cut.
+	CutLengthMm int `json:"cutLengthMm,omitempty"`
 }
 
 // ValidateQuoteCommercialSnapshot enforces the structural contract fail-closed:
@@ -222,6 +253,31 @@ func ValidateQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) error {
 					return fmt.Errorf("%w: profile demand provenance %s has an incomplete source", ErrInvalidRevisionSnapshot, demand.QuoteLineID)
 				}
 			}
+		}
+	}
+	for _, opening := range snapshot.OpeningBOM {
+		if strings.TrimSpace(opening.QuoteLineID) == "" {
+			return fmt.Errorf("%w: opening BOM provenance has no quote line identity", ErrInvalidRevisionSnapshot)
+		}
+		if opening.UnitQuantity <= 0 {
+			return fmt.Errorf("%w: opening BOM provenance %s has no positive unit quantity", ErrInvalidRevisionSnapshot, opening.QuoteLineID)
+		}
+		if len(opening.Lines) == 0 {
+			return fmt.Errorf("%w: opening BOM provenance %s has no lines", ErrInvalidRevisionSnapshot, opening.QuoteLineID)
+		}
+		seenLineIDs := map[string]bool{}
+		for _, line := range opening.Lines {
+			if strings.TrimSpace(line.LineID) == "" || strings.TrimSpace(line.HardwareID) == "" ||
+				strings.TrimSpace(line.ProfileID) == "" || line.ProfileVersion <= 0 ||
+				strings.TrimSpace(line.Boundary) == "" || strings.TrimSpace(line.Rule) == "" ||
+				line.Quantity <= 0 || math.IsNaN(line.Quantity) || math.IsInf(line.Quantity, 0) ||
+				(line.Unit != "meter" && line.Unit != "piece") {
+				return fmt.Errorf("%w: opening BOM provenance %s has an invalid line", ErrInvalidRevisionSnapshot, opening.QuoteLineID)
+			}
+			if seenLineIDs[line.LineID] {
+				return fmt.Errorf("%w: opening BOM provenance %s repeats the line identity %s", ErrInvalidRevisionSnapshot, opening.QuoteLineID, line.LineID)
+			}
+			seenLineIDs[line.LineID] = true
 		}
 	}
 	breakdown := snapshot.Breakdown
@@ -417,7 +473,7 @@ func RedactQuoteCommercialSnapshot(snapshot *QuoteCommercialSnapshot) *QuoteComm
 // hardware demand behind the breakdown; nil keeps the snapshot shape
 // byte-identical to the pre-demand payload (additive optional section under
 // schema v1 — existing frozen revisions never grow one).
-func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, customer, project QuoteCommercialIdentity, breakdown QuoteBreakdown, lines []QuoteCommercialLine, units []QuoteCommercialUnit, profileDemand []QuoteCommercialProfileDemand) (*QuoteCommercialSnapshot, error) {
+func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, customer, project QuoteCommercialIdentity, breakdown QuoteBreakdown, lines []QuoteCommercialLine, units []QuoteCommercialUnit, profileDemand []QuoteCommercialProfileDemand, openingBOM []QuoteCommercialOpeningBOM) (*QuoteCommercialSnapshot, error) {
 	lines = append([]QuoteCommercialLine(nil), lines...)
 	units = append([]QuoteCommercialUnit(nil), units...)
 	for i := range lines {
@@ -454,6 +510,14 @@ func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, custome
 		})
 	}
 	sort.SliceStable(provenance, func(i, j int) bool { return provenance[i].QuoteLineID < provenance[j].QuoteLineID })
+	openingProvenance := append([]QuoteCommercialOpeningBOM(nil), openingBOM...)
+	for i := range openingProvenance {
+		openingProvenance[i].Lines = append([]QuoteCommercialOpeningBOMLine(nil), openingProvenance[i].Lines...)
+		sort.SliceStable(openingProvenance[i].Lines, func(a, b int) bool {
+			return openingProvenance[i].Lines[a].LineID < openingProvenance[i].Lines[b].LineID
+		})
+	}
+	sort.SliceStable(openingProvenance, func(i, j int) bool { return openingProvenance[i].QuoteLineID < openingProvenance[j].QuoteLineID })
 	snapshot := &QuoteCommercialSnapshot{
 		Schema:        QuoteCommercialSnapshotSchema,
 		CapturedAt:    capturedAt,
@@ -464,6 +528,7 @@ func BuildQuoteCommercialSnapshot(capturedAt time.Time, currency string, custome
 		Lines:         lines,
 		Units:         units,
 		ProfileDemand: provenance,
+		OpeningBOM:    openingProvenance,
 	}
 	if err := ValidateQuoteCommercialSnapshot(snapshot); err != nil {
 		return nil, err

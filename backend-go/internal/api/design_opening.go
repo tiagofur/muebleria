@@ -54,6 +54,7 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 			// rows authored before the pin existed. A datasheet update never
 			// silently changes a persisted design's fronts.
 			var profileData []engine.OpeningProfileData
+			var bomProfiles []engine.OpeningProfileBOMData
 			if pin := state.Opening.ProfilePin; pin != nil {
 				profileData = []engine.OpeningProfileData{{
 					ProfileID:        state.Opening.ProfileID,
@@ -63,12 +64,18 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 				}}
 			} else if profiles, err := s.Store.ListOpeningProfiles(r.Context()); err == nil {
 				profileData = make([]engine.OpeningProfileData, 0, len(profiles))
+				bomProfiles = make([]engine.OpeningProfileBOMData, 0, len(profiles))
 				for _, profile := range profiles {
 					profileData = append(profileData, engine.OpeningProfileData{
 						ProfileID:        profile.ID,
 						DatasheetStatus:  profile.DatasheetStatus,
 						FrontReductionMm: derefInt(profile.FrontReductionMm),
 						GripClearanceMm:  derefInt(profile.GripClearanceMm),
+					})
+					bomProfiles = append(bomProfiles, engine.OpeningProfileBOMData{
+						ProfileID:  profile.ID,
+						Version:    profile.Version,
+						BOMMembers: openingContractMembers(profile.BOMMembers),
 					})
 				}
 			}
@@ -77,7 +84,11 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 				// broken overlay fails closed like the profile catalog: no
 				// resolution rendered instead of a stale or invented one.
 				if rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context()); ruleErr == nil {
-					resolution, resErr := engine.ResolveDesignOpening(dims.widthMm, dims.heightMm, state.Opening, profileData, engine.OpeningOverhangRuleMm(rule))
+					var bomCtx *engine.DesignOpeningBOMContext
+					if state.Opening.System == domain.OpeningGripSystemGola {
+						bomCtx = s.designOpeningBOMContext(r, wc, bomProfiles)
+					}
+					resolution, resErr := engine.ResolveDesignOpening(dims.widthMm, dims.heightMm, state.Opening, profileData, engine.OpeningOverhangRuleMm(rule), bomCtx)
 					if resErr != nil {
 						state.Resolution = &engine.DesignOpeningResolution{
 							State: engine.DesignOpeningStateBlocked, Reason: resErr.Code,
@@ -92,6 +103,62 @@ func (s *Server) handleDesignOpeningState(w http.ResponseWriter, r *http.Request
 		}
 	}
 	respondWithJSON(w, http.StatusOK, state)
+}
+
+// openingContractMembers maps the persisted entity members onto the engine
+// contract shape (nil-safe: a profile may declare no BOM members).
+func openingContractMembers(members map[string]domain.OpeningBOMMember) map[string]engine.OpeningContractBOMMember {
+	converted := make(map[string]engine.OpeningContractBOMMember, len(members))
+	for key, member := range members {
+		converted[key] = engine.OpeningContractBOMMember{
+			HardwareID: member.HardwareID,
+			Rule:       member.Rule,
+			Unit:       member.Unit,
+			SpacingMm:  member.SpacingMm,
+		}
+	}
+	return converted
+}
+
+// designOpeningBOMContext assembles the body context the BOM resolution
+// needs (#1263): the cabinet interior width derived from the design's
+// furniture structure (commercial width minus the two lateral panels) and
+// the live BOM profile slice — only consumed for pre-pin rows, so pinned
+// designs never read the live catalog. An underivable width stays 0 and the
+// engine reports OPENING_BOM_BODY_CONTEXT_MISSING; nothing is guessed.
+func (s *Server) designOpeningBOMContext(r *http.Request, wc *domain.DesignWorkingCopy, profiles []engine.OpeningProfileBOMData) *engine.DesignOpeningBOMContext {
+	ctx := &engine.DesignOpeningBOMContext{
+		Ends:     engine.OpeningBOMDefaultEnds,
+		Profiles: profiles,
+	}
+	if len(wc.Items) == 0 || wc.Items[0].FurnitureDefinitionID == "" {
+		return ctx
+	}
+	dims := domain.CommercialDimsFromParameters(wc.Items[0].Parameters)
+	if dims == nil {
+		return ctx
+	}
+	catalog, err := s.Store.GetFullCatalog(r.Context())
+	if err != nil {
+		return ctx
+	}
+	for _, module := range catalog.Modules {
+		if module.ID != wc.Items[0].FurnitureDefinitionID || module.StructureID == "" {
+			continue
+		}
+		for _, structure := range catalog.Structures {
+			if structure.ID != module.StructureID {
+				continue
+			}
+			if thickness, ok := engine.StructureSidePanelThicknessMm(structure, catalog); ok {
+				if interior := dims.WidthMm - 2*thickness; interior > 0 {
+					ctx.CabinetInteriorWidthMm = interior
+				}
+			}
+		}
+		break
+	}
+	return ctx
 }
 
 type openingDims struct{ widthMm, heightMm int }
@@ -204,14 +271,23 @@ func (s *Server) handleDesignOpeningPut(w http.ResponseWriter, r *http.Request, 
 	if validation.State == engine.OpeningSelectionValid && selection.System == domain.OpeningGripSystemGola {
 		// B2: capture the datasheet slice the selection was validated
 		// against — the historical resolution consumes the pin, never the
-		// live catalog.
+		// live catalog. #1263: the slice includes the BOM members + revision
+		// so the historical quote resolves the same physical truth.
 		for _, profile := range profileList {
 			if profile.ID == selection.ProfileID {
+				members := profile.BOMMembers
+				if members == nil {
+					members = map[string]domain.OpeningBOMMember{}
+				}
 				selection.ProfilePin = &domain.DesignOpeningProfilePin{
 					ProfileCode:      profile.Code,
 					FrontReductionMm: derefInt(profile.FrontReductionMm),
 					GripClearanceMm:  derefInt(profile.GripClearanceMm),
 					DatasheetStatus:  profile.DatasheetStatus,
+					BOM: &domain.DesignOpeningProfilePinBOM{
+						ProfileVersion: profile.Version,
+						Members:        members,
+					},
 				}
 				break
 			}

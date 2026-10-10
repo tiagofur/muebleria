@@ -93,7 +93,7 @@ func intersectConsumableChoices(item CreateQuoteRevisionItemCommand, catalog dom
 	return filtered
 }
 
-func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand, intersectConsumable bool) (*domain.QuoteCommercialSnapshot, error) {
+func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand, intersectConsumable bool, opening *designOpeningCommercial) (*domain.QuoteCommercialSnapshot, error) {
 	envelope, err := s.loadQuoteCommercialEnvelope(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -208,6 +208,12 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
 	}
+	// #1263: the opening BOM's pricing demand joins the SAME matrix — one
+	// hardware channel, one validation, sums that keep matching the frozen
+	// breakdown. The frozen section rides separately with full provenance.
+	profileDemand = mergeOpeningDemand(profileDemand, pricingProject.Items, func(item domain.ProjectItem) string {
+		return item.ID
+	}, items, opening)
 	breakdown, err := engine.CalcProjectBreakdownWithProfileDemand(pricingProject, catalog, profileDemand)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
@@ -221,6 +227,10 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	var openingSection []domain.QuoteCommercialOpeningBOM
+	if opening != nil {
+		openingSection = opening.Snapshot
+	}
 	return domain.BuildQuoteCommercialSnapshot(
 		time.Now().UTC(),
 		envelope.Currency,
@@ -230,7 +240,34 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 		lines,
 		units,
 		demandProvenance,
+		openingSection,
 	)
+}
+
+// mergeOpeningDemand folds the opening BOM demand into the profile-demand
+// matrix, index-aligned with pricingItems. Each pricing item adopts the
+// demand of the design units it carries: quoteLineForItem resolves the
+// pricing item's commercial key (the line id in design-first Q1, the unit's
+// line in requote — the same keying the profile demand uses). The merged
+// matrix then prices both demands through the one channel.
+func mergeOpeningDemand(profileDemand [][]engine.HardwareProfileDemandLine, pricingItems []domain.ProjectItem, quoteLineForItem func(domain.ProjectItem) string, items []CreateQuoteRevisionItemCommand, opening *designOpeningCommercial) [][]engine.HardwareProfileDemandLine {
+	if opening == nil || len(opening.DemandByInstance) == 0 {
+		return profileDemand
+	}
+	demandByLine := make(map[string][]engine.HardwareProfileDemandLine, len(items))
+	for _, item := range items {
+		if demand, ok := opening.DemandByInstance[item.FurnitureInstanceID]; ok {
+			demandByLine[item.QuoteLineID] = append(demandByLine[item.QuoteLineID], demand...)
+		}
+	}
+	merged := make([][]engine.HardwareProfileDemandLine, len(pricingItems))
+	for i := range pricingItems {
+		if i < len(profileDemand) {
+			merged[i] = append(merged[i], profileDemand[i]...)
+		}
+		merged[i] = append(merged[i], demandByLine[quoteLineForItem(pricingItems[i])]...)
+	}
+	return merged
 }
 
 // buildRequoteCommercialSnapshot captures the next revision's commercial
@@ -239,7 +276,7 @@ func (s *PostgresStore) buildInitialQuoteCommercialSnapshot(ctx context.Context,
 // per ACTIVE physical unit (definition + frozen choices + dimensions) and
 // resolved against the catalog exactly once, at requote time — a draft is
 // never closed-status, so the legacy project snapshot is never consulted.
-func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand) (*domain.QuoteCommercialSnapshot, error) {
+func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, projectID string, items []CreateQuoteRevisionItemCommand, opening *designOpeningCommercial) (*domain.QuoteCommercialSnapshot, error) {
 	envelope, err := s.loadQuoteCommercialEnvelope(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -338,6 +375,12 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
 	}
+	// #1263: the design revision's frozen opening joins the requote exactly
+	// like Q1 — same channel, same validation; changing or removing the
+	// opening reflects in the next revision's lines.
+	profileDemand = mergeOpeningDemand(profileDemand, pricingProject.Items, func(item domain.ProjectItem) string {
+		return lineByInstance[item.ID]
+	}, items, opening)
 	breakdown, err := engine.CalcProjectBreakdownWithProfileDemand(pricingProject, catalog, profileDemand)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", domain.ErrInvalidRevisionSnapshot, err.Error())
@@ -351,6 +394,10 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 	if err != nil {
 		return nil, err
 	}
+	var openingSection []domain.QuoteCommercialOpeningBOM
+	if opening != nil {
+		openingSection = opening.Snapshot
+	}
 	return domain.BuildQuoteCommercialSnapshot(
 		time.Now().UTC(),
 		envelope.Currency,
@@ -360,6 +407,7 @@ func (s *PostgresStore) buildRequoteCommercialSnapshot(ctx context.Context, proj
 		lines,
 		units,
 		demandProvenance,
+		openingSection,
 	)
 }
 

@@ -1826,7 +1826,7 @@ func TestQuoteRevision_StatusTransitions_ExactLifecycle(t *testing.T) {
 			ModuleName:          "RLS module",
 			LifecycleStatus:     "active",
 			Options:             []domain.QuoteCommercialOption{},
-		}}, nil,
+		}}, nil, nil,
 	)
 	if snapErr != nil {
 		t.Fatalf("build commercial snapshot: %v", snapErr)

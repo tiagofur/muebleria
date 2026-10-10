@@ -1747,6 +1747,26 @@ type QuoteCommercialSnapshot struct {
 	Lines        []QuoteCommercialLine        `json:"lines"`
 	Units        []QuoteCommercialUnit        `json:"units"`
 	DesignSource *QuoteCommercialDesignSource `json:"designSource,omitempty"`
+	OpeningBom   []QuoteCommercialOpeningBom  `json:"openingBom,omitempty"`
+}
+
+type QuoteCommercialOpeningBom struct {
+	QuoteLineId  string                          `json:"quoteLineId"`
+	UnitQuantity int64                           `json:"unitQuantity"`
+	Lines        []QuoteCommercialOpeningBomLine `json:"lines"`
+}
+
+type QuoteCommercialOpeningBomLine struct {
+	LineId         string  `json:"lineId"`
+	MemberKey      string  `json:"memberKey"`
+	HardwareId     string  `json:"hardwareId"`
+	ProfileId      string  `json:"profileId"`
+	ProfileVersion int64   `json:"profileVersion"`
+	Boundary       string  `json:"boundary"`
+	Rule           string  `json:"rule"`
+	Quantity       float64 `json:"quantity"`
+	Unit           string  `json:"unit"`
+	CutLengthMm    *int64  `json:"cutLengthMm,omitempty"`
 }
 
 type QuoteCommercialDesignSource struct {
