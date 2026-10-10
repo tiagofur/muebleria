@@ -238,6 +238,10 @@ type resolveOptions struct {
 	// templateCollector records the default expansion's template shape
 	// (dry-run support for snapshot validation).
 	templateCollector *authoringTemplateIndex
+	// fronts (#1264): the server-resolved opening front region constrains
+	// the door/drawer-front boards after expansion. nil = no opening (the
+	// historical semantics stay byte-identical).
+	fronts []OpeningResolvedFront
 }
 
 // ResolveFurnitureLayout resolves a module's full visual composition — every
@@ -462,10 +466,26 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 		boards = append(boards, agrBoards...)
 	}
 
+	// #1264: the resolved opening front region constrains door/drawer-front
+	// boards BEFORE the authored-translation pass — under an opening, the
+	// vertical placement of a front is the opening's, not client-authored.
+	openingConstrained := map[int]bool{}
+	if len(opts.fronts) > 0 {
+		var passErr error
+		openingConstrained, passErr = applyOpeningFrontsToBoards(boards, opts.fronts)
+		if passErr != nil {
+			return nil, passErr
+		}
+	}
+
 	// #477 final pass: authored translations are furniture-frame intent, so
 	// they override the resolved pose after every source of offset (agregado
-	// unit origins included) has been applied.
+	// unit origins included) has been applied. A front constrained by the
+	// opening is exempt: the opening superseded its vertical authoring.
 	for i := range boards {
+		if openingConstrained[i] {
+			continue
+		}
 		if t := boards[i].authoredTranslation; t != nil {
 			boards[i].x, boards[i].y, boards[i].z = t[0], t[1], t[2]
 		}
