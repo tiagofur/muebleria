@@ -1700,6 +1700,14 @@
       return;
     }
 
+    // #1258: picks with context "configurator" belong to the Biblioteca's
+    // pre-insert hardware rows — never to the mueble lane.
+    if (payload.context === "configurator" && window.GraneteUI.configurator &&
+        typeof window.GraneteUI.configurator.applyHardwareChoice === "function") {
+      window.GraneteUI.configurator.applyHardwareChoice(groupCode, hardwareId);
+      return;
+    }
+
     if (!inspectorMaterialChoices) inspectorMaterialChoices = {};
     inspectorMaterialChoices[groupCode] = hardwareId;
     recordHardwareGroupPick(groupCode, hardwareId);

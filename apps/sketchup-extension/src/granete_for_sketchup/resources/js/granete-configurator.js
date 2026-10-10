@@ -187,6 +187,10 @@
     });
   }
 
+  // #1258: el selector de herrajes de Biblioteca es el MISMO catálogo
+  // flotante con imágenes que usa el Inspector (open_hardware_selector,
+  // context "configurator") — nunca un <select> plano. La fila replica el
+  // patrón visual del Inspector: tile con imagen, nombre, meta y chevron.
   function renderLibraryHardwareRoles(def) {
     if (!libHardwareCard || !libHardwareContainer) return;
     var roles = hardwareRoles(def);
@@ -198,57 +202,143 @@
 
     libHardwareContainer.innerHTML = "";
     roles.forEach(function (role) {
+      var membersKnown = role.optionIds && role.optionIds.length > 0;
+      var chosenId = membersKnown ? libMaterialChoices[role.code] : null;
+      var chosen = chosenId ? hardwareEntryById(chosenId) : null;
+
       var block = document.createElement("div");
       block.className = "material-role-block";
 
-      var labelRow = document.createElement("div");
-      labelRow.className = "kv-row";
-      var k = document.createElement("span");
-      k.className = "k";
-      k.textContent = role.name || role.code;
-      labelRow.appendChild(k);
-      var v = document.createElement("span");
-      v.className = "v";
-      var chosen = hardwareEntryById(libMaterialChoices[role.code]);
-      v.textContent = chosen ? (chosen.name || chosen.code) : "--";
-      labelRow.appendChild(v);
+      var header = document.createElement("div");
+      header.className = "material-role-header";
+      var title = document.createElement("span");
+      title.className = "material-role-title";
+      title.textContent = role.name || role.code;
+      header.appendChild(title);
       if (role.required) {
         var req = document.createElement("span");
         req.className = "status-badge neutral";
         req.textContent = "requerido";
-        labelRow.appendChild(req);
+        header.appendChild(req);
       }
-      block.appendChild(labelRow);
+      var changeBtn = document.createElement("button");
+      changeBtn.type = "button";
+      changeBtn.id = "library-hardware-change-" + role.code;
+      changeBtn.className = "btn btn-secondary btn-sm design-insp-change";
+      changeBtn.style.width = "auto";
+      changeBtn.style.padding = "2px 10px";
+      changeBtn.style.fontSize = "var(--text-xs)";
+      changeBtn.style.lineHeight = "1.4";
+      changeBtn.textContent = chosenId ? "Cambiar" : "Asignar";
+      changeBtn.disabled = !membersKnown;
+      changeBtn.title = membersKnown ? "" : "Sin miembros activos en el catálogo";
+      header.appendChild(changeBtn);
+      block.appendChild(header);
 
-      var select = document.createElement("select");
-      select.style.width = "100%";
-      select.style.marginTop = "var(--space-1)";
-      if (!role.optionIds || role.optionIds.length === 0) {
-        var none = document.createElement("option");
-        none.textContent = "Sin miembros activos en el catálogo";
-        none.selected = true;
-        select.appendChild(none);
-        select.disabled = true;
+      var preview = document.createElement("button");
+      preview.type = "button";
+      preview.className = "material-selected-preview";
+      preview.style.marginTop = "var(--space-1)";
+      preview.title = membersKnown ? "Clic para abrir el catálogo de herrajes" : "Sin miembros activos en el catálogo";
+      preview.disabled = !membersKnown;
+
+      var tile = document.createElement("span");
+      tile.className = "material-swatch material-swatch--hardware";
+      var rawImg = chosen ? (chosen.imageUrl || chosen.image_url || chosen.thumbnailUrl || chosen.previewUrl) : null;
+      var resolvedImg = (rawImg && window.GraneteUI && window.GraneteUI.media &&
+                         typeof window.GraneteUI.media.resolveUrl === "function")
+        ? window.GraneteUI.media.resolveUrl(rawImg) : rawImg;
+      if (resolvedImg) {
+        tile.style.backgroundImage = "url('" + resolvedImg + "')";
+        tile.style.backgroundSize = "contain";
+        tile.style.backgroundRepeat = "no-repeat";
+        tile.style.backgroundPosition = "center";
+        tile.style.backgroundColor = "var(--surface-card)";
       } else {
-        role.optionIds.forEach(function (hwId) {
-          var entry = hardwareEntryById(hwId);
-          var opt = document.createElement("option");
-          opt.value = hwId;
-          opt.textContent = entry ? ((entry.name || entry.code) + (entry.code ? " · " + entry.code : "")) : hwId;
-          if (libMaterialChoices[role.code] === hwId) opt.selected = true;
-          select.appendChild(opt);
-        });
-        select.addEventListener("change", function () {
-          libMaterialChoices[role.code] = select.value;
-          clearCatalogIntentKey();
-          v.textContent = (hardwareEntryById(select.value) || {}).name || select.value;
-          updateLibraryInsertButton();
-        });
+        tile.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.5l8 4.5v10l-8 4.5L4 17V7z"/><circle cx="12" cy="12" r="3"/></svg>';
       }
-      block.appendChild(select);
+      preview.appendChild(tile);
+
+      var info = document.createElement("span");
+      info.className = "material-selected-info";
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "material-selected-name";
+      nameSpan.textContent = chosen ? (chosen.name || chosen.code) : (chosenId || "--");
+      info.appendChild(nameSpan);
+      var metaSpan = document.createElement("span");
+      metaSpan.className = "material-selected-meta";
+      metaSpan.textContent = membersKnown
+        ? ((chosen && chosen.code) ? chosen.code : "Clic para elegir un herraje del catálogo")
+        : "Sin miembros activos en el catálogo";
+      info.appendChild(metaSpan);
+      preview.appendChild(info);
+
+      var chevron = document.createElement("span");
+      chevron.className = "material-chevron";
+      chevron.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+      preview.appendChild(chevron);
+
+      var openPicker = function () {
+        if (!membersKnown) return;
+        openLibraryHardwareSelector(role, chosenId);
+      };
+      preview.addEventListener("click", openPicker);
+      changeBtn.addEventListener("click", function (evt) {
+        if (evt && evt.stopPropagation) evt.stopPropagation();
+        openPicker();
+      });
+      block.appendChild(preview);
 
       libHardwareContainer.appendChild(block);
     });
+  }
+
+  function openLibraryHardwareSelector(role, currentId) {
+    var label = role.name || role.code;
+    if (window.sketchup && typeof window.sketchup.open_hardware_selector === "function") {
+      window.sketchup.open_hardware_selector(JSON.stringify({
+        groupCode: role.code,
+        groupName: label,
+        currentHardwareId: currentId || null,
+        optionIds: role.optionIds || [],
+        context: "configurator"
+      }));
+    } else if (window.GraneteUI.hardwareGroupSelector) {
+      var rows = (role.optionIds || []).map(function (hwId) {
+        var entry = hardwareEntryById(hwId);
+        return {
+          id: hwId,
+          name: entry ? (entry.name || entry.code) : hwId,
+          code: entry ? entry.code : null,
+          imageUrl: entry ? (entry.imageUrl || entry.image_url) : null
+        };
+      });
+      window.GraneteUI.hardwareGroupSelector.open({
+        title: "Elegir " + label,
+        groupLabel: label,
+        rows: rows,
+        chosenId: currentId,
+        onPick: function (hwId) {
+          applyHardwareChoice(role.code, hwId);
+        }
+      });
+    }
+  }
+
+  // #1258: la elección del catálogo flotante aterriza en el MISMO mapa
+  // materialChoices del insert (#1144/#1153) — nada de estado paralelo.
+  function applyHardwareChoice(groupCode, hardwareId) {
+    if (!groupCode || !hardwareId) return;
+    if (!libMaterialChoices) libMaterialChoices = {};
+    libMaterialChoices[groupCode] = hardwareId;
+    if (!libUserCustomizedRoles) libUserCustomizedRoles = {};
+    libUserCustomizedRoles[groupCode] = true;
+    clearCatalogIntentKey();
+    renderLibraryHardwareRoles(activeLibDef);
+    updateLibraryInsertButton();
+    var entry = hardwareEntryById(hardwareId);
+    deps.showToast("success", "✓ Herraje seleccionado: " +
+      (entry ? (entry.name || entry.code) : hardwareId));
   }
 
   // Un grupo requerido sin elección real (sin miembros activos) bloquea
@@ -695,6 +785,12 @@
     applyMaterialChoice: function (role, materialId, isProjectScope) {
       requireDeps();
       applyMaterialChoice(role, materialId, isProjectScope);
+    },
+
+    // #1258: pick del catálogo flotante de herrajes (context "configurator").
+    applyHardwareChoice: function (groupCode, hardwareId) {
+      requireDeps();
+      applyHardwareChoice(groupCode, hardwareId);
     }
   };
 })();

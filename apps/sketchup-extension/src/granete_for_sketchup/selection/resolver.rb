@@ -91,10 +91,18 @@ module Granete
             definition: definition,
             parameters: intent['parameters'] || {},
             material_choices: intent['materialChoices'] || {},
-            # #1046 S3: grupos de herrajes que este mueble consume realmente
-            # (escaneo de hijos gestionados, fail-closed por hijo) con la
-            # elección vigente — la card del mueble ofrece el cambio de modelo.
-            hardware_groups: HardwareInventory.groups_for_furniture(@metadata_store, entity)
+            # #1046 S3 + #1258: grupos de herrajes que este mueble consume —
+            # la unión de los roles de la definición (la misma proyección del
+            # taller que ofrece el Configurador antes de insertar) y el
+            # escaneo de hijos colocados (conteos y elección colocada,
+            # fail-closed por hijo); la elección vigente es la explícita del
+            # item (viaja en el mismo mapa materialChoices, #1153). La card
+            # del mueble ofrece el cambio de modelo por grupo.
+            hardware_groups: HardwareInventory.groups_for_furniture(
+              @metadata_store, entity,
+              definition_roles: definition ? definition['hardwareRoles'] : [],
+              item_choices: intent['materialChoices'] || {}
+            )
           )
           publish_door_actors(context, entity)
           context
