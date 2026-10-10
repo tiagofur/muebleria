@@ -140,6 +140,77 @@ class HardwareInventoryTest < Minitest::Test
     assert_equal [{ 'code' => 'BISAGRA', 'chosenHardwareId' => 'hw-blum', 'count' => 1 }], groups
   end
 
+  # #1258: la card del mueble ofrece la UNIÓN de los roles consumidos de la
+  # definición (la misma proyección del Configurador) y el escaneo de hijos
+  # colocados — un grupo sin colocaciones (herraje cost-only que no renderiza)
+  # sigue siendo elegible, con la elección explícita del item como vigente.
+  def test_groups_for_furniture_unions_definition_roles_with_placed_scan
+    furniture = build_managed_furniture('mueble-union') do |definition|
+      store_group_hinge(definition, 'bis-1', 'BISAGRA', 'hw-blum')
+    end
+
+    groups = Granete::SketchUpExtension::Selection::HardwareInventory.groups_for_furniture(
+      @store, furniture,
+      definition_roles: [
+        { 'code' => 'BISAGRA', 'name' => 'Bisagras', 'required' => true,
+          'optionIds' => %w[hw-blum hw-eco] },
+        { 'code' => 'JALADERA', 'name' => 'Jaladeras', 'required' => true,
+          'optionIds' => %w[hw-pull] }
+      ],
+      item_choices: { 'JALADERA' => 'hw-pull-elegida' }
+    )
+
+    assert_equal [
+      { 'code' => 'BISAGRA', 'chosenHardwareId' => 'hw-blum', 'count' => 1 },
+      { 'code' => 'JALADERA', 'chosenHardwareId' => 'hw-pull-elegida' }
+    ], groups
+  end
+
+  def test_groups_for_furniture_item_choice_wins_over_placed_concrete
+    furniture = build_managed_furniture('mueble-eleccion') do |definition|
+      store_group_hinge(definition, 'bis-1', 'BISAGRA', 'hw-blum')
+    end
+
+    groups = Granete::SketchUpExtension::Selection::HardwareInventory.groups_for_furniture(
+      @store, furniture,
+      definition_roles: [{ 'code' => 'BISAGRA' }],
+      item_choices: { 'BISAGRA' => 'hw-eco' }
+    )
+
+    assert_equal [{ 'code' => 'BISAGRA', 'chosenHardwareId' => 'hw-eco', 'count' => 1 }], groups
+  end
+
+  def test_groups_for_furniture_keeps_placed_only_groups_after_roles
+    furniture = build_managed_furniture('mueble-manual') do |definition|
+      store_group_hinge(definition, 'torn-1', 'TORNILLO', 'hw-screw')
+    end
+
+    groups = Granete::SketchUpExtension::Selection::HardwareInventory.groups_for_furniture(
+      @store, furniture,
+      definition_roles: [{ 'code' => 'BISAGRA' }],
+      item_choices: {}
+    )
+
+    assert_equal [
+      { 'code' => 'BISAGRA' },
+      { 'code' => 'TORNILLO', 'chosenHardwareId' => 'hw-screw', 'count' => 1 }
+    ], groups
+  end
+
+  def test_groups_for_furniture_roles_survive_without_placed_children
+    furniture = build_managed_furniture('mueble-solo-roles') do |definition|
+      board_child(definition, 'side-panel')
+    end
+
+    groups = Granete::SketchUpExtension::Selection::HardwareInventory.groups_for_furniture(
+      @store, furniture,
+      definition_roles: [{ 'code' => 'BISAGRA', 'optionIds' => %w[hw-blum] }],
+      item_choices: {}
+    )
+
+    assert_equal [{ 'code' => 'BISAGRA' }], groups
+  end
+
   def store_group_hinge(definition, id, option_role, hardware_definition_id)
     child = new_child(definition, id)
     intent = hardware_intent(hardware_definition_id).merge('optionRole' => option_role)

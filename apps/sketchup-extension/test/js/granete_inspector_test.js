@@ -1758,6 +1758,41 @@ test('hardware groups: card renders consumed groups and a pick rides the draft t
   assert.strictEqual(submit.payload.materialChoiceModes.BISAGRA, 'override');
 });
 
+// #1258: the floating catalog's pick routes by context — "design" belongs to
+// the Design Inspector draft (#1198), "configurator" to the Biblioteca's
+// pre-insert hardware rows; neither may touch the mueble lane.
+test('hardware pick routing: design and configurator contexts never land in the furniture draft', () => {
+  const designPicks = [];
+  const configPicks = [];
+  const sandbox = buildModuleSandbox({
+    GraneteUI: {
+      library: { findDefinitionById: () => undefined },
+      materialRoles: { defaultMaterialChoices: () => ({}), renderMaterialSelectors: () => {} },
+      configurator: {
+        hasActiveDefinition: () => false,
+        applyMaterialChoice: () => {},
+        applyHardwareChoice: (code, id) => configPicks.push([code, id])
+      },
+      designInspector: { applyHardwarePick: (code, id) => designPicks.push([code, id]) }
+    }
+  });
+  runModule(sandbox);
+  initDeps(sandbox);
+  const api = sandbox.window.GraneteUI.inspector;
+
+  api.onHardwareChoiceApplied({ groupCode: 'BISAGRA', hardwareId: 'hw-eco', context: 'design' });
+  assert.deepStrictEqual(designPicks, [['BISAGRA', 'hw-eco']],
+    'design-context pick routes to the design defaults draft');
+  assert.strictEqual(configPicks.length, 0, 'the configurator is untouched');
+
+  api.onHardwareChoiceApplied({ groupCode: 'BISAGRA', hardwareId: 'hw-eco', context: 'configurator' });
+  assert.deepStrictEqual(configPicks, [['BISAGRA', 'hw-eco']],
+    'configurator-context pick routes to the Biblioteca pre-insert map');
+  assert.strictEqual(designPicks.length, 1, 'the design draft is untouched');
+  assert.strictEqual(sandbox.__mutation.filter((c) => c.action === 'submitUpdate').length, 0,
+    'neither routed pick mutates the furniture');
+});
+
 test('hardware groups: no consumed groups means no card, and groups catalog absence disables Cambiar honestly', () => {
   const sandbox = buildModuleSandbox({
     GraneteUI: {
