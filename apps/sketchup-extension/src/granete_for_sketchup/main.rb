@@ -42,6 +42,7 @@ module Granete
         library/layout_contract
         library/authoring_resolve_contract
         library/library_store
+        library/manifest_hash
         library/library_synchronizer
         library/local_library_resolver
         library/release_api_client
