@@ -45,6 +45,18 @@ Writer: agente ZCode (único escritor). Lane: Delegated Direct (este artefacto).
 - Gemelos del fingerprint (`design_quote_lifecycle.go` + `commercial_projection.go`) ahora hashean `authoring_defaults` — el token de proyección sigue siendo la fuente canónica del cliente, sin migración.
 - Requote resuelve desde `design_revisions.authoring_defaults_snapshot` (legacy NULL ⇒ defaults vacíos ⇒ sin BOM, veraz).
 
+## Hallazgo y corrección durante la validación
+
+- **El requote no veía la apertura**: `BuildRequoteDraft` rebota con `ErrRequoteNoCommercialChange` cuando los ítems no cambiaron — quitar/cambiar SOLO la gola no podía producir Q2. Fix: `RequotePlan.OpeningCommercialChange`, calculado en storage comparando la sección congelada de la revisión base contra la derivación fresca (`sameOpeningCommercialLines`, identidad por línea). Test `TestRequoteRetiresRemovedOpeningBOM`: Q1 con gola → quitar → publicar → requote → Q2 sin sección y hardware a línea base.
+
+## Evidencia final
+
+- `go test` domain + engine + api: verde.
+- `scripts/backend-test.sh -run "OpeningBOM|RequoteRetires|Requote|Reconcile|DigitalThread|QuoteLifecycle|QuoteCommercialSnapshot" ./internal/storage ./internal/domain`: verde.
+- `scripts/backend-test.sh -timeout 30m ./internal/storage` (suite completa, 523s): verde (el timeout de 10m default es infrastructural: CI shardea).
+- Gate browser `foundation-gate-a.sh --stage browser -- tests/organization/opening-bom-quote.spec.ts`: **1 passed** (recorrido completo gola→resolver→reabrir→Q1→UI).
+- `check_openapi_drift.py` limpio; paridad contratos TS 31/31; typecheck workspace + tests/tsconfig verde.
+
 ## Límites / entrega
 
 - Paridad TS del resolver BOM intacta (contrato `openingBom.contract.json` sin cambios: la matemática no cambia).
