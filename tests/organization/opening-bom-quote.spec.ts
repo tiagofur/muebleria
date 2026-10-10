@@ -127,14 +127,20 @@ test('1263: gola selection resolves its BOM and the quote freezes it with exact 
       { id: HW_SUPPORT_SU116, code: 'SU116', name: 'Soporte GOLA atornillar', unit: 'piece' as const, costPerUnit: 10, active: true },
       { id: HW_CAPS_CF8006TP, code: 'CF8006TP', name: 'Juego tapas terminales', unit: 'piece' as const, costPerUnit: 5, active: true },
     ],
-    modules: [{
-      ...template,
-      id: GATE_MODULE_A_ID,
-      structureId: STRUCTURE_ID,
-      components: [],
-      hardwareLines: [],
-      externalDims: { width: 600, height: 720, depth: depthMm },
-    }],
+    // Preserve every other module: the gate org's catalog is SHARED by the
+    // specs that run after this one in the same shard (a clobbered list
+    // breaks their journeys with "module not found").
+    modules: [
+      ...catalog.modules.filter((module) => module.id !== GATE_MODULE_A_ID),
+      {
+        ...template,
+        id: GATE_MODULE_A_ID,
+        structureId: STRUCTURE_ID,
+        components: [],
+        hardwareLines: [],
+        externalDims: { width: 600, height: 720, depth: depthMm },
+      },
+    ],
   });
 
   // The verified Cymisa 8006 datasheet slice (docs/fichas): reduction 38.5 +
