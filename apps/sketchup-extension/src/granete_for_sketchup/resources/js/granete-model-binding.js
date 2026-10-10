@@ -70,6 +70,10 @@
   var bindingBaseRevision = document.getElementById("binding-base-revision");
   var bindingConnectBtn = document.getElementById("btn-binding-connect");
   var bindingRefreshBtn = document.getElementById("btn-binding-refresh");
+  // #1256: nota de descubribilidad del Inspector — visible sólo sin
+  // vincular. Este renderer es la autoridad única del estado, así que la
+  // nota nunca puede contradecir el badge de la pestaña Proyecto.
+  var inspectorBindingHint = document.getElementById("inspector-binding-hint");
   var bindingAdoptBtn = document.getElementById("btn-binding-adopt");
   var bindingPublishBtn = document.getElementById("btn-binding-publish");
   var bindingPublishProgress = document.getElementById("binding-publish-progress");
@@ -152,6 +156,11 @@
     }
 
     bindingConnectBtn.style.display = status.state === "connected" ? "none" : "block";
+    // #1256: la nota del Inspector sigue la misma autoridad — sólo el
+    // estado unbound la muestra; cualquier otro estado la oculta.
+    if (inspectorBindingHint) {
+      inspectorBindingHint.style.display = status.state === "unbound" ? "" : "none";
+    }
     var bootstrapButton = document.getElementById("btn-bootstrap-project");
     if (bootstrapButton) bootstrapButton.style.display = status.state === "unbound" ? "block" : "none";
     // The pairing-code entry is the primary connect path and follows the

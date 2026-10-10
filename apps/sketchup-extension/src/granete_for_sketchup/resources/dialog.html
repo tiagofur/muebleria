@@ -507,6 +507,19 @@
 
         <!-- Tab 3: Contextual Inspector (capability-driven, #476) -->
         <section id="pane-inspector" class="tab-pane" role="tabpanel">
+          <!-- #1256: con el modelo sin vincular, las tarjetas de nivel
+               diseño (Herrajes del diseño, Apertura del diseño) no existen
+               para el usuario y la conexión vive en la pestaña Proyecto.
+               Nota informativa — la acción de conectar NO se duplica aquí.
+               La visibilidad la gobierna granete-model-binding.js
+               (renderModelBindingStatus, autoridad única del estado). -->
+          <div class="card" id="inspector-binding-hint" style="display: none; margin-bottom: var(--space-3);">
+            <div class="card-title">Conectar a un diseño</div>
+            <p class="subhead" style="margin: var(--space-1) 0 0 0; font-size: var(--text-xs); line-height: 1.5;">
+              Para elegir bisagras y apertura del diseño, conectá este modelo con el
+              código de la web en la pestaña <strong>Proyecto</strong> («Conectar con código»).
+            </p>
+          </div>
           <div id="inspector-empty-state" class="card empty-state">
             <div class="empty-state-icon-box">
               <svg class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
@@ -661,14 +674,17 @@
                 <div id="inspector-params-container" style="margin-top: var(--space-2);"></div>
               </div>
 
-              <!-- #529: Card condicional de Apertura. Se muestra únicamente
-                   si el mueble tiene puertas detectadas (metadata gestionada,
-                   parámetro doorSwing o doorAccessories del resolve). Solo
-                   listado de puertas + pose de presentación. -->
+              <!-- #529: Card condicional de presentación de puertas. Se muestra
+                   únicamente si el mueble tiene puertas detectadas (metadata
+                   gestionada, parámetro doorSwing o doorAccessories del
+                   resolve). Sólo listado de puertas + pose de presentación.
+                   #1256: renombrada de «Apertura» a «Presentación de
+                   puertas» — la SELECCIÓN de apertura vive en la tarjeta
+                   «Apertura del diseño» (#1137) del diseño conectado. -->
               <div class="card" id="inspector-opening-accessories-card" style="display: none;">
                 <div class="card-header-row">
                   <div>
-                    <div class="card-title">Apertura</div>
+                    <div class="card-title">Presentación de puertas</div>
                     <div id="opening-accessories-summary" class="subhead" style="margin-top: var(--space-1); font-size: var(--text-xs);">
                       Vista de presentación: abrir o cerrar no modifica el diseño.
                     </div>

@@ -239,6 +239,17 @@ test('setStatus(null) renders the unbound fallback exactly like the old call', (
   assert.ok(visible(el(sandbox, 'pairing-entry')), 'pairing entry offered when unbound');
   assert.ok(!visible(el(sandbox, 'btn-binding-refresh')), 'refresh hidden when unbound');
   assert.ok(!visible(el(sandbox, 'btn-binding-adopt')), 'adopt hidden when unbound');
+  assert.ok(visible(el(sandbox, 'inspector-binding-hint')),
+    '#1256: the Inspector discoverability note is visible while unbound');
+});
+
+test('#1256: the Inspector binding hint hides once the model is connected', () => {
+  const sandbox = runModule();
+  sandbox.window.GraneteUI.modelBinding.setStatus(null);
+  assert.ok(visible(el(sandbox, 'inspector-binding-hint')), 'hint starts visible when unbound');
+  sandbox.window.GraneteUI.modelBinding.setStatus(CONNECTED);
+  assert.strictEqual(el(sandbox, 'inspector-binding-hint').style.display, 'none',
+    'connecting the design hides the note — the design-level cards take over');
 });
 
 test('connected status fills the binding card, hides connect/pairing and gates publish', () => {
