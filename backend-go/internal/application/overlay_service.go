@@ -74,6 +74,9 @@ var permittedPrefixes = []string{
 	"tolerances.",
 	"finish.",
 	"defaults.",
+	// #1260: `opening.capabilities` (#1134) — the blob's CONTENT is owned by
+	// the twin Go/TS parsers; this list only gates its namespace in.
+	"opening.",
 }
 
 // ValidateOverridePaths verifies that all keys in flattened overrides belong to supported namespaces.
@@ -93,7 +96,7 @@ func ValidateOverridePaths(overrides map[string]any) error {
 			}
 		}
 		if !permitted {
-			return fmt.Errorf("%w: path %q must belong to permitted namespaces (parameters, rules, joint, hardware, tolerances, finish)", ErrInvalidOverridePath, path)
+			return fmt.Errorf("%w: path %q must belong to permitted namespaces (parameters, rules, joint, construction, hardware, tolerances, finish, defaults, opening)", ErrInvalidOverridePath, path)
 		}
 	}
 	return nil

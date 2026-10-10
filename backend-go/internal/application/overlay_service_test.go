@@ -258,6 +258,83 @@ func TestOverlayService_CreateOverlay_Validation(t *testing.T) {
 	}
 }
 
+// #1260 regression: the `opening.capabilities` blob (#1134) must pass the
+// overlay path validation — the exact shape the TS client serializes
+// (openingCapabilitiesToOverlayOverrides), including byFurnitureType. Before
+// the `opening.` namespace existed, saving factory opening capabilities was
+// ALWAYS rejected with ErrInvalidOverridePath (400 in the web) while the UI
+// kept the local edits, so the factory decision never persisted.
+func TestOverlayService_Overrides_AcceptOpeningCapabilitiesBlob(t *testing.T) {
+	ctx := context.Background()
+	store := newMockOverlayStore()
+	svc := application.NewOverlayService(store)
+
+	orgID := uuid.New()
+	libID := uuid.New()
+	pubRelID := uuid.New()
+	store.releases[pubRelID] = &domain.LibraryRelease{ID: pubRelID, Status: domain.ReleaseStatusPublished}
+
+	// The blob exactly as the web serializes it, riding the same save as a
+	// foreign `joint.*` key (the owned-key merge of saveOpeningCapabilities).
+	overrides := json.RawMessage(`{
+		"joint.topToSide.systemId": "screw-only",
+		"opening.capabilities": {
+			"version": 1,
+			"grips": {
+				"handle": {"enabled": true, "default": true},
+				"gola": {"enabled": true},
+				"bottom_overhang": {"enabled": false}
+			},
+			"byFurnitureType": {
+				"inferior": {"grips": {"gola": {"placements": ["top", "bottom"], "default": true}}}
+			}
+		}
+	}`)
+
+	// 1. The create path (first factory decision, no overlay yet) accepts it.
+	created, err := svc.CreateOverlay(ctx, application.CreateOverlayParams{
+		OrganizationID: orgID,
+		LibraryID:      libID,
+		BaseReleaseID:  pubRelID,
+		Overrides:      overrides,
+	})
+	if err != nil {
+		t.Fatalf("CreateOverlay with opening.capabilities failed: %v", err)
+	}
+
+	// 2. The update path (existing overlay, owned-key merge) accepts it too,
+	// and the blob lands verbatim.
+	err = svc.UpdateOverrides(ctx, created.ID, orgID, created.Version, overrides, nil)
+	if err != nil {
+		t.Fatalf("UpdateOverrides with opening.capabilities failed: %v", err)
+	}
+	stored, err := store.GetOverlayByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("stored overlay vanished: %v", err)
+	}
+	var storedMap map[string]any
+	if err := json.Unmarshal(stored.Overrides, &storedMap); err != nil {
+		t.Fatalf("stored overrides are not JSON: %v", err)
+	}
+	blob, ok := storedMap["opening.capabilities"].(map[string]any)
+	if !ok {
+		t.Fatalf("stored overrides lost opening.capabilities: %v", storedMap)
+	}
+	if blob["version"] != float64(1) {
+		t.Fatalf("stored blob version = %v, want 1", blob["version"])
+	}
+	if _, ok := blob["byFurnitureType"].(map[string]any); !ok {
+		t.Fatalf("stored blob lost byFurnitureType: %v", blob)
+	}
+
+	// 3. The whitelist still fails closed: a NEAR namespace is not the
+	// opening namespace (no prefix smuggling).
+	err = svc.UpdateOverrides(ctx, created.ID, orgID, stored.Version, json.RawMessage(`{"openings.capabilities": {"version": 1}}`), nil)
+	if !errors.Is(err, application.ErrInvalidOverridePath) {
+		t.Fatalf("expected ErrInvalidOverridePath for openings.*, got %v", err)
+	}
+}
+
 func TestOverlayService_UpdateOverrides_AuthorizationAndPathCheck(t *testing.T) {
 	ctx := context.Background()
 	store := newMockOverlayStore()
