@@ -191,6 +191,7 @@ class ApplicationTest < Minitest::Test
       connect_model connect_with_code create_project_furniture delete_selected_furniture dialog_ready
       emit_initial_quote enroll
       get_catalog get_commercial_projection get_design_defaults get_design_inheritance get_design_opening
+      get_hardware_groups
       get_model_binding
       get_project_furniture insert_furniture
       list_binding_designs list_binding_projects list_bootstrap_customers logout

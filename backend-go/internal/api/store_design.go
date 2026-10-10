@@ -25,6 +25,8 @@ type DesignStore interface {
 	// #637 / DT-MAT: quoted-material provenance detection (read-only) and
 	// the explicit fill-only reconciliation into the mutable working copy.
 	GetDesignWorkingCopyMaterialProvenance(ctx context.Context, designID string) (*storage.DesignWorkingCopyMaterialProvenance, error)
+	// #1252: consumed hardware option groups for the Inspector card (read-only).
+	GetDesignConsumedHardwareOptionGroups(ctx context.Context, designID string) (*storage.DesignConsumedHardwareOptionGroups, error)
 	ReconcileDesignWorkingMaterials(ctx context.Context, cmd storage.ReconcileDesignWorkingMaterialsCommand) (*storage.DesignWorkingMaterialsReconciliation, error)
 	PublishDesignRevision(ctx context.Context, cmd storage.PublishDesignRevisionCommand) (*domain.DesignRevision, error)
 	GetDesignRevision(ctx context.Context, designID string, revisionID string) (*domain.DesignRevision, error)

@@ -22,6 +22,9 @@ func registerDesignRoutes(server *Server, mux *http.ServeMux, authRL, authMW fun
 	// explicit reconciliation command. The repair is an observable business
 	// mutation: durable idempotency receipt like every other design command.
 	mux.Handle("GET /api/designs/{designId}/working-copy/material-provenance", authMW(http.HandlerFunc(server.HandleDesignWorkingCopyMaterialProvenance)))
+	// #1252: consumed hardware option groups for the Inspector card —
+	// read-only server-side discovery of por-grupo demand.
+	mux.Handle("GET /api/designs/{designId}/hardware-option-groups", authMW(http.HandlerFunc(server.HandleDesignHardwareOptionGroups)))
 	mux.Handle("POST /api/designs/{designId}/effective-materials", authMW(http.HandlerFunc(server.HandleDesignEffectiveMaterials)))
 	mux.Handle("POST /api/designs/{designId}/working-copy/material-choices:reconcile", noStoreMiddleware(authMW(server.RequireIdempotency("design.reconcile-working-materials", http.HandlerFunc(server.HandleDesignWorkingCopyMaterialsReconcile)))))
 	// #1137 / OPEN-FRONT: the design's opening intent — the authoring

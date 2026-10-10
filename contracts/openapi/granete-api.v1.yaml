@@ -4035,6 +4035,32 @@
         }
       }
     },
+    "/designs/{designId}/hardware-option-groups": {
+      "get": {
+        "operationId": "getDesignHardwareOptionGroups",
+        "description": "#1252 read model for the SketchUp 'Herrajes del diseño' card: the hardware option groups (kind=hardware) the design's own definitions consume through por-grupo demand, with the design's authoring default as the current choice. When the design consumes no group, scope flips to project and the card offers the groups consumed by the project's furniture models (owner-approved fallback, 2026-10-09) — never the whole catalog. Read-only.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DesignId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consumed hardware option groups for the exact design (scope design) or its project fallback (scope project)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignConsumedHardwareOptionGroups"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/ApiError"
+          }
+        }
+      }
+    },
     "/designs/{designId}/effective-materials": {
       "post": {
         "operationId": "composeDesignEffectiveMaterials",
@@ -11841,6 +11867,75 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/DesignWorkingItemMaterialProvenance"
+            }
+          }
+        }
+      },
+      "ConsumedHardwareOptionGroup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "name",
+          "option_ids",
+          "consumed_by"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Hardware option group code (kind=hardware, e.g. BISAGRA)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group display name from the catalog."
+          },
+          "option_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Selectable member hardware ids (catalog order)."
+          },
+          "chosen_hardware_id": {
+            "type": "string",
+            "description": "Design authoring default for this group (hardware id). Absent = sin elegir; never silently defaulted."
+          },
+          "consumed_by": {
+            "type": "integer",
+            "description": "Distinct definitions whose por-grupo demand consumes this group (design scope: working-copy items; project scope: project items)."
+          }
+        }
+      },
+      "DesignConsumedHardwareOptionGroups": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "design_id",
+          "project_id",
+          "scope",
+          "groups"
+        ],
+        "properties": {
+          "design_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "design",
+              "project"
+            ],
+            "description": "design = groups the design's own definitions consume; project = owner-approved fallback when the design consumes none (groups consumed by the project's furniture models)."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsumedHardwareOptionGroup"
             }
           }
         }

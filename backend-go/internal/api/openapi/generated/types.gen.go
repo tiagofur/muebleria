@@ -1387,6 +1387,21 @@ type DesignWorkingCopyMaterialProvenance struct {
 	Items                []DesignWorkingItemMaterialProvenance `json:"items"`
 }
 
+type ConsumedHardwareOptionGroup struct {
+	Code             string   `json:"code"`
+	Name             string   `json:"name"`
+	OptionIds        []string `json:"option_ids"`
+	ChosenHardwareID *string  `json:"chosen_hardware_id,omitempty"`
+	ConsumedBy       int64    `json:"consumed_by"`
+}
+
+type DesignConsumedHardwareOptionGroups struct {
+	DesignID  string                        `json:"design_id"`
+	ProjectID string                        `json:"project_id"`
+	Scope     string                        `json:"scope"`
+	Groups    []ConsumedHardwareOptionGroup `json:"groups"`
+}
+
 type DesignWorkingMaterialsReconciliation struct {
 	DesignID             string            `json:"design_id"`
 	ProjectID            string            `json:"project_id"`

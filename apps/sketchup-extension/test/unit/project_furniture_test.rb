@@ -2270,6 +2270,51 @@ class ProjectFurnitureTest < Minitest::Test
     assert_empty top_level_furniture(@model)
   end
 
+  # #1252: the consumed hardware option groups projection is the ONLY
+  # authority of the "Herrajes del diseño" card. The parser keeps the
+  # fields the card renders and rejects unknown scopes / empty codes
+  # fail-closed; chosen_hardware_id absent stays nil (sin elegir), never ''.
+  def test_design_hardware_option_groups_parses_fail_closed
+    body = {
+      'design_id' => DESIGN_ID, 'project_id' => PROJECT_ID,
+      'scope' => 'design',
+      'groups' => [
+        { 'code' => 'BISAGRA', 'name' => 'Bisagras',
+          'option_ids' => %w[hw-bisagra-cl hw-bisagra-eco],
+          'chosen_hardware_id' => 'hw-bisagra-cl', 'consumed_by' => 2 },
+        { 'code' => 'PATAS', 'name' => 'Patas',
+          'option_ids' => %w[hw-pata-cil], 'consumed_by' => 1 }
+      ]
+    }
+    parsed = PF::DesignHardwareOptionGroupsContract.parse!(body)
+    assert_equal DESIGN_ID, parsed.design_id
+    assert_equal 'design', parsed.scope
+    assert_equal 2, parsed.groups.length
+
+    bisagra = parsed.groups.first
+    assert_equal 'BISAGRA', bisagra.code
+    assert_equal %w[hw-bisagra-cl hw-bisagra-eco], bisagra.option_ids
+    assert_equal 'hw-bisagra-cl', bisagra.chosen_hardware_id
+    assert_equal 2, bisagra.consumed_by
+    assert_nil parsed.groups.last.chosen_hardware_id
+
+    bad_shapes = [
+      body.merge('scope' => 'catalog'),
+      body.merge('design_id' => 'bad'),
+      body.merge('groups' => 'nope'),
+      body.merge('groups' => [{ 'code' => '', 'name' => 'x', 'option_ids' => [], 'consumed_by' => 0 }]),
+      body.merge('groups' => [{ 'code' => 'BISAGRA', 'name' => 'x', 'option_ids' => [''], 'consumed_by' => 0 }]),
+      body.merge('groups' => [{ 'code' => 'BISAGRA', 'name' => 'x', 'option_ids' => [], 'consumed_by' => -1 }]),
+      body.merge('groups' => [{ 'code' => 'BISAGRA', 'name' => 'x', 'option_ids' => [],
+                                'chosen_hardware_id' => '', 'consumed_by' => 0 }])
+    ]
+    bad_shapes.each do |shape|
+      assert_raises(PF::Contract::ContractError) do
+        PF::DesignHardwareOptionGroupsContract.parse!(shape)
+      end
+    end
+  end
+
   private
 
   def restore_item(parameters: {}, choices: {}, translation: [0.0, 0.0, 0.0], rotation: [0.0, 0.0, 0.0],

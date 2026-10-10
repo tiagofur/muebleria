@@ -264,6 +264,21 @@ func (s *stubStore) GetDesignWorkingCopyMaterialProvenance(_ context.Context, de
 	}, nil
 }
 
+func (s *stubStore) GetDesignConsumedHardwareOptionGroups(_ context.Context, designID string) (*storage.DesignConsumedHardwareOptionGroups, error) {
+	if s.hardwareOptionGroupsErr != nil {
+		return nil, s.hardwareOptionGroupsErr
+	}
+	if s.hardwareOptionGroups != nil {
+		return s.hardwareOptionGroups, nil
+	}
+	return &storage.DesignConsumedHardwareOptionGroups{
+		DesignID:  designID,
+		ProjectID: "proj-1",
+		Scope:     "design",
+		Groups:    []storage.ConsumedHardwareOptionGroup{},
+	}, nil
+}
+
 func (s *stubStore) ReconcileDesignWorkingMaterials(_ context.Context, cmd storage.ReconcileDesignWorkingMaterialsCommand) (*storage.DesignWorkingMaterialsReconciliation, error) {
 	s.reconcileMaterialsCmd = &cmd
 	if s.reconcileMaterialsErr != nil {

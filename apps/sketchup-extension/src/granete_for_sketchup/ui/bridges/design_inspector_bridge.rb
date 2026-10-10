@@ -25,6 +25,8 @@ module Granete
           # controller; its registration rides here so bind_callbacks stays
           # within its complexity budget.
           register_design_inheritance_callbacks(dialog)
+          # #1252: the hardware-groups read bridge — same family.
+          register_design_hardware_groups_callbacks(dialog)
         end
 
         # Payload entrante: { requestId, designId }. Respuesta via

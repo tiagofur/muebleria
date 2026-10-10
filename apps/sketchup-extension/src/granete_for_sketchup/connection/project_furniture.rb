@@ -143,6 +143,14 @@ module Granete
             DesignInheritanceContract.parse!(body)
           end
 
+          # #1252: consumed hardware option groups for the Inspector card —
+          # server-side discovery of por-grupo demand (design scope, with the
+          # owner-approved project fallback delivered by the same payload).
+          def get_design_hardware_option_groups(design_id)
+            body = request(:get, "/designs/#{design_id}/hardware-option-groups")
+            DesignHardwareOptionGroupsContract.parse!(body)
+          end
+
           # #784 R4: resolves definition-aware effective materials and inheritance modes
           # against the Design's authoring defaults.
           def get_effective_materials(design_id, definition_id, material_choices: {})
