@@ -37,6 +37,26 @@ type DesignOpeningResolution struct {
 	State  string                 `json:"state"`
 	Reason string                 `json:"reason,omitempty"`
 	Fronts []OpeningResolvedFront `json:"fronts,omitempty"`
+	// BOM carries the resolved profile/accessory lines (#1263) when the
+	// caller provided a body context. Nil with a BOMReason is the truthful
+	// absence — never a guessed run length or member count.
+	BOM []OpeningResolvedBOMLine `json:"bom,omitempty"`
+	// BOMReason reports why the BOM is absent for a gola selection (pin slice
+	// predating #1263, body context not derivable, or a fail-closed BOM error).
+	BOMReason string `json:"bomReason,omitempty"`
+	// BOMEnds mirrors the end conditions the BOM was resolved with — the v1
+	// declared default is visible to the caller, never silent.
+	BOMEnds *OpeningBOMEndConditions `json:"bomEnds,omitempty"`
+}
+
+// DesignOpeningBOMContext is the body context the BOM resolution needs (#1263):
+// the run's physical inputs the DESIGN-level surfaces own — the cabinet
+// interior width (an input the #1133 contract refuses to derive here) and the
+// profile BOM data (pinned first, live catalog only for pre-pin rows).
+type DesignOpeningBOMContext struct {
+	CabinetInteriorWidthMm int
+	Ends                   OpeningBOMEndConditions
+	Profiles               []OpeningProfileBOMData
 }
 
 // ResolveDesignOpening resolves the persisted selection over the design's
@@ -44,12 +64,14 @@ type DesignOpeningResolution struct {
 // the furniture dims it resolved (nil selection returns nil: no intent, no
 // resolution). overhangMm (#1138) is the factory's BACKED case C rule parsed
 // from the versioned `opening.bottom-overhang` blob; nil = no backed rule,
-// which keeps bottom_overhang BLOCKED verbatim.
+// which keeps bottom_overhang BLOCKED verbatim. bomCtx (#1263) enables the
+// BOM resolution for gola selections; nil keeps the fronts-only behavior.
 func ResolveDesignOpening(
 	widthMm, heightMm int,
 	selection *domain.DesignOpeningSelection,
 	profiles []OpeningProfileData,
 	overhangMm *int,
+	bomCtx *DesignOpeningBOMContext,
 ) (*DesignOpeningResolution, *OpeningResolutionError) {
 	if selection == nil {
 		return nil, nil
@@ -96,8 +118,52 @@ func ResolveDesignOpening(
 		// have rejected — surfaced verbatim either way.
 		return &DesignOpeningResolution{State: DesignOpeningStateBlocked, Reason: resErr.Code}, nil
 	}
-	return &DesignOpeningResolution{
+	resolution := &DesignOpeningResolution{
 		State:  DesignOpeningStateResolved,
 		Fronts: layout.Fronts,
-	}, nil
+	}
+	if bomCtx != nil && selection.System == domain.OpeningGripSystemGola {
+		resolution.BOMEnds = &bomCtx.Ends
+		bomData, bomReason := designOpeningBOMData(selection, bomCtx)
+		if bomReason != "" {
+			resolution.BOMReason = bomReason
+		} else if bomCtx.CabinetInteriorWidthMm <= 0 {
+			resolution.BOMReason = OpeningReasonBOMBodyContextMissing
+		} else if lines, bomErr := ResolveOpeningBOM(layout, bomCtx.CabinetInteriorWidthMm, bomCtx.Ends, []OpeningProfileBOMData{bomData}); bomErr != nil {
+			// Corrupt declared data is reported verbatim; the fronts stay
+			// resolved — the BOM never blocks the presentation of fronts.
+			resolution.BOMReason = bomErr.Code
+		} else {
+			resolution.BOM = lines
+		}
+	}
+	return resolution, nil
+}
+
+// designOpeningBOMData picks the BOM slice the historical design owns: the
+// pin freezes revision + members at validation time; the live catalog only
+// feeds rows authored before the pin existed (same fallback rule as fronts).
+func designOpeningBOMData(selection *domain.DesignOpeningSelection, bomCtx *DesignOpeningBOMContext) (OpeningProfileBOMData, string) {
+	if pin := selection.ProfilePin; pin != nil {
+		if pin.BOM == nil {
+			// Pre-#1263 pin: the frozen slice never included the BOM — the
+			// truthful absence, never a live-catalog fallback.
+			return OpeningProfileBOMData{}, OpeningReasonBOMPinSliceMissing
+		}
+		members := make(map[string]OpeningContractBOMMember, len(pin.BOM.Members))
+		for key, member := range pin.BOM.Members {
+			members[key] = openingContractBOMMember(member)
+		}
+		return OpeningProfileBOMData{
+			ProfileID:  selection.ProfileID,
+			Version:    pin.BOM.ProfileVersion,
+			BOMMembers: members,
+		}, ""
+	}
+	for _, profile := range bomCtx.Profiles {
+		if profile.ProfileID == selection.ProfileID {
+			return profile, ""
+		}
+	}
+	return OpeningProfileBOMData{}, OpeningErrProfileUnknown
 }
