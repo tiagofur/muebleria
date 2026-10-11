@@ -43,6 +43,10 @@ Writer: agente ZCode (único escritor). Lane: Delegated Direct.
 - Bridge de apertura: 8 tests (converge con resolve pineado a designId + apply authoring_dirty:false + transaction:false + context guard; skipped sin dims; fallo honesto sin rollback del intento). Arnés JS: 10 tests (outcome converged/failed, tardío descartado). Wrapper `granete_opening_js_test.rb` lo corre en CI.
 - Convención respetada: main.rb load list incluye los módulos nuevos; boundary prohíbe requires en bridges (model_binding carga por loader/test_helper).
 
+## Estado
+
+PR #1266 — CI 22/22 verde. IMPLEMENTED_PENDING_REVIEW. Smoke real macOS/Windows con RBZ 0.1.60 queda como evidencia owner (guion en el PR).
+
 ## Trampas encontradas (para memoria)
 
 - Ruby 3: agregar un KWARG a un método cuyo callers pasan hash final posicional (choices `'FRENTE' => …`) lo convierte en kwargs → ArgumentError «unknown keyword». El 4º parámetro es POSICIONAL en toda la cadena (base incluida: StaticCatalogProvider define el método a 3).
