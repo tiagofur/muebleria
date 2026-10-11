@@ -36,10 +36,33 @@ module Granete
           return { 'status' => 'skipped', 'reason' => 'sin resultado de geometría' } if results.empty?
 
           drawn = results.find { |r| r['status'] == 'drawn' }
-          return { 'status' => 'drawn', 'heightMm' => spec['heightMm'], 'depthMm' => spec['depthMm'] } if drawn
+          if drawn
+            answer = { 'status' => 'drawn', 'heightMm' => spec['heightMm'], 'depthMm' => spec['depthMm'] }
+            answer['source'] = drawn['source'] if drawn['source']
+            return answer
+          end
 
           skipped = results.find { |r| r['status'] == 'skipped' }
           { 'status' => 'skipped', 'reason' => (skipped && skipped['reason']) || 'sin razón' }
+        end
+
+        # The per-unit channel outcome (#1274): the resolved layout's DERIVED
+        # placement of the pinned profile hardware IS the channel — the real
+        # catalog SKP the rebuild rendered. The placeholder block only covers
+        # the honest fallback (a layout without the member, e.g. a pre-pin
+        # row or a catalog without assets).
+        def design_opening_channel_result(layout, root, spec)
+          # #1274: the members arrive as the ONLY derived placements of a
+          # layout — their presence means the rebuild rendered the catalog
+          # SKPs of the profile and its companions.
+          if layout.respond_to?(:hardware) &&
+             Array(layout.hardware).any? do |placement|
+               placement.respond_to?(:placement_kind) && placement.placement_kind == 'derived'
+             end
+            return { 'status' => 'drawn', 'source' => 'asset',
+                     'heightMm' => spec['heightMm'], 'depthMm' => spec['depthMm'] }
+          end
+          design_opening_draw_channel_placeholder(active_model, root, spec)
         end
 
         # Draws the placeholder block inside the rebuilt root: a solid of the

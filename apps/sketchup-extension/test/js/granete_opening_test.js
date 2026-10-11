@@ -416,12 +416,12 @@ test('#1272: el resultado del canal gola (placeholder) se muestra junto a la geo
 
   opening.onDesignOpeningApplied({
     requestId: applyCall.payload.requestId, status: 'ok', state: freshState,
-    geometry: { status: 'converged', units: 1, channel: { status: 'drawn', heightMm: 27, depthMm: 56 } }
+    geometry: { status: 'converged', units: 1, channel: { status: 'drawn', source: 'asset', heightMm: 27, depthMm: 56 } }
   });
   let channel = findDeep(elementsById['design-inspector-opening-body'], (child) => child.attributes['data-testid'] === 'opening-channel-outcome');
   assert.ok(channel, 'the drawn channel outcome must render');
-  assert.ok(channel.textContent.includes('27×56 mm'), channel.textContent);
-  assert.ok(channel.textContent.includes('provisorio'), channel.textContent);
+  assert.ok(channel.textContent.includes('diseño del perfil'), channel.textContent);
+  assert.ok(channel.textContent.includes('SKP del catálogo'), channel.textContent);
 
   // A skipped placeholder keeps the honest reason visible too.
   const systemSelect2 = findDeep(elementsById['design-inspector-opening-body'], (child) => child.id === 'opening-system-select');

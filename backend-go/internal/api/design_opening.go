@@ -386,33 +386,34 @@ type designOpeningResolveFailure struct {
 // designOpeningFrontsForResolve resolves the design's persisted opening over
 // the resolve request's dimensions (#1264 / V2 OPEN-FRONT). Returns nil
 // fronts with nil failure when there is nothing to constrain: no designId,
-// no selection, the handle baseline, or a furniture other than the design's
-// FIRST module (the pilot's one-opening scope). A BLOCKED opening fails
-// closed — a design that declares an opening never resolves a degraded
-// layout, exactly like its quote never under-prices it (#1263).
-func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringResolveRequest, module *domain.Module, dims *engine.LayoutDims) ([]engine.OpeningResolvedFront, *designOpeningResolveFailure) {
+// no selection, or the handle baseline. A BLOCKED opening fails closed — a
+// design that declares an opening never resolves a degraded layout, exactly
+// like its quote never under-prices it (#1263).
+//
+// #1274: the selection's pinned member set rides along so the layout can
+// materialize the gola run and its companions as derived hardware — the
+// same frozen slice the BOM resolves from, never the live catalog.
+func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringResolveRequest, module *domain.Module, dims *engine.LayoutDims) ([]engine.OpeningResolvedFront, *engine.OpeningMembers, *designOpeningResolveFailure) {
 	designID := strings.TrimSpace(req.Furniture.DesignID)
 	if designID == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if !isValidUUID(designID) {
-		return nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el designId no es un identificador válido"}
+		return nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el designId no es un identificador válido"}
 	}
 	wc, err := s.Store.GetDesignWorkingCopy(r.Context(), designID)
 	if err != nil {
-		return nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el diseño no existe o no es accesible"}
+		return nil, nil, &designOpeningResolveFailure{code: "DESIGN_UNKNOWN", message: "el diseño no existe o no es accesible"}
 	}
 	selection := wc.AuthoringDefaults.Opening
 	if selection == nil || selection.System == domain.OpeningGripSystemHandle {
-		return nil, nil
+		return nil, nil, nil
 	}
-	// Pilot scope: the opening belongs to the design's pilot module (the
-	// first REPRESENTABLE unit, #1261) — resolving any other furniture of
-	// the same design never borrows it.
-	pilot := designOpeningPilotItem(wc)
-	if pilot == nil || pilot.FurnitureDefinitionID != module.ID {
-		return nil, nil
-	}
+	// #1274: the opening belongs to the DESIGN — every furniture of the
+	// design constrains ITS front boards at its OWN dimensions. The
+	// pilot-module scope of #1261 died on real multi-module designs, where
+	// the "first item with a definition" is arbitrary (the owner's IZQ
+	// cabinet stopped constraining the moment a DER cabinet came first).
 	widthMm, heightMm := module.WidthMm, module.HeightMm
 	if dims != nil {
 		widthMm, heightMm = dims.WidthMm, dims.HeightMm
@@ -428,7 +429,7 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 	} else {
 		profiles, listErr := s.Store.ListOpeningProfiles(r.Context())
 		if listErr != nil {
-			return nil, &designOpeningResolveFailure{code: "OPENING_PROFILE_UNKNOWN", message: "el catálogo de perfiles de apertura no está disponible"}
+			return nil, nil, &designOpeningResolveFailure{code: "OPENING_PROFILE_UNKNOWN", message: "el catálogo de perfiles de apertura no está disponible"}
 		}
 		profileData = make([]engine.OpeningProfileData, 0, len(profiles))
 		for _, profile := range profiles {
@@ -442,14 +443,37 @@ func (s *Server) designOpeningFrontsForResolve(r *http.Request, req authoringRes
 	}
 	rule, ruleErr := s.Store.GetOpeningOverhangRule(r.Context())
 	if ruleErr != nil {
-		return nil, &designOpeningResolveFailure{code: "OPENING_OVERHANG_RULE_UNAVAILABLE", message: ruleErr.Error()}
+		return nil, nil, &designOpeningResolveFailure{code: "OPENING_OVERHANG_RULE_UNAVAILABLE", message: ruleErr.Error()}
 	}
 	resolution, resErr := engine.ResolveDesignOpening(widthMm, heightMm, selection, profileData, engine.OpeningOverhangRuleMm(rule), nil)
 	if resErr != nil {
-		return nil, &designOpeningResolveFailure{code: resErr.Code, message: resErr.Message}
+		return nil, nil, &designOpeningResolveFailure{code: resErr.Code, message: resErr.Message}
 	}
 	if resolution.State != engine.DesignOpeningStateResolved {
-		return nil, &designOpeningResolveFailure{code: resolution.Reason, message: "la apertura del diseño está bloqueada"}
+		return nil, nil, &designOpeningResolveFailure{code: resolution.Reason, message: "la apertura del diseño está bloqueada"}
 	}
-	return resolution.Fronts, nil
+	return resolution.Fronts, openingMembersFromPin(selection), nil
+}
+
+// openingMembersFromPin projects the selection's frozen BOM slice onto the
+// layout's member placement set (#1274). Absent pin/BOM or members without
+// hardware place nothing — the truthful absence, never a live-catalog guess.
+func openingMembersFromPin(selection *domain.DesignOpeningSelection) *engine.OpeningMembers {
+	if selection == nil || selection.ProfilePin == nil || selection.ProfilePin.BOM == nil {
+		return nil
+	}
+	var spacing int
+	if support := selection.ProfilePin.BOM.Members["supports"]; support.HardwareID != "" && support.SpacingMm != nil {
+		spacing = *support.SpacingMm
+	}
+	members := &engine.OpeningMembers{
+		ProfileHardwareID: selection.ProfilePin.BOM.Members["profile"].HardwareID,
+		SupportHardwareID: selection.ProfilePin.BOM.Members["supports"].HardwareID,
+		CapHardwareID:     selection.ProfilePin.BOM.Members["endCaps"].HardwareID,
+		SupportSpacingMm:  spacing,
+	}
+	if members.ProfileHardwareID == "" && members.SupportHardwareID == "" && members.CapHardwareID == "" {
+		return nil
+	}
+	return members
 }

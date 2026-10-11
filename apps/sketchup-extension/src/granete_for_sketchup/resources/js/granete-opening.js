@@ -167,6 +167,7 @@
         (channel.status === "drawn" || channel.status === "skipped")) {
       normalizedChannel = {
         status: channel.status,
+        source: channel.source || "",
         heightMm: channel.heightMm || 0,
         depthMm: channel.depthMm || 0,
         reason: channel.reason || ""
@@ -213,8 +214,10 @@
     row.style.cssText = "font-size: var(--text-xs); margin: var(--space-1) 0 0;";
     row.setAttribute("data-testid", "opening-channel-outcome");
     if (channel.status === "drawn") {
-      row.textContent = "Canal de gola representado con un bloque de " + channel.heightMm + "×" +
-        channel.depthMm + " mm (provisorio, a la espera del diseño SKP del perfil).";
+      row.textContent = channel.source === "asset"
+        ? "Canal de gola colocado con el diseño del perfil (SKP del catálogo)."
+        : "Canal de gola representado con un bloque de " + channel.heightMm + "×" +
+          channel.depthMm + " mm (provisorio, a la espera del diseño SKP del perfil).";
     } else {
       row.textContent = "Canal de gola sin representar (" + (channel.reason || "sin razón") + ").";
     }

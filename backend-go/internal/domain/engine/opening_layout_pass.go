@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/tiagofur/muebles-backend/internal/domain"
@@ -84,4 +85,84 @@ func boardIsOpeningFront(board *layoutBoard) bool {
 	return board.placement == string(domain.PlacementPuerta) ||
 		board.placement == string(domain.PlacementFrenteCajon) ||
 		isDoorBoard(board)
+}
+
+// OpeningMembers is the pinned member set (#1274) the layout materializes
+// as DERIVED hardware placements when the design's opening constrained a
+// furniture's fronts: the gola run plus its factory-declared companions.
+// The ids and the spacing come from the selection's profile pin — never
+// the live catalog — so a datasheet change never drifts a resolved model.
+type OpeningMembers struct {
+	ProfileHardwareID string
+	SupportHardwareID string
+	CapHardwareID     string
+	SupportSpacingMm  int
+}
+
+// attachOpeningMembers appends the member placements to the FIRST
+// constrained front board (the door/drawer-front the opening shrank) — the
+// channel physically sits on that front's freed edge: anchorFace top for a
+// top-boundary grip (gola), bottom for rebase. Placements live in the front
+// board's face frame: x runs across the front's width (≈ the useful span),
+// y sits at the freed edge. Industry conventions (#1274 research): one run
+// centered on the span, ceil(span/spacing)+1 supports spread evenly, one
+// cap per exposed end. Honest absences: no constrained front or no profile
+// member places nothing.
+func attachOpeningMembers(boards []layoutBoard, members OpeningMembers, constrained map[int]bool, bottomBoundary bool) {
+	if members.ProfileHardwareID == "" {
+		return
+	}
+	hostIdx := -1
+	for i := range boards {
+		if constrained[i] {
+			hostIdx = i
+			break
+		}
+	}
+	if hostIdx < 0 {
+		return
+	}
+
+	span := boards[hostIdx].widthMm
+	if span <= 0 {
+		return
+	}
+	face := "top"
+	if bottomBoundary {
+		face = "bottom"
+	}
+	at := func(hardwareID string, xMm float64) domain.HardwarePlacement {
+		return domain.HardwarePlacement{
+			HardwareID:       hardwareID,
+			AnchorFace:       face,
+			RelativePosition: domain.HardwareRelPosition{XMm: xMm},
+		}
+	}
+
+	derived := []domain.HardwarePlacement{at(members.ProfileHardwareID, span/2)}
+	if members.SupportHardwareID != "" && members.SupportSpacingMm > 0 {
+		count := int(math.Ceil(span/float64(members.SupportSpacingMm))) + 1
+		if count < 2 {
+			count = 2
+		}
+		for i := 0; i < count; i++ {
+			derived = append(derived, at(members.SupportHardwareID, span*float64(i)/float64(count-1)))
+		}
+	}
+	if members.CapHardwareID != "" {
+		derived = append(derived, at(members.CapHardwareID, 0), at(members.CapHardwareID, span))
+	}
+	boards[hostIdx].derivedHardware = append(boards[hostIdx].derivedHardware, derived...)
+}
+
+// openingFrontsBottomBoundary reports the zone edge the member hardware
+// anchors to: a bottom grip (rebase) frees the front's bottom edge,
+// anything else (gola's top consumption) the top edge.
+func openingFrontsBottomBoundary(fronts []OpeningResolvedFront) bool {
+	for _, grip := range fronts[0].Grips {
+		if grip.Boundary == "bottom" {
+			return true
+		}
+	}
+	return false
 }

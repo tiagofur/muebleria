@@ -162,6 +162,10 @@ type AuthoringResolveInput struct {
 	// fail-closed on blocked states BEFORE the resolve). nil = no opening:
 	// the layout stays byte-identical to the pre-opening semantics.
 	Fronts []OpeningResolvedFront
+	// OpeningMembers (#1274): the selection's pinned member set materialized
+	// as derived hardware placements when Fronts constrained this furniture.
+	// nil = no members to place.
+	OpeningMembers *OpeningMembers
 }
 
 // AuthoringResolveResult carries the accepted resolve. StructuralIssues
@@ -303,6 +307,7 @@ func ResolveAuthoringLayout(input AuthoringResolveInput) (*AuthoringResolveResul
 		opts.manualPlacements = &input.ManualPlacements
 	}
 	opts.fronts = input.Fronts
+	opts.openingMembers = input.OpeningMembers
 	layout, boards, err := resolveFurnitureLayoutOpts(input.Module, input.Catalog, input.Dims, input.OptionChoices, opts)
 	if err != nil {
 		return nil, err

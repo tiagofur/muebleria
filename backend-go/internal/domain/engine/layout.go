@@ -217,6 +217,9 @@ type layoutBoard struct {
 	thicknessMm float64 // local Y
 	lengthMm    float64 // local Z
 	hardware    []domain.HardwarePlacement
+	// derivedHardware holds engine-generated placements (#1274 opening
+	// members): projected with HardwarePlacementKindDerived provenance.
+	derivedHardware []domain.HardwarePlacement
 	// catalogComponentID is the catalog Component.ID behind the template
 	// (#477: occurrence↔template mapping and the normalized snapshot echo).
 	catalogComponentID string
@@ -242,6 +245,10 @@ type resolveOptions struct {
 	// the door/drawer-front boards after expansion. nil = no opening (the
 	// historical semantics stay byte-identical).
 	fronts []OpeningResolvedFront
+	// openingMembers (#1274): the selection's pinned member set materialized
+	// as derived hardware placements on the constrained furniture. nil = no
+	// members (handle baseline, pre-pin rows).
+	openingMembers *OpeningMembers
 }
 
 // ResolveFurnitureLayout resolves a module's full visual composition — every
@@ -367,6 +374,14 @@ func resolveFurnitureLayoutOpts(module domain.Module, catalog domain.Catalog, di
 			}
 			layout.Hardware = append(layout.Hardware, resolved)
 		}
+		for hi, hp := range board.derivedHardware {
+			resolved, ok := resolveHardwareToWorld(board, hp, catalog,
+				fmt.Sprintf("%s-opening-%d", board.id, hi), HardwarePlacementKindDerived)
+			if !ok {
+				continue
+			}
+			layout.Hardware = append(layout.Hardware, resolved)
+		}
 	}
 
 	if opts.manualPlacements != nil {
@@ -475,6 +490,13 @@ func resolveLayoutBoards(module domain.Module, catalog domain.Catalog, dims Layo
 		openingConstrained, passErr = applyOpeningFrontsToBoards(boards, opts.fronts)
 		if passErr != nil {
 			return nil, passErr
+		}
+		// #1274: a furniture the opening constrained materializes the
+		// selection's member hardware (gola run + supports + caps) anchored
+		// to the freed edge of its first constrained front.
+		if len(openingConstrained) > 0 && opts.openingMembers != nil {
+			attachOpeningMembers(boards, *opts.openingMembers, openingConstrained,
+				openingFrontsBottomBoundary(opts.fronts))
 		}
 	}
 
@@ -1193,7 +1215,9 @@ var validHardwarePreviewShapes = map[string]bool{
 // resolveHardwareToWorld resolves one hardware placement from board-local face
 // coordinates to a world-space box. Returns ok=false for cost-only hardware
 // (no valid preview shape) — mirrors TS resolveHardwarePlacement.
-func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, placementID string) (LayoutHardware, bool) {
+func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, catalog domain.Catalog, placementID string,
+	placementKind ...string,
+) (LayoutHardware, bool) {
 	hw, ok := findHardware(catalog, hp.HardwareID)
 	if !ok || !hw.Active {
 		return LayoutHardware{}, false
@@ -1384,9 +1408,13 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		mountFrame = hw.VisualAsset.MountFrame
 	}
 
-	// Every placement this engine renders today is authored on a
-	// component-instance override (#350 manual vocabulary); derived
-	// placements arrive with the relationship/joint projection.
+	// Provenance (#350): manual for authored component-instance
+	// placements; derived for engine-generated ones (#1274 opening
+	// members). Variadic keeps the historical call sites manual.
+	kind := HardwarePlacementKindManual
+	if len(placementKind) > 0 && placementKind[0] != "" {
+		kind = placementKind[0]
+	}
 	return LayoutHardware{
 		PlacementID:             placementID,
 		HardwareID:              hw.ID,
@@ -1398,7 +1426,7 @@ func resolveHardwareToWorld(board *layoutBoard, hp domain.HardwarePlacement, cat
 		ColorHex:                color,
 		HostComponentInstanceID: board.id,
 		AnchorFace:              hp.AnchorFace,
-		PlacementKind:           HardwarePlacementKindManual,
+		PlacementKind:           kind,
 		OptionRole:              strings.TrimSpace(hp.OptionRole),
 		Transform:               LayoutTransform{TranslationMm: boxMin},
 		DimensionsMm:            dims,

@@ -334,7 +334,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 	// front region constrains the door boards. A blocked opening (pending
 	// datasheet, pending overhang evidence) is a structured rejection — a
 	// design that DECLARES an opening never resolves a degraded layout.
-	fronts, designOpeningErr := s.designOpeningFrontsForResolve(r, req, module, dims)
+	fronts, openingMembers, designOpeningErr := s.designOpeningFrontsForResolve(r, req, module, dims)
 	if designOpeningErr != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
 			Code:     designOpeningErr.code,
@@ -359,6 +359,7 @@ func (s *Server) HandleFurnitureAuthoringResolve(w http.ResponseWriter, r *http.
 		ResolvedSideRecipes:       serverInputs.SideRecipes,
 		FactoryConstructionPolicy: serverInputs.Policy,
 		Fronts:                    fronts,
+		OpeningMembers:            openingMembers,
 	})
 	if err != nil {
 		s.writeAuthoringResolveEnvelope(w, http.StatusUnprocessableEntity, req, authoringStatusRejected, []domain.ContractIssue{{
